@@ -86,7 +86,7 @@ export const LIST_TASKS_SCRIPT = `
       
       // Build task object with safe property access
       const taskObj = {
-        id: task.id.primaryKey,
+        id: task.id(),
         name: task.name(),
         completed: task.completed(),
         flagged: task.flagged(),
@@ -299,7 +299,7 @@ export const CREATE_TASK_SCRIPT = `
       for (let i = allInboxTasks.length - 1; i >= 0; i--) {
         const task = allInboxTasks[i];
         if (task.name() === taskData.name) {
-          taskId = task.id.primaryKey;
+          taskId = task.id();
           createdTask = task;
           break;
         }
@@ -337,7 +337,7 @@ export const UPDATE_TASK_SCRIPT = `
     const tasks = doc.flattenedTasks();
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id.primaryKey === taskId) {
+      if (tasks[i].id() === taskId) {
         task = tasks[i];
         break;
       }
@@ -416,7 +416,7 @@ export const UPDATE_TASK_SCRIPT = `
     }
     
     return JSON.stringify({
-      id: task.id.primaryKey,
+      id: task.id(),
       name: task.name(),
       updated: true
     });
@@ -437,7 +437,7 @@ export const COMPLETE_TASK_SCRIPT = `
     const tasks = doc.flattenedTasks();
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id.primaryKey === taskId) {
+      if (tasks[i].id() === taskId) {
         task = tasks[i];
         break;
       }
@@ -454,7 +454,7 @@ export const COMPLETE_TASK_SCRIPT = `
     task.completed = true;
     
     return JSON.stringify({
-      id: task.id.primaryKey,
+      id: task.id(),
       completed: true,
       completionDate: task.completionDate() ? task.completionDate().toISOString() : new Date().toISOString()
     });
@@ -475,7 +475,7 @@ export const DELETE_TASK_SCRIPT = `
     const tasks = doc.flattenedTasks();
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id.primaryKey === taskId) {
+      if (tasks[i].id() === taskId) {
         task = tasks[i];
         break;
       }
@@ -563,7 +563,7 @@ export const TODAYS_AGENDA_SCRIPT = `
       if (includeTask) {
         // Build task object
         const taskObj = {
-          id: task.id.primaryKey,
+          id: task.id(),
           name: task.name(),
           completed: false,
           flagged: task.flagged(),

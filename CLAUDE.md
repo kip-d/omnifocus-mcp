@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **TypeScript First**: This is a TypeScript project. All new code should be written in TypeScript (.ts files)
 - **No JavaScript Files**: Do not create .js files for new functionality - use TypeScript
+- **IMPORTANT**: This is a TypeScript project. All new code should be written in TypeScript (.ts files). Do not create .js files for new functionality - use TypeScript. This includes test files, scripts, and any other code files.
+- **When creating test files or debugging scripts, always use .ts extensions and TypeScript syntax, even for quick tests or one-off scripts.**
 - Before calling a project done, install the project and run integration tests (call the MCP server as Claude Desktop would do it)
 - We are using Omnifocus 4.6+
 - **Testing**: Use TypeScript for test files as well (e.g., .test.ts files)
