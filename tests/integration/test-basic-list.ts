@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { spawn } from 'child_process';
+import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { createInterface, Interface } from 'readline';
 
-const server = spawn('node', ['dist/index.js'], { stdio: ['pipe', 'pipe', 'pipe'] });
+const server: ChildProcessWithoutNullStreams = spawn('node', ['dist/index.js'], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-server.stdout.on('data', (data) => {
-  const lines = data.toString().split('\n').filter(l => l.trim());
-  lines.forEach(line => {
+server.stdout.on('data', (data: Buffer) => {
+  const lines = data.toString().split('\n').filter((l: string) => l.trim());
+  lines.forEach((line: string) => {
     try {
       const msg = JSON.parse(line);
       if (msg.id === 1) {
@@ -30,17 +31,18 @@ server.stdout.on('data', (data) => {
   });
 });
 
-server.stderr.on('data', (data) => {
-  const msg = data.toString();
-  if (msg.includes('ERROR') || msg.includes("Can't convert")) {
-    console.error('Server error:', msg.trim());
-  }
+server.stderr.on('data', (data: Buffer) => {
+  console.log('Server error:', data.toString());
 });
 
 // Initialize
 server.stdin.write(JSON.stringify({
   jsonrpc: '2.0', id: 1, method: 'initialize',
-  params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } }
+  params: { protocolVersion: '0.1.0', capabilities: {}, clientInfo: { name: 'test', version: '1.0' } }
 }) + '\n');
 
-setTimeout(() => { console.log('❌ Timeout'); server.kill(); process.exit(1); }, 10000);
+setTimeout(() => {
+  console.log('Test timeout');
+  server.kill();
+  process.exit(1);
+}, 10000);

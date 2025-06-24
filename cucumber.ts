@@ -1,7 +1,8 @@
 export default {
   default: {
-    paths: ['test/features/*.feature'],
-    import: ['test/features/step_definitions/*.js', 'test/features/support/*.js'],
+    paths: ['tests/features/*.feature'],
+    require: ['tests/features/step_definitions/*.ts', 'tests/features/support/*.ts'],
+    requireModule: ['ts-node/register'],
     format: [
       'progress',
       'html:test-results/cucumber-report.html',

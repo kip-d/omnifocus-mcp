@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LIST_TASKS_SCRIPT } from '../../src/omnifocus/scripts/tasks';
+import { LIST_TASKS_SCRIPT } from 'src/omnifocus/scripts/tasks';
 
 describe('Task ID Extraction', () => {
   it('should show the ID extraction bug in LIST_TASKS_SCRIPT', () => {

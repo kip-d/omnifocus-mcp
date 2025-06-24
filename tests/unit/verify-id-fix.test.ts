@@ -4,12 +4,12 @@ import {
   CREATE_TASK_SCRIPT,
   UPDATE_TASK_SCRIPT,
   COMPLETE_TASK_SCRIPT
-} from '../../src/omnifocus/scripts/tasks';
+} from 'src/omnifocus/scripts/tasks';
 import {
   LIST_PROJECTS_SCRIPT,
   CREATE_PROJECT_SCRIPT,
   UPDATE_PROJECT_SCRIPT
-} from '../../src/omnifocus/scripts/projects';
+} from 'src/omnifocus/scripts/projects';
 
 describe('Verify ID Extraction Fix', () => {
   it('should have fixed all task script ID extractions', () => {

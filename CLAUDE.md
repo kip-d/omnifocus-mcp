@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Before calling a project done, install the project and run integration tests (call the MCP server as Claude Desktop would do it)
 - We are using Omnifocus 4.6+
 - **Testing**: Use TypeScript for test files as well (e.g., .test.ts files)
+- **IMPORTANT**: this is a typescript project
 
 ## Common Development Commands
 

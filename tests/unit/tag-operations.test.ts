@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags';
+import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags';
 
 describe('Tag Operations Fix Verification', () => {
   it('should use correct method calls with parentheses', () => {

@@ -1,27 +1,27 @@
 #!/usr/bin/env node
-import { spawn } from 'child_process';
-import { createInterface } from 'readline';
+import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
+import { createInterface, Interface } from 'readline';
 
 const serverPath = process.argv[2] || './test-minimal-server.js';
 console.log(`Testing MCP server: ${serverPath}`);
 
 // Start the server
-const server = spawn('node', [serverPath], {
+const server: ChildProcessWithoutNullStreams = spawn('node', [serverPath], {
   stdio: ['pipe', 'pipe', 'pipe']
 });
 
 // Create readline interface for server stdout
-const rl = createInterface({
+const rl: Interface = createInterface({
   input: server.stdout,
   crlfDelay: Infinity
 });
 
 // Track responses
-let initializeId = null;
-let toolsListId = null;
+let initializeId: number | null = null;
+let toolsListId: number | null = null;
 
 // Handle server responses
-rl.on('line', (line) => {
+rl.on('line', (line: string) => {
   try {
     const response = JSON.parse(line);
     console.log('Server response:', JSON.stringify(response, null, 2));
@@ -41,16 +41,16 @@ rl.on('line', (line) => {
 });
 
 // Handle errors
-server.stderr.on('data', (data) => {
+server.stderr.on('data', (data: Buffer) => {
   console.error('Server stderr:', data.toString());
 });
 
-server.on('error', (error) => {
+server.on('error', (error: Error) => {
   console.error('Failed to start server:', error);
   process.exit(1);
 });
 
-server.on('close', (code) => {
+server.on('close', (code: number | null) => {
   console.log(`Server exited with code ${code}`);
   if (code !== 0) {
     process.exit(1);
@@ -58,7 +58,7 @@ server.on('close', (code) => {
 });
 
 // Send initialize request
-function sendInitialize() {
+function sendInitialize(): void {
   initializeId = 1;
   const request = {
     jsonrpc: '2.0',
@@ -79,7 +79,7 @@ function sendInitialize() {
 }
 
 // Send tools list request
-function sendToolsList() {
+function sendToolsList(): void {
   toolsListId = 2;
   const request = {
     jsonrpc: '2.0',

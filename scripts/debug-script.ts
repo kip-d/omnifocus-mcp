@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { OmniAutomation } from './dist/omnifocus/OmniAutomation.js';
-import { LIST_TASKS_SCRIPT } from './dist/omnifocus/scripts/tasks.js';
+import { OmniAutomation } from 'src/omnifocus/OmniAutomation';
+import { LIST_TASKS_SCRIPT } from 'src/omnifocus/scripts/tasks';
 
 const omni = new OmniAutomation();
 
@@ -13,9 +13,9 @@ console.log(script);
 console.log('\n\nExecuting...');
 
 omni.execute(script)
-  .then(result => {
+  .then((result: any) => {
     console.log('Success:', result);
   })
-  .catch(error => {
+  .catch((error: Error) => {
     console.error('Error:', error);
   });

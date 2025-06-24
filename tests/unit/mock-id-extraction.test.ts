@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ListTasksTool } from '../../src/tools/tasks/ListTasksTool';
+import { ListTasksTool } from 'src/tools/tasks/ListTasksTool';
 
 describe('Mock ID Extraction Test', () => {
   it('should properly format task response with IDs', async () => {
