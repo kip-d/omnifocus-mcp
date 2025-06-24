@@ -33,7 +33,7 @@ export function safeGetId(obj: any, context?: string): string | null {
  * @returns The property value or defaultValue
  */
 export function safeGetProperty<T>(
-  obj: any, 
+  _obj: any, 
   getter: () => T, 
   defaultValue: T | null = null
 ): T | null {

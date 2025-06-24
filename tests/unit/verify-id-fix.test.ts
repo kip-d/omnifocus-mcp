@@ -11,8 +11,18 @@ import {
   UPDATE_PROJECT_SCRIPT
 } from 'src/omnifocus/scripts/projects';
 
+/**
+ * Note: This test was updated AFTER the implementation was fixed, which is backwards.
+ * We should have updated the test first to specify the correct behavior (primaryKey as property),
+ * then made the implementation changes to satisfy the test.
+ * 
+ * Keeping this as a regression guard to ensure primaryKey remains a property access,
+ * not a method call, throughout the codebase.
+ * 
+ * Lesson learned: Tests should drive implementation, not chase after it.
+ */
 describe('Verify ID Extraction Fix', () => {
-  it('should have fixed all task script ID extractions', () => {
+  it('should use primaryKey as a property (not a method) in all task scripts', () => {
     const scripts = [
       { name: 'LIST_TASKS_SCRIPT', script: LIST_TASKS_SCRIPT },
       { name: 'CREATE_TASK_SCRIPT', script: CREATE_TASK_SCRIPT },
@@ -21,34 +31,34 @@ describe('Verify ID Extraction Fix', () => {
     ];
     
     scripts.forEach(({ name, script }) => {
-      // Check for any remaining .id.primaryKey without parentheses
-      const buggyPattern = /\.id\.primaryKey(?![\(\)])/g;
-      const matches = script.match(buggyPattern);
+      // Check for any incorrect .id.primaryKey() method calls
+      const incorrectPattern = /\.id\.primaryKey\(\)/g;
+      const incorrectMatches = script.match(incorrectPattern);
       
-      if (matches) {
-        console.log(`\\n❌ Found ${matches.length} unfixed instances in ${name}:`);
-        matches.forEach(match => {
+      if (incorrectMatches) {
+        console.log(`\n❌ Found ${incorrectMatches.length} incorrect method calls in ${name}:`);
+        incorrectMatches.forEach(match => {
           const index = script.indexOf(match);
           const context = script.substring(Math.max(0, index - 20), Math.min(script.length, index + 40));
           console.log(`   "${context}"`);
         });
       }
       
-      expect(matches).toBeNull();
+      expect(incorrectMatches).toBeNull();
       
-      // Verify correct patterns exist
-      const correctPattern = /\.id\.primaryKey\(\)/g;
+      // Verify correct property access patterns exist
+      const correctPattern = /\.id\.primaryKey(?![\(\)])/g;
       const correctMatches = script.match(correctPattern);
       
       // Most scripts should have at least one ID extraction
       if (name !== 'CREATE_TASK_SCRIPT') { // CREATE might not have any
         expect(correctMatches).not.toBeNull();
-        console.log(`✓ ${name} has ${correctMatches?.length || 0} correct ID extractions`);
+        console.log(`✓ ${name} has ${correctMatches?.length || 0} correct property accesses`);
       }
     });
   });
   
-  it('should have fixed all project script ID extractions', () => {
+  it('should use primaryKey as a property (not a method) in all project scripts', () => {
     const scripts = [
       { name: 'LIST_PROJECTS_SCRIPT', script: LIST_PROJECTS_SCRIPT },
       { name: 'CREATE_PROJECT_SCRIPT', script: CREATE_PROJECT_SCRIPT },
@@ -56,31 +66,33 @@ describe('Verify ID Extraction Fix', () => {
     ];
     
     scripts.forEach(({ name, script }) => {
-      const buggyPattern = /\.id\.primaryKey(?![\(\)])/g;
-      const matches = script.match(buggyPattern);
+      // Check for any incorrect .id.primaryKey() method calls
+      const incorrectPattern = /\.id\.primaryKey\(\)/g;
+      const incorrectMatches = script.match(incorrectPattern);
       
-      expect(matches).toBeNull();
+      expect(incorrectMatches).toBeNull();
       
-      const correctPattern = /\.id\.primaryKey\(\)/g;
+      // Verify correct property access patterns exist
+      const correctPattern = /\.id\.primaryKey(?![\(\)])/g;
       const correctMatches = script.match(correctPattern);
       
       expect(correctMatches).not.toBeNull();
-      console.log(`✓ ${name} has ${correctMatches?.length || 0} correct ID extractions`);
+      console.log(`✓ ${name} has ${correctMatches?.length || 0} correct property accesses`);
     });
   });
   
-  it('should verify critical ID fields are properly extracted', () => {
-    // Check that task objects include ID
-    expect(LIST_TASKS_SCRIPT).toContain('id: task.id.primaryKey()');
-    expect(UPDATE_TASK_SCRIPT).toContain('id: task.id.primaryKey()');
-    expect(COMPLETE_TASK_SCRIPT).toContain('id: task.id.primaryKey()');
+  it('should verify critical ID fields are properly extracted as properties', () => {
+    // Check that task objects include ID as property access
+    expect(LIST_TASKS_SCRIPT).toContain('id: task.id.primaryKey,');
+    expect(UPDATE_TASK_SCRIPT).toContain('id: task.id.primaryKey,');
+    expect(COMPLETE_TASK_SCRIPT).toContain('id: task.id.primaryKey,');
     
-    // Check project ID extraction
-    expect(LIST_TASKS_SCRIPT).toContain('taskObj.projectId = project.id.primaryKey()');
-    expect(LIST_PROJECTS_SCRIPT).toContain('id: project.id.primaryKey()');
+    // Check project ID extraction as property
+    expect(LIST_TASKS_SCRIPT).toContain('taskObj.projectId = project.id.primaryKey;');
+    expect(LIST_PROJECTS_SCRIPT).toContain('id: project.id.primaryKey,');
     
-    // Check ID comparisons
-    expect(UPDATE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey() === taskId');
-    expect(COMPLETE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey() === taskId');
+    // Check ID comparisons use property access
+    expect(UPDATE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey === taskId');
+    expect(COMPLETE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey === taskId');
   });
 });

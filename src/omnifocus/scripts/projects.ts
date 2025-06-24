@@ -122,7 +122,7 @@ export const CREATE_PROJECT_SCRIPT = `
     }
     
     return JSON.stringify({
-      id: project.id.primaryKey(),
+      id: project.id.primaryKey,
       name: project.name,
       created: true
     });
@@ -143,7 +143,7 @@ export const UPDATE_PROJECT_SCRIPT = `
     const projects = doc.flattenedProjects();
     let project = null;
     for (let i = 0; i < projects.length; i++) {
-      if (projects[i].id.primaryKey() === projectId) {
+      if (projects[i].id.primaryKey === projectId) {
         project = projects[i];
         break;
       }
@@ -162,7 +162,7 @@ export const UPDATE_PROJECT_SCRIPT = `
     if (updates.sequential !== undefined) project.sequential = updates.sequential;
     
     return JSON.stringify({
-      id: project.id.primaryKey(),
+      id: project.id.primaryKey,
       updated: true
     });
   } catch (error) {
@@ -182,7 +182,7 @@ export const ARCHIVE_PROJECT_SCRIPT = `
     const projects = doc.flattenedProjects();
     let project = null;
     for (let i = 0; i < projects.length; i++) {
-      if (projects[i].id.primaryKey() === projectId) {
+      if (projects[i].id.primaryKey === projectId) {
         project = projects[i];
         break;
       }
@@ -200,7 +200,7 @@ export const ARCHIVE_PROJECT_SCRIPT = `
     }
     
     return JSON.stringify({
-      id: project.id.primaryKey(),
+      id: project.id.primaryKey,
       archived: true,
       status: project.status
     });
