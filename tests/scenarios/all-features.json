@@ -1,0 +1,395 @@
+{
+  "name": "OmniFocus MCP Complete Feature Test Suite",
+  "description": "Comprehensive test scenarios covering all 22 tools",
+  "scenarios": [
+    {
+      "category": "Task Management",
+      "tests": [
+        {
+          "name": "Task CRUD Lifecycle",
+          "steps": [
+            {
+              "action": "create_task",
+              "params": {
+                "name": "Test task lifecycle",
+                "note": "Created by Gherkin test",
+                "flagged": true,
+                "dueDate": "2025-06-25T10:00:00Z",
+                "tags": ["test", "automated"]
+              },
+              "expect": {
+                "success": true,
+                "taskId": "string"
+              }
+            },
+            {
+              "action": "list_tasks",
+              "params": {
+                "search": "Test task lifecycle"
+              },
+              "expect": {
+                "tasks": "array",
+                "count": 1
+              }
+            },
+            {
+              "action": "update_task",
+              "params": {
+                "taskId": "${previous.taskId}",
+                "name": "Updated task lifecycle",
+                "flagged": false
+              },
+              "expect": {
+                "success": true
+              }
+            },
+            {
+              "action": "complete_task",
+              "params": {
+                "taskId": "${previous.taskId}"
+              },
+              "expect": {
+                "success": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "Advanced Task Filtering",
+          "steps": [
+            {
+              "action": "list_tasks",
+              "params": {
+                "completed": false,
+                "flagged": true,
+                "available": true,
+                "limit": 10
+              },
+              "expect": {
+                "tasks": "array",
+                "has_more": "boolean"
+              }
+            },
+            {
+              "action": "list_tasks",
+              "params": {
+                "dueBefore": "2025-07-01T00:00:00Z",
+                "dueAfter": "2025-06-01T00:00:00Z"
+              },
+              "expect": {
+                "tasks": "array"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Project Management",
+      "tests": [
+        {
+          "name": "Project Lifecycle",
+          "steps": [
+            {
+              "action": "create_project",
+              "params": {
+                "name": "Gherkin Test Project",
+                "note": "Automated test project",
+                "dueDate": "2025-12-31T23:59:59Z",
+                "flagged": true
+              },
+              "expect": {
+                "success": true,
+                "projectId": "string"
+              }
+            },
+            {
+              "action": "list_projects",
+              "params": {
+                "search": "Gherkin Test Project"
+              },
+              "expect": {
+                "projects": "array",
+                "count": 1
+              }
+            },
+            {
+              "action": "update_project",
+              "params": {
+                "projectName": "Gherkin Test Project",
+                "updates": {
+                  "status": "onHold",
+                  "note": "Project on hold for testing"
+                }
+              },
+              "expect": {
+                "success": true
+              }
+            },
+            {
+              "action": "complete_project",
+              "params": {
+                "projectName": "Gherkin Test Project",
+                "completeAllTasks": true
+              },
+              "expect": {
+                "success": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Tag Management",
+      "tests": [
+        {
+          "name": "Tag Operations",
+          "steps": [
+            {
+              "action": "list_tags",
+              "params": {
+                "sortBy": "usage",
+                "includeEmpty": false
+              },
+              "expect": {
+                "tags": "array"
+              }
+            },
+            {
+              "action": "manage_tags",
+              "params": {
+                "action": "create",
+                "tagName": "gherkin-test-tag"
+              },
+              "expect": {
+                "success": true
+              }
+            },
+            {
+              "action": "manage_tags",
+              "params": {
+                "action": "rename",
+                "tagName": "gherkin-test-tag",
+                "newName": "renamed-gherkin-tag"
+              },
+              "expect": {
+                "success": true
+              }
+            },
+            {
+              "action": "manage_tags",
+              "params": {
+                "action": "delete",
+                "tagName": "renamed-gherkin-tag"
+              },
+              "expect": {
+                "success": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Analytics",
+      "tests": [
+        {
+          "name": "Productivity Analysis",
+          "steps": [
+            {
+              "action": "get_productivity_stats",
+              "params": {
+                "period": "week",
+                "groupBy": "project"
+              },
+              "expect": {
+                "stats": {
+                  "totalTasks": "number",
+                  "completedTasks": "number",
+                  "completionRate": "number"
+                }
+              }
+            },
+            {
+              "action": "get_task_velocity",
+              "params": {
+                "period": "week"
+              },
+              "expect": {
+                "velocity": {
+                  "averageDaily": "number",
+                  "trend": "string"
+                }
+              }
+            },
+            {
+              "action": "analyze_overdue_tasks",
+              "params": {
+                "groupBy": "project",
+                "limit": 50
+              },
+              "expect": {
+                "analysis": {
+                  "overdueCount": "number",
+                  "byProject": "object"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recurring Task Analysis",
+          "steps": [
+            {
+              "action": "analyze_recurring_tasks",
+              "params": {
+                "activeOnly": true,
+                "sortBy": "frequency"
+              },
+              "expect": {
+                "recurringTasks": "array"
+              }
+            },
+            {
+              "action": "get_recurring_patterns",
+              "params": {},
+              "expect": {
+                "patterns": "object"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Export",
+      "tests": [
+        {
+          "name": "Export Operations",
+          "steps": [
+            {
+              "action": "export_tasks",
+              "params": {
+                "format": "json",
+                "filter": {
+                  "flagged": true,
+                  "completed": false
+                },
+                "fields": ["name", "project", "dueDate", "tags"]
+              },
+              "expect": {
+                "format": "json",
+                "data": "string"
+              }
+            },
+            {
+              "action": "export_tasks",
+              "params": {
+                "format": "csv",
+                "filter": {
+                  "available": true
+                },
+                "fields": ["name", "project", "dueDate"]
+              },
+              "expect": {
+                "format": "csv",
+                "data": "string"
+              }
+            },
+            {
+              "action": "export_projects",
+              "params": {
+                "format": "json",
+                "includeStats": true
+              },
+              "expect": {
+                "format": "json",
+                "data": "string"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Performance",
+      "tests": [
+        {
+          "name": "Cache Testing",
+          "steps": [
+            {
+              "action": "get_task_count",
+              "params": {
+                "completed": false
+              },
+              "expect": {
+                "count": "number",
+                "from_cache": false
+              },
+              "note": "First call should not be cached"
+            },
+            {
+              "action": "get_task_count",
+              "params": {
+                "completed": false
+              },
+              "expect": {
+                "count": "number",
+                "from_cache": true
+              },
+              "note": "Second identical call should be cached"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "Error Handling",
+      "tests": [
+        {
+          "name": "Invalid Operations",
+          "steps": [
+            {
+              "action": "update_task",
+              "params": {
+                "taskId": "invalid-task-id-123456",
+                "name": "This should fail"
+              },
+              "expect": {
+                "error": true,
+                "message": "contains:not found"
+              }
+            },
+            {
+              "action": "complete_project",
+              "params": {
+                "projectName": "Non-existent Project XYZ"
+              },
+              "expect": {
+                "error": true,
+                "message": "contains:not found"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "testData": {
+    "validTaskId": "Replace with actual task ID from your OmniFocus",
+    "validProjectId": "Replace with actual project ID from your OmniFocus",
+    "validProjectName": "Replace with actual project name",
+    "testTags": ["test", "automated", "gherkin"],
+    "dateRanges": {
+      "thisWeek": {
+        "start": "2025-06-21T00:00:00Z",
+        "end": "2025-06-28T00:00:00Z"
+      },
+      "nextMonth": {
+        "start": "2025-07-01T00:00:00Z",
+        "end": "2025-07-31T23:59:59Z"
+      }
+    }
+  }
+}
