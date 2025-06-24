@@ -263,31 +263,26 @@ export const CREATE_TASK_SCRIPT = `
     if (taskData.deferDate !== undefined && taskData.deferDate) taskObj.deferDate = new Date(taskData.deferDate);
     if (taskData.estimatedMinutes !== undefined) taskObj.estimatedMinutes = taskData.estimatedMinutes;
     
-    // Handle tags/contexts before task creation
-    const contextsToAdd = [];
+    // Handle tags before task creation
+    const tagsToAdd = [];
     if (taskData.tags && taskData.tags.length > 0) {
-      const existingContexts = doc.flattenedContexts();
+      const existingTags = doc.flattenedTags();
       for (const tagName of taskData.tags) {
         let found = false;
-        for (let i = 0; i < existingContexts.length; i++) {
-          if (existingContexts[i].name() === tagName) {
-            contextsToAdd.push(existingContexts[i]);
+        for (let i = 0; i < existingTags.length; i++) {
+          if (existingTags[i].name() === tagName) {
+            tagsToAdd.push(existingTags[i]);
             found = true;
             break;
           }
         }
-        // Note: JXA doesn't support creating new tags/contexts reliably
+        // Note: JXA doesn't support creating new tags reliably in task creation
       }
-    }
-    
-    // Add first context if available (JXA limitation: single context)
-    if (contextsToAdd.length > 0) {
-      taskObj.context = contextsToAdd[0];
     }
     
     // Create the task using JXA syntax
     const newTask = app.InboxTask(taskObj);
-    const inbox = doc.inboxTasks();
+    const inbox = doc.inboxTasks;
     inbox.push(newTask);
     
     // Try to get the real OmniFocus ID by finding the task we just created
@@ -301,6 +296,16 @@ export const CREATE_TASK_SCRIPT = `
         if (task.name() === taskData.name) {
           taskId = task.id();
           createdTask = task;
+          
+          // Add tags to the created task
+          if (tagsToAdd.length > 0) {
+            try {
+              task.addTags(tagsToAdd);
+            } catch (tagError) {
+              // Tags failed to add, but task was created
+            }
+          }
+          
           break;
         }
       }
