@@ -41,7 +41,9 @@
       "Bash(npx tsx:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git worktree:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
