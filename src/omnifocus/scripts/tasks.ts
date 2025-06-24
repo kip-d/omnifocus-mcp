@@ -455,7 +455,7 @@ export const COMPLETE_TASK_SCRIPT = `
       return JSON.stringify({ error: true, message: 'Task already completed' });
     }
     
-    // Mark as complete using property setter
+    // Mark as complete using JXA property setter
     task.completed = true;
     
     return JSON.stringify({
@@ -469,6 +469,39 @@ export const COMPLETE_TASK_SCRIPT = `
       message: "Failed to complete task: " + error.toString(),
       details: error.message
     });
+  }
+`;
+
+// Omni Automation script for completing tasks (bypasses JXA permission issues)
+export const COMPLETE_TASK_OMNI_SCRIPT = `
+  const taskId = {{taskId}};
+  
+  try {
+    // Find task by ID using Omni Automation
+    const tasks = flattenedTasks;
+    let targetTask = null;
+    
+    tasks.forEach(task => {
+      if (task.id.primaryKey === taskId) {
+        targetTask = task;
+      }
+    });
+    
+    if (!targetTask) {
+      throw new Error('Task not found');
+    }
+    
+    if (targetTask.completed) {
+      throw new Error('Task already completed');
+    }
+    
+    // Mark as complete using Omni Automation method
+    targetTask.markComplete();
+    
+    // Return success (URL scheme doesn't return values directly)
+    return true;
+  } catch (error) {
+    throw new Error("Failed to complete task: " + error.toString());
   }
 `;
 
@@ -491,8 +524,8 @@ export const DELETE_TASK_SCRIPT = `
     
     const taskName = task.name();
     
-    // Delete using remove method
-    task.remove();
+    // Delete using JXA app.delete method
+    app.delete(task);
     
     return JSON.stringify({
       id: taskId,
@@ -505,6 +538,37 @@ export const DELETE_TASK_SCRIPT = `
       message: "Failed to delete task: " + error.toString(),
       details: error.message
     });
+  }
+`;
+
+// Omni Automation script for deleting tasks (bypasses JXA permission issues)
+export const DELETE_TASK_OMNI_SCRIPT = `
+  const taskId = {{taskId}};
+  
+  try {
+    // Find task by ID using Omni Automation
+    const tasks = flattenedTasks;
+    let targetTask = null;
+    
+    tasks.forEach(task => {
+      if (task.id.primaryKey === taskId) {
+        targetTask = task;
+      }
+    });
+    
+    if (!targetTask) {
+      throw new Error('Task not found');
+    }
+    
+    const taskName = targetTask.name;
+    
+    // Delete using Omni Automation method
+    deleteObject(targetTask);
+    
+    // Return success (URL scheme doesn't return values directly)
+    return true;
+  } catch (error) {
+    throw new Error("Failed to delete task: " + error.toString());
   }
 `;
 

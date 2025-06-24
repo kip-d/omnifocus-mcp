@@ -80,8 +80,8 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       });
 
       expect(result).toBeDefined();
-      expect(result.protocolVersion).toBe('0.1.0');
-      expect(result.serverInfo.name).toBe('omnifocus-mcp-pro');
+      expect(result.protocolVersion).toBe('2025-06-18');
+      expect(result.serverInfo.name).toBe('omnifocus-mcp-cached');
     });
   });
 
@@ -120,8 +120,9 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       
       const response = JSON.parse(result.content[0].text);
       expect(response).toHaveProperty('tasks');
-      expect(response).toHaveProperty('total');
-      expect(response).toHaveProperty('cached');
+      expect(response).toHaveProperty('metadata');
+      expect(response.metadata).toHaveProperty('total_items');
+      expect(response.metadata).toHaveProperty('from_cache');
     });
 
     it('should handle task creation with validation', async () => {

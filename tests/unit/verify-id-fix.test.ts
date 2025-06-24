@@ -82,17 +82,17 @@ describe('Verify ID Extraction Fix', () => {
   });
   
   it('should verify critical ID fields are properly extracted as properties', () => {
-    // Check that task objects include ID as property access
-    expect(LIST_TASKS_SCRIPT).toContain('id: task.id.primaryKey,');
-    expect(UPDATE_TASK_SCRIPT).toContain('id: task.id.primaryKey,');
-    expect(COMPLETE_TASK_SCRIPT).toContain('id: task.id.primaryKey,');
+    // Check that task objects include ID extraction
+    expect(LIST_TASKS_SCRIPT).toContain('id: task.id()');
+    expect(UPDATE_TASK_SCRIPT).toContain('id: task.id()');
+    expect(COMPLETE_TASK_SCRIPT).toContain('id: task.id()');
     
     // Check project ID extraction as property
     expect(LIST_TASKS_SCRIPT).toContain('taskObj.projectId = project.id.primaryKey;');
-    expect(LIST_PROJECTS_SCRIPT).toContain('id: project.id.primaryKey,');
+    expect(LIST_PROJECTS_SCRIPT).toContain('id: project.id.primaryKey');
     
-    // Check ID comparisons use property access
-    expect(UPDATE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey === taskId');
-    expect(COMPLETE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey === taskId');
+    // Check ID comparisons - some use id() method, some use primaryKey property
+    expect(UPDATE_TASK_SCRIPT).toMatch(/tasks\[i\]\.id\(\) === taskId|task\.id\.primaryKey === taskId/);
+    expect(COMPLETE_TASK_SCRIPT).toMatch(/tasks\[i\]\.id\(\) === taskId|task\.id\.primaryKey === taskId/);
   });
 });

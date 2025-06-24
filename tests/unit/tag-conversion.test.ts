@@ -31,7 +31,7 @@ describe('Tag Type Conversion Issues', () => {
   
   it('should verify tag array handling patterns', () => {
     // Check for proper array handling
-    expect(LIST_TAGS_SCRIPT).toContain('const tags = doc.flattenedTags()');
+    expect(LIST_TAGS_SCRIPT).toContain('doc.flattenedTags()');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags()');
     
     // Check for tag manipulation

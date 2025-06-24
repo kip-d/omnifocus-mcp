@@ -37,24 +37,36 @@ describe('Mock ID Extraction Test', () => {
     };
     
     // Test that the tool properly formats the response
-    const tool = new ListTasksTool({} as any);
+    // Create mock dependencies
+    const mockOmniAutomation = {
+      buildScript: vi.fn().mockReturnValue('mock script'),
+      execute: vi.fn().mockResolvedValue(mockTaskData)
+    };
+    const mockCache = {
+      get: vi.fn().mockReturnValue(null),
+      set: vi.fn()
+    };
+    const mockLogger = {
+      debug: vi.fn(),
+      info: vi.fn()
+    };
     
-    // Mock the executeScript method to return our test data
-    vi.spyOn(tool as any, 'executeScript').mockResolvedValue(JSON.stringify(mockTaskData));
+    const tool = new ListTasksTool(mockOmniAutomation as any, mockCache as any, mockLogger as any);
     
     const result = await tool.execute({ limit: 10 });
     
-    // Check the formatted output includes IDs
-    expect(result).toContain('Test Task 1');
-    expect(result).toContain('gZ0M5L3PkR8'); // ID should be in the output
-    expect(result).toContain('Test Task 2');
-    expect(result).toContain('hX1N6M4QlS9'); // ID should be in the output
+    // Check the result structure
+    expect(result).toHaveProperty('tasks');
+    expect(result.tasks).toHaveLength(2);
+    expect(result.tasks[0].id).toBe('gZ0M5L3PkR8');
+    expect(result.tasks[0].name).toBe('Test Task 1');
+    expect(result.tasks[1].id).toBe('hX1N6M4QlS9');
+    expect(result.tasks[1].name).toBe('Test Task 2');
     
-    // Verify the response structure
-    expect(result).toContain('**Test Task 1**');
-    expect(result).toContain('Flagged: ✓');
-    expect(result).toContain('Tags: work, urgent');
-    expect(result).toContain('2 tasks found');
+    // Verify task properties
+    expect(result.tasks[0].flagged).toBe(true);
+    expect(result.tasks[0].tags).toEqual(['work', 'urgent']);
+    expect(result.total).toBe(2);
   });
   
   it('should handle update task with proper ID', async () => {

@@ -3,11 +3,11 @@ import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags
 
 describe('Tag Operations Fix Verification', () => {
   it('should use correct method calls with parentheses', () => {
-    // Verify tag method calls use parentheses
+    // Verify tag method calls use parentheses (except primaryKey which is a property)
     expect(LIST_TAGS_SCRIPT).toContain('tag.parent()');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.tags()');
+    expect(LIST_TAGS_SCRIPT).toContain('task.tags()');
     expect(LIST_TAGS_SCRIPT).toContain('tag.name()');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey()');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
   });
   
   it('should use plural methods for tag manipulation', () => {

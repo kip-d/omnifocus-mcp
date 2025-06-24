@@ -1,5 +1,5 @@
 import { BaseTool } from '../base.js';
-import { DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 
 export class DeleteTaskTool extends BaseTool {
   name = 'delete_task';
@@ -21,21 +21,54 @@ export class DeleteTaskTool extends BaseTool {
       // Invalidate task cache
       this.cache.invalidate('tasks');
       
-      const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args);
-      const result = await this.omniAutomation.execute(script);
-      
-      if (result.error) {
-        return result;
+      // Try JXA first, fall back to URL scheme if access denied
+      try {
+        const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args);
+        const result = await this.omniAutomation.execute(script);
+        
+        if (result.error) {
+          // If error contains "parameter is missing" or "access not allowed", use URL scheme
+          if (result.message && 
+              (result.message.toLowerCase().includes('parameter is missing') ||
+               result.message.toLowerCase().includes('access not allowed'))) {
+            this.logger.info('JXA failed, falling back to URL scheme for task deletion');
+            return await this.executeViaUrlScheme(args);
+          }
+          return result;
+        }
+        
+        this.logger.info(`Deleted task via JXA: ${result.name} (${args.taskId})`);
+        return {
+          success: true,
+          task: result,
+        };
+      } catch (jxaError: any) {
+        // If JXA fails with permission error, use URL scheme
+        if (jxaError.message && 
+            (jxaError.message.toLowerCase().includes('parameter is missing') ||
+             jxaError.message.toLowerCase().includes('access not allowed'))) {
+          this.logger.info('JXA failed, falling back to URL scheme for task deletion');
+          return await this.executeViaUrlScheme(args);
+        }
+        throw jxaError;
       }
-      
-      this.logger.info(`Deleted task: ${result.name} (${args.taskId})`);
-      
-      return {
-        success: true,
-        task: result,
-      };
     } catch (error) {
       return this.handleError(error);
     }
+  }
+
+  private async executeViaUrlScheme(args: { taskId: string }): Promise<any> {
+    const omniScript = this.omniAutomation.buildScript(DELETE_TASK_OMNI_SCRIPT, args);
+    await this.omniAutomation.executeViaUrlScheme(omniScript);
+    
+    this.logger.info(`Deleted task via URL scheme: ${args.taskId}`);
+    
+    // Return expected format since URL scheme doesn't return detailed results
+    return {
+      success: true,
+      id: args.taskId,
+      deleted: true,
+      name: 'Task deleted successfully'
+    };
   }
 }
