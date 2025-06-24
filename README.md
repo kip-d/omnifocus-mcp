@@ -214,6 +214,22 @@ src/
 4. Ensure all tests pass
 5. Submit a pull request
 
+## Future Improvements
+
+### High Priority Recommendations
+
+1. **Fix Unit Test Suite**: Several unit tests are failing due to incorrect assumptions about the codebase. Priority areas:
+   - Update test expectations to match actual API response formats
+   - Align mock objects with real implementation interfaces
+   - Remove tests that verify incorrect behavior (e.g., expecting primaryKey to be a method when it's a property)
+
+2. **Add ESLint Configuration**: The project is missing an ESLint configuration file which prevents linting from running. Create an `eslint.config.js` that supports TypeScript and follows the project's coding standards.
+
+3. **Improve Error Recovery**: While the URL scheme fallback for permission-denied errors is a good start, consider:
+   - Implementing retry logic with exponential backoff
+   - Adding user-friendly error messages that suggest solutions
+   - Creating a diagnostic tool to help users troubleshoot permission issues
+
 ## License
 
 MIT License - see LICENSE file for details
