@@ -19,6 +19,10 @@ export class OmniAutomation {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
 
+    return this.executeInternal<T>(script);
+  }
+
+  private async executeInternal<T = any>(script: string): Promise<T> {
     const wrappedScript = this.wrapScript(script);
     
     logger.debug('Executing OmniAutomation script', { scriptLength: script.length });
@@ -47,6 +51,8 @@ export class OmniAutomation {
       proc.on('close', (code) => {
         if (code !== 0) {
           logger.error('Script execution failed with code:', code);
+          
+          
           reject(new OmniAutomationError(`Script execution failed with code ${code}`, script, stderr));
           return;
         }

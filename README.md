@@ -1,4 +1,4 @@
-# OmniFocus Cache by Windsurf
+# OmniFocus MCP Server
 
 A professional Model Context Protocol (MCP) server for OmniFocus that provides advanced task management capabilities with smart caching and analytics. Built with TypeScript and full respect for OmniFocus's official OmniAutomation API.
 
@@ -45,7 +45,15 @@ A professional Model Context Protocol (MCP) server for OmniFocus that provides a
 - Smart search with natural language
 - Recurring task analysis
 
-## Installation
+## Installation & Permissions
+
+### Prerequisites
+
+1. OmniFocus 3 or later installed on macOS
+2. Node.js 18+ installed
+3. Permission to access OmniFocus via automation (see [Permissions Guide](docs/PERMISSIONS.md))
+
+### Installation Steps
 
 ```bash
 # Clone the repository
@@ -61,6 +69,10 @@ npm run build
 # Run the server
 npm start
 ```
+
+### Granting Permissions
+
+The first time you use the MCP server, macOS will prompt you to grant permission to access OmniFocus. See the [Permissions Guide](docs/PERMISSIONS.md) for detailed instructions.
 
 ## Configuration
 
@@ -233,6 +245,54 @@ src/
 ## License
 
 MIT License - see LICENSE file for details
+
+## Testing
+
+### End-to-End Testing with Claude Desktop
+
+To test the permission system with Claude Desktop:
+
+1. **Revoke Permissions** (to test error handling):
+   - Open System Settings → Privacy & Security → Automation
+   - Find "Claude" (or "Electron" if Claude isn't listed)
+   - Uncheck the checkbox next to "OmniFocus"
+
+2. **Test in Claude Desktop**:
+   - Ask Claude: "Can you list my OmniFocus tasks?"
+   - You should see a helpful error message with instructions to grant permissions
+
+3. **Grant Permissions**:
+   - Either click "OK" when the permission dialog appears
+   - Or manually enable in System Settings as instructed
+
+4. **Verify Success**:
+   - Ask Claude again to list your tasks
+   - Tasks should now be displayed correctly
+
+### Testing During Development
+
+```bash
+# Build and test the server
+npm run build
+npm test
+
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector dist/index.js
+
+# Run integration tests
+node tests/integration/test-as-claude-desktop.js
+```
+
+## Technical Notes
+
+### ES Modules Requirement
+
+This project uses ES modules (ESM) with `.js` extensions in import statements, which may seem unusual for TypeScript projects. This is required because:
+
+1. The MCP SDK (`@modelcontextprotocol/sdk`) is currently ESM-only
+2. There are known CommonJS compatibility issues (see [GitHub issue #217](https://github.com/modelcontextprotocol/typescript-sdk/issues/217))
+
+**Future Migration**: Once the MCP SDK adds proper CommonJS support, this project should migrate to standard TypeScript/CommonJS to remove the need for `.js` extensions in imports.
 
 ## Acknowledgments
 

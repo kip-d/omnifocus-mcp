@@ -26,6 +26,23 @@ export abstract class BaseTool {
   protected handleError(error: any): any {
     this.logger.error(`Error in ${this.name}:`, error);
     
+    // Check for permission errors
+    const errorMessage = error.message || '';
+    if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
+      return {
+        error: true,
+        code: 'PERMISSION_DENIED',
+        message: 'Not authorized to send Apple events to OmniFocus',
+        instructions: `To grant permissions:
+1. You may see a permission dialog - click "OK" to grant access
+2. Or manually grant permissions:
+   - Open System Settings → Privacy & Security → Automation
+   - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
+   - Enable the checkbox next to OmniFocus
+3. After granting permissions, try your request again`
+      };
+    }
+    
     if (error.name === 'OmniAutomationError') {
       return {
         error: true,
