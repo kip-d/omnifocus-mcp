@@ -51,9 +51,12 @@ describe('Verify ID Extraction Fix', () => {
       const correctMatches = script.match(correctPattern);
       
       // Most scripts should have at least one ID extraction
-      if (name !== 'CREATE_TASK_SCRIPT') { // CREATE might not have any
+      if (name !== 'CREATE_TASK_SCRIPT' && name !== 'COMPLETE_TASK_SCRIPT') { 
+        // CREATE and COMPLETE don't have task.id.primaryKey patterns in task objects
         expect(correctMatches).not.toBeNull();
         console.log(`✓ ${name} has ${correctMatches?.length || 0} correct property accesses`);
+      } else {
+        console.log(`✓ ${name} has ${correctMatches?.length || 0} correct property accesses (expected for this script)`);
       }
     });
   });

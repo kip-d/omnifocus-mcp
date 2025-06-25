@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - We are using Omnifocus 4.6+
 - **Testing**: Use TypeScript for test files as well (e.g., .test.ts files)
 - **IMPORTANT**: this is a typescript project
+- **NEVER skip integration tests before considering a feature "done" or a release**
 
 ## Common Development Commands
 

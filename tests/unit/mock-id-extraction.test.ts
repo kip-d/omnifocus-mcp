@@ -37,21 +37,23 @@ describe('Mock ID Extraction Test', () => {
     };
     
     // Test that the tool properly formats the response
-    // Create mock dependencies
-    const mockOmniAutomation = {
+    // Create mock cache (this is the only parameter ListTasksTool constructor takes)
+    const mockCache = {
+      get: vi.fn().mockReturnValue(null),
+      set: vi.fn(),
+      invalidate: vi.fn(),
+      clear: vi.fn(),
+      getStats: vi.fn().mockReturnValue({ hits: 0, misses: 0, evictions: 0, size: 0 }),
+      warm: vi.fn()
+    };
+    
+    const tool = new ListTasksTool(mockCache as any);
+    
+    // Mock the omniAutomation property that gets created in BaseTool
+    (tool as any).omniAutomation = {
       buildScript: vi.fn().mockReturnValue('mock script'),
       execute: vi.fn().mockResolvedValue(mockTaskData)
     };
-    const mockCache = {
-      get: vi.fn().mockReturnValue(null),
-      set: vi.fn()
-    };
-    const mockLogger = {
-      debug: vi.fn(),
-      info: vi.fn()
-    };
-    
-    const tool = new ListTasksTool(mockOmniAutomation as any, mockCache as any, mockLogger as any);
     
     const result = await tool.execute({ limit: 10 });
     
@@ -66,7 +68,7 @@ describe('Mock ID Extraction Test', () => {
     // Verify task properties
     expect(result.tasks[0].flagged).toBe(true);
     expect(result.tasks[0].tags).toEqual(['work', 'urgent']);
-    expect(result.total).toBe(2);
+    expect(result.metadata.total_items).toBe(2);
   });
   
   it('should handle update task with proper ID', async () => {

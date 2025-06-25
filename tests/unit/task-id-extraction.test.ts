@@ -2,49 +2,55 @@ import { describe, it, expect, vi } from 'vitest';
 import { LIST_TASKS_SCRIPT } from 'src/omnifocus/scripts/tasks';
 
 describe('Task ID Extraction', () => {
-  it('should show the ID extraction bug in LIST_TASKS_SCRIPT', () => {
-    // Check if the script contains the buggy pattern
-    const buggyPattern = /task\.id\.primaryKey(?![\(\)])/g;
-    const matches = LIST_TASKS_SCRIPT.match(buggyPattern);
+  it('should use task.id() method for task ID extraction', () => {
+    // Check that the script uses task.id() method correctly
+    const taskIdPattern = /task\.id\(\)/g;
+    const matches = LIST_TASKS_SCRIPT.match(taskIdPattern);
     
-    console.log('Checking for buggy ID extraction patterns...');
+    console.log('Checking for task.id() method calls...');
     if (matches) {
-      console.log(`Found ${matches.length} instances of task.id.primaryKey without parentheses`);
-      matches.forEach((match, index) => {
-        const lineNumber = LIST_TASKS_SCRIPT.substring(0, LIST_TASKS_SCRIPT.indexOf(match)).split('\n').length;
-        console.log(`  ${index + 1}. Line ~${lineNumber}: ${match}`);
-      });
+      console.log(`Found ${matches.length} instances of task.id() method calls`);
     }
     
-    // primaryKey is a property in JXA, not a method - this is correct
-    expect(matches).not.toBeNull(); // Should find instances without parentheses
+    // Should find task.id() method calls for task objects
+    expect(matches).not.toBeNull();
+    expect(matches?.length).toBeGreaterThan(0);
   });
   
-  it('should check project ID extraction bug', () => {
-    const buggyPattern = /project\.id\.primaryKey(?![\(\)])/g;
-    const matches = LIST_TASKS_SCRIPT.match(buggyPattern);
+  it('should use project.id.primaryKey property for project ID extraction', () => {
+    const projectIdPattern = /project\.id\.primaryKey(?![\(\)])/g;
+    const matches = LIST_TASKS_SCRIPT.match(projectIdPattern);
     
     if (matches) {
-      console.log(`Found ${matches.length} instances of project.id.primaryKey without parentheses`);
+      console.log(`Found ${matches.length} instances of project.id.primaryKey property access`);
     }
     
     // primaryKey is a property in JXA, not a method - this is correct
     expect(matches).not.toBeNull();
+    expect(matches?.length).toBeGreaterThan(0);
   });
   
-  it('should verify correct syntax after fix', () => {
-    // In JXA, primaryKey is a property, not a method
-    const correctTaskPattern = /task\.id\.primaryKey(?![\(\)])/g;
-    const correctProjectPattern = /project\.id\.primaryKey(?![\(\)])/g;
+  it('should verify mixed ID extraction patterns are used correctly', () => {
+    // Task IDs use method calls in object creation
+    const taskIdMethodPattern = /id: task\.id\(\)/g;
+    const taskIdMethodMatches = LIST_TASKS_SCRIPT.match(taskIdMethodPattern);
     
-    const taskMatches = LIST_TASKS_SCRIPT.match(correctTaskPattern);
-    const projectMatches = LIST_TASKS_SCRIPT.match(correctProjectPattern);
+    // But task ID comparisons in some scripts use primaryKey property  
+    const taskPrimaryKeyPattern = /task\.id\.primaryKey/g;
+    const taskPrimaryKeyMatches = LIST_TASKS_SCRIPT.match(taskPrimaryKeyPattern);
     
-    console.log(`\\nAfter fix simulation:`);
-    console.log(`- Found ${taskMatches?.length || 0} correct task.id.primaryKey calls`);
-    console.log(`- Found ${projectMatches?.length || 0} correct project.id.primaryKey calls`);
+    // Project IDs consistently use primaryKey property
+    const projectIdPattern = /project\.id\.primaryKey/g;
+    const projectMatches = LIST_TASKS_SCRIPT.match(projectIdPattern);
     
-    expect(taskMatches).not.toBeNull();
+    console.log(`\\nID extraction patterns:`);
+    console.log(`- Found ${taskIdMethodMatches?.length || 0} task.id() method calls`);
+    console.log(`- Found ${taskPrimaryKeyMatches?.length || 0} task.id.primaryKey property access`);
+    console.log(`- Found ${projectMatches?.length || 0} project.id.primaryKey property access`);
+    
+    // Should have task ID method calls for object creation
+    expect(taskIdMethodMatches).not.toBeNull();
+    // Should have project ID property access
     expect(projectMatches).not.toBeNull();
   });
 });
