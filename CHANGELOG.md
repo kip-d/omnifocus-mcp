@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-06-25
+
+### Added
+- Permission checking system with graceful error handling
+- Helpful error messages when OmniFocus permissions are not granted
+- Clear instructions for users to grant permissions via System Settings
+- Permission status caching to avoid repeated checks
+- End-to-end testing documentation for Claude Desktop
+- Technical documentation about ESM requirements
+
+### Changed
+- Server now checks permissions on startup (non-blocking)
+- Enhanced error handling in base tool class to detect permission errors
+- Improved user experience when permissions are missing
+
+### Developer Notes
+- Permission errors (code -1743) are now handled gracefully
+- Users receive actionable instructions instead of cryptic errors
+- The server continues to run even without permissions
+
 ## [1.1.1] - 2025-06-25
 
 ### Added
