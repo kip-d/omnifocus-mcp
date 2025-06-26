@@ -1,4 +1,6 @@
-# OmniFocus MCP Server
+# Model Context Protocol for OmniFocus (incl. advanced features)
+
+Disclaimer: pardon the stiffness of the documentation and commits language, the project is fully coded via Claude Code, ao many messages are either as fun as an accounting report (with random emphasis of a car salesman here and there).
 
 A professional Model Context Protocol (MCP) server for OmniFocus that provides advanced task management capabilities with smart caching and analytics. Built with TypeScript and full respect for OmniFocus's official OmniAutomation API.
 
