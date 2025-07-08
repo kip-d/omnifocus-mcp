@@ -17,7 +17,6 @@ export class CreateTaskTool extends BaseTool {
         description: 'Task note/description',
       },
       projectId: {
-        type: 'string',
         description: 'Project ID to add task to - use full alphanumeric ID from list_projects tool (e.g., "az5Ieo4ip7K", not "547"). Claude Desktop may incorrectly extract numbers from IDs (if not provided, task goes to inbox)',
       },
       flagged: {

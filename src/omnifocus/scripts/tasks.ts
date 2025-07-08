@@ -390,11 +390,29 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
       }
     }
     
-    return JSON.stringify({
+    // Build response with updated fields
+    const response = {
       id: task.id(),
       name: task.name(),
-      updated: true
-    });
+      updated: true,
+      changes: {}
+    };
+    
+    // Track what was actually changed
+    if (updates.name !== undefined) response.changes.name = updates.name;
+    if (updates.note !== undefined) response.changes.note = updates.note;
+    if (updates.flagged !== undefined) response.changes.flagged = updates.flagged;
+    if (updates.projectId !== undefined) {
+      response.changes.projectId = updates.projectId;
+      if (updates.projectId !== null) {
+        const project = task.containingProject();
+        if (project) {
+          response.changes.projectName = project.name();
+        }
+      }
+    }
+    
+    return JSON.stringify(response);
   } catch (error) {
     return JSON.stringify({
       error: true,
@@ -506,11 +524,33 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     
-    return JSON.stringify({
+    // Build response with updated fields
+    const response = {
       id: task.id(),
       name: task.name(),
-      updated: true
-    });
+      updated: true,
+      changes: {}
+    };
+    
+    // Track what was actually changed
+    if (updates.name !== undefined) response.changes.name = updates.name;
+    if (updates.note !== undefined) response.changes.note = updates.note;
+    if (updates.flagged !== undefined) response.changes.flagged = updates.flagged;
+    if (updates.dueDate !== undefined) response.changes.dueDate = updates.dueDate;
+    if (updates.deferDate !== undefined) response.changes.deferDate = updates.deferDate;
+    if (updates.estimatedMinutes !== undefined) response.changes.estimatedMinutes = updates.estimatedMinutes;
+    if (updates.tags !== undefined) response.changes.tags = updates.tags;
+    if (updates.projectId !== undefined) {
+      response.changes.projectId = updates.projectId;
+      if (updates.projectId !== null) {
+        const project = task.containingProject();
+        if (project) {
+          response.changes.projectName = project.name();
+        }
+      }
+    }
+    
+    return JSON.stringify(response);
   } catch (error) {
     return JSON.stringify({
       error: true,
