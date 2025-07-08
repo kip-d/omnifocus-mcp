@@ -45,7 +45,7 @@ export class UpdateTaskTool extends BaseTool {
         description: 'New tags (replaces all existing tags)',
       },
       projectId: {
-        description: 'Move task to different project - use full alphanumeric projectId from list_projects tool (e.g., "az5Ieo4ip7K", not just "547"). Claude Desktop may incorrectly extract numbers from IDs - use the complete ID string (null to move to inbox).',
+        description: 'Move task to different project - use full alphanumeric projectId from list_projects tool (e.g., "az5Ieo4ip7K", not just "547"). Use empty string "" to move task to inbox.',
       },
     },
     required: ['taskId'],

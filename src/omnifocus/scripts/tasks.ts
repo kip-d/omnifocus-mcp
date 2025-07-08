@@ -359,7 +359,7 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
     
     // Handle project assignment (simplified version)
     if (updates.projectId !== undefined) {
-      if (updates.projectId === null) {
+      if (updates.projectId === "") {
         // Move to inbox - set assignedContainer to null which moves task to inbox
         task.assignedContainer = null;
       } else {
@@ -404,11 +404,13 @@ export const UPDATE_TASK_SCRIPT_SIMPLE = `
     if (updates.flagged !== undefined) response.changes.flagged = updates.flagged;
     if (updates.projectId !== undefined) {
       response.changes.projectId = updates.projectId;
-      if (updates.projectId !== null) {
+      if (updates.projectId !== "") {
         const project = task.containingProject();
         if (project) {
           response.changes.projectName = project.name();
         }
+      } else {
+        response.changes.projectName = "Inbox";
       }
     }
     
@@ -455,7 +457,7 @@ export const UPDATE_TASK_SCRIPT = `
     
     // Update project assignment
     if (updates.projectId !== undefined) {
-      if (updates.projectId === null) {
+      if (updates.projectId === "") {
         // Move to inbox - set assignedContainer to null
         task.assignedContainer = null;
       } else {
@@ -542,11 +544,13 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.tags !== undefined) response.changes.tags = updates.tags;
     if (updates.projectId !== undefined) {
       response.changes.projectId = updates.projectId;
-      if (updates.projectId !== null) {
+      if (updates.projectId !== "") {
         const project = task.containingProject();
         if (project) {
           response.changes.projectName = project.name();
         }
+      } else {
+        response.changes.projectName = "Inbox";
       }
     }
     
