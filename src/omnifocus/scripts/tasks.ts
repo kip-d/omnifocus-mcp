@@ -2,6 +2,109 @@ export const LIST_TASKS_SCRIPT = `
   const filter = {{filter}};
   const tasks = [];
   
+  // Helper function to analyze recurring task status
+  function analyzeRecurringStatus(task, repetitionRule) {
+    if (!repetitionRule) {
+      return {
+        isRecurring: false,
+        type: 'non-recurring'
+      };
+    }
+    
+    const status = {
+      isRecurring: true,
+      type: 'new-instance', // Default assumption
+      frequency: '',
+      scheduleDeviation: false,
+      nextExpectedDate: null
+    };
+    
+    // Calculate frequency description
+    if (repetitionRule.unit && repetitionRule.steps) {
+      switch(repetitionRule.unit) {
+        case 'days':
+          if (repetitionRule.steps === 1) status.frequency = 'Daily';
+          else if (repetitionRule.steps === 7) status.frequency = 'Weekly';
+          else if (repetitionRule.steps === 14) status.frequency = 'Biweekly';
+          else status.frequency = 'Every ' + repetitionRule.steps + ' days';
+          break;
+        case 'weeks':
+          if (repetitionRule.steps === 1) status.frequency = 'Weekly';
+          else status.frequency = 'Every ' + repetitionRule.steps + ' weeks';
+          break;
+        case 'months':
+          if (repetitionRule.steps === 1) status.frequency = 'Monthly';
+          else if (repetitionRule.steps === 3) status.frequency = 'Quarterly';
+          else status.frequency = 'Every ' + repetitionRule.steps + ' months';
+          break;
+        case 'years':
+          if (repetitionRule.steps === 1) status.frequency = 'Yearly';
+          else status.frequency = 'Every ' + repetitionRule.steps + ' years';
+          break;
+        default:
+          status.frequency = 'Custom';
+      }
+    }
+    
+    // Analyze task timing to detect rescheduled vs new instance
+    try {
+      const now = new Date();
+      const added = task.added();
+      const dueDate = task.dueDate();
+      const deferDate = task.deferDate();
+      const completionDate = task.completionDate();
+      
+      if (added && repetitionRule.unit && repetitionRule.steps) {
+        const daysSinceAdded = Math.floor((now - added) / (1000 * 60 * 60 * 24));
+        
+        // Calculate expected interval in days
+        let intervalDays = repetitionRule.steps;
+        switch(repetitionRule.unit) {
+          case 'weeks': intervalDays *= 7; break;
+          case 'months': intervalDays *= 30; break; // Approximation
+          case 'years': intervalDays *= 365; break; // Approximation
+        }
+        
+        // If task was added very recently (within 1 day), likely new instance
+        if (daysSinceAdded <= 1) {
+          status.type = 'new-instance';
+        }
+        // If task has been around longer than expected interval, might be rescheduled
+        else if (daysSinceAdded > intervalDays * 1.5) {
+          status.type = 'rescheduled';
+          status.scheduleDeviation = true;
+        }
+        // Check if dates align with repetition pattern
+        else if (dueDate) {
+          const daysUntilDue = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
+          
+          // If due date is way off from expected pattern, likely rescheduled
+          if (Math.abs(daysUntilDue) > intervalDays) {
+            status.type = 'rescheduled';
+            status.scheduleDeviation = true;
+          }
+          
+          // Calculate next expected date based on pattern
+          const nextDue = new Date(dueDate);
+          nextDue.setDate(nextDue.getDate() + intervalDays);
+          status.nextExpectedDate = nextDue.toISOString();
+        }
+        
+        // For completion-based repetition, check against completion date
+        if (repetitionRule.scheduleType === 'fromCompletion' && completionDate) {
+          const daysSinceCompletion = Math.floor((now - completionDate) / (1000 * 60 * 60 * 24));
+          if (daysSinceCompletion < intervalDays * 0.8) {
+            status.type = 'new-instance';
+          }
+        }
+      }
+    } catch (e) {
+      // If date analysis fails, stick with default 'new-instance'
+    }
+    
+    return status;
+  }
+  
   try {
     const allTasks = doc.flattenedTasks();
     const limit = Math.min(filter.limit || 100, 1000); // Cap at 1000
@@ -122,6 +225,39 @@ export const LIST_TASKS_SCRIPT = `
         taskObj.tags = tags.map(t => t.name());
       } catch (e) {
         taskObj.tags = [];
+      }
+      
+      // Add creation date if available
+      try {
+        const added = task.added();
+        if (added) taskObj.added = added.toISOString();
+      } catch (e) {}
+      
+      // Add repetition rule and recurring status analysis
+      try {
+        const repetitionRule = task.repetitionRule();
+        if (repetitionRule) {
+          taskObj.repetitionRule = {
+            method: repetitionRule.method || 'fixed',
+            interval: repetitionRule.interval || '',
+            unit: repetitionRule.unit,
+            steps: repetitionRule.steps,
+            scheduleType: repetitionRule.scheduleType
+          };
+          
+          // Use helper function for sophisticated analysis
+          taskObj.recurringStatus = analyzeRecurringStatus(task, repetitionRule);
+        } else {
+          taskObj.recurringStatus = {
+            isRecurring: false,
+            type: 'non-recurring'
+          };
+        }
+      } catch (e) {
+        taskObj.recurringStatus = {
+          isRecurring: false,
+          type: 'non-recurring'
+        };
       }
       
       tasks.push(taskObj);

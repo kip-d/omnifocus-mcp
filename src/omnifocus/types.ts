@@ -17,6 +17,8 @@ export interface OmniFocusTask {
   sequential: boolean;
   inInbox: boolean;
   repetitionRule?: RepetitionRule;
+  recurringStatus?: RecurringTaskStatus;
+  added?: Date; // When task was first created
 }
 
 export interface OmniFocusProject {
@@ -50,6 +52,17 @@ export interface OmniFocusTag {
 export interface RepetitionRule {
   method: 'fixed' | 'startAfterCompletion' | 'dueAfterCompletion';
   interval: string; // e.g., "1 week", "2 days"
+  unit?: 'days' | 'weeks' | 'months' | 'years';
+  steps?: number;
+  scheduleType?: 'regularly' | 'fromCompletion' | 'none';
+}
+
+export interface RecurringTaskStatus {
+  isRecurring: boolean;
+  type: 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override';
+  frequency?: string; // Human-readable like "Daily", "Weekly", etc.
+  nextExpectedDate?: Date;
+  scheduleDeviation?: boolean; // True if dates don't match expected pattern
 }
 
 export interface TaskFilter {
