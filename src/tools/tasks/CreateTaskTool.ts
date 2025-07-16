@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export class CreateTaskTool extends BaseTool {
   name = 'create_task';
@@ -56,7 +57,7 @@ export class CreateTaskTool extends BaseTool {
       const result = await this.omniAutomation.execute(script);
       
       if (result.error) {
-        return result;
+        throw new McpError(ErrorCode.InternalError, result.message, result.details);
       }
       
       // Parse the JSON result since the script returns a JSON string
@@ -64,13 +65,10 @@ export class CreateTaskTool extends BaseTool {
         return typeof result === 'string' ? JSON.parse(result) : result;
       } catch (parseError) {
         this.logger.error(`Failed to parse create task result: ${result}`);
-        return {
-          error: true,
-          message: 'Failed to parse task creation response'
-        };
+        throw new McpError(ErrorCode.InternalError, 'Failed to parse task creation response');
       }
     } catch (error) {
-      return this.handleError(error);
+      this.handleError(error);
     }
   }
 }

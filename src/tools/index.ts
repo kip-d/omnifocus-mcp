@@ -1,5 +1,5 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -95,7 +95,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     
     const tool = tools.find(t => t.name === name);
     if (!tool) {
-      throw new Error(`Tool not found: ${name}`);
+      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
     
     logger.debug(`Executing tool: ${name}`, args);
