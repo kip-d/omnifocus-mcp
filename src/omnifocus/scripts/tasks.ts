@@ -416,19 +416,60 @@ export const CREATE_TASK_SCRIPT = `
       }
     }
     
+    // Determine where to create the task
+    let targetContainer = null;
+    let taskIsInInbox = true;
+    
+    // If projectId is provided, find the project and assign the task there
+    if (taskData.projectId && taskData.projectId !== "") {
+      const projects = doc.flattenedProjects();
+      for (let i = 0; i < projects.length; i++) {
+        if (projects[i].id() === taskData.projectId) {
+          targetContainer = projects[i];
+          taskIsInInbox = false;
+          break;
+        }
+      }
+      
+      // If project not found, return error
+      if (!targetContainer) {
+        // Check if this looks like Claude Desktop extracted a number from an alphanumeric ID
+        const isNumericOnly = /^\d+$/.test(taskData.projectId);
+        let errorMessage = "Project with ID '" + taskData.projectId + "' not found";
+        
+        if (isNumericOnly) {
+          errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
+        }
+        
+        return JSON.stringify({
+          error: true,
+          message: errorMessage
+        });
+      }
+    }
+    
     // Create the task using JXA syntax
-    const newTask = app.InboxTask(taskObj);
-    const inbox = doc.inboxTasks;
-    inbox.push(newTask);
+    let newTask;
+    if (targetContainer) {
+      // Create task in the specified project
+      newTask = app.Task(taskObj);
+      targetContainer.tasks.push(newTask);
+    } else {
+      // Create task in inbox
+      newTask = app.InboxTask(taskObj);
+      const inbox = doc.inboxTasks;
+      inbox.push(newTask);
+    }
     
     // Try to get the real OmniFocus ID by finding the task we just created
     let taskId = null;
     let createdTask = null;
     
     try {
-      const allInboxTasks = doc.inboxTasks();
-      for (let i = allInboxTasks.length - 1; i >= 0; i--) {
-        const task = allInboxTasks[i];
+      // Search in the appropriate container
+      const tasksToSearch = targetContainer ? targetContainer.tasks() : doc.inboxTasks();
+      for (let i = tasksToSearch.length - 1; i >= 0; i--) {
+        const task = tasksToSearch[i];
         if (task.name() === taskData.name) {
           taskId = task.id();
           createdTask = task;
@@ -457,7 +498,9 @@ export const CREATE_TASK_SCRIPT = `
         id: taskId,
         name: taskData.name,
         flagged: taskData.flagged || false,
-        inInbox: true
+        inInbox: taskIsInInbox,
+        projectId: taskData.projectId || null,
+        project: targetContainer ? targetContainer.name() : null
       }
     });
   } catch (error) {
