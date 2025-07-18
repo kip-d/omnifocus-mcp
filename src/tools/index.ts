@@ -37,6 +37,9 @@ import { BulkExportTool } from './export/BulkExportTool.js';
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
 import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
 
+// Import system tools
+import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
+
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
@@ -77,6 +80,9 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // Recurring task tools
     new AnalyzeRecurringTasksTool(cache),
     new GetRecurringPatternsTool(cache),
+    
+    // System tools
+    new GetVersionInfoTool(cache),
   ];
   
   // Register handlers
