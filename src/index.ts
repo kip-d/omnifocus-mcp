@@ -5,6 +5,7 @@ import { registerTools } from './tools/index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
+import { getVersionInfo } from './utils/version.js';
 
 const logger = createLogger('server');
 
@@ -25,6 +26,14 @@ const server = new Server(
 async function runServer() {
   // Initialize cache manager
   const cacheManager = new CacheManager();
+  
+  // Log version information at debug level
+  try {
+    const versionInfo = getVersionInfo();
+    logger.debug(`Starting ${versionInfo.name} v${versionInfo.version} (build: ${versionInfo.build.buildId})`);
+  } catch (error) {
+    logger.debug('Failed to get version info:', error);
+  }
   
   // Perform initial permission check (non-blocking)
   const permissionChecker = PermissionChecker.getInstance();
