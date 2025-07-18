@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 export interface VersionInfo {
@@ -27,8 +27,12 @@ export interface VersionInfo {
 }
 
 export function getVersionInfo(): VersionInfo {
-  // Get package.json version
-  const packagePath = join(process.cwd(), 'package.json');
+  // Get package.json version - find project root
+  // Try current directory first, then parent directory (for dist builds)
+  let packagePath = join(process.cwd(), 'package.json');
+  if (!existsSync(packagePath)) {
+    packagePath = join(process.cwd(), '..', 'package.json');
+  }
   const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
   
   // Get git information
