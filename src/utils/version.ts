@@ -31,7 +31,13 @@ export function getVersionInfo(): VersionInfo {
   // Try current directory first, then parent directory (for dist builds)
   let packagePath = join(process.cwd(), 'package.json');
   if (!existsSync(packagePath)) {
-    packagePath = join(process.cwd(), '..', 'package.json');
+    // If we're likely in the dist directory, go up one level
+    const parentPath = join(process.cwd(), '..', 'package.json');
+    if (existsSync(parentPath)) {
+      packagePath = parentPath;
+    } else {
+      throw new Error(`Cannot find package.json in current directory (${process.cwd()}) or parent directory`);
+    }
   }
   const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
   

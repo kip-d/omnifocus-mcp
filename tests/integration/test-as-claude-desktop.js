@@ -59,14 +59,23 @@ rl.on('line', (line) => {
         }
       });
     } else if (response.id === 4) {
-      // After creating task, list projects
+      // After creating task, test version info
+      sendRequest('tools/call', {
+        name: 'get_version_info',
+        arguments: {}
+      });
+    } else if (response.id === 5) {
+      // After version info, list projects
+      const versionResult = JSON.parse(response.result.content[0].text);
+      console.log(`\n📋 Version: ${versionResult.name} v${versionResult.version} (${versionResult.build.buildId})`);
+      
       sendRequest('tools/call', {
         name: 'list_projects',
         arguments: {
           status: ['active']
         }
       });
-    } else if (response.id === 5) {
+    } else if (response.id === 6) {
       // Done with tests
       console.log('\n✅ All tests completed successfully!');
       server.kill();
