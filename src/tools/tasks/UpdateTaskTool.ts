@@ -141,12 +141,46 @@ export class UpdateTaskTool extends BaseTool {
       sanitized.flagged = updates.flagged;
     }
     
-    // Handle date fields (allow null to clear)
+    // Handle date fields (allow null to clear, convert strings to Date objects)
     if (updates.dueDate !== undefined) {
-      sanitized.dueDate = updates.dueDate;
+      if (updates.dueDate === null) {
+        sanitized.dueDate = null; // Explicitly clear the date
+      } else if (typeof updates.dueDate === 'string') {
+        try {
+          // Convert ISO string to Date object like create_task does
+          const parsedDate = new Date(updates.dueDate);
+          // Validate the date is not invalid
+          if (isNaN(parsedDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+          sanitized.dueDate = parsedDate;
+        } catch (error) {
+          // Skip invalid date strings
+          this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`);
+        }
+      } else if (updates.dueDate instanceof Date) {
+        sanitized.dueDate = updates.dueDate; // Already a Date object
+      }
     }
     if (updates.deferDate !== undefined) {
-      sanitized.deferDate = updates.deferDate;
+      if (updates.deferDate === null) {
+        sanitized.deferDate = null; // Explicitly clear the date
+      } else if (typeof updates.deferDate === 'string') {
+        try {
+          // Convert ISO string to Date object like create_task does
+          const parsedDate = new Date(updates.deferDate);
+          // Validate the date is not invalid
+          if (isNaN(parsedDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+          sanitized.deferDate = parsedDate;
+        } catch (error) {
+          // Skip invalid date strings
+          this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`);
+        }
+      } else if (updates.deferDate instanceof Date) {
+        sanitized.deferDate = updates.deferDate; // Already a Date object
+      }
     }
     
     // Handle numeric fields (allow null to clear)

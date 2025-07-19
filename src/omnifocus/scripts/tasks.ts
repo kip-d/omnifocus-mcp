@@ -636,14 +636,16 @@ export const UPDATE_TASK_SCRIPT = `
     }
     if (updates.dueDate !== undefined) {
       try {
-        task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+        // Handle Date objects, strings, and null values
+        task.dueDate = updates.dueDate; // OmniAutomation.formatValue handles Date objects correctly
       } catch (dateError) {
         // Skip invalid due date
       }
     }
     if (updates.deferDate !== undefined) {
       try {
-        task.deferDate = updates.deferDate ? new Date(updates.deferDate) : null;
+        // Handle Date objects, strings, and null values
+        task.deferDate = updates.deferDate; // OmniAutomation.formatValue handles Date objects correctly
       } catch (dateError) {
         // Skip invalid defer date
       }
