@@ -237,16 +237,79 @@ export const LIST_TASKS_SCRIPT = `
       try {
         const repetitionRule = task.repetitionRule();
         if (repetitionRule) {
-          taskObj.repetitionRule = {
-            method: repetitionRule.method || 'fixed',
-            interval: repetitionRule.interval || '',
-            unit: repetitionRule.unit,
-            steps: repetitionRule.steps,
-            scheduleType: repetitionRule.scheduleType
-          };
+          const ruleData = {};
+          
+          // Try official OmniFocus API properties first
+          const officialProperties = [
+            'method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'
+          ];
+          
+          officialProperties.forEach(prop => {
+            try {
+              const value = repetitionRule[prop];
+              if (value !== undefined && value !== null && value !== '') {
+                ruleData[prop] = value;
+              }
+            } catch (e) {}
+          });
+          
+          // Parse ruleString (RRULE format) to extract frequency details
+          if (ruleData.ruleString) {
+            try {
+              const ruleStr = ruleData.ruleString.toString();
+              
+              // Parse FREQ= part
+              if (ruleStr.includes('FREQ=DAILY')) {
+                ruleData.unit = 'days';
+                ruleData.steps = 1;
+              } else if (ruleStr.includes('FREQ=WEEKLY')) {
+                ruleData.unit = 'weeks';
+                ruleData.steps = 1;
+              } else if (ruleStr.includes('FREQ=MONTHLY')) {
+                ruleData.unit = 'months';
+                ruleData.steps = 1;
+              } else if (ruleStr.includes('FREQ=YEARLY')) {
+                ruleData.unit = 'years';
+                ruleData.steps = 1;
+              }
+              
+              // Parse INTERVAL= part for custom frequencies
+              const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
+              if (intervalMatch) {
+                ruleData.steps = parseInt(intervalMatch[1]);
+              }
+              
+              ruleData._inferenceSource = 'ruleString';
+            } catch (e) {}
+          }
+          
+          // Fallback to name-based inference if API extraction fails
+          if (!ruleData.unit && !ruleData.steps) {
+            const taskName = task.name().toLowerCase();
+            
+            if (taskName.includes('daily') || taskName.includes('every day')) {
+              ruleData.unit = 'days';
+              ruleData.steps = 1;
+              ruleData._inferenceSource = 'taskName';
+            } else if (taskName.includes('weekly') || taskName.includes('every week')) {
+              ruleData.unit = 'weeks';
+              ruleData.steps = 1;
+              ruleData._inferenceSource = 'taskName';
+            } else if (taskName.includes('monthly') || taskName.includes('of each month')) {
+              ruleData.unit = 'months';
+              ruleData.steps = 1;
+              ruleData._inferenceSource = 'taskName';
+            } else if (taskName.includes('yearly') || taskName.includes('annually')) {
+              ruleData.unit = 'years';
+              ruleData.steps = 1;
+              ruleData._inferenceSource = 'taskName';
+            }
+          }
+          
+          taskObj.repetitionRule = ruleData;
           
           // Use helper function for sophisticated analysis
-          taskObj.recurringStatus = analyzeRecurringStatus(task, repetitionRule);
+          taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
         } else {
           taskObj.recurringStatus = {
             isRecurring: false,

@@ -7,7 +7,7 @@ describe('Tag Operations Fix Verification', () => {
     expect(LIST_TAGS_SCRIPT).toContain('tag.parent()');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags()');
     expect(LIST_TAGS_SCRIPT).toContain('tag.name()');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.id()');
   });
   
   it('should use plural methods for tag manipulation', () => {

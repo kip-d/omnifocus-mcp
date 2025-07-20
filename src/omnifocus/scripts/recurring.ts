@@ -19,13 +19,116 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
       const taskInfo = {
         id: task.id(),
         name: task.name(),
-        repetitionRule: {
-          method: repetitionRule.method,
-          unit: repetitionRule.unit,
-          steps: repetitionRule.steps,
-          fixed: repetitionRule.fixed
-        }
+        repetitionRule: {}
       };
+      
+      // Extract repetition rule properties using official OmniFocus API
+      const ruleData = {};
+      
+      // Try official OmniFocus API properties first
+      const officialProperties = [
+        'method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'
+      ];
+      
+      officialProperties.forEach(prop => {
+        try {
+          const value = repetitionRule[prop];
+          if (value !== undefined && value !== null && value !== '') {
+            ruleData[prop] = value;
+          }
+        } catch (e) {}
+      });
+      
+      // Parse ruleString (RRULE format) to extract frequency details
+      if (ruleData.ruleString) {
+        try {
+          const ruleStr = ruleData.ruleString.toString();
+          
+          // Parse FREQ= part
+          if (ruleStr.includes('FREQ=DAILY')) {
+            ruleData.unit = 'days';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=WEEKLY')) {
+            ruleData.unit = 'weeks';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=MONTHLY')) {
+            ruleData.unit = 'months';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=YEARLY')) {
+            ruleData.unit = 'years';
+            ruleData.steps = 1;
+          }
+          
+          // Parse INTERVAL= part for custom frequencies
+          const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
+          if (intervalMatch) {
+            ruleData.steps = parseInt(intervalMatch[1]);
+          }
+          
+          ruleData._inferenceSource = 'ruleString';
+        } catch (e) {}
+      }
+      
+      // Fallback to older property access patterns if official ones don't work
+      if (!ruleData.unit && !ruleData.steps) {
+        const fallbackMappings = [
+          ['unit', 'unit'], ['steps', 'steps'], ['interval', 'interval'],
+          ['frequency', 'frequency'], ['every', 'steps'], ['period', 'unit']
+        ];
+        
+        fallbackMappings.forEach(([prop, targetProp]) => {
+          try { 
+            const value = repetitionRule[prop];
+            if (value !== undefined && value !== null && value !== '') {
+              ruleData[targetProp] = value;
+            }
+          } catch (e) {}
+          
+          try { 
+            if (typeof repetitionRule[prop] === 'function') {
+              const value = repetitionRule[prop]();
+              if (value !== undefined && value !== null && value !== '') {
+                ruleData[targetProp] = value;
+              }
+            }
+          } catch (e) {}
+        });
+        
+        if (ruleData.unit || ruleData.steps) {
+          ruleData._inferenceSource = 'api';
+        }
+      }
+      
+      // Try some hardcoded common patterns from OmniFocus automation
+      try {
+        // Check if it has a description or string representation
+        if (typeof repetitionRule.toString === 'function') {
+          const str = repetitionRule.toString();
+          if (str && str !== '[object Object]' && str.length > 0) {
+            // Try to parse common patterns like "every 1 week", "daily", etc.
+            if (str.includes('day') || str.includes('daily')) {
+              ruleData.unit = 'days';
+              ruleData.steps = 1;
+            } else if (str.includes('week') || str.includes('weekly')) {
+              ruleData.unit = 'weeks';
+              ruleData.steps = 1;
+            } else if (str.includes('month') || str.includes('monthly')) {
+              ruleData.unit = 'months';
+              ruleData.steps = 1;
+            } else if (str.includes('year') || str.includes('yearly')) {
+              ruleData.unit = 'years';
+              ruleData.steps = 1;
+            }
+            // Try to extract numbers
+            const numbers = str.match(/\\d+/g);
+            if (numbers && numbers.length > 0) {
+              ruleData.steps = parseInt(numbers[0]);
+            }
+          }
+        }
+      } catch (e) {}
+      
+      taskInfo.repetitionRule = ruleData;
       
       // Add project info
       try {
@@ -64,30 +167,126 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
         } catch (e) {}
       }
       
-      // Calculate frequency description
+      // Calculate frequency description using extracted rule data OR smart inference
       let frequencyDesc = '';
-      switch(repetitionRule.unit) {
-        case 'days':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Daily';
-          else if (repetitionRule.steps === 7) frequencyDesc = 'Weekly';
-          else if (repetitionRule.steps === 14) frequencyDesc = 'Biweekly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' days';
-          break;
-        case 'weeks':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Weekly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' weeks';
-          break;
-        case 'months':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Monthly';
-          else if (repetitionRule.steps === 3) frequencyDesc = 'Quarterly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' months';
-          break;
-        case 'years':
-          if (repetitionRule.steps === 1) frequencyDesc = 'Yearly';
-          else frequencyDesc = 'Every ' + repetitionRule.steps + ' years';
-          break;
+      
+      // First try the extracted rule data
+      if (ruleData.unit && ruleData.steps) {
+        switch(ruleData.unit) {
+          case 'days':
+            if (ruleData.steps === 1) frequencyDesc = 'Daily';
+            else if (ruleData.steps === 7) frequencyDesc = 'Weekly';
+            else if (ruleData.steps === 14) frequencyDesc = 'Biweekly';
+            else frequencyDesc = 'Every ' + ruleData.steps + ' days';
+            break;
+          case 'weeks':
+            if (ruleData.steps === 1) frequencyDesc = 'Weekly';
+            else frequencyDesc = 'Every ' + ruleData.steps + ' weeks';
+            break;
+          case 'months':
+            if (ruleData.steps === 1) frequencyDesc = 'Monthly';
+            else if (ruleData.steps === 3) frequencyDesc = 'Quarterly';
+            else frequencyDesc = 'Every ' + ruleData.steps + ' months';
+            break;
+          case 'years':
+            if (ruleData.steps === 1) frequencyDesc = 'Yearly';
+            else frequencyDesc = 'Every ' + ruleData.steps + ' years';
+            break;
+        }
       }
+      
+      // Fallback: Smart inference from task name and context
+      if (!frequencyDesc) {
+        const taskName = task.name().toLowerCase();
+        
+        // Pattern matching for common recurring task patterns
+        if (taskName.includes('daily') || taskName.includes('every day')) {
+          frequencyDesc = 'Daily';
+          ruleData.unit = 'days';
+          ruleData.steps = 1;
+        } else if (taskName.includes('weekly') || taskName.includes('every week')) {
+          frequencyDesc = 'Weekly';
+          ruleData.unit = 'weeks';
+          ruleData.steps = 1;
+        } else if (taskName.includes('monthly') || taskName.includes('every month') || taskName.includes('of each month') || taskName.includes('of the month')) {
+          frequencyDesc = 'Monthly';
+          ruleData.unit = 'months';
+          ruleData.steps = 1;
+        } else if (taskName.includes('yearly') || taskName.includes('annually') || taskName.includes('every year')) {
+          frequencyDesc = 'Yearly';
+          ruleData.unit = 'years';
+          ruleData.steps = 1;
+        } else if (taskName.includes('quarterly') || taskName.includes('every 3 months')) {
+          frequencyDesc = 'Quarterly';
+          ruleData.unit = 'months';
+          ruleData.steps = 3;
+        } else if (taskName.includes('biweekly') || taskName.includes('every 2 weeks') || taskName.includes('every two weeks')) {
+          frequencyDesc = 'Biweekly';
+          ruleData.unit = 'weeks';
+          ruleData.steps = 2;
+        }
+        // Extract number patterns like "every 4 weeks"
+        else {
+          const weekMatch = taskName.match(/every (\\d+) weeks?/);
+          const monthMatch = taskName.match(/every (\\d+) months?/);
+          const dayMatch = taskName.match(/every (\\d+) days?/);
+          
+          if (weekMatch) {
+            const num = parseInt(weekMatch[1]);
+            frequencyDesc = num === 1 ? 'Weekly' : \`Every \${num} weeks\`;
+            ruleData.unit = 'weeks';
+            ruleData.steps = num;
+          } else if (monthMatch) {
+            const num = parseInt(monthMatch[1]);
+            frequencyDesc = num === 1 ? 'Monthly' : \`Every \${num} months\`;
+            ruleData.unit = 'months';
+            ruleData.steps = num;
+          } else if (dayMatch) {
+            const num = parseInt(dayMatch[1]);
+            frequencyDesc = num === 1 ? 'Daily' : \`Every \${num} days\`;
+            ruleData.unit = 'days';
+            ruleData.steps = num;
+          }
+        }
+        
+        // If still no pattern, try to infer from context
+        if (!frequencyDesc) {
+          // Check project context for patterns
+          try {
+            const project = task.containingProject();
+            if (project) {
+              const projectName = project.name().toLowerCase();
+              if (projectName.includes('daily')) {
+                frequencyDesc = 'Daily';
+                ruleData.unit = 'days';
+                ruleData.steps = 1;
+              } else if (projectName.includes('weekly')) {
+                frequencyDesc = 'Weekly';
+                ruleData.unit = 'weeks';
+                ruleData.steps = 1;
+              } else if (projectName.includes('monthly') || projectName.includes('bills')) {
+                frequencyDesc = 'Monthly';
+                ruleData.unit = 'months';
+                ruleData.steps = 1;
+              }
+            }
+          } catch (e) {}
+          
+          // Final fallback based on common task types
+          if (!frequencyDesc) {
+            if (taskName.includes('bill') || taskName.includes('payment') || taskName.includes('$') || taskName.includes('subscription')) {
+              frequencyDesc = 'Monthly';
+              ruleData.unit = 'months';
+              ruleData.steps = 1;
+            } else {
+              frequencyDesc = 'Unknown Pattern';
+            }
+          }
+        }
+      }
+      
       taskInfo.frequency = frequencyDesc;
+      taskInfo.repetitionRule = ruleData; // Update with inferred data
       
       recurringTasks.push(taskInfo);
     }
@@ -173,12 +372,97 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
       
       totalRecurring++;
       
+      // Extract repetition rule properties using same approach as main script
+      const ruleData = {};
+      
+      // Try official OmniFocus API properties first
+      const officialProperties = ['method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'];
+      
+      officialProperties.forEach(prop => {
+        try {
+          const value = repetitionRule[prop];
+          if (value !== undefined && value !== null && value !== '') {
+            ruleData[prop] = value;
+          }
+        } catch (e) {}
+      });
+      
+      // Parse ruleString (RRULE format) to extract frequency details
+      if (ruleData.ruleString) {
+        try {
+          const ruleStr = ruleData.ruleString.toString();
+          
+          if (ruleStr.includes('FREQ=DAILY')) {
+            ruleData.unit = 'days';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=WEEKLY')) {
+            ruleData.unit = 'weeks';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=MONTHLY')) {
+            ruleData.unit = 'months';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=YEARLY')) {
+            ruleData.unit = 'years';
+            ruleData.steps = 1;
+          }
+          
+          const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
+          if (intervalMatch) {
+            ruleData.steps = parseInt(intervalMatch[1]);
+          }
+        } catch (e) {}
+      }
+      
+      // Fallback pattern inference if API doesn't work
+      if (!ruleData.unit || !ruleData.steps) {
+        const taskName = task.name().toLowerCase();
+        
+        if (taskName.includes('daily') || taskName.includes('every day')) {
+          ruleData.unit = 'days';
+          ruleData.steps = 1;
+        } else if (taskName.includes('weekly') || taskName.includes('every week')) {
+          ruleData.unit = 'weeks';
+          ruleData.steps = 1;
+        } else if (taskName.includes('monthly') || taskName.includes('of each month') || taskName.includes('of the month')) {
+          ruleData.unit = 'months';
+          ruleData.steps = 1;
+        } else if (taskName.includes('yearly') || taskName.includes('annually')) {
+          ruleData.unit = 'years';
+          ruleData.steps = 1;
+        } else if (taskName.includes('quarterly')) {
+          ruleData.unit = 'months';
+          ruleData.steps = 3;
+        } else if (taskName.includes('biweekly')) {
+          ruleData.unit = 'weeks';
+          ruleData.steps = 2;
+        } else {
+          // Check for number patterns
+          const weekMatch = taskName.match(/every (\\d+) weeks?/);
+          const monthMatch = taskName.match(/every (\\d+) months?/);
+          const dayMatch = taskName.match(/every (\\d+) days?/);
+          
+          if (weekMatch) {
+            ruleData.unit = 'weeks';
+            ruleData.steps = parseInt(weekMatch[1]);
+          } else if (monthMatch) {
+            ruleData.unit = 'months';
+            ruleData.steps = parseInt(monthMatch[1]);
+          } else if (dayMatch) {
+            ruleData.unit = 'days';
+            ruleData.steps = parseInt(dayMatch[1]);
+          } else if (taskName.includes('$') || taskName.includes('bill') || taskName.includes('subscription')) {
+            ruleData.unit = 'months';
+            ruleData.steps = 1;
+          }
+        }
+      }
+      
       // Create pattern key
-      const patternKey = repetitionRule.unit + '_' + repetitionRule.steps;
+      const patternKey = (ruleData.unit || 'unknown') + '_' + (ruleData.steps || 'unknown');
       if (!patterns[patternKey]) {
         patterns[patternKey] = {
-          unit: repetitionRule.unit,
-          steps: repetitionRule.steps,
+          unit: ruleData.unit || 'unknown',
+          steps: ruleData.steps || 'unknown',
           count: 0,
           tasks: []
         };

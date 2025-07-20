@@ -20,9 +20,9 @@ describe('Code Changes Verification', () => {
       // Should check for projectId in updates
       expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId !== undefined)');
       
-      // Should handle null projectId (move to inbox)
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId === null)');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = doc.inbox');
+      // Should handle empty string projectId (move to inbox)
+      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId === "")');
+      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = null');
       
       // Should handle projectId assignment
       expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = projects[i]');
@@ -47,8 +47,7 @@ describe('Code Changes Verification', () => {
       
       const projectIdDescription = tool.inputSchema.properties.projectId.description;
       
-      // Should mention both sources
-      expect(projectIdDescription).toContain('list_tasks');
+      // Should mention list_projects as source (list_tasks doesn't return project info)
       expect(projectIdDescription).toContain('list_projects');
     });
   });

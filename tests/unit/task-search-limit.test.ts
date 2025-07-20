@@ -19,6 +19,6 @@ describe('Task Search Limit Bug Fix', () => {
     // Verify projectId support was added
     expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId !== undefined)');
     expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = null');
-    expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('projects[i].id.primaryKey === updates.projectId');
+    expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('projects[i].id() === updates.projectId');
   });
 });

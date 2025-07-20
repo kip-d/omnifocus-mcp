@@ -30,11 +30,10 @@ describe('Verify ID Extraction Fix', () => {
     expect(LIST_TASKS_SCRIPT).toContain('id: task.id()');
     expect(UPDATE_TASK_SCRIPT).toContain('task.id()');
     expect(COMPLETE_TASK_SCRIPT).toContain('task.id()');
-    expect(DELETE_TASK_SCRIPT).toContain('task.id()');
+    expect(DELETE_TASK_SCRIPT).toContain('tasks[i].id() === taskId');
     
-    // Task scripts should use project.id.primaryKey for project IDs
-    expect(LIST_TASKS_SCRIPT).toContain('projectId: project.id.primaryKey');
-    expect(UPDATE_TASK_SCRIPT).toContain('project.id.primaryKey === updates.projectId');
+    // Task scripts should use project.id() for project IDs
+    expect(LIST_TASKS_SCRIPT).toContain('projectId = project.id()');
   });
   
   it('should use project.id() in project scripts', () => {

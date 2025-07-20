@@ -1,3 +1,33 @@
+/**
+ * OmniFocus MCP Bridge Type Definitions
+ * 
+ * IMPORTANT LEARNINGS FROM API EXPLORATION (July 2025):
+ * 
+ * 1. REPETITION RULES: OmniFocus JXA provides task.repetitionRule() objects,
+ *    but their properties (unit, steps, method, etc.) are NOT accessible
+ *    through standard property access or method calls. This is a significant
+ *    API limitation that requires intelligent inference to work around.
+ * 
+ * 2. SMART INFERENCE: We use task name pattern matching, project context,
+ *    and other heuristics to extract meaningful recurring task information
+ *    when the API fails to provide it directly.
+ * 
+ * 3. LLM-FRIENDLY OUTPUT: Our types prioritize providing actionable information
+ *    to AI assistants rather than raw API data, since the raw data is often
+ *    inaccessible or incomplete.
+ */
+
+/**
+ * OmniFocus Task representation
+ * 
+ * Recurring Task Behavior:
+ * - repetitionRule: Contains extracted/inferred repetition configuration
+ * - recurringStatus: Provides LLM-friendly analysis of recurring behavior
+ * - Both fields work together to give complete recurring task intelligence
+ * 
+ * Note: OmniFocus JXA API limitations mean repetitionRule data is primarily
+ * derived through intelligent inference rather than direct property access.
+ */
 export interface OmniFocusTask {
   id: string;
   name: string;
@@ -16,9 +46,13 @@ export interface OmniFocusTask {
   blocked: boolean;
   sequential: boolean;
   inInbox: boolean;
-  repetitionRule?: RepetitionRule;
-  recurringStatus?: RecurringTaskStatus;
-  added?: Date; // When task was first created
+  
+  // Recurring task information
+  repetitionRule?: RepetitionRule; // Raw repetition configuration (extracted/inferred)
+  recurringStatus?: RecurringTaskStatus; // LLM-friendly recurring analysis
+  
+  // Metadata
+  added?: Date; // When task was first created (helps with recurring analysis)
 }
 
 export interface OmniFocusProject {
@@ -49,20 +83,115 @@ export interface OmniFocusTag {
   children: string[];
 }
 
+/**
+ * OmniFocus RepetitionRule interface
+ * 
+ * Based on official OmniFocus Automation documentation:
+ * https://www.omni-automation.com/omnifocus/task-repeat.html
+ * 
+ * The actual API properties are:
+ * - method (Task.RepetitionMethod, read-only)
+ * - ruleString (String, read-only) 
+ * - anchorDateKey (Task.AnchorDateKey, read-only)
+ * - catchUpAutomatically (Boolean, read-only)
+ * - scheduleType (Task.RepetitionScheduleType, read-only)
+ */
 export interface RepetitionRule {
-  method: 'fixed' | 'startAfterCompletion' | 'dueAfterCompletion';
-  interval: string; // e.g., "1 week", "2 days"
+  // Official OmniFocus API properties (read-only)
+  method?: string; // Task.RepetitionMethod: 'DeferUntilDate' | 'DueDate' | 'Fixed' | 'None'
+  ruleString?: string; // FREQ=WEEKLY, FREQ=DAILY, etc. (RRULE format)
+  anchorDateKey?: string; // Task.AnchorDateKey: 'DeferDate' | 'DueDate' | 'PlannedDate'
+  catchUpAutomatically?: boolean;
+  scheduleType?: string; // Task.RepetitionScheduleType: 'FromCompletion' | 'None' | 'Regularly'
+  
+  // Parsed/inferred properties for easier consumption
   unit?: 'days' | 'weeks' | 'months' | 'years';
   steps?: number;
-  scheduleType?: 'regularly' | 'fromCompletion' | 'none';
+  interval?: string; // Human-readable: "1 week", "2 days"
+  frequency?: string; // Human-readable: "Daily", "Weekly", etc.
+  
+  // Inference metadata
+  _inferred?: boolean; // True if data came from smart inference vs API
+  _inferenceSource?: 'api' | 'ruleString' | 'taskName' | 'projectContext' | 'pattern';
 }
 
+/**
+ * Recurring task analysis results
+ * 
+ * This interface represents the intelligent analysis we perform on tasks
+ * to determine their recurring status and provide LLM-friendly information.
+ */
 export interface RecurringTaskStatus {
   isRecurring: boolean;
   type: 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override';
-  frequency?: string; // Human-readable like "Daily", "Weekly", etc.
-  nextExpectedDate?: Date;
+  
+  // Human-readable frequency description
+  frequency?: string; // "Daily", "Weekly", "Monthly", "Every 2 weeks", "Quarterly", etc.
+  
+  // Predicted information
+  nextExpectedDate?: Date | string; // When the next occurrence should happen
   scheduleDeviation?: boolean; // True if dates don't match expected pattern
+  
+  // Analysis metadata
+  _detectionMethod?: 'api' | 'inference' | 'pattern' | 'context';
+  _confidence?: 'high' | 'medium' | 'low'; // How confident we are in the analysis
+}
+
+/**
+ * Known limitations and behaviors of the OmniFocus JXA API
+ * 
+ * This documents what we've learned about OmniFocus automation challenges
+ * to help future developers understand the constraints.
+ */
+export interface OmniFocusAPILimitations {
+  repetitionRules: {
+    // RepetitionRule objects exist but properties are inaccessible
+    objectExists: true;
+    propertiesAccessible: false;
+    requiresInference: true;
+    
+    // Known property access patterns that fail
+    failedPatterns: string[]; // ['repetitionRule.unit', 'repetitionRule.steps', etc.]
+    
+    // Alternative approaches that work
+    workingApproaches: string[]; // ['task.repetitionRule() !== null', 'name inference']
+  };
+  
+  // Other API quirks discovered during development
+  taskCreation: {
+    temporaryIDs: boolean; // New tasks initially get temporary IDs
+    realIDsRequireRetrieval: boolean; // Must search for task after creation
+  };
+  
+  projectIDHandling: {
+    claudeDesktopBug: boolean; // Claude Desktop extracts numbers from alphanumeric IDs
+    requiresFullAlphanumericIDs: boolean;
+  };
+}
+
+/**
+ * Pattern matching rules for inferring recurring task frequencies
+ * 
+ * These patterns are used when the OmniFocus API doesn't provide
+ * direct access to repetition rule properties.
+ */
+export interface RecurringPatternRules {
+  // Exact keyword matches
+  exact: Record<string, { unit: string; steps: number }>;
+  
+  // Regex patterns for extracting custom intervals
+  patterns: Array<{
+    regex: RegExp;
+    unit: string;
+    stepsExtractor: (match: RegExpMatchArray) => number;
+  }>;
+  
+  // Context-based inference rules
+  contextRules: Array<{
+    projectPattern?: RegExp;
+    taskPattern?: RegExp;
+    inferredFrequency: { unit: string; steps: number };
+  }>;
 }
 
 export interface TaskFilter {

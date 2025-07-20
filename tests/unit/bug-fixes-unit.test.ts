@@ -44,13 +44,13 @@ describe('Bug Fixes - Unit Tests', () => {
       // Should check for projectId in updates
       expect(script).toContain('if (updates.projectId !== undefined)');
       
-      // Should handle null case (move to inbox)
-      expect(script).toContain('if (updates.projectId === null)');
+      // Should handle empty string case (move to inbox)
+      expect(script).toContain('if (updates.projectId === "")');
       expect(script).toContain('task.assignedContainer = null');
       
       // Should handle project assignment
       expect(script).toContain('const projects = doc.flattenedProjects()');
-      expect(script).toContain('if (projects[i].id.primaryKey === updates.projectId)');
+      expect(script).toContain('if (projects[i].id() === updates.projectId)');
       expect(script).toContain('task.assignedContainer = projects[i]');
     });
   });
