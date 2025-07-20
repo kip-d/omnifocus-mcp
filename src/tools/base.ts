@@ -1,6 +1,7 @@
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export abstract class BaseTool {
   protected omniAutomation: OmniAutomation;
@@ -23,40 +24,42 @@ export abstract class BaseTool {
 
   abstract execute(args: any): Promise<any>;
 
-  protected handleError(error: any): any {
+  protected handleError(error: any): never {
     this.logger.error(`Error in ${this.name}:`, error);
     
     // Check for permission errors
     const errorMessage = error.message || '';
     if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
-      return {
-        error: true,
-        code: 'PERMISSION_DENIED',
-        message: 'Not authorized to send Apple events to OmniFocus',
-        instructions: `To grant permissions:
+      throw new McpError(
+        ErrorCode.InternalError,
+        'Not authorized to send Apple events to OmniFocus',
+        {
+          code: 'PERMISSION_DENIED',
+          instructions: `To grant permissions:
 1. You may see a permission dialog - click "OK" to grant access
 2. Or manually grant permissions:
    - Open System Settings → Privacy & Security → Automation
    - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
    - Enable the checkbox next to OmniFocus
 3. After granting permissions, try your request again`
-      };
+        }
+      );
     }
     
     if (error.name === 'OmniAutomationError') {
-      return {
-        error: true,
-        message: error.message,
-        details: {
+      throw new McpError(
+        ErrorCode.InternalError,
+        error.message,
+        {
           script: error.script,
           stderr: error.stderr,
-        },
-      };
+        }
+      );
     }
     
-    return {
-      error: true,
-      message: error.message || 'An unknown error occurred',
-    };
+    throw new McpError(
+      ErrorCode.InternalError,
+      error.message || 'An unknown error occurred'
+    );
   }
 }

@@ -127,10 +127,17 @@ export class OmniAutomation {
     }
     
     if (typeof value === 'object') {
-      const entries = Object.entries(value)
-        .map(([k, v]) => `${JSON.stringify(k)}: ${this.formatValue(v)}`)
-        .join(', ');
-      return `{${entries}}`;
+      // Safely handle objects that might be null
+      try {
+        const entries = Object.entries(value)
+          .filter(([, v]) => v !== undefined) // Filter out undefined values
+          .map(([k, v]) => `${JSON.stringify(k)}: ${this.formatValue(v)}`)
+          .join(', ');
+        return `{${entries}}`;
+      } catch (error) {
+        logger.warn('Failed to format object value:', error);
+        return 'null';
+      }
     }
     
     return String(value);

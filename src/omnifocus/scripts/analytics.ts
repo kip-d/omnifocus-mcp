@@ -38,6 +38,11 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
       
+      // Skip dropped tasks - they should not be included in productivity stats
+      try {
+        if (task.dropped && task.dropped()) continue;
+      } catch (e) {}
+      
       // Check if task is in period
       let inPeriod = false;
       let createdInPeriod = false;
@@ -195,6 +200,11 @@ export const TASK_VELOCITY_SCRIPT = `
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
       
+      // Skip dropped tasks - they should not be included in velocity calculations
+      try {
+        if (task.dropped && task.dropped()) continue;
+      } catch (e) {}
+      
       // Apply filters
       if (options.projectId) {
         try {
@@ -332,6 +342,9 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
       const task = allTasks[i];
       
       try {
+        // Skip dropped tasks - they should not be included in overdue analysis
+        if (task.dropped && task.dropped()) continue;
+        
         const dueDate = task.dueDate();
         if (!dueDate) continue;
         

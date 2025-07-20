@@ -1,6 +1,6 @@
 import { BaseTool } from '../base.js';
 import { TaskUpdate } from '../../omnifocus/types.js';
-import { UPDATE_TASK_SCRIPT_SIMPLE } from '../../omnifocus/scripts/tasks.js';
+import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 
 export class UpdateTaskTool extends BaseTool {
   name = 'update_task';
@@ -55,32 +55,43 @@ export class UpdateTaskTool extends BaseTool {
     try {
       const { taskId, ...updates } = args;
       
-      // Temporarily disable cache invalidation to test freeze issue
-      // this.cache.invalidate('tasks');
+      // Validate required parameters
+      if (!taskId || typeof taskId !== 'string') {
+        return {
+          error: true,
+          message: 'Task ID is required and must be a string'
+        };
+      }
       
-      // Filter updates to only include what the simplified script can handle
-      const safeUpdates = {
-        ...(updates.name !== undefined && { name: updates.name }),
-        ...(updates.note !== undefined && { note: updates.note }),
-        ...(updates.flagged !== undefined && { flagged: updates.flagged }),
-        ...(updates.projectId !== undefined && { projectId: updates.projectId })
-      };
+      // Sanitize and validate updates object
+      const safeUpdates = this.sanitizeUpdates(updates);
       
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT_SIMPLE, { 
+      // If no valid updates, return early
+      if (Object.keys(safeUpdates).length === 0) {
+        return {
+          success: true,
+          task: { id: taskId, updated: false, message: 'No valid updates provided' }
+        };
+      }
+      
+      // Use the full script for comprehensive update support
+      const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, { 
         taskId,
         updates: safeUpdates,
       });
       
       const result = await this.omniAutomation.execute(script);
       
+      // Handle script execution errors
       if (result.error) {
-        return result;
+        this.logger.error(`Update task script error: ${result.message}`);
+        return {
+          error: true,
+          message: result.message || 'Failed to update task'
+        };
       }
       
-      // Temporarily disable logging to test freeze issue
-      // this.logger.info(`Updated task: ${taskId}`);
-      
-      // Parse the JSON result since the script returns a JSON string
+      // Parse the JSON result
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
@@ -92,6 +103,19 @@ export class UpdateTaskTool extends BaseTool {
         };
       }
       
+      // Check if the parsed result indicates an error
+      if (parsedResult.error) {
+        return {
+          error: true,
+          message: parsedResult.message || 'Update failed'
+        };
+      }
+      
+      // Invalidate cache after successful update
+      this.cache.invalidate('tasks');
+      
+      this.logger.info(`Updated task: ${taskId}`);
+      
       return {
         success: true,
         task: parsedResult,
@@ -99,5 +123,81 @@ export class UpdateTaskTool extends BaseTool {
     } catch (error) {
       return this.handleError(error);
     }
+  }
+  
+  private sanitizeUpdates(updates: TaskUpdate): Record<string, any> {
+    const sanitized: Record<string, any> = {};
+    
+    // Handle string fields
+    if (typeof updates.name === 'string') {
+      sanitized.name = updates.name;
+    }
+    if (typeof updates.note === 'string') {
+      sanitized.note = updates.note;
+    }
+    
+    // Handle boolean fields
+    if (typeof updates.flagged === 'boolean') {
+      sanitized.flagged = updates.flagged;
+    }
+    
+    // Handle date fields (allow null to clear, convert strings to Date objects)
+    if (updates.dueDate !== undefined) {
+      if (updates.dueDate === null) {
+        sanitized.dueDate = null; // Explicitly clear the date
+      } else if (typeof updates.dueDate === 'string') {
+        try {
+          // Convert ISO string to Date object like create_task does
+          const parsedDate = new Date(updates.dueDate);
+          // Validate the date is not invalid
+          if (isNaN(parsedDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+          sanitized.dueDate = parsedDate;
+        } catch (error) {
+          // Skip invalid date strings
+          this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`);
+        }
+      } else if (updates.dueDate instanceof Date) {
+        sanitized.dueDate = updates.dueDate; // Already a Date object
+      }
+    }
+    if (updates.deferDate !== undefined) {
+      if (updates.deferDate === null) {
+        sanitized.deferDate = null; // Explicitly clear the date
+      } else if (typeof updates.deferDate === 'string') {
+        try {
+          // Convert ISO string to Date object like create_task does
+          const parsedDate = new Date(updates.deferDate);
+          // Validate the date is not invalid
+          if (isNaN(parsedDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+          sanitized.deferDate = parsedDate;
+        } catch (error) {
+          // Skip invalid date strings
+          this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`);
+        }
+      } else if (updates.deferDate instanceof Date) {
+        sanitized.deferDate = updates.deferDate; // Already a Date object
+      }
+    }
+    
+    // Handle numeric fields (allow null to clear)
+    if (updates.estimatedMinutes !== undefined) {
+      sanitized.estimatedMinutes = updates.estimatedMinutes;
+    }
+    
+    // Handle project ID (allow null/empty string)
+    if (updates.projectId !== undefined) {
+      sanitized.projectId = updates.projectId;
+    }
+    
+    // Handle tags array
+    if (Array.isArray(updates.tags)) {
+      sanitized.tags = updates.tags.filter(tag => typeof tag === 'string');
+    }
+    
+    return sanitized;
   }
 }

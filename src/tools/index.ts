@@ -1,5 +1,5 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -36,6 +36,9 @@ import { BulkExportTool } from './export/BulkExportTool.js';
 // Import recurring task tools
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
 import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
+
+// Import system tools
+import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
 
 const logger = createLogger('tools');
 
@@ -77,6 +80,9 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // Recurring task tools
     new AnalyzeRecurringTasksTool(cache),
     new GetRecurringPatternsTool(cache),
+    
+    // System tools
+    new GetVersionInfoTool(cache),
   ];
   
   // Register handlers
@@ -95,7 +101,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     
     const tool = tools.find(t => t.name === name);
     if (!tool) {
-      throw new Error(`Tool not found: ${name}`);
+      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
     
     logger.debug(`Executing tool: ${name}`, args);

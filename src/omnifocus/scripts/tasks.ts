@@ -100,6 +100,7 @@ export const LIST_TASKS_SCRIPT = `
       }
     } catch (e) {
       // If date analysis fails, stick with default 'new-instance'
+      console.error("[DEBUG] Failed to analyze task dates:", e.toString());
     }
     
     return status;
@@ -224,6 +225,7 @@ export const LIST_TASKS_SCRIPT = `
         const tags = task.tags();
         taskObj.tags = tags.map(t => t.name());
       } catch (e) {
+        console.error("[DEBUG] Failed to extract tags for task:", e.toString());
         taskObj.tags = [];
       }
       
@@ -479,19 +481,60 @@ export const CREATE_TASK_SCRIPT = `
       }
     }
     
+    // Determine where to create the task
+    let targetContainer = null;
+    let taskIsInInbox = true;
+    
+    // If projectId is provided, find the project and assign the task there
+    if (taskData.projectId && taskData.projectId !== "") {
+      const projects = doc.flattenedProjects();
+      for (let i = 0; i < projects.length; i++) {
+        if (projects[i].id() === taskData.projectId) {
+          targetContainer = projects[i];
+          taskIsInInbox = false;
+          break;
+        }
+      }
+      
+      // If project not found, return error
+      if (!targetContainer) {
+        // Check if this looks like Claude Desktop extracted a number from an alphanumeric ID
+        const isNumericOnly = /^\d+$/.test(taskData.projectId);
+        let errorMessage = "Project with ID '" + taskData.projectId + "' not found";
+        
+        if (isNumericOnly) {
+          errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
+        }
+        
+        return JSON.stringify({
+          error: true,
+          message: errorMessage
+        });
+      }
+    }
+    
     // Create the task using JXA syntax
-    const newTask = app.InboxTask(taskObj);
-    const inbox = doc.inboxTasks;
-    inbox.push(newTask);
+    let newTask;
+    if (targetContainer) {
+      // Create task in the specified project
+      newTask = app.Task(taskObj);
+      targetContainer.tasks.push(newTask);
+    } else {
+      // Create task in inbox
+      newTask = app.InboxTask(taskObj);
+      const inbox = doc.inboxTasks;
+      inbox.push(newTask);
+    }
     
     // Try to get the real OmniFocus ID by finding the task we just created
     let taskId = null;
     let createdTask = null;
     
     try {
-      const allInboxTasks = doc.inboxTasks();
-      for (let i = allInboxTasks.length - 1; i >= 0; i--) {
-        const task = allInboxTasks[i];
+      // Search in the appropriate container
+      const tasksToSearch = targetContainer ? targetContainer.tasks() : doc.inboxTasks();
+      for (let i = tasksToSearch.length - 1; i >= 0; i--) {
+        const task = tasksToSearch[i];
         if (task.name() === taskData.name) {
           taskId = task.id();
           createdTask = task;
@@ -501,7 +544,8 @@ export const CREATE_TASK_SCRIPT = `
             try {
               task.addTags(tagsToAdd);
             } catch (tagError) {
-              // Tags failed to add, but task was created
+              // Tags failed to add, but task was created - log warning
+              console.error("[WARN] Failed to add tags to task:", tagError.toString());
             }
           }
           
@@ -510,6 +554,7 @@ export const CREATE_TASK_SCRIPT = `
       }
     } catch (e) {
       // If we can't get the real ID, generate a temporary one
+      console.error("[WARN] Failed to get task ID from created task, using temporary ID:", e.toString());
       taskId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
     }
     
@@ -520,7 +565,9 @@ export const CREATE_TASK_SCRIPT = `
         id: taskId,
         name: taskData.name,
         flagged: taskData.flagged || false,
-        inInbox: true
+        inInbox: taskIsInInbox,
+        projectId: taskData.projectId || null,
+        project: targetContainer ? targetContainer.name() : null
       }
     });
   } catch (error) {
@@ -640,88 +687,126 @@ export const UPDATE_TASK_SCRIPT = `
       return JSON.stringify({ error: true, message: 'Task not found' });
     }
     
-    // Apply updates using property setters
-    if (updates.name !== undefined) task.name = updates.name;
-    if (updates.note !== undefined) task.note = updates.note;
-    if (updates.flagged !== undefined) task.flagged = updates.flagged;
+    // Apply updates using property setters with null handling
+    if (updates.name !== undefined) {
+      task.name = updates.name;
+    }
+    if (updates.note !== undefined) {
+      task.note = updates.note || '';
+    }
+    if (updates.flagged !== undefined) {
+      task.flagged = updates.flagged;
+    }
     if (updates.dueDate !== undefined) {
-      task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+      try {
+        // Handle Date objects, strings, and null values
+        task.dueDate = updates.dueDate; // OmniAutomation.formatValue handles Date objects correctly
+      } catch (dateError) {
+        // Skip invalid due date
+      }
     }
     if (updates.deferDate !== undefined) {
-      task.deferDate = updates.deferDate ? new Date(updates.deferDate) : null;
+      try {
+        // Handle Date objects, strings, and null values
+        task.deferDate = updates.deferDate; // OmniAutomation.formatValue handles Date objects correctly
+      } catch (dateError) {
+        // Skip invalid defer date
+      }
     }
     if (updates.estimatedMinutes !== undefined) {
       task.estimatedMinutes = updates.estimatedMinutes;
     }
     
-    // Update project assignment
+    // Update project assignment with better error handling
     if (updates.projectId !== undefined) {
-      if (updates.projectId === "") {
-        // Move to inbox - set assignedContainer to null
-        task.assignedContainer = null;
-      } else {
-        // Find and assign project
-        const projects = doc.flattenedProjects();
-        let projectFound = false;
-        for (let i = 0; i < projects.length; i++) {
-          if (projects[i].id() === updates.projectId) {
-            task.assignedContainer = projects[i];
-            projectFound = true;
-            break;
-          }
-        }
-        if (!projectFound) {
-          // Check if this looks like Claude Desktop extracted a number from an alphanumeric ID
-          const isNumericOnly = /^\d+$/.test(updates.projectId);
-          let errorMessage = "Project with ID '" + updates.projectId + "' not found";
-          
-          if (isNumericOnly) {
-            errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
-          }
-          
-          return JSON.stringify({
-            error: true,
-            message: errorMessage
-          });
-        }
-      }
-    }
-    
-    // Update tags
-    if (updates.tags !== undefined) {
-      // Get current tags
-      const currentTags = task.tags();
-      
-      // Remove all existing tags
-      if (currentTags.length > 0) {
-        task.removeTags(currentTags);
-      }
-      
-      // Add new tags
-      if (updates.tags.length > 0) {
-        const existingTags = doc.flattenedTags();
-        const tagsToAdd = [];
-        
-        for (const tagName of updates.tags) {
-          let found = false;
-          for (let i = 0; i < existingTags.length; i++) {
-            if (existingTags[i].name() === tagName) {
-              tagsToAdd.push(existingTags[i]);
-              found = true;
+      try {
+        if (updates.projectId === "" || updates.projectId === null) {
+          // Move to inbox - set assignedContainer to null
+          task.assignedContainer = null;
+        } else {
+          // Find and assign project
+          const projects = doc.flattenedProjects();
+          let projectFound = false;
+          for (let i = 0; i < projects.length; i++) {
+            if (projects[i].id() === updates.projectId) {
+              task.assignedContainer = projects[i];
+              projectFound = true;
               break;
             }
           }
-          if (!found) {
-            // Create new tag
-            const newTag = app.Tag({name: tagName});
-            doc.tags.push(newTag);
-            tagsToAdd.push(newTag);
+          if (!projectFound) {
+            // Check if this looks like Claude Desktop extracted a number from an alphanumeric ID
+            const isNumericOnly = /^\d+$/.test(updates.projectId);
+            let errorMessage = "Project with ID '" + updates.projectId + "' not found";
+            
+            if (isNumericOnly) {
+              errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
+            }
+            
+            return JSON.stringify({
+              error: true,
+              message: errorMessage
+            });
           }
         }
+      } catch (projectError) {
+        // Project assignment error
+        return JSON.stringify({
+          error: true,
+          message: "Failed to update project assignment: " + projectError.toString()
+        });
+      }
+    }
+    
+    // Update tags with error handling
+    if (updates.tags !== undefined) {
+      try {
+        // Get current tags
+        const currentTags = task.tags();
         
-        if (tagsToAdd.length > 0) {
-          task.addTags(tagsToAdd);
+        // Remove all existing tags
+        if (currentTags.length > 0) {
+          task.removeTags(currentTags);
         }
+        
+        // Add new tags
+        if (updates.tags && updates.tags.length > 0) {
+          const existingTags = doc.flattenedTags();
+          const tagsToAdd = [];
+          
+          for (const tagName of updates.tags) {
+            if (typeof tagName !== 'string' || tagName.trim() === '') {
+              // Skip invalid tag name
+              continue;
+            }
+            
+            let found = false;
+            for (let i = 0; i < existingTags.length; i++) {
+              if (existingTags[i].name() === tagName) {
+                tagsToAdd.push(existingTags[i]);
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              try {
+                // Create new tag
+                const newTag = app.Tag({name: tagName});
+                doc.tags.push(newTag);
+                tagsToAdd.push(newTag);
+              } catch (tagError) {
+                // Skip tag creation error
+              }
+            }
+          }
+          
+          if (tagsToAdd.length > 0) {
+            task.addTags(tagsToAdd);
+          }
+        }
+      } catch (tagError) {
+        // Skip tag update errors
+        // Don't fail the entire update for tag errors
       }
     }
     

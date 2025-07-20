@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export class ManageTagsTool extends BaseTool {
   name = 'manage_tags';
@@ -35,17 +36,11 @@ export class ManageTagsTool extends BaseTool {
       
       // Validate inputs
       if (action === 'rename' && !newName) {
-        return {
-          error: true,
-          message: 'New name is required for rename action',
-        };
+        throw new McpError(ErrorCode.InvalidParams, 'New name is required for rename action');
       }
       
       if (action === 'merge' && !targetTag) {
-        return {
-          error: true,
-          message: 'Target tag is required for merge action',
-        };
+        throw new McpError(ErrorCode.InvalidParams, 'Target tag is required for merge action');
       }
       
       // Clear tag cache since we're modifying
@@ -62,7 +57,7 @@ export class ManageTagsTool extends BaseTool {
       
       return result;
     } catch (error) {
-      return this.handleError(error);
+      this.handleError(error);
     }
   }
 }
