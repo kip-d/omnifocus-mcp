@@ -13,8 +13,8 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
       
-      // Skip if filtering by active only and task is completed
-      if (options.activeOnly && task.completed()) continue;
+      // Skip if filtering by active only and task is completed or dropped
+      if (options.activeOnly && (task.completed() || task.dropped())) continue;
       
       const taskInfo = {
         id: task.id(),
@@ -436,6 +436,11 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
       const task = allTasks[i];
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
+      
+      // Skip dropped tasks - they should not be included in pattern analysis
+      try {
+        if (task.dropped && task.dropped()) continue;
+      } catch (e) {}
       
       totalRecurring++;
       
