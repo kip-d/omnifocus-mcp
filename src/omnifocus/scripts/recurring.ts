@@ -45,7 +45,10 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
           const ruleStr = ruleData.ruleString.toString();
           
           // Parse FREQ= part
-          if (ruleStr.includes('FREQ=DAILY')) {
+          if (ruleStr.includes('FREQ=HOURLY')) {
+            ruleData.unit = 'hours';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=DAILY')) {
             ruleData.unit = 'days';
             ruleData.steps = 1;
           } else if (ruleStr.includes('FREQ=WEEKLY')) {
@@ -173,6 +176,15 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
       // First try the extracted rule data
       if (ruleData.unit && ruleData.steps) {
         switch(ruleData.unit) {
+          case 'hours':
+            if (ruleData.steps === 1) frequencyDesc = 'Hourly';
+            else if (ruleData.steps === 2) frequencyDesc = 'Every 2 hours';
+            else if (ruleData.steps === 4) frequencyDesc = 'Every 4 hours';
+            else if (ruleData.steps === 6) frequencyDesc = 'Every 6 hours';
+            else if (ruleData.steps === 8) frequencyDesc = 'Every 8 hours';
+            else if (ruleData.steps === 12) frequencyDesc = 'Every 12 hours';
+            else frequencyDesc = 'Every ' + ruleData.steps + ' hours';
+            break;
           case 'days':
             if (ruleData.steps === 1) frequencyDesc = 'Daily';
             else if (ruleData.steps === 7) frequencyDesc = 'Weekly';
@@ -181,15 +193,19 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
             break;
           case 'weeks':
             if (ruleData.steps === 1) frequencyDesc = 'Weekly';
+            else if (ruleData.steps === 4) frequencyDesc = 'Every 4 weeks';
             else frequencyDesc = 'Every ' + ruleData.steps + ' weeks';
             break;
           case 'months':
             if (ruleData.steps === 1) frequencyDesc = 'Monthly';
             else if (ruleData.steps === 3) frequencyDesc = 'Quarterly';
+            else if (ruleData.steps === 6) frequencyDesc = 'Every 6 months';
             else frequencyDesc = 'Every ' + ruleData.steps + ' months';
             break;
           case 'years':
             if (ruleData.steps === 1) frequencyDesc = 'Yearly';
+            else if (ruleData.steps === 2) frequencyDesc = 'Every 2 years';
+            else if (ruleData.steps === 3) frequencyDesc = 'Every 3 years';
             else frequencyDesc = 'Every ' + ruleData.steps + ' years';
             break;
         }
@@ -200,11 +216,18 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
         const taskName = task.name().toLowerCase();
         
         // Pattern matching for common recurring task patterns
-        if (taskName.includes('daily') || taskName.includes('every day')) {
+        // Gaming hourly patterns first
+        if (taskName.includes('energy available') || taskName.includes('mines should be harvested') || 
+            taskName.includes('hourly') || taskName.includes('every hour')) {
+          frequencyDesc = 'Hourly';
+          ruleData.unit = 'hours';
+          ruleData.steps = 1;
+        } else if (taskName.includes('daily') || taskName.includes('every day')) {
           frequencyDesc = 'Daily';
           ruleData.unit = 'days';
           ruleData.steps = 1;
-        } else if (taskName.includes('weekly') || taskName.includes('every week')) {
+        } else if (taskName.includes('weekly') || taskName.includes('every week') || 
+                  taskName.includes('helpdesk tickets') || taskName.includes('review recent activity')) {
           frequencyDesc = 'Weekly';
           ruleData.unit = 'weeks';
           ruleData.steps = 1;
@@ -212,7 +235,8 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
           frequencyDesc = 'Monthly';
           ruleData.unit = 'months';
           ruleData.steps = 1;
-        } else if (taskName.includes('yearly') || taskName.includes('annually') || taskName.includes('every year')) {
+        } else if (taskName.includes('yearly') || taskName.includes('annually') || taskName.includes('every year') || 
+                  taskName.includes('domain renewal') || taskName.includes('.com') || taskName.includes('.org')) {
           frequencyDesc = 'Yearly';
           ruleData.unit = 'years';
           ruleData.steps = 1;
@@ -279,7 +303,50 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
               ruleData.unit = 'months';
               ruleData.steps = 1;
             } else {
-              frequencyDesc = 'Unknown Pattern';
+              // Enhanced gaming-specific pattern detection
+              try {
+                const project = task.containingProject();
+                if (project) {
+                  const projectName = project.name().toLowerCase();
+                  if (projectName.includes('troops') || projectName.includes('blitz') || 
+                      projectName.includes('titans') || projectName.includes('game')) {
+                    // Gaming projects - analyze due dates for patterns
+                    const dueDate = task.dueDate();
+                    const deferDate = task.deferDate();
+                    
+                    if (dueDate && deferDate) {
+                      const hoursDiff = Math.abs(dueDate - deferDate) / (1000 * 60 * 60);
+                      // Gaming task patterns (2-12 hour intervals)
+                      if (hoursDiff >= 2 && hoursDiff <= 12 && hoursDiff % 1 === 0) {
+                        frequencyDesc = 'Every ' + Math.round(hoursDiff) + ' hours';
+                        ruleData.unit = 'hours';
+                        ruleData.steps = Math.round(hoursDiff);
+                      }
+                    } else if (dueDate) {
+                      // Gaming projects - look for common gaming intervals
+                      const dueHour = dueDate.getHours();
+                      // Common gaming reset times suggest specific intervals
+                      if (dueHour === 0 || dueHour === 6 || dueHour === 12 || dueHour === 18) {
+                        frequencyDesc = 'Every 6 hours';
+                        ruleData.unit = 'hours';
+                        ruleData.steps = 6;
+                      } else if (dueHour === 8 || dueHour === 16) {
+                        frequencyDesc = 'Every 8 hours';
+                        ruleData.unit = 'hours';
+                        ruleData.steps = 8;
+                      } else {
+                        frequencyDesc = 'Every 4 hours';
+                        ruleData.unit = 'hours';
+                        ruleData.steps = 4;
+                      }
+                    }
+                  }
+                }
+              } catch (e) {}
+              
+              if (!frequencyDesc) {
+                frequencyDesc = 'Unknown Pattern';
+              }
             }
           }
         }
@@ -392,7 +459,10 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
         try {
           const ruleStr = ruleData.ruleString.toString();
           
-          if (ruleStr.includes('FREQ=DAILY')) {
+          if (ruleStr.includes('FREQ=HOURLY')) {
+            ruleData.unit = 'hours';
+            ruleData.steps = 1;
+          } else if (ruleStr.includes('FREQ=DAILY')) {
             ruleData.unit = 'days';
             ruleData.steps = 1;
           } else if (ruleStr.includes('FREQ=WEEKLY')) {
@@ -417,16 +487,23 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
       if (!ruleData.unit || !ruleData.steps) {
         const taskName = task.name().toLowerCase();
         
-        if (taskName.includes('daily') || taskName.includes('every day')) {
+        // Gaming hourly patterns first
+        if (taskName.includes('energy available') || taskName.includes('mines should be harvested') || 
+            taskName.includes('hourly') || taskName.includes('every hour')) {
+          ruleData.unit = 'hours';
+          ruleData.steps = 1;
+        } else if (taskName.includes('daily') || taskName.includes('every day')) {
           ruleData.unit = 'days';
           ruleData.steps = 1;
-        } else if (taskName.includes('weekly') || taskName.includes('every week')) {
+        } else if (taskName.includes('weekly') || taskName.includes('every week') || 
+                  taskName.includes('helpdesk tickets') || taskName.includes('review recent activity')) {
           ruleData.unit = 'weeks';
           ruleData.steps = 1;
         } else if (taskName.includes('monthly') || taskName.includes('of each month') || taskName.includes('of the month')) {
           ruleData.unit = 'months';
           ruleData.steps = 1;
-        } else if (taskName.includes('yearly') || taskName.includes('annually')) {
+        } else if (taskName.includes('yearly') || taskName.includes('annually') || 
+                  taskName.includes('domain renewal') || taskName.includes('.com') || taskName.includes('.org')) {
           ruleData.unit = 'years';
           ruleData.steps = 1;
         } else if (taskName.includes('quarterly')) {
@@ -454,6 +531,45 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
             ruleData.unit = 'months';
             ruleData.steps = 1;
           }
+        }
+        
+        // Enhanced gaming-specific pattern detection if still no pattern
+        if (!ruleData.unit || !ruleData.steps) {
+          try {
+            const project = task.containingProject();
+            if (project) {
+              const projectName = project.name().toLowerCase();
+              if (projectName.includes('troops') || projectName.includes('blitz') || 
+                  projectName.includes('titans') || projectName.includes('game')) {
+                // Gaming projects - analyze due dates for patterns
+                const dueDate = task.dueDate();
+                const deferDate = task.deferDate();
+                
+                if (dueDate && deferDate) {
+                  const hoursDiff = Math.abs(dueDate - deferDate) / (1000 * 60 * 60);
+                  // Gaming task patterns (2-12 hour intervals)
+                  if (hoursDiff >= 2 && hoursDiff <= 12 && hoursDiff % 1 === 0) {
+                    ruleData.unit = 'hours';
+                    ruleData.steps = Math.round(hoursDiff);
+                  }
+                } else if (dueDate) {
+                  // Gaming projects - look for common gaming intervals
+                  const dueHour = dueDate.getHours();
+                  // Common gaming reset times suggest specific intervals
+                  if (dueHour === 0 || dueHour === 6 || dueHour === 12 || dueHour === 18) {
+                    ruleData.unit = 'hours';
+                    ruleData.steps = 6;
+                  } else if (dueHour === 8 || dueHour === 16) {
+                    ruleData.unit = 'hours';
+                    ruleData.steps = 8;
+                  } else {
+                    ruleData.unit = 'hours';
+                    ruleData.steps = 4;
+                  }
+                }
+              }
+            }
+          } catch (e) {}
         }
       }
       
