@@ -64,7 +64,7 @@ export const LIST_PROJECTS_SCRIPT = `
         const tasks = project.flattenedTasks();
         projectObj.numberOfTasks = tasks.length;
       } catch (e) {
-        console.error("[DEBUG] Failed to count tasks for project:", e.toString());
+        
         projectObj.numberOfTasks = 0;
       }
       

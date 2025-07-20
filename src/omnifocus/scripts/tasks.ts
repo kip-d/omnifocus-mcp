@@ -100,7 +100,7 @@ export const LIST_TASKS_SCRIPT = `
       }
     } catch (e) {
       // If date analysis fails, stick with default 'new-instance'
-      console.error("[DEBUG] Failed to analyze task dates:", e.toString());
+      // Debug: Failed to analyze task dates
     }
     
     return status;
@@ -225,7 +225,7 @@ export const LIST_TASKS_SCRIPT = `
         const tags = task.tags();
         taskObj.tags = tags.map(t => t.name());
       } catch (e) {
-        console.error("[DEBUG] Failed to extract tags for task:", e.toString());
+        // Debug: Failed to extract tags for task
         taskObj.tags = [];
       }
       
@@ -545,7 +545,7 @@ export const CREATE_TASK_SCRIPT = `
               task.addTags(tagsToAdd);
             } catch (tagError) {
               // Tags failed to add, but task was created - log warning
-              console.error("[WARN] Failed to add tags to task:", tagError.toString());
+              // Warning: Failed to add tags to task
             }
           }
           
@@ -554,7 +554,7 @@ export const CREATE_TASK_SCRIPT = `
       }
     } catch (e) {
       // If we can't get the real ID, generate a temporary one
-      console.error("[WARN] Failed to get task ID from created task, using temporary ID:", e.toString());
+      // Warning: Failed to get task ID from created task, using temporary ID
       taskId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
     }
     
