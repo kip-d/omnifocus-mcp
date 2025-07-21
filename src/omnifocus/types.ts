@@ -220,11 +220,11 @@ export interface TaskUpdate {
   name?: string;
   note?: string;
   flagged?: boolean;
-  dueDate?: Date | null;
-  deferDate?: Date | null;
-  estimatedMinutes?: number | null;
+  dueDate?: string; // ISO date string, empty string to clear
+  deferDate?: string; // ISO date string, empty string to clear  
+  estimatedMinutes?: number; // 0 to clear
   tags?: string[];
-  projectId?: string | null;
+  projectId?: string; // empty string to move to inbox
 }
 
 export interface ProjectUpdate {

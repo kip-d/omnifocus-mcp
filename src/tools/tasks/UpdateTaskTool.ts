@@ -26,18 +26,18 @@ export class UpdateTaskTool extends BaseTool {
         description: 'New flagged status',
       },
       dueDate: {
-        type: ['string', 'null'],
+        type: 'string',
         format: 'date-time',
-        description: 'New due date (null to clear)',
+        description: 'New due date (use empty string "" to clear existing date)',
       },
       deferDate: {
-        type: ['string', 'null'],
+        type: 'string',
         format: 'date-time',
-        description: 'New defer date (null to clear)',
+        description: 'New defer date (use empty string "" to clear existing date)',
       },
       estimatedMinutes: {
-        type: ['number', 'null'],
-        description: 'New estimated time (null to clear)',
+        type: 'number',
+        description: 'New estimated time (use 0 to clear existing estimate)',
       },
       tags: {
         type: 'array',
@@ -174,17 +174,16 @@ export class UpdateTaskTool extends BaseTool {
       sanitized.flagged = updates.flagged;
     }
     
-    // Handle date fields (allow null to clear, validate but keep as strings like create_task)
+    // Handle date fields (use empty string to clear, validate but keep as strings like create_task)
     if (updates.dueDate !== undefined) {
       this.logger.info('Processing dueDate:', {
         value: updates.dueDate,
         type: typeof updates.dueDate,
-        isNull: updates.dueDate === null,
-        isString: typeof updates.dueDate === 'string',
-        isDate: updates.dueDate instanceof Date
+        isEmptyString: updates.dueDate === '',
+        isString: typeof updates.dueDate === 'string'
       });
       
-      if (updates.dueDate === null) {
+      if (updates.dueDate === '') {
         this.logger.info('Setting dueDate to null (clearing date)');
         sanitized.dueDate = null; // Explicitly clear the date
       } else if (typeof updates.dueDate === 'string') {
@@ -204,13 +203,6 @@ export class UpdateTaskTool extends BaseTool {
           // Skip invalid date strings
           this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`, error);
         }
-      } else if (updates.dueDate instanceof Date) {
-        const isoString = updates.dueDate.toISOString();
-        this.logger.info('Converting Date object to ISO string:', {
-          original: updates.dueDate,
-          converted: isoString
-        });
-        sanitized.dueDate = isoString; // Convert Date object to ISO string
       } else {
         this.logger.warn('Unexpected dueDate type:', {
           value: updates.dueDate,
@@ -219,7 +211,7 @@ export class UpdateTaskTool extends BaseTool {
       }
     }
     if (updates.deferDate !== undefined) {
-      if (updates.deferDate === null) {
+      if (updates.deferDate === '') {
         sanitized.deferDate = null; // Explicitly clear the date
       } else if (typeof updates.deferDate === 'string') {
         try {
@@ -234,14 +226,21 @@ export class UpdateTaskTool extends BaseTool {
           // Skip invalid date strings
           this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`);
         }
-      } else if (updates.deferDate instanceof Date) {
-        sanitized.deferDate = updates.deferDate.toISOString(); // Convert Date object to ISO string
+      } else {
+        this.logger.warn('Unexpected deferDate type:', {
+          value: updates.deferDate,
+          type: typeof updates.deferDate
+        });
       }
     }
     
-    // Handle numeric fields (allow null to clear)
+    // Handle numeric fields (use 0 to clear)
     if (updates.estimatedMinutes !== undefined) {
-      sanitized.estimatedMinutes = updates.estimatedMinutes;
+      if (updates.estimatedMinutes === 0) {
+        sanitized.estimatedMinutes = null; // Clear the estimate
+      } else {
+        sanitized.estimatedMinutes = updates.estimatedMinutes;
+      }
     }
     
     // Handle project ID (allow null/empty string)
