@@ -196,7 +196,6 @@ export class OmniAutomation {
     });
   }
 
-  // Utility method for batch operations
   public async executeBatch<T = any>(scripts: string[]): Promise<T[]> {
     logger.info(`Executing batch of ${scripts.length} scripts`);
     
