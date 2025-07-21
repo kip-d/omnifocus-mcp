@@ -532,17 +532,27 @@ export const CREATE_TASK_SCRIPT = `
       taskId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
     }
     
+    // Build complete task response including all set fields
+    const responseTask = {
+      id: taskId,
+      name: taskData.name,
+      flagged: taskData.flagged || false,
+      inInbox: taskIsInInbox,
+      projectId: taskData.projectId || null,
+      project: targetContainer ? targetContainer.name() : null
+    };
+    
+    // Include all fields that were actually set in the creation
+    if (taskData.note !== undefined) responseTask.note = taskData.note;
+    if (taskData.dueDate !== undefined) responseTask.dueDate = taskData.dueDate;
+    if (taskData.deferDate !== undefined) responseTask.deferDate = taskData.deferDate;
+    if (taskData.estimatedMinutes !== undefined) responseTask.estimatedMinutes = taskData.estimatedMinutes;
+    if (taskData.tags !== undefined && taskData.tags.length > 0) responseTask.tags = taskData.tags;
+    
     return JSON.stringify({
       success: true,
       taskId: taskId,
-      task: {
-        id: taskId,
-        name: taskData.name,
-        flagged: taskData.flagged || false,
-        inInbox: taskIsInInbox,
-        projectId: taskData.projectId || null,
-        project: targetContainer ? targetContainer.name() : null
-      }
+      task: responseTask
     });
   } catch (error) {
     return JSON.stringify({
@@ -584,18 +594,28 @@ export const UPDATE_TASK_SCRIPT = `
     }
     if (updates.dueDate !== undefined) {
       try {
-        // Handle Date objects, strings, and null values
-        task.dueDate = updates.dueDate; // OmniAutomation.formatValue handles Date objects correctly
+        // Handle null values explicitly to clear dates
+        if (updates.dueDate === null) {
+          task.dueDate = null;
+        } else if (updates.dueDate) {
+          // Handle Date objects and strings
+          task.dueDate = updates.dueDate;
+        }
       } catch (dateError) {
-        // Skip invalid due date
+        // Skip invalid due date - log error details for debugging
       }
     }
     if (updates.deferDate !== undefined) {
       try {
-        // Handle Date objects, strings, and null values
-        task.deferDate = updates.deferDate; // OmniAutomation.formatValue handles Date objects correctly
+        // Handle null values explicitly to clear dates
+        if (updates.deferDate === null) {
+          task.deferDate = null;
+        } else if (updates.deferDate) {
+          // Handle Date objects and strings
+          task.deferDate = updates.deferDate;
+        }
       } catch (dateError) {
-        // Skip invalid defer date
+        // Skip invalid defer date - log error details for debugging
       }
     }
     if (updates.estimatedMinutes !== undefined) {
@@ -821,21 +841,23 @@ export const DELETE_TASK_SCRIPT = `
       return JSON.stringify({ error: true, message: 'Task not found' });
     }
     
-    const taskName = task.name();
+    const taskName = safeGet(() => task.name(), 'Unnamed Task');
     
     // Delete using JXA app.delete method
     app.delete(task);
     
     return JSON.stringify({
+      success: true,
       id: taskId,
       deleted: true,
       name: taskName
     });
   } catch (error) {
+    const errorMessage = error ? error.toString() : 'Unknown error';
     return JSON.stringify({
       error: true,
-      message: "Failed to delete task: " + error.toString(),
-      details: error.message
+      message: "Failed to delete task: " + errorMessage,
+      details: error && error.message ? error.message : 'No details available'
     });
   }
 `;

@@ -37,23 +37,26 @@ export class DeleteTaskTool extends BaseTool {
           return result;
         }
         
-        // Parse the JSON result since the script returns a JSON string
+        // Handle the result from DELETE_TASK_SCRIPT
         let parsedResult;
         try {
           parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
         } catch (parseError) {
-          this.logger.error(`Failed to parse delete task result: ${result}`);
+          this.logger.error(`Failed to parse delete task result:`, { result, error: parseError });
           return {
             error: true,
             message: 'Failed to parse task deletion response'
           };
         }
         
+        // Check if the script returned an error
+        if (parsedResult.error) {
+          this.logger.error(`Delete task script error: ${parsedResult.message}`);
+          return parsedResult;
+        }
+        
         this.logger.info(`Deleted task via JXA: ${parsedResult.name} (${args.taskId})`);
-        return {
-          success: true,
-          task: parsedResult,
-        };
+        return parsedResult;
       } catch (jxaError: any) {
         // If JXA fails with permission error, use URL scheme
         if (jxaError.message && 

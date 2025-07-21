@@ -12,7 +12,7 @@ export class OmniAutomationError extends Error {
 
 export class OmniAutomation {
   private readonly maxScriptSize = 100000; // 100KB limit for scripts
-  private readonly timeout = 30000; // 30 second timeout
+  private readonly timeout = 60000; // 60 second timeout (increased for reliability)
 
   public async execute<T = any>(script: string): Promise<T> {
     if (script.length > this.maxScriptSize) {
@@ -61,13 +61,29 @@ export class OmniAutomation {
           logger.warn('Script execution warning:', stderr);
         }
 
+        const trimmedOutput = stdout.trim();
+        
+        if (!trimmedOutput) {
+          logger.warn('Script returned empty output, treating as null result');
+          resolve(null as T);
+          return;
+        }
+        
         try {
-          const result = JSON.parse(stdout.trim());
+          const result = JSON.parse(trimmedOutput);
           logger.debug('Script execution successful');
           resolve(result);
         } catch (parseError) {
-          logger.error('Failed to parse script output:', stdout);
-          reject(new OmniAutomationError('Invalid JSON response from script', script, stdout));
+          logger.error('Failed to parse script output:', { output: trimmedOutput, error: parseError });
+          
+          // Try to return the raw output if it might be useful
+          if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
+            // Looks like malformed JSON, treat as error
+            reject(new OmniAutomationError('Invalid JSON response from script', script, trimmedOutput));
+          } else {
+            // Might be a simple string result, wrap it
+            resolve(trimmedOutput as T);
+          }
         }
       });
 
@@ -85,10 +101,13 @@ export class OmniAutomation {
         
         ${script}
       } catch (error) {
+        const errorMessage = error && error.toString ? error.toString() : 'Unknown error occurred';
+        const errorStack = error && error.stack ? error.stack : 'No stack trace available';
+        
         return JSON.stringify({
           error: true,
-          message: error.toString(),
-          stack: error.stack
+          message: errorMessage,
+          stack: errorStack
         });
       }
     })()`;
