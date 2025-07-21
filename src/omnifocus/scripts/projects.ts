@@ -380,6 +380,14 @@ export const DELETE_PROJECT_SCRIPT = `
   const projectId = {{projectId}};
   const deleteTasks = {{deleteTasks}};
   
+  // Validate parameters
+  if (!projectId || typeof projectId !== 'string') {
+    return JSON.stringify({
+      error: true,
+      message: "Parameter 'projectId' is required and must be a string"
+    });
+  }
+  
   try {
     // Find the project by ID
     const projects = doc.flattenedProjects();
