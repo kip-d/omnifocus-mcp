@@ -568,6 +568,31 @@ export const UPDATE_TASK_SCRIPT = `
   const taskId = {{taskId}};
   const updates = {{updates}};
   
+  // Safe utility functions
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetProject(task) {
+    try {
+      const project = task.containingProject();
+      if (project) {
+        return {
+          name: project.name(),
+          id: project.id()
+        };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
   try {
     // Find task by ID
     const tasks = doc.flattenedTasks();
@@ -595,11 +620,15 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.dueDate !== undefined) {
       try {
         // Handle null values explicitly to clear dates
-        if (updates.dueDate === null) {
+        if (updates.dueDate === null || updates.dueDate === undefined) {
           task.dueDate = null;
         } else if (updates.dueDate) {
-          // Handle Date objects and strings
-          task.dueDate = updates.dueDate;
+          // Handle Date objects and strings, convert strings to Date objects
+          if (typeof updates.dueDate === 'string') {
+            task.dueDate = new Date(updates.dueDate);
+          } else {
+            task.dueDate = updates.dueDate;
+          }
         }
       } catch (dateError) {
         // Skip invalid due date - log error details for debugging
@@ -608,11 +637,15 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.deferDate !== undefined) {
       try {
         // Handle null values explicitly to clear dates
-        if (updates.deferDate === null) {
+        if (updates.deferDate === null || updates.deferDate === undefined) {
           task.deferDate = null;
         } else if (updates.deferDate) {
-          // Handle Date objects and strings
-          task.deferDate = updates.deferDate;
+          // Handle Date objects and strings, convert strings to Date objects
+          if (typeof updates.deferDate === 'string') {
+            task.deferDate = new Date(updates.deferDate);
+          } else {
+            task.deferDate = updates.deferDate;
+          }
         }
       } catch (dateError) {
         // Skip invalid defer date - log error details for debugging
@@ -734,9 +767,9 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.projectId !== undefined) {
       response.changes.projectId = updates.projectId;
       if (updates.projectId !== "") {
-        const project = task.containingProject();
+        const project = safeGetProject(task);
         if (project) {
-          response.changes.projectName = project.name();
+          response.changes.projectName = project.name;
         }
       } else {
         response.changes.projectName = "Inbox";
@@ -755,6 +788,25 @@ export const UPDATE_TASK_SCRIPT = `
 
 export const COMPLETE_TASK_SCRIPT = `
   const taskId = {{taskId}};
+  
+  // Safe utility functions
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetDate(getter) {
+    try {
+      const date = getter();
+      return date ? date.toISOString() : null;
+    } catch (e) {
+      return null;
+    }
+  }
   
   try {
     // Find task by ID
@@ -777,10 +829,12 @@ export const COMPLETE_TASK_SCRIPT = `
     // Mark as complete using JXA property setter
     task.completed = true;
     
+    const completionDate = safeGetDate(() => task.completionDate()) || new Date().toISOString();
+    
     return JSON.stringify({
       id: task.id(),
       completed: true,
-      completionDate: task.completionDate() ? task.completionDate().toISOString() : new Date().toISOString()
+      completionDate: completionDate
     });
   } catch (error) {
     return JSON.stringify({
@@ -826,6 +880,16 @@ export const COMPLETE_TASK_OMNI_SCRIPT = `
 
 export const DELETE_TASK_SCRIPT = `
   const taskId = {{taskId}};
+  
+  // Safe utility functions
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
   
   try {
     // Find task by ID
