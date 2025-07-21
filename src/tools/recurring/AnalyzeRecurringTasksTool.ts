@@ -10,8 +10,18 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
     properties: {
       activeOnly: {
         type: 'boolean',
-        description: 'Only include active (non-completed) recurring tasks',
+        description: 'Only include active (non-completed, non-dropped) recurring tasks',
         default: true,
+      },
+      includeCompleted: {
+        type: 'boolean',
+        description: 'Include completed recurring tasks (overrides activeOnly for completed)',
+        default: false,
+      },
+      includeDropped: {
+        type: 'boolean',
+        description: 'Include dropped recurring tasks (overrides activeOnly for dropped)',
+        default: false,
       },
       includeHistory: {
         type: 'boolean',
@@ -29,12 +39,16 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
 
   async execute(args: { 
     activeOnly?: boolean;
+    includeCompleted?: boolean;
+    includeDropped?: boolean;
     includeHistory?: boolean;
     sortBy?: string;
   }): Promise<any> {
     try {
       const options = {
         activeOnly: args.activeOnly ?? true,
+        includeCompleted: args.includeCompleted ?? false,
+        includeDropped: args.includeDropped ?? false,
         includeHistory: args.includeHistory ?? false,
         sortBy: args.sortBy || 'dueDate',
       };

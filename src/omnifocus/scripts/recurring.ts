@@ -13,8 +13,18 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
       
-      // Skip if filtering by active only and task is completed or dropped
-      if (options.activeOnly && (task.completed() || task.dropped())) continue;
+      // Apply filtering logic with granular control
+      const isCompleted = task.completed();
+      const isDropped = task.dropped();
+      
+      // Skip completed tasks unless includeCompleted is true
+      if (isCompleted && !options.includeCompleted) continue;
+      
+      // Skip dropped tasks unless includeDropped is true  
+      if (isDropped && !options.includeDropped) continue;
+      
+      // If activeOnly is true and neither includeCompleted nor includeDropped override, skip non-active tasks
+      if (options.activeOnly && !options.includeCompleted && !options.includeDropped && (isCompleted || isDropped)) continue;
       
       const taskInfo = {
         id: task.id(),
@@ -426,6 +436,8 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
 `;
 
 export const GET_RECURRING_PATTERNS_SCRIPT = `
+  const options = {{options}};
+  
   try {
     const patterns = {};
     const projectPatterns = {};
@@ -437,9 +449,19 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
       const repetitionRule = task.repetitionRule();
       if (!repetitionRule) continue;
       
-      // Skip dropped tasks - they should not be included in pattern analysis
+      // Apply filtering logic with granular control
       try {
-        if (task.dropped && task.dropped()) continue;
+        const isCompleted = task.completed();
+        const isDropped = task.dropped();
+        
+        // Skip completed tasks unless includeCompleted is true
+        if (isCompleted && !options.includeCompleted) continue;
+        
+        // Skip dropped tasks unless includeDropped is true  
+        if (isDropped && !options.includeDropped) continue;
+        
+        // If activeOnly is true and neither includeCompleted nor includeDropped override, skip non-active tasks
+        if (options.activeOnly && !options.includeCompleted && !options.includeDropped && (isCompleted || isDropped)) continue;
       } catch (e) {}
       
       totalRecurring++;

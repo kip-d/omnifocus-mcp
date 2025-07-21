@@ -7,20 +7,46 @@ export class GetRecurringPatternsTool extends BaseTool {
   
   inputSchema = {
     type: 'object' as const,
-    properties: {},
+    properties: {
+      activeOnly: {
+        type: 'boolean',
+        description: 'Only include active (non-completed, non-dropped) recurring tasks',
+        default: true,
+      },
+      includeCompleted: {
+        type: 'boolean',
+        description: 'Include completed recurring tasks (overrides activeOnly for completed)',
+        default: false,
+      },
+      includeDropped: {
+        type: 'boolean',
+        description: 'Include dropped recurring tasks (overrides activeOnly for dropped)',
+        default: false,
+      },
+    },
   };
 
-  async execute(_args: {}): Promise<any> {
+  async execute(args: {
+    activeOnly?: boolean;
+    includeCompleted?: boolean;
+    includeDropped?: boolean;
+  }): Promise<any> {
     try {
+      const options = {
+        activeOnly: args.activeOnly ?? true,
+        includeCompleted: args.includeCompleted ?? false,
+        includeDropped: args.includeDropped ?? false,
+      };
+      
       // Try to use cache
-      const cacheKey = 'recurring_patterns';
+      const cacheKey = `recurring_patterns_${JSON.stringify(options)}`;
       const cached = this.cache.get('analytics', cacheKey);
       if (cached) {
         return cached;
       }
       
       // Execute pattern analysis script
-      const script = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {});
+      const script = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, { options });
       const result = await this.omniAutomation.execute<{
         totalRecurring: number;
         patterns: any[];
@@ -77,6 +103,7 @@ export class GetRecurringPatternsTool extends BaseTool {
         insights,
         metadata: {
           timestamp: new Date().toISOString(),
+          options,
         },
       };
       
