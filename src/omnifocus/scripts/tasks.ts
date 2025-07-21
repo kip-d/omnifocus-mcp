@@ -132,6 +132,106 @@ export const LIST_TASKS_SCRIPT = `
     return analyzers;
   }
   
+  // Safe utility functions to reduce try-catch boilerplate
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetDate(getter) {
+    try {
+      const date = getter();
+      return date ? date.toISOString() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetProject(task) {
+    try {
+      const project = task.containingProject();
+      if (project) {
+        return {
+          name: project.name(),
+          id: project.id()
+        };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTags(task) {
+    try {
+      const tags = task.tags();
+      return tags ? tags.map(t => t.name()) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  function safeExtractRuleProperties(repetitionRule) {
+    const ruleData = {};
+    const officialProperties = [
+      'method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'
+    ];
+    
+    officialProperties.forEach(prop => {
+      const value = safeGet(() => repetitionRule[prop]);
+      if (value !== null && value !== '') {
+        ruleData[prop] = value;
+      }
+    });
+    
+    return ruleData;
+  }
+  
+  function safeParseRuleString(ruleString) {
+    return safeGet(() => {
+      const ruleStr = ruleString.toString();
+      const ruleData = { _inferenceSource: 'ruleString' };
+      
+      // Parse FREQ= part
+      if (ruleStr.includes('FREQ=HOURLY')) {
+        ruleData.unit = 'hours';
+        ruleData.steps = 1;
+      } else if (ruleStr.includes('FREQ=DAILY')) {
+        ruleData.unit = 'days';
+        ruleData.steps = 1;
+      } else if (ruleStr.includes('FREQ=WEEKLY')) {
+        ruleData.unit = 'weeks';
+        ruleData.steps = 1;
+      } else if (ruleStr.includes('FREQ=MONTHLY')) {
+        ruleData.unit = 'months';
+        ruleData.steps = 1;
+      } else if (ruleStr.includes('FREQ=YEARLY')) {
+        ruleData.unit = 'years';
+        ruleData.steps = 1;
+      }
+      
+      // Parse INTERVAL= part for custom frequencies
+      const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
+      if (intervalMatch) {
+        ruleData.steps = parseInt(intervalMatch[1]);
+      }
+      
+      return ruleData;
+    }, {});
+  }
+  
+  function safeDateFilter(task, dateGetter, beforeDate, afterDate) {
+    const date = safeGet(dateGetter);
+    if (!date && (beforeDate || afterDate)) return false; // Skip tasks without dates when filtering by date
+    if (beforeDate && date > new Date(beforeDate)) return false;
+    if (afterDate && date < new Date(afterDate)) return false;
+    return true;
+  }
+
   // Helper function to analyze recurring task status using plugins
   function analyzeRecurringStatus(task, repetitionRule) {
     const analyzers = initializePlugins();
@@ -165,70 +265,40 @@ export const LIST_TASKS_SCRIPT = `
     
     // Search filter
     if (filter.search) {
-      try {
-        const name = task.name() || '';
-        const note = task.note() || '';
-        const searchText = (name + ' ' + note).toLowerCase();
-        if (!searchText.includes(filter.search.toLowerCase())) return false;
-      } catch (e) {
-        return false;
-      }
+      const name = safeGet(() => task.name(), '') || '';
+      const note = safeGet(() => task.note(), '') || '';
+      const searchText = (name + ' ' + note).toLowerCase();
+      if (!searchText.includes(filter.search.toLowerCase())) return false;
     }
     
     // Project filter
     if (filter.projectId !== undefined) {
-      try {
-        const project = task.containingProject();
-        if (filter.projectId === null && project !== null) return false;
-        if (filter.projectId !== null && (!project || project.id() !== filter.projectId)) return false;
-      } catch (e) {
-        return false;
-      }
+      const project = safeGetProject(task);
+      if (filter.projectId === null && project !== null) return false;
+      if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
     }
     
     // Tags filter
     if (filter.tags && filter.tags.length > 0) {
-      try {
-        const taskTags = task.tags().map(t => t.name());
-        const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-        if (!hasAllTags) return false;
-      } catch (e) {
-        return false;
-      }
+      const taskTags = safeGetTags(task);
+      const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
+      if (!hasAllTags) return false;
     }
     
     // Date filters
     if (filter.dueBefore || filter.dueAfter) {
-      try {
-        const dueDate = task.dueDate();
-        if (!dueDate && (filter.dueBefore || filter.dueAfter)) return false;
-        if (filter.dueBefore && dueDate > new Date(filter.dueBefore)) return false;
-        if (filter.dueAfter && dueDate < new Date(filter.dueAfter)) return false;
-      } catch (e) {
-        return false;
-      }
+      if (!safeDateFilter(task, () => task.dueDate(), filter.dueBefore, filter.dueAfter)) return false;
     }
     
     if (filter.deferBefore || filter.deferAfter) {
-      try {
-        const deferDate = task.deferDate();
-        if (!deferDate && (filter.deferBefore || filter.deferAfter)) return false;
-        if (filter.deferBefore && deferDate > new Date(filter.deferBefore)) return false;
-        if (filter.deferAfter && deferDate < new Date(filter.deferAfter)) return false;
-      } catch (e) {
-        return false;
-      }
+      if (!safeDateFilter(task, () => task.deferDate(), filter.deferBefore, filter.deferAfter)) return false;
     }
     
     // Available filter
     if (filter.available) {
-      try {
-        if (task.completed() || task.dropped()) return false;
-        const deferDate = task.deferDate();
-        if (deferDate && deferDate > new Date()) return false;
-      } catch (e) {
-        return false;
-      }
+      if (task.completed() || task.dropped()) return false;
+      const deferDate = safeGet(() => task.deferDate());
+      if (deferDate && deferDate > new Date()) return false;
     }
     
     return true;
@@ -255,114 +325,46 @@ export const LIST_TASKS_SCRIPT = `
         inInbox: task.inInbox()
       };
       
-      // Add optional properties safely
-      try {
-        const note = task.note();
-        if (note) taskObj.note = note;
-      } catch (e) {}
+      // Add optional properties using safe utilities
+      const note = safeGet(() => task.note());
+      if (note) taskObj.note = note;
       
-      try {
-        const project = task.containingProject();
-        if (project) {
-          taskObj.project = project.name();
-          taskObj.projectId = project.id();
-        }
-      } catch (e) {}
-      
-      try {
-        const dueDate = task.dueDate();
-        if (dueDate) taskObj.dueDate = dueDate.toISOString();
-      } catch (e) {}
-      
-      try {
-        const deferDate = task.deferDate();
-        if (deferDate) taskObj.deferDate = deferDate.toISOString();
-      } catch (e) {}
-      
-      try {
-        const tags = task.tags();
-        taskObj.tags = tags.map(t => t.name());
-      } catch (e) {
-        // Debug: Failed to extract tags for task
-        taskObj.tags = [];
+      const project = safeGetProject(task);
+      if (project) {
+        taskObj.project = project.name;
+        taskObj.projectId = project.id;
       }
       
-      // Add creation date if available
-      try {
-        const added = task.added();
-        if (added) taskObj.added = added.toISOString();
-      } catch (e) {}
+      const dueDate = safeGetDate(() => task.dueDate());
+      if (dueDate) taskObj.dueDate = dueDate;
+      
+      const deferDate = safeGetDate(() => task.deferDate());
+      if (deferDate) taskObj.deferDate = deferDate;
+      
+      taskObj.tags = safeGetTags(task);
+      
+      const added = safeGetDate(() => task.added());
+      if (added) taskObj.added = added;
       
       // Add repetition rule and recurring status analysis
-      try {
-        const repetitionRule = task.repetitionRule();
-        if (repetitionRule) {
-          const ruleData = {};
-          
-          // Try official OmniFocus API properties first
-          const officialProperties = [
-            'method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'
-          ];
-          
-          officialProperties.forEach(prop => {
-            try {
-              const value = repetitionRule[prop];
-              if (value !== undefined && value !== null && value !== '') {
-                ruleData[prop] = value;
-              }
-            } catch (e) {}
-          });
-          
-          // Parse ruleString (RRULE format) to extract frequency details
-          if (ruleData.ruleString) {
-            try {
-              const ruleStr = ruleData.ruleString.toString();
-              
-              // Parse FREQ= part
-              if (ruleStr.includes('FREQ=HOURLY')) {
-                ruleData.unit = 'hours';
-                ruleData.steps = 1;
-              } else if (ruleStr.includes('FREQ=DAILY')) {
-                ruleData.unit = 'days';
-                ruleData.steps = 1;
-              } else if (ruleStr.includes('FREQ=WEEKLY')) {
-                ruleData.unit = 'weeks';
-                ruleData.steps = 1;
-              } else if (ruleStr.includes('FREQ=MONTHLY')) {
-                ruleData.unit = 'months';
-                ruleData.steps = 1;
-              } else if (ruleStr.includes('FREQ=YEARLY')) {
-                ruleData.unit = 'years';
-                ruleData.steps = 1;
-              }
-              
-              // Parse INTERVAL= part for custom frequencies
-              const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
-              if (intervalMatch) {
-                ruleData.steps = parseInt(intervalMatch[1]);
-              }
-              
-              ruleData._inferenceSource = 'ruleString';
-            } catch (e) {}
-          }
-          
-          // Basic fallback - plugins will handle the advanced inference
-          if (!ruleData.unit && !ruleData.steps) {
-            // Leave empty - let the plugin system handle inference
-            ruleData._inferenceSource = 'none';
-          }
-          
-          taskObj.repetitionRule = ruleData;
-          
-          // Use helper function for sophisticated analysis
-          taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
-        } else {
-          taskObj.recurringStatus = {
-            isRecurring: false,
-            type: 'non-recurring'
-          };
+      const repetitionRule = safeGet(() => task.repetitionRule());
+      if (repetitionRule) {
+        let ruleData = safeExtractRuleProperties(repetitionRule);
+        
+        // Parse ruleString if available
+        if (ruleData.ruleString) {
+          const parsedRule = safeParseRuleString(ruleData.ruleString);
+          ruleData = { ...ruleData, ...parsedRule };
         }
-      } catch (e) {
+        
+        // Basic fallback - plugins will handle the advanced inference
+        if (!ruleData.unit && !ruleData.steps) {
+          ruleData._inferenceSource = 'none';
+        }
+        
+        taskObj.repetitionRule = ruleData;
+        taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
+      } else {
         taskObj.recurringStatus = {
           isRecurring: false,
           type: 'non-recurring'
