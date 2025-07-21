@@ -104,7 +104,35 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
     
-    logger.debug(`Executing tool: ${name}`, args);
+    // Enhanced logging to debug parameter issues
+    logger.info(`Executing tool: ${name}`, {
+      rawArgs: args,
+      argsType: typeof args,
+      argsKeys: args ? Object.keys(args) : [],
+      serializedArgs: JSON.stringify(args, null, 2)
+    });
+    
+    // Special logging for update_task to debug date parameter issues
+    if (name === 'update_task' && args) {
+      logger.info('UpdateTask specific debug:', {
+        taskId: args.taskId,
+        dueDate: {
+          provided: 'dueDate' in args,
+          value: args.dueDate,
+          type: typeof args.dueDate,
+          isNull: args.dueDate === null,
+          isUndefined: args.dueDate === undefined
+        },
+        allParams: Object.entries(args).map(([key, value]) => ({
+          key,
+          value,
+          type: typeof value,
+          isNull: value === null,
+          isUndefined: value === undefined
+        }))
+      });
+    }
+    
     const result = await tool.execute(args || {});
     
     return {

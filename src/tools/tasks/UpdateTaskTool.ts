@@ -55,6 +55,27 @@ export class UpdateTaskTool extends BaseTool {
     try {
       const { taskId, ...updates } = args;
       
+      // Debug logging: Log all received parameters
+      this.logger.info('UpdateTaskTool received parameters:', {
+        taskId,
+        updates: {
+          ...updates,
+          // Explicitly log the types and values of date fields
+          dueDate: updates.dueDate !== undefined ? {
+            value: updates.dueDate,
+            type: typeof updates.dueDate,
+            isNull: updates.dueDate === null,
+            isUndefined: updates.dueDate === undefined
+          } : 'not provided',
+          deferDate: updates.deferDate !== undefined ? {
+            value: updates.deferDate,
+            type: typeof updates.deferDate,
+            isNull: updates.deferDate === null,
+            isUndefined: updates.deferDate === undefined
+          } : 'not provided'
+        }
+      });
+      
       // Validate required parameters
       if (!taskId || typeof taskId !== 'string') {
         return {
@@ -73,6 +94,13 @@ export class UpdateTaskTool extends BaseTool {
           task: { id: taskId, updated: false, message: 'No valid updates provided' }
         };
       }
+      
+      // Log what we're sending to the script
+      this.logger.info('Sending to JXA script:', {
+        taskId,
+        safeUpdates,
+        safeUpdatesKeys: Object.keys(safeUpdates)
+      });
       
       // Use the full script for comprehensive update support
       const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, { 
@@ -128,6 +156,11 @@ export class UpdateTaskTool extends BaseTool {
   private sanitizeUpdates(updates: TaskUpdate): Record<string, any> {
     const sanitized: Record<string, any> = {};
     
+    this.logger.info('Sanitizing updates:', { 
+      rawUpdates: updates,
+      keys: Object.keys(updates)
+    });
+    
     // Handle string fields
     if (typeof updates.name === 'string') {
       sanitized.name = updates.name;
@@ -143,7 +176,16 @@ export class UpdateTaskTool extends BaseTool {
     
     // Handle date fields (allow null to clear, validate but keep as strings like create_task)
     if (updates.dueDate !== undefined) {
+      this.logger.info('Processing dueDate:', {
+        value: updates.dueDate,
+        type: typeof updates.dueDate,
+        isNull: updates.dueDate === null,
+        isString: typeof updates.dueDate === 'string',
+        isDate: updates.dueDate instanceof Date
+      });
+      
       if (updates.dueDate === null) {
+        this.logger.info('Setting dueDate to null (clearing date)');
         sanitized.dueDate = null; // Explicitly clear the date
       } else if (typeof updates.dueDate === 'string') {
         try {
@@ -153,13 +195,27 @@ export class UpdateTaskTool extends BaseTool {
           if (isNaN(parsedDate.getTime())) {
             throw new Error('Invalid date');
           }
+          this.logger.info('Date string validated successfully:', {
+            original: updates.dueDate,
+            parsed: parsedDate.toISOString()
+          });
           sanitized.dueDate = updates.dueDate; // Keep as string for JXA script
         } catch (error) {
           // Skip invalid date strings
-          this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`);
+          this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`, error);
         }
       } else if (updates.dueDate instanceof Date) {
-        sanitized.dueDate = updates.dueDate.toISOString(); // Convert Date object to ISO string
+        const isoString = updates.dueDate.toISOString();
+        this.logger.info('Converting Date object to ISO string:', {
+          original: updates.dueDate,
+          converted: isoString
+        });
+        sanitized.dueDate = isoString; // Convert Date object to ISO string
+      } else {
+        this.logger.warn('Unexpected dueDate type:', {
+          value: updates.dueDate,
+          type: typeof updates.dueDate
+        });
       }
     }
     if (updates.deferDate !== undefined) {

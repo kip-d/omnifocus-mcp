@@ -957,6 +957,16 @@ export const TODAYS_AGENDA_SCRIPT = `
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   
+  // Safe utility functions
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
   try {
     const allTasks = doc.flattenedTasks();
     const startTime = Date.now();
@@ -1017,10 +1027,8 @@ export const TODAYS_AGENDA_SCRIPT = `
         };
         
         // Add optional properties
-        try {
-          const note = task.note();
-          if (note) taskObj.note = note;
-        } catch (e) {}
+        const note = safeGet(() => task.note());
+        if (note) taskObj.note = note;
         
         try {
           const project = task.containingProject();
@@ -1040,12 +1048,8 @@ export const TODAYS_AGENDA_SCRIPT = `
           if (deferDate) taskObj.deferDate = deferDate.toISOString();
         } catch (e) {}
         
-        try {
-          const tags = task.tags();
-          taskObj.tags = tags.map(t => t.name());
-        } catch (e) {
-          taskObj.tags = [];
-        }
+        const tags = safeGet(() => task.tags(), []);
+        taskObj.tags = tags.map(t => t.name());
         
         tasks.push(taskObj);
       }
@@ -1081,6 +1085,16 @@ export const TODAYS_AGENDA_SCRIPT = `
 export const GET_TASK_COUNT_SCRIPT = `
   const filter = {{filter}};
   
+  // Safe utility functions
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
   try {
     const allTasks = doc.flattenedTasks();
     let count = 0;
@@ -1106,24 +1120,16 @@ export const GET_TASK_COUNT_SCRIPT = `
       }
       
       if (filter.tags && filter.tags.length > 0) {
-        try {
-          const taskTags = task.tags().map(t => t.name());
-          const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-          if (!hasAllTags) continue;
-        } catch (e) {
-          continue;
-        }
+        const taskTags = safeGet(() => task.tags(), []).map(t => t.name());
+        const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
+        if (!hasAllTags) continue;
       }
       
       if (filter.search) {
-        try {
-          const name = task.name() || '';
-          const note = task.note() || '';
-          const searchText = (name + ' ' + note).toLowerCase();
-          if (!searchText.includes(filter.search.toLowerCase())) continue;
-        } catch (e) {
-          continue;
-        }
+        const name = safeGet(() => task.name(), '') || '';
+        const note = safeGet(() => task.note(), '') || '';
+        const searchText = (name + ' ' + note).toLowerCase();
+        if (!searchText.includes(filter.search.toLowerCase())) continue;
       }
       
       if (filter.dueBefore || filter.dueAfter) {
