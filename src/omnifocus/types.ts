@@ -220,9 +220,12 @@ export interface TaskUpdate {
   name?: string;
   note?: string;
   flagged?: boolean;
-  dueDate?: string; // ISO date string, empty string to clear
-  deferDate?: string; // ISO date string, empty string to clear  
-  estimatedMinutes?: number; // 0 to clear
+  dueDate?: string; // ISO date string
+  clearDueDate?: boolean; // true to clear existing due date
+  deferDate?: string; // ISO date string
+  clearDeferDate?: boolean; // true to clear existing defer date
+  estimatedMinutes?: number;
+  clearEstimatedMinutes?: boolean; // true to clear existing estimate
   tags?: string[];
   projectId?: string; // empty string to move to inbox
 }
@@ -232,10 +235,13 @@ export interface ProjectUpdate {
   note?: string;
   status?: 'active' | 'onHold' | 'dropped' | 'completed';
   flagged?: boolean;
-  dueDate?: Date | null;
-  deferDate?: Date | null;
+  dueDate?: string; // ISO date string
+  clearDueDate?: boolean; // true to clear existing due date
+  deferDate?: string; // ISO date string
+  clearDeferDate?: boolean; // true to clear existing defer date
   sequential?: boolean;
   reviewInterval?: number;
+  folder?: string; // folder name, empty string to move to root
 }
 
 export interface ProductivityStats {

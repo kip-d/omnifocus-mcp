@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { 
-  UPDATE_TASK_SCRIPT_SIMPLE,
+  UPDATE_TASK_SCRIPT,
   LIST_TASKS_SCRIPT,
   CREATE_TASK_SCRIPT
 } from '../../src/omnifocus/scripts/tasks';
@@ -15,7 +15,7 @@ describe('Bug Fixes - Unit Tests', () => {
       // All scripts should use JSON.stringify to return results
       expect(LIST_TASKS_SCRIPT).toContain('return JSON.stringify({');
       expect(CREATE_TASK_SCRIPT).toContain('return JSON.stringify({');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('return JSON.stringify({');
+      expect(UPDATE_TASK_SCRIPT).toContain('return JSON.stringify({');
       
       // Scripts should handle errors with JSON too
       expect(LIST_TASKS_SCRIPT).toContain('error: true,');
@@ -24,8 +24,8 @@ describe('Bug Fixes - Unit Tests', () => {
   });
 
   describe('Bug 2: 100 Task Limit', () => {
-    it('UPDATE_TASK_SCRIPT_SIMPLE should not limit task search', () => {
-      const script = UPDATE_TASK_SCRIPT_SIMPLE;
+    it('UPDATE_TASK_SCRIPT should not limit task search', () => {
+      const script = UPDATE_TASK_SCRIPT;
       
       // Should search through all tasks
       expect(script).toContain('for (let i = 0; i < tasks.length; i++)');
@@ -38,8 +38,8 @@ describe('Bug Fixes - Unit Tests', () => {
   });
 
   describe('Bug 3: Missing ProjectId Support', () => {
-    it('UPDATE_TASK_SCRIPT_SIMPLE should handle projectId parameter', () => {
-      const script = UPDATE_TASK_SCRIPT_SIMPLE;
+    it('UPDATE_TASK_SCRIPT should handle projectId parameter', () => {
+      const script = UPDATE_TASK_SCRIPT;
       
       // Should check for projectId in updates
       expect(script).toContain('if (updates.projectId !== undefined)');
@@ -82,7 +82,7 @@ describe('Bug Fixes - Unit Tests', () => {
     it('scripts should document known JXA limitations', () => {
       // This is a known issue where projectId: null causes JXA error
       // The simplified script tries to handle it but JXA has limitations
-      const script = UPDATE_TASK_SCRIPT_SIMPLE;
+      const script = UPDATE_TASK_SCRIPT;
       
       // We fixed it by using null assignment
       expect(script).toContain('task.assignedContainer = null');

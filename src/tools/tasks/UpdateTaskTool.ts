@@ -1,5 +1,4 @@
 import { BaseTool } from '../base.js';
-import { TaskUpdate } from '../../omnifocus/types.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 
 export class UpdateTaskTool extends BaseTool {
@@ -28,16 +27,28 @@ export class UpdateTaskTool extends BaseTool {
       dueDate: {
         type: 'string',
         format: 'date-time',
-        description: 'New due date (use empty string "" to clear existing date)',
+        description: 'New due date in ISO format',
+      },
+      clearDueDate: {
+        type: 'boolean',
+        description: 'Set to true to clear the existing due date',
       },
       deferDate: {
         type: 'string',
         format: 'date-time',
-        description: 'New defer date (use empty string "" to clear existing date)',
+        description: 'New defer date in ISO format',
+      },
+      clearDeferDate: {
+        type: 'boolean',
+        description: 'Set to true to clear the existing defer date',
       },
       estimatedMinutes: {
         type: 'number',
-        description: 'New estimated time (use 0 to clear existing estimate)',
+        description: 'New estimated time in minutes',
+      },
+      clearEstimatedMinutes: {
+        type: 'boolean',
+        description: 'Set to true to clear the existing time estimate',
       },
       tags: {
         type: 'array',
@@ -51,7 +62,20 @@ export class UpdateTaskTool extends BaseTool {
     required: ['taskId'],
   };
 
-  async execute(args: { taskId: string } & TaskUpdate): Promise<any> {
+  async execute(args: { 
+    taskId: string;
+    name?: string;
+    note?: string;
+    flagged?: boolean;
+    dueDate?: string;
+    clearDueDate?: boolean;
+    deferDate?: string;
+    clearDeferDate?: boolean;
+    estimatedMinutes?: number;
+    clearEstimatedMinutes?: boolean;
+    tags?: string[];
+    projectId?: string;
+  }): Promise<any> {
     try {
       const { taskId, ...updates } = args;
       
@@ -153,7 +177,19 @@ export class UpdateTaskTool extends BaseTool {
     }
   }
   
-  private sanitizeUpdates(updates: TaskUpdate): Record<string, any> {
+  private sanitizeUpdates(updates: {
+    name?: string;
+    note?: string;
+    flagged?: boolean;
+    dueDate?: string;
+    clearDueDate?: boolean;
+    deferDate?: string;
+    clearDeferDate?: boolean;
+    estimatedMinutes?: number;
+    clearEstimatedMinutes?: boolean;
+    tags?: string[];
+    projectId?: string;
+  }): Record<string, any> {
     const sanitized: Record<string, any> = {};
     
     this.logger.info('Sanitizing updates:', { 
@@ -174,23 +210,20 @@ export class UpdateTaskTool extends BaseTool {
       sanitized.flagged = updates.flagged;
     }
     
-    // Handle date fields (use empty string to clear, validate but keep as strings like create_task)
-    if (updates.dueDate !== undefined) {
+    // Handle date fields with separate clear flags
+    if (updates.clearDueDate) {
+      this.logger.info('Clearing dueDate (clearDueDate flag set)');
+      sanitized.dueDate = null; // Clear the date
+    } else if (updates.dueDate !== undefined) {
       this.logger.info('Processing dueDate:', {
         value: updates.dueDate,
-        type: typeof updates.dueDate,
-        isEmptyString: updates.dueDate === '',
-        isString: typeof updates.dueDate === 'string'
+        type: typeof updates.dueDate
       });
       
-      if (updates.dueDate === '') {
-        this.logger.info('Setting dueDate to null (clearing date)');
-        sanitized.dueDate = null; // Explicitly clear the date
-      } else if (typeof updates.dueDate === 'string') {
+      if (typeof updates.dueDate === 'string') {
         try {
           // Validate the date string but keep it as string (like create_task does)
           const parsedDate = new Date(updates.dueDate);
-          // Validate the date is not invalid
           if (isNaN(parsedDate.getTime())) {
             throw new Error('Invalid date');
           }
@@ -200,7 +233,6 @@ export class UpdateTaskTool extends BaseTool {
           });
           sanitized.dueDate = updates.dueDate; // Keep as string for JXA script
         } catch (error) {
-          // Skip invalid date strings
           this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`, error);
         }
       } else {
@@ -210,21 +242,30 @@ export class UpdateTaskTool extends BaseTool {
         });
       }
     }
-    if (updates.deferDate !== undefined) {
-      if (updates.deferDate === '') {
-        sanitized.deferDate = null; // Explicitly clear the date
-      } else if (typeof updates.deferDate === 'string') {
+    
+    if (updates.clearDeferDate) {
+      this.logger.info('Clearing deferDate (clearDeferDate flag set)');
+      sanitized.deferDate = null; // Clear the date
+    } else if (updates.deferDate !== undefined) {
+      this.logger.info('Processing deferDate:', {
+        value: updates.deferDate,
+        type: typeof updates.deferDate
+      });
+      
+      if (typeof updates.deferDate === 'string') {
         try {
           // Validate the date string but keep it as string (like create_task does)
           const parsedDate = new Date(updates.deferDate);
-          // Validate the date is not invalid
           if (isNaN(parsedDate.getTime())) {
             throw new Error('Invalid date');
           }
+          this.logger.info('DeferDate string validated successfully:', {
+            original: updates.deferDate,
+            parsed: parsedDate.toISOString()
+          });
           sanitized.deferDate = updates.deferDate; // Keep as string for JXA script
         } catch (error) {
-          // Skip invalid date strings
-          this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`);
+          this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`, error);
         }
       } else {
         this.logger.warn('Unexpected deferDate type:', {
@@ -234,13 +275,12 @@ export class UpdateTaskTool extends BaseTool {
       }
     }
     
-    // Handle numeric fields (use 0 to clear)
-    if (updates.estimatedMinutes !== undefined) {
-      if (updates.estimatedMinutes === 0) {
-        sanitized.estimatedMinutes = null; // Clear the estimate
-      } else {
-        sanitized.estimatedMinutes = updates.estimatedMinutes;
-      }
+    // Handle numeric fields with separate clear flag
+    if (updates.clearEstimatedMinutes) {
+      this.logger.info('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
+      sanitized.estimatedMinutes = null; // Clear the estimate
+    } else if (updates.estimatedMinutes !== undefined) {
+      sanitized.estimatedMinutes = updates.estimatedMinutes;
     }
     
     // Handle project ID (allow null/empty string)

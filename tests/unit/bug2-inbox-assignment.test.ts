@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { UPDATE_TASK_SCRIPT_SIMPLE, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks';
+import { UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks';
 
 describe('Bug 2: Inbox Assignment Fix', () => {
-  describe('UPDATE_TASK_SCRIPT_SIMPLE', () => {
+  describe('UPDATE_TASK_SCRIPT', () => {
     it('should set assignedContainer to null when projectId is empty string', () => {
       // Setting assignedContainer to null moves task to inbox in JXA
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId === "")');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = null;');
+      expect(UPDATE_TASK_SCRIPT).toContain('if (updates.projectId === "")');
+      expect(UPDATE_TASK_SCRIPT).toContain('task.assignedContainer = null;');
       
       // Should NOT use the broken doc.inbox assignment
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain('task.assignedContainer = doc.inbox');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain('doc.inboxTasks');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('task.assignedContainer = doc.inbox');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('doc.inboxTasks');
     });
   });
 
@@ -38,8 +38,8 @@ describe('Bug 2: Inbox Assignment Fix', () => {
       const correctPattern = 'task.assignedContainer = null;';
       const brokenPattern = 'task.assignedContainer = doc.inbox;';
       
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain(correctPattern);
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain(brokenPattern);
+      expect(UPDATE_TASK_SCRIPT).toContain(correctPattern);
+      expect(UPDATE_TASK_SCRIPT).not.toContain(brokenPattern);
     });
   });
 });

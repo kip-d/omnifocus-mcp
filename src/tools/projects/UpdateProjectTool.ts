@@ -25,12 +25,22 @@ export class UpdateProjectTool extends BaseTool {
             description: 'New note (null to clear)',
           },
           deferDate: {
-            type: ['string', 'null'],
-            description: 'New defer date in ISO format (null to clear)',
+            type: 'string',
+            format: 'date-time',
+            description: 'New defer date in ISO format',
+          },
+          clearDeferDate: {
+            type: 'boolean',
+            description: 'Set to true to clear the existing defer date',
           },
           dueDate: {
-            type: ['string', 'null'],
-            description: 'New due date in ISO format (null to clear)',
+            type: 'string',
+            format: 'date-time',
+            description: 'New due date in ISO format',
+          },
+          clearDueDate: {
+            type: 'boolean',
+            description: 'Set to true to clear the existing due date',
           },
           flagged: {
             type: 'boolean',
@@ -42,8 +52,8 @@ export class UpdateProjectTool extends BaseTool {
             description: 'Project status',
           },
           folder: {
-            type: ['string', 'null'],
-            description: 'Move project to folder (null to move to root)',
+            type: 'string',
+            description: 'Move project to folder (use empty string to move to root)',
           },
         },
       },
@@ -55,12 +65,14 @@ export class UpdateProjectTool extends BaseTool {
     projectId: string;
     updates: {
       name?: string;
-      note?: string | null;
-      deferDate?: string | null;
-      dueDate?: string | null;
+      note?: string;
+      deferDate?: string;
+      clearDeferDate?: boolean;
+      dueDate?: string;
+      clearDueDate?: boolean;
       flagged?: boolean;
       status?: string;
-      folder?: string | null;
+      folder?: string;
     };
   }): Promise<any> {
     try {

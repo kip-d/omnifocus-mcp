@@ -1,31 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { UPDATE_TASK_SCRIPT_SIMPLE } from '../../src/omnifocus/scripts/tasks';
+import { UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks';
 import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects';
 
 describe('Code Changes Verification', () => {
   describe('Bug Fix: Task Search Limit', () => {
-    it('UPDATE_TASK_SCRIPT_SIMPLE should search all tasks, not just first 100', () => {
+    it('UPDATE_TASK_SCRIPT should search all tasks, not just first 100', () => {
       // The loop should iterate through all tasks
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('for (let i = 0; i < tasks.length; i++)');
+      expect(UPDATE_TASK_SCRIPT).toContain('for (let i = 0; i < tasks.length; i++)');
       
       // Should NOT have any limit like i < 100
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain('i < 100');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain('Math.min(100');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).not.toContain('Math.min(tasks.length, 100)');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('i < 100');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('Math.min(100');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('Math.min(tasks.length, 100)');
     });
   });
 
   describe('Bug Fix: ProjectId Support in Simplified Script', () => {
-    it('UPDATE_TASK_SCRIPT_SIMPLE should handle projectId updates', () => {
+    it('UPDATE_TASK_SCRIPT should handle projectId updates', () => {
       // Should check for projectId in updates
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId !== undefined)');
+      expect(UPDATE_TASK_SCRIPT).toContain('if (updates.projectId !== undefined)');
       
       // Should handle empty string projectId (move to inbox)
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('if (updates.projectId === "")');
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = null');
+      expect(UPDATE_TASK_SCRIPT).toContain('if (updates.projectId === "")');
+      expect(UPDATE_TASK_SCRIPT).toContain('task.assignedContainer = null');
       
       // Should handle projectId assignment
-      expect(UPDATE_TASK_SCRIPT_SIMPLE).toContain('task.assignedContainer = projects[i]');
+      expect(UPDATE_TASK_SCRIPT).toContain('task.assignedContainer = projects[i]');
     });
   });
 
