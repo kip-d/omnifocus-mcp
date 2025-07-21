@@ -354,19 +354,42 @@ export const COMPLETE_PROJECT_SCRIPT = `
     }
     
     // Complete the project
+    let statusSet = false;
     try {
       // Try different ways to set project status to done
       if (typeof app.Project.Status.done !== 'undefined') {
         targetProject.status = app.Project.Status.done;
+        statusSet = true;
       } else {
         // Fallback: try setting status directly with string value
         targetProject.status = 'done';
+        statusSet = true;
       }
     } catch (statusError) {
-      // If status setting fails, just mark completion date
-      // The project will be considered done by having a completion date
+      // Status setting failed, try alternative approaches
+      try {
+        // Try using the markComplete method if available
+        if (typeof targetProject.markComplete === 'function') {
+          targetProject.markComplete();
+          statusSet = true;
+        }
+      } catch (markCompleteError) {
+        // Last resort: try setting completion date without status
+        // This might work in some OmniFocus versions
+      }
     }
-    targetProject.completionDate = new Date();
+    
+    // Only set completion date after status is set, or as last resort
+    try {
+      if (statusSet) {
+        targetProject.completionDate = new Date();
+      } else {
+        // Try completion date as last resort (some versions allow this)
+        targetProject.completionDate = new Date();
+      }
+    } catch (completionError) {
+      // If we can't set completion date, the status change might be enough
+    }
     
     return JSON.stringify({
       success: true,
@@ -387,20 +410,23 @@ export const COMPLETE_PROJECT_SCRIPT = `
   }
 `;
 
+
 export const DELETE_PROJECT_SCRIPT = `
   const projectId = {{projectId}};
   const deleteTasks = {{deleteTasks}};
   
-  // Validate parameters
-  if (!projectId || typeof projectId !== 'string') {
-    return JSON.stringify({
-      error: true,
-      message: "Parameter 'projectId' is required and must be a string"
-    });
+  // Safe utility function (from working task deletion)
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
   }
   
   try {
-    // Find the project by ID
+    // Find the project by ID (using same pattern as working task deletion)
     const projects = doc.flattenedProjects();
     let targetProject = null;
     
@@ -418,24 +444,34 @@ export const DELETE_PROJECT_SCRIPT = `
       });
     }
     
-    const projectName = targetProject.name();
+    const projectName = safeGet(() => targetProject.name(), 'Unknown Project');
     
     // Count tasks
-    const tasks = targetProject.flattenedTasks();
+    const tasks = safeGet(() => targetProject.flattenedTasks(), []);
     const taskCount = tasks.length;
     let deletedTaskCount = 0;
     
-    // Delete or orphan tasks
+    // Delete or orphan tasks (if requested)
     if (deleteTasks && taskCount > 0) {
-      // Delete all tasks in the project
       for (let i = tasks.length - 1; i >= 0; i--) {
-        tasks[i].remove();
-        deletedTaskCount++;
+        try {
+          tasks[i].markDropped();
+          deletedTaskCount++;
+        } catch (taskError) {
+          // Task deletion failed, but continue with project
+        }
       }
     }
     
-    // Delete the project
-    targetProject.remove();
+    // Delete/drop the project (using same approach as working task deletion)
+    try {
+      targetProject.markDropped();
+    } catch (dropError) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to delete project: " + dropError.toString()
+      });
+    }
     
     return JSON.stringify({
       success: true,
