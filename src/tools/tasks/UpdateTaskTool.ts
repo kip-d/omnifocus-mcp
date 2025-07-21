@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class UpdateTaskTool extends BaseTool {
   name = 'update_task';
@@ -76,6 +77,8 @@ export class UpdateTaskTool extends BaseTool {
     tags?: string[];
     projectId?: string;
   }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { taskId, ...updates } = args;
       
@@ -102,10 +105,13 @@ export class UpdateTaskTool extends BaseTool {
       
       // Validate required parameters
       if (!taskId || typeof taskId !== 'string') {
-        return {
-          error: true,
-          message: 'Task ID is required and must be a string'
-        };
+        return createErrorResponse(
+          'update_task',
+          'INVALID_PARAMS',
+          'Task ID is required and must be a string',
+          { provided_taskId: taskId },
+          timer.toMetadata()
+        );
       }
       
       // Sanitize and validate updates object
@@ -113,10 +119,16 @@ export class UpdateTaskTool extends BaseTool {
       
       // If no valid updates, return early
       if (Object.keys(safeUpdates).length === 0) {
-        return {
-          success: true,
-          task: { id: taskId, updated: false, message: 'No valid updates provided' }
-        };
+        return createEntityResponse(
+          'update_task',
+          'task',
+          { id: taskId, updated: false },
+          {
+            query_time_ms: timer.getElapsedMs(),
+            input_params: { taskId },
+            message: 'No valid updates provided'
+          }
+        );
       }
       
       // Log what we're sending to the script
@@ -137,10 +149,13 @@ export class UpdateTaskTool extends BaseTool {
       // Handle script execution errors
       if (result.error) {
         this.logger.error(`Update task script error: ${result.message}`);
-        return {
-          error: true,
-          message: result.message || 'Failed to update task'
-        };
+        return createErrorResponse(
+          'update_task',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to update task',
+          result.details,
+          timer.toMetadata()
+        );
       }
       
       // Parse the JSON result
@@ -149,18 +164,24 @@ export class UpdateTaskTool extends BaseTool {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       } catch (parseError) {
         this.logger.error(`Failed to parse update task result: ${result}`);
-        return {
-          error: true,
-          message: 'Failed to parse task update response'
-        };
+        return createErrorResponse(
+          'update_task',
+          'PARSE_ERROR',
+          'Failed to parse task update response',
+          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
+          timer.toMetadata()
+        );
       }
       
       // Check if the parsed result indicates an error
       if (parsedResult.error) {
-        return {
-          error: true,
-          message: parsedResult.message || 'Update failed'
-        };
+        return createErrorResponse(
+          'update_task',
+          'UPDATE_FAILED',
+          parsedResult.message || 'Update failed',
+          parsedResult,
+          timer.toMetadata()
+        );
       }
       
       // Invalidate cache after successful update
@@ -168,10 +189,22 @@ export class UpdateTaskTool extends BaseTool {
       
       this.logger.info(`Updated task: ${taskId}`);
       
-      return {
-        success: true,
-        task: parsedResult,
-      };
+      // Return standardized response
+      return createEntityResponse(
+        'update_task',
+        'task',
+        parsedResult,
+        {
+          ...timer.toMetadata(),
+          updated_id: taskId,
+          input_params: {
+            taskId,
+            fields_updated: Object.keys(safeUpdates),
+            has_date_changes: !!(safeUpdates.dueDate || safeUpdates.deferDate || safeUpdates.clearDueDate || safeUpdates.clearDeferDate),
+            has_project_change: safeUpdates.projectId !== undefined
+          }
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

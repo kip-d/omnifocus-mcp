@@ -1,6 +1,7 @@
 import { BaseTool } from '../base.js';
-import { ProjectFilter, OmniFocusProject } from '../../omnifocus/types.js';
+import { ProjectFilter } from '../../omnifocus/types.js';
 import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class ListProjectsTool extends BaseTool {
   name = 'list_projects';
@@ -38,19 +39,39 @@ export class ListProjectsTool extends BaseTool {
   };
 
   async execute(args: ProjectFilter): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       // Create cache key from filter
       const cacheKey = JSON.stringify(args);
       
       // Check cache
-      const cached = this.cache.get<OmniFocusProject[]>('projects', cacheKey);
+      const cached = this.cache.get<any>('projects', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached projects');
-        return {
-          projects: cached,
-          total: cached.length,
-          cached: true,
-        };
+        // Handle both legacy and new cached formats
+        if (cached.data && cached.data.items) {
+          // Already in standardized format
+          return {
+            ...cached,
+            metadata: {
+              ...cached.metadata,
+              from_cache: true,
+              ...timer.toMetadata()
+            }
+          };
+        } else if (Array.isArray(cached)) {
+          // Legacy format - convert to standard
+          return createListResponse(
+            'list_projects',
+            cached,
+            {
+              from_cache: true,
+              ...timer.toMetadata(),
+              filters_applied: args
+            }
+          );
+        }
       }
       
       // Execute script
@@ -59,16 +80,24 @@ export class ListProjectsTool extends BaseTool {
       
       // Check if script returned an error
       if (result.error) {
-        return result;
+        return createErrorResponse(
+          'list_projects',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to list projects',
+          result.details,
+          timer.toMetadata()
+        );
       }
       
       // Ensure projects array exists
       if (!result.projects || !Array.isArray(result.projects)) {
-        return {
-          error: true,
-          message: 'Invalid response from OmniFocus: projects array not found',
-          details: 'The script returned an unexpected format'
-        };
+        return createErrorResponse(
+          'list_projects',
+          'INVALID_RESPONSE',
+          'Invalid response from OmniFocus: projects array not found',
+          { received: result, expected: 'object with projects array' },
+          timer.toMetadata()
+        );
       }
       
       // Parse dates
@@ -80,14 +109,21 @@ export class ListProjectsTool extends BaseTool {
         lastReviewDate: project.lastReviewDate ? new Date(project.lastReviewDate) : undefined,
       }));
       
-      // Cache results
-      this.cache.set('projects', cacheKey, parsedProjects);
+      // Create standardized response
+      const standardResponse = createListResponse(
+        'list_projects',
+        parsedProjects,
+        {
+          ...timer.toMetadata(),
+          filters_applied: args,
+          ...result.metadata
+        }
+      );
       
-      return {
-        projects: parsedProjects,
-        total: parsedProjects.length,
-        cached: false,
-      };
+      // Cache results (cache the standardized format)
+      this.cache.set('projects', cacheKey, standardResponse);
+      
+      return standardResponse;
     } catch (error) {
       return this.handleError(error);
     }

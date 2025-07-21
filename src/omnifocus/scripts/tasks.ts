@@ -1,3 +1,101 @@
+// Safe utility functions - shared across all scripts
+export const SAFE_UTILITIES_SCRIPT = `
+  // Safe utility functions for OmniFocus automation
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetDate(getter) {
+    try {
+      const date = getter();
+      return date ? date.toISOString() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetProject(task) {
+    try {
+      const project = task.containingProject();
+      if (project) {
+        return {
+          name: project.name(),
+          id: project.id()
+        };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTags(task) {
+    try {
+      const tags = task.tags();
+      return tags ? tags.map(t => t.name()) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  function safeGetFolder(project) {
+    try {
+      const folder = project.folder();
+      return folder ? folder.name() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTaskCount(project) {
+    try {
+      const tasks = project.flattenedTasks();
+      return tasks ? tasks.length : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  
+  function safeGetStatus(obj) {
+    try {
+      const status = obj.status();
+      return status || 'unknown';
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+  
+  function safeIsCompleted(obj) {
+    try {
+      return obj.completed() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function safeIsFlagged(obj) {
+    try {
+      return obj.flagged() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function safeGetEstimatedMinutes(task) {
+    try {
+      const estimate = task.estimatedMinutes();
+      return typeof estimate === 'number' ? estimate : null;
+    } catch (e) {
+      return null;
+    }
+  }
+`;
+
 export const LIST_TASKS_SCRIPT = `
   const filter = {{filter}};
   const tasks = [];
@@ -132,48 +230,7 @@ export const LIST_TASKS_SCRIPT = `
     return analyzers;
   }
   
-  // Safe utility functions to reduce try-catch boilerplate
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
-  
-  function safeGetDate(getter) {
-    try {
-      const date = getter();
-      return date ? date.toISOString() : null;
-    } catch (e) {
-      return null;
-    }
-  }
-  
-  function safeGetProject(task) {
-    try {
-      const project = task.containingProject();
-      if (project) {
-        return {
-          name: project.name(),
-          id: project.id()
-        };
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-  
-  function safeGetTags(task) {
-    try {
-      const tags = task.tags();
-      return tags ? tags.map(t => t.name()) : [];
-    } catch (e) {
-      return [];
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   function safeExtractRuleProperties(repetitionRule) {
     const ruleData = {};
@@ -568,30 +625,7 @@ export const UPDATE_TASK_SCRIPT = `
   const taskId = {{taskId}};
   const updates = {{updates}};
   
-  // Safe utility functions
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
-  
-  function safeGetProject(task) {
-    try {
-      const project = task.containingProject();
-      if (project) {
-        return {
-          name: project.name(),
-          id: project.id()
-        };
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     // Find task by ID
@@ -604,7 +638,10 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     if (!task) {
-      return JSON.stringify({ error: true, message: 'Task not found' });
+      return JSON.stringify({ 
+        error: true, 
+        message: "Task with ID '" + taskId + "' not found. Use 'list_tasks' tool to see available tasks." 
+      });
     }
     
     // Apply updates using property setters with null handling
@@ -781,24 +818,7 @@ export const UPDATE_TASK_SCRIPT = `
 export const COMPLETE_TASK_SCRIPT = `
   const taskId = {{taskId}};
   
-  // Safe utility functions
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
-  
-  function safeGetDate(getter) {
-    try {
-      const date = getter();
-      return date ? date.toISOString() : null;
-    } catch (e) {
-      return null;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     // Find task by ID
@@ -811,11 +831,18 @@ export const COMPLETE_TASK_SCRIPT = `
       }
     }
     if (!task) {
-      return JSON.stringify({ error: true, message: 'Task not found' });
+      return JSON.stringify({ 
+        error: true, 
+        message: "Task with ID '" + taskId + "' not found. Use 'list_tasks' tool to see available tasks." 
+      });
     }
     
     if (task.completed()) {
-      return JSON.stringify({ error: true, message: 'Task already completed' });
+      const taskName = safeGet(() => task.name(), 'Unknown Task');
+      return JSON.stringify({ 
+        error: true, 
+        message: "Task '" + taskName + "' (ID: " + taskId + ") is already completed." 
+      });
     }
     
     // Mark as complete using JXA property setter
@@ -853,11 +880,11 @@ export const COMPLETE_TASK_OMNI_SCRIPT = `
     });
     
     if (!targetTask) {
-      throw new Error('Task not found');
+      throw new Error("Task with ID '" + taskId + "' not found via URL scheme. Use 'list_tasks' tool to see available tasks.");
     }
     
     if (targetTask.completed) {
-      throw new Error('Task already completed');
+      throw new Error("Task '" + (targetTask.name || 'Unknown Task') + "' (ID: " + taskId + ") is already completed.");
     }
     
     // Mark as complete using Omni Automation method
@@ -873,15 +900,7 @@ export const COMPLETE_TASK_OMNI_SCRIPT = `
 export const DELETE_TASK_SCRIPT = `
   const taskId = {{taskId}};
   
-  // Safe utility functions
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     // Find task by ID
@@ -894,7 +913,10 @@ export const DELETE_TASK_SCRIPT = `
       }
     }
     if (!task) {
-      return JSON.stringify({ error: true, message: 'Task not found' });
+      return JSON.stringify({ 
+        error: true, 
+        message: "Task with ID '" + taskId + "' not found. Use 'list_tasks' tool to see available tasks." 
+      });
     }
     
     const taskName = safeGet(() => task.name(), 'Unnamed Task');
@@ -934,7 +956,7 @@ export const DELETE_TASK_OMNI_SCRIPT = `
     });
     
     if (!targetTask) {
-      throw new Error('Task not found');
+      throw new Error("Task with ID '" + taskId + "' not found via URL scheme. Use 'list_tasks' tool to see available tasks.");
     }
     
     const taskName = targetTask.name;
@@ -957,15 +979,7 @@ export const TODAYS_AGENDA_SCRIPT = `
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   
-  // Safe utility functions
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     const allTasks = doc.flattenedTasks();
@@ -1085,15 +1099,7 @@ export const TODAYS_AGENDA_SCRIPT = `
 export const GET_TASK_COUNT_SCRIPT = `
   const filter = {{filter}};
   
-  // Safe utility functions
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     const allTasks = doc.flattenedTasks();

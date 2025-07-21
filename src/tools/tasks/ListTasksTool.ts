@@ -1,6 +1,7 @@
 import { BaseTool } from '../base.js';
 import { TaskFilter } from '../../omnifocus/types.js';
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { createListResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class ListTasksTool extends BaseTool {
   name = 'list_tasks';
@@ -69,6 +70,8 @@ export class ListTasksTool extends BaseTool {
   };
 
   async execute(args: TaskFilter & { limit?: number }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { limit = 100, ...filter } = args;
       
@@ -79,13 +82,20 @@ export class ListTasksTool extends BaseTool {
       const cached = this.cache.get<any>('tasks', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tasks');
-        return {
-          ...cached,
-          metadata: {
-            ...cached.metadata,
-            from_cache: true,
-          }
-        };
+        // Convert legacy cached response to standard format
+        if (cached.tasks && Array.isArray(cached.tasks)) {
+          return createListResponse(
+            'list_tasks', 
+            cached.tasks,
+            {
+              from_cache: true,
+              ...timer.toMetadata(),
+              filters_applied: filter,
+              limit_applied: limit,
+              ...cached.metadata
+            }
+          );
+        }
       }
       
       // Execute script - pass filter with limit included
@@ -116,18 +126,22 @@ export class ListTasksTool extends BaseTool {
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
       }));
       
-      const finalResult = {
-        tasks: parsedTasks,
-        metadata: {
-          ...result.metadata,
-          from_cache: false,
+      // Create standardized response
+      const standardResponse = createListResponse(
+        'list_tasks',
+        parsedTasks,
+        {
+          ...timer.toMetadata(),
+          filters_applied: filter,
+          limit_applied: limit,
+          ...result.metadata
         }
-      };
+      );
       
-      // Cache results
-      this.cache.set('tasks', cacheKey, finalResult);
+      // Cache results (cache the standardized format)
+      this.cache.set('tasks', cacheKey, standardResponse);
       
-      return finalResult;
+      return standardResponse;
     } catch (error) {
       return this.handleError(error);
     }

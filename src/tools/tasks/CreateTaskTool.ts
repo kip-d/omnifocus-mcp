@@ -1,6 +1,8 @@
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { parsingError } from '../../utils/error-messages.js';
+import { createEntityResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class CreateTaskTool extends BaseTool {
   name = 'create_task';
@@ -49,10 +51,9 @@ export class CreateTaskTool extends BaseTool {
   };
 
   async execute(args: any): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
-      // Invalidate task cache on create
-      this.cache.invalidate('tasks');
-      
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: args });
       const result = await this.omniAutomation.execute(script);
       
@@ -61,14 +62,40 @@ export class CreateTaskTool extends BaseTool {
       }
       
       // Parse the JSON result since the script returns a JSON string
+      let parsedResult;
       try {
-        return typeof result === 'string' ? JSON.parse(result) : result;
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       } catch (parseError) {
         this.logger.error(`Failed to parse create task result: ${result}`);
-        throw new McpError(ErrorCode.InternalError, 'Failed to parse task creation response');
+        throw new McpError(
+          ErrorCode.InternalError, 
+          parsingError('task creation', String(result), 'valid JSON'),
+          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) }
+        );
       }
+      
+      // Invalidate cache after successful task creation
+      this.cache.invalidate('tasks');
+      
+      // Return standardized response
+      return createEntityResponse(
+        'create_task',
+        'task',
+        parsedResult,
+        {
+          ...timer.toMetadata(),
+          created_id: parsedResult.id,
+          project_id: args.projectId || null,
+          input_params: {
+            name: args.name,
+            has_project: !!args.projectId,
+            has_due_date: !!args.dueDate,
+            has_tags: !!(args.tags && args.tags.length > 0)
+          }
+        }
+      );
     } catch (error) {
-      this.handleError(error);
+      return this.handleError(error);
     }
   }
 }

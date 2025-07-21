@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { UPDATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class UpdateProjectTool extends BaseTool {
   name = 'update_project';
@@ -75,11 +76,10 @@ export class UpdateProjectTool extends BaseTool {
       folder?: string;
     };
   }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { projectId, updates } = args;
-      
-      // Clear project cache since we're updating
-      this.cache.clear('projects');
       
       // Execute update script
       const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, { 
@@ -88,7 +88,34 @@ export class UpdateProjectTool extends BaseTool {
       });
       const result = await this.omniAutomation.execute<any>(script);
       
-      return result;
+      // Only invalidate cache after successful update
+      if (result && !result.error) {
+        this.cache.invalidate('projects');
+        
+        // Return standardized response
+        return createEntityResponse(
+          'update_project',
+          'project',
+          result,
+          {
+            ...timer.toMetadata(),
+            updated_id: projectId,
+            input_params: {
+              projectId,
+              fields_updated: Object.keys(updates)
+            }
+          }
+        );
+      }
+      
+      // Error case - return standardized error
+      return createErrorResponse(
+        'update_project',
+        'UPDATE_FAILED',
+        result.message || 'Failed to update project',
+        result,
+        timer.toMetadata()
+      );
     } catch (error) {
       return this.handleError(error);
     }

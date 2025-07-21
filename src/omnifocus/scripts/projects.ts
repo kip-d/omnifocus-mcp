@@ -1,3 +1,6 @@
+// Import shared safe utilities
+import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+
 export const LIST_PROJECTS_SCRIPT = `
   const filter = {{filter}};
   const projects = [];
@@ -181,7 +184,7 @@ export const UPDATE_PROJECT_SCRIPT = `
     if (!targetProject) {
       return JSON.stringify({
         error: true,
-        message: "Project with ID '" + projectId + "' not found"
+        message: "Project with ID '" + projectId + "' not found. Use 'list_projects' tool to see available projects."
       });
     }
     
@@ -328,7 +331,7 @@ export const COMPLETE_PROJECT_SCRIPT = `
     if (!targetProject) {
       return JSON.stringify({
         error: true,
-        message: "Project with ID '" + projectId + "' not found"
+        message: "Project with ID '" + projectId + "' not found. Use 'list_projects' tool to see available projects."
       });
     }
     
@@ -415,15 +418,7 @@ export const DELETE_PROJECT_SCRIPT = `
   const projectId = {{projectId}};
   const deleteTasks = {{deleteTasks}};
   
-  // Safe utility function (from working task deletion)
-  function safeGet(getter, defaultValue = null) {
-    try {
-      const result = getter();
-      return result !== null && result !== undefined ? result : defaultValue;
-    } catch (e) {
-      return defaultValue;
-    }
-  }
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     // Find the project by ID (using same pattern as working task deletion)
@@ -440,7 +435,7 @@ export const DELETE_PROJECT_SCRIPT = `
     if (!targetProject) {
       return JSON.stringify({
         error: true,
-        message: "Project with ID '" + projectId + "' not found"
+        message: "Project with ID '" + projectId + "' not found. Use 'list_projects' tool to see available projects."
       });
     }
     

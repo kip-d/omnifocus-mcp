@@ -28,15 +28,19 @@ export class CompleteProjectTool extends BaseTool {
     try {
       const { projectId, completeAllTasks = false } = args;
       
-      // Clear project cache since we're completing
-      this.cache.clear('projects');
-      
       // Execute complete script (ensure completeAllTasks is always a boolean)
       const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, { 
         projectId,
         completeAllTasks: Boolean(completeAllTasks)
       });
       const result = await this.omniAutomation.execute<any>(script);
+      
+      // Only invalidate cache after successful completion
+      if (result && !result.error) {
+        this.cache.invalidate('projects');
+        // Also invalidate analytics since project completion affects productivity stats
+        this.cache.invalidate('analytics');
+      }
       
       return result;
     } catch (error) {

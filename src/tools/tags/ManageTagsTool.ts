@@ -43,9 +43,6 @@ export class ManageTagsTool extends BaseTool {
         throw new McpError(ErrorCode.InvalidParams, 'Target tag is required for merge action');
       }
       
-      // Clear tag cache since we're modifying
-      this.cache.clear('tags');
-      
       // Execute script
       const script = this.omniAutomation.buildScript(MANAGE_TAGS_SCRIPT, { 
         action,
@@ -55,9 +52,16 @@ export class ManageTagsTool extends BaseTool {
       });
       const result = await this.omniAutomation.execute<any>(script);
       
+      // Only invalidate cache after successful tag modification
+      if (result && !result.error) {
+        this.cache.invalidate('tags');
+        // Tag changes might affect task filtering, so invalidate tasks too
+        this.cache.invalidate('tasks');
+      }
+      
       return result;
     } catch (error) {
-      this.handleError(error);
+      return this.handleError(error);
     }
   }
 }

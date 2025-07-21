@@ -28,9 +28,6 @@ export class DeleteProjectTool extends BaseTool {
     try {
       const { projectId, deleteTasks = false } = args;
       
-      // Clear project cache since we're deleting
-      this.cache.clear('projects');
-      
       // Try JXA first, fall back to URL scheme if access denied or parameter missing
       try {
         const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { 
@@ -49,6 +46,9 @@ export class DeleteProjectTool extends BaseTool {
           }
           return result;
         }
+        
+        // Invalidate cache after successful deletion
+        this.cache.invalidate('projects');
         
         this.logger.info(`Deleted project via JXA: ${result.projectName} (${projectId})`);
         return result;
@@ -100,6 +100,9 @@ export class DeleteProjectTool extends BaseTool {
     `;
     
     await this.omniAutomation.executeViaUrlScheme(omniScript);
+    
+    // Invalidate cache after successful URL scheme execution
+    this.cache.invalidate('projects');
     
     this.logger.info(`Marked project as dropped via URL scheme: ${args.projectId}`);
     

@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class CompleteTaskTool extends BaseTool {
   name = 'complete_task';
@@ -17,11 +18,9 @@ export class CompleteTaskTool extends BaseTool {
   };
 
   async execute(args: { taskId: string }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
-      // Invalidate task and analytics cache
-      this.cache.invalidate('tasks');
-      this.cache.invalidate('analytics');
-      
       // Try JXA first, fall back to URL scheme if access denied
       try {
         const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, args);
@@ -44,16 +43,30 @@ export class CompleteTaskTool extends BaseTool {
           parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
         } catch (parseError) {
           this.logger.error(`Failed to parse complete task result: ${result}`);
-          return {
-            error: true,
-            message: 'Failed to parse task completion response'
-          };
+          return createErrorResponse(
+            'complete_task',
+            'PARSE_ERROR',
+            'Failed to parse task completion response',
+            { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
+            timer.toMetadata()
+          );
         }
         
-        return {
-          success: true,
-          task: parsedResult,
-        };
+        // Invalidate cache after successful completion
+        this.cache.invalidate('tasks');
+        this.cache.invalidate('analytics');
+        
+        return createEntityResponse(
+          'complete_task',
+          'task',
+          parsedResult,
+          {
+            ...timer.toMetadata(),
+            completed_id: args.taskId,
+            method: 'jxa',
+            input_params: { taskId: args.taskId }
+          }
+        );
       } catch (jxaError: any) {
         // If JXA fails with permission error, use URL scheme
         if (jxaError.message && jxaError.message.toLowerCase().includes('access not allowed')) {
@@ -68,17 +81,31 @@ export class CompleteTaskTool extends BaseTool {
   }
 
   private async executeViaUrlScheme(args: { taskId: string }): Promise<any> {
+    const timer = new OperationTimer();
     const omniScript = this.omniAutomation.buildScript(COMPLETE_TASK_OMNI_SCRIPT, args);
     await this.omniAutomation.executeViaUrlScheme(omniScript);
     
+    // Invalidate cache after successful URL scheme execution
+    this.cache.invalidate('tasks');
+    this.cache.invalidate('analytics');
+    
     this.logger.info(`Completed task via URL scheme: ${args.taskId}`);
     
-    // Return expected format since URL scheme doesn't return detailed results
-    return {
-      success: true,
-      id: args.taskId,
-      completed: true,
-      completionDate: new Date().toISOString()
-    };
+    // Return standardized format since URL scheme doesn't return detailed results
+    return createEntityResponse(
+      'complete_task',
+      'task',
+      {
+        id: args.taskId,
+        completed: true,
+        completionDate: new Date().toISOString()
+      },
+      {
+        ...timer.toMetadata(),
+        completed_id: args.taskId,
+        method: 'url_scheme',
+        input_params: { taskId: args.taskId }
+      }
+    );
   }
 }
