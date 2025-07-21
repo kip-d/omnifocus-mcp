@@ -31,10 +31,10 @@ export class CompleteProjectTool extends BaseTool {
       // Clear project cache since we're completing
       this.cache.clear('projects');
       
-      // Execute complete script
+      // Execute complete script (ensure completeAllTasks is always a boolean)
       const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, { 
         projectId,
-        completeAllTasks
+        completeAllTasks: Boolean(completeAllTasks)
       });
       const result = await this.omniAutomation.execute<any>(script);
       

@@ -31,10 +31,10 @@ export class DeleteProjectTool extends BaseTool {
       // Clear project cache since we're deleting
       this.cache.clear('projects');
       
-      // Execute delete script
+      // Execute delete script (ensure deleteTasks is always a boolean)
       const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { 
         projectId,
-        deleteTasks
+        deleteTasks: Boolean(deleteTasks)
       });
       const result = await this.omniAutomation.execute<any>(script);
       
