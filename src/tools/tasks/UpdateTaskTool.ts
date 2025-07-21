@@ -141,25 +141,25 @@ export class UpdateTaskTool extends BaseTool {
       sanitized.flagged = updates.flagged;
     }
     
-    // Handle date fields (allow null to clear, convert strings to Date objects)
+    // Handle date fields (allow null to clear, validate but keep as strings like create_task)
     if (updates.dueDate !== undefined) {
       if (updates.dueDate === null) {
         sanitized.dueDate = null; // Explicitly clear the date
       } else if (typeof updates.dueDate === 'string') {
         try {
-          // Convert ISO string to Date object like create_task does
+          // Validate the date string but keep it as string (like create_task does)
           const parsedDate = new Date(updates.dueDate);
           // Validate the date is not invalid
           if (isNaN(parsedDate.getTime())) {
             throw new Error('Invalid date');
           }
-          sanitized.dueDate = parsedDate;
+          sanitized.dueDate = updates.dueDate; // Keep as string for JXA script
         } catch (error) {
           // Skip invalid date strings
           this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`);
         }
       } else if (updates.dueDate instanceof Date) {
-        sanitized.dueDate = updates.dueDate; // Already a Date object
+        sanitized.dueDate = updates.dueDate.toISOString(); // Convert Date object to ISO string
       }
     }
     if (updates.deferDate !== undefined) {
@@ -167,19 +167,19 @@ export class UpdateTaskTool extends BaseTool {
         sanitized.deferDate = null; // Explicitly clear the date
       } else if (typeof updates.deferDate === 'string') {
         try {
-          // Convert ISO string to Date object like create_task does
+          // Validate the date string but keep it as string (like create_task does)
           const parsedDate = new Date(updates.deferDate);
           // Validate the date is not invalid
           if (isNaN(parsedDate.getTime())) {
             throw new Error('Invalid date');
           }
-          sanitized.deferDate = parsedDate;
+          sanitized.deferDate = updates.deferDate; // Keep as string for JXA script
         } catch (error) {
           // Skip invalid date strings
           this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`);
         }
       } else if (updates.deferDate instanceof Date) {
-        sanitized.deferDate = updates.deferDate; // Already a Date object
+        sanitized.deferDate = updates.deferDate.toISOString(); // Convert Date object to ISO string
       }
     }
     

@@ -623,12 +623,8 @@ export const UPDATE_TASK_SCRIPT = `
         if (updates.dueDate === null || updates.dueDate === undefined) {
           task.dueDate = null;
         } else if (updates.dueDate) {
-          // Handle Date objects and strings, convert strings to Date objects
-          if (typeof updates.dueDate === 'string') {
-            task.dueDate = new Date(updates.dueDate);
-          } else {
-            task.dueDate = updates.dueDate;
-          }
+          // Handle date strings like create_task does (simplified approach)
+          task.dueDate = new Date(updates.dueDate);
         }
       } catch (dateError) {
         // Skip invalid due date - log error details for debugging
@@ -640,12 +636,8 @@ export const UPDATE_TASK_SCRIPT = `
         if (updates.deferDate === null || updates.deferDate === undefined) {
           task.deferDate = null;
         } else if (updates.deferDate) {
-          // Handle Date objects and strings, convert strings to Date objects
-          if (typeof updates.deferDate === 'string') {
-            task.deferDate = new Date(updates.deferDate);
-          } else {
-            task.deferDate = updates.deferDate;
-          }
+          // Handle date strings like create_task does (simplified approach)
+          task.deferDate = new Date(updates.deferDate);
         }
       } catch (dateError) {
         // Skip invalid defer date - log error details for debugging
