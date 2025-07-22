@@ -125,16 +125,38 @@ export const MANAGE_TAGS_SCRIPT = `
           }
         }
         
-        // Create new tag
-        const newTag = app.Tag({name: tagName});
-        doc.tags.push(newTag);
-        
-        return JSON.stringify({
-          success: true,
-          action: 'created',
-          tagName: tagName,
-          message: "Tag '" + tagName + "' created successfully"
-        });
+        // Create new tag using make
+        try {
+          const newTag = app.make({
+            new: 'tag',
+            withProperties: { name: tagName },
+            at: doc.tags
+          });
+          
+          return JSON.stringify({
+            success: true,
+            action: 'created',
+            tagName: tagName,
+            tagId: newTag.id(),
+            message: "Tag '" + tagName + "' created successfully"
+          });
+        } catch (createError) {
+          // If make fails, try alternate syntax
+          try {
+            const newTag = doc.tags.push(app.Tag({ name: tagName }));
+            return JSON.stringify({
+              success: true,
+              action: 'created',
+              tagName: tagName,
+              message: "Tag '" + tagName + "' created successfully"
+            });
+          } catch (altError) {
+            return JSON.stringify({
+              error: true,
+              message: "Failed to create tag: " + createError.toString() + " / " + altError.toString()
+            });
+          }
+        }
         
       case 'rename':
         // Find tag to rename

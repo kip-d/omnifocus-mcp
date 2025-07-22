@@ -194,8 +194,16 @@ export const EXPORT_PROJECTS_SCRIPT = `
       
       // Add status with safe access
       try {
-        const status = project.status();
-        projectData.status = status || 'active';
+        const statusObj = project.status();
+        // Status might be an object with a name property or a string
+        if (statusObj && typeof statusObj === 'object' && statusObj.name) {
+          projectData.status = statusObj.name;
+        } else if (typeof statusObj === 'string') {
+          // Clean up status string if it contains redundant words
+          projectData.status = statusObj.replace(/\s*status\s*/i, '').trim() || 'active';
+        } else {
+          projectData.status = 'active';
+        }
       } catch (e) {
         projectData.status = 'active';
       }

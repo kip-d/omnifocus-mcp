@@ -768,12 +768,22 @@ export const UPDATE_TASK_SCRIPT = `
             }
             if (!found) {
               try {
-                // Create new tag
-                const newTag = app.Tag({name: tagName});
-                doc.tags.push(newTag);
+                // Create new tag using make
+                const newTag = app.make({
+                  new: 'tag',
+                  withProperties: { name: tagName },
+                  at: doc.tags
+                });
                 tagsToAdd.push(newTag);
-              } catch (tagError) {
-                // Skip tag creation error
+              } catch (makeError) {
+                // If make fails, try alternate syntax
+                try {
+                  const newTag = app.Tag({name: tagName});
+                  doc.tags.push(newTag);
+                  tagsToAdd.push(newTag);
+                } catch (tagError) {
+                  // Skip tag creation error - tag won't be added
+                }
               }
             }
           }

@@ -67,12 +67,15 @@ export class BulkExportTool extends BaseTool {
       
       if (!taskResult.error) {
         const taskFile = path.join(outputDirectory, `tasks.${format}`);
+        const taskData = taskResult.data || taskResult;
+        const taskCount = taskResult.count || (taskData.count) || 0;
+        
         if (format === 'csv') {
-          await fs.writeFile(taskFile, taskResult.data, 'utf-8');
+          await fs.writeFile(taskFile, taskData.data || taskData, 'utf-8');
         } else {
-          await fs.writeFile(taskFile, JSON.stringify(taskResult.data, null, 2), 'utf-8');
+          await fs.writeFile(taskFile, JSON.stringify(taskData.data || taskData, null, 2), 'utf-8');
         }
-        results.tasks.exported = taskResult.count;
+        results.tasks.exported = taskCount;
         results.tasks.file = taskFile;
       }
       
@@ -83,14 +86,17 @@ export class BulkExportTool extends BaseTool {
         includeStats: includeProjectStats 
       });
       
-      if (!projectResult.error) {
+      if (!projectResult.error && projectResult.success !== false) {
         const projectFile = path.join(outputDirectory, `projects.${format}`);
+        const projectData = projectResult.data || projectResult;
+        const projectCount = projectData.count || 0;
+        
         if (format === 'csv') {
-          await fs.writeFile(projectFile, projectResult.data, 'utf-8');
+          await fs.writeFile(projectFile, projectData.data || projectData, 'utf-8');
         } else {
-          await fs.writeFile(projectFile, JSON.stringify(projectResult.data, null, 2), 'utf-8');
+          await fs.writeFile(projectFile, JSON.stringify(projectData.data || projectData, null, 2), 'utf-8');
         }
-        results.projects.exported = projectResult.count;
+        results.projects.exported = projectCount;
         results.projects.file = projectFile;
       }
       
@@ -98,10 +104,14 @@ export class BulkExportTool extends BaseTool {
       const tagExporter = new ListTagsTool(this.cache);
       const tagResult = await tagExporter.execute({ includeEmpty: true });
       
-      if (!tagResult.error) {
+      if (!tagResult.error && tagResult.success !== false) {
         const tagFile = path.join(outputDirectory, 'tags.json');
-        await fs.writeFile(tagFile, JSON.stringify(tagResult, null, 2), 'utf-8');
-        results.tags.exported = tagResult.summary.totalTags;
+        const tagData = tagResult.data || tagResult;
+        const tagItems = tagData.items || tagData.tags || [];
+        const tagCount = tagResult.metadata?.total_count || tagItems.length || 0;
+        
+        await fs.writeFile(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
+        results.tags.exported = tagCount;
         results.tags.file = tagFile;
       }
       
