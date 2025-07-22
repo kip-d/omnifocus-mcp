@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class ExportProjectsTool extends BaseTool {
   name = 'export_projects';
@@ -26,6 +27,8 @@ export class ExportProjectsTool extends BaseTool {
     format?: 'json' | 'csv'; 
     includeStats?: boolean;
   }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { format = 'json', includeStats = false } = args;
       
@@ -43,21 +46,29 @@ export class ExportProjectsTool extends BaseTool {
       }>(script);
       
       if (result.error) {
-        return {
-          error: true,
-          message: result.message,
-        };
+        return createErrorResponse(
+          'export_projects',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to export projects',
+          { details: result },
+          timer.toMetadata()
+        );
       }
       
-      return {
-        format: result.format,
-        count: result.count,
-        data: result.data,
-        metadata: {
-          exportedAt: new Date().toISOString(),
-          includeStats,
+      return createSuccessResponse(
+        'export_projects',
+        {
+          format: result.format,
+          count: result.count,
+          data: result.data
         },
-      };
+        {
+          ...timer.toMetadata(),
+          exported_at: new Date().toISOString(),
+          include_stats: includeStats,
+          format: format
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

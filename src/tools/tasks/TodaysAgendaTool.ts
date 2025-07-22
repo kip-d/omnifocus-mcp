@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class TodaysAgendaTool extends BaseTool {
   name = 'todays_agenda';
@@ -27,6 +28,8 @@ export class TodaysAgendaTool extends BaseTool {
   };
 
   async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { 
         includeFlagged = true, 
@@ -41,10 +44,21 @@ export class TodaysAgendaTool extends BaseTool {
       const cached = this.cache.get<any>('tasks', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached agenda');
-        return {
-          ...cached,
-          from_cache: true,
-        };
+        return createListResponse(
+          'todays_agenda',
+          cached.tasks,
+          {
+            ...timer.toMetadata(),
+            from_cache: true,
+            date: cached.date,
+            summary: cached.summary,
+            filters_applied: {
+              include_flagged: includeFlagged,
+              include_overdue: includeOverdue,
+              include_available: includeAvailable
+            }
+          }
+        );
       }
       
       // Execute script
@@ -54,7 +68,13 @@ export class TodaysAgendaTool extends BaseTool {
       const result = await this.omniAutomation.execute<any>(script);
       
       if (result.error) {
-        return result;
+        return createErrorResponse(
+          'todays_agenda',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to get today\'s agenda',
+          { details: result.details },
+          timer.toMetadata()
+        );
       }
       
       // Parse dates in tasks
@@ -65,17 +85,31 @@ export class TodaysAgendaTool extends BaseTool {
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
       }));
       
-      const finalResult = {
+      const cacheData = {
         date: new Date().toISOString().split('T')[0],
         tasks: parsedTasks,
-        summary: result.summary,
-        from_cache: false,
+        summary: result.summary
       };
       
       // Cache for shorter time (5 minutes for agenda)
-      this.cache.set('tasks', cacheKey, finalResult);
+      this.cache.set('tasks', cacheKey, cacheData);
       
-      return finalResult;
+      return createListResponse(
+        'todays_agenda',
+        parsedTasks,
+        {
+          ...timer.toMetadata(),
+          from_cache: false,
+          date: cacheData.date,
+          summary: result.summary,
+          filters_applied: {
+            include_flagged: includeFlagged,
+            include_overdue: includeOverdue,
+            include_available: includeAvailable
+          },
+          query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs()
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

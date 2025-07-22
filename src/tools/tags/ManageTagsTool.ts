@@ -1,6 +1,7 @@
 import { BaseTool } from '../base.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class ManageTagsTool extends BaseTool {
   name = 'manage_tags';
@@ -31,6 +32,8 @@ export class ManageTagsTool extends BaseTool {
   };
 
   async execute(args: { action: string; tagName: string; newName?: string; targetTag?: string }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { action, tagName, newName, targetTag } = args;
       
@@ -52,14 +55,48 @@ export class ManageTagsTool extends BaseTool {
       });
       const result = await this.omniAutomation.execute<any>(script);
       
-      // Only invalidate cache after successful tag modification
-      if (result && !result.error) {
-        this.cache.invalidate('tags');
-        // Tag changes might affect task filtering, so invalidate tasks too
-        this.cache.invalidate('tasks');
+      if (result.error) {
+        return createErrorResponse(
+          'manage_tags',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to manage tag',
+          { details: result.details },
+          timer.toMetadata()
+        );
       }
       
-      return result;
+      // Only invalidate cache after successful tag modification
+      this.cache.invalidate('tags');
+      // Tag changes might affect task filtering, so invalidate tasks too
+      this.cache.invalidate('tasks');
+      
+      // Parse the result if it's a string
+      let parsedResult;
+      try {
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      } catch (parseError) {
+        this.logger.error(`Failed to parse manage tags result: ${result}`);
+        parsedResult = result;
+      }
+      
+      return createSuccessResponse(
+        'manage_tags',
+        {
+          action: parsedResult.action || action,
+          message: parsedResult.message,
+          tag_name: parsedResult.tagName || tagName,
+          ...(parsedResult.oldName && { old_name: parsedResult.oldName }),
+          ...(parsedResult.newName && { new_name: parsedResult.newName }),
+          ...(parsedResult.targetTag && { target_tag: parsedResult.targetTag }),
+          ...(parsedResult.tasksAffected !== undefined && { tasks_affected: parsedResult.tasksAffected }),
+          ...(parsedResult.tasksMerged !== undefined && { tasks_merged: parsedResult.tasksMerged })
+        },
+        {
+          ...timer.toMetadata(),
+          action: action,
+          input_params: args
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

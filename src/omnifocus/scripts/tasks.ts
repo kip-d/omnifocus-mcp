@@ -560,6 +560,7 @@ export const CREATE_TASK_SCRIPT = `
     // Try to get the real OmniFocus ID by finding the task we just created
     let taskId = null;
     let createdTask = null;
+    let actualTags = [];
     
     try {
       // Search in the appropriate container
@@ -574,9 +575,12 @@ export const CREATE_TASK_SCRIPT = `
           if (tagsToAdd.length > 0) {
             try {
               task.addTags(tagsToAdd);
+              // Verify tags were actually added
+              actualTags = safeGetTags(task);
             } catch (tagError) {
               // Tags failed to add, but task was created - log warning
               // Warning: Failed to add tags to task
+              actualTags = [];
             }
           }
           
@@ -604,7 +608,14 @@ export const CREATE_TASK_SCRIPT = `
     if (taskData.dueDate !== undefined) responseTask.dueDate = taskData.dueDate;
     if (taskData.deferDate !== undefined) responseTask.deferDate = taskData.deferDate;
     if (taskData.estimatedMinutes !== undefined) responseTask.estimatedMinutes = taskData.estimatedMinutes;
-    if (taskData.tags !== undefined && taskData.tags.length > 0) responseTask.tags = taskData.tags;
+    // Only include tags that were actually added to the task
+    if (actualTags.length > 0) {
+      responseTask.tags = actualTags;
+    } else if (taskData.tags !== undefined && taskData.tags.length > 0) {
+      // If tags were requested but not added, include empty array to indicate the attempt
+      responseTask.tags = [];
+      responseTask.tagWarning = 'Tags were requested but could not be added';
+    }
     
     return JSON.stringify({
       success: true,
@@ -845,8 +856,20 @@ export const COMPLETE_TASK_SCRIPT = `
       });
     }
     
-    // Mark as complete using JXA property setter
-    task.completed = true;
+    // Mark as complete using JXA markComplete method
+    try {
+      task.markComplete();
+    } catch (markError) {
+      // If markComplete fails, try property setter as fallback
+      try {
+        task.completed = true;
+      } catch (propError) {
+        return JSON.stringify({ 
+          error: true, 
+          message: "Failed to mark task as complete. Both markComplete() and property setter failed: " + markError.toString() + " / " + propError.toString()
+        });
+      }
+    }
     
     const completionDate = safeGetDate(() => task.completionDate()) || new Date().toISOString();
     

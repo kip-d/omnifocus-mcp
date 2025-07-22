@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
+import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class DeleteProjectTool extends BaseTool {
   name = 'delete_project';
@@ -51,7 +52,30 @@ export class DeleteProjectTool extends BaseTool {
         this.cache.invalidate('projects');
         
         this.logger.info(`Deleted project via JXA: ${result.projectName} (${projectId})`);
-        return result;
+        
+        // Parse the result if it's a string
+        let parsedResult;
+        try {
+          parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+        } catch (parseError) {
+          this.logger.error(`Failed to parse delete project result: ${result}`);
+          parsedResult = result;
+        }
+        
+        return createSuccessResponse(
+          'delete_project',
+          {
+            message: `Project '${parsedResult.projectName || 'Unknown'}' deleted successfully`,
+            deleted_id: projectId,
+            project_name: parsedResult.projectName,
+            tasks_deleted: parsedResult.tasksDeleted || 0,
+            tasks_orphaned: parsedResult.tasksOrphaned || 0
+          },
+          {
+            delete_tasks: args.deleteTasks || false,
+            method: 'jxa'
+          }
+        );
       } catch (jxaError: any) {
         // If JXA fails with permission error, use URL scheme
         if (jxaError.message && 
@@ -71,6 +95,7 @@ export class DeleteProjectTool extends BaseTool {
     projectId: string;
     deleteTasks?: boolean;
   }): Promise<any> {
+    const timer = new OperationTimer();
     // For URL scheme, we'll use a simpler script that just marks project as dropped
     const omniScript = `
       const projectId = "${args.projectId}";
@@ -106,14 +131,22 @@ export class DeleteProjectTool extends BaseTool {
     
     this.logger.info(`Marked project as dropped via URL scheme: ${args.projectId}`);
     
-    // Return expected format since URL scheme doesn't return detailed results
-    return {
-      success: true,
-      projectName: 'Project marked as dropped',
-      tasksDeleted: 0,
-      tasksOrphaned: 0,
-      message: 'Project marked as dropped (deletion not available via URL scheme)',
-      note: 'Used URL scheme fallback - project marked as dropped instead of deleted'
-    };
+    // Return standardized format since URL scheme doesn't return detailed results
+    return createSuccessResponse(
+      'delete_project',
+      {
+        message: 'Project marked as dropped (deletion not available via URL scheme)',
+        deleted_id: args.projectId,
+        project_name: 'Project marked as dropped',
+        tasks_deleted: 0,
+        tasks_orphaned: 0
+      },
+      {
+        ...timer.toMetadata(),
+        delete_tasks: args.deleteTasks || false,
+        method: 'url_scheme',
+        note: 'Used URL scheme fallback - project marked as dropped instead of deleted'
+      }
+    );
   }
 }

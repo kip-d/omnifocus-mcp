@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class ListTagsTool extends BaseTool {
   name = 'list_tags';
@@ -23,6 +24,8 @@ export class ListTagsTool extends BaseTool {
   };
 
   async execute(args: { sortBy?: string; includeEmpty?: boolean }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { sortBy = 'name', includeEmpty = true } = args;
       
@@ -33,10 +36,17 @@ export class ListTagsTool extends BaseTool {
       const cached = this.cache.get<any>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tags');
-        return {
-          ...cached,
-          from_cache: true,
-        };
+        return createListResponse(
+          'list_tags',
+          cached.tags,
+          {
+            ...timer.toMetadata(),
+            from_cache: true,
+            summary: cached.summary,
+            sort_by: sortBy,
+            include_empty: includeEmpty
+          }
+        );
       }
       
       // Execute script
@@ -46,19 +56,35 @@ export class ListTagsTool extends BaseTool {
       const result = await this.omniAutomation.execute<any>(script);
       
       if (result.error) {
-        return result;
+        return createErrorResponse(
+          'list_tags',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to list tags',
+          { details: result.details },
+          timer.toMetadata()
+        );
       }
       
-      const finalResult = {
+      const cacheData = {
         tags: result.tags,
-        summary: result.summary,
-        from_cache: false,
+        summary: result.summary
       };
       
       // Cache results
-      this.cache.set('tags', cacheKey, finalResult);
+      this.cache.set('tags', cacheKey, cacheData);
       
-      return finalResult;
+      return createListResponse(
+        'list_tags',
+        result.tags,
+        {
+          ...timer.toMetadata(),
+          from_cache: false,
+          summary: result.summary,
+          sort_by: sortBy,
+          include_empty: includeEmpty,
+          query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs()
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

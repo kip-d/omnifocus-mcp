@@ -1,5 +1,6 @@
 import { BaseTool } from '../base.js';
 import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
 export class CreateProjectTool extends BaseTool {
   name = 'create_project';
@@ -44,6 +45,8 @@ export class CreateProjectTool extends BaseTool {
     flagged?: boolean;
     folder?: string;
   }): Promise<any> {
+    const timer = new OperationTimer();
+    
     try {
       const { name, ...options } = args;
       
@@ -54,12 +57,46 @@ export class CreateProjectTool extends BaseTool {
       });
       const result = await this.omniAutomation.execute<any>(script);
       
-      // Only invalidate cache after successful creation
-      if (result && !result.error) {
-        this.cache.invalidate('projects');
+      if (result.error) {
+        return createErrorResponse(
+          'create_project',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to create project',
+          { details: result.details },
+          timer.toMetadata()
+        );
       }
       
-      return result;
+      // Only invalidate cache after successful creation
+      this.cache.invalidate('projects');
+      
+      // Parse the result if it's a string
+      let parsedResult;
+      try {
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      } catch (parseError) {
+        this.logger.error(`Failed to parse create project result: ${result}`);
+        parsedResult = result;
+      }
+      
+      return createEntityResponse(
+        'create_project',
+        'project',
+        parsedResult,
+        {
+          ...timer.toMetadata(),
+          created_id: parsedResult.id || parsedResult.projectId,
+          folder: args.folder,
+          input_params: {
+            name: args.name,
+            has_note: !!args.note,
+            has_due_date: !!args.dueDate,
+            has_defer_date: !!args.deferDate,
+            has_folder: !!args.folder,
+            flagged: args.flagged || false
+          }
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

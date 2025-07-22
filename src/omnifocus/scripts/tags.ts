@@ -208,8 +208,8 @@ export const MANAGE_TAGS_SCRIPT = `
           } catch (e) {}
         }
         
-        // Remove the tag
-        tagToDelete.remove();
+        // Delete the tag using JXA app.delete method
+        app.delete(tagToDelete);
         
         return JSON.stringify({
           success: true,
@@ -281,8 +281,8 @@ export const MANAGE_TAGS_SCRIPT = `
           } catch (e) {}
         }
         
-        // Delete the source tag
-        sourceTag.remove();
+        // Delete the source tag using JXA app.delete method
+        app.delete(sourceTag);
         
         return JSON.stringify({
           success: true,

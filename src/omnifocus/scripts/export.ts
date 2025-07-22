@@ -189,13 +189,22 @@ export const EXPORT_PROJECTS_SCRIPT = `
       
       const projectData = {
         id: project.id(),
-        name: project.name(),
-        status: project.status ? project.status.name : 'active'
+        name: project.name()
       };
       
+      // Add status with safe access
+      try {
+        const status = project.status();
+        projectData.status = status || 'active';
+      } catch (e) {
+        projectData.status = 'active';
+      }
+      
       // Add note if present
-      const note = project.note();
-      if (note) projectData.note = note;
+      try {
+        const note = project.note();
+        if (note) projectData.note = note;
+      } catch (e) {}
       
       // Add parent info
       try {
@@ -206,58 +215,86 @@ export const EXPORT_PROJECTS_SCRIPT = `
         }
       } catch (e) {}
       
-      // Add dates
-      const deferDate = project.deferDate();
-      if (deferDate) projectData.deferDate = deferDate.toISOString();
+      // Add dates with safe access
+      try {
+        const deferDate = project.deferDate();
+        if (deferDate) projectData.deferDate = deferDate.toISOString();
+      } catch (e) {}
       
-      const dueDate = project.dueDate();
-      if (dueDate) projectData.dueDate = dueDate.toISOString();
+      try {
+        const dueDate = project.dueDate();
+        if (dueDate) projectData.dueDate = dueDate.toISOString();
+      } catch (e) {}
       
-      const completionDate = project.completionDate();
-      if (completionDate) projectData.completionDate = completionDate.toISOString();
+      try {
+        const completionDate = project.completionDate();
+        if (completionDate) projectData.completionDate = completionDate.toISOString();
+      } catch (e) {}
       
-      const modifiedDate = project.modificationDate();
-      if (modifiedDate) projectData.modifiedDate = modifiedDate.toISOString();
+      try {
+        const modifiedDate = project.modificationDate();
+        if (modifiedDate) projectData.modifiedDate = modifiedDate.toISOString();
+      } catch (e) {}
       
       // Add statistics if requested
       if (includeStats) {
-        const tasks = project.flattenedTasks();
-        let totalTasks = 0;
-        let completedTasks = 0;
-        let availableTasks = 0;
-        let overdueCount = 0;
-        let flaggedCount = 0;
-        const now = new Date();
-        
-        for (let j = 0; j < tasks.length; j++) {
-          const task = tasks[j];
-          totalTasks++;
+        try {
+          const tasks = project.flattenedTasks();
+          let totalTasks = 0;
+          let completedTasks = 0;
+          let availableTasks = 0;
+          let overdueCount = 0;
+          let flaggedCount = 0;
+          const now = new Date();
           
-          if (task.completed()) {
-            completedTasks++;
-          } else {
-            if (!task.effectivelyHidden()) {
-              availableTasks++;
-            }
-            const dueDate = task.dueDate();
-            if (dueDate && dueDate < now) {
-              overdueCount++;
-            }
+          for (let j = 0; j < tasks.length; j++) {
+            const task = tasks[j];
+            totalTasks++;
+            
+            try {
+              if (task.completed()) {
+                completedTasks++;
+              } else {
+                try {
+                  if (!task.effectivelyHidden()) {
+                    availableTasks++;
+                  }
+                } catch (e) {
+                  availableTasks++;
+                }
+                try {
+                  const dueDate = task.dueDate();
+                  if (dueDate && dueDate < now) {
+                    overdueCount++;
+                  }
+                } catch (e) {}
+              }
+              
+              if (task.flagged()) {
+                flaggedCount++;
+              }
+            } catch (e) {}
           }
           
-          if (task.flagged()) {
-            flaggedCount++;
-          }
+          projectData.stats = {
+            totalTasks: totalTasks,
+            completedTasks: completedTasks,
+            availableTasks: availableTasks,
+            completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+            overdueCount: overdueCount,
+            flaggedCount: flaggedCount
+          };
+        } catch (e) {
+          // If we can't get tasks, just skip stats
+          projectData.stats = {
+            totalTasks: 0,
+            completedTasks: 0,
+            availableTasks: 0,
+            completionRate: 0,
+            overdueCount: 0,
+            flaggedCount: 0
+          };
         }
-        
-        projectData.stats = {
-          totalTasks: totalTasks,
-          completedTasks: completedTasks,
-          availableTasks: availableTasks,
-          completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
-          overdueCount: overdueCount,
-          flaggedCount: flaggedCount
-        };
       }
       
       projects.push(projectData);
