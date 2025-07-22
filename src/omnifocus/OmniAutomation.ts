@@ -14,7 +14,7 @@ export class OmniAutomation {
   private readonly maxScriptSize = 100000; // 100KB limit for scripts
   private readonly timeout = 60000; // 60 second timeout (increased for reliability)
 
-  public async execute<T = any>(script: string): Promise<T> {
+  public async execute<T = unknown>(script: string): Promise<T> {
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
@@ -22,7 +22,7 @@ export class OmniAutomation {
     return this.executeInternal<T>(script);
   }
 
-  private async executeInternal<T = any>(script: string): Promise<T> {
+  private async executeInternal<T = unknown>(script: string): Promise<T> {
     const wrappedScript = this.wrapScript(script);
     
     logger.debug('Executing OmniAutomation script', { scriptLength: script.length });
@@ -114,7 +114,7 @@ export class OmniAutomation {
   }
 
   // Helper method to build common script patterns
-  public buildScript(template: string, params: Record<string, any> = {}): string {
+  public buildScript<T extends Record<string, unknown> = Record<string, unknown>>(template: string, params: T = {} as T): string {
     let script = template;
     
     for (const [key, value] of Object.entries(params)) {
@@ -126,7 +126,7 @@ export class OmniAutomation {
     return script;
   }
 
-  private formatValue(value: any): string {
+  private formatValue(value: unknown): string {
     if (value === null || value === undefined) {
       return 'null';
     }

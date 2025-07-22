@@ -2,9 +2,12 @@ import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { parsingError } from '../../utils/error-messages.js';
-import { createEntityResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { CreateTaskArgs, CreateTaskResponse } from '../types.js';
+import { StandardResponse } from '../../utils/response-format.js';
+import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
 
-export class CreateTaskTool extends BaseTool {
+export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ task: CreateTaskResponse }>>{
   name = 'create_task';
   description = 'Create a new task in OmniFocus (can be assigned to a project using projectId from list_projects)';
   
@@ -50,15 +53,15 @@ export class CreateTaskTool extends BaseTool {
     required: ['name'],
   };
 
-  async execute(args: any): Promise<any> {
+  async execute(args: CreateTaskArgs): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
     const timer = new OperationTimer();
     
     try {
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: args });
-      const result = await this.omniAutomation.execute(script);
+      const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
       
-      if (result.error) {
-        throw new McpError(ErrorCode.InternalError, result.message, result.details);
+      if ('error' in result && result.error) {
+        throw new McpError(ErrorCode.InternalError, result.message || 'Unknown error');
       }
       
       // Parse the JSON result since the script returns a JSON string
@@ -78,13 +81,12 @@ export class CreateTaskTool extends BaseTool {
       this.cache.invalidate('tasks');
       
       // Return standardized response
-      return createEntityResponse(
+      return createSuccessResponse(
         'create_task',
-        'task',
-        parsedResult,
+        { task: parsedResult as CreateTaskResponse },
         {
           ...timer.toMetadata(),
-          created_id: parsedResult.id,
+          created_id: parsedResult.taskId,
           project_id: args.projectId || null,
           input_params: {
             name: args.name,

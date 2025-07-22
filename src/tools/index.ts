@@ -133,7 +133,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
       });
     }
     
-    const result = await tool.execute(args || {});
+    const result = await (tool as any).execute(args || {});
     
     return {
       content: [

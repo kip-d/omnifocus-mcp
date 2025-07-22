@@ -1,8 +1,10 @@
 import { BaseTool } from '../base.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { UpdateTaskArgs } from '../types.js';
+import { StandardResponse } from '../../utils/response-format.js';
 
-export class UpdateTaskTool extends BaseTool {
+export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<any>> {
   name = 'update_task';
   description = 'Update an existing task in OmniFocus (can move between projects using projectId)';
   
@@ -63,20 +65,7 @@ export class UpdateTaskTool extends BaseTool {
     required: ['taskId'],
   };
 
-  async execute(args: { 
-    taskId: string;
-    name?: string;
-    note?: string;
-    flagged?: boolean;
-    dueDate?: string;
-    clearDueDate?: boolean;
-    deferDate?: string;
-    clearDeferDate?: boolean;
-    estimatedMinutes?: number;
-    clearEstimatedMinutes?: boolean;
-    tags?: string[];
-    projectId?: string;
-  }): Promise<any> {
+  async execute(args: UpdateTaskArgs): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
     
     try {
@@ -144,16 +133,17 @@ export class UpdateTaskTool extends BaseTool {
         updates: safeUpdates,
       });
       
-      const result = await this.omniAutomation.execute(script);
+      const result = await this.omniAutomation.execute<any>(script);
       
       // Handle script execution errors
-      if (result.error) {
-        this.logger.error(`Update task script error: ${result.message}`);
+      if (result && typeof result === 'object' && 'error' in result && result.error) {
+        const errorMessage = 'message' in result ? String(result.message) : 'Failed to update task';
+        this.logger.error(`Update task script error: ${errorMessage}`);
         return createErrorResponse(
           'update_task',
           'SCRIPT_ERROR',
-          result.message || 'Failed to update task',
-          result.details,
+          errorMessage,
+          'details' in result ? result.details : undefined,
           timer.toMetadata()
         );
       }

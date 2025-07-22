@@ -1,8 +1,10 @@
 import { BaseTool } from '../base.js';
 import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { CompleteTaskArgs } from '../types.js';
+import { StandardResponse } from '../../utils/response-format.js';
 
-export class CompleteTaskTool extends BaseTool {
+export class CompleteTaskTool extends BaseTool<CompleteTaskArgs, StandardResponse<any>> {
   name = 'complete_task';
   description = 'Mark a task as completed in OmniFocus';
   
@@ -17,18 +19,18 @@ export class CompleteTaskTool extends BaseTool {
     required: ['taskId'],
   };
 
-  async execute(args: { taskId: string }): Promise<any> {
+  async execute(args: CompleteTaskArgs): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
     
     try {
       // Try JXA first, fall back to URL scheme if access denied
       try {
-        const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, args);
-        const result = await this.omniAutomation.execute(script);
+        const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, args as unknown as Record<string, unknown>);
+        const result = await this.omniAutomation.execute<any>(script);
         
-        if (result.error) {
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
           // If error contains "access not allowed", use URL scheme
-          if (result.message && result.message.toLowerCase().includes('access not allowed')) {
+          if ('message' in result && typeof result.message === 'string' && result.message.toLowerCase().includes('access not allowed')) {
             this.logger.info('JXA access denied, falling back to URL scheme for task completion');
             return await this.executeViaUrlScheme(args);
           }

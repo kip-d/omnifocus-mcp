@@ -3,7 +3,7 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
-export abstract class BaseTool {
+export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
   protected omniAutomation: OmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
@@ -22,13 +22,13 @@ export abstract class BaseTool {
     required?: string[];
   };
 
-  abstract execute(args: any): Promise<any>;
+  abstract execute(args: TArgs): Promise<TResponse>;
 
-  protected handleError(error: any): never {
+  protected handleError(error: unknown): never {
     this.logger.error(`Error in ${this.name}:`, error);
     
     // Check for permission errors
-    const errorMessage = error.message || '';
+    const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
       throw new McpError(
         ErrorCode.InternalError,
@@ -46,20 +46,20 @@ export abstract class BaseTool {
       );
     }
     
-    if (error.name === 'OmniAutomationError') {
+    if (error instanceof Error && error.name === 'OmniAutomationError') {
       throw new McpError(
         ErrorCode.InternalError,
         error.message,
         {
-          script: error.script,
-          stderr: error.stderr,
+          script: (error as any).script,
+          stderr: (error as any).stderr,
         }
       );
     }
     
     throw new McpError(
       ErrorCode.InternalError,
-      error.message || 'An unknown error occurred'
+      error instanceof Error ? error.message : 'An unknown error occurred'
     );
   }
 }

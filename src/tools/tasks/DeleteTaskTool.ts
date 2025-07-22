@@ -1,8 +1,10 @@
 import { BaseTool } from '../base.js';
 import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { DeleteTaskArgs } from '../types.js';
+import { StandardResponse } from '../../utils/response-format.js';
 
-export class DeleteTaskTool extends BaseTool {
+export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<any>> {
   name = 'delete_task';
   description = 'Delete (drop) a task in OmniFocus';
   
@@ -17,18 +19,18 @@ export class DeleteTaskTool extends BaseTool {
     required: ['taskId'],
   };
 
-  async execute(args: { taskId: string }): Promise<any> {
+  async execute(args: DeleteTaskArgs): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
     
     try {
       // Try JXA first, fall back to URL scheme if access denied
       try {
-        const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args);
-        const result = await this.omniAutomation.execute(script);
+        const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args as unknown as Record<string, unknown>);
+        const result = await this.omniAutomation.execute<any>(script);
         
-        if (result.error) {
+        if (result && typeof result === 'object' && 'error' in result && result.error) {
           // If error contains "parameter is missing" or "access not allowed", use URL scheme
-          if (result.message && 
+          if ('message' in result && typeof result.message === 'string' && 
               (result.message.toLowerCase().includes('parameter is missing') ||
                result.message.toLowerCase().includes('access not allowed'))) {
             this.logger.info('JXA failed, falling back to URL scheme for task deletion');
