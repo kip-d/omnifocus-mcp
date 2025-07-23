@@ -100,6 +100,15 @@ export class OmniAutomation {
         // Use defaultDocument() as a method call instead of property access
         const doc = app.defaultDocument();
         
+        // Check if doc is null or undefined
+        if (!doc) {
+          return JSON.stringify({
+            error: true,
+            message: "No OmniFocus document available. Please ensure OmniFocus is running and has a document open.",
+            details: "app.defaultDocument() returned null or undefined"
+          });
+        }
+        
         ${script}
       } catch (error) {
         const errorMessage = error && error.toString ? error.toString() : 'Unknown error occurred';

@@ -199,6 +199,11 @@ export const LIST_TASKS_SCRIPT = `
       inferRule: function(task) {
         const taskName = task.name().toLowerCase();
         
+        // Ensure patterns exists before using Object.entries
+        if (!this.patterns) {
+          return null;
+        }
+        
         for (const [interval, patterns] of Object.entries(this.patterns)) {
           for (const pattern of patterns) {
             if (taskName.includes(pattern)) {
@@ -363,6 +368,16 @@ export const LIST_TASKS_SCRIPT = `
 
   try {
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
+    
     const limit = Math.min(filter.limit || 100, 1000); // Cap at 1000
     let count = 0;
     const startTime = Date.now();
