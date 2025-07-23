@@ -26,6 +26,7 @@ export class OmniAutomation {
     const wrappedScript = this.wrapScript(script);
 
     logger.debug('Executing OmniAutomation script', { scriptLength: script.length });
+    logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
     return new Promise((resolve, reject) => {
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
@@ -71,10 +72,18 @@ export class OmniAutomation {
 
         try {
           const result = JSON.parse(trimmedOutput);
-          logger.debug('Script execution successful');
+          logger.debug('Script execution successful', { 
+            outputLength: trimmedOutput.length,
+            resultType: typeof result,
+            hasError: result && result.error ? true : false
+          });
           resolve(result);
         } catch (parseError) {
-          logger.error('Failed to parse script output:', { output: trimmedOutput, error: parseError });
+          logger.error('Failed to parse script output:', { 
+            output: trimmedOutput.substring(0, 500), 
+            outputLength: trimmedOutput.length,
+            error: parseError 
+          });
 
           // Try to return the raw output if it might be useful
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
