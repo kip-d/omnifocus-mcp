@@ -117,7 +117,10 @@ export class OmniAutomation {
   public buildScript<T extends Record<string, unknown> = Record<string, unknown>>(template: string, params: T = {} as T): string {
     let script = template;
 
-    for (const [key, value] of Object.entries(params)) {
+    // Ensure params is not null/undefined
+    const safeParams = params || {} as T;
+
+    for (const [key, value] of Object.entries(safeParams)) {
       const placeholder = `{{${key}}}`;
       const replacement = this.formatValue(value);
       script = script.replace(new RegExp(placeholder, 'g'), replacement);
@@ -145,8 +148,8 @@ export class OmniAutomation {
       return `[${items}]`;
     }
 
-    if (typeof value === 'object') {
-      // Safely handle objects that might be null
+    if (typeof value === 'object' && value !== null) {
+      // Safely handle objects
       try {
         const entries = Object.entries(value)
           .filter(([, v]) => v !== undefined) // Filter out undefined values
