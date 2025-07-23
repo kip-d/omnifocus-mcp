@@ -58,17 +58,20 @@ describe('Mock ID Extraction Test', () => {
     const result = await tool.execute({ limit: 10 });
     
     // Check the result structure
-    expect(result).toHaveProperty('tasks');
-    expect(result.tasks).toHaveLength(2);
-    expect(result.tasks[0].id).toBe('gZ0M5L3PkR8');
-    expect(result.tasks[0].name).toBe('Test Task 1');
-    expect(result.tasks[1].id).toBe('hX1N6M4QlS9');
-    expect(result.tasks[1].name).toBe('Test Task 2');
+    expect(result).toHaveProperty('success');
+    expect(result.success).toBe(true);
+    expect(result).toHaveProperty('data');
+    expect(result.data).toHaveProperty('items');
+    expect(result.data.items).toHaveLength(2);
+    expect(result.data.items[0].id).toBe('gZ0M5L3PkR8');
+    expect(result.data.items[0].name).toBe('Test Task 1');
+    expect(result.data.items[1].id).toBe('hX1N6M4QlS9');
+    expect(result.data.items[1].name).toBe('Test Task 2');
     
     // Verify task properties
-    expect(result.tasks[0].flagged).toBe(true);
-    expect(result.tasks[0].tags).toEqual(['work', 'urgent']);
-    expect(result.metadata.total_items).toBe(2);
+    expect(result.data.items[0].flagged).toBe(true);
+    expect(result.data.items[0].tags).toEqual(['work', 'urgent']);
+    expect(result.metadata.total_count).toBe(2);
   });
   
   it('should handle update task with proper ID', async () => {

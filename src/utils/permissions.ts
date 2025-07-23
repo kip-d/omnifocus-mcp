@@ -39,8 +39,8 @@ export class PermissionChecker {
       logger.info('OmniFocus permissions verified');
       this.permissionStatus = { hasPermission: true };
       return this.permissionStatus;
-    } catch (error: any) {
-      const errorMessage = error.message || '';
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       // Check for specific permission error codes
       if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {

@@ -1,9 +1,11 @@
 import { BaseTool } from '../base.js';
 import { TaskFilter } from '../../omnifocus/types.js';
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { createListResponse, OperationTimer } from '../../utils/response-format.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
+import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
 
-export class ListTasksTool extends BaseTool {
+export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number }, ListTasksResponse> {
   name = 'list_tasks';
   description = 'List tasks from OmniFocus with advanced filtering options';
 
@@ -69,7 +71,7 @@ export class ListTasksTool extends BaseTool {
     },
   };
 
-  async execute(args: TaskFilter & { limit?: number }): Promise<any> {
+  async execute(args: TaskFilter & { limit?: number }): Promise<ListTasksResponse> {
     const timer = new OperationTimer();
 
     try {
@@ -79,23 +81,18 @@ export class ListTasksTool extends BaseTool {
       const cacheKey = JSON.stringify(filter);
 
       // Check cache
-      const cached = this.cache.get<any>('tasks', cacheKey);
+      const cached = this.cache.get<ListTasksResponse>('tasks', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tasks');
-        // Convert legacy cached response to standard format
-        if (cached.tasks && Array.isArray(cached.tasks)) {
-          return createListResponse(
-            'list_tasks',
-            cached.tasks,
-            {
-              from_cache: true,
-              ...timer.toMetadata(),
-              filters_applied: filter,
-              limit_applied: limit,
-              ...cached.metadata,
-            },
-          );
-        }
+        // Return cached response with updated from_cache flag
+        return {
+          ...cached,
+          metadata: {
+            ...cached.metadata,
+            from_cache: true,
+            ...timer.toMetadata(),
+          },
+        };
       }
 
       // Execute script - pass filter with limit included
@@ -103,27 +100,36 @@ export class ListTasksTool extends BaseTool {
       this.logger.debug('Script params:', scriptParams);
       const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });
       this.logger.debug('Generated script length:', script.length);
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
 
-      if (result.error) {
-        return result;
+      if ('error' in result && result.error) {
+        return createErrorResponse(
+          'list_tasks',
+          'SCRIPT_ERROR',
+          'message' in result ? String(result.message) : 'Failed to list tasks',
+          'details' in result ? result.details : undefined,
+          timer.toMetadata(),
+        );
       }
 
       // Ensure tasks array exists
       if (!result.tasks || !Array.isArray(result.tasks)) {
-        return {
-          error: true,
-          message: 'Invalid response from OmniFocus: tasks array not found',
-          details: 'The script returned an unexpected format',
-        };
+        return createErrorResponse(
+          'list_tasks',
+          'INVALID_RESPONSE',
+          'Invalid response from OmniFocus: tasks array not found',
+          'The script returned an unexpected format',
+          timer.toMetadata(),
+        );
       }
 
-      // Parse dates in tasks
-      const parsedTasks = result.tasks.map((task: any) => ({
+      // Parse dates in tasks with proper type conversion
+      const parsedTasks = result.tasks.map((task): OmniFocusTask => ({
         ...task,
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
         deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
+        added: task.added ? new Date(task.added) : undefined,
       }));
 
       // Create standardized response
@@ -132,9 +138,9 @@ export class ListTasksTool extends BaseTool {
         parsedTasks,
         {
           ...timer.toMetadata(),
+          ...result.metadata,
           filters_applied: filter,
           limit_applied: limit,
-          ...result.metadata,
         },
       );
 

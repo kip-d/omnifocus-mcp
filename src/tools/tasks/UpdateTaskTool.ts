@@ -1,10 +1,10 @@
 import { BaseTool } from '../base.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskArgs } from '../types.js';
-import { StandardResponse } from '../../utils/response-format.js';
+import { UpdateTaskResponse } from '../response-types.js';
 
-export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<any>> {
+export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, UpdateTaskResponse> {
   name = 'update_task';
   description = 'Update an existing task in OmniFocus (can move between projects using projectId)';
 
@@ -65,7 +65,7 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     required: ['taskId'],
   };
 
-  async execute(args: UpdateTaskArgs): Promise<StandardResponse<any>> {
+  async execute(args: UpdateTaskArgs): Promise<UpdateTaskResponse> {
     const timer = new OperationTimer();
 
     try {
@@ -108,10 +108,9 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
 
       // If no valid updates, return early
       if (Object.keys(safeUpdates).length === 0) {
-        return createEntityResponse(
+        return createTaskResponse(
           'update_task',
-          'task',
-          { id: taskId, updated: false },
+          { id: taskId, name: '', updated: false as const, changes: {} },
           {
             query_time_ms: timer.getElapsedMs(),
             input_params: { taskId },
@@ -133,7 +132,7 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
         updates: safeUpdates,
       });
 
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.execute<string | { error: boolean; message: string; details?: string }>(script);
 
       // Handle script execution errors
       if (result && typeof result === 'object' && 'error' in result && result.error) {
@@ -179,10 +178,9 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
 
       this.logger.info(`Updated task: ${taskId}`);
 
-      // Return standardized response
-      return createEntityResponse(
+      // Return standardized response with proper typing
+      return createTaskResponse(
         'update_task',
-        'task',
         parsedResult,
         {
           ...timer.toMetadata(),
@@ -212,7 +210,7 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     clearEstimatedMinutes?: boolean;
     tags?: string[];
     projectId?: string;
-  }): Record<string, any> {
+  }): Record<string, unknown> {
     const sanitized: Record<string, any> = {};
 
     this.logger.info('Sanitizing updates:', {

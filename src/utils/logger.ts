@@ -1,10 +1,10 @@
 import { stderr } from 'node:process';
 
 export interface Logger {
-  info: (message: string, ...args: any[]) => void;
-  error: (message: string, ...args: any[]) => void;
-  debug: (message: string, ...args: any[]) => void;
-  warn: (message: string, ...args: any[]) => void;
+  info: (message: string, ...args: unknown[]) => void;
+  error: (message: string, ...args: unknown[]) => void;
+  debug: (message: string, ...args: unknown[]) => void;
+  warn: (message: string, ...args: unknown[]) => void;
 }
 
 export function createLogger(context: string): Logger {
@@ -16,29 +16,29 @@ export function createLogger(context: string): Logger {
     return levels.indexOf(level) <= currentLevelIndex;
   };
 
-  const formatMessage = (level: string, message: string, args: any[]): string => {
+  const formatMessage = (level: string, message: string, args: unknown[]): string => {
     const timestamp = new Date().toISOString();
     const formattedArgs = args.length > 0 ? ' ' + JSON.stringify(args) : '';
     return `[${timestamp}] [${level.toUpperCase()}] [${context}] ${message}${formattedArgs}`;
   };
 
   return {
-    info: (message: string, ...args: any[]) => {
+    info: (message: string, ...args: unknown[]) => {
       if (shouldLog('info')) {
         stderr.write(formatMessage('info', message, args) + '\n');
       }
     },
-    error: (message: string, ...args: any[]) => {
+    error: (message: string, ...args: unknown[]) => {
       if (shouldLog('error')) {
         stderr.write(formatMessage('error', message, args) + '\n');
       }
     },
-    debug: (message: string, ...args: any[]) => {
+    debug: (message: string, ...args: unknown[]) => {
       if (shouldLog('debug')) {
         stderr.write(formatMessage('debug', message, args) + '\n');
       }
     },
-    warn: (message: string, ...args: any[]) => {
+    warn: (message: string, ...args: unknown[]) => {
       if (shouldLog('warn')) {
         stderr.write(formatMessage('warn', message, args) + '\n');
       }

@@ -4,7 +4,7 @@ import { createLogger } from '../utils/logger.js';
 const logger = createLogger('cache');
 
 export class CacheManager {
-  private cache: Map<string, CacheEntry<any>> = new Map();
+  private cache: Map<string, CacheEntry<unknown>> = new Map();
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -48,7 +48,7 @@ export class CacheManager {
 
     this.stats.hits++;
     logger.debug(`Cache hit for ${fullKey}`);
-    return entry.data;
+    return entry.data as T;
   }
 
   public set<T>(category: CacheCategory, key: string, data: T): void {
@@ -137,8 +137,8 @@ export class CacheManager {
     }
   }
 
-  public warm(category: CacheCategory, key: string, fetcher: () => Promise<any>): Promise<any> {
-    const cached = this.get(category, key);
+  public warm<T>(category: CacheCategory, key: string, fetcher: () => Promise<T>): Promise<T> {
+    const cached = this.get<T>(category, key);
     if (cached !== null) {
       return Promise.resolve(cached);
     }

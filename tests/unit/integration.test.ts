@@ -122,9 +122,11 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(result.content[0].type).toBe('text');
       
       const response = JSON.parse(result.content[0].text);
-      expect(response).toHaveProperty('tasks');
+      expect(response).toHaveProperty('success');
+      expect(response.success).toBe(true);
+      expect(response).toHaveProperty('data');
+      expect(response.data).toHaveProperty('items');
       expect(response).toHaveProperty('metadata');
-      expect(response.metadata).toHaveProperty('total_items');
       expect(response.metadata).toHaveProperty('from_cache');
     });
 
@@ -144,12 +146,14 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       const response = JSON.parse(result.content[0].text);
       
       // Check for either success or OmniFocus not running error
-      if (response.error) {
-        expect(response.message).toContain('OmniFocus');
+      if (response.success === false) {
+        expect(response.error.message).toContain('OmniFocus');
       } else {
         expect(response.success).toBe(true);
-        expect(response.task).toHaveProperty('id');
-        expect(response.task).toHaveProperty('name');
+        expect(response.data).toHaveProperty('task');
+        expect(response.data.task).toHaveProperty('task');
+        expect(response.data.task.task).toHaveProperty('id');
+        expect(response.data.task.task).toHaveProperty('name');
       }
     });
   });
@@ -167,9 +171,12 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(result.content).toBeInstanceOf(Array);
       
       const response = JSON.parse(result.content[0].text);
-      expect(response).toHaveProperty('projects');
-      expect(response).toHaveProperty('total');
-      expect(response).toHaveProperty('cached');
+      expect(response).toHaveProperty('success');
+      expect(response.success).toBe(true);
+      expect(response).toHaveProperty('data');
+      expect(response.data).toHaveProperty('items');
+      expect(response).toHaveProperty('metadata');
+      expect(response.metadata).toHaveProperty('from_cache');
     });
   });
 
@@ -196,7 +203,10 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.error).toBe(true);
+      expect(response.success).toBe(false);
+      expect(response).toHaveProperty('error');
+      expect(response.error).toHaveProperty('code');
+      expect(response.error.code).toBe('INVALID_PARAMS');
     });
   });
 });

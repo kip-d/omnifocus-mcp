@@ -18,7 +18,7 @@ export interface StandardMetadata {
   has_more?: boolean;
 
   // Operation-specific metadata
-  [key: string]: any;
+  [key: string]: string | number | boolean | undefined | null | Record<string, unknown> | unknown[];
 }
 
 export interface StandardResponse<T> {
@@ -35,7 +35,7 @@ export interface StandardResponse<T> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
 }
 
@@ -66,7 +66,7 @@ export function createErrorResponse<T = never>(
   operation: string,
   errorCode: string,
   message: string,
-  details?: any,
+  details?: unknown,
   metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<T> {
   return {
@@ -122,14 +122,29 @@ export function createEntityResponse<T>(
 }
 
 /**
+ * Create a task response specifically
+ */
+export function createTaskResponse<T>(
+  operation: string,
+  task: T,
+  metadata: Partial<StandardMetadata> = {},
+): StandardResponse<{ task: T }> {
+  return createSuccessResponse(
+    operation,
+    { task },
+    metadata,
+  );
+}
+
+/**
  * Create an analytics response with structured data and summary
  */
 export function createAnalyticsResponse<T>(
   operation: string,
   stats: T,
-  summary: any = {},
+  summary: Record<string, unknown> = {},
   metadata: Partial<StandardMetadata> = {},
-): StandardResponse<{ stats: T; summary: any }> {
+): StandardResponse<{ stats: T; summary: Record<string, unknown> }> {
   return createSuccessResponse(
     operation,
     { stats, summary },
@@ -147,11 +162,11 @@ export function wrapLegacyResponse<T>(
 ): StandardResponse<T> {
   // If the legacy response already has error info, convert to error response
   if (typeof legacyResponse === 'object' && legacyResponse !== null && 'error' in legacyResponse) {
-    const errorResponse = legacyResponse as any;
+    const errorResponse = legacyResponse as Record<string, unknown>;
     return createErrorResponse(
       operation,
       'LEGACY_ERROR',
-      errorResponse.message || 'Unknown error',
+      (typeof errorResponse.message === 'string' ? errorResponse.message : 'Unknown error'),
       errorResponse,
       metadata,
     );

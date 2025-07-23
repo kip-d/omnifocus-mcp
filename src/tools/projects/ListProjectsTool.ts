@@ -68,7 +68,7 @@ export class ListProjectsTool extends BaseTool {
             {
               from_cache: true,
               ...timer.toMetadata(),
-              filters_applied: args,
+              filters_applied: args as Record<string, unknown>,
             },
           );
         }

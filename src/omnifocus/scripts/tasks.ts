@@ -332,7 +332,7 @@ export const LIST_TASKS_SCRIPT = `
     if (filter.projectId !== undefined) {
       const project = safeGetProject(task);
       if (filter.projectId === null && project !== null) return false;
-      if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
+      if (filter.projectId !== null && (!project || project.id() !== filter.projectId)) return false;
     }
     
     // Tags filter
@@ -389,7 +389,7 @@ export const LIST_TASKS_SCRIPT = `
       const project = safeGetProject(task);
       if (project) {
         taskObj.project = project.name;
-        taskObj.projectId = project.id;
+        taskObj.projectId = project.id();
       }
       
       const dueDate = safeGetDate(() => task.dueDate());
@@ -698,7 +698,10 @@ export const UPDATE_TASK_SCRIPT = `
     // Update project assignment with better error handling
     if (updates.projectId !== undefined) {
       try {
-        if (updates.projectId === "" || updates.projectId === null) {
+        if (updates.projectId === "") {
+          // Move to inbox - set assignedContainer to null
+          task.assignedContainer = null;
+        } else if (updates.projectId === null) {
           // Move to inbox - set assignedContainer to null
           task.assignedContainer = null;
         } else {
