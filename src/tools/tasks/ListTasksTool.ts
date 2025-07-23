@@ -5,7 +5,7 @@ import { createListResponse, createErrorResponse, OperationTimer } from '../../u
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
 
-export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number }, ListTasksResponse> {
+export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number; skipAnalysis?: boolean }, ListTasksResponse> {
   name = 'list_tasks';
   description = 'List tasks from OmniFocus with advanced filtering options';
 
@@ -68,35 +68,42 @@ export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number }, Lis
         minimum: 1,
         maximum: 1000,
       },
+      skipAnalysis: {
+        type: 'boolean',
+        description: 'Skip recurring task analysis for better performance (default: false)',
+        default: false,
+      },
     },
   };
 
-  async execute(args: TaskFilter & { limit?: number }): Promise<ListTasksResponse> {
+  async execute(args: TaskFilter & { limit?: number; skipAnalysis?: boolean }): Promise<ListTasksResponse> {
     const timer = new OperationTimer();
 
     try {
-      const { limit = 100, ...filter } = args;
+      const { limit = 100, skipAnalysis = false, ...filter } = args;
 
-      // Create cache key from filter
+      // Create cache key from filter (excluding performance options)
       const cacheKey = JSON.stringify(filter);
 
-      // Check cache
-      const cached = this.cache.get<ListTasksResponse>('tasks', cacheKey);
-      if (cached) {
-        this.logger.debug('Returning cached tasks');
-        // Return cached response with updated from_cache flag
-        return {
-          ...cached,
-          metadata: {
-            ...cached.metadata,
-            from_cache: true,
-            ...timer.toMetadata(),
-          },
-        };
+      // Check cache only if not skipping analysis (to ensure consistent results)
+      if (!skipAnalysis) {
+        const cached = this.cache.get<ListTasksResponse>('tasks', cacheKey);
+        if (cached) {
+          this.logger.debug('Returning cached tasks');
+          // Return cached response with updated from_cache flag
+          return {
+            ...cached,
+            metadata: {
+              ...cached.metadata,
+              from_cache: true,
+              ...timer.toMetadata(),
+            },
+          };
+        }
       }
 
-      // Execute script - pass filter with limit included
-      const scriptParams = { ...filter, limit };
+      // Execute script - pass filter with limit and skipAnalysis included
+      const scriptParams = { ...filter, limit, skipAnalysis };
       this.logger.debug('Script params:', scriptParams);
       const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });
       this.logger.debug('Generated script length:', script.length);

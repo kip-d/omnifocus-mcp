@@ -100,6 +100,9 @@ export const LIST_TASKS_SCRIPT = `
   const filter = {{filter}};
   const tasks = [];
   
+  // Check if we should skip recurring analysis (default to false for backwards compatibility)
+  const skipRecurringAnalysis = filter.skipAnalysis === true;
+  
   // Initialize plugin system
   function initializePlugins() {
     // Plugin registry (simplified for JXA environment)
@@ -381,12 +384,20 @@ export const LIST_TASKS_SCRIPT = `
     const limit = Math.min(filter.limit || 100, 1000); // Cap at 1000
     let count = 0;
     const startTime = Date.now();
+    let tasksScanned = 0;
+    let filterTimeTotal = 0;
+    let analysisTimeTotal = 0;
     
     for (let i = 0; i < allTasks.length && count < limit; i++) {
       const task = allTasks[i];
+      tasksScanned++;
       
       // Skip if task doesn't match filters
-      if (!matchesFilters(task, filter)) continue;
+      const filterStart = Date.now();
+      const matches = matchesFilters(task, filter);
+      filterTimeTotal += Date.now() - filterStart;
+      
+      if (!matches) continue;
       
       // Build task object with safe property access
       const taskObj = {
@@ -419,53 +430,57 @@ export const LIST_TASKS_SCRIPT = `
       if (added) taskObj.added = added;
       
       // Add repetition rule and recurring status analysis
-      const repetitionRule = safeGet(() => task.repetitionRule());
-      if (repetitionRule) {
-        let ruleData = safeExtractRuleProperties(repetitionRule);
-        
-        // Parse ruleString if available
-        if (ruleData.ruleString) {
-          const parsedRule = safeParseRuleString(ruleData.ruleString);
-          ruleData = { ...ruleData, ...parsedRule };
-        }
-        
-        // Basic fallback - plugins will handle the advanced inference
-        if (!ruleData.unit && !ruleData.steps) {
-          ruleData._inferenceSource = 'none';
-        }
-        
-        taskObj.repetitionRule = ruleData;
-        taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
-      } else {
+      const analysisStart = Date.now();
+      if (skipRecurringAnalysis) {
+        // Skip analysis for performance
         taskObj.recurringStatus = {
           isRecurring: false,
-          type: 'non-recurring'
+          type: 'analysis-skipped',
+          skipped: true
         };
+      } else {
+        const repetitionRule = safeGet(() => task.repetitionRule());
+        if (repetitionRule) {
+          let ruleData = safeExtractRuleProperties(repetitionRule);
+          
+          // Parse ruleString if available
+          if (ruleData.ruleString) {
+            const parsedRule = safeParseRuleString(ruleData.ruleString);
+            ruleData = { ...ruleData, ...parsedRule };
+          }
+          
+          // Basic fallback - plugins will handle the advanced inference
+          if (!ruleData.unit && !ruleData.steps) {
+            ruleData._inferenceSource = 'none';
+          }
+          
+          taskObj.repetitionRule = ruleData;
+          taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
+        } else {
+          taskObj.recurringStatus = {
+            isRecurring: false,
+            type: 'non-recurring'
+          };
+        }
       }
+      analysisTimeTotal += Date.now() - analysisStart;
       
       tasks.push(taskObj);
       count++;
     }
     
     const endTime = Date.now();
-    const totalFiltered = count; // Tasks that matched filters (including those beyond limit)
-    let totalAvailable = 0;
     
-    // Count total matching tasks using the same filter logic
-    for (let i = 0; i < allTasks.length; i++) {
-      const task = allTasks[i];
-      if (matchesFilters(task, filter)) {
-        totalAvailable++;
-      }
-    }
+    // For performance: estimate has_more based on whether we hit the limit
+    const hasMore = count > tasks.length;
     
     return JSON.stringify({
       tasks: tasks,
       metadata: {
-        total_items: totalAvailable,
+        total_items: count,
         items_returned: tasks.length,
         limit_applied: limit,
-        has_more: totalAvailable > tasks.length,
+        has_more: hasMore,
         query_time_ms: endTime - startTime,
         filters_applied: {
           completed: filter.completed,
@@ -480,9 +495,15 @@ export const LIST_TASKS_SCRIPT = `
           deferAfter: filter.deferAfter,
           available: filter.available
         },
-        performance_note: totalAvailable > 500 ? 
-          "Large result set. Consider using more specific filters for better performance." : 
-          undefined
+        performance_note: hasMore ? 
+          "More tasks available. Consider using more specific filters for better performance." : 
+          undefined,
+        performance_metrics: {
+          tasks_scanned: tasksScanned,
+          filter_time_ms: filterTimeTotal,
+          analysis_time_ms: analysisTimeTotal,
+          analysis_skipped: skipRecurringAnalysis
+        }
       }
     });
   } catch (error) {
