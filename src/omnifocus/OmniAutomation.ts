@@ -119,7 +119,16 @@ export class OmniAutomation {
         }
         
         // Use defaultDocument() as a method call instead of property access
-        const doc = app.defaultDocument();
+        let doc;
+        try {
+          doc = app.defaultDocument();
+        } catch (docError) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to access OmniFocus document: " + (docError.toString ? docError.toString() : 'Unknown error'),
+            details: "app.defaultDocument() threw an error"
+          });
+        }
         
         // Check if doc is null or undefined
         if (!doc) {
@@ -127,6 +136,18 @@ export class OmniAutomation {
             error: true,
             message: "No OmniFocus document available. Please ensure OmniFocus is running and has a document open.",
             details: "app.defaultDocument() returned null or undefined"
+          });
+        }
+        
+        // Verify doc is actually usable
+        try {
+          // Try a simple operation to verify the document is accessible
+          doc.name();
+        } catch (accessError) {
+          return JSON.stringify({
+            error: true,
+            message: "OmniFocus document is not accessible. The application may be in an invalid state.",
+            details: "Cannot access document properties: " + (accessError.toString ? accessError.toString() : 'Unknown error')
           });
         }
         
