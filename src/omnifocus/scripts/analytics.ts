@@ -62,13 +62,13 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       let createdInPeriod = false;
       
       try {
-        const completionDate = task.completionDate();
+        const completionDate = safeGetDate(() => task.completionDate());
         if (completionDate && completionDate >= periodStart) {
           inPeriod = true;
           completedTasks++;
           
           // Check if completed on time
-          const dueDate = task.dueDate();
+          const dueDate = safeGetDate(() => task.dueDate());
           if (dueDate) {
             if (completionDate > dueDate) {
               overdueCompleted++;
@@ -85,7 +85,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       
       // Check creation date (if available through modified date as proxy)
       try {
-        const modifiedDate = task.modificationDate();
+        const modifiedDate = safeGetDate(() => task.modificationDate());
         if (modifiedDate && modifiedDate >= periodStart) {
           createdInPeriod = true;
           createdTasks++;
@@ -101,19 +101,19 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         switch(options.groupBy) {
           case 'project':
             try {
-              const project = task.containingProject();
-              groupKey = project ? project.name() : 'No Project';
+              const project = safeGetProject(task);
+              groupKey = project ? project.name : 'No Project';
             } catch (e) {}
             break;
           case 'tag':
             try {
-              const tags = task.tags();
-              groupKey = tags.length > 0 ? tags[0].name() : 'No Tags';
+              const tags = safeGetTags(task);
+              groupKey = tags.length > 0 ? tags[0] : 'No Tags';
             } catch (e) {}
             break;
           case 'day':
             try {
-              const date = task.completionDate() || task.modificationDate();
+              const date = safeGetDate(() => task.completionDate()) || safeGetDate(() => task.modificationDate());
               if (date) {
                 groupKey = date.toLocaleDateString();
               }
@@ -233,8 +233,8 @@ export const TASK_VELOCITY_SCRIPT = `
       // Apply filters
       if (options.projectId) {
         try {
-          const project = task.containingProject();
-          if (!project || project.id() !== options.projectId) continue;
+          const project = safeGetProject(task);
+          if (!project || project.id !== options.projectId) continue;
         } catch (e) {
           continue;
         }
@@ -242,7 +242,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       if (options.tags && options.tags.length > 0) {
         try {
-          const taskTags = task.tags().map(t => t.name());
+          const taskTags = safeGetTags(task);
           const hasTag = options.tags.some(tag => taskTags.includes(tag));
           if (!hasTag) continue;
         } catch (e) {
@@ -252,7 +252,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track completion
       try {
-        const completionDate = task.completionDate();
+        const completionDate = safeGetDate(() => task.completionDate());
         if (completionDate) {
           totalCompleted++;
           
@@ -266,7 +266,7 @@ export const TASK_VELOCITY_SCRIPT = `
           
           // Calculate completion time if we have creation date
           try {
-            const modifiedDate = task.modificationDate();
+            const modifiedDate = safeGetDate(() => task.modificationDate());
             if (modifiedDate && modifiedDate < completionDate) {
               const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
               completionTimes.push(completionHours);
@@ -277,7 +277,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track creation (using modification date as proxy)
       try {
-        const modifiedDate = task.modificationDate();
+        const modifiedDate = safeGetDate(() => task.modificationDate());
         if (modifiedDate) {
           for (const interval of intervals) {
             if (modifiedDate >= interval.start && modifiedDate < interval.end) {
@@ -381,11 +381,11 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
         // Skip dropped tasks - they should not be included in overdue analysis
         if (safeGet(() => task.dropped && task.dropped(), false)) continue;
         
-        const dueDate = task.dueDate();
+        const dueDate = safeGetDate(() => task.dueDate());
         if (!dueDate) continue;
         
         const completed = safeIsCompleted(task);
-        const completionDate = completed ? task.completionDate() : null;
+        const completionDate = completed ? safeGetDate(() => task.completionDate()) : null;
         
         // Check if overdue
         let isOverdue = false;
@@ -420,8 +420,8 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
           
           // Build task info
           const taskInfo = {
-            id: task.id(),
-            name: task.name(),
+            id: safeGet(() => task.id(), 'unknown'),
+            name: safeGet(() => task.name(), 'Unnamed Task'),
             dueDate: dueDate.toISOString(),
             overdueDays: overdueDays,
             completed: completed,
@@ -430,16 +430,16 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
           
           // Add optional fields
           try {
-            const project = task.containingProject();
+            const project = safeGetProject(task);
             if (project) {
-              taskInfo.project = project.name();
-              taskInfo.projectId = project.id();
+              taskInfo.project = project.name;
+              taskInfo.projectId = project.id;
             }
           } catch (e) {}
           
           try {
-            const tags = task.tags();
-            taskInfo.tags = tags.map(t => t.name());
+            const tags = safeGetTags(task);
+            taskInfo.tags = tags;
           } catch (e) {
             taskInfo.tags = [];
           }

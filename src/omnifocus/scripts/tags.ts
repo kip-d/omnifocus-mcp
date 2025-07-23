@@ -89,9 +89,13 @@ export const LIST_TAGS_SCRIPT = `
       }
       
       // Check for child tags
-      const children = safeGet(() => tag.tags(), []);
-      if (children && Array.isArray(children) && children.length > 0) {
-        tagInfo.childCount = children.length;
+      try {
+        const children = tag.tags();
+        if (children && Array.isArray(children) && children.length > 0) {
+          tagInfo.childCount = children.length;
+        }
+      } catch (e) {
+        // Some tags may not support the tags() method
       }
       
       tags.push(tagInfo);
@@ -157,7 +161,7 @@ export const MANAGE_TAGS_SCRIPT = `
       case 'create':
         // Check if tag already exists
         for (let i = 0; i < allTags.length; i++) {
-          if (allTags[i].name() === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             return JSON.stringify({
               error: true,
               message: "Tag '" + tagName + "' already exists"
@@ -177,7 +181,7 @@ export const MANAGE_TAGS_SCRIPT = `
             success: true,
             action: 'created',
             tagName: tagName,
-            tagId: newTag.id(),
+            tagId: safeGet(() => newTag.id(), 'unknown'),
             message: "Tag '" + tagName + "' created successfully"
           });
         } catch (createError) {
@@ -202,7 +206,7 @@ export const MANAGE_TAGS_SCRIPT = `
         // Find tag to rename
         let tagToRename = null;
         for (let i = 0; i < allTags.length; i++) {
-          if (allTags[i].name() === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             tagToRename = allTags[i];
             break;
           }
@@ -217,7 +221,7 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Check if new name already exists
         for (let i = 0; i < allTags.length; i++) {
-          if (allTags[i].name() === newName) {
+          if (safeGet(() => allTags[i].name()) === newName) {
             return JSON.stringify({
               error: true,
               message: "Tag '" + newName + "' already exists"
@@ -241,7 +245,7 @@ export const MANAGE_TAGS_SCRIPT = `
         let tagToDelete = null;
         let tagIndex = -1;
         for (let i = 0; i < allTags.length; i++) {
-          if (allTags[i].name() === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             tagToDelete = allTags[i];
             tagIndex = i;
             break;
@@ -287,7 +291,7 @@ export const MANAGE_TAGS_SCRIPT = `
         let targetTagObj = null;
         
         for (let i = 0; i < allTags.length; i++) {
-          if (allTags[i].name() === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             sourceTag = allTags[i];
           }
           if (allTags[i].name() === targetTag) {

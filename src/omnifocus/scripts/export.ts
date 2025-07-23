@@ -26,16 +26,16 @@ export const EXPORT_TASKS_SCRIPT = `
       const task = allTasks[i];
       
       // Apply filters
-      if (filter.available !== undefined && task.effectivelyHidden() === filter.available) continue;
+      if (filter.available !== undefined && safeGet(() => task.effectivelyHidden(), false) === filter.available) continue;
       
-      if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
+      if (filter.completed !== undefined && safeIsCompleted(task) !== filter.completed) continue;
       
-      if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
+      if (filter.flagged !== undefined && safeIsFlagged(task) !== filter.flagged) continue;
       
       if (filter.project) {
         try {
-          const project = task.containingProject();
-          if (!project || project.name() !== filter.project) continue;
+          const project = safeGetProject(task);
+          if (!project || project.name !== filter.project) continue;
         } catch (e) {
           continue;
         }
@@ -43,8 +43,8 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (filter.projectId) {
         try {
-          const project = task.containingProject();
-          if (!project || project.id() !== filter.projectId) continue;
+          const project = safeGetProject(task);
+          if (!project || project.id !== filter.projectId) continue;
         } catch (e) {
           continue;
         }
@@ -52,7 +52,7 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (filter.tags && filter.tags.length > 0) {
         try {
-          const taskTags = task.tags().map(t => t.name());
+          const taskTags = safeGetTags(task);
           const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
           if (!hasAllTags) continue;
         } catch (e) {
@@ -62,8 +62,8 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (filter.search) {
         try {
-          const name = task.name() || '';
-          const note = task.note() || '';
+          const name = safeGet(() => task.name(), '') || '';
+          const note = safeGet(() => task.note(), '') || '';
           const searchText = (name + ' ' + note).toLowerCase();
           if (!searchText.includes(filter.search.toLowerCase())) continue;
         } catch (e) {
@@ -75,33 +75,33 @@ export const EXPORT_TASKS_SCRIPT = `
       const taskData = {};
       
       if (allFields.includes('id')) {
-        taskData.id = task.id();
+        taskData.id = safeGet(() => task.id(), 'unknown');
       }
       
       if (allFields.includes('name')) {
-        taskData.name = task.name();
+        taskData.name = safeGet(() => task.name(), 'Unnamed Task');
       }
       
       if (allFields.includes('note')) {
-        const note = task.note();
+        const note = safeGet(() => task.note());
         if (note) taskData.note = note;
       }
       
       if (allFields.includes('project')) {
         try {
-          const project = task.containingProject();
+          const project = safeGetProject(task);
           if (project) {
-            taskData.project = project.name();
-            taskData.projectId = project.id();
+            taskData.project = project.name;
+            taskData.projectId = project.id;
           }
         } catch (e) {}
       }
       
       if (allFields.includes('tags')) {
         try {
-          const tags = task.tags();
+          const tags = safeGetTags(task);
           if (tags && tags.length > 0) {
-            taskData.tags = tags.map(t => t.name());
+            taskData.tags = tags;
           }
         } catch (e) {}
       }
