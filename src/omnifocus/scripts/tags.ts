@@ -7,9 +7,9 @@ export const LIST_TAGS_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
+    const startTime = Date.now();
     const tags = [];
     const allTags = doc.flattenedTags();
-    const allTasks = doc.flattenedTasks();
     
     // Check if collections are null or undefined
     if (!allTags) {
@@ -20,48 +20,52 @@ export const LIST_TAGS_SCRIPT = `
       });
     }
     
-    if (!allTasks) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTasks() returned null or undefined"
-      });
+    // Initialize tag usage and build tag map for faster lookups
+    const tagUsage = {};
+    const tagMap = {};
+    
+    // First pass: build tag map for O(1) lookups
+    for (let i = 0; i < allTags.length; i++) {
+      const tag = allTags[i];
+      const tagId = safeGet(() => tag.id());
+      const tagName = safeGet(() => tag.name());
+      if (tagId && tagName) {
+        tagMap[tagName] = tagId;
+        tagUsage[tagId] = { total: 0, active: 0, completed: 0 };
+      }
     }
     
-    // Count task usage for each tag
-    const tagUsage = {};
-    
-    for (let i = 0; i < allTasks.length; i++) {
-      const task = allTasks[i];
-      const taskTags = safeGetTags(task);
-      
-      for (let j = 0; j < taskTags.length; j++) {
-        const tagName = taskTags[j];
-        
-        // Find tag ID by name
-        let tagId = null;
-        for (let k = 0; k < allTags.length; k++) {
-          if (safeGet(() => allTags[k].name()) === tagName) {
-            tagId = safeGet(() => allTags[k].id());
-            break;
+    // Count task usage if requested and not too many tags
+    if (options.includeUsageStats !== false && allTags.length < 200) {
+      try {
+        const allTasks = doc.flattenedTasks();
+        if (allTasks) {
+          // Limit task processing to avoid timeouts
+          const maxTasksToProcess = Math.min(allTasks.length, 200);
+          for (let i = 0; i < maxTasksToProcess; i++) {
+            const task = allTasks[i];
+            if (!task) continue;
+            
+            const taskTags = safeGetTags(task);
+            const isCompleted = safeIsCompleted(task);
+            
+            for (let j = 0; j < taskTags.length; j++) {
+              const tagName = taskTags[j];
+              const tagId = tagMap[tagName];
+              
+              if (tagId && tagUsage[tagId]) {
+                tagUsage[tagId].total++;
+                if (isCompleted) {
+                  tagUsage[tagId].completed++;
+                } else {
+                  tagUsage[tagId].active++;
+                }
+              }
+            }
           }
         }
-        
-        if (tagId) {
-          if (!tagUsage[tagId]) {
-            tagUsage[tagId] = {
-              total: 0,
-              active: 0,
-              completed: 0
-            };
-          }
-          tagUsage[tagId].total++;
-          if (safeIsCompleted(task)) {
-            tagUsage[tagId].completed++;
-          } else {
-            tagUsage[tagId].active++;
-          }
-        }
+      } catch (taskError) {
+        // Continue without usage stats if task processing fails
       }
     }
     
@@ -88,37 +92,33 @@ export const LIST_TAGS_SCRIPT = `
         tagInfo.parentName = safeGet(() => parent.name());
       }
       
-      // Check for child tags
-      try {
-        const children = tag.tags();
-        if (children && Array.isArray(children) && children.length > 0) {
-          tagInfo.childCount = children.length;
-        }
-      } catch (e) {
-        // Some tags may not support the tags() method
-      }
-      
       tags.push(tagInfo);
     }
     
     // Sort tags
     switch(options.sortBy) {
       case 'usage':
-        tags.sort((a, b) => b.usage.total - a.usage.total);
+        tags.sort((a, b) => (b.usage?.total || 0) - (a.usage?.total || 0));
         break;
       case 'tasks':
-        tags.sort((a, b) => b.usage.active - a.usage.active);
+        tags.sort((a, b) => (b.usage?.active || 0) - (a.usage?.active || 0));
         break;
       case 'name':
       default:
-        tags.sort((a, b) => a.name.localeCompare(b.name));
+        tags.sort((a, b) => {
+          const aName = a.name || '';
+          const bName = b.name || '';
+          return aName.localeCompare(bName);
+        });
         break;
     }
     
     // Calculate summary
     const totalTags = tags.length;
-    const activeTags = tags.filter(t => t.usage.active > 0).length;
-    const emptyTags = tags.filter(t => t.usage.total === 0).length;
+    const activeTags = tags.filter(t => t.usage && t.usage.active > 0).length;
+    const emptyTags = tags.filter(t => !t.usage || t.usage.total === 0).length;
+    
+    const endTime = Date.now();
     
     return JSON.stringify({
       tags: tags,
@@ -126,7 +126,8 @@ export const LIST_TAGS_SCRIPT = `
         totalTags: totalTags,
         activeTags: activeTags,
         emptyTags: emptyTags,
-        mostUsed: tags.length > 0 ? tags[0].name : null
+        mostUsed: tags.length > 0 ? tags[0].name : null,
+        query_time_ms: endTime - startTime
       }
     });
   } catch (error) {
@@ -171,10 +172,18 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Create new tag using make
         try {
+          const tagCollection = safeGet(() => doc.tags);
+          if (!tagCollection) {
+            return JSON.stringify({
+              error: true,
+              message: "Failed to access document tags collection"
+            });
+          }
+          
           const newTag = app.make({
             new: 'tag',
             withProperties: { name: tagName },
-            at: doc.tags
+            at: tagCollection
           });
           
           return JSON.stringify({
@@ -187,7 +196,15 @@ export const MANAGE_TAGS_SCRIPT = `
         } catch (createError) {
           // If make fails, try alternate syntax
           try {
-            const newTag = doc.tags.push(app.Tag({ name: tagName }));
+            const tagCollection = safeGet(() => doc.tags);
+            if (!tagCollection) {
+              return JSON.stringify({
+                error: true,
+                message: "Failed to access document tags collection"
+              });
+            }
+            
+            const newTag = safeGet(() => tagCollection.push(app.Tag({ name: tagName })));
             return JSON.stringify({
               success: true,
               action: 'created',
@@ -262,11 +279,17 @@ export const MANAGE_TAGS_SCRIPT = `
         // Count tasks using this tag
         let taskCount = 0;
         const tasks = doc.flattenedTasks();
+        if (!tasks) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to retrieve tasks from OmniFocus"
+          });
+        }
         for (let i = 0; i < tasks.length; i++) {
           try {
             const taskTags = safeGet(() => tasks[i].tags(), []);
             for (let j = 0; j < taskTags.length; j++) {
-              if (safeGet(() => taskTags[j].id()) === tagToDelete.id()) {
+              if (safeGet(() => taskTags[j].id()) === safeGet(() => tagToDelete.id())) {
                 taskCount++;
                 break;
               }
@@ -294,7 +317,7 @@ export const MANAGE_TAGS_SCRIPT = `
           if (safeGet(() => allTags[i].name()) === tagName) {
             sourceTag = allTags[i];
           }
-          if (allTags[i].name() === targetTag) {
+          if (safeGet(() => allTags[i].name()) === targetTag) {
             targetTagObj = allTags[i];
           }
         }
@@ -315,10 +338,16 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Move all tasks from source to target
         let mergedCount = 0;
-        const tasks = doc.flattenedTasks();
+        const mergeTasks = doc.flattenedTasks();
+        if (!mergeTasks) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to retrieve tasks from OmniFocus"
+          });
+        }
         
-        for (let i = 0; i < tasks.length; i++) {
-          const task = tasks[i];
+        for (let i = 0; i < mergeTasks.length; i++) {
+          const task = mergeTasks[i];
           try {
             const taskTags = safeGet(() => task.tags(), []);
             let hasSourceTag = false;
@@ -326,10 +355,10 @@ export const MANAGE_TAGS_SCRIPT = `
             
             for (let j = 0; j < taskTags.length; j++) {
               const tagId = safeGet(() => taskTags[j].id());
-              if (tagId === sourceTag.id()) {
+              if (tagId === safeGet(() => sourceTag.id())) {
                 hasSourceTag = true;
               }
-              if (tagId === targetTagObj.id()) {
+              if (tagId === safeGet(() => targetTagObj.id())) {
                 hasTargetTag = true;
               }
             }

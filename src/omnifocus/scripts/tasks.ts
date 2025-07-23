@@ -24,8 +24,8 @@ export const SAFE_UTILITIES_SCRIPT = `
       const project = task.containingProject();
       if (project) {
         return {
-          name: project.name(),
-          id: project.id()
+          name: safeGet(() => project.name()),
+          id: safeGet(() => project.id())
         };
       }
       return null;
@@ -37,7 +37,15 @@ export const SAFE_UTILITIES_SCRIPT = `
   function safeGetTags(task) {
     try {
       const tags = task.tags();
-      return tags ? tags.map(t => t.name()) : [];
+      if (!tags) return [];
+      const tagNames = [];
+      for (let i = 0; i < tags.length; i++) {
+        const tagName = safeGet(() => tags[i].name());
+        if (tagName) {
+          tagNames.push(tagName);
+        }
+      }
+      return tagNames;
     } catch (e) {
       return [];
     }
@@ -46,7 +54,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   function safeGetFolder(project) {
     try {
       const folder = project.folder();
-      return folder ? folder.name() : null;
+      return folder ? safeGet(() => folder.name()) : null;
     } catch (e) {
       return null;
     }
