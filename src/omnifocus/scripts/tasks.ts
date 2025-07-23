@@ -656,7 +656,7 @@ export const CREATE_TASK_SCRIPT = `
       flagged: taskData.flagged || false,
       inInbox: taskIsInInbox,
       projectId: taskData.projectId || null,
-      project: targetContainer ? targetContainer.name() : null
+      project: targetContainer ? safeGet(() => targetContainer.name(), null) : null
     };
     
     // Include all fields that were actually set in the creation
@@ -1173,8 +1173,8 @@ export const TODAYS_AGENDA_SCRIPT = `
         const deferDate = safeGetDate(() => task.deferDate());
         if (deferDate) taskObj.deferDate = deferDate;
         
-        const tags = safeGet(() => task.tags(), []);
-        taskObj.tags = tags.map(t => safeGet(() => t.name(), 'Unknown Tag'));
+        const tags = safeGetTags(task);
+        taskObj.tags = tags;
         
         tasks.push(taskObj);
       }

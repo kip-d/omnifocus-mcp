@@ -149,7 +149,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     try {
       // Convert dailyStats object to array of values
       for (let key in dailyStats) {
-        if (dailyStats.hasOwnProperty(key)) {
+        if (dailyStats[key] !== undefined) {
           dailyValues.push(dailyStats[key]);
         }
       }
