@@ -106,6 +106,18 @@ export class OmniAutomation {
     return `(() => {
       try {
         const app = Application('OmniFocus');
+        app.includeStandardAdditions = true;
+        
+        // Try to activate OmniFocus if needed
+        try {
+          if (!app.running()) {
+            app.activate();
+            delay(1); // Give it a moment to start
+          }
+        } catch (e) {
+          // Ignore activation errors
+        }
+        
         // Use defaultDocument() as a method call instead of property access
         const doc = app.defaultDocument();
         
