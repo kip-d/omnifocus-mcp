@@ -97,7 +97,8 @@ export class OmniAutomation {
     return `(() => {
       try {
         const app = Application('OmniFocus');
-        const doc = app.defaultDocument;
+        // Use defaultDocument() as a method call instead of property access
+        const doc = app.defaultDocument();
         
         ${script}
       } catch (error) {

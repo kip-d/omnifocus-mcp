@@ -332,7 +332,7 @@ export const LIST_TASKS_SCRIPT = `
     if (filter.projectId !== undefined) {
       const project = safeGetProject(task);
       if (filter.projectId === null && project !== null) return false;
-      if (filter.projectId !== null && (!project || project.id() !== filter.projectId)) return false;
+      if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
     }
     
     // Tags filter
@@ -389,7 +389,7 @@ export const LIST_TASKS_SCRIPT = `
       const project = safeGetProject(task);
       if (project) {
         taskObj.project = project.name;
-        taskObj.projectId = project.id();
+        taskObj.projectId = project.id;
       }
       
       const dueDate = safeGetDate(() => task.dueDate());
@@ -1080,13 +1080,11 @@ export const TODAYS_AGENDA_SCRIPT = `
         const note = safeGet(() => task.note());
         if (note) taskObj.note = note;
         
-        try {
-          const project = task.containingProject();
-          if (project) {
-            taskObj.project = project.name();
-            taskObj.projectId = project.id();
-          }
-        } catch (e) {}
+        const project = safeGetProject(task);
+        if (project) {
+          taskObj.project = project.name;
+          taskObj.projectId = project.id;
+        }
         
         try {
           const dueDate = task.dueDate();
