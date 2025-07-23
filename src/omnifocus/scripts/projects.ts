@@ -5,29 +5,36 @@ export const LIST_PROJECTS_SCRIPT = `
   const filter = {{filter}};
   const projects = [];
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const allProjects = doc.flattenedProjects();
+    
+    // Check if allProjects is null or undefined
+    if (!allProjects) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedProjects() returned null or undefined"
+      });
+    }
     
     for (let i = 0; i < allProjects.length; i++) {
       const project = allProjects[i];
       
       // Apply filters
       if (filter.status && filter.status.length > 0) {
-        const projectStatus = project.status();
+        const projectStatus = safeGetStatus(project);
         if (!filter.status.includes(projectStatus)) continue;
       }
       
-      if (filter.flagged !== undefined && project.flagged() !== filter.flagged) continue;
+      if (filter.flagged !== undefined && safeIsFlagged(project) !== filter.flagged) continue;
       
       // Apply search filter
       if (filter.search) {
         const searchTerm = filter.search.toLowerCase();
-        const projectName = project.name().toLowerCase();
-        let projectNote = '';
-        try {
-          const note = project.note();
-          if (note) projectNote = note.toLowerCase();
-        } catch (e) {}
+        const projectName = safeGet(() => project.name(), '').toLowerCase();
+        const projectNote = safeGet(() => project.note(), '').toLowerCase();
         
         if (!projectName.includes(searchTerm) && !projectNote.includes(searchTerm)) {
           continue;
@@ -36,40 +43,26 @@ export const LIST_PROJECTS_SCRIPT = `
       
       // Build project object
       const projectObj = {
-        id: project.id(),
-        name: project.name(),
-        status: project.status(),
-        flagged: project.flagged()
+        id: safeGet(() => project.id(), 'unknown'),
+        name: safeGet(() => project.name(), 'Unnamed Project'),
+        status: safeGetStatus(project),
+        flagged: safeIsFlagged(project)
       };
       
       // Add optional properties safely
-      try {
-        const note = project.note();
-        if (note) projectObj.note = note;
-      } catch (e) {}
+      const note = safeGet(() => project.note());
+      if (note) projectObj.note = note;
       
-      try {
-        const folder = project.folder();
-        if (folder) projectObj.folder = folder.name();
-      } catch (e) {}
+      const folder = safeGetFolder(project);
+      if (folder) projectObj.folder = folder;
       
-      try {
-        const dueDate = project.dueDate();
-        if (dueDate) projectObj.dueDate = dueDate.toISOString();
-      } catch (e) {}
+      const dueDate = safeGetDate(() => project.dueDate());
+      if (dueDate) projectObj.dueDate = dueDate;
       
-      try {
-        const deferDate = project.deferDate();
-        if (deferDate) projectObj.deferDate = deferDate.toISOString();
-      } catch (e) {}
+      const deferDate = safeGetDate(() => project.deferDate());
+      if (deferDate) projectObj.deferDate = deferDate;
       
-      try {
-        const tasks = project.flattenedTasks();
-        projectObj.numberOfTasks = tasks.length;
-      } catch (e) {
-        
-        projectObj.numberOfTasks = 0;
-      }
+      projectObj.numberOfTasks = safeGetTaskCount(project);
       
       projects.push(projectObj);
     }

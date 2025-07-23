@@ -1,20 +1,53 @@
+// Import shared safe utilities
+import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+
 export const LIST_TAGS_SCRIPT = `
   const options = {{options}};
+  
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     const tags = [];
     const allTags = doc.flattenedTags();
     const allTasks = doc.flattenedTasks();
     
+    // Check if collections are null or undefined
+    if (!allTags) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tags from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTags() returned null or undefined"
+      });
+    }
+    
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
+    
     // Count task usage for each tag
     const tagUsage = {};
     
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
-      try {
-        const taskTags = task.tags();
-        for (let j = 0; j < taskTags.length; j++) {
-          const tagId = taskTags[j].id();
+      const taskTags = safeGetTags(task);
+      
+      for (let j = 0; j < taskTags.length; j++) {
+        const tagName = taskTags[j];
+        
+        // Find tag ID by name
+        let tagId = null;
+        for (let k = 0; k < allTags.length; k++) {
+          if (safeGet(() => allTags[k].name()) === tagName) {
+            tagId = safeGet(() => allTags[k].id());
+            break;
+          }
+        }
+        
+        if (tagId) {
           if (!tagUsage[tagId]) {
             tagUsage[tagId] = {
               total: 0,
@@ -23,19 +56,19 @@ export const LIST_TAGS_SCRIPT = `
             };
           }
           tagUsage[tagId].total++;
-          if (task.completed()) {
+          if (safeIsCompleted(task)) {
             tagUsage[tagId].completed++;
           } else {
             tagUsage[tagId].active++;
           }
         }
-      } catch (e) {}
+      }
     }
     
     // Build tag list
     for (let i = 0; i < allTags.length; i++) {
       const tag = allTags[i];
-      const tagId = tag.id();
+      const tagId = safeGet(() => tag.id(), 'unknown');
       const usage = tagUsage[tagId] || { total: 0, active: 0, completed: 0 };
       
       // Skip empty tags if requested
@@ -43,27 +76,23 @@ export const LIST_TAGS_SCRIPT = `
       
       const tagInfo = {
         id: tagId,
-        name: tag.name(),
+        name: safeGet(() => tag.name(), 'Unnamed Tag'),
         usage: usage,
         status: 'active' // Tags don't have status in OmniFocus
       };
       
       // Check for parent tag
-      try {
-        const parent = tag.parent();
-        if (parent) {
-          tagInfo.parentId = parent.id();
-          tagInfo.parentName = parent.name();
-        }
-      } catch (e) {}
+      const parent = safeGet(() => tag.parent());
+      if (parent) {
+        tagInfo.parentId = safeGet(() => parent.id());
+        tagInfo.parentName = safeGet(() => parent.name());
+      }
       
       // Check for child tags
-      try {
-        const children = tag.tags();
-        if (children && children.length > 0) {
-          tagInfo.childCount = children.length;
-        }
-      } catch (e) {}
+      const children = safeGet(() => tag.tags());
+      if (children && children.length > 0) {
+        tagInfo.childCount = children.length;
+      }
       
       tags.push(tagInfo);
     }
