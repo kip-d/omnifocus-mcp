@@ -287,26 +287,34 @@ export const MANAGE_TAGS_SCRIPT = `
         }
         for (let i = 0; i < tasks.length; i++) {
           try {
-            const taskTags = safeGet(() => tasks[i].tags(), []);
-            for (let j = 0; j < taskTags.length; j++) {
-              if (safeGet(() => taskTags[j].id()) === safeGet(() => tagToDelete.id())) {
-                taskCount++;
-                break;
-              }
+            const taskTags = safeGetTags(tasks[i]);
+            const tagIdToDelete = safeGet(() => tagToDelete.id());
+            const tagNameToDelete = safeGet(() => tagToDelete.name());
+            // Check if task has this tag by name
+            if (taskTags.includes(tagNameToDelete)) {
+              taskCount++;
             }
           } catch (e) {}
         }
         
         // Delete the tag using JXA app.delete method
-        app.delete(tagToDelete);
-        
-        return JSON.stringify({
-          success: true,
-          action: 'deleted',
-          tagName: tagName,
-          tasksAffected: taskCount,
-          message: "Tag '" + tagName + "' deleted. " + taskCount + " tasks were affected."
-        });
+        try {
+          app.delete(tagToDelete);
+          
+          return JSON.stringify({
+            success: true,
+            action: 'deleted',
+            tagName: tagName,
+            tasksAffected: taskCount,
+            message: "Tag '" + tagName + "' deleted. " + taskCount + " tasks were affected."
+          });
+        } catch (deleteError) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to delete tag: " + deleteError.toString(),
+            details: "Tag '" + tagName + "' exists but could not be deleted"
+          });
+        }
         
       case 'merge':
         // Find source and target tags
@@ -349,45 +357,54 @@ export const MANAGE_TAGS_SCRIPT = `
         for (let i = 0; i < mergeTasks.length; i++) {
           const task = mergeTasks[i];
           try {
-            const taskTags = safeGet(() => task.tags(), []);
-            let hasSourceTag = false;
-            let hasTargetTag = false;
+            const taskTags = safeGetTags(task);
+            const sourceTagName = safeGet(() => sourceTag.name());
+            const targetTagName = safeGet(() => targetTagObj.name());
             
-            for (let j = 0; j < taskTags.length; j++) {
-              const tagId = safeGet(() => taskTags[j].id());
-              if (tagId === safeGet(() => sourceTag.id())) {
-                hasSourceTag = true;
-              }
-              if (tagId === safeGet(() => targetTagObj.id())) {
-                hasTargetTag = true;
-              }
-            }
+            const hasSourceTag = taskTags.includes(sourceTagName);
+            const hasTargetTag = taskTags.includes(targetTagName);
             
             if (hasSourceTag) {
-              // Remove source tag
-              task.removeTags([sourceTag]);
-              
-              // Add target tag if not already present
-              if (!hasTargetTag) {
-                task.addTags([targetTagObj]);
+              try {
+                // Remove source tag
+                task.removeTags([sourceTag]);
+                
+                // Add target tag if not already present
+                if (!hasTargetTag) {
+                  task.addTags([targetTagObj]);
+                }
+                
+                mergedCount++;
+              } catch (tagError) {
+                // Continue if tag operations fail on individual task
               }
-              
-              mergedCount++;
             }
           } catch (e) {}
         }
         
         // Delete the source tag using JXA app.delete method
-        app.delete(sourceTag);
-        
-        return JSON.stringify({
-          success: true,
-          action: 'merged',
-          sourceTag: tagName,
-          targetTag: targetTag,
-          tasksMerged: mergedCount,
-          message: "Merged '" + tagName + "' into '" + targetTag + "'. " + mergedCount + " tasks updated."
-        });
+        try {
+          app.delete(sourceTag);
+          
+          return JSON.stringify({
+            success: true,
+            action: 'merged',
+            sourceTag: tagName,
+            targetTag: targetTag,
+            tasksMerged: mergedCount,
+            message: "Merged '" + tagName + "' into '" + targetTag + "'. " + mergedCount + " tasks updated."
+          });
+        } catch (deleteError) {
+          return JSON.stringify({
+            success: true,
+            action: 'merged_with_warning',
+            sourceTag: tagName,
+            targetTag: targetTag,
+            tasksMerged: mergedCount,
+            warning: "Tags were merged but source tag could not be deleted: " + deleteError.toString(),
+            message: "Merged " + mergedCount + " tasks but could not delete source tag"
+          });
+        }
         
       default:
         return JSON.stringify({

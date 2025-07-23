@@ -145,9 +145,27 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     const dailyAverage = (completedTasks / daysInPeriod).toFixed(1);
     
     // Find best and worst days
-    const dailyValues = Object.values(dailyStats);
-    const bestDay = dailyValues.length > 0 ? Math.max(...dailyValues) : 0;
-    const worstDay = dailyValues.length > 0 ? Math.min(...dailyValues) : 0;
+    let dailyValues = [];
+    try {
+      // Convert dailyStats object to array of values
+      for (let key in dailyStats) {
+        if (dailyStats.hasOwnProperty(key)) {
+          dailyValues.push(dailyStats[key]);
+        }
+      }
+    } catch (e) {
+      dailyValues = [];
+    }
+    let bestDay = 0;
+    let worstDay = 0;
+    if (dailyValues.length > 0) {
+      bestDay = dailyValues[0];
+      worstDay = dailyValues[0];
+      for (let i = 1; i < dailyValues.length; i++) {
+        if (dailyValues[i] > bestDay) bestDay = dailyValues[i];
+        if (dailyValues[i] < worstDay) worstDay = dailyValues[i];
+      }
+    }
     
     return JSON.stringify({
       stats: groupedStats,
