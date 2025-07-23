@@ -1085,6 +1085,16 @@ export const TODAYS_AGENDA_SCRIPT = `
   
   try {
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
+    
     const startTime = Date.now();
     
     let dueTodayCount = 0;
