@@ -139,8 +139,19 @@ export const MANAGE_TAGS_SCRIPT = `
   const newName = {{newName}};
   const targetTag = {{targetTag}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const allTags = doc.flattenedTags();
+    
+    // Check if allTags is null or undefined
+    if (!allTags) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tags from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTags() returned null or undefined"
+      });
+    }
     
     switch(action) {
       case 'create':

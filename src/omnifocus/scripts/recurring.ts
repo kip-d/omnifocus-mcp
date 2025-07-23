@@ -1,9 +1,23 @@
+// Import shared safe utilities
+import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
   const options = {{options}};
+  
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     const recurringTasks = [];
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     const now = new Date();
     
     for (let i = 0; i < allTasks.length; i++) {
@@ -438,10 +452,21 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
 export const GET_RECURRING_PATTERNS_SCRIPT = `
   const options = {{options}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const patterns = {};
     const projectPatterns = {};
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     let totalRecurring = 0;
     
     for (let i = 0; i < allTasks.length; i++) {

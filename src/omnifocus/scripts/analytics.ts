@@ -1,5 +1,10 @@
+// Import shared safe utilities
+import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+
 export const PRODUCTIVITY_STATS_SCRIPT = `
   const options = {{options}};
+  
+  ${SAFE_UTILITIES_SCRIPT}
   
   try {
     const now = new Date();
@@ -26,6 +31,15 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     }
     
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     let totalTasks = 0;
     let completedTasks = 0;
     let createdTasks = 0;
@@ -166,6 +180,8 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
 export const TASK_VELOCITY_SCRIPT = `
   const options = {{options}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const now = new Date();
     const velocityData = [];
@@ -193,6 +209,15 @@ export const TASK_VELOCITY_SCRIPT = `
     
     // Analyze tasks
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     let totalCompleted = 0;
     let totalCreated = 0;
     const completionTimes = [];
@@ -318,6 +343,8 @@ export const TASK_VELOCITY_SCRIPT = `
 export const OVERDUE_ANALYSIS_SCRIPT = `
   const options = {{options}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const now = new Date();
     const overdueTasks = [];
@@ -325,6 +352,15 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
     const groupedAnalysis = {};
     
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     let totalOverdue = 0;
     let recentlyCompletedOverdue = 0;
     let chronicallyOverdue = 0;

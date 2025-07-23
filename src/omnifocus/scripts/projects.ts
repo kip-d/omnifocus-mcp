@@ -81,9 +81,20 @@ export const CREATE_PROJECT_SCRIPT = `
   const name = {{name}};
   const options = {{options}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     // Check if project already exists
     const existingProjects = doc.flattenedProjects();
+    
+    // Check if existingProjects is null or undefined
+    if (!existingProjects) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedProjects() returned null or undefined"
+      });
+    }
     for (let i = 0; i < existingProjects.length; i++) {
       if (existingProjects[i].name() === name) {
         return JSON.stringify({
@@ -119,6 +130,15 @@ export const CREATE_PROJECT_SCRIPT = `
     // Add to specific folder if specified
     if (options.folder) {
       const folders = doc.flattenedFolders();
+      
+      // Check if folders is null or undefined
+      if (!folders) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+          details: "doc.flattenedFolders() returned null or undefined"
+        });
+      }
       let targetFolder = null;
       
       for (let i = 0; i < folders.length; i++) {
@@ -162,9 +182,20 @@ export const UPDATE_PROJECT_SCRIPT = `
   const projectId = {{projectId}};
   const updates = {{updates}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     // Find the project by ID
     const projects = doc.flattenedProjects();
+    
+    // Check if projects is null or undefined
+    if (!projects) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedProjects() returned null or undefined"
+      });
+    }
     let targetProject = null;
     
     for (let i = 0; i < projects.length; i++) {
@@ -255,6 +286,15 @@ export const UPDATE_PROJECT_SCRIPT = `
         } else {
           // Move to specific folder
           const folders = doc.flattenedFolders();
+      
+      // Check if folders is null or undefined
+      if (!folders) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+          details: "doc.flattenedFolders() returned null or undefined"
+        });
+      }
           let targetFolder = null;
           
           for (let i = 0; i < folders.length; i++) {
@@ -309,9 +349,20 @@ export const COMPLETE_PROJECT_SCRIPT = `
   const projectId = {{projectId}};
   const completeAllTasks = {{completeAllTasks}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     // Find the project by ID
     const projects = doc.flattenedProjects();
+    
+    // Check if projects is null or undefined
+    if (!projects) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedProjects() returned null or undefined"
+      });
+    }
     let targetProject = null;
     
     for (let i = 0; i < projects.length; i++) {

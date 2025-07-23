@@ -1,11 +1,25 @@
+// Import shared safe utilities
+import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+
 export const EXPORT_TASKS_SCRIPT = `
   const filter = {{filter}};
   const format = {{format}};
   const fields = {{fields}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const tasks = [];
     const allTasks = doc.flattenedTasks();
+    
+    // Check if allTasks is null or undefined
+    if (!allTasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
+    }
     const allFields = fields || ['name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'flagged'];
     
     for (let i = 0; i < allTasks.length; i++) {
@@ -180,9 +194,20 @@ export const EXPORT_PROJECTS_SCRIPT = `
   const includeStats = {{includeStats}};
   const format = {{format}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     const projects = [];
     const allProjects = doc.flattenedProjects();
+    
+    // Check if allProjects is null or undefined
+    if (!allProjects) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
+        details: "doc.flattenedProjects() returned null or undefined"
+      });
+    }
     
     for (let i = 0; i < allProjects.length; i++) {
       const project = allProjects[i];
