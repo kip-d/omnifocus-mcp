@@ -401,11 +401,11 @@ export const LIST_TASKS_SCRIPT = `
       
       // Build task object with safe property access
       const taskObj = {
-        id: task.id(),
-        name: task.name(),
-        completed: task.completed(),
-        flagged: task.flagged(),
-        inInbox: task.inInbox()
+        id: safeGet(() => task.id(), 'unknown'),
+        name: safeGet(() => task.name(), 'Unnamed Task'),
+        completed: safeIsCompleted(task),
+        flagged: safeIsFlagged(task),
+        inInbox: safeGet(() => task.inInbox(), false)
       };
       
       // Add optional properties using safe utilities
@@ -518,6 +518,8 @@ export const LIST_TASKS_SCRIPT = `
 export const CREATE_TASK_SCRIPT = `
   const taskData = {{taskData}};
   
+  ${SAFE_UTILITIES_SCRIPT}
+  
   try {
     // Create task data object for JXA
     const taskObj = {
@@ -535,16 +537,20 @@ export const CREATE_TASK_SCRIPT = `
     const tagsToAdd = [];
     if (taskData.tags && taskData.tags.length > 0) {
       const existingTags = doc.flattenedTags();
-      for (const tagName of taskData.tags) {
-        let found = false;
-        for (let i = 0; i < existingTags.length; i++) {
-          if (existingTags[i].name() === tagName) {
-            tagsToAdd.push(existingTags[i]);
+      if (!existingTags) {
+        // Tags not available, but continue with task creation
+      } else {
+        for (const tagName of taskData.tags) {
+          let found = false;
+          for (let i = 0; i < existingTags.length; i++) {
+            if (safeGet(() => existingTags[i].name()) === tagName) {
+              tagsToAdd.push(existingTags[i]);
             found = true;
             break;
           }
+          }
+          // Note: JXA doesn't support creating new tags reliably in task creation
         }
-        // Note: JXA doesn't support creating new tags reliably in task creation
       }
     }
     
@@ -555,8 +561,14 @@ export const CREATE_TASK_SCRIPT = `
     // If projectId is provided, find the project and assign the task there
     if (taskData.projectId && taskData.projectId !== "") {
       const projects = doc.flattenedProjects();
+      if (!projects) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly."
+        });
+      }
       for (let i = 0; i < projects.length; i++) {
-        if (projects[i].id() === taskData.projectId) {
+        if (safeGet(() => projects[i].id()) === taskData.projectId) {
           targetContainer = projects[i];
           taskIsInInbox = false;
           break;
@@ -600,11 +612,11 @@ export const CREATE_TASK_SCRIPT = `
     
     try {
       // Search in the appropriate container
-      const tasksToSearch = targetContainer ? targetContainer.tasks() : doc.inboxTasks();
+      const tasksToSearch = targetContainer ? safeGet(() => targetContainer.tasks(), []) : safeGet(() => doc.inboxTasks(), []);
       for (let i = tasksToSearch.length - 1; i >= 0; i--) {
         const task = tasksToSearch[i];
-        if (task.name() === taskData.name) {
-          taskId = task.id();
+        if (safeGet(() => task.name()) === taskData.name) {
+          taskId = safeGet(() => task.id(), null);
           createdTask = task;
           
           // Add tags to the created task
@@ -677,9 +689,15 @@ export const UPDATE_TASK_SCRIPT = `
   try {
     // Find task by ID
     const tasks = doc.flattenedTasks();
+    if (!tasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
+      });
+    }
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id() === taskId) {
+      if (safeGet(() => tasks[i].id()) === taskId) {
         task = tasks[i];
         break;
       }
@@ -883,9 +901,15 @@ export const COMPLETE_TASK_SCRIPT = `
   try {
     // Find task by ID
     const tasks = doc.flattenedTasks();
+    if (!tasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
+      });
+    }
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id() === taskId) {
+      if (safeGet(() => tasks[i].id()) === taskId) {
         task = tasks[i];
         break;
       }
@@ -977,9 +1001,15 @@ export const DELETE_TASK_SCRIPT = `
   try {
     // Find task by ID
     const tasks = doc.flattenedTasks();
+    if (!tasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
+      });
+    }
     let task = null;
     for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].id() === taskId) {
+      if (safeGet(() => tasks[i].id()) === taskId) {
         task = tasks[i];
         break;
       }
@@ -1065,38 +1095,35 @@ export const TODAYS_AGENDA_SCRIPT = `
       const task = allTasks[i];
       
       // Skip completed tasks
-      if (task.completed()) continue;
+      if (safeIsCompleted(task)) continue;
       
       // Check if available (if required)
       if (options.includeAvailable) {
-        try {
-          const deferDate = task.deferDate();
-          if (deferDate && deferDate > new Date()) continue;
-          // Note: Full availability check would include blocked status
-        } catch (e) {}
+        const deferDate = safeGetDate(() => task.deferDate());
+        if (deferDate && new Date(deferDate) > new Date()) continue;
+        // Note: Full availability check would include blocked status
       }
       
       let includeTask = false;
       let reason = '';
       
       // Check due date
-      try {
-        const dueDate = task.dueDate();
-        if (dueDate) {
-          if (dueDate < today && options.includeOverdue) {
-            includeTask = true;
-            reason = 'overdue';
-            overdueCount++;
-          } else if (dueDate >= today && dueDate < tomorrow) {
-            includeTask = true;
-            reason = 'due_today';
-            dueTodayCount++;
-          }
+      const dueDateStr = safeGetDate(() => task.dueDate());
+      if (dueDateStr) {
+        const dueDate = new Date(dueDateStr);
+        if (dueDate < today && options.includeOverdue) {
+          includeTask = true;
+          reason = 'overdue';
+          overdueCount++;
+        } else if (dueDate >= today && dueDate < tomorrow) {
+          includeTask = true;
+          reason = 'due_today';
+          dueTodayCount++;
         }
-      } catch (e) {}
+      }
       
       // Check flagged status
-      if (!includeTask && options.includeFlagged && task.flagged()) {
+      if (!includeTask && options.includeFlagged && safeIsFlagged(task)) {
         includeTask = true;
         reason = 'flagged';
         flaggedCount++;
@@ -1105,10 +1132,10 @@ export const TODAYS_AGENDA_SCRIPT = `
       if (includeTask) {
         // Build task object
         const taskObj = {
-          id: task.id(),
-          name: task.name(),
+          id: safeGet(() => task.id(), 'unknown'),
+          name: safeGet(() => task.name(), 'Unnamed Task'),
           completed: false,
-          flagged: task.flagged(),
+          flagged: safeIsFlagged(task),
           reason: reason
         };
         
@@ -1122,18 +1149,14 @@ export const TODAYS_AGENDA_SCRIPT = `
           taskObj.projectId = project.id;
         }
         
-        try {
-          const dueDate = task.dueDate();
-          if (dueDate) taskObj.dueDate = dueDate.toISOString();
-        } catch (e) {}
+        const dueDate = safeGetDate(() => task.dueDate());
+        if (dueDate) taskObj.dueDate = dueDate;
         
-        try {
-          const deferDate = task.deferDate();
-          if (deferDate) taskObj.deferDate = deferDate.toISOString();
-        } catch (e) {}
+        const deferDate = safeGetDate(() => task.deferDate());
+        if (deferDate) taskObj.deferDate = deferDate;
         
         const tags = safeGet(() => task.tags(), []);
-        taskObj.tags = tags.map(t => t.name());
+        taskObj.tags = tags.map(t => safeGet(() => t.name(), 'Unknown Tag'));
         
         tasks.push(taskObj);
       }

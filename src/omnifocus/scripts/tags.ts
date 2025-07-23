@@ -89,8 +89,8 @@ export const LIST_TAGS_SCRIPT = `
       }
       
       // Check for child tags
-      const children = safeGet(() => tag.tags());
-      if (children && children.length > 0) {
+      const children = safeGet(() => tag.tags(), []);
+      if (children && Array.isArray(children) && children.length > 0) {
         tagInfo.childCount = children.length;
       }
       
@@ -260,9 +260,9 @@ export const MANAGE_TAGS_SCRIPT = `
         const tasks = doc.flattenedTasks();
         for (let i = 0; i < tasks.length; i++) {
           try {
-            const taskTags = tasks[i].tags();
+            const taskTags = safeGet(() => tasks[i].tags(), []);
             for (let j = 0; j < taskTags.length; j++) {
-              if (taskTags[j].id() === tagToDelete.id()) {
+              if (safeGet(() => taskTags[j].id()) === tagToDelete.id()) {
                 taskCount++;
                 break;
               }
@@ -316,15 +316,16 @@ export const MANAGE_TAGS_SCRIPT = `
         for (let i = 0; i < tasks.length; i++) {
           const task = tasks[i];
           try {
-            const taskTags = task.tags();
+            const taskTags = safeGet(() => task.tags(), []);
             let hasSourceTag = false;
             let hasTargetTag = false;
             
             for (let j = 0; j < taskTags.length; j++) {
-              if (taskTags[j].id() === sourceTag.id()) {
+              const tagId = safeGet(() => taskTags[j].id());
+              if (tagId === sourceTag.id()) {
                 hasSourceTag = true;
               }
-              if (taskTags[j].id() === targetTagObj.id()) {
+              if (tagId === targetTagObj.id()) {
                 hasTargetTag = true;
               }
             }
