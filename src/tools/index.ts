@@ -40,6 +40,9 @@ import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.j
 // Import system tools
 import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
 
+// Import diagnostic tools
+import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
+
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
@@ -83,6 +86,9 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
 
     // System tools
     new GetVersionInfoTool(cache),
+    
+    // Diagnostic tools
+    new RunDiagnosticsTool(cache),
   ];
 
   // Register handlers
