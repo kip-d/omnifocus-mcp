@@ -1,6 +1,6 @@
 /**
  * Type definitions for OmniFocus script responses
- * 
+ *
  * These interfaces define the expected JSON responses from our JXA scripts
  */
 

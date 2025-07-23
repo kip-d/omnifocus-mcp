@@ -2,15 +2,15 @@
  * Type definitions for MCP tool arguments and responses
  */
 
-import { 
-  OmniFocusTask, 
-  OmniFocusProject, 
+import {
+  OmniFocusTask,
+  OmniFocusProject,
   OmniFocusTag,
   TaskFilter,
   ProjectFilter,
   TaskUpdate,
   ProjectUpdate,
-  ProductivityStats
+  ProductivityStats,
 } from '../omnifocus/types.js';
 
 // Task Tool Arguments

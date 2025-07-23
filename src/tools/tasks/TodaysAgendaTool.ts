@@ -5,7 +5,7 @@ import { createListResponse, createErrorResponse, OperationTimer } from '../../u
 export class TodaysAgendaTool extends BaseTool {
   name = 'todays_agenda';
   description = 'Get today\'s agenda - all tasks due today, overdue, or flagged';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -15,7 +15,7 @@ export class TodaysAgendaTool extends BaseTool {
         default: true,
       },
       includeOverdue: {
-        type: 'boolean', 
+        type: 'boolean',
         description: 'Include overdue tasks',
         default: true,
       },
@@ -29,17 +29,17 @@ export class TodaysAgendaTool extends BaseTool {
 
   async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean }): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
-      const { 
-        includeFlagged = true, 
-        includeOverdue = true, 
-        includeAvailable = true 
+      const {
+        includeFlagged = true,
+        includeOverdue = true,
+        includeAvailable = true,
       } = args;
-      
+
       // Create cache key
       const cacheKey = `agenda_${includeFlagged}_${includeOverdue}_${includeAvailable}`;
-      
+
       // Check cache
       const cached = this.cache.get<any>('tasks', cacheKey);
       if (cached) {
@@ -55,28 +55,28 @@ export class TodaysAgendaTool extends BaseTool {
             filters_applied: {
               include_flagged: includeFlagged,
               include_overdue: includeOverdue,
-              include_available: includeAvailable
-            }
-          }
+              include_available: includeAvailable,
+            },
+          },
         );
       }
-      
+
       // Execute script
-      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, { 
-        options: { includeFlagged, includeOverdue, includeAvailable }
+      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
+        options: { includeFlagged, includeOverdue, includeAvailable },
       });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return createErrorResponse(
           'todays_agenda',
           'SCRIPT_ERROR',
           result.message || 'Failed to get today\'s agenda',
           { details: result.details },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Parse dates in tasks
       const parsedTasks = result.tasks.map((task: any) => ({
         ...task,
@@ -84,16 +84,16 @@ export class TodaysAgendaTool extends BaseTool {
         deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
       }));
-      
+
       const cacheData = {
         date: new Date().toISOString().split('T')[0],
         tasks: parsedTasks,
-        summary: result.summary
+        summary: result.summary,
       };
-      
+
       // Cache for shorter time (5 minutes for agenda)
       this.cache.set('tasks', cacheKey, cacheData);
-      
+
       return createListResponse(
         'todays_agenda',
         parsedTasks,
@@ -105,10 +105,10 @@ export class TodaysAgendaTool extends BaseTool {
           filters_applied: {
             include_flagged: includeFlagged,
             include_overdue: includeOverdue,
-            include_available: includeAvailable
+            include_available: includeAvailable,
           },
-          query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs()
-        }
+          query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs(),
+        },
       );
     } catch (error) {
       return this.handleError(error);

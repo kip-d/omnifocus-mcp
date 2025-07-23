@@ -10,7 +10,7 @@ import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
 export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ task: CreateTaskResponse }>>{
   name = 'create_task';
   description = 'Create a new task in OmniFocus (can be assigned to a project using projectId from list_projects)';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -55,15 +55,15 @@ export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ 
 
   async execute(args: CreateTaskArgs): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
     const timer = new OperationTimer();
-    
+
     try {
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: args });
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
-      
+
       if ('error' in result && result.error) {
         throw new McpError(ErrorCode.InternalError, result.message || 'Unknown error');
       }
-      
+
       // Parse the JSON result since the script returns a JSON string
       let parsedResult;
       try {
@@ -71,15 +71,15 @@ export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ 
       } catch (parseError) {
         this.logger.error(`Failed to parse create task result: ${result}`);
         throw new McpError(
-          ErrorCode.InternalError, 
+          ErrorCode.InternalError,
           parsingError('task creation', String(result), 'valid JSON'),
-          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) }
+          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
         );
       }
-      
+
       // Invalidate cache after successful task creation
       this.cache.invalidate('tasks');
-      
+
       // Return standardized response
       return createSuccessResponse(
         'create_task',
@@ -92,9 +92,9 @@ export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ 
             name: args.name,
             has_project: !!args.projectId,
             has_due_date: !!args.dueDate,
-            has_tags: !!(args.tags && args.tags.length > 0)
-          }
-        }
+            has_tags: !!(args.tags && args.tags.length > 0),
+          },
+        },
       );
     } catch (error) {
       return this.handleError(error);

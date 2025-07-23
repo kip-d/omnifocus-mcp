@@ -24,7 +24,7 @@ export class OmniAutomation {
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
     const wrappedScript = this.wrapScript(script);
-    
+
     logger.debug('Executing OmniAutomation script', { scriptLength: script.length });
 
     return new Promise((resolve, reject) => {
@@ -51,8 +51,8 @@ export class OmniAutomation {
       proc.on('close', (code) => {
         if (code !== 0) {
           logger.error('Script execution failed with code:', code);
-          
-          
+
+
           reject(new OmniAutomationError(`Script execution failed with code ${code}`, script, stderr));
           return;
         }
@@ -62,20 +62,20 @@ export class OmniAutomation {
         }
 
         const trimmedOutput = stdout.trim();
-        
+
         if (!trimmedOutput) {
           logger.warn('Script returned empty output, treating as null result');
           resolve(null as T);
           return;
         }
-        
+
         try {
           const result = JSON.parse(trimmedOutput);
           logger.debug('Script execution successful');
           resolve(result);
         } catch (parseError) {
           logger.error('Failed to parse script output:', { output: trimmedOutput, error: parseError });
-          
+
           // Try to return the raw output if it might be useful
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
             // Looks like malformed JSON, treat as error
@@ -116,13 +116,13 @@ export class OmniAutomation {
   // Helper method to build common script patterns
   public buildScript<T extends Record<string, unknown> = Record<string, unknown>>(template: string, params: T = {} as T): string {
     let script = template;
-    
+
     for (const [key, value] of Object.entries(params)) {
       const placeholder = `{{${key}}}`;
       const replacement = this.formatValue(value);
       script = script.replace(new RegExp(placeholder, 'g'), replacement);
     }
-    
+
     return script;
   }
 
@@ -130,21 +130,21 @@ export class OmniAutomation {
     if (value === null || value === undefined) {
       return 'null';
     }
-    
+
     if (typeof value === 'string') {
       // Escape quotes and special characters in string literals
       return JSON.stringify(value);
     }
-    
+
     if (value instanceof Date) {
       return `new Date("${value.toISOString()}")`;
     }
-    
+
     if (Array.isArray(value)) {
       const items = value.map(v => this.formatValue(v)).join(', ');
       return `[${items}]`;
     }
-    
+
     if (typeof value === 'object') {
       // Safely handle objects that might be null
       try {
@@ -158,7 +158,7 @@ export class OmniAutomation {
         return 'null';
       }
     }
-    
+
     return String(value);
   }
 
@@ -171,7 +171,7 @@ export class OmniAutomation {
     // Encode the script for URL scheme execution
     const encodedScript = encodeURIComponent(script);
     const url = `omnifocus:///omnijs-run?script=${encodedScript}`;
-    
+
     logger.debug('Executing OmniAutomation script via URL scheme', { scriptLength: script.length });
 
     return new Promise((resolve, reject) => {
@@ -217,23 +217,23 @@ export class OmniAutomation {
 
   public async executeBatch<T = any>(scripts: string[]): Promise<T[]> {
     logger.info(`Executing batch of ${scripts.length} scripts`);
-    
+
     const results: T[] = [];
     const errors: Error[] = [];
-    
+
     // Execute in parallel with concurrency limit
     const concurrency = 3;
     const chunks: string[][] = [];
-    
+
     for (let i = 0; i < scripts.length; i += concurrency) {
       chunks.push(scripts.slice(i, i + concurrency));
     }
-    
+
     for (const chunk of chunks) {
       const chunkResults = await Promise.allSettled(
-        chunk.map(script => this.execute<T>(script))
+        chunk.map(script => this.execute<T>(script)),
       );
-      
+
       for (const result of chunkResults) {
         if (result.status === 'fulfilled') {
           results.push(result.value);
@@ -242,11 +242,11 @@ export class OmniAutomation {
         }
       }
     }
-    
+
     if (errors.length > 0) {
       logger.warn(`Batch execution completed with ${errors.length} errors`);
     }
-    
+
     return results;
   }
 }

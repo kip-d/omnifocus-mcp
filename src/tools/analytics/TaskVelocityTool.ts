@@ -4,7 +4,7 @@ import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 export class TaskVelocityTool extends BaseTool {
   name = 'get_task_velocity';
   description = 'Analyze task completion velocity and throughput metrics';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -28,15 +28,15 @@ export class TaskVelocityTool extends BaseTool {
 
   async execute(args: { period?: string; projectId?: string; tags?: string[] }): Promise<any> {
     try {
-      const { 
+      const {
         period = 'week',
         projectId,
-        tags
+        tags,
       } = args;
-      
+
       // Create cache key
       const cacheKey = `velocity_${period}_${projectId || 'all'}_${JSON.stringify(tags || [])}`;
-      
+
       // Check cache
       const cached = this.cache.get<any>('analytics', cacheKey);
       if (cached) {
@@ -46,17 +46,17 @@ export class TaskVelocityTool extends BaseTool {
           from_cache: true,
         };
       }
-      
+
       // Execute script
-      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, { 
-        options: { period, projectId, tags }
+      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
+        options: { period, projectId, tags },
       });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return result;
       }
-      
+
       const finalResult = {
         period: period,
         velocity: result.velocity,
@@ -65,10 +65,10 @@ export class TaskVelocityTool extends BaseTool {
         projections: result.projections,
         from_cache: false,
       };
-      
+
       // Cache for 30 minutes
       this.cache.set('analytics', cacheKey, finalResult);
-      
+
       return finalResult;
     } catch (error) {
       return this.handleError(error);

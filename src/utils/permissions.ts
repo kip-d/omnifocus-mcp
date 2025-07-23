@@ -32,8 +32,8 @@ export class PermissionChecker {
     try {
       // Simple test to see if we can access OmniFocus
       execSync(
-        `osascript -e 'tell application "OmniFocus" to return name of default document'`,
-        { encoding: 'utf8', stdio: 'pipe' }
+        'osascript -e \'tell application "OmniFocus" to return name of default document\'',
+        { encoding: 'utf8', stdio: 'pipe' },
       );
 
       logger.info('OmniFocus permissions verified');
@@ -41,28 +41,28 @@ export class PermissionChecker {
       return this.permissionStatus;
     } catch (error: any) {
       const errorMessage = error.message || '';
-      
+
       // Check for specific permission error codes
       if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
         logger.error('OmniFocus permission denied');
         this.permissionStatus = {
           hasPermission: false,
           error: 'Not authorized to send Apple events to OmniFocus',
-          instructions: this.getPermissionInstructions()
+          instructions: this.getPermissionInstructions(),
         };
       } else if (errorMessage.includes('-600') || errorMessage.includes("isn't running")) {
         logger.error('OmniFocus is not running');
         this.permissionStatus = {
           hasPermission: false,
           error: 'OmniFocus is not running',
-          instructions: 'Please start OmniFocus and try again.'
+          instructions: 'Please start OmniFocus and try again.',
         };
       } else {
         logger.error('Unknown error checking permissions:', errorMessage);
         this.permissionStatus = {
           hasPermission: false,
           error: 'Failed to check OmniFocus permissions',
-          instructions: 'Please ensure OmniFocus is installed and try again.'
+          instructions: 'Please ensure OmniFocus is installed and try again.',
         };
       }
 
@@ -103,6 +103,6 @@ export function createPermissionErrorResponse(status: PermissionStatus): any {
     error: true,
     message: status.error || 'Permission denied',
     instructions: status.instructions,
-    code: 'PERMISSION_DENIED'
+    code: 'PERMISSION_DENIED',
   };
 }

@@ -42,20 +42,20 @@ export interface RecurringTaskAnalyzer {
    * Unique identifier for this analyzer
    */
   readonly name: string;
-  
+
   /**
    * Priority for this analyzer (higher = runs first)
    * Use this to control order of analysis
    */
   readonly priority: number;
-  
+
   /**
    * Determine if this analyzer can handle the given task
    * @param task The task to analyze
    * @returns true if this analyzer should process the task
    */
   canAnalyze(task: TaskContext): boolean;
-  
+
   /**
    * Analyze the task for recurring patterns
    * @param task The task to analyze

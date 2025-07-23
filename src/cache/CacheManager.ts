@@ -23,7 +23,7 @@ export class CacheManager {
     if (config) {
       this.config = { ...this.config, ...config };
     }
-    
+
     // Start cleanup interval
     setInterval(() => this.cleanup(), 60 * 1000); // Every minute
   }
@@ -92,14 +92,14 @@ export class CacheManager {
         logger.debug(`Invalidated cache for ${fullKey}`);
       }
     }
-    
+
     this.stats.size = this.cache.size;
   }
 
   public getStats(): CacheStats {
     return { ...this.stats };
   }
-  
+
   public clear(category?: keyof CacheConfig): void {
     if (category) {
       // Clear specific category

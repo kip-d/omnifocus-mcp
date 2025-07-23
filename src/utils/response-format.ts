@@ -7,16 +7,16 @@ export interface StandardMetadata {
   // Operation info
   operation: string;
   timestamp: string;
-  
+
   // Performance/source info
   from_cache: boolean;
   query_time_ms?: number;
-  
+
   // Pagination/count info (for list operations)
   total_count?: number;
   returned_count?: number;
   has_more?: boolean;
-  
+
   // Operation-specific metadata
   [key: string]: any;
 }
@@ -24,13 +24,13 @@ export interface StandardMetadata {
 export interface StandardResponse<T> {
   // Status
   success: boolean;
-  
+
   // Main payload
   data: T;
-  
+
   // Metadata
   metadata: StandardMetadata;
-  
+
   // Error handling (only when success: false)
   error?: {
     code: string;
@@ -45,7 +45,7 @@ export interface StandardResponse<T> {
 export function createSuccessResponse<T>(
   operation: string,
   data: T,
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<T> {
   return {
     success: true,
@@ -54,8 +54,8 @@ export function createSuccessResponse<T>(
       operation,
       timestamp: new Date().toISOString(),
       from_cache: false,
-      ...metadata
-    }
+      ...metadata,
+    },
   };
 }
 
@@ -67,7 +67,7 @@ export function createErrorResponse<T = never>(
   errorCode: string,
   message: string,
   details?: any,
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<T> {
   return {
     success: false,
@@ -76,13 +76,13 @@ export function createErrorResponse<T = never>(
       operation,
       timestamp: new Date().toISOString(),
       from_cache: false,
-      ...metadata
+      ...metadata,
     },
     error: {
       code: errorCode,
       message,
-      details
-    }
+      details,
+    },
   };
 }
 
@@ -92,7 +92,7 @@ export function createErrorResponse<T = never>(
 export function createListResponse<T>(
   operation: string,
   items: T[],
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<{ items: T[] }> {
   return createSuccessResponse(
     operation,
@@ -100,8 +100,8 @@ export function createListResponse<T>(
     {
       total_count: items.length,
       returned_count: items.length,
-      ...metadata
-    }
+      ...metadata,
+    },
   );
 }
 
@@ -112,12 +112,12 @@ export function createEntityResponse<T>(
   operation: string,
   entityType: string,
   entity: T,
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<{ [key: string]: T }> {
   return createSuccessResponse(
     operation,
     { [entityType]: entity },
-    metadata
+    metadata,
   );
 }
 
@@ -128,12 +128,12 @@ export function createAnalyticsResponse<T>(
   operation: string,
   stats: T,
   summary: any = {},
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<{ stats: T; summary: any }> {
   return createSuccessResponse(
     operation,
     { stats, summary },
-    metadata
+    metadata,
   );
 }
 
@@ -143,7 +143,7 @@ export function createAnalyticsResponse<T>(
 export function wrapLegacyResponse<T>(
   operation: string,
   legacyResponse: T,
-  metadata: Partial<StandardMetadata> = {}
+  metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<T> {
   // If the legacy response already has error info, convert to error response
   if (typeof legacyResponse === 'object' && legacyResponse !== null && 'error' in legacyResponse) {
@@ -153,10 +153,10 @@ export function wrapLegacyResponse<T>(
       'LEGACY_ERROR',
       errorResponse.message || 'Unknown error',
       errorResponse,
-      metadata
+      metadata,
     );
   }
-  
+
   return createSuccessResponse(operation, legacyResponse, metadata);
 }
 
@@ -165,15 +165,15 @@ export function wrapLegacyResponse<T>(
  */
 export class OperationTimer {
   private startTime: number;
-  
+
   constructor() {
     this.startTime = Date.now();
   }
-  
+
   getElapsedMs(): number {
     return Date.now() - this.startTime;
   }
-  
+
   toMetadata(): { query_time_ms: number } {
     return { query_time_ms: this.getElapsedMs() };
   }

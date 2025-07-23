@@ -14,10 +14,10 @@ export function entityNotFoundError(entityType: string, id: string, listToolName
  * Generate a helpful "invalid parameter" error message with format example
  */
 export function invalidParameterError(
-  paramName: string, 
-  value: any, 
-  expectedFormat: string, 
-  example: string
+  paramName: string,
+  value: any,
+  expectedFormat: string,
+  example: string,
 ): string {
   return `Invalid ${paramName}: '${value}'. Expected format: ${expectedFormat}. Example: ${example}`;
 }
@@ -66,7 +66,7 @@ export function permissionError(operation: string): string {
  */
 export const ERROR_MESSAGES = {
   TASK_NOT_FOUND: (taskId: string) => entityNotFoundError('Task', taskId, 'list_tasks'),
-  PROJECT_NOT_FOUND: (projectId: string) => entityNotFoundError('Project', projectId, 'list_projects'), 
+  PROJECT_NOT_FOUND: (projectId: string) => entityNotFoundError('Project', projectId, 'list_projects'),
   TAG_NOT_FOUND: (tagName: string) => `Tag '${tagName}' not found. Use 'list_tags' tool to see available tags.`,
   INVALID_DATE: (fieldName: string, value: string) => invalidDateError(fieldName, value),
   ALREADY_COMPLETED: (entityType: string, name: string) => `${entityType} '${name}' is already completed.`,

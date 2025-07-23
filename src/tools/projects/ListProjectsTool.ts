@@ -6,7 +6,7 @@ import { createListResponse, createErrorResponse, OperationTimer } from '../../u
 export class ListProjectsTool extends BaseTool {
   name = 'list_projects';
   description = 'List projects from OmniFocus with filtering options';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -40,11 +40,11 @@ export class ListProjectsTool extends BaseTool {
 
   async execute(args: ProjectFilter): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       // Create cache key from filter
       const cacheKey = JSON.stringify(args);
-      
+
       // Check cache
       const cached = this.cache.get<any>('projects', cacheKey);
       if (cached) {
@@ -57,8 +57,8 @@ export class ListProjectsTool extends BaseTool {
             metadata: {
               ...cached.metadata,
               from_cache: true,
-              ...timer.toMetadata()
-            }
+              ...timer.toMetadata(),
+            },
           };
         } else if (Array.isArray(cached)) {
           // Legacy format - convert to standard
@@ -68,16 +68,16 @@ export class ListProjectsTool extends BaseTool {
             {
               from_cache: true,
               ...timer.toMetadata(),
-              filters_applied: args
-            }
+              filters_applied: args,
+            },
           );
         }
       }
-      
+
       // Execute script
       const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { filter: args });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       // Check if script returned an error
       if (result.error) {
         return createErrorResponse(
@@ -85,10 +85,10 @@ export class ListProjectsTool extends BaseTool {
           'SCRIPT_ERROR',
           result.message || 'Failed to list projects',
           result.details,
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Ensure projects array exists
       if (!result.projects || !Array.isArray(result.projects)) {
         return createErrorResponse(
@@ -96,10 +96,10 @@ export class ListProjectsTool extends BaseTool {
           'INVALID_RESPONSE',
           'Invalid response from OmniFocus: projects array not found',
           { received: result, expected: 'object with projects array' },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Parse dates
       const parsedProjects = result.projects.map((project: any) => ({
         ...project,
@@ -108,7 +108,7 @@ export class ListProjectsTool extends BaseTool {
         completionDate: project.completionDate ? new Date(project.completionDate) : undefined,
         lastReviewDate: project.lastReviewDate ? new Date(project.lastReviewDate) : undefined,
       }));
-      
+
       // Create standardized response
       const standardResponse = createListResponse(
         'list_projects',
@@ -116,13 +116,13 @@ export class ListProjectsTool extends BaseTool {
         {
           ...timer.toMetadata(),
           filters_applied: args,
-          ...result.metadata
-        }
+          ...result.metadata,
+        },
       );
-      
+
       // Cache results (cache the standardized format)
       this.cache.set('projects', cacheKey, standardResponse);
-      
+
       return standardResponse;
     } catch (error) {
       return this.handleError(error);

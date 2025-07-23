@@ -19,14 +19,14 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // Start server
 async function runServer() {
   // Initialize cache manager
   const cacheManager = new CacheManager();
-  
+
   // Log version information at debug level
   try {
     const versionInfo = getVersionInfo();
@@ -34,7 +34,7 @@ async function runServer() {
   } catch (error) {
     logger.debug('Failed to get version info:', error);
   }
-  
+
   // Perform initial permission check (non-blocking)
   const permissionChecker = PermissionChecker.getInstance();
   permissionChecker.checkPermissions()
@@ -51,10 +51,10 @@ async function runServer() {
     .catch(error => {
       logger.error('Failed to check permissions:', error);
     });
-  
+
   // Register all tools AFTER server creation but BEFORE connection
   await registerTools(server, cacheManager);
-  
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

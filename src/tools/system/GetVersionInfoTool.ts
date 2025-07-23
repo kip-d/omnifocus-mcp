@@ -5,7 +5,7 @@ import { createSuccessResponse, OperationTimer } from '../../utils/response-form
 export class GetVersionInfoTool extends BaseTool {
   name = 'get_version_info';
   description = 'Get version information including git commit hash and build details';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {},
@@ -13,13 +13,13 @@ export class GetVersionInfoTool extends BaseTool {
 
   async execute(): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       const versionInfo = getVersionInfo();
       return createSuccessResponse(
         'get_version_info',
         versionInfo,
-        timer.toMetadata()
+        timer.toMetadata(),
       );
     } catch (error) {
       return this.handleError(error);

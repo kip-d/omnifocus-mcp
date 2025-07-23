@@ -4,7 +4,7 @@ import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js'
 export class ProductivityStatsTool extends BaseTool {
   name = 'get_productivity_stats';
   description = 'Get productivity statistics including completion rates, task velocity, and time distribution';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -30,15 +30,15 @@ export class ProductivityStatsTool extends BaseTool {
 
   async execute(args: { period?: string; groupBy?: string; includeCompleted?: boolean }): Promise<any> {
     try {
-      const { 
+      const {
         period = 'week',
         groupBy = 'project',
-        includeCompleted = true
+        includeCompleted = true,
       } = args;
-      
+
       // Create cache key
       const cacheKey = `productivity_${period}_${groupBy}_${includeCompleted}`;
-      
+
       // Check cache (shorter TTL for productivity stats - 15 minutes)
       const cached = this.cache.get<any>('analytics', cacheKey);
       if (cached) {
@@ -48,17 +48,17 @@ export class ProductivityStatsTool extends BaseTool {
           from_cache: true,
         };
       }
-      
+
       // Execute script
-      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, { 
-        options: { period, groupBy, includeCompleted }
+      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, {
+        options: { period, groupBy, includeCompleted },
       });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return result;
       }
-      
+
       const finalResult = {
         period: period,
         groupBy: groupBy,
@@ -67,10 +67,10 @@ export class ProductivityStatsTool extends BaseTool {
         trends: result.trends,
         from_cache: false,
       };
-      
+
       // Cache for 15 minutes
       this.cache.set('analytics', cacheKey, finalResult);
-      
+
       return finalResult;
     } catch (error) {
       return this.handleError(error);

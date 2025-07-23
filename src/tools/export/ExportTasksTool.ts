@@ -4,7 +4,7 @@ import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export.js';
 export class ExportTasksTool extends BaseTool {
   name = 'export_tasks';
   description = 'Export tasks in JSON or CSV format with filtering options';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -50,28 +50,28 @@ export class ExportTasksTool extends BaseTool {
       },
       fields: {
         type: 'array',
-        items: { 
+        items: {
           type: 'string',
-          enum: ['id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'flagged', 'estimated', 'created', 'modified']
+          enum: ['id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'flagged', 'estimated', 'created', 'modified'],
         },
         description: 'Fields to include in export (default: all common fields)',
       },
     },
   };
 
-  async execute(args: { 
-    format?: 'json' | 'csv'; 
-    filter?: any; 
-    fields?: string[] 
+  async execute(args: {
+    format?: 'json' | 'csv';
+    filter?: any;
+    fields?: string[]
   }): Promise<any> {
     try {
       const { format = 'json', filter = {}, fields } = args;
-      
+
       // Execute export script
-      const script = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, { 
+      const script = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
         format,
         filter,
-        fields
+        fields,
       });
       const result = await this.omniAutomation.execute<{
         format: string;
@@ -80,14 +80,14 @@ export class ExportTasksTool extends BaseTool {
         error?: boolean;
         message?: string;
       }>(script);
-      
+
       if (result.error) {
         return {
           error: true,
           message: result.message,
         };
       }
-      
+
       return {
         format: result.format,
         count: result.count,

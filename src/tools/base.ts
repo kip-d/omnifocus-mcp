@@ -26,7 +26,7 @@ export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
 
   protected handleError(error: unknown): never {
     this.logger.error(`Error in ${this.name}:`, error);
-    
+
     // Check for permission errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
@@ -41,11 +41,11 @@ export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
    - Open System Settings → Privacy & Security → Automation
    - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
    - Enable the checkbox next to OmniFocus
-3. After granting permissions, try your request again`
-        }
+3. After granting permissions, try your request again`,
+        },
       );
     }
-    
+
     if (error instanceof Error && error.name === 'OmniAutomationError') {
       throw new McpError(
         ErrorCode.InternalError,
@@ -53,13 +53,13 @@ export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
         {
           script: (error as any).script,
           stderr: (error as any).stderr,
-        }
+        },
       );
     }
-    
+
     throw new McpError(
       ErrorCode.InternalError,
-      error instanceof Error ? error.message : 'An unknown error occurred'
+      error instanceof Error ? error.message : 'An unknown error occurred',
     );
   }
 }

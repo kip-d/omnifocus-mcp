@@ -5,7 +5,7 @@ import { createEntityResponse, createErrorResponse, OperationTimer } from '../..
 export class CreateProjectTool extends BaseTool {
   name = 'create_project';
   description = 'Create a new project in OmniFocus with optional folder placement (creates folder if needed)';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -37,7 +37,7 @@ export class CreateProjectTool extends BaseTool {
     required: ['name'],
   };
 
-  async execute(args: { 
+  async execute(args: {
     name: string;
     note?: string;
     deferDate?: string;
@@ -46,30 +46,30 @@ export class CreateProjectTool extends BaseTool {
     folder?: string;
   }): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       const { name, ...options } = args;
-      
+
       // Execute create script
-      const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, { 
+      const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
         name,
-        options
+        options,
       });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return createErrorResponse(
           'create_project',
           'SCRIPT_ERROR',
           result.message || 'Failed to create project',
           { details: result.details },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Only invalidate cache after successful creation
       this.cache.invalidate('projects');
-      
+
       // Parse the result if it's a string
       let parsedResult;
       try {
@@ -78,7 +78,7 @@ export class CreateProjectTool extends BaseTool {
         this.logger.error(`Failed to parse create project result: ${result}`);
         parsedResult = result;
       }
-      
+
       return createEntityResponse(
         'create_project',
         'project',
@@ -93,9 +93,9 @@ export class CreateProjectTool extends BaseTool {
             has_due_date: !!args.dueDate,
             has_defer_date: !!args.deferDate,
             has_folder: !!args.folder,
-            flagged: args.flagged || false
-          }
-        }
+            flagged: args.flagged || false,
+          },
+        },
       );
     } catch (error) {
       return this.handleError(error);

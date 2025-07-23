@@ -7,7 +7,7 @@ import { StandardResponse } from '../../utils/response-format.js';
 export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<any>> {
   name = 'delete_task';
   description = 'Delete (drop) a task in OmniFocus';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -21,16 +21,16 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
 
   async execute(args: DeleteTaskArgs): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
-    
+
     try {
       // Try JXA first, fall back to URL scheme if access denied
       try {
         const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args as unknown as Record<string, unknown>);
         const result = await this.omniAutomation.execute<any>(script);
-        
+
         if (result && typeof result === 'object' && 'error' in result && result.error) {
           // If error contains "parameter is missing" or "access not allowed", use URL scheme
-          if ('message' in result && typeof result.message === 'string' && 
+          if ('message' in result && typeof result.message === 'string' &&
               (result.message.toLowerCase().includes('parameter is missing') ||
                result.message.toLowerCase().includes('access not allowed'))) {
             this.logger.info('JXA failed, falling back to URL scheme for task deletion');
@@ -38,22 +38,22 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
           }
           return result;
         }
-        
+
         // Handle the result from DELETE_TASK_SCRIPT
         let parsedResult;
         try {
           parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
         } catch (parseError) {
-          this.logger.error(`Failed to parse delete task result:`, { result, error: parseError });
+          this.logger.error('Failed to parse delete task result:', { result, error: parseError });
           return createErrorResponse(
             'delete_task',
             'PARSE_ERROR',
             'Failed to parse task deletion response',
             { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
         }
-        
+
         // Check if the script returned an error
         if (parsedResult.error) {
           this.logger.error(`Delete task script error: ${parsedResult.message}`);
@@ -62,13 +62,13 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
             'SCRIPT_ERROR',
             parsedResult.message || 'Failed to delete task',
             parsedResult,
-            timer.toMetadata()
+            timer.toMetadata(),
           );
         }
-        
+
         // Invalidate cache after successful deletion
         this.cache.invalidate('tasks');
-        
+
         this.logger.info(`Deleted task via JXA: ${parsedResult.name} (${args.taskId})`);
         return createEntityResponse(
           'delete_task',
@@ -78,12 +78,12 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
             ...timer.toMetadata(),
             deleted_id: args.taskId,
             method: 'jxa',
-            input_params: { taskId: args.taskId }
-          }
+            input_params: { taskId: args.taskId },
+          },
         );
       } catch (jxaError: any) {
         // If JXA fails with permission error, use URL scheme
-        if (jxaError.message && 
+        if (jxaError.message &&
             (jxaError.message.toLowerCase().includes('parameter is missing') ||
              jxaError.message.toLowerCase().includes('access not allowed'))) {
           this.logger.info('JXA failed, falling back to URL scheme for task deletion');
@@ -100,12 +100,12 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
     const timer = new OperationTimer();
     const omniScript = this.omniAutomation.buildScript(DELETE_TASK_OMNI_SCRIPT, args);
     await this.omniAutomation.executeViaUrlScheme(omniScript);
-    
+
     // Invalidate cache after successful URL scheme execution
     this.cache.invalidate('tasks');
-    
+
     this.logger.info(`Deleted task via URL scheme: ${args.taskId}`);
-    
+
     // Return standardized format since URL scheme doesn't return detailed results
     return createEntityResponse(
       'delete_task',
@@ -113,14 +113,14 @@ export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<an
       {
         id: args.taskId,
         deleted: true,
-        name: 'Task deleted successfully'
+        name: 'Task deleted successfully',
       },
       {
         ...timer.toMetadata(),
         deleted_id: args.taskId,
         method: 'url_scheme',
-        input_params: { taskId: args.taskId }
-      }
+        input_params: { taskId: args.taskId },
+      },
     );
   }
 }

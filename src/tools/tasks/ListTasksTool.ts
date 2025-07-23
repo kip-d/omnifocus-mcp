@@ -6,7 +6,7 @@ import { createListResponse, OperationTimer } from '../../utils/response-format.
 export class ListTasksTool extends BaseTool {
   name = 'list_tasks';
   description = 'List tasks from OmniFocus with advanced filtering options';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -71,13 +71,13 @@ export class ListTasksTool extends BaseTool {
 
   async execute(args: TaskFilter & { limit?: number }): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       const { limit = 100, ...filter } = args;
-      
+
       // Create cache key from filter
       const cacheKey = JSON.stringify(filter);
-      
+
       // Check cache
       const cached = this.cache.get<any>('tasks', cacheKey);
       if (cached) {
@@ -85,39 +85,39 @@ export class ListTasksTool extends BaseTool {
         // Convert legacy cached response to standard format
         if (cached.tasks && Array.isArray(cached.tasks)) {
           return createListResponse(
-            'list_tasks', 
+            'list_tasks',
             cached.tasks,
             {
               from_cache: true,
               ...timer.toMetadata(),
               filters_applied: filter,
               limit_applied: limit,
-              ...cached.metadata
-            }
+              ...cached.metadata,
+            },
           );
         }
       }
-      
+
       // Execute script - pass filter with limit included
       const scriptParams = { ...filter, limit };
       this.logger.debug('Script params:', scriptParams);
       const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });
       this.logger.debug('Generated script length:', script.length);
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return result;
       }
-      
+
       // Ensure tasks array exists
       if (!result.tasks || !Array.isArray(result.tasks)) {
         return {
           error: true,
           message: 'Invalid response from OmniFocus: tasks array not found',
-          details: 'The script returned an unexpected format'
+          details: 'The script returned an unexpected format',
         };
       }
-      
+
       // Parse dates in tasks
       const parsedTasks = result.tasks.map((task: any) => ({
         ...task,
@@ -125,7 +125,7 @@ export class ListTasksTool extends BaseTool {
         deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
       }));
-      
+
       // Create standardized response
       const standardResponse = createListResponse(
         'list_tasks',
@@ -134,13 +134,13 @@ export class ListTasksTool extends BaseTool {
           ...timer.toMetadata(),
           filters_applied: filter,
           limit_applied: limit,
-          ...result.metadata
-        }
+          ...result.metadata,
+        },
       );
-      
+
       // Cache results (cache the standardized format)
       this.cache.set('tasks', cacheKey, standardResponse);
-      
+
       return standardResponse;
     } catch (error) {
       return this.handleError(error);

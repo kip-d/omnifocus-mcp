@@ -5,7 +5,7 @@ import { createEntityResponse, createErrorResponse, OperationTimer } from '../..
 export class UpdateProjectTool extends BaseTool {
   name = 'update_project';
   description = 'Update an existing project in OmniFocus, including moving between folders';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -62,7 +62,7 @@ export class UpdateProjectTool extends BaseTool {
     required: ['projectId', 'updates'],
   };
 
-  async execute(args: { 
+  async execute(args: {
     projectId: string;
     updates: {
       name?: string;
@@ -77,21 +77,21 @@ export class UpdateProjectTool extends BaseTool {
     };
   }): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       const { projectId, updates } = args;
-      
+
       // Execute update script
-      const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, { 
+      const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, {
         projectId,
-        updates
+        updates,
       });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       // Only invalidate cache after successful update
       if (result && !result.error) {
         this.cache.invalidate('projects');
-        
+
         // Return standardized response
         return createEntityResponse(
           'update_project',
@@ -102,19 +102,19 @@ export class UpdateProjectTool extends BaseTool {
             updated_id: projectId,
             input_params: {
               projectId,
-              fields_updated: Object.keys(updates)
-            }
-          }
+              fields_updated: Object.keys(updates),
+            },
+          },
         );
       }
-      
+
       // Error case - return standardized error
       return createErrorResponse(
         'update_project',
         'UPDATE_FAILED',
         result.message || 'Failed to update project',
         result,
-        timer.toMetadata()
+        timer.toMetadata(),
       );
     } catch (error) {
       return this.handleError(error);

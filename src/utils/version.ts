@@ -32,45 +32,45 @@ export function getVersionInfo(): VersionInfo {
   // This works regardless of what working directory the process was started from
   const scriptPath = fileURLToPath(import.meta.url);
   const scriptDir = dirname(scriptPath);
-  
+
   // From dist/utils/version.js, go up to project root
   // script location: dist/utils/version.js
   // project root: go up 2 levels (../.. from dist/utils)
   const projectRoot = join(scriptDir, '..', '..');
   const packagePath = join(projectRoot, 'package.json');
-  
+
   if (!existsSync(packagePath)) {
     throw new Error(`Cannot find package.json at ${packagePath}. Script location: ${scriptPath}`);
   }
-  
+
   const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-  
+
   // Get git information
   let gitCommitHash = 'unknown';
   let gitBranch = 'unknown';
   let gitCommitDate = 'unknown';
   let gitCommitMessage = 'unknown';
   let gitDirty = false;
-  
+
   try {
     // Run git commands from the project root directory
     const gitOptions = { encoding: 'utf8' as const, cwd: projectRoot };
-    
+
     // Get current commit hash
     gitCommitHash = execSync('git rev-parse HEAD', gitOptions).trim();
-    
+
     // Get short commit hash
     const shortHash = execSync('git rev-parse --short HEAD', gitOptions).trim();
-    
+
     // Get current branch
     gitBranch = execSync('git rev-parse --abbrev-ref HEAD', gitOptions).trim();
-    
+
     // Get commit date
     gitCommitDate = execSync('git show -s --format=%ci HEAD', gitOptions).trim();
-    
+
     // Get commit message
     gitCommitMessage = execSync('git show -s --format=%s HEAD', gitOptions).trim();
-    
+
     // Check if working directory is dirty
     try {
       const status = execSync('git status --porcelain', gitOptions).trim();
@@ -78,22 +78,22 @@ export function getVersionInfo(): VersionInfo {
     } catch (e) {
       // If git status fails, assume clean
     }
-    
+
     gitCommitHash = shortHash; // Use short hash for display
   } catch (error) {
     // If git commands fail, use defaults
   }
-  
+
   // Get build timestamp
   const buildTimestamp = new Date().toISOString();
-  
+
   // Get Node.js version
   const nodeVersion = process.version;
-  
+
   // Get platform information
   const platform = process.platform;
   const arch = process.arch;
-  
+
   return {
     name: packageJson.name,
     version: packageJson.version,
@@ -105,16 +105,16 @@ export function getVersionInfo(): VersionInfo {
       commitMessage: gitCommitMessage,
       dirty: gitDirty,
       timestamp: buildTimestamp,
-      buildId: `${gitCommitHash}${gitDirty ? '-dirty' : ''}`
+      buildId: `${gitCommitHash}${gitDirty ? '-dirty' : ''}`,
     },
     runtime: {
       node: nodeVersion,
       platform: platform,
-      arch: arch
+      arch: arch,
     },
     git: {
       repository: packageJson.repository?.url || 'unknown',
-      homepage: packageJson.homepage || 'unknown'
-    }
+      homepage: packageJson.homepage || 'unknown',
+    },
   };
 }

@@ -17,7 +17,7 @@ import { GamingRecurringAnalyzer } from './GamingRecurringAnalyzer.js';
 export function initializeRecurringTaskPlugins(): void {
   // Register the gaming analyzer (higher priority)
   recurringTaskRegistry.register(new GamingRecurringAnalyzer());
-  
+
   // Register the core analyzer (lower priority, fallback)
   recurringTaskRegistry.register(new CoreRecurringAnalyzer());
 }

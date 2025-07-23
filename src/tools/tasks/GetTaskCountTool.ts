@@ -6,7 +6,7 @@ import { createSuccessResponse, createErrorResponse, OperationTimer } from '../.
 export class GetTaskCountTool extends BaseTool {
   name = 'get_task_count';
   description = 'Get the count of tasks matching filters without returning the actual task data';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -64,11 +64,11 @@ export class GetTaskCountTool extends BaseTool {
 
   async execute(args: TaskFilter): Promise<any> {
     const timer = new OperationTimer();
-    
+
     try {
       // Create cache key from filter
       const cacheKey = `count_${JSON.stringify(args)}`;
-      
+
       // Check cache
       const cached = this.cache.get<any>('tasks', cacheKey);
       if (cached) {
@@ -77,50 +77,50 @@ export class GetTaskCountTool extends BaseTool {
           'get_task_count',
           {
             count: cached.count,
-            filters_applied: cached.filters_applied
+            filters_applied: cached.filters_applied,
           },
           {
             ...timer.toMetadata(),
             from_cache: true,
-            cached_query_time_ms: cached.query_time_ms
-          }
+            cached_query_time_ms: cached.query_time_ms,
+          },
         );
       }
-      
+
       // Execute script
       const script = this.omniAutomation.buildScript(GET_TASK_COUNT_SCRIPT, { filter: args });
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result.error) {
         return createErrorResponse(
           'get_task_count',
           'SCRIPT_ERROR',
           result.message || 'Failed to count tasks',
           { details: result.details },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       const cacheData = {
         count: result.count,
         query_time_ms: result.query_time_ms,
-        filters_applied: result.filters_applied
+        filters_applied: result.filters_applied,
       };
-      
+
       // Cache results
       this.cache.set('tasks', cacheKey, cacheData);
-      
+
       return createSuccessResponse(
         'get_task_count',
         {
           count: result.count,
-          filters_applied: result.filters_applied
+          filters_applied: result.filters_applied,
         },
         {
           ...timer.toMetadata(),
           from_cache: false,
-          query_time_ms: result.query_time_ms || timer.getElapsedMs()
-        }
+          query_time_ms: result.query_time_ms || timer.getElapsedMs(),
+        },
       );
     } catch (error) {
       return this.handleError(error);

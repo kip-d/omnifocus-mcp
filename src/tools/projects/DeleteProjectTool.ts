@@ -5,7 +5,7 @@ import { createSuccessResponse, OperationTimer } from '../../utils/response-form
 export class DeleteProjectTool extends BaseTool {
   name = 'delete_project';
   description = 'Delete a project from OmniFocus';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -22,24 +22,24 @@ export class DeleteProjectTool extends BaseTool {
     required: ['projectId'],
   };
 
-  async execute(args: { 
+  async execute(args: {
     projectId: string;
     deleteTasks?: boolean;
   }): Promise<any> {
     try {
       const { projectId, deleteTasks = false } = args;
-      
+
       // Try JXA first, fall back to URL scheme if access denied or parameter missing
       try {
-        const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { 
+        const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
           projectId,
-          deleteTasks: Boolean(deleteTasks)
+          deleteTasks: Boolean(deleteTasks),
         });
         const result = await this.omniAutomation.execute<any>(script);
-        
+
         if (result.error) {
           // If error contains "parameter is missing" or "access not allowed", use URL scheme
-          if (result.message && 
+          if (result.message &&
               (result.message.toLowerCase().includes('parameter is missing') ||
                result.message.toLowerCase().includes('access not allowed'))) {
             this.logger.info('JXA failed, falling back to URL scheme for project deletion');
@@ -47,12 +47,12 @@ export class DeleteProjectTool extends BaseTool {
           }
           return result;
         }
-        
+
         // Invalidate cache after successful deletion
         this.cache.invalidate('projects');
-        
+
         this.logger.info(`Deleted project via JXA: ${result.projectName} (${projectId})`);
-        
+
         // Parse the result if it's a string
         let parsedResult;
         try {
@@ -61,7 +61,7 @@ export class DeleteProjectTool extends BaseTool {
           this.logger.error(`Failed to parse delete project result: ${result}`);
           parsedResult = result;
         }
-        
+
         return createSuccessResponse(
           'delete_project',
           {
@@ -69,16 +69,16 @@ export class DeleteProjectTool extends BaseTool {
             deleted_id: projectId,
             project_name: parsedResult.projectName,
             tasks_deleted: parsedResult.tasksDeleted || 0,
-            tasks_orphaned: parsedResult.tasksOrphaned || 0
+            tasks_orphaned: parsedResult.tasksOrphaned || 0,
           },
           {
             delete_tasks: args.deleteTasks || false,
-            method: 'jxa'
-          }
+            method: 'jxa',
+          },
         );
       } catch (jxaError: any) {
         // If JXA fails with permission error, use URL scheme
-        if (jxaError.message && 
+        if (jxaError.message &&
             (jxaError.message.toLowerCase().includes('parameter is missing') ||
              jxaError.message.toLowerCase().includes('access not allowed'))) {
           this.logger.info('JXA failed, falling back to URL scheme for project deletion');
@@ -91,7 +91,7 @@ export class DeleteProjectTool extends BaseTool {
     }
   }
 
-  private async executeViaUrlScheme(args: { 
+  private async executeViaUrlScheme(args: {
     projectId: string;
     deleteTasks?: boolean;
   }): Promise<any> {
@@ -123,14 +123,14 @@ export class DeleteProjectTool extends BaseTool {
         throw new Error('Failed to drop project: ' + error.message);
       }
     `;
-    
+
     await this.omniAutomation.executeViaUrlScheme(omniScript);
-    
+
     // Invalidate cache after successful URL scheme execution
     this.cache.invalidate('projects');
-    
+
     this.logger.info(`Marked project as dropped via URL scheme: ${args.projectId}`);
-    
+
     // Return standardized format since URL scheme doesn't return detailed results
     return createSuccessResponse(
       'delete_project',
@@ -139,14 +139,14 @@ export class DeleteProjectTool extends BaseTool {
         deleted_id: args.projectId,
         project_name: 'Project marked as dropped',
         tasks_deleted: 0,
-        tasks_orphaned: 0
+        tasks_orphaned: 0,
       },
       {
         ...timer.toMetadata(),
         delete_tasks: args.deleteTasks || false,
         method: 'url_scheme',
-        note: 'Used URL scheme fallback - project marked as dropped instead of deleted'
-      }
+        note: 'Used URL scheme fallback - project marked as dropped instead of deleted',
+      },
     );
   }
 }

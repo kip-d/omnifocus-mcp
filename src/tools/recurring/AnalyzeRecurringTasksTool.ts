@@ -4,7 +4,7 @@ import { ANALYZE_RECURRING_TASKS_SCRIPT } from '../../omnifocus/scripts/recurrin
 export class AnalyzeRecurringTasksTool extends BaseTool {
   name = 'analyze_recurring_tasks';
   description = 'Analyze recurring tasks with frequency, due dates, and patterns';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -37,7 +37,7 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
     },
   };
 
-  async execute(args: { 
+  async execute(args: {
     activeOnly?: boolean;
     includeCompleted?: boolean;
     includeDropped?: boolean;
@@ -52,17 +52,17 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
         includeHistory: args.includeHistory ?? false,
         sortBy: args.sortBy || 'dueDate',
       };
-      
+
       // Try to use cache for recurring task analysis
       const cacheKey = `recurring_${JSON.stringify(options)}`;
       const cached = this.cache.get('analytics', cacheKey);
       if (cached) {
         return cached;
       }
-      
+
       // Execute analysis script
-      const script = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, { 
-        options
+      const script = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, {
+        options,
       });
       const result = await this.omniAutomation.execute<{
         tasks: any[];
@@ -70,14 +70,14 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
         error?: boolean;
         message?: string;
       }>(script);
-      
+
       if (result.error) {
         return {
           error: true,
           message: result.message,
         };
       }
-      
+
       // Add metadata
       const response = {
         tasks: result.tasks,
@@ -87,10 +87,10 @@ export class AnalyzeRecurringTasksTool extends BaseTool {
           options,
         },
       };
-      
+
       // Cache the result
       this.cache.set('analytics', cacheKey, response);
-      
+
       return response;
     } catch (error) {
       return this.handleError(error);

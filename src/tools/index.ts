@@ -49,42 +49,42 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ListTasksTool(cache),
     new GetTaskCountTool(cache),
     new TodaysAgendaTool(cache),
-    
+
     // Task tools - Write operations (now enabled with correct JXA syntax)
     new CreateTaskTool(cache),
     new UpdateTaskTool(cache),
     new CompleteTaskTool(cache),
     new DeleteTaskTool(cache),
-    
+
     // Project tools
     new ListProjectsTool(cache),
     new CreateProjectTool(cache),
     new UpdateProjectTool(cache),
     new CompleteProjectTool(cache),
     new DeleteProjectTool(cache),
-    
+
     // Analytics tools
     new ProductivityStatsTool(cache),
     new TaskVelocityTool(cache),
     new OverdueAnalysisTool(cache),
-    
+
     // Tag tools
     new ListTagsTool(cache),
     new ManageTagsTool(cache),
-    
+
     // Export tools
     new ExportTasksTool(cache),
     new ExportProjectsTool(cache),
     new BulkExportTool(cache),
-    
+
     // Recurring task tools
     new AnalyzeRecurringTasksTool(cache),
     new GetRecurringPatternsTool(cache),
-    
+
     // System tools
     new GetVersionInfoTool(cache),
   ];
-  
+
   // Register handlers
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -95,23 +95,23 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
       })),
     };
   });
-  
+
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    
+
     const tool = tools.find(t => t.name === name);
     if (!tool) {
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
-    
+
     // Enhanced logging to debug parameter issues
     logger.info(`Executing tool: ${name}`, {
       rawArgs: args,
       argsType: typeof args,
       argsKeys: args ? Object.keys(args) : [],
-      serializedArgs: JSON.stringify(args, null, 2)
+      serializedArgs: JSON.stringify(args, null, 2),
     });
-    
+
     // Special logging for update_task to debug date parameter issues
     if (name === 'update_task' && args) {
       logger.info('UpdateTask specific debug:', {
@@ -121,20 +121,20 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
           value: args.dueDate,
           type: typeof args.dueDate,
           isNull: args.dueDate === null,
-          isUndefined: args.dueDate === undefined
+          isUndefined: args.dueDate === undefined,
         },
         allParams: Object.entries(args).map(([key, value]) => ({
           key,
           value,
           type: typeof value,
           isNull: value === null,
-          isUndefined: value === undefined
-        }))
+          isUndefined: value === undefined,
+        })),
       });
     }
-    
+
     const result = await (tool as any).execute(args || {});
-    
+
     return {
       content: [
         {
@@ -144,5 +144,5 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
       ],
     };
   });
-  
+
 }

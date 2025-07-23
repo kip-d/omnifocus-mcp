@@ -16,7 +16,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
     daily: ['daily', 'every day'],
     weekly: ['weekly', 'every week', 'helpdesk tickets', 'review recent activity'],
     monthly: ['monthly', 'of each month'],
-    yearly: ['yearly', 'annually', 'domain renewal', '.com', '.org']
+    yearly: ['yearly', 'annually', 'domain renewal', '.com', '.org'],
   };
 
   canAnalyze(_task: TaskContext): boolean {
@@ -29,13 +29,13 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
 
     // If we don't have an existing rule, try to infer one
     const ruleData = existingRule || this.inferStandardRule(task);
-    
+
     if (!ruleData) {
       return {
         isRecurring: false,
         type: 'non-recurring',
         confidence: 1.0,
-        source: this.name
+        source: this.name,
       };
     }
 
@@ -46,7 +46,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
       scheduleDeviation: false,
       nextExpectedDate: null,
       confidence: 0.9,
-      source: this.name
+      source: this.name,
     };
 
     // Analyze timing patterns
@@ -60,7 +60,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
    */
   private inferStandardRule(task: TaskContext): RepetitionRule | null {
     const taskName = task.name().toLowerCase();
-    
+
     // Check for standard patterns in task name
     for (const [interval, patterns] of Object.entries(this.STANDARD_PATTERNS)) {
       for (const pattern of patterns) {
@@ -74,16 +74,16 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
     try {
       const dueDate = task.dueDate();
       const deferDate = task.deferDate();
-      
+
       if (dueDate && deferDate) {
         const daysDiff = Math.abs(dueDate.getTime() - deferDate.getTime()) / (1000 * 60 * 60 * 24);
-        
+
         // Multi-year domain patterns (2-3 years common)
         if (daysDiff >= 700 && daysDiff <= 1100) {
           return {
             unit: 'years',
             steps: Math.round(daysDiff / 365),
-            _inferenceSource: 'date_pattern_domain'
+            _inferenceSource: 'date_pattern_domain',
           };
         }
         // Monthly patterns (28-32 days)
@@ -91,7 +91,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
           return {
             unit: 'months',
             steps: 1,
-            _inferenceSource: 'date_pattern_monthly'
+            _inferenceSource: 'date_pattern_monthly',
           };
         }
         // Weekly patterns (6-8 days)
@@ -99,7 +99,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
           return {
             unit: 'weeks',
             steps: 1,
-            _inferenceSource: 'date_pattern_weekly'
+            _inferenceSource: 'date_pattern_weekly',
           };
         }
       }
@@ -137,10 +137,10 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
       const added = task.added();
       const dueDate = task.dueDate();
       const completionDate = task.completionDate();
-      
+
       if (added && rule.unit && rule.steps) {
         const daysSinceAdded = Math.floor((now.getTime() - added.getTime()) / (1000 * 60 * 60 * 24));
-        
+
         // Calculate expected interval in days
         let intervalDays = rule.steps;
         switch(rule.unit) {
@@ -149,7 +149,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
           case 'months': intervalDays *= 30; break;
           case 'years': intervalDays *= 365; break;
         }
-        
+
         // If task was added very recently (within 1 day), likely new instance
         if (daysSinceAdded <= 1) {
           result.type = 'new-instance';
@@ -162,13 +162,13 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
         // Check if dates align with repetition pattern
         else if (dueDate) {
           const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          
+
           // If due date is way off from expected pattern, likely rescheduled
           if (Math.abs(daysUntilDue) > intervalDays) {
             result.type = 'rescheduled';
             result.scheduleDeviation = true;
           }
-          
+
           // Calculate next expected date based on pattern
           const nextDue = new Date(dueDate);
           switch(rule.unit) {
@@ -190,7 +190,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
           }
           result.nextExpectedDate = nextDue.toISOString();
         }
-        
+
         // For completion-based repetition, check against completion date
         if (rule.scheduleType === 'fromCompletion' && completionDate) {
           const daysSinceCompletion = Math.floor((now.getTime() - completionDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -209,7 +209,7 @@ export class CoreRecurringAnalyzer implements RecurringTaskAnalyzer {
    */
   private formatFrequency(rule: RepetitionRule): string {
     if (!rule.unit || !rule.steps) return 'Custom';
-    
+
     switch(rule.unit) {
       case 'hours':
         if (rule.steps === 1) return 'Hourly';

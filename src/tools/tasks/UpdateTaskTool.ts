@@ -7,7 +7,7 @@ import { StandardResponse } from '../../utils/response-format.js';
 export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<any>> {
   name = 'update_task';
   description = 'Update an existing task in OmniFocus (can move between projects using projectId)';
-  
+
   inputSchema = {
     type: 'object' as const,
     properties: {
@@ -67,10 +67,10 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
 
   async execute(args: UpdateTaskArgs): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
-    
+
     try {
       const { taskId, ...updates } = args;
-      
+
       // Debug logging: Log all received parameters
       this.logger.info('UpdateTaskTool received parameters:', {
         taskId,
@@ -81,17 +81,17 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
             value: updates.dueDate,
             type: typeof updates.dueDate,
             isNull: updates.dueDate === null,
-            isUndefined: updates.dueDate === undefined
+            isUndefined: updates.dueDate === undefined,
           } : 'not provided',
           deferDate: updates.deferDate !== undefined ? {
             value: updates.deferDate,
             type: typeof updates.deferDate,
             isNull: updates.deferDate === null,
-            isUndefined: updates.deferDate === undefined
-          } : 'not provided'
-        }
+            isUndefined: updates.deferDate === undefined,
+          } : 'not provided',
+        },
       });
-      
+
       // Validate required parameters
       if (!taskId || typeof taskId !== 'string') {
         return createErrorResponse(
@@ -99,13 +99,13 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           'INVALID_PARAMS',
           'Task ID is required and must be a string',
           { provided_taskId: taskId },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Sanitize and validate updates object
       const safeUpdates = this.sanitizeUpdates(updates);
-      
+
       // If no valid updates, return early
       if (Object.keys(safeUpdates).length === 0) {
         return createEntityResponse(
@@ -115,26 +115,26 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           {
             query_time_ms: timer.getElapsedMs(),
             input_params: { taskId },
-            message: 'No valid updates provided'
-          }
+            message: 'No valid updates provided',
+          },
         );
       }
-      
+
       // Log what we're sending to the script
       this.logger.info('Sending to JXA script:', {
         taskId,
         safeUpdates,
-        safeUpdatesKeys: Object.keys(safeUpdates)
+        safeUpdatesKeys: Object.keys(safeUpdates),
       });
-      
+
       // Use the full script for comprehensive update support
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, { 
+      const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, {
         taskId,
         updates: safeUpdates,
       });
-      
+
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       // Handle script execution errors
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         const errorMessage = 'message' in result ? String(result.message) : 'Failed to update task';
@@ -144,10 +144,10 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           'SCRIPT_ERROR',
           errorMessage,
           'details' in result ? result.details : undefined,
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Parse the JSON result
       let parsedResult;
       try {
@@ -159,10 +159,10 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           'PARSE_ERROR',
           'Failed to parse task update response',
           { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Check if the parsed result indicates an error
       if (parsedResult.error) {
         return createErrorResponse(
@@ -170,15 +170,15 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           'UPDATE_FAILED',
           parsedResult.message || 'Update failed',
           parsedResult,
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Invalidate cache after successful update
       this.cache.invalidate('tasks');
-      
+
       this.logger.info(`Updated task: ${taskId}`);
-      
+
       // Return standardized response
       return createEntityResponse(
         'update_task',
@@ -191,15 +191,15 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
             taskId,
             fields_updated: Object.keys(safeUpdates),
             has_date_changes: !!(safeUpdates.dueDate || safeUpdates.deferDate || safeUpdates.clearDueDate || safeUpdates.clearDeferDate),
-            has_project_change: safeUpdates.projectId !== undefined
-          }
-        }
+            has_project_change: safeUpdates.projectId !== undefined,
+          },
+        },
       );
     } catch (error) {
       return this.handleError(error);
     }
   }
-  
+
   private sanitizeUpdates(updates: {
     name?: string;
     note?: string;
@@ -214,12 +214,12 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     projectId?: string;
   }): Record<string, any> {
     const sanitized: Record<string, any> = {};
-    
-    this.logger.info('Sanitizing updates:', { 
+
+    this.logger.info('Sanitizing updates:', {
       rawUpdates: updates,
-      keys: Object.keys(updates)
+      keys: Object.keys(updates),
     });
-    
+
     // Handle string fields
     if (typeof updates.name === 'string') {
       sanitized.name = updates.name;
@@ -227,12 +227,12 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     if (typeof updates.note === 'string') {
       sanitized.note = updates.note;
     }
-    
+
     // Handle boolean fields
     if (typeof updates.flagged === 'boolean') {
       sanitized.flagged = updates.flagged;
     }
-    
+
     // Handle date fields with separate clear flags
     if (updates.clearDueDate) {
       this.logger.info('Clearing dueDate (clearDueDate flag set)');
@@ -240,9 +240,9 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     } else if (updates.dueDate !== undefined) {
       this.logger.info('Processing dueDate:', {
         value: updates.dueDate,
-        type: typeof updates.dueDate
+        type: typeof updates.dueDate,
       });
-      
+
       if (typeof updates.dueDate === 'string') {
         try {
           // Validate the date string but keep it as string (like create_task does)
@@ -252,7 +252,7 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           }
           this.logger.info('Date string validated successfully:', {
             original: updates.dueDate,
-            parsed: parsedDate.toISOString()
+            parsed: parsedDate.toISOString(),
           });
           sanitized.dueDate = updates.dueDate; // Keep as string for JXA script
         } catch (error) {
@@ -261,20 +261,20 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
       } else {
         this.logger.warn('Unexpected dueDate type:', {
           value: updates.dueDate,
-          type: typeof updates.dueDate
+          type: typeof updates.dueDate,
         });
       }
     }
-    
+
     if (updates.clearDeferDate) {
       this.logger.info('Clearing deferDate (clearDeferDate flag set)');
       sanitized.deferDate = null; // Clear the date
     } else if (updates.deferDate !== undefined) {
       this.logger.info('Processing deferDate:', {
         value: updates.deferDate,
-        type: typeof updates.deferDate
+        type: typeof updates.deferDate,
       });
-      
+
       if (typeof updates.deferDate === 'string') {
         try {
           // Validate the date string but keep it as string (like create_task does)
@@ -284,7 +284,7 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
           }
           this.logger.info('DeferDate string validated successfully:', {
             original: updates.deferDate,
-            parsed: parsedDate.toISOString()
+            parsed: parsedDate.toISOString(),
           });
           sanitized.deferDate = updates.deferDate; // Keep as string for JXA script
         } catch (error) {
@@ -293,11 +293,11 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
       } else {
         this.logger.warn('Unexpected deferDate type:', {
           value: updates.deferDate,
-          type: typeof updates.deferDate
+          type: typeof updates.deferDate,
         });
       }
     }
-    
+
     // Handle numeric fields with separate clear flag
     if (updates.clearEstimatedMinutes) {
       this.logger.info('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
@@ -305,17 +305,17 @@ export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, StandardResponse<an
     } else if (updates.estimatedMinutes !== undefined) {
       sanitized.estimatedMinutes = updates.estimatedMinutes;
     }
-    
+
     // Handle project ID (allow null/empty string)
     if (updates.projectId !== undefined) {
       sanitized.projectId = updates.projectId;
     }
-    
+
     // Handle tags array
     if (Array.isArray(updates.tags)) {
       sanitized.tags = updates.tags.filter(tag => typeof tag === 'string');
     }
-    
+
     return sanitized;
   }
 }

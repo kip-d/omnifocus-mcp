@@ -11,18 +11,18 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
    */
   register(analyzer: RecurringTaskAnalyzer): void {
     logger.debug(`Registering recurring task analyzer: ${analyzer.name} (priority: ${analyzer.priority})`);
-    
+
     // Check for duplicate names
     if (this.analyzers.some(a => a.name === analyzer.name)) {
       logger.warn(`Analyzer with name "${analyzer.name}" already registered, skipping`);
       return;
     }
-    
+
     this.analyzers.push(analyzer);
-    
+
     // Sort by priority (highest first)
     this.analyzers.sort((a, b) => b.priority - a.priority);
-    
+
     logger.info(`Registered analyzer "${analyzer.name}", total analyzers: ${this.analyzers.length}`);
   }
 
@@ -39,15 +39,15 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
    */
   analyzeTask(task: TaskContext, existingRule?: RepetitionRule): RecurringStatus {
     logger.debug(`Analyzing task "${task.name()}" with ${this.analyzers.length} analyzers`);
-    
+
     // Default fallback result
     const defaultResult: RecurringStatus = {
       isRecurring: false,
       type: 'non-recurring',
       confidence: 1.0,
-      source: 'default'
+      source: 'default',
     };
-    
+
     // If we have an existing rule, start with a basic recurring result
     if (existingRule?.unit && existingRule?.steps) {
       defaultResult.isRecurring = true;
@@ -55,20 +55,20 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
       defaultResult.frequency = this.formatFrequency(existingRule);
       defaultResult.source = 'core';
     }
-    
+
     // Try each analyzer in priority order
     for (const analyzer of this.analyzers) {
       try {
         if (analyzer.canAnalyze(task)) {
           logger.debug(`Trying analyzer: ${analyzer.name}`);
-          
+
           const result = analyzer.analyze(task, existingRule);
           if (result) {
             logger.debug(`Analyzer "${analyzer.name}" provided result: ${result.type}`);
-            
+
             // Add source information
             result.source = analyzer.name;
-            
+
             return result;
           }
         }
@@ -77,7 +77,7 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
         // Continue with next analyzer
       }
     }
-    
+
     logger.debug(`No analyzer handled task "${task.name()}", using default result`);
     return defaultResult;
   }
@@ -87,7 +87,7 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
    */
   private formatFrequency(rule: RepetitionRule): string {
     if (!rule.unit || !rule.steps) return 'Custom';
-    
+
     switch(rule.unit) {
       case 'hours':
         if (rule.steps === 1) return 'Hourly';
