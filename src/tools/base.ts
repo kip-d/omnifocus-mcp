@@ -1,16 +1,17 @@
 import { CacheManager } from '../cache/CacheManager.js';
-import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
+// import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
+import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
-  protected omniAutomation: OmniAutomation;
+  protected omniAutomation: RobustOmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
 
   constructor(cache: CacheManager) {
     this.cache = cache;
-    this.omniAutomation = new OmniAutomation();
+    this.omniAutomation = new RobustOmniAutomation();
     this.logger = createLogger(this.constructor.name);
   }
 
