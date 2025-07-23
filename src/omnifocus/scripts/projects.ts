@@ -3,6 +3,7 @@ import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
 
 export const LIST_PROJECTS_SCRIPT = `
   const filter = {{filter}};
+  const limit = {{limit}};
   const projects = [];
   
   ${SAFE_UTILITIES_SCRIPT}
@@ -65,9 +66,21 @@ export const LIST_PROJECTS_SCRIPT = `
       projectObj.numberOfTasks = safeGetTaskCount(project);
       
       projects.push(projectObj);
+      
+      // Check if we've reached the limit
+      if (projects.length >= limit) {
+        break;
+      }
     }
     
-    return JSON.stringify({ projects: projects });
+    return JSON.stringify({ 
+      projects: projects,
+      metadata: {
+        total_available: allProjects.length,
+        returned_count: projects.length,
+        limit_applied: limit
+      }
+    });
   } catch (error) {
     return JSON.stringify({
       error: true,

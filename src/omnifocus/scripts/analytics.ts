@@ -54,7 +54,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       
       // Skip dropped tasks - they should not be included in productivity stats
       try {
-        if (task.dropped && task.dropped()) continue;
+        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
       } catch (e) {}
       
       // Check if task is in period
@@ -92,7 +92,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         }
       } catch (e) {}
       
-      if (inPeriod || createdInPeriod || !task.completed()) {
+      if (inPeriod || createdInPeriod || !safeIsCompleted(task)) {
         totalTasks++;
         
         // Group by requested dimension
@@ -131,8 +131,8 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         }
         
         groupedStats[groupKey].total++;
-        if (task.completed()) groupedStats[groupKey].completed++;
-        if (task.flagged()) groupedStats[groupKey].flagged++;
+        if (safeIsCompleted(task)) groupedStats[groupKey].completed++;
+        if (safeIsFlagged(task)) groupedStats[groupKey].flagged++;
       }
     }
     
@@ -227,7 +227,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Skip dropped tasks - they should not be included in velocity calculations
       try {
-        if (task.dropped && task.dropped()) continue;
+        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
       } catch (e) {}
       
       // Apply filters
@@ -379,12 +379,12 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
       
       try {
         // Skip dropped tasks - they should not be included in overdue analysis
-        if (task.dropped && task.dropped()) continue;
+        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
         
         const dueDate = task.dueDate();
         if (!dueDate) continue;
         
-        const completed = task.completed();
+        const completed = safeIsCompleted(task);
         const completionDate = completed ? task.completionDate() : null;
         
         // Check if overdue
@@ -425,7 +425,7 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
             dueDate: dueDate.toISOString(),
             overdueDays: overdueDays,
             completed: completed,
-            flagged: task.flagged()
+            flagged: safeIsFlagged(task)
           };
           
           // Add optional fields

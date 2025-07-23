@@ -35,10 +35,17 @@ export class ListProjectsTool extends BaseTool {
         type: 'string',
         description: 'Search in project name and notes',
       },
+      limit: {
+        type: 'number',
+        description: 'Maximum number of projects to return (1-1000, default: 100)',
+        default: 100,
+        minimum: 1,
+        maximum: 1000,
+      },
     },
   };
 
-  async execute(args: ProjectFilter): Promise<any> {
+  async execute(args: ProjectFilter & { limit?: number }): Promise<any> {
     const timer = new OperationTimer();
 
     try {
@@ -75,7 +82,11 @@ export class ListProjectsTool extends BaseTool {
       }
 
       // Execute script
-      const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { filter: args });
+      const { limit, ...filter } = args;
+      const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+        filter,
+        limit: limit || 100
+      });
       const result = await this.omniAutomation.execute<any>(script);
 
       // Check if script returned an error
