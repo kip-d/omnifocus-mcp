@@ -129,7 +129,7 @@ export const EXPORT_TASKS_SCRIPT = `
       }
       
       if (allFields.includes('estimated')) {
-        const minutes = task.estimatedMinutes();
+        const minutes = safeGet(() => task.estimatedMinutes());
         if (minutes && minutes > 0) {
           taskData.estimatedMinutes = minutes;
         }
@@ -289,7 +289,7 @@ export const EXPORT_PROJECTS_SCRIPT = `
                 completedTasks++;
               } else {
                 try {
-                  if (!task.effectivelyHidden()) {
+                  if (!safeGet(() => task.effectivelyHidden(), true)) {
                     availableTasks++;
                   }
                 } catch (e) {
