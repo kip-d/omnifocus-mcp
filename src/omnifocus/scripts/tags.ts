@@ -35,8 +35,9 @@ export const LIST_TAGS_SCRIPT = `
       }
     }
     
-    // Count task usage if requested and not too many tags
-    if (options.includeUsageStats !== false && allTags.length < 200) {
+    // Count task usage only if explicitly requested
+    // Note: This iterates through tasks and can be slow on large databases
+    if (options.includeUsageStats === true && allTags.length < 200) {
       try {
         const allTasks = doc.flattenedTasks();
         if (allTasks) {

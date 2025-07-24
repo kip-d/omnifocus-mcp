@@ -707,21 +707,8 @@ export const UPDATE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID
-    const tasks = doc.flattenedTasks();
-    if (!tasks) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
-      });
-    }
-    let task = null;
-    for (let i = 0; i < tasks.length; i++) {
-      if (safeGet(() => tasks[i].id()) === taskId) {
-        task = tasks[i];
-        break;
-      }
-    }
+    // Find task by ID using O(1) lookup
+    const task = Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -922,21 +909,8 @@ export const COMPLETE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID
-    const tasks = doc.flattenedTasks();
-    if (!tasks) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
-      });
-    }
-    let task = null;
-    for (let i = 0; i < tasks.length; i++) {
-      if (safeGet(() => tasks[i].id()) === taskId) {
-        task = tasks[i];
-        break;
-      }
-    }
+    // Find task by ID using O(1) lookup
+    const task = Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -1022,21 +996,8 @@ export const DELETE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID
-    const tasks = doc.flattenedTasks();
-    if (!tasks) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly."
-      });
-    }
-    let task = null;
-    for (let i = 0; i < tasks.length; i++) {
-      if (safeGet(() => tasks[i].id()) === taskId) {
-        task = tasks[i];
-        break;
-      }
-    }
+    // Find task by ID using O(1) lookup
+    const task = Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 

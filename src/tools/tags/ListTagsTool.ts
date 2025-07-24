@@ -20,17 +20,22 @@ export class ListTagsTool extends BaseTool {
         description: 'Include tags with no tasks',
         default: true,
       },
+      includeUsageStats: {
+        type: 'boolean',
+        description: 'Calculate task usage statistics for each tag (slower on large databases)',
+        default: false,
+      },
     },
   };
 
-  async execute(args: { sortBy?: string; includeEmpty?: boolean }): Promise<any> {
+  async execute(args: { sortBy?: string; includeEmpty?: boolean; includeUsageStats?: boolean }): Promise<any> {
     const timer = new OperationTimer();
 
     try {
-      const { sortBy = 'name', includeEmpty = true } = args;
+      const { sortBy = 'name', includeEmpty = true, includeUsageStats = false } = args;
 
       // Create cache key
-      const cacheKey = `list_${sortBy}_${includeEmpty}`;
+      const cacheKey = `list_${sortBy}_${includeEmpty}_${includeUsageStats}`;
 
       // Check cache
       const cached = this.cache.get<any>('tags', cacheKey);
@@ -51,7 +56,7 @@ export class ListTagsTool extends BaseTool {
 
       // Execute script
       const script = this.omniAutomation.buildScript(LIST_TAGS_SCRIPT, {
-        options: { sortBy, includeEmpty },
+        options: { sortBy, includeEmpty, includeUsageStats },
       });
       const result = await this.omniAutomation.execute<any>(script);
 

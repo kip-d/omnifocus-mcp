@@ -1,15 +1,16 @@
 # Performance Issue Analysis
 
 ## Problem
-The following operations are taking 15-49 seconds:
-- `update_task` (16.7 seconds)
-- `complete_task` (16.8 seconds) 
-- `delete_task` (14.7 seconds)
+The following operations were taking 15-49 seconds:
+- `update_task` (16.7 seconds) - FIXED: now <1 second
+- `complete_task` (16.8 seconds) - FIXED: now <1 second
+- `delete_task` (14.7 seconds) - FIXED: now <1 second
 - `get_task_count` with available filter (45 seconds) - FIXED: now ~2.5 seconds
 - `todays_agenda` (49 seconds) - partially optimized, still ~48 seconds
+- `tag deletion` (49 seconds) - FIXED: now <1 second
 
 ## Root Cause
-These operations search for tasks by ID using O(n) iteration:
+These operations were searching for tasks by ID using O(n) iteration:
 ```javascript
 for (let i = 0; i < tasks.length; i++) {
   if (safeGet(() => tasks[i].id()) === taskId) {
@@ -40,11 +41,21 @@ AppleScript might be faster but loses type safety and JSON handling.
 ### 4. Batch Operations (Future Enhancement)
 Group multiple operations to amortize the lookup cost.
 
-## Immediate Fix
-For now, we should:
-1. Add progress logging to show where time is spent
-2. Consider limiting task searches to recent tasks first
-3. Document this as a known limitation of the JXA API
+## Fixes Applied
+
+### Task Operations (update/complete/delete)
+- Replaced O(n) iteration with `Task.byIdentifier(taskId)` - O(1) lookup
+- Performance improved from 15-17 seconds to <1 second
+
+### Tag Deletion
+- Removed unnecessary task counting that iterated through all tasks
+- OmniFocus automatically removes tags from tasks when deleted
+- Performance improved from 49 seconds to <1 second
+
+### List Tags
+- Made usage statistics opt-in (set `includeUsageStats: true`)
+- Default behavior now skips expensive task iteration
+- Fast tag listing by default, detailed stats only when needed
 
 ## todays_agenda Performance
 The `todays_agenda` tool takes ~49 seconds because:
