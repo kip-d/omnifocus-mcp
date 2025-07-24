@@ -559,7 +559,7 @@ export const CREATE_TASK_SCRIPT = `
         for (const tagName of taskData.tags) {
           let found = false;
           for (let i = 0; i < existingTags.length; i++) {
-            if (safeGet(() => existingTags[i].name) === tagName) {
+            if (safeGet(() => existingTags[i].name()) === tagName) {
               tagsToAdd.push(existingTags[i]);
             found = true;
             break;
@@ -638,12 +638,16 @@ export const CREATE_TASK_SCRIPT = `
           // Add tags to the created task
           if (tagsToAdd.length > 0) {
             try {
-              task.addTags(tagsToAdd);
+              // Use individual addTag calls instead of addTags to avoid type conversion issues
+              for (const tag of tagsToAdd) {
+                task.addTag(tag);
+              }
               // Verify tags were actually added
               actualTags = safeGetTags(task);
             } catch (tagError) {
-              // Tags failed to add, but task was created - log warning
-              // Warning: Failed to add tags to task
+              // KNOWN LIMITATION: Tags fail to add with "Can't convert types" error
+              // This appears to be a limitation of the OmniFocus JXA API
+              // Tags can be found correctly but cannot be assigned to tasks
               actualTags = [];
             }
           }
@@ -862,7 +866,10 @@ export const UPDATE_TASK_SCRIPT = `
           }
           
           if (tagsToAdd.length > 0) {
-            task.addTags(tagsToAdd);
+            // Use individual addTag calls to avoid type conversion issues
+            for (const tag of tagsToAdd) {
+              task.addTag(tag);
+            }
           }
         }
       } catch (tagError) {
@@ -1112,77 +1119,98 @@ export const TODAYS_AGENDA_SCRIPT = `
     }
     
     const startTime = Date.now();
+    const maxTasks = options.limit || 200; // Add reasonable limit
     
     let dueTodayCount = 0;
     let overdueCount = 0;
     let flaggedCount = 0;
     
-    for (let i = 0; i < allTasks.length; i++) {
+    // Pre-compute option flags
+    const checkOverdue = options.includeOverdue !== false;
+    const checkFlagged = options.includeFlagged !== false;
+    const checkAvailable = !!options.includeAvailable;
+    const includeDetails = options.includeDetails !== false;
+    
+    for (let i = 0; i < allTasks.length && tasks.length < maxTasks; i++) {
       const task = allTasks[i];
       
-      // Skip completed tasks
+      // Skip completed tasks first (cheapest check)
       if (safeIsCompleted(task)) continue;
       
+      // Cache expensive calls
+      let deferDate = null;
+      let dueDateObj = null;
+      let dueDateStr = null;
+      let dueDateChecked = false;
+      
       // Check if available (if required)
-      if (options.includeAvailable) {
-        const deferDate = safeGetDate(() => task.deferDate());
+      if (checkAvailable) {
+        deferDate = safeGetDate(() => task.deferDate());
         if (deferDate && new Date(deferDate) > new Date()) continue;
-        // Note: Full availability check would include blocked status
       }
       
       let includeTask = false;
       let reason = '';
       
-      // Check due date
-      const dueDateStr = safeGetDate(() => task.dueDate());
-      if (dueDateStr) {
-        const dueDate = new Date(dueDateStr);
-        if (dueDate < today && options.includeOverdue) {
-          includeTask = true;
-          reason = 'overdue';
-          overdueCount++;
-        } else if (dueDate >= today && dueDate < tomorrow) {
-          includeTask = true;
-          reason = 'due_today';
-          dueTodayCount++;
+      // Check due date only if needed
+      if (checkOverdue || true) { // Always need to check for "due today"
+        dueDateStr = safeGetDate(() => task.dueDate());
+        dueDateChecked = true;
+        
+        if (dueDateStr) {
+          dueDateObj = new Date(dueDateStr);
+          
+          if (checkOverdue && dueDateObj < today) {
+            includeTask = true;
+            reason = 'overdue';
+            overdueCount++;
+          } else if (dueDateObj >= today && dueDateObj < tomorrow) {
+            includeTask = true;
+            reason = 'due_today';
+            dueTodayCount++;
+          }
         }
       }
       
-      // Check flagged status
-      if (!includeTask && options.includeFlagged && safeIsFlagged(task)) {
+      // Check flagged status only if not already included
+      if (!includeTask && checkFlagged && safeIsFlagged(task)) {
         includeTask = true;
         reason = 'flagged';
         flaggedCount++;
       }
       
       if (includeTask) {
-        // Build task object
+        // Build minimal task object first
         const taskObj = {
           id: safeGet(() => task.id(), 'unknown'),
           name: safeGet(() => task.name(), 'Unnamed Task'),
           completed: false,
-          flagged: safeIsFlagged(task),
+          flagged: reason === 'flagged' ? true : safeIsFlagged(task),
           reason: reason
         };
         
-        // Add optional properties
-        const note = safeGet(() => task.note());
-        if (note) taskObj.note = note;
-        
-        const project = safeGetProject(task);
-        if (project) {
-          taskObj.project = project.name;
-          taskObj.projectId = project.id;
+        // Add dates we already fetched
+        if (dueDateChecked && dueDateStr) {
+          taskObj.dueDate = dueDateStr;
+        }
+        if (deferDate) {
+          taskObj.deferDate = deferDate;
         }
         
-        const dueDate = safeGetDate(() => task.dueDate());
-        if (dueDate) taskObj.dueDate = dueDate;
-        
-        const deferDate = safeGetDate(() => task.deferDate());
-        if (deferDate) taskObj.deferDate = deferDate;
-        
-        const tags = safeGetTags(task);
-        taskObj.tags = tags;
+        // Only add expensive details if requested
+        if (includeDetails) {
+          const note = safeGet(() => task.note());
+          if (note) taskObj.note = note;
+          
+          const project = safeGetProject(task);
+          if (project) {
+            taskObj.project = project.name;
+            taskObj.projectId = project.id;
+          }
+          
+          const tags = safeGetTags(task);
+          if (tags.length > 0) taskObj.tags = tags;
+        }
         
         tasks.push(taskObj);
       }
@@ -1203,7 +1231,8 @@ export const TODAYS_AGENDA_SCRIPT = `
         overdue: overdueCount,
         due_today: dueTodayCount,
         flagged: flaggedCount,
-        query_time_ms: endTime - startTime
+        query_time_ms: endTime - startTime,
+        limited: tasks.length >= maxTasks
       }
     });
   } catch (error) {

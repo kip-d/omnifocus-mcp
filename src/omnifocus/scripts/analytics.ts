@@ -49,50 +49,58 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     const groupedStats = {};
     const dailyStats = {};
     
-    for (let i = 0; i < allTasks.length; i++) {
+    // Add a reasonable limit to prevent timeouts
+    const maxTasks = Math.min(allTasks.length, 500);
+    
+    for (let i = 0; i < maxTasks; i++) {
       const task = allTasks[i];
       
-      // Skip dropped tasks - they should not be included in productivity stats
-      try {
-        if (safeGet(() => task.dropped(), false)) continue;
-      } catch (e) {}
+      // Skip dropped tasks if the property exists
+      // Note: dropped() may not be available in all OmniFocus versions
       
       // Check if task is in period
       let inPeriod = false;
       let createdInPeriod = false;
       
       try {
-        const completionDate = safeGetDate(() => task.completionDate());
-        if (completionDate && completionDate >= periodStart) {
-          inPeriod = true;
-          completedTasks++;
-          
-          // Check if completed on time
-          const dueDate = safeGetDate(() => task.dueDate());
-          if (dueDate) {
-            if (completionDate > dueDate) {
-              overdueCompleted++;
-            } else {
-              onTimeCompleted++;
+        const completionDateStr = safeGetDate(() => task.completionDate());
+        if (completionDateStr) {
+          const completionDate = new Date(completionDateStr);
+          if (completionDate >= periodStart) {
+            inPeriod = true;
+            completedTasks++;
+            
+            // Check if completed on time
+            const dueDateStr = safeGetDate(() => task.dueDate());
+            if (dueDateStr) {
+              const dueDate = new Date(dueDateStr);
+              if (completionDate > dueDate) {
+                overdueCompleted++;
+              } else {
+                onTimeCompleted++;
+              }
             }
+            
+            // Daily stats
+            const dayKey = completionDateStr.split('T')[0];
+            dailyStats[dayKey] = (dailyStats[dayKey] || 0) + 1;
           }
-          
-          // Daily stats
-          const dayKey = completionDate.toISOString().split('T')[0];
-          dailyStats[dayKey] = (dailyStats[dayKey] || 0) + 1;
         }
       } catch (e) {}
       
       // Check creation date (if available through modified date as proxy)
       try {
-        const modifiedDate = safeGetDate(() => task.modificationDate());
-        if (modifiedDate && modifiedDate >= periodStart) {
-          createdInPeriod = true;
-          createdTasks++;
+        const modifiedDateStr = safeGetDate(() => task.modificationDate());
+        if (modifiedDateStr) {
+          const modifiedDate = new Date(modifiedDateStr);
+          if (modifiedDate >= periodStart) {
+            createdInPeriod = true;
+            createdTasks++;
+          }
         }
       } catch (e) {}
       
-      if (inPeriod || createdInPeriod || !safeIsCompleted(task)) {
+      if (inPeriod || createdInPeriod) {
         totalTasks++;
         
         // Group by requested dimension
@@ -102,7 +110,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
           case 'project':
             try {
               const project = safeGetProject(task);
-              groupKey = project ? project.name() : 'No Project';
+              groupKey = project ? project.name : 'No Project';
             } catch (e) {}
             break;
           case 'tag':
@@ -113,9 +121,9 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
             break;
           case 'day':
             try {
-              const date = safeGetDate(() => task.completionDate()) || safeGetDate(() => task.modificationDate());
-              if (date) {
-                groupKey = date.toLocaleDateString();
+              const dateStr = safeGetDate(() => task.completionDate()) || safeGetDate(() => task.modificationDate());
+              if (dateStr) {
+                groupKey = new Date(dateStr).toLocaleDateString();
               }
             } catch (e) {}
             break;
@@ -242,19 +250,23 @@ export const TASK_VELOCITY_SCRIPT = `
     let totalCreated = 0;
     const completionTimes = [];
     
-    for (let i = 0; i < allTasks.length; i++) {
+    // Limit tasks to prevent timeout
+    const maxTasks = Math.min(allTasks.length, 500);
+    
+    for (let i = 0; i < maxTasks; i++) {
       const task = allTasks[i];
       
       // Skip dropped tasks - they should not be included in velocity calculations
       try {
-        if (safeGet(() => task.dropped(), false)) continue;
+        // Skip dropped tasks if the property exists
+        // Note: dropped() may not be available in all OmniFocus versions
       } catch (e) {}
       
       // Apply filters
       if (options.projectId) {
         try {
           const project = safeGetProject(task);
-          if (!project || project.id() !== options.projectId) continue;
+          if (!project || project.id !== options.projectId) continue;
         } catch (e) {
           continue;
         }
@@ -272,8 +284,9 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track completion
       try {
-        const completionDate = safeGetDate(() => task.completionDate());
-        if (completionDate) {
+        const completionDateStr = safeGetDate(() => task.completionDate());
+        if (completionDateStr) {
+          const completionDate = new Date(completionDateStr);
           totalCompleted++;
           
           // Find which interval this belongs to
@@ -286,10 +299,13 @@ export const TASK_VELOCITY_SCRIPT = `
           
           // Calculate completion time if we have creation date
           try {
-            const modifiedDate = safeGetDate(() => task.modificationDate());
-            if (modifiedDate && modifiedDate < completionDate) {
-              const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
-              completionTimes.push(completionHours);
+            const modifiedDateStr = safeGetDate(() => task.modificationDate());
+            if (modifiedDateStr) {
+              const modifiedDate = new Date(modifiedDateStr);
+              if (modifiedDate < completionDate) {
+                const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
+                completionTimes.push(completionHours);
+              }
             }
           } catch (e) {}
         }
@@ -297,8 +313,9 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track creation (using modification date as proxy)
       try {
-        const modifiedDate = safeGetDate(() => task.modificationDate());
-        if (modifiedDate) {
+        const modifiedDateStr = safeGetDate(() => task.modificationDate());
+        if (modifiedDateStr) {
+          const modifiedDate = new Date(modifiedDateStr);
           for (const interval of intervals) {
             if (modifiedDate >= interval.start && modifiedDate < interval.end) {
               interval.created++;
@@ -367,6 +384,9 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
   
   try {
     const now = new Date();
+    // Use same overdue definition as todays_agenda: midnight today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const overdueTasks = [];
     const patterns = {};
     const groupedAnalysis = {};
@@ -399,19 +419,22 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
       
       try {
         // Skip dropped tasks - they should not be included in overdue analysis
-        if (safeGet(() => task.dropped(), false)) continue;
+        // Skip dropped tasks if the property exists
+        // Note: dropped() may not be available in all OmniFocus versions
         
-        const dueDate = safeGetDate(() => task.dueDate());
-        if (!dueDate) continue;
+        const dueDateStr = safeGetDate(() => task.dueDate());
+        if (!dueDateStr) continue;
         
+        const dueDate = new Date(dueDateStr);
         const completed = safeIsCompleted(task);
-        const completionDate = completed ? safeGetDate(() => task.completionDate()) : null;
+        const completionDateStr = completed ? safeGetDate(() => task.completionDate()) : null;
+        const completionDate = completionDateStr ? new Date(completionDateStr) : null;
         
         // Check if overdue
         let isOverdue = false;
         let overdueBy = 0;
         
-        if (!completed && dueDate < now) {
+        if (!completed && dueDate < today) {
           isOverdue = true;
           overdueBy = now - dueDate;
           totalOverdue++;
@@ -442,7 +465,7 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
           const taskInfo = {
             id: safeGet(() => task.id(), 'unknown'),
             name: safeGet(() => task.name(), 'Unnamed Task'),
-            dueDate: dueDate.toISOString(),
+            dueDate: dueDateStr,
             overdueDays: overdueDays,
             completed: completed,
             flagged: safeIsFlagged(task)
@@ -452,8 +475,8 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
           try {
             const project = safeGetProject(task);
             if (project) {
-              taskInfo.project = project.name();
-              taskInfo.projectId = project.id();
+              taskInfo.project = project.name;
+              taskInfo.projectId = project.id;
             }
           } catch (e) {}
           

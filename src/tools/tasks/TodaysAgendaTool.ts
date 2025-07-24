@@ -24,10 +24,20 @@ export class TodaysAgendaTool extends BaseTool {
         description: 'Only include available tasks (not blocked/deferred)',
         default: true,
       },
+      includeDetails: {
+        type: 'boolean',
+        description: 'Include task details (note, project, tags). Set to false for better performance',
+        default: true,
+      },
+      limit: {
+        type: 'number',
+        description: 'Maximum number of tasks to return',
+        default: 200,
+      },
     },
   };
 
-  async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean }): Promise<any> {
+  async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean; includeDetails?: boolean; limit?: number }): Promise<any> {
     const timer = new OperationTimer();
 
     try {
@@ -35,10 +45,12 @@ export class TodaysAgendaTool extends BaseTool {
         includeFlagged = true,
         includeOverdue = true,
         includeAvailable = true,
+        includeDetails = true,
+        limit = 200,
       } = args;
 
       // Create cache key
-      const cacheKey = `agenda_${includeFlagged}_${includeOverdue}_${includeAvailable}`;
+      const cacheKey = `agenda_${includeFlagged}_${includeOverdue}_${includeAvailable}_${includeDetails}_${limit}`;
 
       // Check cache
       const cached = this.cache.get<any>('tasks', cacheKey);
@@ -56,6 +68,8 @@ export class TodaysAgendaTool extends BaseTool {
               include_flagged: includeFlagged,
               include_overdue: includeOverdue,
               include_available: includeAvailable,
+              include_details: includeDetails,
+              limit: limit,
             },
           },
         );
@@ -63,7 +77,7 @@ export class TodaysAgendaTool extends BaseTool {
 
       // Execute script
       const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
-        options: { includeFlagged, includeOverdue, includeAvailable },
+        options: { includeFlagged, includeOverdue, includeAvailable, includeDetails, limit },
       });
       const result = await this.omniAutomation.execute<any>(script);
 
@@ -106,6 +120,8 @@ export class TodaysAgendaTool extends BaseTool {
             include_flagged: includeFlagged,
             include_overdue: includeOverdue,
             include_available: includeAvailable,
+            include_details: includeDetails,
+            limit: limit,
           },
           query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs(),
         },
