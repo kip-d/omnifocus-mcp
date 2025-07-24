@@ -9,14 +9,14 @@ export const LIST_PROJECTS_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    const allProjects = doc.flattenedProjects;
+    const allProjects = doc.flattenedProjects();
     
     // Check if allProjects is null or undefined
     if (!allProjects) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedProjects returned null or undefined"
+        details: "doc.flattenedProjects() returned null or undefined"
       });
     }
     
@@ -34,8 +34,8 @@ export const LIST_PROJECTS_SCRIPT = `
       // Apply search filter
       if (filter.search) {
         const searchTerm = filter.search.toLowerCase();
-        const projectName = safeGet(() => project.name, '').toLowerCase();
-        const projectNote = safeGet(() => project.note, '').toLowerCase();
+        const projectName = safeGet(() => project.name(), '').toLowerCase();
+        const projectNote = safeGet(() => project.note(), '').toLowerCase();
         
         if (!projectName.includes(searchTerm) && !projectNote.includes(searchTerm)) {
           continue;
@@ -44,23 +44,23 @@ export const LIST_PROJECTS_SCRIPT = `
       
       // Build project object
       const projectObj = {
-        id: safeGet(() => project.id.primaryKey, 'unknown'),
-        name: safeGet(() => project.name, 'Unnamed Project'),
+        id: safeGet(() => project.id(), 'unknown'),
+        name: safeGet(() => project.name(), 'Unnamed Project'),
         status: safeGetStatus(project),
         flagged: safeIsFlagged(project)
       };
       
       // Add optional properties safely
-      const note = safeGet(() => project.note);
+      const note = safeGet(() => project.note());
       if (note) projectObj.note = note;
       
       const folder = safeGetFolder(project);
       if (folder) projectObj.folder = folder;
       
-      const dueDate = safeGetDate(() => project.dueDate);
+      const dueDate = safeGetDate(() => project.dueDate());
       if (dueDate) projectObj.dueDate = dueDate;
       
-      const deferDate = safeGetDate(() => project.deferDate);
+      const deferDate = safeGetDate(() => project.deferDate());
       if (deferDate) projectObj.deferDate = deferDate;
       
       projectObj.numberOfTasks = safeGetTaskCount(project);
@@ -98,18 +98,18 @@ export const CREATE_PROJECT_SCRIPT = `
   
   try {
     // Check if project already exists
-    const existingProjects = doc.flattenedProjects;
+    const existingProjects = doc.flattenedProjects();
     
     // Check if existingProjects is null or undefined
     if (!existingProjects) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedProjects returned null or undefined"
+        details: "doc.flattenedProjects() returned null or undefined"
       });
     }
     for (let i = 0; i < existingProjects.length; i++) {
-      if (existingProjects[i].name === name) {
+      if (existingProjects[i].name() === name) {
         return JSON.stringify({
           error: true,
           message: "Project '" + name + "' already exists"
@@ -142,20 +142,20 @@ export const CREATE_PROJECT_SCRIPT = `
     
     // Add to specific folder if specified
     if (options.folder) {
-      const folders = doc.flattenedFolders;
+      const folders = doc.flattenedFolders();
       
       // Check if folders is null or undefined
       if (!folders) {
         return JSON.stringify({
           error: true,
           message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-          details: "doc.flattenedFolders returned null or undefined"
+          details: "doc.flattenedFolders() returned null or undefined"
         });
       }
       let targetFolder = null;
       
       for (let i = 0; i < folders.length; i++) {
-        if (folders[i].name === options.folder) {
+        if (folders[i].name() === options.folder) {
           targetFolder = folders[i];
           break;
         }
@@ -177,8 +177,8 @@ export const CREATE_PROJECT_SCRIPT = `
     return JSON.stringify({
       success: true,
       project: {
-        id: newProject.id.primaryKey,
-        name: newProject.name,
+        id: newProject.id(),
+        name: newProject.name(),
         createdAt: new Date().toISOString()
       },
       message: "Project '" + name + "' created successfully"
@@ -199,20 +199,20 @@ export const UPDATE_PROJECT_SCRIPT = `
   
   try {
     // Find the project by ID
-    const projects = doc.flattenedProjects;
+    const projects = doc.flattenedProjects();
     
     // Check if projects is null or undefined
     if (!projects) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedProjects returned null or undefined"
+        details: "doc.flattenedProjects() returned null or undefined"
       });
     }
     let targetProject = null;
     
     for (let i = 0; i < projects.length; i++) {
-      if (projects[i].id.primaryKey === projectId) {
+      if (projects[i].id() === projectId) {
         targetProject = projects[i];
         break;
       }
@@ -228,10 +228,10 @@ export const UPDATE_PROJECT_SCRIPT = `
     // Apply updates
     const changes = [];
     
-    if (updates.name && updates.name !== targetProject.name) {
+    if (updates.name && updates.name !== targetProject.name()) {
       // Check if new name already exists
       for (let i = 0; i < projects.length; i++) {
-        if (projects[i].name === updates.name && projects[i] !== targetProject) {
+        if (projects[i].name() === updates.name && projects[i] !== targetProject) {
           return JSON.stringify({
             error: true,
             message: "Project '" + updates.name + "' already exists"
@@ -298,14 +298,14 @@ export const UPDATE_PROJECT_SCRIPT = `
           changes.push("Moved to root folder");
         } else {
           // Move to specific folder
-          const folders = doc.flattenedFolders;
+          const folders = doc.flattenedFolders();
       
       // Check if folders is null or undefined
       if (!folders) {
         return JSON.stringify({
           error: true,
           message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-          details: "doc.flattenedFolders returned null or undefined"
+          details: "doc.flattenedFolders() returned null or undefined"
         });
       }
           let targetFolder = null;
@@ -344,8 +344,8 @@ export const UPDATE_PROJECT_SCRIPT = `
     return JSON.stringify({
       success: true,
       project: {
-        id: targetProject.id.primaryKey,
-        name: targetProject.name
+        id: targetProject.id(),
+        name: targetProject.name()
       },
       changes: changes,
       message: "Project updated successfully"
@@ -366,20 +366,20 @@ export const COMPLETE_PROJECT_SCRIPT = `
   
   try {
     // Find the project by ID
-    const projects = doc.flattenedProjects;
+    const projects = doc.flattenedProjects();
     
     // Check if projects is null or undefined
     if (!projects) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedProjects returned null or undefined"
+        details: "doc.flattenedProjects() returned null or undefined"
       });
     }
     let targetProject = null;
     
     for (let i = 0; i < projects.length; i++) {
-      if (projects[i].id.primaryKey === projectId) {
+      if (projects[i].id() === projectId) {
         targetProject = projects[i];
         break;
       }
@@ -393,12 +393,12 @@ export const COMPLETE_PROJECT_SCRIPT = `
     }
     
     // Count incomplete tasks
-    const tasks = targetProject.flattenedTasks;
+    const tasks = targetProject.flattenedTasks();
     let incompleteCount = 0;
     let completedCount = 0;
     
     for (let i = 0; i < tasks.length; i++) {
-      if (!tasks[i].completed) {
+      if (!tasks[i].completed()) {
         incompleteCount++;
       }
     }
@@ -406,7 +406,7 @@ export const COMPLETE_PROJECT_SCRIPT = `
     // Complete all tasks if requested
     if (completeAllTasks && incompleteCount > 0) {
       for (let i = 0; i < tasks.length; i++) {
-        if (!tasks[i].completed) {
+        if (!tasks[i].completed()) {
           tasks[i].markComplete();
           completedCount++;
         }
@@ -454,12 +454,12 @@ export const COMPLETE_PROJECT_SCRIPT = `
     return JSON.stringify({
       success: true,
       project: {
-        id: targetProject.id.primaryKey,
-        name: targetProject.name,
-        completedAt: targetProject.completionDate.toISOString()
+        id: targetProject.id(),
+        name: targetProject.name(),
+        completedAt: targetProject.completionDate().toISOString()
       },
       tasksCompleted: completedCount,
-      message: "Project '" + targetProject.name + "' completed" + 
+      message: "Project '" + targetProject.name() + "' completed" + 
                 (completedCount > 0 ? " with " + completedCount + " tasks" : "")
     });
   } catch (error) {
@@ -479,11 +479,11 @@ export const DELETE_PROJECT_SCRIPT = `
   
   try {
     // Find the project by ID (using same pattern as working task deletion)
-    const projects = doc.flattenedProjects;
+    const projects = doc.flattenedProjects();
     let targetProject = null;
     
     for (let i = 0; i < projects.length; i++) {
-      if (projects[i].id.primaryKey === projectId) {
+      if (projects[i].id() === projectId) {
         targetProject = projects[i];
         break;
       }
@@ -496,7 +496,7 @@ export const DELETE_PROJECT_SCRIPT = `
       });
     }
     
-    const projectName = safeGet(() => targetProject.name, 'Unknown Project');
+    const projectName = safeGet(() => targetProject.name(), 'Unknown Project');
     
     // Count tasks
     const tasks = safeGet(() => targetProject.flattenedTasks(), []);

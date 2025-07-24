@@ -54,7 +54,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       
       // Skip dropped tasks - they should not be included in productivity stats
       try {
-        if (safeGet(() => task.dropped && task.dropped, false)) continue;
+        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
       } catch (e) {}
       
       // Check if task is in period
@@ -102,7 +102,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
           case 'project':
             try {
               const project = safeGetProject(task);
-              groupKey = project ? project.name : 'No Project';
+              groupKey = project ? project.name() : 'No Project';
             } catch (e) {}
             break;
           case 'tag':
@@ -252,7 +252,7 @@ export const TASK_VELOCITY_SCRIPT = `
       if (options.projectId) {
         try {
           const project = safeGetProject(task);
-          if (!project || project.id !== options.projectId) continue;
+          if (!project || project.id() !== options.projectId) continue;
         } catch (e) {
           continue;
         }
@@ -450,8 +450,8 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
           try {
             const project = safeGetProject(task);
             if (project) {
-              taskInfo.project = project.name;
-              taskInfo.projectId = project.id;
+              taskInfo.project = project.name();
+              taskInfo.projectId = project.id();
             }
           } catch (e) {}
           

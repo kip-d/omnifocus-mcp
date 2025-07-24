@@ -9,14 +9,14 @@ export const LIST_TAGS_SCRIPT = `
   try {
     const startTime = Date.now();
     const tags = [];
-    const allTags = doc.flattenedTags;
+    const allTags = doc.flattenedTags();
     
     // Check if collections are null or undefined
     if (!allTags) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve tags from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTags returned null or undefined"
+        details: "doc.flattenedTags() returned null or undefined"
       });
     }
     
@@ -27,8 +27,8 @@ export const LIST_TAGS_SCRIPT = `
     // First pass: build tag map for O(1) lookups
     for (let i = 0; i < allTags.length; i++) {
       const tag = allTags[i];
-      const tagId = safeGet(() => tag.id.primaryKey);
-      const tagName = safeGet(() => tag.name);
+      const tagId = safeGet(() => tag.id());
+      const tagName = safeGet(() => tag.name());
       if (tagId && tagName) {
         tagMap[tagName] = tagId;
         tagUsage[tagId] = { total: 0, active: 0, completed: 0 };
@@ -38,7 +38,7 @@ export const LIST_TAGS_SCRIPT = `
     // Count task usage if requested and not too many tags
     if (options.includeUsageStats !== false && allTags.length < 200) {
       try {
-        const allTasks = doc.flattenedTasks;
+        const allTasks = doc.flattenedTasks();
         if (allTasks) {
           // Limit task processing to avoid timeouts
           const maxTasksToProcess = Math.min(allTasks.length, 200);
@@ -80,7 +80,7 @@ export const LIST_TAGS_SCRIPT = `
       
       const tagInfo = {
         id: tagId,
-        name: safeGet(() => tag.name, 'Unnamed Tag'),
+        name: safeGet(() => tag.name(), 'Unnamed Tag'),
         usage: usage,
         status: 'active' // Tags don't have status in OmniFocus
       };
@@ -88,8 +88,8 @@ export const LIST_TAGS_SCRIPT = `
       // Check for parent tag
       const parent = safeGet(() => tag.parent);
       if (parent) {
-        tagInfo.parentId = safeGet(() => parent.id.primaryKey);
-        tagInfo.parentName = safeGet(() => parent.name);
+        tagInfo.parentId = safeGet(() => parent.id());
+        tagInfo.parentName = safeGet(() => parent.name());
       }
       
       tags.push(tagInfo);
@@ -147,14 +147,14 @@ export const MANAGE_TAGS_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    const allTags = doc.flattenedTags;
+    const allTags = doc.flattenedTags();
     
     // Check if allTags is null or undefined
     if (!allTags) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve tags from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTags returned null or undefined"
+        details: "doc.flattenedTags() returned null or undefined"
       });
     }
     
@@ -162,7 +162,7 @@ export const MANAGE_TAGS_SCRIPT = `
       case 'create':
         // Check if tag already exists
         for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name) === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             return JSON.stringify({
               error: true,
               message: "Tag '" + tagName + "' already exists"
@@ -190,7 +190,7 @@ export const MANAGE_TAGS_SCRIPT = `
             success: true,
             action: 'created',
             tagName: tagName,
-            tagId: safeGet(() => newTag.id.primaryKey, 'unknown'),
+            tagId: safeGet(() => newTag.id(), 'unknown'),
             message: "Tag '" + tagName + "' created successfully"
           });
         } catch (createError) {
@@ -223,7 +223,7 @@ export const MANAGE_TAGS_SCRIPT = `
         // Find tag to rename
         let tagToRename = null;
         for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name) === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             tagToRename = allTags[i];
             break;
           }
@@ -238,7 +238,7 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Check if new name already exists
         for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name) === newName) {
+          if (safeGet(() => allTags[i].name()) === newName) {
             return JSON.stringify({
               error: true,
               message: "Tag '" + newName + "' already exists"
@@ -262,7 +262,7 @@ export const MANAGE_TAGS_SCRIPT = `
         let tagToDelete = null;
         let tagIndex = -1;
         for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name) === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             tagToDelete = allTags[i];
             tagIndex = i;
             break;
@@ -278,7 +278,7 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Count tasks using this tag
         let taskCount = 0;
-        const tasks = doc.flattenedTasks;
+        const tasks = doc.flattenedTasks();
         if (!tasks) {
           return JSON.stringify({
             error: true,
@@ -288,8 +288,8 @@ export const MANAGE_TAGS_SCRIPT = `
         for (let i = 0; i < tasks.length; i++) {
           try {
             const taskTags = safeGetTags(tasks[i]);
-            const tagIdToDelete = safeGet(() => tagToDelete.id.primaryKey);
-            const tagNameToDelete = safeGet(() => tagToDelete.name);
+            const tagIdToDelete = safeGet(() => tagToDelete.id());
+            const tagNameToDelete = safeGet(() => tagToDelete.name());
             // Check if task has this tag by name
             if (taskTags.includes(tagNameToDelete)) {
               taskCount++;
@@ -322,10 +322,10 @@ export const MANAGE_TAGS_SCRIPT = `
         let targetTagObj = null;
         
         for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name) === tagName) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
             sourceTag = allTags[i];
           }
-          if (safeGet(() => allTags[i].name) === targetTag) {
+          if (safeGet(() => allTags[i].name()) === targetTag) {
             targetTagObj = allTags[i];
           }
         }
@@ -346,7 +346,7 @@ export const MANAGE_TAGS_SCRIPT = `
         
         // Move all tasks from source to target
         let mergedCount = 0;
-        const mergeTasks = doc.flattenedTasks;
+        const mergeTasks = doc.flattenedTasks();
         if (!mergeTasks) {
           return JSON.stringify({
             error: true,
@@ -358,8 +358,8 @@ export const MANAGE_TAGS_SCRIPT = `
           const task = mergeTasks[i];
           try {
             const taskTags = safeGetTags(task);
-            const sourceTagName = safeGet(() => sourceTag.name);
-            const targetTagName = safeGet(() => targetTagObj.name);
+            const sourceTagName = safeGet(() => sourceTag.name());
+            const targetTagName = safeGet(() => targetTagObj.name());
             
             const hasSourceTag = taskTags.includes(sourceTagName);
             const hasTargetTag = taskTags.includes(targetTagName);
