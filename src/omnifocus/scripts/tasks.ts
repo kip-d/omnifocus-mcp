@@ -331,40 +331,45 @@ export const LIST_TASKS_SCRIPT = `
   
   // Helper function to check if task matches filters
   function matchesFilters(task, filter) {
-    // Basic property filters
+    // Basic property filters (cheapest checks first)
     if (filter.completed !== undefined && task.completed() !== filter.completed) return false;
     if (filter.flagged !== undefined && task.flagged() !== filter.flagged) return false;
     if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) return false;
     
-    // Search filter
-    if (filter.search) {
-      const name = safeGet(() => task.name(), '') || '';
-      const note = safeGet(() => task.note(), '') || '';
-      const searchText = (name + ' ' + note).toLowerCase();
-      if (!searchText.includes(filter.search.toLowerCase())) return false;
-    }
-    
-    // Project filter
+    // Project filter (medium cost)
     if (filter.projectId !== undefined) {
       const project = safeGetProject(task);
       if (filter.projectId === null && project !== null) return false;
       if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
     }
     
-    // Tags filter
-    if (filter.tags && filter.tags.length > 0) {
-      const taskTags = safeGetTags(task);
-      const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-      if (!hasAllTags) return false;
-    }
-    
-    // Date filters
+    // Date filters (medium cost)
     if (filter.dueBefore || filter.dueAfter) {
       if (!safeDateFilter(task, () => task.dueDate(), filter.dueBefore, filter.dueAfter)) return false;
     }
     
     if (filter.deferBefore || filter.deferAfter) {
       if (!safeDateFilter(task, () => task.deferDate(), filter.deferBefore, filter.deferAfter)) return false;
+    }
+    
+    // Search filter (expensive - only run if needed)
+    if (filter.search) {
+      const searchTerm = filter.search.toLowerCase();
+      const name = safeGet(() => task.name(), '') || '';
+      
+      // Quick check if name contains search term before getting note
+      if (!name.toLowerCase().includes(searchTerm)) {
+        // Only get note if name doesn't match
+        const note = safeGet(() => task.note(), '') || '';
+        if (!note.toLowerCase().includes(searchTerm)) return false;
+      }
+    }
+    
+    // Tags filter (most expensive - only run if needed)
+    if (filter.tags && filter.tags.length > 0) {
+      const taskTags = safeGetTags(task);
+      const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
+      if (!hasAllTags) return false;
     }
     
     // Available filter
@@ -1220,16 +1225,33 @@ export const GET_TASK_COUNT_SCRIPT = `
     let count = 0;
     const startTime = Date.now();
     
+    // Pre-compute filter flags to avoid checking in loop
+    const hasTagFilter = filter.tags && filter.tags.length > 0;
+    const hasSearchFilter = !!filter.search;
+    const searchTerm = hasSearchFilter ? filter.search.toLowerCase() : null;
+    const hasDueDateFilter = filter.dueBefore || filter.dueAfter;
+    const hasDeferDateFilter = filter.deferBefore || filter.deferAfter;
+    const hasProjectFilter = filter.projectId !== undefined;
+    const hasAvailableFilter = !!filter.available;
+    
     for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
       
-      // Skip if task doesn't match filters
-      if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
-      if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
-      if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
+      // Fast filters first (boolean checks)
+      try {
+        // These are the cheapest checks - do them first
+        if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
+        if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
+        if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
+        
+        // For available filter, check completed/dropped early
+        if (hasAvailableFilter && (task.completed() || task.dropped())) continue;
+      } catch (e) {
+        continue;
+      }
       
-      // Additional filters that require more processing
-      if (filter.projectId !== undefined) {
+      // Project filter (medium cost)
+      if (hasProjectFilter) {
         try {
           const project = task.containingProject();
           if (filter.projectId === null && project !== null) continue;
@@ -1239,46 +1261,68 @@ export const GET_TASK_COUNT_SCRIPT = `
         }
       }
       
-      if (filter.tags && filter.tags.length > 0) {
-        const taskTags = safeGet(() => task.tags(), []).map(t => t.name());
-        const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-        if (!hasAllTags) continue;
-      }
-      
-      if (filter.search) {
-        const name = safeGet(() => task.name(), '') || '';
-        const note = safeGet(() => task.note(), '') || '';
-        const searchText = (name + ' ' + note).toLowerCase();
-        if (!searchText.includes(filter.search.toLowerCase())) continue;
-      }
-      
-      if (filter.dueBefore || filter.dueAfter) {
+      // Date filters (medium cost)
+      if (hasDueDateFilter) {
         try {
           const dueDate = task.dueDate();
           if (filter.dueBefore && (!dueDate || dueDate > new Date(filter.dueBefore))) continue;
           if (filter.dueAfter && (!dueDate || dueDate < new Date(filter.dueAfter))) continue;
         } catch (e) {
-          if (filter.dueBefore || filter.dueAfter) continue;
+          continue;
         }
       }
       
-      if (filter.deferBefore || filter.deferAfter) {
+      if (hasDeferDateFilter || (hasAvailableFilter && !task.completed())) {
         try {
           const deferDate = task.deferDate();
-          if (filter.deferBefore && (!deferDate || deferDate > new Date(filter.deferBefore))) continue;
-          if (filter.deferAfter && (!deferDate || deferDate < new Date(filter.deferAfter))) continue;
+          if (hasDeferDateFilter) {
+            if (filter.deferBefore && (!deferDate || deferDate > new Date(filter.deferBefore))) continue;
+            if (filter.deferAfter && (!deferDate || deferDate < new Date(filter.deferAfter))) continue;
+          }
+          if (hasAvailableFilter && deferDate && deferDate > new Date()) continue;
         } catch (e) {
-          if (filter.deferBefore || filter.deferAfter) continue;
+          if (hasDeferDateFilter) continue;
         }
       }
       
-      if (filter.available) {
+      // Expensive filters last
+      // Only get tags if we have a tag filter
+      if (hasTagFilter) {
         try {
-          if (task.completed() || task.dropped()) continue;
-          const deferDate = task.deferDate();
-          if (deferDate && deferDate > new Date()) continue;
-          // Check if blocked (has incomplete sequential predecessors)
-          // This is simplified - full availability logic is complex
+          const taskTags = task.tags();
+          // Early exit if no tags
+          if (!taskTags || taskTags.length === 0) continue;
+          
+          // Build tag name array only if needed
+          const tagNames = [];
+          for (let j = 0; j < taskTags.length; j++) {
+            tagNames.push(taskTags[j].name());
+          }
+          
+          // Check if all required tags are present
+          let hasAllTags = true;
+          for (let j = 0; j < filter.tags.length; j++) {
+            if (!tagNames.includes(filter.tags[j])) {
+              hasAllTags = false;
+              break;
+            }
+          }
+          if (!hasAllTags) continue;
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      // Only do search if we have a search filter
+      if (hasSearchFilter) {
+        try {
+          const name = task.name() || '';
+          // Quick check if name contains search term before getting note
+          if (!name.toLowerCase().includes(searchTerm)) {
+            // Only get note if name doesn't match
+            const note = task.note() || '';
+            if (!note.toLowerCase().includes(searchTerm)) continue;
+          }
         } catch (e) {
           continue;
         }
