@@ -54,7 +54,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       
       // Skip dropped tasks - they should not be included in productivity stats
       try {
-        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
+        if (safeGet(() => task.dropped(), false)) continue;
       } catch (e) {}
       
       // Check if task is in period
@@ -62,13 +62,13 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       let createdInPeriod = false;
       
       try {
-        const completionDate = safeGetDate(() => task.completionDate);
+        const completionDate = safeGetDate(() => task.completionDate());
         if (completionDate && completionDate >= periodStart) {
           inPeriod = true;
           completedTasks++;
           
           // Check if completed on time
-          const dueDate = safeGetDate(() => task.dueDate);
+          const dueDate = safeGetDate(() => task.dueDate());
           if (dueDate) {
             if (completionDate > dueDate) {
               overdueCompleted++;
@@ -85,7 +85,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
       
       // Check creation date (if available through modified date as proxy)
       try {
-        const modifiedDate = safeGetDate(() => task.modificationDate);
+        const modifiedDate = safeGetDate(() => task.modificationDate());
         if (modifiedDate && modifiedDate >= periodStart) {
           createdInPeriod = true;
           createdTasks++;
@@ -113,7 +113,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
             break;
           case 'day':
             try {
-              const date = safeGetDate(() => task.completionDate) || safeGetDate(() => task.modificationDate);
+              const date = safeGetDate(() => task.completionDate()) || safeGetDate(() => task.modificationDate());
               if (date) {
                 groupKey = date.toLocaleDateString();
               }
@@ -245,7 +245,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Skip dropped tasks - they should not be included in velocity calculations
       try {
-        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
+        if (safeGet(() => task.dropped(), false)) continue;
       } catch (e) {}
       
       // Apply filters
@@ -270,7 +270,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track completion
       try {
-        const completionDate = safeGetDate(() => task.completionDate);
+        const completionDate = safeGetDate(() => task.completionDate());
         if (completionDate) {
           totalCompleted++;
           
@@ -284,7 +284,7 @@ export const TASK_VELOCITY_SCRIPT = `
           
           // Calculate completion time if we have creation date
           try {
-            const modifiedDate = safeGetDate(() => task.modificationDate);
+            const modifiedDate = safeGetDate(() => task.modificationDate());
             if (modifiedDate && modifiedDate < completionDate) {
               const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
               completionTimes.push(completionHours);
@@ -295,7 +295,7 @@ export const TASK_VELOCITY_SCRIPT = `
       
       // Track creation (using modification date as proxy)
       try {
-        const modifiedDate = safeGetDate(() => task.modificationDate);
+        const modifiedDate = safeGetDate(() => task.modificationDate());
         if (modifiedDate) {
           for (const interval of intervals) {
             if (modifiedDate >= interval.start && modifiedDate < interval.end) {
@@ -397,13 +397,13 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
       
       try {
         // Skip dropped tasks - they should not be included in overdue analysis
-        if (safeGet(() => task.dropped && task.dropped(), false)) continue;
+        if (safeGet(() => task.dropped(), false)) continue;
         
-        const dueDate = safeGetDate(() => task.dueDate);
+        const dueDate = safeGetDate(() => task.dueDate());
         if (!dueDate) continue;
         
         const completed = safeIsCompleted(task);
-        const completionDate = completed ? safeGetDate(() => task.completionDate) : null;
+        const completionDate = completed ? safeGetDate(() => task.completionDate()) : null;
         
         // Check if overdue
         let isOverdue = false;

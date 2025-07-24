@@ -107,19 +107,19 @@ export const EXPORT_TASKS_SCRIPT = `
       }
       
       if (allFields.includes('deferDate')) {
-        const deferDate = task.deferDate();
+        const deferDate = safeGet(() => task.deferDate());
         if (deferDate) taskData.deferDate = deferDate.toISOString();
       }
       
       if (allFields.includes('dueDate')) {
-        const dueDate = task.dueDate();
+        const dueDate = safeGet(() => task.dueDate());
         if (dueDate) taskData.dueDate = dueDate.toISOString();
       }
       
       if (allFields.includes('completed')) {
         taskData.completed = task.completed();
         if (task.completed()) {
-          const completionDate = task.completionDate();
+          const completionDate = safeGet(() => task.completionDate());
           if (completionDate) taskData.completionDate = completionDate.toISOString();
         }
       }
@@ -136,12 +136,12 @@ export const EXPORT_TASKS_SCRIPT = `
       }
       
       if (allFields.includes('created')) {
-        const created = task.creationDate();
+        const created = safeGet(() => task.creationDate());
         if (created) taskData.createdDate = created.toISOString();
       }
       
       if (allFields.includes('modified')) {
-        const modified = task.modificationDate();
+        const modified = safeGet(() => task.modificationDate());
         if (modified) taskData.modifiedDate = modified.toISOString();
       }
       
@@ -250,17 +250,17 @@ export const EXPORT_PROJECTS_SCRIPT = `
       
       // Add dates with safe access
       try {
-        const deferDate = project.deferDate();
+        const deferDate = safeGet(() => project.deferDate());
         if (deferDate) projectData.deferDate = deferDate.toISOString();
       } catch (e) {}
       
       try {
-        const dueDate = project.dueDate();
+        const dueDate = safeGet(() => project.dueDate());
         if (dueDate) projectData.dueDate = dueDate.toISOString();
       } catch (e) {}
       
       try {
-        const completionDate = project.completionDate();
+        const completionDate = safeGet(() => project.completionDate());
         if (completionDate) projectData.completionDate = completionDate.toISOString();
       } catch (e) {}
       
@@ -296,7 +296,7 @@ export const EXPORT_PROJECTS_SCRIPT = `
                   availableTasks++;
                 }
                 try {
-                  const dueDate = task.dueDate();
+                  const dueDate = safeGet(() => task.dueDate());
                   if (dueDate && dueDate < now) {
                     overdueCount++;
                   }

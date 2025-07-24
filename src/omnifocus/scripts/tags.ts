@@ -72,7 +72,7 @@ export const LIST_TAGS_SCRIPT = `
     // Build tag list
     for (let i = 0; i < allTags.length; i++) {
       const tag = allTags[i];
-      const tagId = safeGet(() => tag.id.primaryKey, 'unknown');
+      const tagId = safeGet(() => tag.id(), 'unknown');
       const usage = tagUsage[tagId] || { total: 0, active: 0, completed: 0 };
       
       // Skip empty tags if requested
@@ -86,7 +86,7 @@ export const LIST_TAGS_SCRIPT = `
       };
       
       // Check for parent tag
-      const parent = safeGet(() => tag.parent);
+      const parent = safeGet(() => tag.parent());
       if (parent) {
         tagInfo.parentId = safeGet(() => parent.id());
         tagInfo.parentName = safeGet(() => parent.name());
