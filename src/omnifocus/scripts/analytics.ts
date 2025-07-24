@@ -148,7 +148,9 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
     let dailyValues = [];
     try {
       // Convert dailyStats object to array of values
-      for (let key in dailyStats) {
+      const keys = Object.keys(dailyStats || {});
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
         if (dailyStats[key] !== undefined) {
           dailyValues.push(dailyStats[key]);
         }
@@ -507,17 +509,27 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
     }
     
     // Calculate averages for groups
-    for (const group in groupedAnalysis) {
+    const groupKeys = Object.keys(groupedAnalysis || {});
+    for (let i = 0; i < groupKeys.length; i++) {
+      const group = groupKeys[i];
       const g = groupedAnalysis[group];
-      g.avgOverdueDays = (g.avgOverdueDays / g.count).toFixed(1);
-      // Only keep top 5 tasks per group
-      g.tasks = g.tasks.slice(0, 5);
+      if (g && g.count > 0) {
+        g.avgOverdueDays = (g.avgOverdueDays / g.count).toFixed(1);
+        // Only keep top 5 tasks per group
+        g.tasks = g.tasks.slice(0, 5);
+      }
     }
     
     // Identify patterns
-    const mostOverdueProject = Object.entries(groupedAnalysis)
-      .filter(([key, _]) => options.groupBy === 'project')
-      .sort((a, b) => b[1].count - a[1].count)[0];
+    let mostOverdueProject = null;
+    try {
+      const entries = Object.entries(groupedAnalysis || {});
+      mostOverdueProject = entries
+        .filter(([key, _]) => options.groupBy === 'project')
+        .sort((a, b) => (b[1].count || 0) - (a[1].count || 0))[0];
+    } catch (e) {
+      // Handle any errors with object operations
+    }
     
     const recommendations = [];
     
