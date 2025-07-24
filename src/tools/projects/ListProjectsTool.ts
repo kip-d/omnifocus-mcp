@@ -42,10 +42,15 @@ export class ListProjectsTool extends BaseTool {
         minimum: 1,
         maximum: 1000,
       },
+      includeStats: {
+        type: 'boolean',
+        description: 'Calculate detailed task statistics for each project (slower on large databases)',
+        default: false,
+      },
     },
   };
 
-  async execute(args: ProjectFilter & { limit?: number }): Promise<any> {
+  async execute(args: ProjectFilter & { limit?: number; includeStats?: boolean }): Promise<any> {
     const timer = new OperationTimer();
 
     try {
@@ -82,10 +87,11 @@ export class ListProjectsTool extends BaseTool {
       }
 
       // Execute script
-      const { limit, ...filter } = args;
+      const { limit, includeStats, ...filter } = args;
       const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
         filter,
-        limit: limit || 100
+        limit: limit || 100,
+        includeStats: includeStats || false
       });
       const result = await this.omniAutomation.execute<any>(script);
 

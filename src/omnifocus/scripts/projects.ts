@@ -4,6 +4,7 @@ import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
 export const LIST_PROJECTS_SCRIPT = `
   const filter = {{filter}};
   const limit = {{limit}};
+  const includeStats = {{includeStats}};
   const projects = [];
   
   ${SAFE_UTILITIES_SCRIPT}
@@ -63,7 +64,89 @@ export const LIST_PROJECTS_SCRIPT = `
       const deferDate = safeGetDate(() => project.deferDate());
       if (deferDate) projectObj.deferDate = deferDate;
       
+      // Basic task count (always included for backward compatibility)
       projectObj.numberOfTasks = safeGetTaskCount(project);
+      
+      // Collect detailed statistics only if requested
+      if (includeStats === true) {
+        try {
+          const tasks = project.flattenedTasks();
+          if (tasks && tasks.length > 0) {
+            let active = 0;
+            let completed = 0;
+            let overdue = 0;
+            let flagged = 0;
+            let totalEstimatedMinutes = 0;
+            let lastActivityDate = null;
+            const now = new Date();
+            
+            // Analyze tasks
+            for (let j = 0; j < tasks.length; j++) {
+              const task = tasks[j];
+              
+              if (safeIsCompleted(task)) {
+                completed++;
+                // Track last completion date
+                const completionDate = safeGetDate(() => task.completionDate());
+                if (completionDate && (!lastActivityDate || new Date(completionDate) > new Date(lastActivityDate))) {
+                  lastActivityDate = completionDate;
+                }
+              } else {
+                active++;
+                
+                // Check if overdue
+                const dueDate = safeGetDate(() => task.dueDate());
+                if (dueDate && new Date(dueDate) < now) {
+                  overdue++;
+                }
+                
+                // Track last modification for active tasks
+                const modDate = safeGetDate(() => task.modificationDate());
+                if (modDate && (!lastActivityDate || new Date(modDate) > new Date(lastActivityDate))) {
+                  lastActivityDate = modDate;
+                }
+              }
+              
+              if (safeIsFlagged(task)) {
+                flagged++;
+              }
+              
+              // Sum estimated time
+              const estimatedMinutes = safeGetEstimatedMinutes(task);
+              if (estimatedMinutes) {
+                totalEstimatedMinutes += estimatedMinutes;
+              }
+            }
+            
+            // Add statistics to project object
+            projectObj.stats = {
+              active: active,
+              completed: completed,
+              total: tasks.length,
+              completionRate: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
+              overdue: overdue,
+              flagged: flagged,
+              estimatedHours: totalEstimatedMinutes > 0 ? (totalEstimatedMinutes / 60).toFixed(1) : null,
+              lastActivityDate: lastActivityDate
+            };
+          } else {
+            // Empty project stats
+            projectObj.stats = {
+              active: 0,
+              completed: 0,
+              total: 0,
+              completionRate: 0,
+              overdue: 0,
+              flagged: 0,
+              estimatedHours: null,
+              lastActivityDate: null
+            };
+          }
+        } catch (statsError) {
+          // If stats collection fails, continue without them
+          projectObj.statsError = "Failed to collect statistics";
+        }
+      }
       
       projects.push(projectObj);
       
