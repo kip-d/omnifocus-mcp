@@ -21,6 +21,8 @@
  *    inaccessible or incomplete.
  */
 
+import { RepetitionRule } from './jxa-types.js';
+
 /**
  * OmniFocus Task representation
  *
@@ -45,10 +47,10 @@ export interface OmniFocusTask {
   tags: string[];
   estimatedMinutes?: number;
   completed: boolean;
-  dropped: boolean;
-  effectivelyCompleted: boolean;
-  blocked: boolean;
-  sequential: boolean;
+  dropped?: boolean;
+  effectivelyCompleted?: boolean;
+  blocked?: boolean;
+  sequential?: boolean;
   inInbox: boolean;
 
   // Recurring task information
@@ -87,37 +89,8 @@ export interface OmniFocusTag {
   children: string[];
 }
 
-/**
- * OmniFocus RepetitionRule interface
- *
- * Based on official OmniFocus Automation documentation:
- * https://www.omni-automation.com/omnifocus/task-repeat.html
- *
- * The actual API properties are:
- * - method (Task.RepetitionMethod, read-only)
- * - ruleString (String, read-only)
- * - anchorDateKey (Task.AnchorDateKey, read-only)
- * - catchUpAutomatically (Boolean, read-only)
- * - scheduleType (Task.RepetitionScheduleType, read-only)
- */
-export interface RepetitionRule {
-  // Official OmniFocus API properties (read-only)
-  method?: string; // Task.RepetitionMethod: 'DeferUntilDate' | 'DueDate' | 'Fixed' | 'None'
-  ruleString?: string; // FREQ=WEEKLY, FREQ=DAILY, etc. (RRULE format)
-  anchorDateKey?: string; // Task.AnchorDateKey: 'DeferDate' | 'DueDate' | 'PlannedDate'
-  catchUpAutomatically?: boolean;
-  scheduleType?: string; // Task.RepetitionScheduleType: 'FromCompletion' | 'None' | 'Regularly'
-
-  // Parsed/inferred properties for easier consumption
-  unit?: 'days' | 'weeks' | 'months' | 'years';
-  steps?: number;
-  interval?: string; // Human-readable: "1 week", "2 days"
-  frequency?: string; // Human-readable: "Daily", "Weekly", etc.
-
-  // Inference metadata
-  _inferred?: boolean; // True if data came from smart inference vs API
-  _inferenceSource?: 'api' | 'ruleString' | 'taskName' | 'projectContext' | 'pattern';
-}
+// RepetitionRule is imported from './jxa-types.js'
+// It provides a union type that properly handles different repetition frequencies
 
 /**
  * Recurring task analysis results
@@ -127,7 +100,7 @@ export interface RepetitionRule {
  */
 export interface RecurringTaskStatus {
   isRecurring: boolean;
-  type: 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override';
+  type: 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped';
 
   // Human-readable frequency description
   frequency?: string; // "Daily", "Weekly", "Monthly", "Every 2 weeks", "Quarterly", etc.

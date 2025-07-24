@@ -137,6 +137,11 @@ export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number; skipA
         deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
         completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
         added: task.added ? new Date(task.added) : undefined,
+        // Ensure recurringStatus has properly typed 'type' field
+        recurringStatus: task.recurringStatus ? {
+          ...task.recurringStatus,
+          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+        } : undefined,
       }));
 
       // Create standardized response

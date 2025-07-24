@@ -4,32 +4,14 @@
  */
 
 import { StandardResponse } from '../utils/response-format.js';
-import { RepetitionRule } from '../omnifocus/jxa-types.js';
+import { 
+  OmniFocusTask,
+  OmniFocusProject,
+  OmniFocusTag
+} from '../omnifocus/types.js';
 
-// Task tool responses
-export interface OmniFocusTask {
-  id: string;
-  name: string;
-  completed: boolean;
-  flagged: boolean;
-  inInbox: boolean;
-  note?: string;
-  project?: string;
-  projectId?: string;
-  dueDate?: Date;
-  deferDate?: Date;
-  completionDate?: Date;
-  tags: string[];
-  added?: Date;
-  repetitionRule?: RepetitionRule;
-  recurringStatus?: {
-    isRecurring: boolean;
-    type: string;
-    frequency?: string;
-    confidence?: number;
-    source?: string;
-  };
-}
+// Re-export the shared types for convenience
+export { OmniFocusTask, OmniFocusProject, OmniFocusTag };
 
 export interface TaskListMetadata {
   total_items: number;
@@ -117,23 +99,7 @@ export interface TodaysAgendaResponseData {
 export type TodaysAgendaResponse = StandardResponse<TodaysAgendaResponseData>;
 
 // Project tool responses
-export interface OmniFocusProject {
-  id: string;
-  name: string;
-  status: string;
-  flagged: boolean;
-  dueDate?: Date;
-  deferDate?: Date;
-  completionDate?: Date;
-  note?: string;
-  taskCount: number;
-  availableTaskCount: number;
-  remainingTaskCount: number;
-  tags: string[];
-  folder?: string;
-  isSequential: boolean;
-  isSingleAction: boolean;
-}
+// OmniFocusProject is imported from '../omnifocus/types.js'
 
 export type ListProjectsResponse = StandardResponse<{ items: OmniFocusProject[] }>;
 
@@ -162,20 +128,7 @@ export type CompleteProjectResponse = StandardResponse<{ project: { id: string; 
 export type DeleteProjectResponse = StandardResponse<{ project: { id: string; deleted: true; name: string } }>;
 
 // Tag tool responses
-export interface OmniFocusTag {
-  name: string;
-  id: string;
-  taskCount: number;
-  availableTaskCount?: number;
-  remainingTaskCount?: number;
-  tags?: string[];
-  hierarchy?: Array<{
-    name: string;
-    id: string;
-    taskCount: number;
-    children?: unknown[];
-  }>;
-}
+// OmniFocusTag is imported from '../omnifocus/types.js'
 
 export type ListTagsResponse = StandardResponse<{ items: OmniFocusTag[] }>;
 
