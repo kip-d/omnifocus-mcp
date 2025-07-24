@@ -6,7 +6,7 @@
  * while our MCP interface uses plain JSON-serializable objects.
  */
 
-import type { OmniFocusTask, OmniFocusProject, OmniFocusTag } from '../types';
+import type { OmniFocusTask, OmniFocusProject, OmniFocusTag } from '../types.js';
 
 /**
  * Adapts an OmniFocus Task object to our MCP response format

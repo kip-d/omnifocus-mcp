@@ -8,7 +8,7 @@
  */
 
 // Re-export official API types
-export * from './api-types';
+export * from './api-types.js';
 
 // Export type adapters
 export { 
@@ -16,7 +16,7 @@ export {
   adaptProject, 
   adaptTag,
   TypeGuards 
-} from './type-adapters';
+} from './type-adapters.js';
 
 // Export paths to definition files for reference
 export const API_DEFINITIONS = {

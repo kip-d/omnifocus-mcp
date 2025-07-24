@@ -7,19 +7,16 @@
 
 /// <reference path="./OmniFocus.d.ts" />
 
-// Re-export commonly used types from the official API
-export type { 
-  Task,
-  Project,
-  Tag,
-  Document,
-  Database,
-  ObjectIdentifier,
-  DateComponents,
-  Folder,
-  Perspective,
-  ReviewInterval
-} from './OmniFocus';
+// The official OmniFocus types are available globally due to the reference path above
+// They are ambient declarations and don't need to be imported or re-exported
+
+// Re-export type aliases for convenience
+export type OmniFocusTask = Task;
+export type OmniFocusProject = Project;
+export type OmniFocusTag = Tag;
+export type OmniFocusDocument = Document;
+export type OmniFocusDatabase = Database;
+export type OmniFocusObjectIdentifier = ObjectIdentifier;
 
 // Utility type for safe property access in JXA context
 export type SafeGetter<T> = () => T | null | undefined;
