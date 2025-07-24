@@ -21,11 +21,11 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetProject(task) {
     try {
-      const project = task.containingProject;
+      const project = task.containingProject();
       if (project) {
         return {
-          name: safeGet(() => project.name),
-          id: safeGet(() => project.id.primaryKey)
+          name: safeGet(() => project.name()),
+          id: safeGet(() => project.id())
         };
       }
       return null;
@@ -36,11 +36,11 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetTags(task) {
     try {
-      const tags = task.tags;
+      const tags = task.tags();
       if (!tags) return [];
       const tagNames = [];
       for (let i = 0; i < tags.length; i++) {
-        const tagName = safeGet(() => tags[i].name);
+        const tagName = safeGet(() => tags[i].name());
         if (tagName) {
           tagNames.push(tagName);
         }
@@ -53,8 +53,8 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetFolder(project) {
     try {
-      const folder = project.parentFolder;
-      return folder ? safeGet(() => folder.name) : null;
+      const folder = project.parentFolder();
+      return folder ? safeGet(() => folder.name()) : null;
     } catch (e) {
       return null;
     }
@@ -62,7 +62,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetTaskCount(project) {
     try {
-      const tasks = project.flattenedTasks;
+      const tasks = project.flattenedTasks();
       return tasks ? tasks.length : 0;
     } catch (e) {
       return 0;
@@ -71,7 +71,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetStatus(obj) {
     try {
-      const status = obj.status;
+      const status = obj.status();
       return status || 'unknown';
     } catch (e) {
       return 'unknown';
@@ -80,7 +80,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeIsCompleted(obj) {
     try {
-      return obj.completed === true;
+      return obj.completed() === true;
     } catch (e) {
       return false;
     }
@@ -88,7 +88,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeIsFlagged(obj) {
     try {
-      return obj.flagged === true;
+      return obj.flagged() === true;
     } catch (e) {
       return false;
     }
@@ -96,7 +96,7 @@ export const SAFE_UTILITIES_SCRIPT = `
   
   function safeGetEstimatedMinutes(task) {
     try {
-      const estimate = task.estimatedMinutes;
+      const estimate = task.estimatedMinutes();
       return typeof estimate === 'number' ? estimate : null;
     } catch (e) {
       return null;
@@ -332,14 +332,14 @@ export const LIST_TASKS_SCRIPT = `
   // Helper function to check if task matches filters
   function matchesFilters(task, filter) {
     // Basic property filters
-    if (filter.completed !== undefined && task.completed !== filter.completed) return false;
-    if (filter.flagged !== undefined && task.flagged !== filter.flagged) return false;
-    if (filter.inInbox !== undefined && task.inInbox !== filter.inInbox) return false;
+    if (filter.completed !== undefined && task.completed() !== filter.completed) return false;
+    if (filter.flagged !== undefined && task.flagged() !== filter.flagged) return false;
+    if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) return false;
     
     // Search filter
     if (filter.search) {
-      const name = safeGet(() => task.name, '') || '';
-      const note = safeGet(() => task.note, '') || '';
+      const name = safeGet(() => task.name(), '') || '';
+      const note = safeGet(() => task.note(), '') || '';
       const searchText = (name + ' ' + note).toLowerCase();
       if (!searchText.includes(filter.search.toLowerCase())) return false;
     }
@@ -360,17 +360,17 @@ export const LIST_TASKS_SCRIPT = `
     
     // Date filters
     if (filter.dueBefore || filter.dueAfter) {
-      if (!safeDateFilter(task, () => task.dueDate, filter.dueBefore, filter.dueAfter)) return false;
+      if (!safeDateFilter(task, () => task.dueDate(), filter.dueBefore, filter.dueAfter)) return false;
     }
     
     if (filter.deferBefore || filter.deferAfter) {
-      if (!safeDateFilter(task, () => task.deferDate, filter.deferBefore, filter.deferAfter)) return false;
+      if (!safeDateFilter(task, () => task.deferDate(), filter.deferBefore, filter.deferAfter)) return false;
     }
     
     // Available filter
     if (filter.available) {
-      if (task.completed || task.dropped) return false;
-      const deferDate = safeGet(() => task.deferDate);
+      if (task.completed() || task.dropped()) return false;
+      const deferDate = safeGet(() => task.deferDate());
       if (deferDate && deferDate > new Date()) return false;
     }
     
@@ -378,14 +378,14 @@ export const LIST_TASKS_SCRIPT = `
   }
 
   try {
-    const allTasks = doc.flattenedTasks;
+    const allTasks = doc.flattenedTasks();
     
     // Check if allTasks is null or undefined
     if (!allTasks) {
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTasks returned null or undefined"
+        details: "doc.flattenedTasks() returned null or undefined"
       });
     }
     
@@ -409,15 +409,15 @@ export const LIST_TASKS_SCRIPT = `
       
       // Build task object with safe property access
       const taskObj = {
-        id: safeGet(() => task.id.primaryKey, 'unknown'),
-        name: safeGet(() => task.name, 'Unnamed Task'),
+        id: safeGet(() => task.id(), 'unknown'),
+        name: safeGet(() => task.name(), 'Unnamed Task'),
         completed: safeIsCompleted(task),
         flagged: safeIsFlagged(task),
-        inInbox: safeGet(() => task.inInbox, false)
+        inInbox: safeGet(() => task.inInbox(), false)
       };
       
       // Add optional properties using safe utilities
-      const note = safeGet(() => task.note);
+      const note = safeGet(() => task.note());
       if (note) taskObj.note = note;
       
       const project = safeGetProject(task);
@@ -426,16 +426,19 @@ export const LIST_TASKS_SCRIPT = `
         taskObj.projectId = project.id;
       }
       
-      const dueDate = safeGetDate(() => task.dueDate);
+      const dueDate = safeGetDate(() => task.dueDate());
       if (dueDate) taskObj.dueDate = dueDate;
       
-      const deferDate = safeGetDate(() => task.deferDate);
+      const deferDate = safeGetDate(() => task.deferDate());
       if (deferDate) taskObj.deferDate = deferDate;
       
       taskObj.tags = safeGetTags(task);
       
-      const added = safeGetDate(() => task.added);
+      const added = safeGetDate(() => task.added());
       if (added) taskObj.added = added;
+      
+      const estimatedMinutes = safeGetEstimatedMinutes(task);
+      if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
       
       // Add repetition rule and recurring status analysis
       const analysisStart = Date.now();
@@ -447,7 +450,7 @@ export const LIST_TASKS_SCRIPT = `
           skipped: true
         };
       } else {
-        const repetitionRule = safeGet(() => task.repetitionRule);
+        const repetitionRule = safeGet(() => task.repetitionRule());
         if (repetitionRule) {
           let ruleData = safeExtractRuleProperties(repetitionRule);
           
