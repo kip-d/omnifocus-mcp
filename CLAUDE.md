@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## OmniFocus API Reference
+
+- **Official TypeScript definitions**: `src/omnifocus/api/OmniFocus.d.ts`
+- **Version**: OmniFocus 4.6.1 (182.3) on macOS 15.5
+- **Generated**: 2025-07-24
+- **IMPORTANT**: Always refer to these official type definitions when working with OmniFocus automation
+- The definitions show all available classes, methods, and properties in the OmniFocus automation API
+
 ## Development Notes
 
 - **TypeScript First**: This is a TypeScript project. All new code should be written in TypeScript (.ts files)
