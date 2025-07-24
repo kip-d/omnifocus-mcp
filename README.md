@@ -310,11 +310,22 @@ src/
 └── index.ts        # Server entry point
 ```
 
+## Known Limitations
+
+### Tag Assignment
+Due to OmniFocus JXA API limitations, tags cannot be assigned during task creation. **Workaround**: Create the task first, then use `update_task` to assign tags.
+
+### Performance Considerations
+Some operations may take 30-60 seconds on large databases (2000+ tasks) due to OmniFocus API constraints. This is expected behavior. See [Performance documentation](docs/PERFORMANCE_ISSUE.md) for details.
+
+### MCP Architecture
+MCP does not support progress indicators or streaming responses. Long operations must complete before returning results. See [User Feedback and Limitations](docs/USER_FEEDBACK_AND_LIMITATIONS.md) for detailed explanation.
+
 ## Performance
 
-- Handles 1000+ tasks with sub-second response times
+- Handles 1000+ tasks with sub-second response times (cached)
 - Intelligent caching reduces OmniFocus API calls by 80%+
-- Concurrent script execution for batch operations
+- First-time operations may be slower while populating cache
 - Memory-efficient with automatic cache cleanup
 
 ## Security
