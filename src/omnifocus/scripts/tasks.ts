@@ -127,7 +127,7 @@ export const LIST_TASKS_SCRIPT = `
       analyze: function(task, rule) {
         const taskName = task.name().toLowerCase();
         const project = task.containingProject();
-        const projectName = project ? project.name().toLowerCase() : '';
+        const projectName = project ? project.name.toLowerCase() : '';
         
         const isGamingTask = this.patterns.tasks.some(p => taskName.includes(p)) ||
                             this.patterns.projects.some(p => projectName.includes(p));
@@ -422,7 +422,7 @@ export const LIST_TASKS_SCRIPT = `
       
       const project = safeGetProject(task);
       if (project) {
-        taskObj.project = project.name();
+        taskObj.project = project.name;
         taskObj.projectId = project.id;
       }
       
@@ -887,7 +887,7 @@ export const UPDATE_TASK_SCRIPT = `
       if (updates.projectId !== "") {
         const project = safeGetProject(task);
         if (project) {
-          response.changes.projectName = project.name();
+          response.changes.projectName = project.name;
         }
       } else {
         response.changes.projectName = "Inbox";
@@ -1166,7 +1166,7 @@ export const TODAYS_AGENDA_SCRIPT = `
         
         const project = safeGetProject(task);
         if (project) {
-          taskObj.project = project.name();
+          taskObj.project = project.name;
           taskObj.projectId = project.id;
         }
         
