@@ -276,28 +276,8 @@ export const MANAGE_TAGS_SCRIPT = `
           });
         }
         
-        // Count tasks using this tag
-        let taskCount = 0;
-        const tasks = doc.flattenedTasks();
-        if (!tasks) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to retrieve tasks from OmniFocus"
-          });
-        }
-        for (let i = 0; i < tasks.length; i++) {
-          try {
-            const taskTags = safeGetTags(tasks[i]);
-            const tagIdToDelete = safeGet(() => tagToDelete.id());
-            const tagNameToDelete = safeGet(() => tagToDelete.name());
-            // Check if task has this tag by name
-            if (taskTags.includes(tagNameToDelete)) {
-              taskCount++;
-            }
-          } catch (e) {}
-        }
-        
         // Delete the tag using JXA app.delete method
+        // Note: OmniFocus automatically removes the tag from all tasks when deleted
         try {
           app.delete(tagToDelete);
           
@@ -305,8 +285,7 @@ export const MANAGE_TAGS_SCRIPT = `
             success: true,
             action: 'deleted',
             tagName: tagName,
-            tasksAffected: taskCount,
-            message: "Tag '" + tagName + "' deleted. " + taskCount + " tasks were affected."
+            message: "Tag '" + tagName + "' deleted successfully."
           });
         } catch (deleteError) {
           return JSON.stringify({
