@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createLogger } from '../utils/logger.js';
 
+// For TypeScript type information about OmniFocus objects, see:
+// ./api/OmniFocus.d.ts - Official OmniFocus API types
+// ./api/type-adapters.ts - Type conversion utilities
+
 const logger = createLogger('omniautomation');
 
 export class OmniAutomationError extends Error {

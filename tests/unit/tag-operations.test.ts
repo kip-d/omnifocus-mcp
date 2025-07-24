@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags';
 
 describe('Tag Operations Fix Verification', () => {
-  it('should use correct method calls with parentheses', () => {
-    // Verify tag method calls use parentheses (except primaryKey which is a property)
-    expect(LIST_TAGS_SCRIPT).toContain('tag.parent()');
-    expect(LIST_TAGS_SCRIPT).toContain('task.tags()');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.name()');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.id()');
+  it('should use correct property access without parentheses', () => {
+    // Verify tag properties use direct access (official API pattern)
+    expect(LIST_TAGS_SCRIPT).toContain('tag.parent');
+    expect(LIST_TAGS_SCRIPT).toContain('task.tags');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.name');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
   });
   
   it('should use plural methods for tag manipulation', () => {

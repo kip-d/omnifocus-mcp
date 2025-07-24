@@ -1,12 +1,16 @@
 /**
  * OmniFocus MCP Bridge Type Definitions
  *
+ * These types represent the JSON-serializable format used by the MCP bridge.
+ * For the official OmniFocus API types, see: ./api/OmniFocus.d.ts
+ * For type conversion utilities, see: ./api/type-adapters.ts
+ *
  * IMPORTANT LEARNINGS FROM API EXPLORATION (July 2025):
  *
- * 1. REPETITION RULES: OmniFocus JXA provides task.repetitionRule() objects,
+ * 1. REPETITION RULES: OmniFocus JXA provides task.repetitionRule objects,
  *    but their properties (unit, steps, method, etc.) are NOT accessible
- *    through standard property access or method calls. This is a significant
- *    API limitation that requires intelligent inference to work around.
+ *    through standard property access. This is a significant API limitation
+ *    that requires intelligent inference to work around.
  *
  * 2. SMART INFERENCE: We use task name pattern matching, project context,
  *    and other heuristics to extract meaningful recurring task information

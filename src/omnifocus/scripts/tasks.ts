@@ -865,8 +865,8 @@ export const UPDATE_TASK_SCRIPT = `
     
     // Build response with updated fields
     const response = {
-      id: task.id.primaryKey,
-      name: task.name,
+      id: safeGet(() => task.id.primaryKey, 'unknown'),
+      name: safeGet(() => task.name, 'Unnamed Task'),
       updated: true,
       changes: {}
     };
@@ -955,7 +955,7 @@ export const COMPLETE_TASK_SCRIPT = `
     const completionDate = safeGetDate(() => task.completionDate) || new Date().toISOString();
     
     return JSON.stringify({
-      id: task.id(),
+      id: safeGet(() => task.id.primaryKey, 'unknown'),
       completed: true,
       completionDate: completionDate
     });

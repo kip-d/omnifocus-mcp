@@ -49,32 +49,31 @@ describe('Bug Fixes - Unit Tests', () => {
       expect(script).toContain('task.assignedContainer = null');
       
       // Should handle project assignment
-      expect(script).toContain('const projects = doc.flattenedProjects()');
-      expect(script).toContain('if (projects[i].id() === updates.projectId)');
+      expect(script).toContain('const projects = doc.flattenedProjects');
+      expect(script).toContain('if (projects[i].id.primaryKey === updates.projectId)');
       expect(script).toContain('task.assignedContainer = projects[i]');
     });
   });
 
   describe('Bug 4: List Projects ID Field', () => {
-    it('LIST_PROJECTS_SCRIPT should return id using project.id()', () => {
+    it('LIST_PROJECTS_SCRIPT should return id using project.id.primaryKey', () => {
       const script = LIST_PROJECTS_SCRIPT;
       
-      // Should build project object with id field
-      expect(script).toMatch(/const projectObj = \{[\s\S]*?id: project\.id\(\)/);
+      // Should build project object with id field using official API
+      expect(script).toContain('project.id.primaryKey');
       
-      // Should NOT use the broken .primaryKey access
-      expect(script).not.toContain('id: project.id.primaryKey,');
-      expect(script).not.toContain('id: project.id.primaryKey;');
+      // Should NOT use the old method call
+      expect(script).not.toContain('project.id()');
     });
     
-    it('UPDATE_PROJECT_SCRIPT should use project.id() for comparisons', () => {
+    it('UPDATE_PROJECT_SCRIPT should use project.id.primaryKey for comparisons', () => {
       const script = UPDATE_PROJECT_SCRIPT;
       
-      // Should compare using id() method
-      expect(script).toContain('if (projects[i].id() === projectId)');
+      // Should compare using id.primaryKey
+      expect(script).toContain('if (projects[i].id.primaryKey === projectId)');
       
       // Should return id in response
-      expect(script).toContain('id: targetProject.id()');
+      expect(script).toContain('targetProject.id.primaryKey');
     });
   });
 

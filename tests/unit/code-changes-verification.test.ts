@@ -30,12 +30,12 @@ describe('Code Changes Verification', () => {
   });
 
   describe('Bug Fix: List Projects Returns ID Field', () => {
-    it('LIST_PROJECTS_SCRIPT should use project.id() not project.id.primaryKey', () => {
-      // Should use the correct JXA API
-      expect(LIST_PROJECTS_SCRIPT).toContain('id: project.id()');
+    it('LIST_PROJECTS_SCRIPT should use project.id.primaryKey for official API', () => {
+      // Should use the correct official API pattern
+      expect(LIST_PROJECTS_SCRIPT).toContain('project.id.primaryKey');
       
-      // Should NOT use the broken pattern
-      expect(LIST_PROJECTS_SCRIPT).not.toContain('id: project.id.primaryKey,');
+      // Should NOT use the old method call pattern
+      expect(LIST_PROJECTS_SCRIPT).not.toContain('project.id()');
     });
   });
 
