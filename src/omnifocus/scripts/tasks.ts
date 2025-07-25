@@ -442,6 +442,42 @@ export const LIST_TASKS_SCRIPT = `
       const added = safeGetDate(() => task.added());
       if (added) taskObj.added = added;
       
+      // Enhanced properties discovered through API exploration
+      // Task state properties that affect actionability
+      const blocked = safeGet(() => task.blocked(), false);
+      const next = safeGet(() => task.next(), false);
+      if (blocked) taskObj.blocked = blocked;
+      if (next) taskObj.next = next;
+      
+      // Effective dates (inherited from parent)
+      const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
+      const effectiveDueDate = safeGetDate(() => task.effectiveDueDate());
+      if (effectiveDeferDate && (!deferDate || effectiveDeferDate.getTime() !== deferDate.getTime())) {
+        taskObj.effectiveDeferDate = effectiveDeferDate.toISOString();
+      }
+      if (effectiveDueDate && (!dueDate || effectiveDueDate.getTime() !== dueDate.getTime())) {
+        taskObj.effectiveDueDate = effectiveDueDate.toISOString();
+      }
+      
+      // Include metadata if requested (avoid overhead by default)
+      if (filter.includeMetadata) {
+        const creationDate = safeGetDate(() => task.creationDate());
+        const modificationDate = safeGetDate(() => task.modificationDate());
+        if (creationDate) taskObj.creationDate = creationDate.toISOString();
+        if (modificationDate) taskObj.modificationDate = modificationDate.toISOString();
+      }
+      
+      // Child task counts (for parent tasks)
+      const numberOfTasks = safeGet(() => task.numberOfTasks(), 0);
+      if (numberOfTasks > 0) {
+        taskObj.childCounts = {
+          total: numberOfTasks,
+          available: safeGet(() => task.numberOfAvailableTasks(), 0),
+          completed: safeGet(() => task.numberOfCompletedTasks(), 0)
+        };
+      }
+      
+      // Estimated duration
       const estimatedMinutes = safeGetEstimatedMinutes(task);
       if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
       
