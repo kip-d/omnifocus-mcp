@@ -74,11 +74,29 @@ export interface OmniFocusProject {
   sequential: boolean;
   containsSingletonActions: boolean;
   lastReviewDate?: Date;
-  reviewInterval?: number; // in days
+  nextReviewDate?: Date;
+  reviewInterval?: number; // in days (keep original type)
+  reviewIntervalDetails?: { // Add as separate property
+    unit: string;
+    steps: number;
+  };
   folder?: string;
   numberOfTasks: number;
   numberOfAvailableTasks: number;
   numberOfCompletedTasks: number;
+  // Enhanced properties
+  nextTask?: {
+    id: string;
+    name: string;
+    flagged: boolean;
+    dueDate?: Date;
+  };
+  completedByChildren?: boolean;
+  taskCounts?: {
+    total: number;
+    available: number;
+    completed: number;
+  };
 }
 
 export interface OmniFocusTag {

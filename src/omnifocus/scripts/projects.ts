@@ -64,6 +64,56 @@ export const LIST_PROJECTS_SCRIPT = `
       const deferDate = safeGetDate(() => project.deferDate());
       if (deferDate) projectObj.deferDate = deferDate;
       
+      // Enhanced properties from API exploration
+      // Next actionable task
+      const nextTask = safeGet(() => project.nextTask());
+      if (nextTask) {
+        projectObj.nextTask = {
+          id: safeGet(() => nextTask.id(), 'unknown'),
+          name: safeGet(() => nextTask.name(), 'Unnamed Task'),
+          flagged: safeGet(() => nextTask.flagged(), false),
+          dueDate: safeGetDate(() => nextTask.dueDate())
+        };
+      }
+      
+      // Root task provides access to project hierarchy
+      const rootTask = safeGet(() => project.rootTask());
+      if (rootTask) {
+        // Sequential vs parallel
+        projectObj.sequential = safeGet(() => project.sequential(), false);
+        
+        // Completion behavior
+        projectObj.completedByChildren = safeGet(() => project.completedByChildren(), false);
+        
+        // Task counts from root task (more accurate)
+        projectObj.taskCounts = {
+          total: safeGet(() => rootTask.numberOfTasks(), 0),
+          available: safeGet(() => rootTask.numberOfAvailableTasks(), 0),
+          completed: safeGet(() => rootTask.numberOfCompletedTasks(), 0)
+        };
+      }
+      
+      // Review dates
+      const lastReviewDate = safeGetDate(() => project.lastReviewDate());
+      if (lastReviewDate) projectObj.lastReviewDate = lastReviewDate;
+      
+      const nextReviewDate = safeGetDate(() => project.nextReviewDate());
+      if (nextReviewDate) projectObj.nextReviewDate = nextReviewDate;
+      
+      // Review interval (raw number from API)
+      const reviewInterval = safeGet(() => project.reviewInterval());
+      if (reviewInterval !== null && reviewInterval !== undefined) {
+        projectObj.reviewInterval = reviewInterval; // Days as number
+        
+        // Try to extract detailed interval if it's an object
+        if (typeof reviewInterval === 'object' && reviewInterval !== null) {
+          projectObj.reviewIntervalDetails = {
+            unit: safeGet(() => reviewInterval.unit, 'days'),
+            steps: safeGet(() => reviewInterval.steps, reviewInterval)
+          };
+        }
+      }
+      
       // Basic task count (always included for backward compatibility)
       projectObj.numberOfTasks = safeGetTaskCount(project);
       
