@@ -330,6 +330,114 @@ export const LIST_TASKS_SCRIPT = `
   }
   
   // Helper function to check if task matches filters
+  // Helper function to build task object
+  function buildTaskObject(task, filter, skipRecurringAnalysis) {
+    const taskObj = {
+      id: safeGet(() => task.id(), 'unknown'),
+      name: safeGet(() => task.name(), 'Unnamed Task'),
+      completed: safeIsCompleted(task),
+      flagged: safeIsFlagged(task),
+      inInbox: safeGet(() => task.inInbox(), false)
+    };
+    
+    // Add optional properties using safe utilities
+    const note = safeGet(() => task.note());
+    if (note) taskObj.note = note;
+    
+    const project = safeGetProject(task);
+    if (project) {
+      taskObj.project = project.name;
+      taskObj.projectId = project.id;
+    }
+    
+    const dueDate = safeGetDate(() => task.dueDate());
+    if (dueDate) taskObj.dueDate = dueDate;
+    
+    const deferDate = safeGetDate(() => task.deferDate());
+    if (deferDate) taskObj.deferDate = deferDate;
+    
+    taskObj.tags = safeGetTags(task);
+    
+    const added = safeGetDate(() => task.added());
+    if (added) taskObj.added = added;
+    
+    // Enhanced properties discovered through API exploration
+    // Task state properties that affect actionability
+    const blocked = safeGet(() => task.blocked(), false);
+    const next = safeGet(() => task.next(), false);
+    if (blocked) taskObj.blocked = blocked;
+    if (next) taskObj.next = next;
+    
+    // Effective dates (inherited from parent)
+    const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
+    const effectiveDueDate = safeGetDate(() => task.effectiveDueDate());
+    if (effectiveDeferDate && (!deferDate || effectiveDeferDate.getTime() !== deferDate.getTime())) {
+      taskObj.effectiveDeferDate = effectiveDeferDate.toISOString();
+    }
+    if (effectiveDueDate && (!dueDate || effectiveDueDate.getTime() !== dueDate.getTime())) {
+      taskObj.effectiveDueDate = effectiveDueDate.toISOString();
+    }
+    
+    // Include metadata if requested (avoid overhead by default)
+    if (filter.includeMetadata) {
+      const creationDate = safeGetDate(() => task.creationDate());
+      const modificationDate = safeGetDate(() => task.modificationDate());
+      if (creationDate) taskObj.creationDate = creationDate.toISOString();
+      if (modificationDate) taskObj.modificationDate = modificationDate.toISOString();
+    }
+    
+    // Child task counts (for parent tasks)
+    const numberOfTasks = safeGet(() => task.numberOfTasks(), 0);
+    if (numberOfTasks > 0) {
+      taskObj.childCounts = {
+        total: numberOfTasks,
+        available: safeGet(() => task.numberOfAvailableTasks(), 0),
+        completed: safeGet(() => task.numberOfCompletedTasks(), 0)
+      };
+    }
+    
+    // Estimated duration
+    const estimatedMinutes = safeGetEstimatedMinutes(task);
+    if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
+    
+    // Add repetition rule and recurring status analysis
+    if (!skipRecurringAnalysis) {
+      const repetitionRule = safeGet(() => task.repetitionRule());
+      if (repetitionRule) {
+        let ruleData = safeExtractRuleProperties(repetitionRule);
+        
+        // Parse ruleString if available
+        if (ruleData.ruleString) {
+          const parsedRule = safeParseRuleString(ruleData.ruleString);
+          ruleData = { ...ruleData, ...parsedRule };
+        }
+        
+        // Basic fallback - plugins will handle the advanced inference
+        if (!ruleData.unit && !ruleData.steps) {
+          ruleData._inferenceSource = 'none';
+        }
+        
+        taskObj.repetitionRule = ruleData;
+        taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
+      } else {
+        taskObj.recurringStatus = {
+          isRecurring: false,
+          type: 'non-recurring',
+          source: 'core'
+        };
+      }
+    } else {
+      // Skip analysis for performance
+      taskObj.recurringStatus = {
+        isRecurring: false,
+        type: 'analysis-skipped',
+        skipped: true
+      };
+    }
+    
+    return taskObj;
+  }
+
   function matchesFilters(task, filter) {
     // Basic property filters (cheapest checks first)
     if (filter.completed !== undefined && task.completed() !== filter.completed) return false;
@@ -383,6 +491,87 @@ export const LIST_TASKS_SCRIPT = `
   }
 
   try {
+    // Tag collection optimization for single tag filters
+    if (filter.tags && filter.tags.length === 1 && !filter.search) {
+      const tagName = filter.tags[0];
+      const startTime = Date.now();
+      
+      try {
+        const tag = doc.flattenedTags.whose({name: tagName})[0];
+        if (tag) {
+          // Use pre-filtered tag collection based on completion status
+          let tagTasks;
+          if (filter.completed === false) {
+            // For incomplete tasks, use specialized collections
+            if (filter.available === true || filter.blocked === false) {
+              // availableTasks() returns unblocked, incomplete tasks
+              tagTasks = safeGet(() => tag.availableTasks(), []);
+            } else {
+              // remainingTasks() returns all incomplete tasks (including blocked)
+              tagTasks = safeGet(() => tag.remainingTasks(), []);
+            }
+          } else {
+            // For completed or unspecified, get all tasks for this tag
+            tagTasks = safeGet(() => tag.tasks(), []);
+          }
+          
+          const limit = Math.min(filter.limit || 100, 1000);
+          let count = 0;
+          
+          // Apply remaining filters to pre-filtered collection
+          for (let i = 0; i < tagTasks.length && count < limit; i++) {
+            const task = tagTasks[i];
+            
+            // Check filters (skip tag check since already filtered)
+            if (filter.completed !== undefined && safeIsCompleted(task) !== filter.completed) continue;
+            if (filter.flagged !== undefined && safeIsFlagged(task) !== filter.flagged) continue;
+            if (filter.inInbox !== undefined && safeGet(() => task.inInbox(), false) !== filter.inInbox) continue;
+            
+            // Date filters
+            if (filter.dueBefore || filter.dueAfter) {
+              const dueDate = safeGetDate(() => task.dueDate());
+              if (filter.dueBefore && (!dueDate || dueDate >= filter.dueBefore)) continue;
+              if (filter.dueAfter && (!dueDate || dueDate <= filter.dueAfter)) continue;
+            }
+            
+            if (filter.deferBefore || filter.deferAfter) {
+              const deferDate = safeGetDate(() => task.deferDate());
+              if (filter.deferBefore && (!deferDate || deferDate >= filter.deferBefore)) continue;
+              if (filter.deferAfter && (!deferDate || deferDate <= filter.deferAfter)) continue;
+            }
+            
+            // Project filter
+            if (filter.projectId !== undefined) {
+              const project = safeGetProject(task);
+              if (filter.projectId === "" && project) continue;
+              if (filter.projectId !== "" && (!project || project.id !== filter.projectId)) continue;
+            }
+            
+            // Build task object (same as regular path)
+            const taskObj = buildTaskObject(task, filter, skipRecurringAnalysis);
+            tasks.push(taskObj);
+            count++;
+          }
+          
+          return JSON.stringify({
+            success: true,
+            tasks: tasks,
+            count: tasks.length,
+            hasMore: tagTasks.length > limit,
+            performance: {
+              total_ms: Date.now() - startTime,
+              tasks_scanned: tagTasks.length,
+              optimization: 'tag_collection',
+              tag: tagName
+            }
+          });
+        }
+      } catch (e) {
+        // Tag optimization failed, fall through to regular path
+      }
+    }
+    
+    // Regular path - get all tasks
     const allTasks = doc.flattenedTasks();
     
     // Check if allTasks is null or undefined
@@ -412,109 +601,9 @@ export const LIST_TASKS_SCRIPT = `
       
       if (!matches) continue;
       
-      // Build task object with safe property access
-      const taskObj = {
-        id: safeGet(() => task.id(), 'unknown'),
-        name: safeGet(() => task.name(), 'Unnamed Task'),
-        completed: safeIsCompleted(task),
-        flagged: safeIsFlagged(task),
-        inInbox: safeGet(() => task.inInbox(), false)
-      };
-      
-      // Add optional properties using safe utilities
-      const note = safeGet(() => task.note());
-      if (note) taskObj.note = note;
-      
-      const project = safeGetProject(task);
-      if (project) {
-        taskObj.project = project.name;
-        taskObj.projectId = project.id;
-      }
-      
-      const dueDate = safeGetDate(() => task.dueDate());
-      if (dueDate) taskObj.dueDate = dueDate;
-      
-      const deferDate = safeGetDate(() => task.deferDate());
-      if (deferDate) taskObj.deferDate = deferDate;
-      
-      taskObj.tags = safeGetTags(task);
-      
-      const added = safeGetDate(() => task.added());
-      if (added) taskObj.added = added;
-      
-      // Enhanced properties discovered through API exploration
-      // Task state properties that affect actionability
-      const blocked = safeGet(() => task.blocked(), false);
-      const next = safeGet(() => task.next(), false);
-      if (blocked) taskObj.blocked = blocked;
-      if (next) taskObj.next = next;
-      
-      // Effective dates (inherited from parent)
-      const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
-      const effectiveDueDate = safeGetDate(() => task.effectiveDueDate());
-      if (effectiveDeferDate && (!deferDate || effectiveDeferDate.getTime() !== deferDate.getTime())) {
-        taskObj.effectiveDeferDate = effectiveDeferDate.toISOString();
-      }
-      if (effectiveDueDate && (!dueDate || effectiveDueDate.getTime() !== dueDate.getTime())) {
-        taskObj.effectiveDueDate = effectiveDueDate.toISOString();
-      }
-      
-      // Include metadata if requested (avoid overhead by default)
-      if (filter.includeMetadata) {
-        const creationDate = safeGetDate(() => task.creationDate());
-        const modificationDate = safeGetDate(() => task.modificationDate());
-        if (creationDate) taskObj.creationDate = creationDate.toISOString();
-        if (modificationDate) taskObj.modificationDate = modificationDate.toISOString();
-      }
-      
-      // Child task counts (for parent tasks)
-      const numberOfTasks = safeGet(() => task.numberOfTasks(), 0);
-      if (numberOfTasks > 0) {
-        taskObj.childCounts = {
-          total: numberOfTasks,
-          available: safeGet(() => task.numberOfAvailableTasks(), 0),
-          completed: safeGet(() => task.numberOfCompletedTasks(), 0)
-        };
-      }
-      
-      // Estimated duration
-      const estimatedMinutes = safeGetEstimatedMinutes(task);
-      if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
-      
-      // Add repetition rule and recurring status analysis
+      // Build task object using helper function (includes analysis)
       const analysisStart = Date.now();
-      if (skipRecurringAnalysis) {
-        // Skip analysis for performance
-        taskObj.recurringStatus = {
-          isRecurring: false,
-          type: 'analysis-skipped',
-          skipped: true
-        };
-      } else {
-        const repetitionRule = safeGet(() => task.repetitionRule());
-        if (repetitionRule) {
-          let ruleData = safeExtractRuleProperties(repetitionRule);
-          
-          // Parse ruleString if available
-          if (ruleData.ruleString) {
-            const parsedRule = safeParseRuleString(ruleData.ruleString);
-            ruleData = { ...ruleData, ...parsedRule };
-          }
-          
-          // Basic fallback - plugins will handle the advanced inference
-          if (!ruleData.unit && !ruleData.steps) {
-            ruleData._inferenceSource = 'none';
-          }
-          
-          taskObj.repetitionRule = ruleData;
-          taskObj.recurringStatus = analyzeRecurringStatus(task, ruleData);
-        } else {
-          taskObj.recurringStatus = {
-            isRecurring: false,
-            type: 'non-recurring'
-          };
-        }
-      }
+      const taskObj = buildTaskObject(task, filter, skipRecurringAnalysis);
       analysisTimeTotal += Date.now() - analysisStart;
       
       tasks.push(taskObj);
