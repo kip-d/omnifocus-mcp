@@ -27,9 +27,9 @@ describe('Verify ID Extraction Fix', () => {
   it('should use correct ID extraction patterns in task scripts', () => {
     // Task scripts should use safe getters for IDs
     expect(LIST_TASKS_SCRIPT).toContain('id: safeGet(() => task.id()');
-    expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
-    expect(COMPLETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
-    expect(DELETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
+    expect(COMPLETE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
+    expect(DELETE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
     
     // Task scripts should use safe getters for project IDs
     expect(LIST_TASKS_SCRIPT).toContain('safeGet(() => project.id())');
@@ -50,9 +50,9 @@ describe('Verify ID Extraction Fix', () => {
   
   it('should verify ID comparison patterns', () => {
     // Task lookups use Task.byIdentifier for O(1) access
-    expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
-    expect(COMPLETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
-    expect(DELETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
+    expect(COMPLETE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
+    expect(DELETE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
     
     // Project lookups still use iteration but with id() method
     expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');

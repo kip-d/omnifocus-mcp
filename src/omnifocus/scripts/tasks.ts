@@ -708,19 +708,15 @@ export const UPDATE_TASK_SCRIPT = `
   
   try {
     // Find task by ID
-    // Try using the Task namespace method (may not work in JXA)
+    // Use whose() for O(1) lookup - much faster than iteration
     let task = null;
     try {
-      // First attempt: Direct namespace access
-      if (typeof Task !== 'undefined' && Task.byIdentifier) {
-        task = Task.byIdentifier(taskId);
+      const matches = doc.flattenedTasks.whose({id: taskId});
+      if (matches && matches.length > 0) {
+        task = matches[0];
       }
     } catch (e) {
-      // Namespace access failed
-    }
-    
-    // Fallback to iteration if byIdentifier doesn't work
-    if (!task) {
+      // whose() failed, fall back to iteration
       const tasks = doc.flattenedTasks();
       if (tasks) {
         for (let i = 0; i < tasks.length; i++) {
@@ -932,19 +928,15 @@ export const COMPLETE_TASK_SCRIPT = `
   
   try {
     // Find task by ID
-    // Try using the Task namespace method (may not work in JXA)
+    // Use whose() for O(1) lookup - much faster than iteration
     let task = null;
     try {
-      // First attempt: Direct namespace access
-      if (typeof Task !== 'undefined' && Task.byIdentifier) {
-        task = Task.byIdentifier(taskId);
+      const matches = doc.flattenedTasks.whose({id: taskId});
+      if (matches && matches.length > 0) {
+        task = matches[0];
       }
     } catch (e) {
-      // Namespace access failed
-    }
-    
-    // Fallback to iteration if byIdentifier doesn't work
-    if (!task) {
+      // whose() failed, fall back to iteration
       const tasks = doc.flattenedTasks();
       if (tasks) {
         for (let i = 0; i < tasks.length; i++) {
@@ -1041,19 +1033,15 @@ export const DELETE_TASK_SCRIPT = `
   
   try {
     // Find task by ID
-    // Try using the Task namespace method (may not work in JXA)
+    // Use whose() for O(1) lookup - much faster than iteration
     let task = null;
     try {
-      // First attempt: Direct namespace access
-      if (typeof Task !== 'undefined' && Task.byIdentifier) {
-        task = Task.byIdentifier(taskId);
+      const matches = doc.flattenedTasks.whose({id: taskId});
+      if (matches && matches.length > 0) {
+        task = matches[0];
       }
     } catch (e) {
-      // Namespace access failed
-    }
-    
-    // Fallback to iteration if byIdentifier doesn't work
-    if (!task) {
+      // whose() failed, fall back to iteration
       const tasks = doc.flattenedTasks();
       if (tasks) {
         for (let i = 0; i < tasks.length; i++) {

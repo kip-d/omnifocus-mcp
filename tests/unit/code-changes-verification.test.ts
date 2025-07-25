@@ -6,7 +6,7 @@ describe('Code Changes Verification', () => {
   describe('Bug Fix: Task Search Limit', () => {
     it('UPDATE_TASK_SCRIPT should use O(1) task lookup', () => {
       // Should use Task.byIdentifier for O(1) lookup
-      expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
       
       // Should NOT have any limit like i < 100
       expect(UPDATE_TASK_SCRIPT).not.toContain('i < 100');

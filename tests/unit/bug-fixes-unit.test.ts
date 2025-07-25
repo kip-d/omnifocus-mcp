@@ -27,12 +27,12 @@ describe('Bug Fixes - Unit Tests', () => {
     it('UPDATE_TASK_SCRIPT should use O(1) task lookup with fallback', () => {
       const script = UPDATE_TASK_SCRIPT;
       
-      // Should attempt Task.byIdentifier for O(1) lookup
-      expect(script).toContain('Task.byIdentifier(taskId)');
+      // Should use whose() for O(1) lookup
+      expect(script).toContain('doc.flattenedTasks.whose({id: taskId})');
       
       // Should have fallback to iteration
       expect(script).toContain('doc.flattenedTasks()');
-      expect(script).toContain('Fallback to iteration');
+      expect(script).toContain('fall back to iteration');
       
       // Should NOT contain any artificial limits
       expect(script).not.toMatch(/for.*i\s*<\s*100/);
