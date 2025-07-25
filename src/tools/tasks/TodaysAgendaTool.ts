@@ -81,12 +81,34 @@ export class TodaysAgendaTool extends BaseTool {
       });
       const result = await this.omniAutomation.execute<any>(script);
 
+      // Check for null result or error
+      if (!result) {
+        return createErrorResponse(
+          'todays_agenda',
+          'SCRIPT_ERROR',
+          'Script returned null result',
+          { details: 'The script execution did not return any data' },
+          timer.toMetadata(),
+        );
+      }
+
       if (result.error) {
         return createErrorResponse(
           'todays_agenda',
           'SCRIPT_ERROR',
           result.message || 'Failed to get today\'s agenda',
           { details: result.details },
+          timer.toMetadata(),
+        );
+      }
+
+      // Ensure tasks array exists
+      if (!result.tasks || !Array.isArray(result.tasks)) {
+        return createErrorResponse(
+          'todays_agenda',
+          'INVALID_RESPONSE',
+          'Invalid response from OmniFocus: tasks array not found',
+          { received: result },
           timer.toMetadata(),
         );
       }
