@@ -1248,9 +1248,14 @@ export const TODAYS_AGENDA_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    const allTasks = doc.flattenedTasks();
+    // Optimization: Start with all tasks but we'll filter efficiently
+    let allTasks = doc.flattenedTasks();
+    let optimizationUsed = 'standard_filter';
     
-    // Check if allTasks is null or undefined
+    // For future optimization: we could use whose() on the collection
+    // but it requires different syntax than array access
+    
+    // Check if we got valid results
     if (!allTasks) {
       return JSON.stringify({
         error: true,
@@ -1272,11 +1277,19 @@ export const TODAYS_AGENDA_SCRIPT = `
     const checkAvailable = !!options.includeAvailable;
     const includeDetails = options.includeDetails !== false;
     
+    // Performance metrics
+    let tasksScanned = 0;
+    let filterTimeTotal = 0;
+    
     for (let i = 0; i < allTasks.length && tasks.length < maxTasks; i++) {
       const task = allTasks[i];
       
       // Skip completed tasks first (cheapest check)
       if (safeIsCompleted(task)) continue;
+      
+      tasksScanned++;
+      
+      const filterStart = Date.now();
       
       // Cache expensive calls
       let deferDate = null;
@@ -1284,10 +1297,20 @@ export const TODAYS_AGENDA_SCRIPT = `
       let dueDateStr = null;
       let dueDateChecked = false;
       
-      // Check if available (if required)
+      // Check if available (if required) - use blocked property for optimization
       if (checkAvailable) {
+        // Quick check using blocked property
+        if (safeGet(() => task.blocked(), false)) {
+          filterTimeTotal += Date.now() - filterStart;
+          continue;
+        }
+        
+        // Check defer date
         deferDate = safeGetDate(() => task.deferDate());
-        if (deferDate && new Date(deferDate) > new Date()) continue;
+        if (deferDate && new Date(deferDate) > new Date()) {
+          filterTimeTotal += Date.now() - filterStart;
+          continue;
+        }
       }
       
       let includeTask = false;
@@ -1321,7 +1344,7 @@ export const TODAYS_AGENDA_SCRIPT = `
       }
       
       if (includeTask) {
-        // Build minimal task object first
+        // Build task object efficiently
         const taskObj = {
           id: safeGet(() => task.id(), 'unknown'),
           name: safeGet(() => task.name(), 'Unnamed Task'),
@@ -1351,10 +1374,22 @@ export const TODAYS_AGENDA_SCRIPT = `
           
           const tags = safeGetTags(task);
           if (tags.length > 0) taskObj.tags = tags;
+          
+          // Add additional properties if available
+          const estimatedMinutes = safeGetEstimatedMinutes(task);
+          if (estimatedMinutes) taskObj.estimatedMinutes = estimatedMinutes;
+          
+          // Add task state indicators
+          const blocked = safeGet(() => task.blocked(), false);
+          const next = safeGet(() => task.next(), false);
+          if (blocked) taskObj.blocked = blocked;
+          if (next) taskObj.next = next;
         }
         
         tasks.push(taskObj);
       }
+      
+      filterTimeTotal += Date.now() - filterStart;
     }
     
     const endTime = Date.now();
@@ -1374,6 +1409,12 @@ export const TODAYS_AGENDA_SCRIPT = `
         flagged: flaggedCount,
         query_time_ms: endTime - startTime,
         limited: tasks.length >= maxTasks
+      },
+      performance_metrics: {
+        tasks_scanned: tasksScanned,
+        filter_time_ms: filterTimeTotal,
+        total_time_ms: endTime - startTime,
+        optimization: optimizationUsed
       }
     });
   } catch (error) {
