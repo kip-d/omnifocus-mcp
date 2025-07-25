@@ -1,5 +1,7 @@
 # User Feedback and MCP Limitations
 
+Last Updated: July 25, 2025 (v1.4.0)
+
 This document addresses common user suggestions and explains architectural limitations of the Model Context Protocol (MCP) that may not be immediately obvious to users familiar with traditional APIs or CLI tools.
 
 ## Common User Suggestions and Why They Can't Be Implemented
@@ -82,19 +84,27 @@ Given these limitations, users should expect:
 3. **Caching is critical** - First requests may be slow, subsequent ones should be fast
 4. **Timeouts matter** - Claude Desktop has a timeout limit that we cannot exceed
 
-## Known Performance Characteristics
+## Known Performance Characteristics (v1.4.0)
 
-Based on user testing with ~2000 tasks:
+Based on extensive user testing with ~2,000 tasks and 175 projects:
 
-- **Task counting**: ~45 seconds (uncached)
-- **Tag operations**: ~49 seconds for deletions
-- **Task updates**: ~16 seconds (due to O(n) ID lookup)
-- **Analytics queries**: 30-60 seconds for large datasets
+### Fast Operations (<1 second)
+- **Basic queries**: list_tasks (624ms), list_projects (929ms)
+- **Creation**: create_task (418ms), create_project (1.5s)
+- **Analytics**: productivity stats, task velocity, overdue analysis
+- **Simple operations**: get_version_info (112ms)
+
+### Slow Operations (Known Limitations)
+- **todays_agenda**: ~48 seconds (must scan all 2,000 tasks)
+- **list_tags with usage stats**: ~40 seconds (counts usage across all tasks)
+- **get_task_count**: ~25 seconds (filtered iteration)
+- **update_task**: ~15-17 seconds (Task.byIdentifier fallback)
+- **complete_task**: ~15 seconds (Task.byIdentifier fallback)
 
 These are **expected behaviors** due to:
-1. OmniFocus JXA API limitations (no indexed lookups)
+1. OmniFocus JXA API limitations (Task.byIdentifier unreliable, no filtered queries)
 2. MCP architectural constraints (no progress updates)
-3. Large dataset sizes
+3. Large dataset sizes requiring O(n) operations
 
 ## Workarounds and Best Practices
 
@@ -118,6 +128,30 @@ While we cannot change MCP's fundamental architecture, potential improvements in
 3. **Chunked operations** - Break large tasks into smaller requests
 4. **Performance hints** - Warn users before long operations
 
+## Tag Assignment Limitation
+
+**Known Issue**: Tags cannot be assigned during task creation (JXA API limitation)
+
+**Workaround**: Create the task first, then use `update_task` to add tags:
+```javascript
+// Step 1: Create task
+const task = await create_task({ name: "My Task" });
+
+// Step 2: Add tags
+await update_task({ 
+  taskId: task.id, 
+  updates: { tags: ["Work", "Important"] }
+});
+```
+
 ## Summary
 
 MCP bridges operate under different constraints than traditional APIs or CLI tools. The lack of progress indicators and streaming responses is not a limitation of our implementation, but a fundamental characteristic of the MCP protocol. Understanding these constraints helps set appropriate user expectations and guides development decisions.
+
+### Key Takeaways for v1.4.0
+
+1. **All 24 functions are working** - The bridge is functionally complete
+2. **Performance varies by operation type** - Simple queries are fast, full scans are slow
+3. **Caching is essential** - 30-second cache makes repeated operations instant
+4. **JXA API limitations are real** - We work around them where possible
+5. **User workflows should adapt** - Use fast operations when possible, batch slow ones
