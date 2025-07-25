@@ -24,11 +24,14 @@ describe('Bug Fixes - Unit Tests', () => {
   });
 
   describe('Bug 2: 100 Task Limit', () => {
-    it('UPDATE_TASK_SCRIPT should not limit task search', () => {
+    it('UPDATE_TASK_SCRIPT should use O(1) task lookup', () => {
       const script = UPDATE_TASK_SCRIPT;
       
-      // Should search through all tasks
-      expect(script).toContain('for (let i = 0; i < tasks.length; i++)');
+      // Should use Task.byIdentifier for O(1) lookup
+      expect(script).toContain('Task.byIdentifier(taskId)');
+      
+      // Should NOT iterate through all tasks
+      expect(script).not.toContain('for (let i = 0; i < tasks.length; i++)');
       
       // Should NOT contain any artificial limits
       expect(script).not.toMatch(/for.*i\s*<\s*100/);
@@ -50,30 +53,30 @@ describe('Bug Fixes - Unit Tests', () => {
       
       // Should handle project assignment
       expect(script).toContain('const projects = doc.flattenedProjects');
-      expect(script).toContain('if (projects[i].id.primaryKey === updates.projectId)');
+      expect(script).toContain('if (projects[i].id() === updates.projectId)');
       expect(script).toContain('task.assignedContainer = projects[i]');
     });
   });
 
   describe('Bug 4: List Projects ID Field', () => {
-    it('LIST_PROJECTS_SCRIPT should return id using project.id.primaryKey', () => {
+    it('LIST_PROJECTS_SCRIPT should return id using safe getter', () => {
       const script = LIST_PROJECTS_SCRIPT;
       
-      // Should build project object with id field using official API
-      expect(script).toContain('project.id.primaryKey');
+      // Should build project object with id field using safe getter
+      expect(script).toContain('id: safeGet(() => project.id()');
       
-      // Should NOT use the old method call
-      expect(script).not.toContain('project.id()');
+      // Should use safe getter pattern for all properties
+      expect(script).toContain('safeGet');
     });
     
-    it('UPDATE_PROJECT_SCRIPT should use project.id.primaryKey for comparisons', () => {
+    it('UPDATE_PROJECT_SCRIPT should use project.id() for comparisons', () => {
       const script = UPDATE_PROJECT_SCRIPT;
       
-      // Should compare using id.primaryKey
-      expect(script).toContain('if (projects[i].id.primaryKey === projectId)');
+      // Should compare using id()
+      expect(script).toContain('if (projects[i].id() === projectId)');
       
       // Should return id in response
-      expect(script).toContain('targetProject.id.primaryKey');
+      expect(script).toContain('targetProject.id()');
     });
   });
 

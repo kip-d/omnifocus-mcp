@@ -3,11 +3,10 @@ import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags
 
 describe('Tag Operations Fix Verification', () => {
   it('should use correct property access without parentheses', () => {
-    // Verify tag properties use direct access (official API pattern)
-    expect(LIST_TAGS_SCRIPT).toContain('tag.parent');
-    expect(LIST_TAGS_SCRIPT).toContain('task.tags');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.name');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
+    // Verify tag properties use method calls with safe getters
+    expect(LIST_TAGS_SCRIPT).toContain('safeGet(() => tag.id())');
+    expect(LIST_TAGS_SCRIPT).toContain('safeGet(() => tag.name())');
+    expect(LIST_TAGS_SCRIPT).toContain('safeGetTags(task)');
   });
   
   it('should use plural methods for tag manipulation', () => {

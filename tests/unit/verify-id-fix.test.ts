@@ -25,38 +25,38 @@ import {
  */
 describe('Verify ID Extraction Fix', () => {
   it('should use correct ID extraction patterns in task scripts', () => {
-    // Task scripts should use task.id.primaryKey for task IDs
-    expect(LIST_TASKS_SCRIPT).toContain('task.id.primaryKey');
-    expect(UPDATE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey');
-    expect(COMPLETE_TASK_SCRIPT).toContain('task.id.primaryKey');
-    expect(DELETE_TASK_SCRIPT).toContain('tasks[i].id.primaryKey');
+    // Task scripts should use safe getters for IDs
+    expect(LIST_TASKS_SCRIPT).toContain('id: safeGet(() => task.id()');
+    expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(COMPLETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(DELETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
     
-    // Task scripts should use project.id.primaryKey for project IDs
-    expect(LIST_TASKS_SCRIPT).toContain('project.id.primaryKey');
+    // Task scripts should use safe getters for project IDs
+    expect(LIST_TASKS_SCRIPT).toContain('safeGet(() => project.id())');
   });
   
-  it('should use project.id.primaryKey in project scripts', () => {
-    // Project scripts should use project.id.primaryKey for project IDs
-    expect(LIST_PROJECTS_SCRIPT).toContain('project.id.primaryKey');
-    expect(CREATE_PROJECT_SCRIPT).toContain('newProject.id.primaryKey');
-    expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
-    expect(COMPLETE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
-    expect(DELETE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
+  it('should use project.id() in project scripts', () => {
+    // Project scripts should use safe getters and id() method
+    expect(LIST_PROJECTS_SCRIPT).toContain('id: safeGet(() => project.id()');
+    expect(CREATE_PROJECT_SCRIPT).toContain('newProject.id()');
+    expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
+    expect(COMPLETE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
+    expect(DELETE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
     
-    // Project scripts SHOULD use .id.primaryKey
-    expect(LIST_PROJECTS_SCRIPT).toContain('.id.primaryKey');
-    expect(UPDATE_PROJECT_SCRIPT).toContain('.id.primaryKey');
+    // Project scripts should use id() method
+    expect(LIST_PROJECTS_SCRIPT).toContain('.id()');
+    expect(UPDATE_PROJECT_SCRIPT).toContain('.id()');
   });
   
   it('should verify ID comparison patterns', () => {
-    // Task lookups use task.id.primaryKey (wrapped in safeGet)
-    expect(UPDATE_TASK_SCRIPT).toContain('safeGet(() => tasks[i].id.primaryKey) === taskId');
-    expect(COMPLETE_TASK_SCRIPT).toContain('safeGet(() => tasks[i].id.primaryKey) === taskId');
-    expect(DELETE_TASK_SCRIPT).toContain('safeGet(() => tasks[i].id.primaryKey) === taskId');
+    // Task lookups use Task.byIdentifier for O(1) access
+    expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(COMPLETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
+    expect(DELETE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
     
-    // Project lookups use project.id.primaryKey
-    expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
-    expect(COMPLETE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
-    expect(DELETE_PROJECT_SCRIPT).toContain('projects[i].id.primaryKey === projectId');
+    // Project lookups still use iteration but with id() method
+    expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
+    expect(COMPLETE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
+    expect(DELETE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
   });
 });

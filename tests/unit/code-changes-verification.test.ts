@@ -4,9 +4,9 @@ import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects';
 
 describe('Code Changes Verification', () => {
   describe('Bug Fix: Task Search Limit', () => {
-    it('UPDATE_TASK_SCRIPT should search all tasks, not just first 100', () => {
-      // The loop should iterate through all tasks
-      expect(UPDATE_TASK_SCRIPT).toContain('for (let i = 0; i < tasks.length; i++)');
+    it('UPDATE_TASK_SCRIPT should use O(1) task lookup', () => {
+      // Should use Task.byIdentifier for O(1) lookup
+      expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
       
       // Should NOT have any limit like i < 100
       expect(UPDATE_TASK_SCRIPT).not.toContain('i < 100');
@@ -30,12 +30,12 @@ describe('Code Changes Verification', () => {
   });
 
   describe('Bug Fix: List Projects Returns ID Field', () => {
-    it('LIST_PROJECTS_SCRIPT should use project.id.primaryKey for official API', () => {
-      // Should use the correct official API pattern
-      expect(LIST_PROJECTS_SCRIPT).toContain('project.id.primaryKey');
+    it('LIST_PROJECTS_SCRIPT should use safe getter for id', () => {
+      // Should use safe getter pattern
+      expect(LIST_PROJECTS_SCRIPT).toContain('id: safeGet(() => project.id()');
       
-      // Should NOT use the old method call pattern
-      expect(LIST_PROJECTS_SCRIPT).not.toContain('project.id()');
+      // Should use id() method with safe getter
+      expect(LIST_PROJECTS_SCRIPT).toContain('safeGet');
     });
   });
 
