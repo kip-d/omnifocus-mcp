@@ -1292,10 +1292,10 @@ export const TODAYS_AGENDA_SCRIPT = `
     let overdueCount = 0;
     let flaggedCount = 0;
     
-    // Pre-compute option flags
+    // Pre-compute option flags (default to true for all except includeAvailable)
     const checkOverdue = options.includeOverdue !== false;
     const checkFlagged = options.includeFlagged !== false;
-    const checkAvailable = !!options.includeAvailable;
+    const checkAvailable = options.includeAvailable === true;  // Default false, only true if explicitly set
     const includeDetails = options.includeDetails !== false;
     
     // Performance metrics

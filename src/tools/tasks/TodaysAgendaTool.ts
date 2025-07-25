@@ -26,28 +26,36 @@ export class TodaysAgendaTool extends BaseTool {
       },
       includeDetails: {
         type: 'boolean',
-        description: 'Include task details (note, project, tags). Set to false for better performance',
-        default: true,
+        description: 'Include task details (note, project, tags). Defaults to false for better performance',
+        default: false,
       },
       limit: {
         type: 'number',
-        description: 'Maximum number of tasks to return',
-        default: 200,
+        description: 'Maximum number of tasks to return (default: 50)',
+        default: 50,
       },
     },
   };
 
-  async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean; includeDetails?: boolean; limit?: number }): Promise<any> {
+  async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean; includeDetails?: boolean; limit?: number } = {}): Promise<any> {
     const timer = new OperationTimer();
 
     try {
+      // Log incoming args for debugging
+      this.logger.debug('TodaysAgendaTool.execute called with args:', args);
+      
+      // Ensure args is an object
+      const safeArgs = args || {};
+      
       const {
         includeFlagged = true,
         includeOverdue = true,
         includeAvailable = true,
-        includeDetails = true,
-        limit = 200,
-      } = args;
+        includeDetails = false,  // Default to false for better performance
+        limit = 50,  // Reduced default limit to prevent timeouts
+      } = safeArgs;
+      
+      this.logger.debug('Using parameters:', { includeFlagged, includeOverdue, includeAvailable, includeDetails, limit });
 
       // Create cache key
       const cacheKey = `agenda_${includeFlagged}_${includeOverdue}_${includeAvailable}_${includeDetails}_${limit}`;
