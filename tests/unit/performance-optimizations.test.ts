@@ -196,7 +196,7 @@ describe('Error Handling Tests', () => {
 
   it('should validate Task.byIdentifier availability', () => {
     // Scripts should handle cases where byIdentifier is not available
-    expect(UPDATE_TASK_SCRIPT).toContain('const task = Task.byIdentifier(taskId)');
+    expect(UPDATE_TASK_SCRIPT).toContain('const task = app.Task.byIdentifier(taskId)');
     expect(UPDATE_TASK_SCRIPT).toContain('if (!task)');
   });
 });

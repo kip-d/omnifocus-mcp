@@ -708,7 +708,7 @@ export const UPDATE_TASK_SCRIPT = `
   
   try {
     // Find task by ID using O(1) lookup
-    const task = Task.byIdentifier(taskId);
+    const task = app.Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -910,7 +910,7 @@ export const COMPLETE_TASK_SCRIPT = `
   
   try {
     // Find task by ID using O(1) lookup
-    const task = Task.byIdentifier(taskId);
+    const task = app.Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -997,7 +997,7 @@ export const DELETE_TASK_SCRIPT = `
   
   try {
     // Find task by ID using O(1) lookup
-    const task = Task.byIdentifier(taskId);
+    const task = app.Task.byIdentifier(taskId);
     if (!task) {
       return JSON.stringify({ 
         error: true, 
