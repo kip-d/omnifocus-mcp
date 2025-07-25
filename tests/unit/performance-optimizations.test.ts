@@ -58,10 +58,11 @@ describe('Performance Optimization Tests', () => {
   });
 
   describe('Task lookup optimizations', () => {
-    it('should use Task.byIdentifier for O(1) lookups', async () => {
+    it('should use Task.byIdentifier for O(1) lookups with fallback', async () => {
       const { UPDATE_TASK_SCRIPT } = await import('../../src/omnifocus/scripts/tasks.js');
       expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier(taskId)');
-      expect(UPDATE_TASK_SCRIPT).not.toContain('for (let i = 0; i < tasks.length; i++)');
+      // Should have fallback to iteration
+      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks()');
     });
 
     it('should use Project.byIdentifier for O(1) lookups', async () => {
@@ -196,7 +197,9 @@ describe('Error Handling Tests', () => {
 
   it('should validate Task.byIdentifier availability', () => {
     // Scripts should handle cases where byIdentifier is not available
-    expect(UPDATE_TASK_SCRIPT).toContain('const task = app.Task.byIdentifier(taskId)');
+    expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier');
     expect(UPDATE_TASK_SCRIPT).toContain('if (!task)');
+    // Should have fallback to iteration
+    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks()');
   });
 });

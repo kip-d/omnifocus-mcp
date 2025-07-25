@@ -24,14 +24,15 @@ describe('Bug Fixes - Unit Tests', () => {
   });
 
   describe('Bug 2: 100 Task Limit', () => {
-    it('UPDATE_TASK_SCRIPT should use O(1) task lookup', () => {
+    it('UPDATE_TASK_SCRIPT should use O(1) task lookup with fallback', () => {
       const script = UPDATE_TASK_SCRIPT;
       
-      // Should use Task.byIdentifier for O(1) lookup
+      // Should attempt Task.byIdentifier for O(1) lookup
       expect(script).toContain('Task.byIdentifier(taskId)');
       
-      // Should NOT iterate through all tasks
-      expect(script).not.toContain('for (let i = 0; i < tasks.length; i++)');
+      // Should have fallback to iteration
+      expect(script).toContain('doc.flattenedTasks()');
+      expect(script).toContain('Fallback to iteration');
       
       // Should NOT contain any artificial limits
       expect(script).not.toMatch(/for.*i\s*<\s*100/);

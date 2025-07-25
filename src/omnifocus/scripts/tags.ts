@@ -37,12 +37,12 @@ export const LIST_TAGS_SCRIPT = `
     
     // Count task usage only if explicitly requested
     // Note: This iterates through tasks and can be slow on large databases
-    if (options.includeUsageStats === true && allTags.length < 200) {
+    if (options.includeUsageStats === true) {
       try {
         const allTasks = doc.flattenedTasks();
         if (allTasks) {
           // Limit task processing to avoid timeouts
-          const maxTasksToProcess = Math.min(allTasks.length, 200);
+          const maxTasksToProcess = Math.min(allTasks.length, 5000);
           for (let i = 0; i < maxTasksToProcess; i++) {
             const task = allTasks[i];
             if (!task) continue;

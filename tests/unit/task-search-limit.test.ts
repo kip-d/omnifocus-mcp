@@ -9,11 +9,12 @@ describe('Task Search Limit Bug Fix', () => {
     expect(UPDATE_TASK_SCRIPT).not.toContain('Math.min(100');
   });
 
-  it('should not iterate through all tasks', () => {
-    // Verify we're NOT using iteration anymore
-    const searchPattern = /for \(let i = 0; i < tasks\.length; i\+\+\)/;
-    expect(UPDATE_TASK_SCRIPT).not.toMatch(searchPattern);
+  it('should attempt O(1) lookup with fallback to iteration', () => {
+    // Verify we attempt Task.byIdentifier first
     expect(UPDATE_TASK_SCRIPT).toContain('Task.byIdentifier');
+    // But have fallback to iteration
+    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks()');
+    expect(UPDATE_TASK_SCRIPT).toContain('Fallback to iteration');
   });
 
   it('should handle projectId in the simplified script', () => {

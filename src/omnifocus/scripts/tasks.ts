@@ -707,8 +707,30 @@ export const UPDATE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID using O(1) lookup
-    const task = app.Task.byIdentifier(taskId);
+    // Find task by ID
+    // Try using the Task namespace method (may not work in JXA)
+    let task = null;
+    try {
+      // First attempt: Direct namespace access
+      if (typeof Task !== 'undefined' && Task.byIdentifier) {
+        task = Task.byIdentifier(taskId);
+      }
+    } catch (e) {
+      // Namespace access failed
+    }
+    
+    // Fallback to iteration if byIdentifier doesn't work
+    if (!task) {
+      const tasks = doc.flattenedTasks();
+      if (tasks) {
+        for (let i = 0; i < tasks.length; i++) {
+          if (safeGet(() => tasks[i].id()) === taskId) {
+            task = tasks[i];
+            break;
+          }
+        }
+      }
+    }
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -909,8 +931,30 @@ export const COMPLETE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID using O(1) lookup
-    const task = app.Task.byIdentifier(taskId);
+    // Find task by ID
+    // Try using the Task namespace method (may not work in JXA)
+    let task = null;
+    try {
+      // First attempt: Direct namespace access
+      if (typeof Task !== 'undefined' && Task.byIdentifier) {
+        task = Task.byIdentifier(taskId);
+      }
+    } catch (e) {
+      // Namespace access failed
+    }
+    
+    // Fallback to iteration if byIdentifier doesn't work
+    if (!task) {
+      const tasks = doc.flattenedTasks();
+      if (tasks) {
+        for (let i = 0; i < tasks.length; i++) {
+          if (safeGet(() => tasks[i].id()) === taskId) {
+            task = tasks[i];
+            break;
+          }
+        }
+      }
+    }
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -996,8 +1040,30 @@ export const DELETE_TASK_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Find task by ID using O(1) lookup
-    const task = app.Task.byIdentifier(taskId);
+    // Find task by ID
+    // Try using the Task namespace method (may not work in JXA)
+    let task = null;
+    try {
+      // First attempt: Direct namespace access
+      if (typeof Task !== 'undefined' && Task.byIdentifier) {
+        task = Task.byIdentifier(taskId);
+      }
+    } catch (e) {
+      // Namespace access failed
+    }
+    
+    // Fallback to iteration if byIdentifier doesn't work
+    if (!task) {
+      const tasks = doc.flattenedTasks();
+      if (tasks) {
+        for (let i = 0; i < tasks.length; i++) {
+          if (safeGet(() => tasks[i].id()) === taskId) {
+            task = tasks[i];
+            break;
+          }
+        }
+      }
+    }
     if (!task) {
       return JSON.stringify({ 
         error: true, 
@@ -1211,7 +1277,36 @@ export const GET_TASK_COUNT_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    const allTasks = doc.flattenedTasks();
+    // Optimize by using specific task collections when possible
+    let tasks = null;
+    let useFilteredTasks = false;
+    
+    // Use more efficient task collections based on filter
+    if (filter.available) {
+      // Available tasks is a pre-filtered collection
+      tasks = doc.flattenedTasks.whose({completed: false, effectivelyDropped: false});
+      useFilteredTasks = true;
+    } else if (filter.completed === true) {
+      // Completed tasks only
+      tasks = doc.flattenedTasks.whose({completed: true});
+      useFilteredTasks = true;
+    } else if (filter.completed === false) {
+      // Incomplete tasks only (much smaller set)
+      tasks = doc.flattenedTasks.whose({completed: false});
+      useFilteredTasks = true;
+    } else if (filter.flagged === true) {
+      // Flagged tasks only
+      tasks = doc.flattenedTasks.whose({flagged: true});
+      useFilteredTasks = true;
+    } else if (filter.inInbox === true) {
+      // Inbox tasks only
+      tasks = doc.flattenedTasks.whose({inInbox: true});
+      useFilteredTasks = true;
+    } else {
+      // Fall back to all tasks only if necessary
+      tasks = doc.flattenedTasks();
+    }
+    
     let count = 0;
     const startTime = Date.now();
     
@@ -1222,17 +1317,19 @@ export const GET_TASK_COUNT_SCRIPT = `
     const hasDueDateFilter = filter.dueBefore || filter.dueAfter;
     const hasDeferDateFilter = filter.deferBefore || filter.deferAfter;
     const hasProjectFilter = filter.projectId !== undefined;
-    const hasAvailableFilter = !!filter.available;
+    const hasAvailableFilter = !!filter.available && !useFilteredTasks; // Skip if already filtered
     
-    for (let i = 0; i < allTasks.length; i++) {
-      const task = allTasks[i];
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
       
       // Fast filters first (boolean checks)
       try {
-        // These are the cheapest checks - do them first
-        if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
-        if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
-        if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
+        // These are the cheapest checks - do them first (skip if already pre-filtered)
+        if (!useFilteredTasks) {
+          if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
+          if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
+          if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
+        }
         
         // For available filter, check completed/dropped early
         if (hasAvailableFilter && (task.completed() || task.dropped())) continue;
