@@ -15,7 +15,12 @@ export {
   adaptTask, 
   adaptProject, 
   adaptTag,
-  TypeGuards 
+  adaptTasks,
+  adaptProjects,
+  adaptTags,
+  isOFTask,
+  isOFProject,
+  isOFTag
 } from './type-adapters.js';
 
 // Export paths to definition files for reference

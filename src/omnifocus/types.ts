@@ -22,6 +22,7 @@
  */
 
 import { RepetitionRule } from './jxa-types.js';
+export { RepetitionRule };
 
 /**
  * OmniFocus Task representation

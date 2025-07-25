@@ -163,8 +163,8 @@ export function adaptTask(ofTask: OFTask, skipAnalysis = false): OmniFocusTask {
   // Handle project
   const project = safeGet(() => ofTask.containingProject());
   if (project) {
-    task.project = safeGet(() => project.name());
-    task.projectId = safeGet(() => project.id());
+    task.project = safeGet(() => project.name()) ?? undefined;
+    task.projectId = safeGet(() => project.id()) ?? undefined;
   }
 
   // Handle tags
@@ -243,7 +243,7 @@ export function adaptProject(ofProject: OFProject, includeStats = false): OmniFo
 
   const folder = safeGet(() => ofProject.parentFolder());
   if (folder) {
-    project.folder = safeGet(() => folder.name());
+    project.folder = safeGet(() => folder.name()) ?? undefined;
   }
 
   // Task counts
@@ -293,7 +293,7 @@ export function adaptTag(ofTag: OFTag): OmniFocusTag {
 
   const parent = safeGet(() => ofTag.parent());
   if (parent) {
-    tag.parent = safeGet(() => parent.name());
+    tag.parent = safeGet(() => parent.name()) ?? undefined;
   }
 
   // Get child tag names
@@ -324,7 +324,7 @@ function adaptRepetitionRule(ofRule: OFRepetitionRule | null): RepetitionRule | 
 /**
  * Analyze recurring status (placeholder - would include full analysis logic)
  */
-function analyzeRecurringStatus(task: OFTask, rule?: RepetitionRule): RecurringTaskStatus {
+function analyzeRecurringStatus(_task: OFTask, rule?: RepetitionRule): RecurringTaskStatus {
   if (!rule) {
     return {
       isRecurring: false,
