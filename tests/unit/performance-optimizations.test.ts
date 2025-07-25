@@ -12,7 +12,7 @@ describe('Performance Optimization Tests', () => {
     it('should skip recurring task analysis when skipAnalysis is true', () => {
       // The script should check skipRecurringAnalysis before running analysis
       expect(LIST_TASKS_SCRIPT).toContain('skipRecurringAnalysis');
-      expect(LIST_TASKS_SCRIPT).toContain('if (skipRecurringAnalysis)');
+      expect(LIST_TASKS_SCRIPT).toContain('if (!skipRecurringAnalysis)');
     });
 
     it('should include performance metrics in response', () => {

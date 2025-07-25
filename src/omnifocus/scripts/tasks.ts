@@ -371,19 +371,20 @@ export const LIST_TASKS_SCRIPT = `
     // Effective dates (inherited from parent)
     const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
     const effectiveDueDate = safeGetDate(() => task.effectiveDueDate());
-    if (effectiveDeferDate && (!deferDate || effectiveDeferDate.getTime() !== deferDate.getTime())) {
-      taskObj.effectiveDeferDate = effectiveDeferDate.toISOString();
+    // Since safeGetDate returns ISO string, we can only compare strings
+    if (effectiveDeferDate && effectiveDeferDate !== deferDate) {
+      taskObj.effectiveDeferDate = effectiveDeferDate;
     }
-    if (effectiveDueDate && (!dueDate || effectiveDueDate.getTime() !== dueDate.getTime())) {
-      taskObj.effectiveDueDate = effectiveDueDate.toISOString();
+    if (effectiveDueDate && effectiveDueDate !== dueDate) {
+      taskObj.effectiveDueDate = effectiveDueDate;
     }
     
     // Include metadata if requested (avoid overhead by default)
     if (filter.includeMetadata) {
       const creationDate = safeGetDate(() => task.creationDate());
       const modificationDate = safeGetDate(() => task.modificationDate());
-      if (creationDate) taskObj.creationDate = creationDate.toISOString();
-      if (modificationDate) taskObj.modificationDate = modificationDate.toISOString();
+      if (creationDate) taskObj.creationDate = creationDate;
+      if (modificationDate) taskObj.modificationDate = modificationDate;
     }
     
     // Child task counts (for parent tasks)
