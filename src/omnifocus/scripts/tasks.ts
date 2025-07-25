@@ -1249,7 +1249,18 @@ export const TODAYS_AGENDA_SCRIPT = `
   
   try {
     // Optimization: Start with all tasks but we'll filter efficiently
-    let allTasks = doc.flattenedTasks();
+    let allTasks;
+    try {
+      allTasks = doc.flattenedTasks();
+    } catch (taskError) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus: " + taskError.toString(),
+        details: "doc.flattenedTasks() threw an error",
+        errorType: "TASK_RETRIEVAL_ERROR"
+      });
+    }
+    
     let optimizationUsed = 'standard_filter';
     
     // For future optimization: we could use whose() on the collection
@@ -1260,8 +1271,18 @@ export const TODAYS_AGENDA_SCRIPT = `
       return JSON.stringify({
         error: true,
         message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTasks() returned null or undefined"
+        details: "doc.flattenedTasks() returned null or undefined",
+        errorType: "NULL_TASKS_ERROR"
       });
+    }
+    
+    // Check task count for debugging
+    let totalTaskCount = 0;
+    try {
+      totalTaskCount = allTasks.length;
+    } catch (e) {
+      // Length property might not be accessible
+      totalTaskCount = -1;
     }
     
     const startTime = Date.now();
@@ -1281,7 +1302,10 @@ export const TODAYS_AGENDA_SCRIPT = `
     let tasksScanned = 0;
     let filterTimeTotal = 0;
     
-    for (let i = 0; i < allTasks.length && tasks.length < maxTasks; i++) {
+    // Safety limit to prevent runaway loops
+    const maxIterations = Math.min(allTasks.length, 10000);
+    
+    for (let i = 0; i < maxIterations && tasks.length < maxTasks; i++) {
       const task = allTasks[i];
       
       // Skip completed tasks first (cheapest check)
@@ -1414,7 +1438,8 @@ export const TODAYS_AGENDA_SCRIPT = `
         tasks_scanned: tasksScanned,
         filter_time_ms: filterTimeTotal,
         total_time_ms: endTime - startTime,
-        optimization: optimizationUsed
+        optimization: optimizationUsed,
+        total_tasks_in_db: totalTaskCount
       }
     });
   } catch (error) {

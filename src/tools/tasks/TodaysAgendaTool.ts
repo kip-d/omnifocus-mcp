@@ -146,6 +146,7 @@ export class TodaysAgendaTool extends BaseTool {
             limit: limit,
           },
           query_time_ms: result.summary?.query_time_ms || timer.getElapsedMs(),
+          performance_metrics: result.performance_metrics,
         },
       );
     } catch (error) {
