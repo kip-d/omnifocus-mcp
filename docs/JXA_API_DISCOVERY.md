@@ -1,24 +1,30 @@
 # OmniFocus JXA API Discovery Guide
 
-## Understanding the Three APIs
+## Critical Discovery: Three Different JavaScript APIs
 
-### 1. OmniAutomation (Internal Plugin API)
-- **Context**: Runs inside OmniFocus
-- **Access**: Plugin scripts, Automation menu
-- **Features**: Full API with Task.byIdentifier(), etc.
+After extensive testing (July 2025), we've identified that OmniFocus has THREE different JavaScript APIs that are often confused:
+
+### 1. OmniJS (OmniAutomation) - Plugin API
+- **Context**: Runs INSIDE OmniFocus as plugins
+- **Access**: Via Automation menu, plugin files
+- **Example**: `Task.byIdentifier('abc123')` ✓ Works here
+- **Globals**: Task, Project, Document, etc. are available
 - **Docs**: https://omni-automation.com/omnifocus/
+- **TypeScript definitions**: The `.d.ts` files are for THIS API
 
-### 2. AppleScript/JXA Bridge (External Scripting)
-- **Context**: External scripts via osascript
-- **Access**: Application('OmniFocus')
-- **Features**: Limited to AppleScript dictionary
-- **Docs**: Script Editor > Open Dictionary > OmniFocus
+### 2. JXA (JavaScript for Automation) - What we're using
+- **Context**: External scripts via `osascript -l JavaScript`
+- **Access**: `Application('OmniFocus')`
+- **Example**: `doc.flattenedTasks.whose({id: 'abc123'})` ✓ Works here
+- **No globals**: Must access everything through app/doc objects
+- **Docs**: AppleScript Dictionary (very limited)
+- **Key insight**: `whose` is on the collection function, not the result!
 
-### 3. URL Scheme
-- **Context**: Inter-app communication
-- **Access**: omnifocus:// URLs
-- **Features**: Very limited (add, open)
-- **Docs**: https://support.omnigroup.com/omnifocus-url-scheme/
+### 3. AppleScript Bridge Methods (Broken in JXA)
+- **Context**: Methods that exist but expect AppleScript object specifiers
+- **Examples**: `doc.taskWithID()`, `doc.Task.byIdentifier()`
+- **Status**: These ALL throw "Can't convert types" ✗
+- **Why**: They expect AppleScript object specifiers, not strings
 
 ## Discovering Available JXA Methods
 
@@ -63,36 +69,43 @@ console.log("typeof Tag:", typeof Tag);
 
 ## Key JXA API Discoveries (July 2025)
 
-### What Works:
-1. **`whose()` filtering** - Fast O(1) lookups!
-   - `doc.flattenedTasks.whose({id: taskId})` - 2ms vs 7ms for iteration
-   - `doc.flattenedTasks.whose({completed: false})` - Pre-filtered collections
-   - `doc.flattenedTasks.whose({flagged: true})` - Much faster than iteration
+### Critical Understanding: `whose` is Special
+- **CORRECT**: `doc.flattenedTasks.whose({id: 'xyz'})` ✓
+- **WRONG**: `doc.flattenedTasks().whose({id: 'xyz'})` ✗
+- `whose` is a method on the collection FUNCTION, not the array result!
 
-2. **Document methods exist but throw errors**:
-   - `doc.Task.byIdentifier` exists but throws "Can't convert types"
-   - `doc.taskWithID()` exists but throws "Can't convert types"
-   - Same for `projectWithID()`, `folderWithID()`, `tagWithID()`
+### What Works in JXA:
+1. **`whose()` clause filtering** - The ONLY fast lookup method!
+   - `doc.flattenedTasks.whose({id: taskId})` - 2ms (vs 7ms iteration)
+   - `doc.flattenedTasks.whose({completed: false})` - Pre-filtered
+   - `doc.flattenedTasks.whose({flagged: true})` - Very efficient
+   - Works on all collection functions: tasks, projects, tags, etc.
+
+2. **Collection differences**:
+   - `doc.tasks()` - Returns 0 items (only root-level document tasks)
+   - `doc.flattenedTasks()` - Returns ALL tasks (what you want)
+   - Same pattern for projects, folders, tags
 
 3. **Hidden properties**:
-   - Object.keys() returns empty arrays
-   - for...in loops find nothing
-   - But methods ARE accessible when called directly
+   - Object.keys() returns empty arrays (JXA proxy objects)
+   - Methods work when called directly: `task.name()`, `task.id()`
+   - All properties are hidden from enumeration
 
-### What Doesn't Work:
-1. **Static namespace methods**:
-   - `app.Task.byIdentifier` is undefined
-   - `Task.byIdentifier` (global) doesn't exist
-   - Only `doc.Task` exists as a constructor function
+### What Doesn't Work in JXA:
+1. **OmniJS methods** (wrong API):
+   - `Task.byIdentifier()` - Not available (OmniJS only)
+   - Global objects like Task, Project - Not available
 
-2. **Type conversion errors**:
-   - Any method ending in `WithID` throws "Can't convert types"
-   - This appears to be a JXA bridge limitation
+2. **AppleScript bridge methods** (type mismatch):
+   - `doc.taskWithID()` - Expects AppleScript object specifier
+   - `doc.Task.byIdentifier()` - Same issue
+   - ALL throw "Can't convert types" regardless of parameter
 
-### Performance Implications:
-- `whose()` is 3-5x faster than iteration
-- Should be used for all ID-based lookups
-- Falls back gracefully to iteration if it fails
+### The Confusion Explained:
+- The TypeScript `.d.ts` files document OmniJS (plugin API)
+- We're using JXA (external automation)
+- Methods like `byIdentifier` exist in OmniJS but not JXA
+- Methods like `taskWithID` expect AppleScript specifiers, not strings
 
 ## Practical Workarounds
 
