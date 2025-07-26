@@ -384,15 +384,26 @@ src/
 
 ## Known Limitations
 
-### Tag Assignment
-Due to OmniFocus JXA API limitations, tags cannot be assigned during task creation. 
-**Workaround**: Create the task first, then use `update_task` to assign tags:
+### Tag Assignment (Critical Limitation)
+**IMPORTANT**: Tag assignment is severely limited in the OmniFocus JXA API. While the API reports successful tag updates, tags are often not actually applied to tasks. This is a known OmniFocus JXA limitation.
+
+**Current Status**:
+- Tag creation and listing work perfectly
+- Tag assignment to tasks fails silently (returns success but tags not applied)
+- The server tries multiple methods (addTags, tags property, individual addTag) but all fail with type conversion errors
+- Tasks may become temporarily unsearchable by ID after failed tag operations (though they remain findable by name)
+
+**Attempted Workarounds** (all have limitations):
 ```javascript
-// Step 1: Create task
+// Approach 1: Create task first, then update (still fails)
 const task = await create_task({ name: "My Task" });
-// Step 2: Update with tags
-await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+await update_task({ taskId: task.id, tags: ["work", "urgent"] }); // Reports success but tags not applied
+
+// Approach 2: Manual tag assignment in OmniFocus UI
+// Currently the only reliable method
 ```
+
+**Recommendation**: Until OmniFocus updates their JXA API, manage tags directly in the OmniFocus UI rather than through automation.
 
 ### JXA whose() Constraints
 - Cannot query for "not null" directly (use `{_not: null}` syntax)

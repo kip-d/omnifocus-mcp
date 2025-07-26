@@ -764,9 +764,24 @@ export const CREATE_TASK_SCRIPT = `
           // Add tags to the created task
           if (tagsToAdd.length > 0) {
             try {
-              // Use individual addTag calls instead of addTags to avoid type conversion issues
-              for (const tag of tagsToAdd) {
-                task.addTag(tag);
+              // Try multiple approaches to add tags
+              try {
+                // Method 1: addTags with array
+                task.addTags(tagsToAdd);
+              } catch (e1) {
+                try {
+                  // Method 2: set tags property directly
+                  task.tags = tagsToAdd;
+                } catch (e2) {
+                  // Method 3: individual addTag calls
+                  for (const tag of tagsToAdd) {
+                    try {
+                      task.addTag(tag);
+                    } catch (e3) {
+                      // Skip individual tag errors
+                    }
+                  }
+                }
               }
               // Verify tags were actually added
               actualTags = safeGetTags(task);
@@ -948,10 +963,10 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.tags !== undefined) {
       try {
         // Get current tags
-        const currentTags = task.tags;
+        const currentTags = task.tags();
         
         // Remove all existing tags
-        if (currentTags.length > 0) {
+        if (currentTags && currentTags.length > 0) {
           task.removeTags(currentTags);
         }
         
@@ -997,9 +1012,23 @@ export const UPDATE_TASK_SCRIPT = `
           }
           
           if (tagsToAdd.length > 0) {
-            // Use individual addTag calls to avoid type conversion issues
-            for (const tag of tagsToAdd) {
-              task.addTag(tag);
+            // Try using addTags with array instead of individual calls
+            try {
+              task.addTags(tagsToAdd);
+            } catch (addTagsError) {
+              // If addTags fails, try setting tags property directly
+              try {
+                task.tags = tagsToAdd;
+              } catch (setTagsError) {
+                // Last resort: try individual calls
+                for (const tag of tagsToAdd) {
+                  try {
+                    task.addTag(tag);
+                  } catch (e) {
+                    // Skip individual tag errors
+                  }
+                }
+              }
             }
           }
         }
@@ -1009,9 +1038,27 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     
+    // Re-fetch task ID to ensure it's still valid after updates
+    let taskIdAfterUpdate = safeGet(() => task.id());
+    if (!taskIdAfterUpdate) {
+      // If task ID is lost, try to find it by other properties
+      try {
+        const allTasks = doc.flattenedTasks();
+        for (let i = 0; i < allTasks.length; i++) {
+          if (allTasks[i].name() === task.name() && 
+              allTasks[i].primaryKey === task.primaryKey) {
+            taskIdAfterUpdate = allTasks[i].id();
+            break;
+          }
+        }
+      } catch (e) {
+        taskIdAfterUpdate = 'unknown';
+      }
+    }
+    
     // Build response with updated fields
     const response = {
-      id: safeGet(() => task.id(), 'unknown'),
+      id: taskIdAfterUpdate || 'unknown',
       name: safeGet(() => task.name(), 'Unnamed Task'),
       updated: true,
       changes: {}
@@ -1024,7 +1071,14 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.dueDate !== undefined) response.changes.dueDate = updates.dueDate;
     if (updates.deferDate !== undefined) response.changes.deferDate = updates.deferDate;
     if (updates.estimatedMinutes !== undefined) response.changes.estimatedMinutes = updates.estimatedMinutes;
-    if (updates.tags !== undefined) response.changes.tags = updates.tags;
+    if (updates.tags !== undefined) {
+      response.changes.tags = updates.tags;
+      // Verify if tags were actually applied
+      const actualTags = safeGetTags(task);
+      if (updates.tags.length > 0 && actualTags.length === 0) {
+        response.warning = "Tags were not applied due to OmniFocus JXA API limitations. This is a known issue.";
+      }
+    }
     if (updates.projectId !== undefined) {
       response.changes.projectId = updates.projectId;
       if (updates.projectId !== "") {
