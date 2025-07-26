@@ -1,43 +1,15 @@
+import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { TodaysAgendaSchema } from '../schemas/task-schemas.js';
 
-export class TodaysAgendaTool extends BaseTool {
+export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
   name = 'todays_agenda';
   description = 'Get today\'s agenda - all tasks due today, overdue, or flagged';
+  schema = TodaysAgendaSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      includeFlagged: {
-        type: 'boolean',
-        description: 'Include flagged tasks regardless of due date',
-        default: true,
-      },
-      includeOverdue: {
-        type: 'boolean',
-        description: 'Include overdue tasks',
-        default: true,
-      },
-      includeAvailable: {
-        type: 'boolean',
-        description: 'Only include available tasks (not blocked/deferred)',
-        default: true,
-      },
-      includeDetails: {
-        type: 'boolean',
-        description: 'Include task details (note, project, tags). Defaults to false for better performance',
-        default: false,
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of tasks to return (default: 50)',
-        default: 50,
-      },
-    },
-  };
-
-  async execute(args: { includeFlagged?: boolean; includeOverdue?: boolean; includeAvailable?: boolean; includeDetails?: boolean; limit?: number } = {}): Promise<any> {
+  async executeValidated(args: z.infer<typeof TodaysAgendaSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {

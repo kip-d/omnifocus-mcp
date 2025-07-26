@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { UPDATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class UpdateProjectTool extends BaseTool {
+export class UpdateProjectTool extends LegacyBaseTool {
   name = 'update_project';
   description = 'Update an existing project in OmniFocus, including moving between folders';
 

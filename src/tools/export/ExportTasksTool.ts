@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export.js';
 
-export class ExportTasksTool extends BaseTool {
+export class ExportTasksTool extends LegacyBaseTool {
   name = 'export_tasks';
   description = 'Export tasks in JSON or CSV format with filtering options';
 

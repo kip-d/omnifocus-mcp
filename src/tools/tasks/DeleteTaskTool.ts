@@ -1,10 +1,10 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { DeleteTaskArgs } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
 
-export class DeleteTaskTool extends BaseTool<DeleteTaskArgs, StandardResponse<any>> {
+export class DeleteTaskTool extends LegacyBaseTool<DeleteTaskArgs, StandardResponse<any>> {
   name = 'delete_task';
   description = 'Delete (drop) a task in OmniFocus';
 

@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class CompleteProjectTool extends BaseTool {
+export class CompleteProjectTool extends LegacyBaseTool {
   name = 'complete_project';
   description = 'Mark a project as completed in OmniFocus';
 

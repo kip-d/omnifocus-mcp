@@ -1,11 +1,11 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { ExportTasksTool } from './ExportTasksTool.js';
 import { ExportProjectsTool } from './ExportProjectsTool.js';
 import { ListTagsTool } from '../tags/ListTagsTool.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-export class BulkExportTool extends BaseTool {
+export class BulkExportTool extends LegacyBaseTool {
   name = 'bulk_export';
   description = 'Export all OmniFocus data (tasks, projects, tags) to files';
 

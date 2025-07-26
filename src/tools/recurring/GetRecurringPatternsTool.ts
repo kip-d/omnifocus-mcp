@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 
-export class GetRecurringPatternsTool extends BaseTool {
+export class GetRecurringPatternsTool extends LegacyBaseTool {
   name = 'get_recurring_patterns';
   description = 'Get patterns and statistics about recurring task frequencies';
 

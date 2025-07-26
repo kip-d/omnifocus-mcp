@@ -1,10 +1,14 @@
+import { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
-export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
+/**
+ * Base class for all MCP tools with Zod schema validation
+ */
+export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
   protected omniAutomation: OmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
@@ -17,14 +21,61 @@ export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
 
   abstract name: string;
   abstract description: string;
-  abstract inputSchema: {
-    type: 'object';
-    properties: Record<string, any>;
-    required?: string[];
-  };
+  abstract schema: TSchema;
 
-  abstract execute(args: TArgs): Promise<TResponse>;
+  /**
+   * Get JSON Schema from Zod schema for MCP compatibility
+   */
+  get inputSchema(): any {
+    // Convert Zod schema to JSON Schema format
+    // For now, we'll use a simplified conversion
+    // In production, consider using a library like zod-to-json-schema
+    return this.zodToJsonSchema(this.schema);
+  }
 
+  /**
+   * Execute the tool with validation
+   */
+  async execute(args: unknown): Promise<any> {
+    try {
+      // Validate input with Zod
+      const validated = this.schema.parse(args);
+      
+      // Log the validated input
+      this.logger.debug(`Executing ${this.name} with validated args:`, validated);
+      
+      // Execute the tool-specific logic
+      return await this.executeValidated(validated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        // Convert Zod errors to MCP errors with helpful messages
+        const issues = error.issues.map(issue => {
+          const path = issue.path.join('.');
+          return `${path}: ${issue.message}`;
+        }).join(', ');
+        
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Invalid parameters: ${issues}`,
+          {
+            validation_errors: error.issues
+          }
+        );
+      }
+      
+      // Handle other errors
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Execute the tool with validated arguments
+   */
+  protected abstract executeValidated(args: z.infer<TSchema>): Promise<any>;
+
+  /**
+   * Handle errors consistently across all tools
+   */
   protected handleError(error: unknown): never {
     this.logger.error(`Error in ${this.name}:`, error);
 
@@ -62,5 +113,89 @@ export abstract class BaseTool<TArgs = unknown, TResponse = unknown> {
       ErrorCode.InternalError,
       error instanceof Error ? error.message : 'An unknown error occurred',
     );
+  }
+
+  /**
+   * Simple Zod to JSON Schema converter
+   * In production, use a proper library like zod-to-json-schema
+   */
+  private zodToJsonSchema(schema: z.ZodType): any {
+    // This is a simplified implementation
+    // For full compatibility, use a library like zod-to-json-schema
+    if (schema instanceof z.ZodObject) {
+      const shape = schema.shape;
+      const properties: Record<string, any> = {};
+      const required: string[] = [];
+
+      for (const [key, value] of Object.entries(shape)) {
+        properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
+        
+        // Check if field is required
+        if (!(value instanceof z.ZodOptional)) {
+          required.push(key);
+        }
+      }
+
+      return {
+        type: 'object',
+        properties,
+        required: required.length > 0 ? required : undefined,
+      };
+    }
+
+    return { type: 'object', properties: {} };
+  }
+
+  /**
+   * Convert individual Zod types to JSON Schema
+   */
+  private zodTypeToJsonSchema(schema: z.ZodType): any {
+    if (schema instanceof z.ZodString) {
+      return { type: 'string', description: schema.description };
+    }
+    if (schema instanceof z.ZodNumber) {
+      return { type: 'number', description: schema.description };
+    }
+    if (schema instanceof z.ZodBoolean) {
+      return { type: 'boolean', description: schema.description };
+    }
+    if (schema instanceof z.ZodArray) {
+      return {
+        type: 'array',
+        items: this.zodTypeToJsonSchema(schema._def.type),
+        description: schema.description,
+      };
+    }
+    if (schema instanceof z.ZodOptional) {
+      return this.zodTypeToJsonSchema(schema._def.innerType);
+    }
+    if (schema instanceof z.ZodUnion) {
+      const options = schema._def.options;
+      if (options.length === 2 && options.some((o: any) => o instanceof z.ZodNull)) {
+        // Handle nullable fields
+        const nonNull = options.find((o: any) => !(o instanceof z.ZodNull));
+        return this.zodTypeToJsonSchema(nonNull);
+      }
+    }
+    if (schema instanceof z.ZodEnum) {
+      return {
+        type: 'string',
+        enum: schema._def.values,
+        description: schema.description,
+      };
+    }
+    if (schema instanceof z.ZodLiteral) {
+      return {
+        type: typeof schema._def.value,
+        const: schema._def.value,
+        description: schema.description,
+      };
+    }
+    if (schema instanceof z.ZodObject) {
+      return this.zodToJsonSchema(schema);
+    }
+
+    // Default fallback
+    return { type: 'string', description: schema.description };
   }
 }

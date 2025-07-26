@@ -1,9 +1,9 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class ManageTagsTool extends BaseTool {
+export class ManageTagsTool extends LegacyBaseTool {
   name = 'manage_tags';
   description = 'Create, rename, or delete tags in OmniFocus';
 

@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { getVersionInfo } from '../../utils/version.js';
 import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class GetVersionInfoTool extends BaseTool {
+export class GetVersionInfoTool extends LegacyBaseTool {
   name = 'get_version_info';
   description = 'Get version information including git commit hash and build details';
 

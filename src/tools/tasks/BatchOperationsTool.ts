@@ -1,4 +1,4 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import {
   BATCH_UPDATE_TASKS_SCRIPT,
   BATCH_COMPLETE_TASKS_SCRIPT,
@@ -39,7 +39,7 @@ interface BatchMixedInput {
   }>;
 }
 
-export class BatchUpdateTasksTool extends BaseTool<BatchUpdateInput, StandardResponse<any>> {
+export class BatchUpdateTasksTool extends LegacyBaseTool<BatchUpdateInput, StandardResponse<any>> {
   name = 'batch_update_tasks';
   description = 'Update multiple tasks in a single operation. More efficient than individual updates.';
   
@@ -105,7 +105,7 @@ export class BatchUpdateTasksTool extends BaseTool<BatchUpdateInput, StandardRes
   }
 }
 
-export class BatchCompleteTasksTool extends BaseTool<BatchCompleteInput, StandardResponse<any>> {
+export class BatchCompleteTasksTool extends LegacyBaseTool<BatchCompleteInput, StandardResponse<any>> {
   name = 'batch_complete_tasks';
   description = 'Complete multiple tasks at once. More efficient than individual completions.';
   
@@ -158,7 +158,7 @@ export class BatchCompleteTasksTool extends BaseTool<BatchCompleteInput, Standar
   }
 }
 
-export class BatchDeleteTasksTool extends BaseTool<BatchDeleteInput, StandardResponse<any>> {
+export class BatchDeleteTasksTool extends LegacyBaseTool<BatchDeleteInput, StandardResponse<any>> {
   name = 'batch_delete_tasks';
   description = 'Delete multiple tasks at once. Use with caution - this cannot be undone.';
   
@@ -204,7 +204,7 @@ export class BatchDeleteTasksTool extends BaseTool<BatchDeleteInput, StandardRes
   }
 }
 
-export class BatchMixedOperationsTool extends BaseTool<BatchMixedInput, StandardResponse<any>> {
+export class BatchMixedOperationsTool extends LegacyBaseTool<BatchMixedInput, StandardResponse<any>> {
   name = 'batch_mixed_operations';
   description = 'Perform different operations on different tasks in one batch. Combines update, complete, and delete actions.';
   

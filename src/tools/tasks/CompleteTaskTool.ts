@@ -1,10 +1,10 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { CompleteTaskArgs } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
 
-export class CompleteTaskTool extends BaseTool<CompleteTaskArgs, StandardResponse<any>> {
+export class CompleteTaskTool extends LegacyBaseTool<CompleteTaskArgs, StandardResponse<any>> {
   name = 'complete_task';
   description = 'Mark a task as completed in OmniFocus';
 

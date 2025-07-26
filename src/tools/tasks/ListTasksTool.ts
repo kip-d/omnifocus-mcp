@@ -1,82 +1,17 @@
+import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { TaskFilter } from '../../omnifocus/types.js';
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
+import { ListTasksSchema } from '../schemas/task-schemas.js';
 
-export class ListTasksTool extends BaseTool<TaskFilter & { limit?: number; skipAnalysis?: boolean }, ListTasksResponse> {
+export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
   name = 'list_tasks';
   description = 'List tasks from OmniFocus with advanced filtering options';
+  schema = ListTasksSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      completed: {
-        type: 'boolean',
-        description: 'Filter by completion status',
-      },
-      flagged: {
-        type: 'boolean',
-        description: 'Filter by flagged status',
-      },
-      projectId: {
-        type: 'string',
-        description: 'Filter by project ID',
-      },
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Filter by tags (all specified tags must be present)',
-      },
-      dueBefore: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Filter tasks due before this date',
-      },
-      dueAfter: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Filter tasks due after this date',
-      },
-      deferBefore: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Filter tasks deferred before this date',
-      },
-      deferAfter: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Filter tasks deferred after this date',
-      },
-      search: {
-        type: 'string',
-        description: 'Search in task name and notes',
-      },
-      inInbox: {
-        type: 'boolean',
-        description: 'Filter tasks in inbox',
-      },
-      available: {
-        type: 'boolean',
-        description: 'Filter available tasks (not completed, not dropped, not blocked, not deferred)',
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of tasks to return (1-1000, default: 100)',
-        default: 100,
-        minimum: 1,
-        maximum: 1000,
-      },
-      skipAnalysis: {
-        type: 'boolean',
-        description: 'Skip recurring task analysis for better performance (default: false)',
-        default: false,
-      },
-    },
-  };
-
-  async execute(args: TaskFilter & { limit?: number; skipAnalysis?: boolean }): Promise<ListTasksResponse> {
+  async executeValidated(args: z.infer<typeof ListTasksSchema>): Promise<ListTasksResponse> {
     const timer = new OperationTimer();
 
     try {

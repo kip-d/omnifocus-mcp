@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { ANALYZE_RECURRING_TASKS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 
-export class AnalyzeRecurringTasksTool extends BaseTool {
+export class AnalyzeRecurringTasksTool extends LegacyBaseTool {
   name = 'analyze_recurring_tasks';
   description = 'Analyze recurring tasks with frequency, due dates, and patterns';
 

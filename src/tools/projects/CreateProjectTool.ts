@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class CreateProjectTool extends BaseTool {
+export class CreateProjectTool extends LegacyBaseTool {
   name = 'create_project';
   description = 'Create a new project in OmniFocus with optional folder placement (creates folder if needed)';
 

@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class ExportProjectsTool extends BaseTool {
+export class ExportProjectsTool extends LegacyBaseTool {
   name = 'export_projects';
   description = 'Export all projects in JSON or CSV format with optional statistics';
 

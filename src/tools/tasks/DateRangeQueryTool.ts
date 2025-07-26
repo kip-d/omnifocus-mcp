@@ -1,4 +1,4 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { 
   GET_TASKS_IN_DATE_RANGE_SCRIPT,
   GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT,
@@ -6,7 +6,7 @@ import {
 } from '../../omnifocus/scripts/date-range-queries.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class DateRangeQueryTool extends BaseTool {
+export class DateRangeQueryTool extends LegacyBaseTool {
   name = 'query_tasks_by_date';
   description = 'Query tasks by date range using optimized whose() filters. Supports due dates, defer dates, and completion dates.';
 
@@ -210,7 +210,7 @@ export class DateRangeQueryTool extends BaseTool {
   }
 }
 
-export class OverdueTasksTool extends BaseTool {
+export class OverdueTasksTool extends LegacyBaseTool {
   name = 'get_overdue_tasks';
   description = 'Get all overdue tasks using optimized whose() queries. Faster than using list_tasks with date filters.';
 
@@ -242,7 +242,7 @@ export class OverdueTasksTool extends BaseTool {
   }
 }
 
-export class UpcomingTasksTool extends BaseTool {
+export class UpcomingTasksTool extends LegacyBaseTool {
   name = 'get_upcoming_tasks';
   description = 'Get upcoming tasks for the next N days using optimized whose() queries. Faster than using list_tasks with date filters.';
 

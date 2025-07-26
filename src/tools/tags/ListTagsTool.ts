@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class ListTagsTool extends BaseTool {
+export class ListTagsTool extends LegacyBaseTool {
   name = 'list_tags';
   description = 'List all tags/contexts in OmniFocus with usage statistics';
 

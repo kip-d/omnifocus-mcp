@@ -1,10 +1,10 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskArgs } from '../types.js';
 import { UpdateTaskResponse } from '../response-types.js';
 
-export class UpdateTaskTool extends BaseTool<UpdateTaskArgs, UpdateTaskResponse> {
+export class UpdateTaskTool extends LegacyBaseTool<UpdateTaskArgs, UpdateTaskResponse> {
   name = 'update_task';
   description = 'Update an existing task in OmniFocus (can move between projects using projectId)';
 

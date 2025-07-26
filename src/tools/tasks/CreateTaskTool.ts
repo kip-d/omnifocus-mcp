@@ -1,59 +1,20 @@
+import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { parsingError } from '../../utils/error-messages.js';
 import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
-import { CreateTaskArgs, CreateTaskResponse } from '../types.js';
+import { CreateTaskResponse } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
 import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
+import { CreateTaskSchema } from '../schemas/task-schemas.js';
 
-export class CreateTaskTool extends BaseTool<CreateTaskArgs, StandardResponse<{ task: CreateTaskResponse }>>{
+export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   name = 'create_task';
   description = 'Create a new task in OmniFocus (can be assigned to a project using projectId from list_projects)';
+  schema = CreateTaskSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Task name',
-      },
-      note: {
-        type: 'string',
-        description: 'Task note/description',
-      },
-      projectId: {
-        description: 'Project ID to add task to - use full alphanumeric ID from list_projects tool (e.g., "az5Ieo4ip7K", not "547"). Claude Desktop may incorrectly extract numbers from IDs (if not provided, task goes to inbox)',
-      },
-      flagged: {
-        type: 'boolean',
-        description: 'Whether task is flagged',
-        default: false,
-      },
-      dueDate: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Due date for the task',
-      },
-      deferDate: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Defer date for the task',
-      },
-      estimatedMinutes: {
-        type: 'number',
-        description: 'Estimated time in minutes',
-      },
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Tags to apply to the task',
-      },
-    },
-    required: ['name'],
-  };
-
-  async execute(args: CreateTaskArgs): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
+  async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
     const timer = new OperationTimer();
 
     try {

@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { OVERDUE_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 
-export class OverdueAnalysisTool extends BaseTool {
+export class OverdueAnalysisTool extends LegacyBaseTool {
   name = 'analyze_overdue_tasks';
   description = 'Analyze overdue tasks to identify patterns and bottlenecks';
 

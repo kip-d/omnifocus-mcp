@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 
-export class ProductivityStatsTool extends BaseTool {
+export class ProductivityStatsTool extends LegacyBaseTool {
   name = 'get_productivity_stats';
   description = 'Get productivity statistics including completion rates, task velocity, and time distribution';
 

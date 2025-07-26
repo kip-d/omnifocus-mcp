@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 
-export class RunDiagnosticsTool extends BaseTool {
+export class RunDiagnosticsTool extends LegacyBaseTool {
   name = 'run_diagnostics';
   description = 'Run comprehensive diagnostics to identify connection issues with OmniFocus';
 

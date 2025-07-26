@@ -1,8 +1,8 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class DeleteProjectTool extends BaseTool {
+export class DeleteProjectTool extends LegacyBaseTool {
   name = 'delete_project';
   description = 'Delete a project from OmniFocus';
 

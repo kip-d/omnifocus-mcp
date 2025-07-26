@@ -1,9 +1,9 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { ProjectFilter } from '../../omnifocus/types.js';
 import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 
-export class ListProjectsTool extends BaseTool {
+export class ListProjectsTool extends LegacyBaseTool {
   name = 'list_projects';
   description = 'List projects from OmniFocus with filtering options';
 

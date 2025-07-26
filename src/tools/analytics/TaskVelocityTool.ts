@@ -1,7 +1,7 @@
-import { BaseTool } from '../base.js';
+import { LegacyBaseTool } from '../legacy-base.js';
 import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 
-export class TaskVelocityTool extends BaseTool {
+export class TaskVelocityTool extends LegacyBaseTool {
   name = 'get_task_velocity';
   description = 'Analyze task completion velocity and throughput metrics';
 
