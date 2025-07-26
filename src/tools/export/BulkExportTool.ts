@@ -1,47 +1,18 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { ExportTasksTool } from './ExportTasksTool.js';
 import { ExportProjectsTool } from './ExportProjectsTool.js';
 import { ListTagsTool } from '../tags/ListTagsTool.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { BulkExportSchema } from '../schemas/export-schemas.js';
 
-export class BulkExportTool extends LegacyBaseTool {
+export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
   name = 'bulk_export';
   description = 'Export all OmniFocus data (tasks, projects, tags) to files';
+  schema = BulkExportSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      outputDirectory: {
-        type: 'string',
-        description: 'Directory to save export files',
-      },
-      format: {
-        type: 'string',
-        enum: ['json', 'csv'],
-        description: 'Export format (default: json)',
-        default: 'json',
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed tasks',
-        default: true,
-      },
-      includeProjectStats: {
-        type: 'boolean',
-        description: 'Include statistics in project export',
-        default: true,
-      },
-    },
-    required: ['outputDirectory'],
-  };
-
-  async execute(args: {
-    outputDirectory: string;
-    format?: 'json' | 'csv';
-    includeCompleted?: boolean;
-    includeProjectStats?: boolean;
-  }): Promise<any> {
+  async executeValidated(args: z.infer<typeof BulkExportSchema>): Promise<any> {
     try {
       const {
         outputDirectory,

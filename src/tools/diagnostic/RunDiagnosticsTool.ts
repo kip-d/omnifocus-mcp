@@ -1,9 +1,12 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
+import { RunDiagnosticsSchema } from '../schemas/system-schemas.js';
 
-export class RunDiagnosticsTool extends LegacyBaseTool {
+export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
   name = 'run_diagnostics';
   description = 'Run comprehensive diagnostics to identify connection issues with OmniFocus';
+  schema = RunDiagnosticsSchema;
 
   private diagnosticOmni: DiagnosticOmniAutomation;
 
@@ -12,18 +15,7 @@ export class RunDiagnosticsTool extends LegacyBaseTool {
     this.diagnosticOmni = new DiagnosticOmniAutomation();
   }
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      testScript: {
-        type: 'string',
-        description: 'Optional custom script to test (defaults to basic list_tasks)',
-        default: 'list_tasks'
-      }
-    }
-  };
-
-  async execute(args: { testScript?: string }): Promise<any> {
+  async executeValidated(args: z.infer<typeof RunDiagnosticsSchema>): Promise<any> {
     const results: any = {
       timestamp: new Date().toISOString(),
       tests: {}

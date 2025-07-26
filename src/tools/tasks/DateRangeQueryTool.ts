@@ -1,67 +1,19 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { 
   GET_TASKS_IN_DATE_RANGE_SCRIPT,
   GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT
 } from '../../omnifocus/scripts/date-range-queries.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../schemas/task-schemas.js';
 
-export class DateRangeQueryTool extends LegacyBaseTool {
+export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema> {
   name = 'query_tasks_by_date';
   description = 'Query tasks by date range using optimized whose() filters. Supports due dates, defer dates, and completion dates.';
+  schema = DateRangeQueryToolSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      queryType: {
-        type: 'string',
-        enum: ['date_range', 'overdue', 'upcoming'],
-        description: 'Type of date query to perform',
-        default: 'date_range',
-      },
-      startDate: {
-        type: 'string',
-        description: 'Start date (ISO format). Required for date_range query when endDate is not provided.',
-      },
-      endDate: {
-        type: 'string',
-        description: 'End date (ISO format). Required for date_range query when startDate is not provided.',
-      },
-      dateField: {
-        type: 'string',
-        enum: ['dueDate', 'deferDate', 'completionDate'],
-        description: 'Which date field to query on (for date_range query)',
-        default: 'dueDate',
-      },
-      includeNullDates: {
-        type: 'boolean',
-        description: 'Include tasks without the specified date field (for date_range query)',
-        default: false,
-      },
-      days: {
-        type: 'number',
-        description: 'Number of days to look ahead (for upcoming query)',
-        default: 7,
-      },
-      includeToday: {
-        type: 'boolean',
-        description: 'Include today in upcoming tasks (for upcoming query)',
-        default: true,
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed tasks (for overdue query)',
-        default: false,
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of tasks to return',
-        default: 100,
-      },
-    },
-  };
-
-  async execute(args: any = {}): Promise<any> {
+  async executeValidated(args: z.infer<typeof DateRangeQueryToolSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {
@@ -210,27 +162,12 @@ export class DateRangeQueryTool extends LegacyBaseTool {
   }
 }
 
-export class OverdueTasksTool extends LegacyBaseTool {
+export class OverdueTasksTool extends BaseTool<typeof OverdueTasksToolSchema> {
   name = 'get_overdue_tasks';
   description = 'Get all overdue tasks using optimized whose() queries. Faster than using list_tasks with date filters.';
+  schema = OverdueTasksToolSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed overdue tasks',
-        default: false,
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of tasks to return',
-        default: 50,
-      },
-    },
-  };
-
-  async execute(args: any = {}): Promise<any> {
+  async executeValidated(args: z.infer<typeof OverdueTasksToolSchema>): Promise<any> {
     // Delegate to DateRangeQueryTool using shared cache
     const dateRangeTool = new DateRangeQueryTool(this.cache);
     
@@ -242,32 +179,12 @@ export class OverdueTasksTool extends LegacyBaseTool {
   }
 }
 
-export class UpcomingTasksTool extends LegacyBaseTool {
+export class UpcomingTasksTool extends BaseTool<typeof UpcomingTasksToolSchema> {
   name = 'get_upcoming_tasks';
   description = 'Get upcoming tasks for the next N days using optimized whose() queries. Faster than using list_tasks with date filters.';
+  schema = UpcomingTasksToolSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      days: {
-        type: 'number',
-        description: 'Number of days to look ahead',
-        default: 7,
-      },
-      includeToday: {
-        type: 'boolean',
-        description: 'Include tasks due today',
-        default: true,
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of tasks to return',
-        default: 100,
-      },
-    },
-  };
-
-  async execute(args: any = {}): Promise<any> {
+  async executeValidated(args: z.infer<typeof UpcomingTasksToolSchema>): Promise<any> {
     // Delegate to DateRangeQueryTool using shared cache
     const dateRangeTool = new DateRangeQueryTool(this.cache);
     

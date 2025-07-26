@@ -1,25 +1,16 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { CompleteTaskArgs } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
+import { CompleteTaskSchema } from '../schemas/task-schemas.js';
 
-export class CompleteTaskTool extends LegacyBaseTool<CompleteTaskArgs, StandardResponse<any>> {
+export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
   name = 'complete_task';
   description = 'Mark a task as completed in OmniFocus';
+  schema = CompleteTaskSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      taskId: {
-        type: 'string',
-        description: 'ID of the task to complete',
-      },
-    },
-    required: ['taskId'],
-  };
-
-  async execute(args: CompleteTaskArgs): Promise<StandardResponse<any>> {
+  async executeValidated(args: z.infer<typeof CompleteTaskSchema>): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
 
     try {

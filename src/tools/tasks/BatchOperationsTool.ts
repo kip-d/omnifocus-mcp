@@ -1,4 +1,5 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import {
   BATCH_UPDATE_TASKS_SCRIPT,
   BATCH_COMPLETE_TASKS_SCRIPT,
@@ -6,78 +7,25 @@ import {
   BATCH_MIXED_OPERATIONS_SCRIPT
 } from '../../omnifocus/scripts/batch-operations.js';
 import { StandardResponse, createSuccessResponse } from '../../utils/response-format.js';
+import { 
+  BatchUpdateTasksSchema, 
+  BatchCompleteTasksSchema, 
+  BatchDeleteTasksSchema, 
+  BatchMixedOperationsSchema 
+} from '../schemas/task-schemas.js';
 
-interface BatchUpdateInput {
-  updates: Array<{
-    taskId: string;
-    updates: {
-      name?: string;
-      note?: string;
-      flagged?: boolean;
-      dueDate?: string;
-      deferDate?: string;
-      estimatedMinutes?: number;
-      projectId?: string;
-    };
-  }>;
-}
+// Type inference from Zod schemas
+type BatchUpdateInput = z.infer<typeof BatchUpdateTasksSchema>;
+type BatchCompleteInput = z.infer<typeof BatchCompleteTasksSchema>;
+type BatchDeleteInput = z.infer<typeof BatchDeleteTasksSchema>;
+type BatchMixedInput = z.infer<typeof BatchMixedOperationsSchema>;
 
-interface BatchCompleteInput {
-  taskIds: string[];
-  completionDate?: string;
-}
-
-interface BatchDeleteInput {
-  taskIds: string[];
-}
-
-interface BatchMixedInput {
-  operations: Array<{
-    taskId: string;
-    action: 'complete' | 'delete' | 'update';
-    data?: any;
-  }>;
-}
-
-export class BatchUpdateTasksTool extends LegacyBaseTool<BatchUpdateInput, StandardResponse<any>> {
+export class BatchUpdateTasksTool extends BaseTool<typeof BatchUpdateTasksSchema> {
   name = 'batch_update_tasks';
   description = 'Update multiple tasks in a single operation. More efficient than individual updates.';
-  
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      updates: {
-        type: 'array',
-        description: 'Array of task updates',
-        items: {
-          type: 'object',
-          properties: {
-            taskId: {
-              type: 'string',
-              description: 'ID of the task to update'
-            },
-            updates: {
-              type: 'object',
-              description: 'Properties to update',
-              properties: {
-                name: { type: 'string', description: 'New task name' },
-                note: { type: 'string', description: 'New task note' },
-                flagged: { type: 'boolean', description: 'Flag status' },
-                dueDate: { type: 'string', description: 'ISO date string or null to clear' },
-                deferDate: { type: 'string', description: 'ISO date string or null to clear' },
-                estimatedMinutes: { type: 'number', description: 'Estimated duration' },
-                projectId: { type: 'string', description: 'Project ID or empty string for inbox' }
-              }
-            }
-          },
-          required: ['taskId', 'updates']
-        }
-      }
-    },
-    required: ['updates']
-  };
+  schema = BatchUpdateTasksSchema;
 
-  async execute(params: BatchUpdateInput): Promise<StandardResponse<any>> {
+  async executeValidated(params: BatchUpdateInput): Promise<StandardResponse<any>> {
     try {
       const script = this.omniAutomation.buildScript(BATCH_UPDATE_TASKS_SCRIPT, { taskUpdates: params.updates });
       const result = await this.omniAutomation.execute<any>(script);
@@ -105,29 +53,12 @@ export class BatchUpdateTasksTool extends LegacyBaseTool<BatchUpdateInput, Stand
   }
 }
 
-export class BatchCompleteTasksTool extends LegacyBaseTool<BatchCompleteInput, StandardResponse<any>> {
+export class BatchCompleteTasksTool extends BaseTool<typeof BatchCompleteTasksSchema> {
   name = 'batch_complete_tasks';
   description = 'Complete multiple tasks at once. More efficient than individual completions.';
-  
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      taskIds: {
-        type: 'array',
-        description: 'Array of task IDs to complete',
-        items: {
-          type: 'string'
-        }
-      },
-      completionDate: {
-        type: 'string',
-        description: 'Optional ISO date string for completion date (defaults to now)'
-      }
-    },
-    required: ['taskIds']
-  };
+  schema = BatchCompleteTasksSchema;
 
-  async execute(params: BatchCompleteInput): Promise<StandardResponse<any>> {
+  async executeValidated(params: BatchCompleteInput): Promise<StandardResponse<any>> {
     try {
       const script = this.omniAutomation.buildScript(BATCH_COMPLETE_TASKS_SCRIPT, {
         taskIds: params.taskIds,
@@ -158,25 +89,12 @@ export class BatchCompleteTasksTool extends LegacyBaseTool<BatchCompleteInput, S
   }
 }
 
-export class BatchDeleteTasksTool extends LegacyBaseTool<BatchDeleteInput, StandardResponse<any>> {
+export class BatchDeleteTasksTool extends BaseTool<typeof BatchDeleteTasksSchema> {
   name = 'batch_delete_tasks';
   description = 'Delete multiple tasks at once. Use with caution - this cannot be undone.';
-  
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      taskIds: {
-        type: 'array',
-        description: 'Array of task IDs to delete',
-        items: {
-          type: 'string'
-        }
-      }
-    },
-    required: ['taskIds']
-  };
+  schema = BatchDeleteTasksSchema;
 
-  async execute(params: BatchDeleteInput): Promise<StandardResponse<any>> {
+  async executeValidated(params: BatchDeleteInput): Promise<StandardResponse<any>> {
     try {
       const script = this.omniAutomation.buildScript(BATCH_DELETE_TASKS_SCRIPT, { taskIds: params.taskIds });
       const result = await this.omniAutomation.execute<any>(script);
@@ -204,49 +122,12 @@ export class BatchDeleteTasksTool extends LegacyBaseTool<BatchDeleteInput, Stand
   }
 }
 
-export class BatchMixedOperationsTool extends LegacyBaseTool<BatchMixedInput, StandardResponse<any>> {
+export class BatchMixedOperationsTool extends BaseTool<typeof BatchMixedOperationsSchema> {
   name = 'batch_mixed_operations';
   description = 'Perform different operations on different tasks in one batch. Combines update, complete, and delete actions.';
-  
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      operations: {
-        type: 'array',
-        description: 'Array of operations to perform',
-        items: {
-          type: 'object',
-          properties: {
-            taskId: {
-              type: 'string',
-              description: 'ID of the task'
-            },
-            action: {
-              type: 'string',
-              enum: ['complete', 'delete', 'update'],
-              description: 'Action to perform'
-            },
-            data: {
-              type: 'object',
-              description: 'Data for the action (required for update, optional for complete)',
-              properties: {
-                completionDate: { type: 'string', description: 'For complete action' },
-                name: { type: 'string', description: 'For update action' },
-                note: { type: 'string', description: 'For update action' },
-                flagged: { type: 'boolean', description: 'For update action' },
-                dueDate: { type: 'string', description: 'For update action' },
-                deferDate: { type: 'string', description: 'For update action' }
-              }
-            }
-          },
-          required: ['taskId', 'action']
-        }
-      }
-    },
-    required: ['operations']
-  };
+  schema = BatchMixedOperationsSchema;
 
-  async execute(params: BatchMixedInput): Promise<StandardResponse<any>> {
+  async executeValidated(params: BatchMixedInput): Promise<StandardResponse<any>> {
     try {
       const script = this.omniAutomation.buildScript(BATCH_MIXED_OPERATIONS_SCRIPT, { operations: params.operations });
       const result = await this.omniAutomation.execute<any>(script);

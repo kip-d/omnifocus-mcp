@@ -9,53 +9,47 @@ export const GetVersionInfoSchema = z.object({});
 
 // Run diagnostics parameters
 export const RunDiagnosticsSchema = z.object({
-  includePerformance: z.boolean()
-    .default(true)
-    .describe('Include performance metrics'),
-  
-  includeCacheStats: z.boolean()
-    .default(true)
-    .describe('Include cache statistics'),
-  
-  includeSystemInfo: z.boolean()
-    .default(true)
-    .describe('Include system information'),
-  
-  testOperations: z.array(z.enum([
-    'list_tasks', 'list_projects', 'list_tags',
-    'create_task', 'update_task', 'delete_task'
-  ]))
-    .optional()
-    .describe('Specific operations to test')
+  testScript: z.string()
+    .default('list_tasks')
+    .describe('Optional custom script to test (defaults to basic list_tasks)')
 });
 
 // Recurring task analysis parameters
 export const AnalyzeRecurringTasksSchema = z.object({
+  activeOnly: z.boolean()
+    .default(true)
+    .describe('Only include active (non-completed, non-dropped) recurring tasks'),
+  
   includeCompleted: z.boolean()
     .default(false)
-    .describe('Include completed recurring tasks'),
+    .describe('Include completed recurring tasks (overrides activeOnly for completed)'),
   
-  projectFilter: z.array(z.string())
-    .optional()
-    .describe('Filter by specific projects'),
+  includeDropped: z.boolean()
+    .default(false)
+    .describe('Include dropped recurring tasks (overrides activeOnly for dropped)'),
   
-  maxResults: z.number()
-    .int()
-    .positive()
-    .max(500)
-    .default(100)
-    .describe('Maximum recurring tasks to analyze')
+  includeHistory: z.boolean()
+    .default(false)
+    .describe('Include completion history information'),
+  
+  sortBy: z.enum(['name', 'dueDate', 'frequency', 'project'])
+    .default('dueDate')
+    .describe('Sort order for results')
 });
 
 // Get recurring patterns parameters
 export const GetRecurringPatternsSchema = z.object({
-  groupBy: z.enum(['frequency', 'project', 'nextDue'])
-    .default('frequency')
-    .describe('How to group recurring patterns'),
-  
-  includeStats: z.boolean()
+  activeOnly: z.boolean()
     .default(true)
-    .describe('Include statistics for each pattern')
+    .describe('Only include active (non-completed, non-dropped) recurring tasks'),
+  
+  includeCompleted: z.boolean()
+    .default(false)
+    .describe('Include completed recurring tasks (overrides activeOnly for completed)'),
+  
+  includeDropped: z.boolean()
+    .default(false)
+    .describe('Include dropped recurring tasks (overrides activeOnly for dropped)')
 });
 
 // Response schemas

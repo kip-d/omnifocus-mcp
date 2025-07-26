@@ -188,17 +188,29 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New flagged status'),
   
-  dueDate: z.union([DateTimeSchema, z.null()])
+  dueDate: DateTimeSchema
     .optional()
-    .describe('New due date (or null to clear)'),
+    .describe('New due date'),
   
-  deferDate: z.union([DateTimeSchema, z.null()])
+  clearDueDate: z.boolean()
     .optional()
-    .describe('New defer date (or null to clear)'),
+    .describe('Set to true to clear the existing due date'),
   
-  estimatedMinutes: z.union([z.number().int().positive(), z.null()])
+  deferDate: DateTimeSchema
     .optional()
-    .describe('New estimated duration (or null to clear)'),
+    .describe('New defer date'),
+  
+  clearDeferDate: z.boolean()
+    .optional()
+    .describe('Set to true to clear the existing defer date'),
+  
+  estimatedMinutes: z.number().int().positive()
+    .optional()
+    .describe('New estimated duration in minutes'),
+  
+  clearEstimatedMinutes: z.boolean()
+    .optional()
+    .describe('Set to true to clear the existing time estimate'),
   
   tags: z.array(TagNameSchema)
     .optional()
@@ -229,29 +241,149 @@ export const BatchTaskIdsSchema = z.object({
     .describe('List of task IDs to process')
 });
 
+// Schema for batch updating multiple tasks with different updates each
 export const BatchUpdateTasksSchema = z.object({
-  taskIds: z.array(IdSchema)
-    .min(1)
-    .max(100)
-    .describe('List of task IDs to update'),
-  
-  updates: UpdateTaskSchema.omit({ taskId: true })
-    .describe('Updates to apply to all tasks')
-});
-
-export const BatchMixedOperationsSchema = z.object({
-  operations: z.array(z.object({
-    operation: z.enum(['update', 'complete', 'delete']),
-    taskId: IdSchema,
-    updates: UpdateTaskSchema.omit({ taskId: true }).optional(),
-    completionDate: DateTimeSchema.optional()
+  updates: z.array(z.object({
+    taskId: IdSchema.describe('ID of the task to update'),
+    updates: z.object({
+      name: z.string().optional().describe('New task name'),
+      note: z.string().optional().describe('New task note'),
+      flagged: z.boolean().optional().describe('Flag status'),
+      dueDate: z.string().optional().describe('ISO date string or null to clear'),
+      deferDate: z.string().optional().describe('ISO date string or null to clear'),
+      estimatedMinutes: z.number().optional().describe('Estimated duration'),
+      projectId: z.string().optional().describe('Project ID or empty string for inbox')
+    }).describe('Properties to update')
   }))
   .min(1)
   .max(100)
-  .describe('List of operations to perform')
+  .describe('Array of task updates')
 });
 
-// Date range query schemas
+// Schema for batch completing tasks
+export const BatchCompleteTasksSchema = z.object({
+  taskIds: z.array(IdSchema)
+    .min(1)
+    .max(100)
+    .describe('Array of task IDs to complete'),
+  
+  completionDate: DateTimeSchema
+    .optional()
+    .describe('Optional ISO date string for completion date (defaults to now)')
+});
+
+// Schema for batch deleting tasks  
+export const BatchDeleteTasksSchema = z.object({
+  taskIds: z.array(IdSchema)
+    .min(1)
+    .max(100)
+    .describe('Array of task IDs to delete')
+});
+
+// Schema for mixed batch operations
+export const BatchMixedOperationsSchema = z.object({
+  operations: z.array(z.object({
+    action: z.enum(['update', 'complete', 'delete']).describe('Action to perform'),
+    taskId: IdSchema.describe('ID of the task'),
+    data: z.object({
+      completionDate: z.string().optional().describe('For complete action'),
+      name: z.string().optional().describe('For update action'),
+      note: z.string().optional().describe('For update action'),
+      flagged: z.boolean().optional().describe('For update action'),
+      dueDate: z.string().optional().describe('For update action'),
+      deferDate: z.string().optional().describe('For update action')
+    }).optional().describe('Data for the action (required for update, optional for complete)')
+  }))
+  .min(1)
+  .max(100)
+  .describe('Array of operations to perform')
+});
+
+// Date range query schemas - flexible query tool
+export const DateRangeQueryToolSchema = z.object({
+  queryType: z.enum(['date_range', 'overdue', 'upcoming'])
+    .default('date_range')
+    .describe('Type of date query to perform'),
+    
+  // For date_range queries
+  startDate: DateTimeSchema
+    .optional()
+    .describe('Start date (ISO format). Required for date_range query when endDate is not provided.'),
+    
+  endDate: DateTimeSchema
+    .optional()
+    .describe('End date (ISO format). Required for date_range query when startDate is not provided.'),
+    
+  dateField: z.enum(['dueDate', 'deferDate', 'completionDate'])
+    .default('dueDate')
+    .describe('Which date field to query on (for date_range query)'),
+    
+  includeNullDates: z.boolean()
+    .default(false)
+    .describe('Include tasks without the specified date field (for date_range query)'),
+    
+  // For upcoming queries
+  days: z.number()
+    .int()
+    .positive()
+    .max(365)
+    .default(7)
+    .describe('Number of days to look ahead (for upcoming query)'),
+    
+  includeToday: z.boolean()
+    .default(true)
+    .describe('Include today in upcoming tasks (for upcoming query)'),
+    
+  // For overdue queries
+  includeCompleted: z.boolean()
+    .default(false)
+    .describe('Include completed tasks (for overdue query)'),
+    
+  // Common parameters
+  limit: z.number()
+    .int()
+    .positive()
+    .max(1000)
+    .default(100)
+    .describe('Maximum number of tasks to return')
+});
+
+// Simpler overdue tasks schema
+export const OverdueTasksToolSchema = z.object({
+  includeCompleted: z.boolean()
+    .default(false)
+    .describe('Include completed overdue tasks'),
+    
+  limit: z.number()
+    .int()
+    .positive()
+    .max(1000)
+    .default(50)
+    .describe('Maximum number of tasks to return')
+});
+
+// Simpler upcoming tasks schema
+export const UpcomingTasksToolSchema = z.object({
+  days: z.number()
+    .int()
+    .positive()
+    .max(365)
+    .default(7)
+    .describe('Number of days to look ahead'),
+    
+  includeToday: z.boolean()
+    .default(true)
+    .describe('Include tasks due today'),
+    
+  limit: z.number()
+    .int()
+    .positive()
+    .max(1000)
+    .default(100)
+    .describe('Maximum number of tasks to return')
+});
+
+// Keep original schemas for potential future use
 export const DateRangeQuerySchema = z.object({
   dateField: z.enum(['dueDate', 'deferDate', 'completionDate'])
     .describe('Which date field to query'),

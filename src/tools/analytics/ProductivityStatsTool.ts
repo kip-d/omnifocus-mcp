@@ -1,34 +1,14 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { ProductivityStatsSchema } from '../schemas/analytics-schemas.js';
 
-export class ProductivityStatsTool extends LegacyBaseTool {
+export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSchema> {
   name = 'get_productivity_stats';
   description = 'Get productivity statistics including completion rates, task velocity, and time distribution';
+  schema = ProductivityStatsSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      period: {
-        type: 'string',
-        enum: ['today', 'week', 'month', 'quarter', 'year'],
-        description: 'Time period for analysis',
-        default: 'week',
-      },
-      groupBy: {
-        type: 'string',
-        enum: ['project', 'tag', 'day', 'week'],
-        description: 'How to group the statistics',
-        default: 'project',
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed tasks in analysis',
-        default: true,
-      },
-    },
-  };
-
-  async execute(args: { period?: string; groupBy?: string; includeCompleted?: boolean }): Promise<any> {
+  async executeValidated(args: z.infer<typeof ProductivityStatsSchema>): Promise<any> {
     try {
       const {
         period = 'week',

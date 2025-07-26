@@ -1,34 +1,14 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { OVERDUE_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { OverdueAnalysisSchema } from '../schemas/analytics-schemas.js';
 
-export class OverdueAnalysisTool extends LegacyBaseTool {
+export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> {
   name = 'analyze_overdue_tasks';
   description = 'Analyze overdue tasks to identify patterns and bottlenecks';
+  schema = OverdueAnalysisSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      includeRecentlyCompleted: {
-        type: 'boolean',
-        description: 'Include tasks completed after their due date',
-        default: true,
-      },
-      groupBy: {
-        type: 'string',
-        enum: ['project', 'tag', 'age', 'priority'],
-        description: 'How to group overdue analysis',
-        default: 'project',
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of overdue tasks to analyze',
-        default: 100,
-        maximum: 500,
-      },
-    },
-  };
-
-  async execute(args: { includeRecentlyCompleted?: boolean; groupBy?: string; limit?: number }): Promise<any> {
+  async executeValidated(args: z.infer<typeof OverdueAnalysisSchema>): Promise<any> {
     try {
       const {
         includeRecentlyCompleted = true,

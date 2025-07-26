@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import { ExportFormatSchema } from './shared-schemas.js';
-import { ListTasksSchema } from './task-schemas.js';
-import { ListProjectsSchema } from './project-schemas.js';
 
 /**
  * Export-related schema definitions
@@ -11,75 +9,53 @@ import { ListProjectsSchema } from './project-schemas.js';
 export const ExportTasksSchema = z.object({
   format: ExportFormatSchema
     .default('json')
-    .describe('Export format'),
+    .describe('Export format (default: json)'),
   
-  filters: ListTasksSchema.omit({ limit: true, offset: true })
+  filter: z.object({
+    search: z.string().optional().describe('Search in task names and notes'),
+    project: z.string().optional().describe('Filter by project name'),
+    projectId: z.string().optional().describe('Filter by project ID - use full alphanumeric ID from list_projects (e.g., "az5Ieo4ip7K", not "547"). Claude Desktop may incorrectly extract numbers from IDs.'),
+    tags: z.array(z.string()).optional().describe('Filter by tags (requires all specified tags)'),
+    available: z.boolean().optional().describe('Only available tasks (not deferred/blocked)'),
+    completed: z.boolean().optional().describe('Filter by completion status'),
+    flagged: z.boolean().optional().describe('Only flagged tasks')
+  })
     .optional()
-    .describe('Filter tasks before export'),
+    .describe('Filter criteria'),
   
   fields: z.array(z.enum([
-    'id', 'name', 'note', 'completed', 'flagged', 
-    'project', 'tags', 'dueDate', 'deferDate', 
-    'completionDate', 'estimatedMinutes', 'primaryKey'
+    'id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 
+    'completed', 'flagged', 'estimated', 'created', 'modified'
   ]))
     .optional()
-    .describe('Fields to include in export (defaults to all)'),
-  
-  includeCompleted: z.boolean()
-    .default(false)
-    .describe('Include completed tasks'),
-  
-  sortBy: z.enum(['name', 'dueDate', 'project', 'createdDate'])
-    .optional()
-    .describe('Sort field for export')
+    .describe('Fields to include in export (default: all common fields)')
 });
 
 // Export projects parameters
 export const ExportProjectsSchema = z.object({
   format: ExportFormatSchema
     .default('json')
-    .describe('Export format'),
+    .describe('Export format (default: json)'),
   
-  filters: ListProjectsSchema
-    .optional()
-    .describe('Filter projects before export'),
-  
-  includeTasks: z.boolean()
+  includeStats: z.boolean()
     .default(false)
-    .describe('Include tasks within each project'),
-  
-  fields: z.array(z.enum([
-    'id', 'name', 'note', 'status', 'flagged',
-    'dueDate', 'deferDate', 'completionDate',
-    'folder', 'taskCount', 'primaryKey'
-  ]))
-    .optional()
-    .describe('Fields to include in export (defaults to all)')
+    .describe('Include task statistics for each project')
 });
 
 // Bulk export parameters
 export const BulkExportSchema = z.object({
+  outputDirectory: z.string()
+    .describe('Directory to save export files'),
+  
   format: ExportFormatSchema
     .default('json')
-    .describe('Export format'),
-  
-  includeTypes: z.array(z.enum(['tasks', 'projects', 'tags']))
-    .default(['tasks', 'projects'])
-    .describe('Data types to include in export'),
-  
-  taskFilters: ListTasksSchema.omit({ limit: true, offset: true })
-    .optional()
-    .describe('Filter tasks in export'),
-  
-  projectFilters: ListProjectsSchema
-    .optional()
-    .describe('Filter projects in export'),
+    .describe('Export format (default: json)'),
   
   includeCompleted: z.boolean()
-    .default(false)
-    .describe('Include completed items'),
-  
-  includeMetadata: z.boolean()
     .default(true)
-    .describe('Include export metadata (timestamp, counts, etc.)')
+    .describe('Include completed tasks'),
+  
+  includeProjectStats: z.boolean()
+    .default(true)
+    .describe('Include statistics in project export')
 });

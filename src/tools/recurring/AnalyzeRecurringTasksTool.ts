@@ -1,49 +1,14 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { ANALYZE_RECURRING_TASKS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
+import { AnalyzeRecurringTasksSchema } from '../schemas/system-schemas.js';
 
-export class AnalyzeRecurringTasksTool extends LegacyBaseTool {
+export class AnalyzeRecurringTasksTool extends BaseTool<typeof AnalyzeRecurringTasksSchema> {
   name = 'analyze_recurring_tasks';
   description = 'Analyze recurring tasks with frequency, due dates, and patterns';
+  schema = AnalyzeRecurringTasksSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      activeOnly: {
-        type: 'boolean',
-        description: 'Only include active (non-completed, non-dropped) recurring tasks',
-        default: true,
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed recurring tasks (overrides activeOnly for completed)',
-        default: false,
-      },
-      includeDropped: {
-        type: 'boolean',
-        description: 'Include dropped recurring tasks (overrides activeOnly for dropped)',
-        default: false,
-      },
-      includeHistory: {
-        type: 'boolean',
-        description: 'Include completion history information',
-        default: false,
-      },
-      sortBy: {
-        type: 'string',
-        enum: ['name', 'dueDate', 'frequency', 'project'],
-        description: 'Sort order for results',
-        default: 'dueDate',
-      },
-    },
-  };
-
-  async execute(args: {
-    activeOnly?: boolean;
-    includeCompleted?: boolean;
-    includeDropped?: boolean;
-    includeHistory?: boolean;
-    sortBy?: string;
-  }): Promise<any> {
+  async executeValidated(args: z.infer<typeof AnalyzeRecurringTasksSchema>): Promise<any> {
     try {
       const options = {
         activeOnly: args.activeOnly ?? true,

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { DateTimeSchema } from './shared-schemas.js';
 
 /**
  * Analytics-related schema definitions
@@ -7,65 +6,50 @@ import { DateTimeSchema } from './shared-schemas.js';
 
 // Productivity stats parameters
 export const ProductivityStatsSchema = z.object({
-  startDate: DateTimeSchema
-    .optional()
-    .describe('Start date for analysis (defaults to 30 days ago)'),
-  
-  endDate: DateTimeSchema
-    .optional()
-    .describe('End date for analysis (defaults to now)'),
-  
-  groupBy: z.enum(['day', 'week', 'month', 'project', 'tag'])
-    .optional()
+  period: z.enum(['today', 'week', 'month', 'quarter', 'year'])
     .default('week')
+    .describe('Time period for analysis'),
+  
+  groupBy: z.enum(['project', 'tag', 'day', 'week'])
+    .default('project')
     .describe('How to group the statistics'),
   
-  includeProjects: z.array(z.string())
-    .optional()
-    .describe('Only include specific projects'),
-  
-  excludeProjects: z.array(z.string())
-    .optional()
-    .describe('Exclude specific projects')
+  includeCompleted: z.boolean()
+    .default(true)
+    .describe('Include completed tasks in analysis')
 });
 
 // Task velocity parameters
 export const TaskVelocitySchema = z.object({
-  period: z.enum(['day', 'week', 'month', 'quarter'])
+  period: z.enum(['day', 'week', 'month'])
     .default('week')
     .describe('Time period for velocity calculation'),
   
-  lookback: z.number()
-    .int()
-    .positive()
-    .max(365)
-    .default(30)
-    .describe('Number of days to look back'),
-  
-  includeWeekends: z.boolean()
-    .default(true)
-    .describe('Include weekends in calculations'),
-  
-  projectFilter: z.array(z.string())
+  projectId: z.string()
     .optional()
-    .describe('Filter by specific projects')
+    .describe('Filter by specific project (optional)'),
+  
+  tags: z.array(z.string())
+    .optional()
+    .describe('Filter by tags (optional)')
 });
 
 // Overdue analysis parameters
 export const OverdueAnalysisSchema = z.object({
+  includeRecentlyCompleted: z.boolean()
+    .default(true)
+    .describe('Include tasks completed after their due date'),
+  
   groupBy: z.enum(['project', 'tag', 'age', 'priority'])
     .default('project')
-    .describe('How to group overdue tasks'),
+    .describe('How to group overdue analysis'),
   
-  includeCompleted: z.boolean()
-    .default(false)
-    .describe('Include completed overdue tasks'),
-  
-  maxAge: z.number()
+  limit: z.number()
     .int()
     .positive()
-    .optional()
-    .describe('Maximum overdue age in days to include')
+    .max(500)
+    .default(100)
+    .describe('Maximum number of overdue tasks to analyze')
 });
 
 // Analytics response schemas

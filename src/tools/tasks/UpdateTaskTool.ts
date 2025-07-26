@@ -1,71 +1,16 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { UpdateTaskArgs } from '../types.js';
 import { UpdateTaskResponse } from '../response-types.js';
+import { UpdateTaskSchema } from '../schemas/task-schemas.js';
 
-export class UpdateTaskTool extends LegacyBaseTool<UpdateTaskArgs, UpdateTaskResponse> {
+export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
   description = 'Update an existing task in OmniFocus (can move between projects using projectId)';
+  schema = UpdateTaskSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      taskId: {
-        type: 'string',
-        description: 'ID of the task to update',
-      },
-      name: {
-        type: 'string',
-        description: 'New task name',
-      },
-      note: {
-        type: 'string',
-        description: 'New task note',
-      },
-      flagged: {
-        type: 'boolean',
-        description: 'New flagged status',
-      },
-      dueDate: {
-        type: 'string',
-        format: 'date-time',
-        description: 'New due date in ISO format',
-      },
-      clearDueDate: {
-        type: 'boolean',
-        description: 'Set to true to clear the existing due date',
-      },
-      deferDate: {
-        type: 'string',
-        format: 'date-time',
-        description: 'New defer date in ISO format',
-      },
-      clearDeferDate: {
-        type: 'boolean',
-        description: 'Set to true to clear the existing defer date',
-      },
-      estimatedMinutes: {
-        type: 'number',
-        description: 'New estimated time in minutes',
-      },
-      clearEstimatedMinutes: {
-        type: 'boolean',
-        description: 'Set to true to clear the existing time estimate',
-      },
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'New tags (replaces all existing tags)',
-      },
-      projectId: {
-        description: 'Move task to different project - use full alphanumeric projectId from list_projects tool (e.g., "az5Ieo4ip7K", not just "547"). Use empty string "" to move task to inbox.',
-      },
-    },
-    required: ['taskId'],
-  };
-
-  async execute(args: UpdateTaskArgs): Promise<UpdateTaskResponse> {
+  async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {
     const timer = new OperationTimer();
 
     try {
@@ -209,7 +154,7 @@ export class UpdateTaskTool extends LegacyBaseTool<UpdateTaskArgs, UpdateTaskRes
     estimatedMinutes?: number;
     clearEstimatedMinutes?: boolean;
     tags?: string[];
-    projectId?: string;
+    projectId?: string | null;
   }): Record<string, unknown> {
     const sanitized: Record<string, any> = {};
 

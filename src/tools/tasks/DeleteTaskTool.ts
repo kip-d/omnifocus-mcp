@@ -1,25 +1,16 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { DeleteTaskArgs } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
+import { DeleteTaskSchema } from '../schemas/task-schemas.js';
 
-export class DeleteTaskTool extends LegacyBaseTool<DeleteTaskArgs, StandardResponse<any>> {
+export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
   name = 'delete_task';
   description = 'Delete (drop) a task in OmniFocus';
+  schema = DeleteTaskSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      taskId: {
-        type: 'string',
-        description: 'ID of the task to delete',
-      },
-    },
-    required: ['taskId'],
-  };
-
-  async execute(args: DeleteTaskArgs): Promise<StandardResponse<any>> {
+  async executeValidated(args: z.infer<typeof DeleteTaskSchema>): Promise<StandardResponse<any>> {
     const timer = new OperationTimer();
 
     try {

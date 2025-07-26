@@ -1,32 +1,14 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { TaskVelocitySchema } from '../schemas/analytics-schemas.js';
 
-export class TaskVelocityTool extends LegacyBaseTool {
+export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
   name = 'get_task_velocity';
   description = 'Analyze task completion velocity and throughput metrics';
+  schema = TaskVelocitySchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      period: {
-        type: 'string',
-        enum: ['day', 'week', 'month'],
-        description: 'Time period for velocity calculation',
-        default: 'week',
-      },
-      projectId: {
-        type: 'string',
-        description: 'Filter by specific project (optional)',
-      },
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Filter by tags (optional)',
-      },
-    },
-  };
-
-  async execute(args: { period?: string; projectId?: string; tags?: string[] }): Promise<any> {
+  async executeValidated(args: z.infer<typeof TaskVelocitySchema>): Promise<any> {
     try {
       const {
         period = 'week',

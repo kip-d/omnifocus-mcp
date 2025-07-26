@@ -1,36 +1,14 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
+import { GetRecurringPatternsSchema } from '../schemas/system-schemas.js';
 
-export class GetRecurringPatternsTool extends LegacyBaseTool {
+export class GetRecurringPatternsTool extends BaseTool<typeof GetRecurringPatternsSchema> {
   name = 'get_recurring_patterns';
   description = 'Get patterns and statistics about recurring task frequencies';
+  schema = GetRecurringPatternsSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      activeOnly: {
-        type: 'boolean',
-        description: 'Only include active (non-completed, non-dropped) recurring tasks',
-        default: true,
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Include completed recurring tasks (overrides activeOnly for completed)',
-        default: false,
-      },
-      includeDropped: {
-        type: 'boolean',
-        description: 'Include dropped recurring tasks (overrides activeOnly for dropped)',
-        default: false,
-      },
-    },
-  };
-
-  async execute(args: {
-    activeOnly?: boolean;
-    includeCompleted?: boolean;
-    includeDropped?: boolean;
-  }): Promise<any> {
+  async executeValidated(args: z.infer<typeof GetRecurringPatternsSchema>): Promise<any> {
     try {
       const options = {
         activeOnly: args.activeOnly ?? true,
