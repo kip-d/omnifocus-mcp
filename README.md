@@ -532,6 +532,6 @@ This project uses ES modules (ESM) with `.js` extensions in import statements, w
 ## Acknowledgments
 
 Built with:
-- [Model Context Protocol SDK](https://github.com/anthropics/mcp)
+- [Model Context Protocol SDK](https://github.com/modelcontextprotocol)
 - [OmniAutomation](https://omni-automation.com/)
 - TypeScript
