@@ -1,16 +1,19 @@
-# Model Context Protocol for OmniFocus (incl. advanced features)
+# OmniFocus MCP Server v1.5.0
 
-Disclaimer: pardon the stiffness of the documentation and commits language, the project is fully coded via Claude Code, ao many messages are either as fun as an accounting report (with random emphasis of a car salesman here and there).
+A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides advanced task management, analytics, and automation capabilities. Built with TypeScript and the official OmniAutomation API.
 
-A professional Model Context Protocol (MCP) server for OmniFocus that provides advanced task management capabilities with smart caching and analytics. Built with TypeScript and full respect for OmniFocus's official OmniAutomation API.
+> **Note**: This project is developed with Claude Code, which explains the formal documentation style and detailed commit messages.
 
 ## Features
 
 ### Core Capabilities
-- **Smart Caching**: TTL-based caching system for optimal performance
-- **Type Safety**: Full TypeScript support with comprehensive types
-- **Official API Only**: Uses only OmniAutomation scripts (no database hacking)
-- **High Performance**: Handles 1000+ tasks efficiently with intelligent caching
+- **Smart Caching**: TTL-based caching system for optimal performance (30s for tasks, 5m for projects, 1h for analytics)
+- **Type Safety**: Full TypeScript support with comprehensive type definitions
+- **Official API Only**: Uses only OmniAutomation scripts via JXA (no database hacking)
+- **High Performance**: Handles 2000+ tasks efficiently with intelligent caching
+- **Batch Operations**: Process multiple tasks in a single operation
+- **Advanced Analytics**: GTD productivity insights and metrics
+- **Export Capabilities**: Export data in CSV, JSON, and Markdown formats
 
 ### Available Tools
 
@@ -23,37 +26,110 @@ A professional Model Context Protocol (MCP) server for OmniFocus that provides a
 - `get_task_count` - Get count of tasks matching filters without data
   - Same filtering options as list_tasks
   - Returns count only for performance
+- `todays_agenda` - Get today's tasks with optimized performance
+  - Smart filtering for due/defer dates
+  - Includes overdue tasks automatically
+  - Default limit of 50 tasks for fast response
 
 #### Task Operations (Write) 
-- `create_task` - Create new tasks in inbox
+- `create_task` - Create new tasks in inbox or specific project
   - Set name, note, flagged status, due/defer dates
-  - Tag assignment limited to existing tags
-  - Returns temporary ID (JXA limitation)
+  - Tag assignment requires separate update (JXA limitation)
+  - Returns task ID for further operations
 - `update_task` - Update existing tasks
-  - Modify name, note, flagged status, dates
-  - Limited tag management due to JXA
+  - Modify name, note, flagged status, dates, tags
+  - Support for moving between projects
+  - Proper null handling for clearing dates
 - `complete_task` - Mark tasks as completed
-- `delete_task` - Remove tasks
+- `delete_task` - Remove tasks permanently
+
+#### Batch Operations
+- `batch_update_tasks` - Update multiple tasks at once
+  - Apply same changes to multiple tasks
+  - Supports all update_task fields
+- `batch_complete_tasks` - Complete multiple tasks
+  - May encounter access restrictions (use individual complete as fallback)
+- `batch_delete_tasks` - Delete multiple tasks
+- `batch_mixed_operations` - Different operations on different tasks
+
+#### Date Range Queries
+- `date_range_query` - Query tasks by date ranges
+  - Filter by dueDate, deferDate, or completionDate
+  - Supports operators: equals, before, after, between
+  - Handles null date filtering
+- `overdue_tasks` - Get all overdue tasks
+  - Automatic date calculation
+  - Combines with other filters
+- `upcoming_tasks` - Get tasks due in next N days
+  - Configurable day range (default 7)
+  - Excludes overdue tasks
 
 #### Project Operations
 - `list_projects` - List and filter projects with caching
   - Filter by: status (active, on hold, dropped, completed), flags, folder
   - Results cached for 5 minutes
+  - Includes task counts
 - `create_project` - Create new projects with folder support
   - Automatically creates folders if they don't exist
   - Set name, note, dates, flags, and parent folder
 - `update_project` - Update project properties
   - Change name, note, status, dates, flags
-  - Folder movement supported with limitations (JXA constraint)
+  - Folder movement supported with limitations
 - `complete_project` - Mark projects as done
 - `delete_project` - Remove projects from OmniFocus
 
-### Coming Soon
-- Analytics tools (productivity stats, velocity tracking, overdue analysis)
-- Tag management
-- Bulk operations
-- Smart search with natural language
-- Recurring task analysis
+#### Analytics & Insights
+- `productivity_stats` - Comprehensive productivity metrics
+  - Completion rates and velocity
+  - Time-based trends
+  - Project distribution analysis
+- `task_velocity` - Task completion trends
+  - Daily/weekly/monthly velocity
+  - Moving averages
+  - Completion patterns
+- `overdue_analysis` - Analyze overdue tasks
+  - Overdue distribution by project/tag
+  - Age analysis
+  - Recurring task patterns
+
+#### Tag Management
+- `list_tags` - Get all available tags
+  - Hierarchical tag structure
+  - Usage counts
+  - Cached for performance
+- `manage_tags` - Create, rename, or delete tags
+  - Batch tag operations
+  - Maintains tag hierarchy
+
+#### Export Tools
+- `export_tasks` - Export tasks to various formats
+  - Supports CSV, JSON, Markdown
+  - Customizable fields
+  - Filter before export
+- `export_projects` - Export project data
+  - Include project metadata
+  - Optional task inclusion
+- `bulk_export` - Export all data
+  - Complete backup functionality
+  - Multiple format support
+
+#### Recurring Tasks
+- `analyze_recurring_tasks` - Analyze recurring patterns
+  - Identify overdue recurring tasks
+  - Pattern detection
+  - Next occurrence predictions
+- `get_recurring_patterns` - Extract recurring rules
+  - Frequency analysis
+  - Custom recurrence detection
+
+#### System & Diagnostics
+- `get_version_info` - Get OmniFocus and server versions
+  - API compatibility info
+  - System requirements check
+- `run_diagnostics` - Comprehensive system check
+  - Permission verification
+  - Performance metrics
+  - Cache statistics
 
 ## Installation & Permissions
 
@@ -67,8 +143,8 @@ A professional Model Context Protocol (MCP) server for OmniFocus that provides a
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/omnifocus-cache-by-windsurf.git
-cd omnifocus-cache-by-windsurf
+git clone https://github.com/yourusername/omnifocus-mcp.git
+cd omnifocus-mcp
 
 # Install dependencies
 npm install
@@ -95,7 +171,7 @@ Add to your Claude Desktop configuration file (`~/Library/Application Support/Cl
   "mcpServers": {
     "omnifocus": {
       "command": "node",
-      "args": ["/path/to/omnifocus-cache-by-windsurf/dist/index.js"],
+      "args": ["/path/to/omnifocus-mcp/dist/index.js"],
       "env": {
         "LOG_LEVEL": "info"
       }
@@ -313,20 +389,44 @@ src/
 ## Known Limitations
 
 ### Tag Assignment
-Due to OmniFocus JXA API limitations, tags cannot be assigned during task creation. **Workaround**: Create the task first, then use `update_task` to assign tags.
+Due to OmniFocus JXA API limitations, tags cannot be assigned during task creation. 
+**Workaround**: Create the task first, then use `update_task` to assign tags:
+```javascript
+// Step 1: Create task
+const task = await create_task({ name: "My Task" });
+// Step 2: Update with tags
+await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+```
+
+### JXA whose() Constraints
+- Cannot query for "not null" directly (use `{_not: null}` syntax)
+- String operators require underscore prefix: `_contains`, `_beginsWith`, `_endsWith`
+- Date operators use symbols (`>`, `<`), NOT underscores
+- Complex queries may timeout with large databases
+- See [JXA Operators Guide](docs/JXA-WHOSE-OPERATORS-DEFINITIVE.md) for complete reference
+
+### Batch Operations
+- `batch_complete_tasks` may encounter access restrictions
+- **Workaround**: Fall back to individual `complete_task` operations
+- Other batch operations (update, delete) work reliably
 
 ### Performance Considerations
-Some operations may take 30-60 seconds on large databases (2000+ tasks) due to OmniFocus API constraints. This is expected behavior. See [Performance documentation](docs/PERFORMANCE_ISSUE.md) for details.
+- Default limits optimized for performance (todays_agenda: 50, list_tasks: 100)
+- Large queries (2000+ tasks) may take 30-60 seconds
+- Use `skipAnalysis: true` for ~30% faster queries when recurring task details aren't needed
+- See [Performance documentation](docs/PERFORMANCE_ISSUE.md) for optimization tips
 
 ### MCP Architecture
 MCP does not support progress indicators or streaming responses. Long operations must complete before returning results. See [User Feedback and Limitations](docs/USER_FEEDBACK_AND_LIMITATIONS.md) for detailed explanation.
 
 ## Performance
 
-- Handles 1000+ tasks with sub-second response times (cached)
+- Handles 2000+ tasks with optimized query strategies
 - Intelligent caching reduces OmniFocus API calls by 80%+
-- First-time operations may be slower while populating cache
+- Response times with caching: ~1-2 seconds for typical queries
+- Smart defaults prevent timeouts (reduced from 200 to 50 items for todays_agenda)
 - Memory-efficient with automatic cache cleanup
+- Performance metrics included in responses for monitoring
 
 ## Security
 
