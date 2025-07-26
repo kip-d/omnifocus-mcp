@@ -1,56 +1,15 @@
-import { LegacyBaseTool } from '../legacy-base.js';
-import { ProjectFilter } from '../../omnifocus/types.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { ListProjectsSchema } from '../schemas/project-schemas.js';
 
-export class ListProjectsTool extends LegacyBaseTool {
+export class ListProjectsTool extends BaseTool<typeof ListProjectsSchema> {
   name = 'list_projects';
   description = 'List projects from OmniFocus with filtering options';
+  schema = ListProjectsSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      status: {
-        type: 'array',
-        items: {
-          type: 'string',
-          enum: ['active', 'onHold', 'dropped', 'completed'],
-        },
-        description: 'Filter by project status',
-      },
-      flagged: {
-        type: 'boolean',
-        description: 'Filter by flagged status',
-      },
-      folder: {
-        type: 'string',
-        description: 'Filter by folder name',
-      },
-      reviewBefore: {
-        type: 'string',
-        format: 'date-time',
-        description: 'Filter projects needing review before this date',
-      },
-      search: {
-        type: 'string',
-        description: 'Search in project name and notes',
-      },
-      limit: {
-        type: 'number',
-        description: 'Maximum number of projects to return (1-1000, default: 100)',
-        default: 100,
-        minimum: 1,
-        maximum: 1000,
-      },
-      includeStats: {
-        type: 'boolean',
-        description: 'Calculate detailed task statistics for each project (slower on large databases)',
-        default: false,
-      },
-    },
-  };
-
-  async execute(args: ProjectFilter & { limit?: number; includeStats?: boolean }): Promise<any> {
+  async executeValidated(args: z.infer<typeof ListProjectsSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {

@@ -1,31 +1,15 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { DeleteProjectSchema } from '../schemas/project-schemas.js';
 
-export class DeleteProjectTool extends LegacyBaseTool {
+export class DeleteProjectTool extends BaseTool<typeof DeleteProjectSchema> {
   name = 'delete_project';
   description = 'Delete a project from OmniFocus';
+  schema = DeleteProjectSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      projectId: {
-        type: 'string',
-        description: 'ID of the project to delete',
-      },
-      deleteTasks: {
-        type: 'boolean',
-        description: 'Delete all tasks in the project (otherwise they move to Inbox)',
-        default: false,
-      },
-    },
-    required: ['projectId'],
-  };
-
-  async execute(args: {
-    projectId: string;
-    deleteTasks?: boolean;
-  }): Promise<any> {
+  async executeValidated(args: z.infer<typeof DeleteProjectSchema>): Promise<any> {
     try {
       const { projectId, deleteTasks = false } = args;
 

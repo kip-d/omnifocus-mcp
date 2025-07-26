@@ -1,50 +1,15 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { CreateProjectSchema } from '../schemas/project-schemas.js';
 
-export class CreateProjectTool extends LegacyBaseTool {
+export class CreateProjectTool extends BaseTool<typeof CreateProjectSchema> {
   name = 'create_project';
   description = 'Create a new project in OmniFocus with optional folder placement (creates folder if needed)';
+  schema = CreateProjectSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the new project',
-      },
-      note: {
-        type: 'string',
-        description: 'Optional note for the project',
-      },
-      deferDate: {
-        type: 'string',
-        description: 'Defer date in ISO format',
-      },
-      dueDate: {
-        type: 'string',
-        description: 'Due date in ISO format',
-      },
-      flagged: {
-        type: 'boolean',
-        description: 'Whether the project is flagged',
-      },
-      folder: {
-        type: 'string',
-        description: 'Name of folder to place project in (creates it if it doesn\'t exist)',
-      },
-    },
-    required: ['name'],
-  };
-
-  async execute(args: {
-    name: string;
-    note?: string;
-    deferDate?: string;
-    dueDate?: string;
-    flagged?: boolean;
-    folder?: string;
-  }): Promise<any> {
+  async executeValidated(args: z.infer<typeof CreateProjectSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {

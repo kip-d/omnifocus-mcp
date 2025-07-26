@@ -1,34 +1,15 @@
-import { LegacyBaseTool } from '../legacy-base.js';
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { ListTagsSchema } from '../schemas/tag-schemas.js';
 
-export class ListTagsTool extends LegacyBaseTool {
+export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
   name = 'list_tags';
   description = 'List all tags/contexts in OmniFocus with usage statistics';
+  schema = ListTagsSchema;
 
-  inputSchema = {
-    type: 'object' as const,
-    properties: {
-      sortBy: {
-        type: 'string',
-        enum: ['name', 'usage', 'tasks'],
-        description: 'How to sort the tags',
-        default: 'name',
-      },
-      includeEmpty: {
-        type: 'boolean',
-        description: 'Include tags with no tasks',
-        default: true,
-      },
-      includeUsageStats: {
-        type: 'boolean',
-        description: 'Calculate task usage statistics for each tag (slower on large databases)',
-        default: false,
-      },
-    },
-  };
-
-  async execute(args: { sortBy?: string; includeEmpty?: boolean; includeUsageStats?: boolean }): Promise<any> {
+  async executeValidated(args: z.infer<typeof ListTagsSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {

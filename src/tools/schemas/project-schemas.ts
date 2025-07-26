@@ -50,6 +50,10 @@ export const ListProjectsSchema = z.object({
     .default(true)
     .describe('Include task count information'),
   
+  includeStats: z.boolean()
+    .default(false)
+    .describe('Calculate detailed task statistics for each project (slower on large databases)'),
+  
   sortBy: z.enum(['name', 'dueDate', 'modificationDate', 'status'])
     .optional()
     .default('name')
@@ -58,7 +62,14 @@ export const ListProjectsSchema = z.object({
   sortOrder: z.enum(['asc', 'desc'])
     .optional()
     .default('asc')
-    .describe('Sort order')
+    .describe('Sort order'),
+  
+  limit: z.number()
+    .int()
+    .positive()
+    .max(1000)
+    .default(100)
+    .describe('Maximum number of projects to return')
 });
 
 // Create project parameters
@@ -139,7 +150,11 @@ export const CompleteProjectSchema = z.object({
   
   completionDate: DateTimeSchema
     .optional()
-    .describe('Completion date (defaults to now)')
+    .describe('Completion date (defaults to now)'),
+  
+  completeAllTasks: z.boolean()
+    .default(false)
+    .describe('Complete all incomplete tasks in the project')
 });
 
 // Delete project parameters
@@ -147,7 +162,7 @@ export const DeleteProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to delete'),
   
-  deleteContainedItems: z.boolean()
+  deleteTasks: z.boolean()
     .default(false)
-    .describe('Also delete all tasks within the project')
+    .describe('Delete all tasks in the project (otherwise they move to Inbox)')
 });
