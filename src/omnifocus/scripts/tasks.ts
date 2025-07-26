@@ -1457,34 +1457,16 @@ export const GET_TASK_COUNT_SCRIPT = `
   ${SAFE_UTILITIES_SCRIPT}
   
   try {
-    // Optimize by using specific task collections when possible
-    let tasks = null;
-    let useFilteredTasks = false;
+    // Get all tasks - optimization with whose() doesn't work on function results
+    let tasks = doc.flattenedTasks();
     
-    // Use more efficient task collections based on filter
-    if (filter.available) {
-      // Available tasks is a pre-filtered collection
-      tasks = doc.flattenedTasks.whose({completed: false, effectivelyDropped: false});
-      useFilteredTasks = true;
-    } else if (filter.completed === true) {
-      // Completed tasks only
-      tasks = doc.flattenedTasks.whose({completed: true});
-      useFilteredTasks = true;
-    } else if (filter.completed === false) {
-      // Incomplete tasks only (much smaller set)
-      tasks = doc.flattenedTasks.whose({completed: false});
-      useFilteredTasks = true;
-    } else if (filter.flagged === true) {
-      // Flagged tasks only
-      tasks = doc.flattenedTasks.whose({flagged: true});
-      useFilteredTasks = true;
-    } else if (filter.inInbox === true) {
-      // Inbox tasks only
-      tasks = doc.flattenedTasks.whose({inInbox: true});
-      useFilteredTasks = true;
-    } else {
-      // Fall back to all tasks only if necessary
-      tasks = doc.flattenedTasks();
+    // Check if tasks is valid
+    if (!tasks) {
+      return JSON.stringify({
+        error: true,
+        message: "Failed to retrieve tasks from OmniFocus",
+        details: "doc.flattenedTasks() returned null or undefined"
+      });
     }
     
     let count = 0;
@@ -1497,19 +1479,17 @@ export const GET_TASK_COUNT_SCRIPT = `
     const hasDueDateFilter = filter.dueBefore || filter.dueAfter;
     const hasDeferDateFilter = filter.deferBefore || filter.deferAfter;
     const hasProjectFilter = filter.projectId !== undefined;
-    const hasAvailableFilter = !!filter.available && !useFilteredTasks; // Skip if already filtered
+    const hasAvailableFilter = !!filter.available;
     
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
       
       // Fast filters first (boolean checks)
       try {
-        // These are the cheapest checks - do them first (skip if already pre-filtered)
-        if (!useFilteredTasks) {
-          if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
-          if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
-          if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
-        }
+        // These are the cheapest checks - do them first
+        if (filter.completed !== undefined && task.completed() !== filter.completed) continue;
+        if (filter.flagged !== undefined && task.flagged() !== filter.flagged) continue;
+        if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) continue;
         
         // For available filter, check completed/dropped early
         if (hasAvailableFilter && (task.completed() || task.dropped())) continue;

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2025-07-25
+
+### Added
+- Batch operations support for tasks (batch update, complete, delete)
+- Mixed batch operations tool for complex workflows
+- Date range query tools with optimized filtering
+- Specialized tools for overdue and upcoming tasks
+- Comprehensive JXA `whose()` documentation
+- Performance metrics in tool responses
+
+### Fixed
+- Critical timeout issue in `todays_agenda` tool with default parameters
+- `get_task_count` script error with undefined variable
+- Default parameter handling to prevent timeouts with large databases
+
+### Changed
+- Reduced default limits: todays_agenda (200→50), includeDetails (true→false)
+- Improved error handling and fallback strategies
+- Enhanced performance through early filtering and optimized queries
+
+### Technical
+- Documented JXA limitations with `whose()` method
+- Explained null vs missing value issues in JXA bridge
+- Added workarounds for complex date range queries
+
 ## [1.2.0] - 2025-06-25
 
 ### Added

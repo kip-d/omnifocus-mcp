@@ -36,6 +36,9 @@ import { BulkExportTool } from './export/BulkExportTool.js';
 // Import batch operations tools
 import { BatchUpdateTasksTool, BatchCompleteTasksTool, BatchDeleteTasksTool, BatchMixedOperationsTool } from './tasks/BatchOperationsTool.js';
 
+// Import date range query tools
+import { DateRangeQueryTool, OverdueTasksTool, UpcomingTasksTool } from './tasks/DateRangeQueryTool.js';
+
 // Import recurring task tools
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
 import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
@@ -67,6 +70,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new BatchCompleteTasksTool(cache),
     new BatchDeleteTasksTool(cache),
     new BatchMixedOperationsTool(cache),
+
+    // Date range query tools
+    new DateRangeQueryTool(cache),
+    new OverdueTasksTool(cache),
+    new UpcomingTasksTool(cache),
 
     // Project tools
     new ListProjectsTool(cache),
