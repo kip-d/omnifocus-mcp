@@ -234,71 +234,10 @@ export const DeleteTaskSchema = z.object({
     .describe('ID of the task to delete')
 });
 
-// Batch operations schemas
-export const BatchTaskIdsSchema = z.object({
-  taskIds: z.array(IdSchema)
-    .min(1)
-    .max(100)
-    .describe('List of task IDs to process')
-});
-
-// Schema for batch updating multiple tasks with different updates each
-export const BatchUpdateTasksSchema = z.object({
-  updates: z.array(z.object({
-    taskId: IdSchema.describe('ID of the task to update'),
-    updates: z.object({
-      name: z.string().optional().describe('New task name'),
-      note: z.string().optional().describe('New task note'),
-      flagged: coerceBoolean().optional().describe('Flag status'),
-      dueDate: z.string().optional().describe('ISO date string or null to clear'),
-      deferDate: z.string().optional().describe('ISO date string or null to clear'),
-      estimatedMinutes: coerceNumber().optional().describe('Estimated duration'),
-      projectId: z.string().optional().describe('Project ID or empty string for inbox')
-    }).describe('Properties to update')
-  }))
-  .min(1)
-  .max(100)
-  .describe('Array of task updates')
-});
-
-// Schema for batch completing tasks
-export const BatchCompleteTasksSchema = z.object({
-  taskIds: z.array(IdSchema)
-    .min(1)
-    .max(100)
-    .describe('Array of task IDs to complete'),
-  
-  completionDate: DateTimeSchema
-    .optional()
-    .describe('Optional ISO date string for completion date (defaults to now)')
-});
-
-// Schema for batch deleting tasks  
-export const BatchDeleteTasksSchema = z.object({
-  taskIds: z.array(IdSchema)
-    .min(1)
-    .max(100)
-    .describe('Array of task IDs to delete')
-});
-
-// Schema for mixed batch operations
-export const BatchMixedOperationsSchema = z.object({
-  operations: z.array(z.object({
-    action: z.enum(['update', 'complete', 'delete']).describe('Action to perform'),
-    taskId: IdSchema.describe('ID of the task'),
-    data: z.object({
-      completionDate: z.string().optional().describe('For complete action'),
-      name: z.string().optional().describe('For update action'),
-      note: z.string().optional().describe('For update action'),
-      flagged: coerceBoolean().optional().describe('For update action'),
-      dueDate: z.string().optional().describe('For update action'),
-      deferDate: z.string().optional().describe('For update action')
-    }).optional().describe('Data for the action (required for update, optional for complete)')
-  }))
-  .min(1)
-  .max(100)
-  .describe('Array of operations to perform')
-});
+// Batch operations removed - OmniFocus JXA API doesn't support bulk operations
+// Individual operations (create_task, update_task, complete_task, delete_task) work perfectly
+// and should be used for all workflows. If OmniFocus updates their API in the future,
+// batch operations may be re-implemented for performance optimization.
 
 // Date range query schemas - flexible query tool
 export const DateRangeQueryToolSchema = z.object({

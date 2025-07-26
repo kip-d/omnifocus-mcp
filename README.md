@@ -11,7 +11,7 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
 - **Type Safety**: Full TypeScript support with comprehensive type definitions
 - **Official API Only**: Uses only OmniAutomation scripts via JXA (no database hacking)
 - **High Performance**: Handles 2000+ tasks efficiently with intelligent caching
-- **Batch Operations**: Process multiple tasks in a single operation
+- **Individual Task Operations**: Create, update, complete, and delete tasks efficiently
 - **Advanced Analytics**: GTD productivity insights and metrics
 - **Export Capabilities**: Export data in CSV, JSON, and Markdown formats
 
@@ -43,14 +43,11 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
 - `complete_task` - Mark tasks as completed
 - `delete_task` - Remove tasks permanently
 
-#### Batch Operations
-- `batch_update_tasks` - Update multiple tasks at once
-  - Apply same changes to multiple tasks
-  - Supports all update_task fields
-- `batch_complete_tasks` - Complete multiple tasks
-  - May encounter access restrictions (use individual complete as fallback)
-- `batch_delete_tasks` - Delete multiple tasks
-- `batch_mixed_operations` - Different operations on different tasks
+#### Note on Batch Operations
+Batch operations are not currently supported due to OmniFocus JXA API limitations. 
+Individual task operations (create, update, complete, delete) work perfectly and are 
+recommended for all workflows. If OmniFocus updates their API in the future, batch 
+operations may be re-implemented for performance optimization.
 
 #### Date Range Queries
 - `date_range_query` - Query tasks by date ranges
@@ -98,7 +95,6 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
   - Usage counts
   - Cached for performance
 - `manage_tags` - Create, rename, or delete tags
-  - Batch tag operations
   - Maintains tag hierarchy
 
 #### Export Tools
@@ -350,7 +346,7 @@ All OmniFocus interactions use JavaScript for Automation (JXA) through OmniAutom
 - Scripts are wrapped for error handling
 - Parameters are safely escaped
 - Results are typed and validated
-- Batch operations are supported
+- Individual operations are fast and reliable
 
 ### Error Handling
 
@@ -405,10 +401,10 @@ await update_task({ taskId: task.id, tags: ["work", "urgent"] });
 - Complex queries may timeout with large databases
 - See [JXA Operators Guide](docs/JXA-WHOSE-OPERATORS-DEFINITIVE.md) for complete reference
 
-### Batch Operations
-- `batch_complete_tasks` may encounter access restrictions
-- **Workaround**: Fall back to individual `complete_task` operations
-- Other batch operations (update, delete) work reliably
+### Individual Operations
+- All individual task operations (create, update, complete, delete) work perfectly
+- Fast enough for practical GTD workflows
+- More reliable than batch operations due to OmniFocus API design
 
 ### Performance Considerations
 - Default limits optimized for performance (todays_agenda: 50, list_tasks: 100)

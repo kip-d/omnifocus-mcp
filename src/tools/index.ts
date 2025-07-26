@@ -33,8 +33,8 @@ import { ExportTasksTool } from './export/ExportTasksTool.js';
 import { ExportProjectsTool } from './export/ExportProjectsTool.js';
 import { BulkExportTool } from './export/BulkExportTool.js';
 
-// Import batch operations tools
-import { BatchUpdateTasksTool, BatchCompleteTasksTool, BatchDeleteTasksTool, BatchMixedOperationsTool } from './tasks/BatchOperationsTool.js';
+// Batch operations removed - OmniFocus JXA API doesn't support bulk operations
+// Individual operations work perfectly and are recommended for all workflows
 
 // Import date range query tools
 import { DateRangeQueryTool, OverdueTasksTool, UpcomingTasksTool } from './tasks/DateRangeQueryTool.js';
@@ -65,11 +65,8 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new CompleteTaskTool(cache),
     new DeleteTaskTool(cache),
 
-    // Batch operations tools
-    new BatchUpdateTasksTool(cache),
-    new BatchCompleteTasksTool(cache),
-    new BatchDeleteTasksTool(cache),
-    new BatchMixedOperationsTool(cache),
+    // Batch operations removed due to OmniFocus JXA limitations
+    // Use individual task operations which work perfectly
 
     // Date range query tools
     new DateRangeQueryTool(cache),
