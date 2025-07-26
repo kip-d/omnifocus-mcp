@@ -702,7 +702,7 @@ export const CREATE_TASK_SCRIPT = `
     
     // If projectId is provided, find the project and assign the task there
     if (taskData.projectId && taskData.projectId !== "") {
-      const projects = doc.flattenedProjects;
+      const projects = doc.flattenedProjects();
       if (!projects) {
         return JSON.stringify({
           error: true,

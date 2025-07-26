@@ -6,7 +6,7 @@ import { ListTagsSchema } from '../schemas/tag-schemas.js';
 
 export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
   name = 'list_tags';
-  description = 'List all tags/contexts in OmniFocus with usage statistics';
+  description = 'List all tags/contexts in OmniFocus. Set includeUsageStats=true to get task counts for each tag (defaults to false for performance)';
   schema = ListTagsSchema;
 
   async executeValidated(args: z.infer<typeof ListTagsSchema>): Promise<any> {
