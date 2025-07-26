@@ -9,7 +9,7 @@ import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 export const ProductivityStatsSchema = z.object({
   period: z.enum(['today', 'week', 'month', 'quarter', 'year'])
     .default('week')
-    .describe('Time period for analysis'),
+    .describe('Time period for analysis. Must be exactly one of: "today", "week", "month", "quarter", "year". Note: "last_week", "this_week", "current_week" etc. are NOT valid - use "week" for current week data'),
   
   groupBy: z.enum(['project', 'tag', 'day', 'week'])
     .default('project')
