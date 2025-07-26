@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceBoolean } from './coercion-helpers.js';
 
 /**
  * System and diagnostic-related schema definitions
@@ -16,19 +17,19 @@ export const RunDiagnosticsSchema = z.object({
 
 // Recurring task analysis parameters
 export const AnalyzeRecurringTasksSchema = z.object({
-  activeOnly: z.boolean()
+  activeOnly: coerceBoolean()
     .default(true)
     .describe('Only include active (non-completed, non-dropped) recurring tasks'),
   
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed recurring tasks (overrides activeOnly for completed)'),
   
-  includeDropped: z.boolean()
+  includeDropped: coerceBoolean()
     .default(false)
     .describe('Include dropped recurring tasks (overrides activeOnly for dropped)'),
   
-  includeHistory: z.boolean()
+  includeHistory: coerceBoolean()
     .default(false)
     .describe('Include completion history information'),
   
@@ -39,15 +40,15 @@ export const AnalyzeRecurringTasksSchema = z.object({
 
 // Get recurring patterns parameters
 export const GetRecurringPatternsSchema = z.object({
-  activeOnly: z.boolean()
+  activeOnly: coerceBoolean()
     .default(true)
     .describe('Only include active (non-completed, non-dropped) recurring tasks'),
   
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed recurring tasks (overrides activeOnly for completed)'),
   
-  includeDropped: z.boolean()
+  includeDropped: coerceBoolean()
     .default(false)
     .describe('Include dropped recurring tasks (overrides activeOnly for dropped)')
 });

@@ -6,6 +6,7 @@ import {
   ProjectStatusSchema,
   SearchTextSchema 
 } from './shared-schemas.js';
+import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
  * Project-related schema definitions
@@ -34,7 +35,7 @@ export const ListProjectsSchema = z.object({
     .optional()
     .describe('Filter by project status'),
   
-  flagged: z.boolean()
+  flagged: coerceBoolean()
     .optional()
     .describe('Filter by flagged status'),
   
@@ -46,11 +47,11 @@ export const ListProjectsSchema = z.object({
     .optional()
     .describe('Search in project names and notes'),
   
-  includeTaskCounts: z.boolean()
+  includeTaskCounts: coerceBoolean()
     .default(true)
     .describe('Include task count information'),
   
-  includeStats: z.boolean()
+  includeStats: coerceBoolean()
     .default(false)
     .describe('Calculate detailed task statistics for each project (slower on large databases)'),
   
@@ -64,7 +65,7 @@ export const ListProjectsSchema = z.object({
     .default('asc')
     .describe('Sort order'),
   
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
@@ -90,7 +91,7 @@ export const CreateProjectSchema = z.object({
     .default('active')
     .describe('Initial project status'),
   
-  flagged: z.boolean()
+  flagged: coerceBoolean()
     .default(false)
     .describe('Whether the project is flagged'),
   
@@ -122,7 +123,7 @@ export const UpdateProjectSchema = z.object({
       .optional()
       .describe('New project status'),
     
-    flagged: z.boolean()
+    flagged: coerceBoolean()
       .optional()
       .describe('New flagged status'),
     
@@ -152,7 +153,7 @@ export const CompleteProjectSchema = z.object({
     .optional()
     .describe('Completion date (defaults to now)'),
   
-  completeAllTasks: z.boolean()
+  completeAllTasks: coerceBoolean()
     .default(false)
     .describe('Complete all incomplete tasks in the project')
 });
@@ -162,7 +163,7 @@ export const DeleteProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to delete'),
   
-  deleteTasks: z.boolean()
+  deleteTasks: coerceBoolean()
     .default(false)
     .describe('Delete all tasks in the project (otherwise they move to Inbox)')
 });

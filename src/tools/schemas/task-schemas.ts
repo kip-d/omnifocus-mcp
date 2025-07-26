@@ -8,6 +8,7 @@ import {
   SearchTextSchema,
   PerformanceOptionsSchema
 } from './shared-schemas.js';
+import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
  * Task-related schema definitions
@@ -33,13 +34,13 @@ export const TaskSchema = z.object({
   primaryKey: z.string().optional()
 });
 
-// List tasks parameters
+// List tasks parameters - with coercion for MCP string inputs
 export const ListTasksSchema = z.object({
-  completed: z.boolean()
+  completed: coerceBoolean()
     .optional()
     .describe('Filter by completion status'),
   
-  flagged: z.boolean()
+  flagged: coerceBoolean()
     .optional()
     .describe('Filter by flagged status'),
   
@@ -67,11 +68,11 @@ export const ListTasksSchema = z.object({
     .optional()
     .describe('Filter tasks deferred after this date'),
   
-  available: z.boolean()
+  available: coerceBoolean()
     .optional()
     .describe('Filter by availability (considering defer dates)'),
   
-  inInbox: z.boolean()
+  inInbox: coerceBoolean()
     .optional()
     .describe('Filter for inbox tasks only'),
   
@@ -79,7 +80,7 @@ export const ListTasksSchema = z.object({
     .optional()
     .describe('Search in task names and notes'),
   
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .optional()
     .describe('Include completed tasks in results'),
   
@@ -103,25 +104,25 @@ export const GetTaskCountSchema = ListTasksSchema.omit({
   sortOrder: true
 });
 
-// Today's agenda parameters
+// Today's agenda parameters - with coercion for MCP string inputs
 export const TodaysAgendaSchema = z.object({
-  includeFlagged: z.boolean()
+  includeFlagged: coerceBoolean()
     .default(true)
     .describe('Include flagged tasks regardless of due date'),
   
-  includeOverdue: z.boolean()
+  includeOverdue: coerceBoolean()
     .default(true)
     .describe('Include overdue tasks'),
   
-  includeAvailable: z.boolean()
+  includeAvailable: coerceBoolean()
     .default(true)
     .describe('Only include available tasks (not blocked/deferred)'),
   
-  includeDetails: z.boolean()
+  includeDetails: coerceBoolean()
     .default(false)
     .describe('Include task details (note, project, tags). Defaults to false for better performance'),
   
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(200)
@@ -143,7 +144,7 @@ export const CreateTaskSchema = z.object({
     .optional()
     .describe('Project ID to assign the task to'),
   
-  flagged: z.boolean()
+  flagged: coerceBoolean()
     .default(false)
     .describe('Whether the task is flagged'),
   
@@ -155,7 +156,7 @@ export const CreateTaskSchema = z.object({
     .optional()
     .describe('Defer date for the task'),
   
-  estimatedMinutes: z.number()
+  estimatedMinutes: coerceNumber()
     .int()
     .positive()
     .optional()
@@ -184,7 +185,7 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New project ID (or null to move to inbox)'),
   
-  flagged: z.boolean()
+  flagged: coerceBoolean()
     .optional()
     .describe('New flagged status'),
   
@@ -192,7 +193,7 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New due date'),
   
-  clearDueDate: z.boolean()
+  clearDueDate: coerceBoolean()
     .optional()
     .describe('Set to true to clear the existing due date'),
   
@@ -200,15 +201,15 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New defer date'),
   
-  clearDeferDate: z.boolean()
+  clearDeferDate: coerceBoolean()
     .optional()
     .describe('Set to true to clear the existing defer date'),
   
-  estimatedMinutes: z.number().int().positive()
+  estimatedMinutes: coerceNumber().int().positive()
     .optional()
     .describe('New estimated duration in minutes'),
   
-  clearEstimatedMinutes: z.boolean()
+  clearEstimatedMinutes: coerceBoolean()
     .optional()
     .describe('Set to true to clear the existing time estimate'),
   
@@ -248,10 +249,10 @@ export const BatchUpdateTasksSchema = z.object({
     updates: z.object({
       name: z.string().optional().describe('New task name'),
       note: z.string().optional().describe('New task note'),
-      flagged: z.boolean().optional().describe('Flag status'),
+      flagged: coerceBoolean().optional().describe('Flag status'),
       dueDate: z.string().optional().describe('ISO date string or null to clear'),
       deferDate: z.string().optional().describe('ISO date string or null to clear'),
-      estimatedMinutes: z.number().optional().describe('Estimated duration'),
+      estimatedMinutes: coerceNumber().optional().describe('Estimated duration'),
       projectId: z.string().optional().describe('Project ID or empty string for inbox')
     }).describe('Properties to update')
   }))
@@ -289,7 +290,7 @@ export const BatchMixedOperationsSchema = z.object({
       completionDate: z.string().optional().describe('For complete action'),
       name: z.string().optional().describe('For update action'),
       note: z.string().optional().describe('For update action'),
-      flagged: z.boolean().optional().describe('For update action'),
+      flagged: coerceBoolean().optional().describe('For update action'),
       dueDate: z.string().optional().describe('For update action'),
       deferDate: z.string().optional().describe('For update action')
     }).optional().describe('Data for the action (required for update, optional for complete)')
@@ -318,29 +319,29 @@ export const DateRangeQueryToolSchema = z.object({
     .default('dueDate')
     .describe('Which date field to query on (for date_range query)'),
     
-  includeNullDates: z.boolean()
+  includeNullDates: coerceBoolean()
     .default(false)
     .describe('Include tasks without the specified date field (for date_range query)'),
     
   // For upcoming queries
-  days: z.number()
+  days: coerceNumber()
     .int()
     .positive()
     .max(365)
     .default(7)
     .describe('Number of days to look ahead (for upcoming query)'),
     
-  includeToday: z.boolean()
+  includeToday: coerceBoolean()
     .default(true)
     .describe('Include today in upcoming tasks (for upcoming query)'),
     
   // For overdue queries
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed tasks (for overdue query)'),
     
   // Common parameters
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
@@ -350,11 +351,11 @@ export const DateRangeQueryToolSchema = z.object({
 
 // Simpler overdue tasks schema
 export const OverdueTasksToolSchema = z.object({
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed overdue tasks'),
     
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
@@ -364,18 +365,18 @@ export const OverdueTasksToolSchema = z.object({
 
 // Simpler upcoming tasks schema
 export const UpcomingTasksToolSchema = z.object({
-  days: z.number()
+  days: coerceNumber()
     .int()
     .positive()
     .max(365)
     .default(7)
     .describe('Number of days to look ahead'),
     
-  includeToday: z.boolean()
+  includeToday: coerceBoolean()
     .default(true)
     .describe('Include tasks due today'),
     
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
@@ -399,7 +400,7 @@ export const DateRangeQuerySchema = z.object({
     .optional()
     .describe('End date for between operator'),
   
-  includeNullDates: z.boolean()
+  includeNullDates: coerceBoolean()
     .default(false)
     .describe('Include tasks with null dates in results')
 })
@@ -416,7 +417,7 @@ export const OverdueTasksSchema = z.object({
     .optional()
     .describe('Reference date for overdue calculation (defaults to now)'),
   
-  includeToday: z.boolean()
+  includeToday: coerceBoolean()
     .default(false)
     .describe('Include tasks due today as overdue')
 })
@@ -428,14 +429,14 @@ export const OverdueTasksSchema = z.object({
 }));
 
 export const UpcomingTasksSchema = z.object({
-  days: z.number()
+  days: coerceNumber()
     .int()
     .positive()
     .max(365)
     .default(7)
     .describe('Number of days to look ahead'),
   
-  includeOverdue: z.boolean()
+  includeOverdue: coerceBoolean()
     .default(false)
     .describe('Include overdue tasks')
 })

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
  * Analytics-related schema definitions
@@ -14,7 +15,7 @@ export const ProductivityStatsSchema = z.object({
     .default('project')
     .describe('How to group the statistics'),
   
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(true)
     .describe('Include completed tasks in analysis')
 });
@@ -36,7 +37,7 @@ export const TaskVelocitySchema = z.object({
 
 // Overdue analysis parameters
 export const OverdueAnalysisSchema = z.object({
-  includeRecentlyCompleted: z.boolean()
+  includeRecentlyCompleted: coerceBoolean()
     .default(true)
     .describe('Include tasks completed after their due date'),
   
@@ -44,7 +45,7 @@ export const OverdueAnalysisSchema = z.object({
     .default('project')
     .describe('How to group overdue analysis'),
   
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(500)

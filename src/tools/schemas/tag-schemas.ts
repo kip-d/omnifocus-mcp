@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TagNameSchema } from './shared-schemas.js';
+import { coerceBoolean } from './coercion-helpers.js';
 
 /**
  * Tag-related schema definitions
@@ -18,15 +19,15 @@ export const ListTagsSchema = z.object({
     .default('name')
     .describe('How to sort the tags'),
   
-  includeEmpty: z.boolean()
+  includeEmpty: coerceBoolean()
     .default(true)
     .describe('Include tags with no tasks'),
   
-  includeUsageStats: z.boolean()
+  includeUsageStats: coerceBoolean()
     .default(false)
     .describe('Calculate task usage statistics for each tag (slower on large databases)'),
   
-  includeTaskCounts: z.boolean()
+  includeTaskCounts: coerceBoolean()
     .default(true)
     .describe('Include task count information for each tag')
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
  * Shared schema definitions used across multiple tools
@@ -27,15 +28,15 @@ export const TagNameSchema = z.string()
   .max(100)
   .describe('Tag name');
 
-// Common pagination parameters
+// Common pagination parameters - with coercion for MCP string inputs
 export const PaginationSchema = z.object({
-  limit: z.number()
+  limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
     .default(100)
     .describe('Maximum number of results to return'),
-  offset: z.number()
+  offset: coerceNumber()
     .int()
     .nonnegative()
     .default(0)
@@ -52,12 +53,12 @@ export const SearchTextSchema = z.string()
 export const ExportFormatSchema = z.enum(['json', 'csv', 'markdown'])
   .describe('Export format');
 
-// Performance options
+// Performance options - with coercion for MCP string inputs
 export const PerformanceOptionsSchema = z.object({
-  skipAnalysis: z.boolean()
+  skipAnalysis: coerceBoolean()
     .optional()
     .describe('Skip expensive analysis for better performance'),
-  includeDetails: z.boolean()
+  includeDetails: coerceBoolean()
     .optional()
     .describe('Include detailed information (may impact performance)')
 });

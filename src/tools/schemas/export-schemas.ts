@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ExportFormatSchema } from './shared-schemas.js';
+import { coerceBoolean } from './coercion-helpers.js';
 
 /**
  * Export-related schema definitions
@@ -16,9 +17,9 @@ export const ExportTasksSchema = z.object({
     project: z.string().optional().describe('Filter by project name'),
     projectId: z.string().optional().describe('Filter by project ID - use full alphanumeric ID from list_projects (e.g., "az5Ieo4ip7K", not "547"). Claude Desktop may incorrectly extract numbers from IDs.'),
     tags: z.array(z.string()).optional().describe('Filter by tags (requires all specified tags)'),
-    available: z.boolean().optional().describe('Only available tasks (not deferred/blocked)'),
-    completed: z.boolean().optional().describe('Filter by completion status'),
-    flagged: z.boolean().optional().describe('Only flagged tasks')
+    available: coerceBoolean().optional().describe('Only available tasks (not deferred/blocked)'),
+    completed: coerceBoolean().optional().describe('Filter by completion status'),
+    flagged: coerceBoolean().optional().describe('Only flagged tasks')
   })
     .optional()
     .describe('Filter criteria'),
@@ -37,7 +38,7 @@ export const ExportProjectsSchema = z.object({
     .default('json')
     .describe('Export format (default: json)'),
   
-  includeStats: z.boolean()
+  includeStats: coerceBoolean()
     .default(false)
     .describe('Include task statistics for each project')
 });
@@ -51,11 +52,11 @@ export const BulkExportSchema = z.object({
     .default('json')
     .describe('Export format (default: json)'),
   
-  includeCompleted: z.boolean()
+  includeCompleted: coerceBoolean()
     .default(true)
     .describe('Include completed tasks'),
   
-  includeProjectStats: z.boolean()
+  includeProjectStats: coerceBoolean()
     .default(true)
     .describe('Include statistics in project export')
 });
