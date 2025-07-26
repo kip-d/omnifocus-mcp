@@ -146,3 +146,40 @@ npm run scripts/run-cucumber-tests.sh
 - OmniFocus JXA returns temporary IDs for new tasks
 - IDs are extracted from script output using regex patterns
 - See src/omnifocus/scripts/tasks.ts for ID handling logic
+
+## Version 1.5.0 Release Notes (2025-07-25)
+
+### Major Improvements
+- **Fixed Critical Bugs**: todays_agenda timeout with default parameters, get_task_count undefined variable
+- **Batch Operations**: Added batch update, complete, and delete for tasks
+- **Date Range Queries**: New tools for querying tasks by date ranges (with JXA limitations)
+- **Performance**: Reduced default limits (todays_agenda: 200→50, includeDetails: true→false)
+
+### Known Limitations & Workarounds
+
+#### Tag Assignment
+- **Limitation**: Cannot assign tags during task creation (JXA constraint)
+- **Workaround**: Create task first, then update with tags
+```javascript
+// Step 1: Create task
+const task = await create_task({ name: "My Task" });
+// Step 2: Update with tags
+await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+```
+
+#### JXA whose() Limitations
+- **No "not null" support**: Cannot query for `{dueDate: {_not: null}}`
+- **String operators**: Use underscore prefix (`_contains`, `_beginsWith`, `_endsWith`)
+- **Date operators**: Use symbols (`>`, `<`, `>=`, `<=`), NOT underscores
+- **Performance**: Complex queries timeout with large databases (2000+ tasks)
+- See `docs/JXA-WHOSE-OPERATORS-DEFINITIVE.md` for complete reference
+
+#### Batch Operations
+- **Batch Complete**: May encounter access restrictions (individual complete works)
+- **Recommendation**: Use individual operations as fallback
+
+### Production Testing Results (v1.5.0)
+- Successfully tested with 2,041 tasks, 176 projects, 104 tags
+- Performance improvements from caching are significant
+- Analytics tools provide valuable GTD insights
+- All core functionality working as expected
