@@ -14,8 +14,8 @@ export const DateTimeSchema = z.string()
 export const OptionalDateTimeSchema = z.union([DateTimeSchema, z.null()]).optional();
 
 // Project status enum
-export const ProjectStatusSchema = z.enum(['active', 'onHold', 'completed', 'dropped'])
-  .describe('Project status');
+export const ProjectStatusSchema = z.enum(['active', 'onHold', 'done', 'dropped'])
+  .describe('Project status (active, onHold, done, dropped)');
 
 // Task/Project ID validation
 export const IdSchema = z.string()

@@ -384,26 +384,40 @@ src/
 
 ## Known Limitations
 
-### Tag Assignment (Critical Limitation)
-**IMPORTANT**: Tag assignment is severely limited in the OmniFocus JXA API. While the API reports successful tag updates, tags are often not actually applied to tasks. This is a known OmniFocus JXA limitation.
+### Tag Assignment
+**Known Limitation**: Tags cannot be assigned during task creation due to OmniFocus JXA API constraints. 
 
 **Current Status**:
 - Tag creation and listing work perfectly
-- Tag assignment to tasks fails silently (returns success but tags not applied)
-- The server tries multiple methods (addTags, tags property, individual addTag) but all fail with type conversion errors
-- Tasks may become temporarily unsearchable by ID after failed tag operations (though they remain findable by name)
+- Tag assignment DURING task creation is not supported
+- Tag assignment via update_task after creation has mixed results:
+  - The server attempts multiple methods (addTags, tags property, individual addTag)
+  - Success varies depending on OmniFocus version and task state
+  - If tags fail to apply, you'll receive a warning with details
 
-**Attempted Workarounds** (all have limitations):
+**Recommended Approach**:
 ```javascript
-// Approach 1: Create task first, then update (still fails)
-const task = await create_task({ name: "My Task" });
-await update_task({ taskId: task.id, tags: ["work", "urgent"] }); // Reports success but tags not applied
+// Step 1: Create task without tags
+const task = await create_task({ 
+  name: "My Task",
+  projectId: "someProjectId"
+  // Don't include tags here
+});
 
-// Approach 2: Manual tag assignment in OmniFocus UI
-// Currently the only reliable method
+// Step 2: Update task with tags
+const result = await update_task({ 
+  taskId: task.id, 
+  tags: ["work", "urgent"] 
+});
+
+// Check if warning was returned
+if (result.warning) {
+  console.log("Tag assignment issue:", result.warning);
+  // Tags may need to be applied manually in OmniFocus
+}
 ```
 
-**Recommendation**: Until OmniFocus updates their JXA API, manage tags directly in the OmniFocus UI rather than through automation.
+**Best Practice**: For reliable tag management, consider using the OmniFocus UI directly or creating tasks with tags through OmniFocus's native interfaces.
 
 ### JXA whose() Constraints
 - Cannot query for "not null" directly (use `{_not: null}` syntax)

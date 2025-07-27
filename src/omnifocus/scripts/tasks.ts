@@ -72,7 +72,16 @@ export const SAFE_UTILITIES_SCRIPT = `
   function safeGetStatus(obj) {
     try {
       const status = obj.status();
-      return status || 'unknown';
+      if (!status) return 'unknown';
+      
+      // Normalize status values - OmniFocus sometimes returns "active status" instead of "active"
+      const statusStr = status.toString().toLowerCase();
+      if (statusStr.includes('active')) return 'active';
+      if (statusStr.includes('hold')) return 'onHold';
+      if (statusStr.includes('drop')) return 'dropped';
+      if (statusStr.includes('done') || statusStr.includes('complete')) return 'done';
+      
+      return status;
     } catch (e) {
       return 'unknown';
     }
@@ -928,9 +937,11 @@ export const UPDATE_TASK_SCRIPT = `
           // Find and assign project
           const projects = doc.flattenedProjects();
           let projectFound = false;
+          let targetProject = null;
+          
           for (let i = 0; i < projects.length; i++) {
             if (projects[i].id() === updates.projectId) {
-              task.assignedContainer = projects[i];
+              targetProject = projects[i];
               projectFound = true;
               break;
             }
@@ -948,6 +959,25 @@ export const UPDATE_TASK_SCRIPT = `
               error: true,
               message: errorMessage
             });
+          }
+          
+          // Try multiple methods to assign the task to the project
+          try {
+            // Method 1: Direct assignment
+            task.assignedContainer = targetProject;
+          } catch (e1) {
+            try {
+              // Method 2: Move using project's tasks collection
+              targetProject.tasks.push(task);
+            } catch (e2) {
+              try {
+                // Method 3: Use app.move if available
+                app.move(task, {to: targetProject});
+              } catch (e3) {
+                // All methods failed
+                throw new Error("All project assignment methods failed: " + e1.toString() + ", " + e2.toString() + ", " + e3.toString());
+              }
+            }
           }
         }
       } catch (projectError) {
@@ -1074,9 +1104,16 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.tags !== undefined) {
       response.changes.tags = updates.tags;
       // Verify if tags were actually applied
-      const actualTags = safeGetTags(task);
-      if (updates.tags.length > 0 && actualTags.length === 0) {
-        response.warning = "Tags were not applied due to OmniFocus JXA API limitations. This is a known issue.";
+      const actualTagsAfter = safeGetTags(task);
+      const requestedTags = updates.tags || [];
+      
+      // Check if all requested tags were applied
+      const missingTags = requestedTags.filter(tag => !actualTagsAfter.includes(tag));
+      
+      if (missingTags.length > 0) {
+        // Tags were requested but not all were applied
+        response.warning = "Some or all tags could not be applied. OmniFocus JXA has limitations with tag assignment. Missing tags: " + missingTags.join(", ");
+        response.actualTags = actualTagsAfter;
       }
     }
     if (updates.projectId !== undefined) {
