@@ -1,4 +1,4 @@
-# OmniFocus MCP Server v1.5.0
+# OmniFocus MCP Server v1.6.0
 
 A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides advanced task management, analytics, and automation capabilities. Built with TypeScript and the official OmniAutomation API.
 
@@ -117,6 +117,27 @@ operations may be re-implemented for performance optimization.
 - `get_recurring_patterns` - Extract recurring rules
   - Frequency analysis
   - Custom recurrence detection
+
+### GTD Workflow Prompts (New!)
+The server now includes MCP Prompts for guided GTD workflows:
+
+#### Weekly Review Prompt
+- `gtd_weekly_review` - Complete GTD weekly review with intelligent project analysis
+  - Processes inbox items
+  - Reviews completed tasks from the past week
+  - **Identifies stale projects** that haven't been reviewed recently
+  - Suggests projects for someday/maybe or deletion
+  - Ensures every active project has clear next actions
+  - Reviews calendar alignment
+
+#### Inbox Processing Prompt  
+- `gtd_process_inbox` - Process inbox using GTD methodology
+  - Guides through actionable/non-actionable decisions
+  - Applies 2-minute rule
+  - Helps with delegation decisions
+  - Identifies single actions vs projects
+
+These prompts provide step-by-step guidance through GTD best practices, helping maintain a trusted system.
 
 #### System & Diagnostics
 - `get_version_info` - Get OmniFocus and server versions

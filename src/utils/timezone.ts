@@ -62,7 +62,7 @@ export function getCurrentTimezoneOffset(): number {
  * @param timezone Optional timezone override (defaults to system timezone)
  * @returns UTC ISO string for use with OmniFocus API
  */
-export function localToUTC(localDateStr: string, timezone?: string): string {
+export function localToUTC(localDateStr: string, _timezone?: string): string {
   // Parse the input to determine format
   const hasTime = localDateStr.includes(' ') || localDateStr.includes('T');
   

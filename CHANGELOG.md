@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2025-07-27
+
+### Added
+- MCP Prompts support for guided GTD workflows
+- `gtd_weekly_review` prompt with intelligent stale project detection
+- `gtd_process_inbox` prompt for GTD-compliant inbox processing
+- Automatic timezone detection and conversion for all date operations
+- Local time input support (e.g., "2024-01-15 14:30")
+- Prompts infrastructure for future workflow additions
+
+### Changed
+- All date inputs now accept local time and automatically convert to UTC
+- No timezone configuration needed - automatically detected from system
+- Weekly review prompt identifies projects not reviewed in 30+ days
+
+### Technical
+- Added `src/prompts/` directory with base prompt infrastructure
+- Implemented `LocalDateTimeSchema` for flexible date input
+- Added `localToUTC()` and `getSystemTimezone()` utilities
+- Server now advertises prompts capability in MCP
+
 ## [1.5.2] - 2025-07-27
 
 ### Fixed

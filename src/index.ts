@@ -2,6 +2,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerTools } from './tools/index.js';
+import { registerPrompts } from './prompts/index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
@@ -13,11 +14,12 @@ const logger = createLogger('server');
 const server = new Server(
   {
     name: 'omnifocus-mcp-cached',
-    version: '1.4.0',
+    version: '1.6.0',
   },
   {
     capabilities: {
       tools: {},
+      prompts: {},
     },
   },
 );
@@ -52,8 +54,9 @@ async function runServer() {
       logger.error('Failed to check permissions:', error);
     });
 
-  // Register all tools AFTER server creation but BEFORE connection
+  // Register all tools and prompts AFTER server creation but BEFORE connection
   await registerTools(server, cacheManager);
+  registerPrompts(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
