@@ -8,6 +8,7 @@ import { CreateTaskResponse } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
 import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
 import { CreateTaskSchema } from '../schemas/task-schemas.js';
+import { localToUTC } from '../../utils/timezone.js';
 
 export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   name = 'create_task';
@@ -18,7 +19,14 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
     const timer = new OperationTimer();
 
     try {
-      const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: args });
+      // Convert local dates to UTC for OmniFocus
+      const taskData = {
+        ...args,
+        dueDate: args.dueDate ? localToUTC(args.dueDate) : undefined,
+        deferDate: args.deferDate ? localToUTC(args.deferDate) : undefined,
+      };
+      
+      const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData });
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
 
       if ('error' in result && result.error) {

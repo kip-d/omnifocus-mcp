@@ -4,6 +4,7 @@ import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { StandardResponse } from '../../utils/response-format.js';
 import { CompleteTaskSchema } from '../schemas/task-schemas.js';
+import { localToUTC } from '../../utils/timezone.js';
 
 export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
   name = 'complete_task';
@@ -14,9 +15,15 @@ export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
     const timer = new OperationTimer();
 
     try {
+      // Convert completionDate if provided
+      const processedArgs = {
+        ...args,
+        completionDate: args.completionDate ? localToUTC(args.completionDate) : undefined,
+      };
+      
       // Try JXA first, fall back to URL scheme if access denied
       try {
-        const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, args as unknown as Record<string, unknown>);
+        const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, processedArgs as unknown as Record<string, unknown>);
         const result = await this.omniAutomation.execute<any>(script);
 
         if (result && typeof result === 'object' && 'error' in result && result.error) {

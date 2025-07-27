@@ -4,6 +4,7 @@ import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskResponse } from '../response-types.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
+import { localToUTC } from '../../utils/timezone.js';
 
 export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
@@ -188,16 +189,13 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       if (typeof updates.dueDate === 'string') {
         try {
-          // Validate the date string but keep it as string (like create_task does)
-          const parsedDate = new Date(updates.dueDate);
-          if (isNaN(parsedDate.getTime())) {
-            throw new Error('Invalid date');
-          }
-          this.logger.info('Date string validated successfully:', {
+          // Convert local time to UTC for OmniFocus
+          const utcDate = localToUTC(updates.dueDate);
+          this.logger.info('Date converted to UTC:', {
             original: updates.dueDate,
-            parsed: parsedDate.toISOString(),
+            converted: utcDate,
           });
-          sanitized.dueDate = updates.dueDate; // Keep as string for JXA script
+          sanitized.dueDate = utcDate;
         } catch (error) {
           this.logger.warn(`Invalid dueDate format: ${updates.dueDate}`, error);
         }
@@ -220,16 +218,13 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       if (typeof updates.deferDate === 'string') {
         try {
-          // Validate the date string but keep it as string (like create_task does)
-          const parsedDate = new Date(updates.deferDate);
-          if (isNaN(parsedDate.getTime())) {
-            throw new Error('Invalid date');
-          }
-          this.logger.info('DeferDate string validated successfully:', {
+          // Convert local time to UTC for OmniFocus
+          const utcDate = localToUTC(updates.deferDate);
+          this.logger.info('DeferDate converted to UTC:', {
             original: updates.deferDate,
-            parsed: parsedDate.toISOString(),
+            converted: utcDate,
           });
-          sanitized.deferDate = updates.deferDate; // Keep as string for JXA script
+          sanitized.deferDate = utcDate;
         } catch (error) {
           this.logger.warn(`Invalid deferDate format: ${updates.deferDate}`, error);
         }

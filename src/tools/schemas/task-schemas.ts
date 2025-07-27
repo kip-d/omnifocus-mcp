@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { 
-  DateTimeSchema, 
+  DateTimeSchema,
+  LocalDateTimeSchema,
   OptionalDateTimeSchema, 
   IdSchema, 
   TagNameSchema,
@@ -148,13 +149,13 @@ export const CreateTaskSchema = z.object({
     .default(false)
     .describe('Whether the task is flagged'),
   
-  dueDate: DateTimeSchema
+  dueDate: LocalDateTimeSchema
     .optional()
-    .describe('Due date for the task'),
+    .describe('Due date in your local time (e.g., 2024-01-15 or 2024-01-15 14:30)'),
   
-  deferDate: DateTimeSchema
+  deferDate: LocalDateTimeSchema
     .optional()
-    .describe('Defer date for the task'),
+    .describe('Defer date in your local time (e.g., 2024-01-15 or 2024-01-15 09:00)'),
   
   estimatedMinutes: coerceNumber()
     .int()
@@ -189,17 +190,17 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New flagged status'),
   
-  dueDate: DateTimeSchema
+  dueDate: LocalDateTimeSchema
     .optional()
-    .describe('New due date'),
+    .describe('New due date in your local time'),
   
   clearDueDate: coerceBoolean()
     .optional()
     .describe('Set to true to clear the existing due date'),
   
-  deferDate: DateTimeSchema
+  deferDate: LocalDateTimeSchema
     .optional()
-    .describe('New defer date'),
+    .describe('New defer date in your local time'),
   
   clearDeferDate: coerceBoolean()
     .optional()
@@ -223,9 +224,9 @@ export const CompleteTaskSchema = z.object({
   taskId: IdSchema
     .describe('ID of the task to complete'),
   
-  completionDate: DateTimeSchema
+  completionDate: LocalDateTimeSchema
     .optional()
-    .describe('Completion date (defaults to now)')
+    .describe('Completion date in your local time (defaults to now)')
 });
 
 // Delete task parameters
