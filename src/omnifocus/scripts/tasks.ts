@@ -979,18 +979,22 @@ export const UPDATE_TASK_SCRIPT = `
           // Get current tags before deletion
           const currentTags = safeGetTags(task);
           
-          // Delete the original task
+          // Try to delete and recreate the task
+          let deleteSucceeded = false;
           try {
             app.delete(task);
+            deleteSucceeded = true;
           } catch (deleteError) {
             // If delete fails, try to at least update the reference
             try {
               task.assignedContainer = targetProject;
+              // If direct assignment worked, we're done - no need to recreate
             } catch (assignError) {
               throw new Error("Failed to move task: could not delete original or reassign");
             }
-            // If direct assignment worked, we're done
-          } else {
+          }
+          
+          if (deleteSucceeded) {
             // Successfully deleted the task, now recreate it in target project
             const newTaskObj = {
               name: taskData.name,
