@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2025-07-27
+
+### Fixed
+- Project assignment now works reliably using delete/recreate approach
+- Tag assignment warnings only appear when tags actually fail to apply
+- Project status filtering handles "active status" vs "active" variations
+- MCP error -32603 syntax error in update task script
+
+### Changed
+- Project moves now recreate tasks with new IDs (JXA limitation workaround)
+- Improved tag warning messages with specific details about missing tags
+- Status normalization for consistent project filtering
+- Enhanced documentation about tag and project assignment limitations
+
+### Removed
+- Batch operations removed entirely due to OmniFocus JXA API limitations
+- Individual operations (create, update, complete, delete) work perfectly
+
+### Known Limitations
+- Tag assignment remains unreliable due to OmniFocus JXA API constraints
+- Project assignment requires task recreation (ID changes)
+- Users should manage tags through OmniFocus UI for reliability
+
 ## [1.5.0] - 2025-07-25
 
 ### Added
