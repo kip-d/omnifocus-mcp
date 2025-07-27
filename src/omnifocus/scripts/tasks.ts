@@ -961,23 +961,57 @@ export const UPDATE_TASK_SCRIPT = `
             });
           }
           
-          // Try multiple methods to assign the task to the project
+          // Moving tasks between projects is complex in JXA
+          // We'll use a recreation approach since direct assignment often fails
+          
+          // First, capture all current task properties
+          const taskData = {
+            name: safeGet(() => task.name(), 'Unnamed Task'),
+            note: safeGet(() => task.note(), ''),
+            flagged: safeGet(() => task.flagged(), false),
+            dueDate: safeGetDate(() => task.dueDate()),
+            deferDate: safeGetDate(() => task.deferDate()),
+            estimatedMinutes: safeGetEstimatedMinutes(task),
+            completed: safeGet(() => task.completed(), false),
+            completionDate: safeGetDate(() => task.completionDate())
+          };
+          
+          // Get current tags before deletion
+          const currentTags = safeGetTags(task);
+          
+          // Delete the original task
           try {
-            // Method 1: Direct assignment
-            task.assignedContainer = targetProject;
-          } catch (e1) {
+            app.delete(task);
+          } catch (deleteError) {
+            // If delete fails, try to at least update the reference
             try {
-              // Method 2: Move using project's tasks collection
-              targetProject.tasks.push(task);
-            } catch (e2) {
-              try {
-                // Method 3: Use app.move if available
-                app.move(task, {to: targetProject});
-              } catch (e3) {
-                // All methods failed
-                throw new Error("All project assignment methods failed: " + e1.toString() + ", " + e2.toString() + ", " + e3.toString());
-              }
+              task.assignedContainer = targetProject;
+            } catch (assignError) {
+              throw new Error("Failed to move task: could not delete original or reassign");
             }
+            // If direct assignment worked, we're done
+          } else {
+            // Successfully deleted the task, now recreate it in target project
+            const newTaskObj = {
+              name: taskData.name,
+              note: taskData.note,
+              flagged: taskData.flagged
+            };
+            
+            if (taskData.dueDate) newTaskObj.dueDate = new Date(taskData.dueDate);
+            if (taskData.deferDate) newTaskObj.deferDate = new Date(taskData.deferDate);
+            if (taskData.estimatedMinutes) newTaskObj.estimatedMinutes = taskData.estimatedMinutes;
+            
+            const newTask = app.Task(newTaskObj);
+            targetProject.tasks.push(newTask);
+            
+            // If task was completed, mark it complete
+            if (taskData.completed && taskData.completionDate) {
+              newTask.markComplete({completionDate: new Date(taskData.completionDate)});
+            }
+            
+            // Update our task reference to the new task
+            task = newTask;
           }
         }
       } catch (projectError) {
@@ -1122,6 +1156,10 @@ export const UPDATE_TASK_SCRIPT = `
         const project = safeGetProject(task);
         if (project) {
           response.changes.projectName = project.name;
+        }
+        // Check if this was a delete/recreate operation
+        if (taskIdAfterUpdate !== taskId) {
+          response.note = "Task was recreated in the target project due to JXA limitations. New task ID: " + taskIdAfterUpdate;
         }
       } else {
         response.changes.projectName = "Inbox";

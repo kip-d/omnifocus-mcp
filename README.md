@@ -419,6 +419,29 @@ if (result.warning) {
 
 **Best Practice**: For reliable tag management, consider using the OmniFocus UI directly or creating tasks with tags through OmniFocus's native interfaces.
 
+### Project Assignment
+**Known Limitation**: Moving tasks between projects using JXA has reliability issues.
+
+**Current Approach**:
+- When updating a task's project, the server may need to delete and recreate the task
+- This is due to JXA's `assignedContainer` property not working reliably
+- The task will maintain all its properties (name, notes, dates, flags) but get a new ID
+- You'll receive a note in the response if recreation was necessary
+
+**Example**:
+```javascript
+// Moving a task to a project
+const result = await update_task({ 
+  taskId: "abc123", 
+  projectId: "xyz789" 
+});
+
+// Check if task was recreated
+if (result.note && result.note.includes("recreated")) {
+  console.log("Task was moved via recreation. New ID:", result.id);
+}
+```
+
 ### JXA whose() Constraints
 - Cannot query for "not null" directly (use `{_not: null}` syntax)
 - String operators require underscore prefix: `_contains`, `_beginsWith`, `_endsWith`
