@@ -118,10 +118,10 @@ operations may be re-implemented for performance optimization.
   - Frequency analysis
   - Custom recurrence detection
 
-### GTD Workflow Prompts (New!)
-The server now includes MCP Prompts for guided GTD workflows:
+### GTD Workflow Prompts (Ready for Future Claude Desktop Support)
+The server implements MCP Prompts for guided GTD workflows, but **Claude Desktop does not yet support the MCP Prompts capability**. See [GTD-WORKFLOW-MANUAL.md](docs/GTD-WORKFLOW-MANUAL.md) for manual workflow instructions using available tools.
 
-#### Weekly Review Prompt
+#### Implemented Prompts (awaiting client support):
 - `gtd_weekly_review` - Complete GTD weekly review with intelligent project analysis
   - Processes inbox items
   - Reviews completed tasks from the past week
@@ -130,14 +130,13 @@ The server now includes MCP Prompts for guided GTD workflows:
   - Ensures every active project has clear next actions
   - Reviews calendar alignment
 
-#### Inbox Processing Prompt  
 - `gtd_process_inbox` - Process inbox using GTD methodology
   - Guides through actionable/non-actionable decisions
   - Applies 2-minute rule
   - Helps with delegation decisions
   - Identifies single actions vs projects
 
-These prompts provide step-by-step guidance through GTD best practices, helping maintain a trusted system.
+Once Claude Desktop adds prompt support, these will provide automated step-by-step guidance through GTD best practices.
 
 #### System & Diagnostics
 - `get_version_info` - Get OmniFocus and server versions
