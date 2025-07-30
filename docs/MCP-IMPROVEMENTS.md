@@ -121,7 +121,7 @@ Improve documentation to match MCP ecosystem standards.
  * 
  * @description
  * Retrieves tasks from OmniFocus with powerful filtering options.
- * Results are cached for 30 seconds to improve performance.
+ * Results are cached for 1 minute to improve performance.
  * 
  * @example Basic usage
  * {
