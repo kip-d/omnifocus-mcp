@@ -81,10 +81,10 @@ omnifocus-mcp-pro/
 
 ```typescript
 interface CacheConfig {
-  tasks: { ttl: 30 },        // 30 seconds for task lists
-  projects: { ttl: 300 },    // 5 minutes for projects
+  tasks: { ttl: 60 },        // 1 minute for task lists
+  projects: { ttl: 600 },    // 10 minutes for projects
   analytics: { ttl: 3600 },  // 1 hour for analytics
-  tags: { ttl: 600 }         // 10 minutes for tags
+  tags: { ttl: 1200 }        // 20 minutes for tags
 }
 ```
 

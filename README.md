@@ -7,7 +7,7 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
 ## Features
 
 ### Core Capabilities
-- **Smart Caching**: TTL-based caching system for optimal performance (30s for tasks, 5m for projects, 1h for analytics)
+- **Smart Caching**: TTL-based caching system for optimal performance (1m for tasks, 10m for projects, 1h for analytics)
 - **Type Safety**: Full TypeScript support with comprehensive type definitions
 - **Official API Only**: Uses only OmniAutomation scripts via JXA (no database hacking)
 - **High Performance**: Handles 2000+ tasks efficiently with intelligent caching
@@ -22,7 +22,7 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
   - Filter by: completion status, flags, project, tags, dates, search terms
   - Supports inbox filtering and availability checks  
   - Supports up to 1000 tasks with proper pagination metadata
-  - Results cached for 30 seconds for lightning-fast repeated queries
+  - Results cached for 1 minute for lightning-fast repeated queries
 - `get_task_count` - Get count of tasks matching filters without data
   - Same filtering options as list_tasks
   - Returns count only for performance
@@ -64,7 +64,7 @@ operations may be re-implemented for performance optimization.
 #### Project Operations
 - `list_projects` - List and filter projects with caching
   - Filter by: status (active, on hold, dropped, completed), flags, folder
-  - Results cached for 5 minutes
+  - Results cached for 10 minutes
   - Includes task counts
 - `create_project` - Create new projects with folder support
   - Automatically creates folders if they don't exist
@@ -353,10 +353,10 @@ If you see errors like `Project with ID '547' not found` followed by a Claude De
 
 The server implements intelligent caching with different TTLs for different data types:
 
-- **Tasks**: 30 seconds (frequently changing)
-- **Projects**: 5 minutes (less volatile)
+- **Tasks**: 1 minute (frequently changing)
+- **Projects**: 10 minutes (less volatile)
 - **Analytics**: 1 hour (expensive computations)
-- **Tags**: 10 minutes (relatively stable)
+- **Tags**: 20 minutes (relatively stable)
 
 Cache is automatically invalidated on write operations.
 

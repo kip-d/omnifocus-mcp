@@ -152,6 +152,6 @@ MCP bridges operate under different constraints than traditional APIs or CLI too
 
 1. **All 24 functions are working** - The bridge is functionally complete
 2. **Performance varies by operation type** - Simple queries are fast, full scans are slow
-3. **Caching is essential** - 30-second cache makes repeated operations instant
+3. **Caching is essential** - 1-minute cache makes repeated operations instant
 4. **JXA API limitations are real** - We work around them where possible
 5. **User workflows should adapt** - Use fast operations when possible, batch slow ones

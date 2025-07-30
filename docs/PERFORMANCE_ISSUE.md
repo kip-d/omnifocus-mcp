@@ -111,7 +111,7 @@ For a database with 2,000 tasks:
 
 ### Recommendations for Users
 
-1. **Use caching** - Results are cached for 30 seconds
+1. **Use caching** - Results are cached for 1 minute
 2. **Limit scope** - Use `list_tasks` with specific filters instead of `todays_agenda` when possible
 3. **Schedule updates** - Run agenda queries during natural breaks
 4. **Consider database size** - Performance scales linearly with task count
