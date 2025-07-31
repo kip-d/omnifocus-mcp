@@ -25,7 +25,7 @@ All 27 tools are now working correctly, up from 85% in the previous version. Thi
 
 ### Critical Fixes
 1. **Fixed "Cannot convert undefined or null to object" errors** - Added comprehensive safe property access throughout all scripts
-2. **Fixed task ID extraction** - Now correctly uses `id.primaryKey` for all object identifiers
+2. **Fixed task ID extraction** - Now consistently retrieves identifiers using the `id()` method
 3. **Fixed tag operations** - Tag creation, renaming, merging, and deletion now work reliably
 4. **Fixed project status updates** - Projects can now be properly completed and have their status changed
 
@@ -65,7 +65,7 @@ Thanks to the user testing group for their detailed feedback and patience during
 ## Technical Details for Developers
 
 ### API Property Access Changes
-- Task properties: `task.id()` → `task.id.primaryKey`
+- Task properties continue to use `task.id()` for identifier lookup
 - Project properties: `project.name()` → `project.name`
 - Document collections: `doc.flattenedTasks()` → `doc.flattenedTasks`
 

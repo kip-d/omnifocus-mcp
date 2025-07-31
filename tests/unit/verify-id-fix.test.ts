@@ -16,12 +16,7 @@ import {
 
 /**
  * Note: This test verifies the correct OmniFocus API usage for ID extraction.
- * In OmniFocus official API:
- * - task.id is an ObjectIdentifier with primaryKey property
- * - project.id is an ObjectIdentifier with primaryKey property
- * - All scripts should use .id.primaryKey to get the string ID
- * 
- * This test ensures we're using the correct official API patterns.
+ * IDs are retrieved using the `id()` method on tasks and projects.
  */
 describe('Verify ID Extraction Fix', () => {
   it('should use correct ID extraction patterns in task scripts', () => {

@@ -82,7 +82,7 @@ describe('Mock ID Extraction Test', () => {
       updated: true
     };
     
-    // This simulates that our JXA script properly uses task.id.primaryKey()
+    // This simulates that our JXA script properly uses task.id()
     expect(mockUpdateResponse.id).toBeTruthy();
     expect(mockUpdateResponse.id).toBe('gZ0M5L3PkR8');
   });
@@ -91,16 +91,15 @@ describe('Mock ID Extraction Test', () => {
     // This tests that our script has the correct syntax
     const scriptSnippet = `
       const task = tasks[0];
-      const taskId = task.id.primaryKey();
+      const taskId = task.id();
       const project = task.containingProject();
-      const projectId = project ? project.id.primaryKey() : null;
+      const projectId = project ? project.id() : null;
     `;
     
     // Check for correct method calls with parentheses
-    expect(scriptSnippet).toContain('task.id.primaryKey()');
-    expect(scriptSnippet).toContain('project.id.primaryKey()');
+    expect(scriptSnippet).toContain('task.id()');
+    expect(scriptSnippet).toContain('project.id()');
     
-    // Ensure no instances without parentheses
-    expect(scriptSnippet).not.toMatch(/\.id\.primaryKey(?![\(\)])/);
+    expect(scriptSnippet).not.toMatch(/\.id(?!\()/);
   });
 });

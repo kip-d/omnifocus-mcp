@@ -13,8 +13,8 @@ Successfully migrated the OmniFocus MCP Bridge to use the official OmniFocus 4.6
 ### 2. Property Access Pattern Updates
 
 #### Task Properties
-Changed from method calls to direct property access:
-- `task.id()` → `task.id.primaryKey`
+-Changed from method calls to direct property access (except for IDs which still
+use the `id()` method):
 - `task.name()` → `task.name`
 - `task.note()` → `task.note`
 - `task.completed()` → `task.completed`
@@ -32,7 +32,6 @@ Changed from method calls to direct property access:
 - `task.repetitionRule()` → `task.repetitionRule`
 
 #### Project Properties
-- `project.id()` → `project.id.primaryKey`
 - `project.name()` → `project.name`
 - `project.note()` → `project.note`
 - `project.status()` → `project.status`
@@ -44,7 +43,6 @@ Changed from method calls to direct property access:
 - `project.flattenedTasks()` → `project.flattenedTasks`
 
 #### Tag Properties
-- `tag.id()` → `tag.id.primaryKey`
 - `tag.name()` → `tag.name`
 - `tag.parent()` → `tag.parent`
 - `tag.tags()` → `tag.children` (note: property name change)
@@ -65,16 +63,10 @@ Changed from method calls to direct property access:
 ### 4. Key Learnings
 
 #### ObjectIdentifier
-The `id` property returns an `ObjectIdentifier` object with a `primaryKey` property:
-```typescript
-declare class ObjectIdentifier {
-    readonly objectClass: Object | null;
-    readonly primaryKey: string;
-}
-```
+Some OmniFocus objects expose an `id()` method that returns the task or project identifier as a string. The official type definitions describe an `ObjectIdentifier` type with a `primaryKey` field, but JXA scripts simply return the identifier string when calling `id()`.
 
 #### Property vs Method Access
-The official API uses property access (no parentheses) rather than method calls, which is more idiomatic for TypeScript/JavaScript.
+Most simple attributes can be accessed without parentheses (e.g. `task.name`), but identifier lookups still use the `id()` method.
 
 ### 5. Build Status
 ✅ TypeScript compilation successful - all code changes are syntactically correct.
