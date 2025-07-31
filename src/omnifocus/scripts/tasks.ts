@@ -1113,8 +1113,7 @@ export const UPDATE_TASK_SCRIPT = `
       try {
         const allTasks = doc.flattenedTasks();
         for (let i = 0; i < allTasks.length; i++) {
-          if (allTasks[i].name() === task.name() && 
-              allTasks[i].primaryKey === task.primaryKey) {
+          if (allTasks[i].name() === task.name()) {
             taskIdAfterUpdate = allTasks[i].id();
             break;
           }
