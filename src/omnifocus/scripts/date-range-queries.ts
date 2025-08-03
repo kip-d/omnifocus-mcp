@@ -3,23 +3,26 @@
  * These scripts demonstrate how to use JXA's whose() method with date comparisons
  */
 
-import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+import { getAllHelpers } from './shared/helpers.js';
 
 /**
  * Get tasks due within a specific date range using whose()
  * This is significantly faster than iterating through all tasks
  */
 export const GET_TASKS_IN_DATE_RANGE_SCRIPT = `
-  const params = {{params}};
-  const startDate = params.startDate ? new Date(params.startDate) : null;
-  const endDate = params.endDate ? new Date(params.endDate) : null;
-  const dateField = params.dateField || 'dueDate'; // 'dueDate', 'deferDate', or 'completionDate'
-  const includeNullDates = params.includeNullDates || false;
-  const limit = params.limit || 100;
+  ${getAllHelpers()}
   
-  ${SAFE_UTILITIES_SCRIPT}
-  
-  try {
+  (() => {
+    const app = Application('OmniFocus');
+    const doc = app.defaultDocument();
+    const params = {{params}};
+    const startDate = params.startDate ? new Date(params.startDate) : null;
+    const endDate = params.endDate ? new Date(params.endDate) : null;
+    const dateField = params.dateField || 'dueDate'; // 'dueDate', 'deferDate', or 'completionDate'
+    const includeNullDates = params.includeNullDates || false;
+    const limit = params.limit || 100;
+    
+    try {
     const startTime = Date.now();
     let tasks = [];
     let queryMethod = 'unknown';
@@ -219,19 +222,23 @@ export const GET_TASKS_IN_DATE_RANGE_SCRIPT = `
     
     return obj;
   }
+  })();
 `;
 
 /**
  * Get tasks that are overdue using optimized whose() queries
  */
 export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
-  const limit = {{limit}} || 50;
-  const includeCompleted = {{includeCompleted}} || false;
+  ${getAllHelpers()}
   
-  ${SAFE_UTILITIES_SCRIPT}
-  
-  try {
-    const startTime = Date.now();
+  (() => {
+    const app = Application('OmniFocus');
+    const doc = app.defaultDocument();
+    const limit = {{limit}};
+    const includeCompleted = {{includeCompleted}};
+    
+    try {
+      const startTime = Date.now();
     const now = new Date();
     const tasks = [];
     
@@ -301,22 +308,26 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
       details: error.message
     });
   }
+  })();
 `;
 
 /**
  * Get upcoming tasks for the next N days using optimized queries
  */
 export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
-  const days = {{days}} || 7;
-  const includeToday = {{includeToday}} !== false; // default true
-  const limit = {{limit}} || 100;
+  ${getAllHelpers()}
   
-  ${SAFE_UTILITIES_SCRIPT}
-  
-  try {
-    const startTime = Date.now();
-    const now = new Date();
-    const startDate = includeToday ? now : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  (() => {
+    const app = Application('OmniFocus');
+    const doc = app.defaultDocument();
+    const days = {{days}};
+    const includeToday = {{includeToday}};
+    const limit = {{limit}};
+    
+    try {
+      const startTime = Date.now();
+      const now = new Date();
+      const startDate = includeToday ? now : new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     
     const tasks = [];
@@ -391,4 +402,5 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
       details: error.message
     });
   }
+  })();
 `;

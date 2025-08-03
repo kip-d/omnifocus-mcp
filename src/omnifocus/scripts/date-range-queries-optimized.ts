@@ -3,7 +3,7 @@
  * Uses _not operator for null inequality checks
  */
 
-import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+import { getAllHelpers } from './shared/helpers.js';
 
 /**
  * Get tasks due within a specific date range using optimized whose() queries
@@ -16,7 +16,7 @@ export const GET_TASKS_IN_DATE_RANGE_OPTIMIZED_SCRIPT = `
   const includeNullDates = params.includeNullDates || false;
   const limit = params.limit || 100;
   
-  ${SAFE_UTILITIES_SCRIPT}
+  ${getAllHelpers()}
   
   try {
     const startTime = Date.now();
@@ -247,7 +247,7 @@ export const GET_OVERDUE_TASKS_TRULY_OPTIMIZED_SCRIPT = `
   const limit = {{limit}} || 50;
   const includeCompleted = {{includeCompleted}} || false;
   
-  ${SAFE_UTILITIES_SCRIPT}
+  ${getAllHelpers()}
   
   try {
     const startTime = Date.now();
