@@ -11,3 +11,6 @@ coverage/
 
 # Claude Code settings
 .claude/settings.local.json
+
+# Archive directory for old files
+archive/
