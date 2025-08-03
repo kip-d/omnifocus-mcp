@@ -14,10 +14,11 @@ export const TASK_VELOCITY_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
-  
-  try {
-    const app = Application('OmniFocus');
-    const doc = app.defaultDocument();
+    const options = {{options}};
+    
+    try {
+      const app = Application('OmniFocus');
+      const doc = app.defaultDocument();
     
     const now = new Date();
     const velocityData = [];

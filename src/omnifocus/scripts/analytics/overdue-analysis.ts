@@ -14,9 +14,10 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
-  
-  // Helper to check if task is completed (add if not in helpers)
-  function safeIsCompleted(task) {
+    const options = {{options}};
+    
+    // Helper to check if task is completed (add if not in helpers)
+    function safeIsCompleted(task) {
     try {
       return task.completed() === true;
     } catch (e) {
