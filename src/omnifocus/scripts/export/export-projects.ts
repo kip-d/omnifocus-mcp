@@ -11,10 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Proper CSV formatting with flattened stats
  */
 export const EXPORT_PROJECTS_SCRIPT = `
-  const includeStats = {{includeStats}};
-  const format = {{format}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -196,4 +195,5 @@ export const EXPORT_PROJECTS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'export_projects');
   }
+  })();
 `;

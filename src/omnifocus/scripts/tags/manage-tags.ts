@@ -11,12 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Comprehensive error handling for each operation
  */
 export const MANAGE_TAGS_SCRIPT = `
-  const action = {{action}};
-  const tagName = {{tagName}};
-  const newName = {{newName}};
-  const targetTag = {{targetTag}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -268,4 +265,5 @@ export const MANAGE_TAGS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'manage_tags');
   }
+  })();
 `;

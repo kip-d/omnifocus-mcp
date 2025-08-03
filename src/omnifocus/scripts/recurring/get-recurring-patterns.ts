@@ -11,9 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Most common pattern identification
  */
 export const GET_RECURRING_PATTERNS_SCRIPT = `
-  const options = {{options}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -143,7 +143,7 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
           } else if (dayMatch) {
             ruleData.unit = 'days';
             ruleData.steps = parseInt(dayMatch[1]);
-          } else if (taskName.includes('$') || taskName.includes('bill') || taskName.includes('subscription')) {
+          } else if (taskName.includes(') || taskName.includes('bill') || taskName.includes('subscription')) {
             ruleData.unit = 'months';
             ruleData.steps = 1;
           }
@@ -258,4 +258,5 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'get_recurring_patterns');
   }
+  })();
 `;

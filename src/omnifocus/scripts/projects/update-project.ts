@@ -11,10 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Detailed change tracking
  */
 export const UPDATE_PROJECT_SCRIPT = `
-  const projectId = {{projectId}};
-  const updates = {{updates}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -175,4 +174,5 @@ export const UPDATE_PROJECT_SCRIPT = `
   } catch (error) {
     return formatError(error, 'update_project');
   }
+  })();
 `;

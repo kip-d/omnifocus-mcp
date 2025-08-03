@@ -11,9 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Projections for future throughput
  */
 export const TASK_VELOCITY_SCRIPT = `
-  const options = {{options}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -180,4 +180,5 @@ export const TASK_VELOCITY_SCRIPT = `
   } catch (error) {
     return formatError(error, 'task_velocity');
   }
+  })();
 `;

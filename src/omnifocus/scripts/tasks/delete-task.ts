@@ -9,7 +9,7 @@ export const DELETE_TASK_SCRIPT = `
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
-    const taskId = '{{taskId}}';
+    const taskId = {{taskId}};
     
     try {
       // Find task using whose clause

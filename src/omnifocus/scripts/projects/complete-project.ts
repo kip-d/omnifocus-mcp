@@ -10,10 +10,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Handles different OmniFocus versions gracefully
  */
 export const COMPLETE_PROJECT_SCRIPT = `
-  const projectId = {{projectId}};
-  const completeAllTasks = {{completeAllTasks}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -119,4 +118,5 @@ export const COMPLETE_PROJECT_SCRIPT = `
   } catch (error) {
     return formatError(error, 'complete_project');
   }
+  })();
 `;

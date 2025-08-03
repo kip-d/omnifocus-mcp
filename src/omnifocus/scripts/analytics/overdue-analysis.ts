@@ -11,9 +11,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Recently completed overdue task tracking
  */
 export const OVERDUE_ANALYSIS_SCRIPT = `
-  const options = {{options}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   // Helper to check if task is completed (add if not in helpers)
   function safeIsCompleted(task) {
@@ -253,4 +253,5 @@ export const OVERDUE_ANALYSIS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'overdue_analysis');
   }
+  })();
 `;

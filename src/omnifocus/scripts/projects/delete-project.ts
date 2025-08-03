@@ -10,10 +10,9 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Detailed reporting of deleted/orphaned tasks
  */
 export const DELETE_PROJECT_SCRIPT = `
-  const projectId = {{projectId}};
-  const deleteTasks = {{deleteTasks}};
-  
   ${getAllHelpers()}
+  
+  (() => {
   
   try {
     const app = Application('OmniFocus');
@@ -78,4 +77,5 @@ export const DELETE_PROJECT_SCRIPT = `
   } catch (error) {
     return formatError(error, 'delete_project');
   }
+  })();
 `;

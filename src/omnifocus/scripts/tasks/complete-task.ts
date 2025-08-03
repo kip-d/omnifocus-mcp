@@ -9,7 +9,7 @@ export const COMPLETE_TASK_SCRIPT = `
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
-    const taskId = '{{taskId}}';
+    const taskId = {{taskId}};
     const completionDate = {{completionDate}} ? new Date({{completionDate}}) : new Date();
     
     try {
@@ -47,7 +47,7 @@ export const COMPLETE_TASK_SCRIPT = `
  * Script to complete a task using OmniAutomation (URL scheme fallback)
  */
 export const COMPLETE_TASK_OMNI_SCRIPT = `
-  const taskId = '{{taskId}}';
+  const taskId = {{taskId}};
   const task = Task.byIdentifier(taskId);
   
   if (!task) {
