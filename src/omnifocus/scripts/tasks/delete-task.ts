@@ -44,20 +44,22 @@ export const DELETE_TASK_SCRIPT = `
  * Script to delete a task using OmniAutomation (URL scheme fallback)
  */
 export const DELETE_TASK_OMNI_SCRIPT = `
-  const taskId = '{{taskId}}';
-  const task = Task.byIdentifier(taskId);
-  
-  if (!task) {
-    throw new Error('Task not found: ' + taskId);
-  }
-  
-  const taskName = task.name;
-  deleteObject(task);
-  
-  return {
-    id: taskId,
-    name: taskName,
-    deleted: true,
-    message: 'Task deleted successfully'
-  };
+  (() => {
+    const taskId = {{taskId}};
+    const task = Task.byIdentifier(taskId);
+    
+    if (!task) {
+      throw new Error('Task not found: ' + taskId);
+    }
+    
+    const taskName = task.name;
+    deleteObject(task);
+    
+    return {
+      id: taskId,
+      name: taskName,
+      deleted: true,
+      message: 'Task deleted successfully'
+    };
+  })()
 `;

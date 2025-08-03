@@ -47,18 +47,20 @@ export const COMPLETE_TASK_SCRIPT = `
  * Script to complete a task using OmniAutomation (URL scheme fallback)
  */
 export const COMPLETE_TASK_OMNI_SCRIPT = `
-  const taskId = {{taskId}};
-  const task = Task.byIdentifier(taskId);
-  
-  if (!task) {
-    throw new Error('Task not found: ' + taskId);
-  }
-  
-  task.markComplete();
-  
-  return {
-    id: taskId,
-    completed: true,
-    message: 'Task completed successfully'
-  };
+  (() => {
+    const taskId = {{taskId}};
+    const task = Task.byIdentifier(taskId);
+    
+    if (!task) {
+      throw new Error('Task not found: ' + taskId);
+    }
+    
+    task.markComplete();
+    
+    return {
+      id: taskId,
+      completed: true,
+      message: 'Task completed successfully'
+    };
+  })()
 `;
