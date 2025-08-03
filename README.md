@@ -23,6 +23,7 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
   - Supports inbox filtering and availability checks  
   - Supports up to 1000 tasks with proper pagination metadata
   - Results cached for 1 minute for lightning-fast repeated queries
+  - Use `skipAnalysis: true` for ~30% faster queries (skips recurring task analysis)
 - `get_task_count` - Get count of tasks matching filters without data
   - Same filtering options as list_tasks
   - Returns count only for performance
@@ -359,6 +360,13 @@ The server implements intelligent caching with different TTLs for different data
 - **Tags**: 20 minutes (relatively stable)
 
 Cache is automatically invalidated on write operations.
+
+### Performance Optimization
+
+The `list_tasks` tool includes a `skipAnalysis` parameter for better performance:
+- Set `skipAnalysis: true` to skip recurring task analysis (~30% faster)
+- Useful when you don't need recurring task details
+- Tasks are still returned with all data except recurring analysis
 
 ### OmniAutomation Integration
 

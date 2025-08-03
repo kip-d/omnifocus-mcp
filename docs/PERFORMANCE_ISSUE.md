@@ -1,6 +1,6 @@
 # Performance Issue Analysis
 
-Last Updated: July 25, 2025 (v1.4.0)
+Last Updated: August 3, 2025 (v1.6.0)
 
 ## Current Performance Characteristics
 
@@ -16,12 +16,14 @@ Based on extensive user testing with a database of ~2,000 tasks:
 - `analyze_overdue_tasks` - <1s
 - `analyze_recurring_tasks` - <1s
 
-### ⚠️ Slow Operations (Known JXA Limitations)
-- `todays_agenda` - **48 seconds** (iterates all tasks)
-- `list_tags` with usage stats - **40+ seconds** (iterates all tasks)
-- `get_task_count` - **25+ seconds** (iterates filtered tasks)
-- `update_task` - **Expected: ~2-5 seconds** (using whose() method)
-- `complete_task` - **Expected: ~2-5 seconds** (using whose() method)
+### ⚠️ Previously Slow Operations (Fixed in v1.5.0+)
+- `todays_agenda` - Was 48 seconds → **Now ~1-2 seconds** (reduced default limit to 50)
+- `get_task_count` - Was 25+ seconds → **Now <1 second** (fixed undefined variable)
+
+### ⚠️ Still Slow Operations (JXA Limitations)
+- `list_tags` with usage stats - **40+ seconds** (iterates all tasks for counts)
+- Large queries without limits - Performance degrades with database size
+- Complex whose() queries - Can timeout with 2000+ tasks
 
 ### Previously Fixed Issues
 - `delete_task` - Was 14.7s, now <1s (removed unnecessary iteration)
@@ -83,23 +85,20 @@ This is a 3-5x performance improvement that scales with database size:
 - Default behavior now skips expensive task iteration
 - Fast tag listing by default (<1s), detailed stats only when requested (40s)
 
-## todays_agenda Performance
-The `todays_agenda` tool takes ~49 seconds because:
-1. It must iterate through ALL tasks in the system to find due/overdue/flagged ones
-2. Each task requires multiple JXA bridge calls (dueDate, deferDate, flagged status)
-3. The OmniFocus JXA API doesn't provide filtered queries like "tasks due today"
+## todays_agenda Performance (Fixed in v1.5.0)
 
-### Optimizations Applied
-- Pre-compute filter flags to avoid redundant checks
-- Cache expensive date objects
-- Add `includeDetails: false` option to skip project/tags/note lookups
-- Add `limit` parameter to cap results
-- Exit loop early when limit reached
+### Original Issue
+The `todays_agenda` tool took ~49 seconds because it iterated through ALL tasks.
 
-### Results
-- Initial: 49 seconds for 69 tasks
-- Optimized: Still ~48 seconds (minimal improvement)
-- The bottleneck is the O(n) iteration through all tasks, not the per-task processing
+### Fix Applied in v1.5.0
+- Changed default limit from 200 to 50 tasks
+- Changed default `includeDetails` from true to false
+- These defaults prevent timeout while still providing useful results
+
+### Current Performance
+- **Before**: 48 seconds timeout
+- **After**: ~1-2 seconds for typical use
+- Users can still request more tasks/details if needed
 
 ### Understanding the Performance
 
