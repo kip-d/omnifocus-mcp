@@ -25,10 +25,12 @@ export const COMPLETE_TASK_SCRIPT = `
       
       const task = tasks[0];
       
-      // Mark as completed
-      task.completed = true;
+      // Mark as completed using the proper method
+      // markComplete() expects either no args or an object with date property
       if (completionDate) {
-        task.completionDate = completionDate;
+        task.markComplete({date: completionDate});
+      } else {
+        task.markComplete();
       }
       
       return JSON.stringify({
