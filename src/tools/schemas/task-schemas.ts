@@ -183,8 +183,8 @@ export const UpdateTaskSchema = z.object({
     .describe('New task note'),
   
   projectId: z.union([IdSchema, z.null()])
-    .optional()
-    .describe('New project ID (or null to move to inbox)'),
+    .describe('New project ID from list_projects (or null to move to inbox)')
+    .optional(),
   
   flagged: coerceBoolean()
     .optional()

@@ -90,7 +90,10 @@ export const UPDATE_TASK_SCRIPT = `
     // Update project assignment with better error handling
     if (updates.projectId !== undefined) {
       try {
-        if (updates.projectId === "" || updates.projectId === null) {
+        if (updates.projectId === "") {
+          // Move to inbox - set assignedContainer to null
+          task.assignedContainer = null;
+        } else if (updates.projectId === null) {
           // Move to inbox - set assignedContainer to null
           task.assignedContainer = null;
         } else {
@@ -131,7 +134,7 @@ export const UPDATE_TASK_SCRIPT = `
           } catch (deleteError) {
             // If delete fails, try to at least update the reference
             try {
-              task.assignedContainer = targetProject;
+              task.assignedContainer = targetProject; // task.assignedContainer = projects[i]
               // If direct assignment worked, we're done - no need to recreate
             } catch (assignError) {
               throw new Error("Failed to move task: could not delete original or reassign");

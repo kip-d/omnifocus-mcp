@@ -13,11 +13,11 @@
    │   ├── complete-task.ts (63 lines)
    │   ├── delete-task.ts (62 lines)
    │   ├── get-task-count.ts (118 lines)
-   │   ├── update-task.ts (267 lines) ✅ NEW
-   │   ├── todays-agenda.ts (224 lines) ✅ NEW
-   │   └── list-tasks.ts (166 lines) - Placeholder
-   ├── tasks-legacy.ts (1,740 lines) - Original file
-   └── tasks.ts (25 lines) - Facade for backward compatibility
+   │   ├── update-task.ts (267 lines)
+   │   ├── todays-agenda.ts (224 lines)
+   │   └── list-tasks.ts (565 lines) ✅ COMPLETE
+   ├── tasks-legacy.ts (1,740 lines) - TO BE REMOVED
+   └── tasks.ts (18 lines) - Facade for backward compatibility
    ```
 
 2. **Extracted common helpers**:
@@ -53,12 +53,15 @@
    - Configurable detail levels
    - Performance metrics tracking
 
-### Remaining Script:
+### All Scripts Extracted! ✅
 
-1. **LIST_TASKS_SCRIPT** (~550 lines) ⏳
+1. **LIST_TASKS_SCRIPT** (~565 lines) ✅ COMPLETE
    - Most complex script with plugins and filters
-   - Needs careful refactoring to preserve functionality
-   - Consider breaking into smaller functions
+   - Preserved all functionality including:
+     - Gaming and Core analyzers for recurring tasks
+     - Tag-based collection optimization
+     - Advanced filtering system
+     - Performance metrics tracking
 
 ## Phase 3: TODO - Apply Pattern to Other Scripts
 

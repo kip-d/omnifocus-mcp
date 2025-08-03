@@ -9,7 +9,20 @@ export const LIST_PROJECTS_SCRIPT = `
   
   ${SAFE_UTILITIES_SCRIPT}
   
+  // Additional helper functions for projects
+  function safeGetStatus(project) {
+    try {
+      const status = project.status();
+      return status || 'active';
+    } catch (e) {
+      return 'active';
+    }
+  }
+  
   try {
+    const app = Application('OmniFocus');
+    const doc = app.defaultDocument();
+    
     const allProjects = doc.flattenedProjects();
     
     // Check if allProjects is null or undefined
@@ -30,7 +43,7 @@ export const LIST_PROJECTS_SCRIPT = `
         if (!filter.status.includes(projectStatus)) continue;
       }
       
-      if (filter.flagged !== undefined && safeIsFlagged(project) !== filter.flagged) continue;
+      if (filter.flagged !== undefined && isFlagged(project) !== filter.flagged) continue;
       
       // Apply search filter
       if (filter.search) {
@@ -48,7 +61,7 @@ export const LIST_PROJECTS_SCRIPT = `
         id: safeGet(() => project.id(), 'unknown'),
         name: safeGet(() => project.name(), 'Unnamed Project'),
         status: safeGetStatus(project),
-        flagged: safeIsFlagged(project)
+        flagged: isFlagged(project)
       };
       
       // Add optional properties safely
@@ -157,7 +170,7 @@ export const LIST_PROJECTS_SCRIPT = `
                 }
               }
               
-              if (safeIsFlagged(task)) {
+              if (isFlagged(task)) {
                 flagged++;
               }
               

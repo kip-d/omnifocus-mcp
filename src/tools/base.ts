@@ -167,14 +167,24 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
       };
     }
     if (schema instanceof z.ZodOptional) {
-      return this.zodTypeToJsonSchema(schema._def.innerType);
+      const result = this.zodTypeToJsonSchema(schema._def.innerType);
+      // Preserve the optional's description if it has one
+      if (schema.description) {
+        result.description = schema.description;
+      }
+      return result;
     }
     if (schema instanceof z.ZodUnion) {
       const options = schema._def.options;
       if (options.length === 2 && options.some((o: any) => o instanceof z.ZodNull)) {
         // Handle nullable fields
         const nonNull = options.find((o: any) => !(o instanceof z.ZodNull));
-        return this.zodTypeToJsonSchema(nonNull);
+        const result = this.zodTypeToJsonSchema(nonNull);
+        // Preserve the union's description if it has one
+        if (schema.description) {
+          result.description = schema.description;
+        }
+        return result;
       }
     }
     if (schema instanceof z.ZodEnum) {

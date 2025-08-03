@@ -12,14 +12,7 @@ export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task
 export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { UPDATE_TASK_SCRIPT } from './tasks/update-task.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
-
-// For complex scripts, temporarily import from legacy file
-// These will be refactored in the next iteration
-import { 
-  LIST_TASKS_SCRIPT as LEGACY_LIST_TASKS
-} from './tasks-legacy.js';
-
-export const LIST_TASKS_SCRIPT = LEGACY_LIST_TASKS;
+export { LIST_TASKS_SCRIPT } from './tasks/list-tasks.js';
 
 // Legacy helper export
 export { SAFE_UTILITIES_SCRIPT } from './shared/helpers.js';
