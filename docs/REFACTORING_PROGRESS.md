@@ -13,9 +13,11 @@
    │   ├── complete-task.ts (63 lines)
    │   ├── delete-task.ts (62 lines)
    │   ├── get-task-count.ts (118 lines)
+   │   ├── update-task.ts (267 lines) ✅ NEW
+   │   ├── todays-agenda.ts (224 lines) ✅ NEW
    │   └── list-tasks.ts (166 lines) - Placeholder
    ├── tasks-legacy.ts (1,740 lines) - Original file
-   └── tasks.ts (27 lines) - Facade for backward compatibility
+   └── tasks.ts (25 lines) - Facade for backward compatibility
    ```
 
 2. **Extracted common helpers**:
@@ -35,23 +37,28 @@
 - **Easier maintenance**: 60-120 line files vs 1,740 line monolith
 - **Type safety**: Each script module can have proper types
 
-## Phase 2: TODO - Complex Scripts
+## Phase 2: Complex Scripts Extraction ✅
 
-The following scripts still need extraction from `tasks-legacy.ts`:
+### Extracted Scripts:
 
-1. **LIST_TASKS_SCRIPT** (~550 lines)
+1. **UPDATE_TASK_SCRIPT** (~267 lines) ✅
+   - Project reassignment logic with delete/recreate fallback
+   - Tag updates with comprehensive error handling
+   - Date handling with null support
+   - Claude Desktop numeric ID bug detection
+
+2. **TODAYS_AGENDA_SCRIPT** (~224 lines) ✅
+   - Performance-optimized queries
+   - Complex date filtering for overdue/today/flagged
+   - Configurable detail levels
+   - Performance metrics tracking
+
+### Remaining Script:
+
+1. **LIST_TASKS_SCRIPT** (~550 lines) ⏳
    - Most complex script with plugins and filters
    - Needs careful refactoring to preserve functionality
    - Consider breaking into smaller functions
-
-2. **UPDATE_TASK_SCRIPT** (~200 lines)
-   - Project reassignment logic
-   - Tag updates
-   - Date handling
-
-3. **TODAYS_AGENDA_SCRIPT** (~150 lines)
-   - Performance-optimized queries
-   - Complex date filtering
 
 ## Phase 3: TODO - Apply Pattern to Other Scripts
 
