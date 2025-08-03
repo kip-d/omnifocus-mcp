@@ -27,9 +27,19 @@ export class OmniAutomation {
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
-    const wrappedScript = this.wrapScript(script);
+    // Check if script already has its own IIFE wrapper and app/doc initialization
+    const hasIIFE = script.includes('(() =>') || script.includes('(function');
+    const hasAppInit = script.includes("Application('OmniFocus')");
+    
+    // Only wrap if the script doesn't already have its own structure
+    const wrappedScript = hasIIFE && hasAppInit ? script : this.wrapScript(script);
 
-    logger.debug('Executing OmniAutomation script', { scriptLength: script.length });
+    logger.debug('Executing OmniAutomation script', { 
+      scriptLength: script.length,
+      hasIIFE,
+      hasAppInit,
+      wrapped: wrappedScript !== script
+    });
     logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
     return new Promise((resolve, reject) => {
@@ -155,7 +165,8 @@ export class OmniAutomation {
           });
         }
         
-        ${script}
+        // Execute the actual script and return its result
+        return ${script}
       } catch (error) {
         const errorMessage = error && error.toString ? error.toString() : 'Unknown error occurred';
         const errorStack = error && error.stack ? error.stack : 'No stack trace available';

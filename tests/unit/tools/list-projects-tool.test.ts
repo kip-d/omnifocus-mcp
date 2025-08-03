@@ -70,14 +70,19 @@ describe('ListProjectsTool', () => {
         includeStats: true 
       });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          filter: {},
-          limit: 10,
-          includeStats: true
-        })
-      );
+      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
+      expect(template).toContain('const filter = {{filter}}');
+      expect(template).toContain('const includeStats = {{includeStats}}');
+      expect(params).toEqual({
+        filter: {
+          includeTaskCounts: true,
+          sortBy: 'name',
+          sortOrder: 'asc'
+        },
+        limit: 10,
+        includeStats: true
+      });
     });
 
     it('should default includeStats to false', async () => {
@@ -90,12 +95,19 @@ describe('ListProjectsTool', () => {
 
       await tool.execute({ limit: 10 });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          includeStats: false
-        })
-      );
+      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
+      expect(template).toContain('const filter = {{filter}}');
+      expect(template).toContain('const includeStats = {{includeStats}}');
+      expect(params).toEqual({
+        filter: {
+          includeTaskCounts: true,
+          sortBy: 'name',
+          sortOrder: 'asc'
+        },
+        limit: 10,
+        includeStats: false
+      });
     });
 
     it('should include stats in project response when enabled', async () => {

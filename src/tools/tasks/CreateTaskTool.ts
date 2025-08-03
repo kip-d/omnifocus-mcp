@@ -29,7 +29,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData });
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
 
-      if ('error' in result && result.error) {
+      if (result && typeof result === 'object' && 'error' in result && result.error) {
         throw new McpError(ErrorCode.InternalError, result.message || 'Unknown error');
       }
 
@@ -46,6 +46,15 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         );
       }
 
+      // Check if parsedResult is valid
+      if (!parsedResult || typeof parsedResult !== 'object') {
+        throw new McpError(
+          ErrorCode.InternalError,
+          'Invalid response from create task script',
+          { received: parsedResult }
+        );
+      }
+
       // Invalidate cache after successful task creation
       this.cache.invalidate('tasks');
 
@@ -55,7 +64,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         { task: parsedResult as CreateTaskResponse },
         {
           ...timer.toMetadata(),
-          created_id: parsedResult.taskId,
+          created_id: parsedResult.taskId || null,
           project_id: args.projectId || null,
           input_params: {
             name: args.name,

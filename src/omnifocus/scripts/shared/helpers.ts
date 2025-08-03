@@ -111,6 +111,34 @@ export const SAFE_UTILITIES = `
       return null;
     }
   }
+  
+  function safeGetFolder(project) {
+    try {
+      const container = project.container();
+      if (container && container.constructor.name === 'Folder') {
+        return safeGet(() => container.name());
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTaskCount(project) {
+    try {
+      return project.numberOfTasks() || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  
+  function safeIsCompleted(task) {
+    try {
+      return task.completed() === true;
+    } catch (e) {
+      return false;
+    }
+  }
 `;
 
 /**
@@ -120,8 +148,29 @@ export const PROJECT_VALIDATION = `
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
     
-    const projects = doc.flattenedProjects.whose({id: projectId})();
-    if (projects.length === 0) {
+    // Try whose() first for performance
+    let foundProject = null;
+    try {
+      const projects = doc.flattenedProjects.whose({id: projectId})();
+      if (projects && projects.length > 0) {
+        foundProject = projects[0];
+      }
+    } catch (e) {
+      // whose() failed, fall back to iteration
+    }
+    
+    // Fall back to iteration if whose() didn't work
+    if (!foundProject) {
+      const projects = doc.flattenedProjects();
+      for (let i = 0; i < projects.length; i++) {
+        if (projects[i].id() === projectId) {
+          foundProject = projects[i];
+          break;
+        }
+      }
+    }
+    
+    if (!foundProject) {
       // Check if it's a numeric-only ID (Claude Desktop bug)
       const isNumericOnly = /^\\d+$/.test(projectId);
       let errorMessage = 'Project not found: ' + projectId;
@@ -138,7 +187,7 @@ export const PROJECT_VALIDATION = `
     
     return { 
       valid: true, 
-      project: projects[0] 
+      project: foundProject 
     };
   }
 `;

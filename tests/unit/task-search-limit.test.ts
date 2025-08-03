@@ -21,6 +21,8 @@ describe('Task Search Limit Bug Fix', () => {
     // Verify projectId support was added
     expect(UPDATE_TASK_SCRIPT).toContain('if (updates.projectId !== undefined)');
     expect(UPDATE_TASK_SCRIPT).toContain('task.assignedContainer = null');
-    expect(UPDATE_TASK_SCRIPT).toContain('projects[i].id() === updates.projectId');
+    // The pattern is now in validateProject helper function
+    expect(UPDATE_TASK_SCRIPT).toContain('validateProject(updates.projectId, doc)');
+    expect(UPDATE_TASK_SCRIPT).toContain('projects[i].id() === projectId');
   });
 });

@@ -206,19 +206,19 @@ describe('OmniFocus MCP Server Integration Tests', () => {
     });
 
     it('should handle missing required parameters', async () => {
-      const result = await sendRequest('tools/call', {
-        name: 'update_task',
-        arguments: {
-          // Missing required taskId
-          name: 'Updated name',
-        },
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.success).toBe(false);
-      expect(response).toHaveProperty('error');
-      expect(response.error).toHaveProperty('code');
-      expect(response.error.code).toBe('INVALID_PARAMS');
+      try {
+        await sendRequest('tools/call', {
+          name: 'update_task',
+          arguments: {
+            // Missing required taskId
+            name: 'Updated name',
+          },
+        });
+        expect.fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.message).toContain('Invalid parameters');
+        expect(error.message).toContain('taskId');
+      }
     });
   });
 });

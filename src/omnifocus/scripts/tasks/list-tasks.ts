@@ -11,13 +11,14 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Performance metrics
  */
 export const LIST_TASKS_SCRIPT = `
-  const filter = {{filter}};
-  const tasks = [];
-  
-  // Check if we should skip recurring analysis (default to false for backwards compatibility)
-  const skipRecurringAnalysis = filter.skipAnalysis === true;
-  
   ${getAllHelpers()}
+  
+  (() => {
+    const filter = {{filter}};
+    const tasks = [];
+    
+    // Check if we should skip recurring analysis (default to false for backwards compatibility)
+    const skipRecurringAnalysis = filter.skipAnalysis === true;
   
   // Initialize plugin system
   function initializePlugins() {
@@ -561,4 +562,5 @@ export const LIST_TASKS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'list_tasks');
   }
+  })();
 `;

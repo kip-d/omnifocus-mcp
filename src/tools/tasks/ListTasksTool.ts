@@ -44,7 +44,7 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
       this.logger.debug('Generated script length:', script.length);
       const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
 
-      if ('error' in result && result.error) {
+      if (result && typeof result === 'object' && 'error' in result && result.error) {
         return createErrorResponse(
           'list_tasks',
           'SCRIPT_ERROR',

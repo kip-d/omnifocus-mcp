@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Major Refactoring**: Modularized all large script files for better maintainability
+  - Extracted 1,740-line tasks.ts into 7 focused modules
+  - Extracted 700-line recurring.ts into 2 modules  
+  - Extracted 605-line analytics.ts into 3 modules
+  - Extracted 676-line projects.ts into 5 modules
+  - Extracted 401-line tags.ts into 2 modules
+  - Extracted 380-line export.ts into 2 modules
+- Created shared helpers module to eliminate code duplication across scripts
+- Improved script execution handling to detect self-contained IIFE scripts
+
+### Fixed
+- Script execution failures after refactoring due to double-wrapping of IIFE functions
+- Integration tests now properly handle modularized scripts
+- LIST_TASKS_SCRIPT now properly wrapped in IIFE for correct execution
+
+### Technical
+- Added automatic detection of script structure in OmniAutomation.ts
+- Scripts with their own IIFE and app initialization are no longer double-wrapped
+- Maintained backward compatibility with facade pattern for all script imports
+
 ## [1.6.0] - 2025-07-27
 
 ### Added

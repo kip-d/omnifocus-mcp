@@ -74,16 +74,18 @@ describe('ListTasksTool', () => {
         skipAnalysis: true 
       });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          filter: { 
-            completed: false,
-            limit: 10,
-            skipAnalysis: true
-          }
-        })
-      );
+      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
+      expect(template).toContain('const filter = {{filter}}');
+      expect(params).toEqual({
+        filter: { 
+          completed: false,
+          limit: 10,
+          skipAnalysis: true,
+          offset: 0,
+          sortOrder: 'asc'
+        }
+      });
     });
 
     it('should include analysis_skipped in performance metrics', async () => {
@@ -128,16 +130,18 @@ describe('ListTasksTool', () => {
         completed: false 
       });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          filter: { 
-            completed: false,
-            limit: 100,
-            skipAnalysis: false
-          }
-        })
-      );
+      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
+      expect(template).toContain('const filter = {{filter}}');
+      expect(params).toEqual({
+        filter: { 
+          completed: false,
+          limit: 100,
+          skipAnalysis: false,
+          offset: 0,
+          sortOrder: 'asc'
+        }
+      });
     });
   });
 
