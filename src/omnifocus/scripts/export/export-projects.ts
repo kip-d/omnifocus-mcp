@@ -14,6 +14,8 @@ export const EXPORT_PROJECTS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+    const format = {{format}};
+    const includeStats = {{includeStats}};
   
   try {
     const app = Application('OmniFocus');

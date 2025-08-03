@@ -6,7 +6,7 @@ import { ManageTagsSchema } from '../schemas/tag-schemas.js';
 
 export class ManageTagsTool extends BaseTool<typeof ManageTagsSchema> {
   name = 'manage_tags';
-  description = 'Create, rename, or delete tags in OmniFocus';
+  description = 'Create, rename, or delete tags in OmniFocus. Required: action (create/rename/delete/merge) and tagName. For rename: newName required. For merge: targetTag required.';
   schema = ManageTagsSchema;
 
   async executeValidated(args: z.infer<typeof ManageTagsSchema>): Promise<any> {
