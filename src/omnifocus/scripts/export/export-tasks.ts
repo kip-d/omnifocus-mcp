@@ -11,13 +11,14 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Proper CSV escaping for complex data
  */
 export const EXPORT_TASKS_SCRIPT = `
-  const filter = {{filter}};
-  const format = {{format}};
-  const fields = {{fields}};
-  
   ${getAllHelpers()}
   
-  try {
+  (() => {
+    const filter = {{filter}};
+    const format = {{format}};
+    const fields = {{fields}};
+    
+    try {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     const tasks = [];
@@ -196,4 +197,5 @@ export const EXPORT_TASKS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'export_tasks');
   }
+  })();
 `;

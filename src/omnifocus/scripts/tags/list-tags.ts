@@ -11,11 +11,12 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Performance optimized with tag map for O(1) lookups
  */
 export const LIST_TAGS_SCRIPT = `
-  const options = {{options}};
-  
   ${getAllHelpers()}
   
-  try {
+  (() => {
+    const options = {{options}};
+    
+    try {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     const startTime = Date.now();
@@ -145,4 +146,5 @@ export const LIST_TAGS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'list_tags');
   }
+  })();
 `;

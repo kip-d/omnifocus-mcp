@@ -14,14 +14,15 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Limited default results
  */
 export const TODAYS_AGENDA_SCRIPT = `
-  const options = {{options}};
-  const tasks = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  
   ${getAllHelpers()}
+  
+  (() => {
+    const options = {{options}};
+    const tasks = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
   
   // Helper function for safe completed check
   function safeIsCompleted(task) {
@@ -239,4 +240,5 @@ export const TODAYS_AGENDA_SCRIPT = `
   } catch (error) {
     return formatError(error, 'todays_agenda');
   }
+  })();
 `;

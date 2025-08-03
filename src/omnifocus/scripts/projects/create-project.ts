@@ -10,12 +10,13 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Proper error handling and validation
  */
 export const CREATE_PROJECT_SCRIPT = `
-  const name = {{name}};
-  const options = {{options}};
-  
   ${getAllHelpers()}
   
-  try {
+  (() => {
+    const name = {{name}};
+    const options = {{options}};
+    
+    try {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     
@@ -108,4 +109,5 @@ export const CREATE_PROJECT_SCRIPT = `
   } catch (error) {
     return formatError(error, 'create_project');
   }
+  })();
 `;

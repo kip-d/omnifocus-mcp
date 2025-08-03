@@ -10,12 +10,13 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Claude Desktop numeric ID bug detection
  */
 export const UPDATE_TASK_SCRIPT = `
-  const taskId = {{taskId}};
-  const updates = {{updates}};
-  
   ${getAllHelpers()}
   
-  try {
+  (() => {
+    const taskId = {{taskId}};
+    const updates = {{updates}};
+    
+    try {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     
@@ -318,4 +319,5 @@ export const UPDATE_TASK_SCRIPT = `
   } catch (error) {
     return formatError(error, 'update_task');
   }
+  })();
 `;

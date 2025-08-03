@@ -11,12 +11,13 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Enhanced properties like next task, review dates, and sequential settings
  */
 export const LIST_PROJECTS_SCRIPT = `
-  const filter = {{filter}};
-  const limit = {{limit}};
-  const includeStats = {{includeStats}};
-  const projects = [];
-  
   ${getAllHelpers()}
+  
+  (() => {
+    const filter = {{filter}};
+    const limit = {{limit}};
+    const includeStats = {{includeStats}};
+    const projects = [];
   
   // Additional helper functions for projects
   function safeGetStatus(project) {
@@ -239,4 +240,5 @@ export const LIST_PROJECTS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'list_projects');
   }
+  })();
 `;

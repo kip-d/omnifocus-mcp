@@ -11,9 +11,10 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Grouping by project, tag, or day
  */
 export const PRODUCTIVITY_STATS_SCRIPT = `
-  const options = {{options}};
-  
   ${getAllHelpers()}
+  
+  (() => {
+    const options = {{options}};
   
   // Helper to check if task is completed (add if not in helpers)
   function safeIsCompleted(task) {
@@ -230,4 +231,5 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
   } catch (error) {
     return formatError(error, 'productivity_stats');
   }
+  })();
 `;
