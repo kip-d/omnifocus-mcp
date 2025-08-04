@@ -5,7 +5,7 @@ import { GetRecurringPatternsSchema } from '../schemas/system-schemas.js';
 
 export class GetRecurringPatternsTool extends BaseTool<typeof GetRecurringPatternsSchema> {
   name = 'get_recurring_patterns';
-  description = 'Get patterns and statistics about recurring task frequencies';
+  description = 'Get recurring task frequency patterns and statistics. Default activeOnly=true. Override with includeCompleted or includeDropped. Returns frequency distribution and common patterns.';
   schema = GetRecurringPatternsSchema;
 
   async executeValidated(args: z.infer<typeof GetRecurringPatternsSchema>): Promise<any> {

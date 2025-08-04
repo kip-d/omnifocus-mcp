@@ -5,7 +5,7 @@ import { TaskVelocitySchema } from '../schemas/analytics-schemas.js';
 
 export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
   name = 'get_task_velocity';
-  description = 'Analyze task completion velocity and throughput metrics';
+  description = 'Analyze task completion velocity and throughput. Period: today|week|month|quarter|year. Filter by projectId or tags. Returns completion rate, average time, and patterns. Cached 1 hour.';
   schema = TaskVelocitySchema;
 
   async executeValidated(args: z.infer<typeof TaskVelocitySchema>): Promise<any> {

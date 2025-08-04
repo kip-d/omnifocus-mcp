@@ -6,7 +6,7 @@ import { TodaysAgendaSchema } from '../schemas/task-schemas.js';
 
 export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
   name = 'todays_agenda';
-  description = 'Get today\'s agenda - all tasks due today, overdue, or flagged';
+  description = 'Get today\'s agenda with tasks due today, overdue, and optionally flagged. Default limit=50 for performance. Set includeDetails=false (default) for faster response. Options: includeFlagged=true, includeOverdue=true, includeAvailable=true control what\'s included.';
   schema = TodaysAgendaSchema;
 
   async executeValidated(args: z.infer<typeof TodaysAgendaSchema>): Promise<any> {

@@ -9,7 +9,7 @@ import { BulkExportSchema } from '../schemas/export-schemas.js';
 
 export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
   name = 'bulk_export';
-  description = 'Export all OmniFocus data (tasks, projects, tags) to files';
+  description = 'Export all OmniFocus data to files. Specify outputDirectory. Format: json|csv. Set includeCompleted=true for complete backup, includeProjectStats for metrics. Creates 3 files.';
   schema = BulkExportSchema;
 
   async executeValidated(args: z.infer<typeof BulkExportSchema>): Promise<any> {

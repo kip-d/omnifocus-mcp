@@ -6,7 +6,7 @@ import { ListProjectsSchema } from '../schemas/project-schemas.js';
 
 export class ListProjectsTool extends BaseTool<typeof ListProjectsSchema> {
   name = 'list_projects';
-  description = 'List projects from OmniFocus with filtering options';
+  description = 'List projects from OmniFocus. Filter by status, flagged, folder, or search. Set includeStats=false (default) for faster queries, includeTaskCounts=true for task metrics. Default limit=100. Cached for performance.';
   schema = ListProjectsSchema;
 
   async executeValidated(args: z.infer<typeof ListProjectsSchema>): Promise<any> {

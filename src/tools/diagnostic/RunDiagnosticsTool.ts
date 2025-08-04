@@ -5,7 +5,7 @@ import { RunDiagnosticsSchema } from '../schemas/system-schemas.js';
 
 export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
   name = 'run_diagnostics';
-  description = 'Run comprehensive diagnostics to identify connection issues with OmniFocus';
+  description = 'Run diagnostics to identify OmniFocus connection issues. Tests permissions, script execution, and data access. Optionally provide testScript for custom diagnostics.';
   schema = RunDiagnosticsSchema;
 
   private diagnosticOmni: DiagnosticOmniAutomation;

@@ -5,7 +5,7 @@ import { AnalyzeRecurringTasksSchema } from '../schemas/system-schemas.js';
 
 export class AnalyzeRecurringTasksTool extends BaseTool<typeof AnalyzeRecurringTasksSchema> {
   name = 'analyze_recurring_tasks';
-  description = 'Analyze recurring tasks with frequency, due dates, and patterns';
+  description = 'Analyze recurring tasks for patterns. Default activeOnly=true (exclude completed/dropped). Override with includeCompleted or includeDropped. Set includeHistory=true for completion patterns. Sort by: nextDue|frequency|name.';
   schema = AnalyzeRecurringTasksSchema;
 
   async executeValidated(args: z.infer<typeof AnalyzeRecurringTasksSchema>): Promise<any> {

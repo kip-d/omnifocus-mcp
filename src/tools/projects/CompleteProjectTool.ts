@@ -6,7 +6,7 @@ import { CompleteProjectSchema } from '../schemas/project-schemas.js';
 
 export class CompleteProjectTool extends BaseTool<typeof CompleteProjectSchema> {
   name = 'complete_project';
-  description = 'Mark a project as completed in OmniFocus';
+  description = 'Mark a project as completed in OmniFocus. Set completeAllTasks=true to complete all tasks within. Specify completionDate or defaults to now. Invalidates cache.';
   schema = CompleteProjectSchema;
 
   async executeValidated(args: z.infer<typeof CompleteProjectSchema>): Promise<any> {

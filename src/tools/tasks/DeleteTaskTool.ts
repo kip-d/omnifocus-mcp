@@ -7,7 +7,7 @@ import { DeleteTaskSchema } from '../schemas/task-schemas.js';
 
 export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
   name = 'delete_task';
-  description = 'Delete (drop) a task in OmniFocus';
+  description = 'Delete (drop) a task permanently from OmniFocus. This cannot be undone. Task will be removed from all projects and contexts.';
   schema = DeleteTaskSchema;
 
   async executeValidated(args: z.infer<typeof DeleteTaskSchema>): Promise<StandardResponse<any>> {

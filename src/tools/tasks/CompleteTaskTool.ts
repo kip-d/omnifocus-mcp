@@ -8,7 +8,7 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
   name = 'complete_task';
-  description = 'Mark a task as completed in OmniFocus';
+  description = 'Mark a task as completed in OmniFocus. Optionally specify completionDate in local time (defaults to now). Updates cache after completion.';
   schema = CompleteTaskSchema;
 
   async executeValidated(args: z.infer<typeof CompleteTaskSchema>): Promise<StandardResponse<any>> {

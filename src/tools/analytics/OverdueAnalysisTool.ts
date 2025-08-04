@@ -5,7 +5,7 @@ import { OverdueAnalysisSchema } from '../schemas/analytics-schemas.js';
 
 export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> {
   name = 'analyze_overdue_tasks';
-  description = 'Analyze overdue tasks to identify patterns and bottlenecks';
+  description = 'Analyze overdue tasks for patterns and bottlenecks. Set includeRecentlyCompleted=true for completed overdue tasks. Group by: project|tag|duration. Default limit=100. Cached 30 min.';
   schema = OverdueAnalysisSchema;
 
   async executeValidated(args: z.infer<typeof OverdueAnalysisSchema>): Promise<any> {

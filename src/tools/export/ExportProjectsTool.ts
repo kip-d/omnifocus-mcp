@@ -6,7 +6,7 @@ import { ExportProjectsSchema } from '../schemas/export-schemas.js';
 
 export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
   name = 'export_projects';
-  description = 'Export all projects in JSON or CSV format with optional statistics';
+  description = 'Export all projects to JSON/CSV. Format: json|csv (default json). Set includeStats=true for task metrics per project (slower). Returns file content for saving.';
   schema = ExportProjectsSchema;
 
   async executeValidated(args: z.infer<typeof ExportProjectsSchema>): Promise<any> {

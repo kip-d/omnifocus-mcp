@@ -6,7 +6,7 @@ import { DeleteProjectSchema } from '../schemas/project-schemas.js';
 
 export class DeleteProjectTool extends BaseTool<typeof DeleteProjectSchema> {
   name = 'delete_project';
-  description = 'Delete a project from OmniFocus';
+  description = 'Delete a project permanently from OmniFocus. Set deleteTasks=true to delete all tasks (otherwise move to inbox). This cannot be undone. Invalidates cache.';
   schema = DeleteProjectSchema;
 
   async executeValidated(args: z.infer<typeof DeleteProjectSchema>): Promise<any> {

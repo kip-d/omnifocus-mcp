@@ -8,7 +8,7 @@ import { ListTasksSchema } from '../schemas/task-schemas.js';
 
 export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
   name = 'list_tasks';
-  description = 'List tasks from OmniFocus with advanced filtering options';
+  description = 'List tasks from OmniFocus. Performance: Use skipAnalysis=true for 30% faster queries, limit=50 for quick results. Key filters: completed, flagged, projectId, tags, dueBefore/After, search. Returns cached results when available.';
   schema = ListTasksSchema;
 
   async executeValidated(args: z.infer<typeof ListTasksSchema>): Promise<ListTasksResponse> {

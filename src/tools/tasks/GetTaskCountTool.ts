@@ -6,7 +6,7 @@ import { GetTaskCountSchema } from '../schemas/task-schemas.js';
 
 export class GetTaskCountTool extends BaseTool<typeof GetTaskCountSchema> {
   name = 'get_task_count';
-  description = 'Get the count of tasks matching filters without returning the actual task data';
+  description = 'Get count of tasks matching filters without full data (faster than list_tasks). Supports all list_tasks filters. Use skipAnalysis=true for 30% speed boost. Cached for performance.';
   schema = GetTaskCountSchema;
 
   async executeValidated(args: z.infer<typeof GetTaskCountSchema>): Promise<any> {

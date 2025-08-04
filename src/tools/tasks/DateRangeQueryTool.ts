@@ -10,7 +10,7 @@ import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSche
 
 export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema> {
   name = 'query_tasks_by_date';
-  description = 'Query tasks by date range using optimized whose() filters. Supports due dates, defer dates, and completion dates.';
+  description = 'Query tasks by date range with optimized performance. Use queryType: overdue|upcoming|date_range. For date_range: specify dateField (dueDate|deferDate|completionDate), includeNullDates=true for tasks without dates. Default limit=100.';
   schema = DateRangeQueryToolSchema;
 
   async executeValidated(args: z.infer<typeof DateRangeQueryToolSchema>): Promise<any> {
@@ -164,7 +164,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
 
 export class OverdueTasksTool extends BaseTool<typeof OverdueTasksToolSchema> {
   name = 'get_overdue_tasks';
-  description = 'Get all overdue tasks using optimized whose() queries. Faster than using list_tasks with date filters.';
+  description = 'Get overdue tasks with optimized performance (~2x faster than list_tasks). Set includeCompleted=true to include completed overdue tasks. Default limit=50. Returns tasks sorted by most overdue first.';
   schema = OverdueTasksToolSchema;
 
   async executeValidated(args: z.infer<typeof OverdueTasksToolSchema>): Promise<any> {
@@ -181,7 +181,7 @@ export class OverdueTasksTool extends BaseTool<typeof OverdueTasksToolSchema> {
 
 export class UpcomingTasksTool extends BaseTool<typeof UpcomingTasksToolSchema> {
   name = 'get_upcoming_tasks';
-  description = 'Get upcoming tasks for the next N days using optimized whose() queries. Faster than using list_tasks with date filters.';
+  description = 'Get upcoming tasks for next N days with optimized performance. Specify days (default=7), includeToday=true to include today\'s tasks. Default limit=50. Returns tasks sorted by due date.';
   schema = UpcomingTasksToolSchema;
 
   async executeValidated(args: z.infer<typeof UpcomingTasksToolSchema>): Promise<any> {

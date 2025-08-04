@@ -6,7 +6,7 @@ import { GetVersionInfoSchema } from '../schemas/system-schemas.js';
 
 export class GetVersionInfoTool extends BaseTool<typeof GetVersionInfoSchema> {
   name = 'get_version_info';
-  description = 'Get version information including git commit hash and build details';
+  description = 'Get MCP server version info including version number, git commit hash, build timestamp, and environment details. Useful for debugging and support.';
   schema = GetVersionInfoSchema;
 
   async executeValidated(_args: z.infer<typeof GetVersionInfoSchema>): Promise<any> {

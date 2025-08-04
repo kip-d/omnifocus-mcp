@@ -5,7 +5,7 @@ import { ProductivityStatsSchema } from '../schemas/analytics-schemas.js';
 
 export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSchema> {
   name = 'get_productivity_stats';
-  description = 'Get productivity statistics including completion rates, task velocity, and time distribution. Valid period values: "today", "week", "month", "quarter", "year" (NOT "last_week" or other variations)';
+  description = 'Get productivity statistics with completion rates and velocity. Period must be: today|week|month|quarter|year (not "last_week"). Group by: project|tag|none. Set includeCompleted=true for historical analysis. Cached 1 hour.';
   schema = ProductivityStatsSchema;
 
   async executeValidated(args: z.infer<typeof ProductivityStatsSchema>): Promise<any> {
