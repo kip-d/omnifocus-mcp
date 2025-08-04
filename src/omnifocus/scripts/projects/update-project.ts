@@ -14,6 +14,8 @@ export const UPDATE_PROJECT_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  const projectId = {{projectId}};
+  const updates = {{updates}};
   
   try {
     const app = Application('OmniFocus');

@@ -43,11 +43,21 @@ export const GET_TASKS_IN_DATE_RANGE_SCRIPT = `
       // For due dates, we can use effective queries
       if (startDate && endDate) {
         // Tasks due between two dates
-        // whose() doesn't support complex date ranges directly, so we'll use a hybrid approach
-        queryMethod = 'hybrid_filter';
+        // Use whose() to pre-filter to tasks with due dates
+        queryMethod = 'whose_due_not_null';
         
-        // Get all tasks - whose() with null comparisons is problematic in JXA
-        const allTasks = doc.flattenedTasks();
+        let allTasks;
+        try {
+          // Get only incomplete tasks with due dates
+          allTasks = doc.flattenedTasks.whose({
+            completed: false,
+            dueDate: {_not: null}
+          })();
+        } catch (e) {
+          // Fallback to all tasks
+          allTasks = doc.flattenedTasks();
+          queryMethod = 'fallback_all_tasks';
+        }
         
         // Filter to date range
         for (let i = 0; i < allTasks.length && tasks.length < limit; i++) {
@@ -63,15 +73,25 @@ export const GET_TASKS_IN_DATE_RANGE_SCRIPT = `
         }
       } else if (startDate && !endDate) {
         // Tasks due after a specific date (future tasks)
-        queryMethod = 'future_due';
+        queryMethod = 'whose_future_due';
         
-        // Get all tasks and filter incomplete ones
-        const allTasks = doc.flattenedTasks();
-        const incompleteTasks = [];
-        for (let i = 0; i < allTasks.length; i++) {
-          if (!safeGet(() => allTasks[i].completed(), false)) {
-            incompleteTasks.push(allTasks[i]);
+        // Get incomplete tasks with due dates
+        let incompleteTasks;
+        try {
+          incompleteTasks = doc.flattenedTasks.whose({
+            completed: false,
+            dueDate: {_not: null}
+          })();
+        } catch (e) {
+          // Fallback
+          const allTasks = doc.flattenedTasks();
+          incompleteTasks = [];
+          for (let i = 0; i < allTasks.length; i++) {
+            if (!safeGet(() => allTasks[i].completed(), false)) {
+              incompleteTasks.push(allTasks[i]);
+            }
           }
+          queryMethod = 'fallback_filter';
         }
         
         for (let i = 0; i < incompleteTasks.length && tasks.length < limit; i++) {
@@ -244,13 +264,27 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
     
     // Get tasks based on completion status
     let allTasks;
+    let queryMethod = 'standard';
     
-    if (includeCompleted) {
-      // Include both complete and incomplete tasks
+    try {
+      if (includeCompleted) {
+        // Include both complete and incomplete tasks with due dates
+        allTasks = doc.flattenedTasks.whose({
+          dueDate: {_not: null}
+        })();
+        queryMethod = 'whose_due_not_null';
+      } else {
+        // Get only incomplete tasks with due dates
+        allTasks = doc.flattenedTasks.whose({
+          completed: false,
+          dueDate: {_not: null}
+        })();
+        queryMethod = 'whose_incomplete_with_due';
+      }
+    } catch (whoseError) {
+      // Fallback to standard query
       allTasks = doc.flattenedTasks();
-    } else {
-      // Get all tasks and filter incomplete ones inline
-      allTasks = doc.flattenedTasks();
+      queryMethod = 'fallback_all_tasks';
     }
     
     // Filter for overdue tasks
@@ -297,7 +331,8 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
         total: tasks.length,
         limited: tasks.length >= limit,
         query_time_ms: endTime - startTime,
-        reference_date: now.toISOString()
+        reference_date: now.toISOString(),
+        query_method: queryMethod
       }
     });
     

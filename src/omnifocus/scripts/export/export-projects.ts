@@ -43,14 +43,18 @@ export const EXPORT_PROJECTS_SCRIPT = `
       // Add status with safe access
       try {
         const statusObj = project.status();
-        // Status might be an object with a name property or a string
-        if (statusObj && typeof statusObj === 'object' && statusObj.name) {
-          projectData.status = statusObj.name;
-        } else if (typeof statusObj === 'string') {
-          // Clean up status string if it contains redundant words
-          projectData.status = statusObj.replace(/\s*status\s*/i, '').trim() || 'active';
-        } else {
+        if (!statusObj) {
           projectData.status = 'active';
+        } else {
+          // OmniFocus returns status as "active status", "done status", etc.
+          // Normalize to match our API expectations
+          const statusStr = statusObj.toString().toLowerCase();
+          
+          if (statusStr.includes('active')) projectData.status = 'active';
+          else if (statusStr.includes('done')) projectData.status = 'done';
+          else if (statusStr.includes('hold')) projectData.status = 'onHold';
+          else if (statusStr.includes('dropped')) projectData.status = 'dropped';
+          else projectData.status = 'active'; // Default
         }
       } catch (e) {
         projectData.status = 'active';
@@ -95,41 +99,36 @@ export const EXPORT_PROJECTS_SCRIPT = `
       // Add statistics if requested
       if (includeStats) {
         try {
-          const tasks = project.flattenedTasks();
-          let totalTasks = 0;
-          let completedTasks = 0;
-          let availableTasks = 0;
+          // Use built-in properties for basic counts (much faster)
+          const totalTasks = safeGet(() => project.numberOfTasks(), 0);
+          const completedTasks = safeGet(() => project.numberOfCompletedTasks(), 0);
+          const availableTasks = safeGet(() => project.numberOfAvailableTasks(), 0);
+          
+          // Only calculate detailed stats for smaller projects
           let overdueCount = 0;
           let flaggedCount = 0;
-          const now = new Date();
           
-          for (let j = 0; j < tasks.length; j++) {
-            const task = tasks[j];
-            totalTasks++;
+          // Skip detailed iteration for very large projects
+          if (totalTasks > 0 && totalTasks < 500) {
+            const tasks = project.flattenedTasks();
+            const now = new Date();
             
-            try {
-              if (task.completed()) {
-                completedTasks++;
-              } else {
-                try {
-                  if (!safeGet(() => task.effectivelyHidden(), true)) {
-                    availableTasks++;
-                  }
-                } catch (e) {
-                  availableTasks++;
-                }
-                try {
+            for (let j = 0; j < tasks.length; j++) {
+              const task = tasks[j];
+              
+              try {
+                if (!task.completed()) {
                   const dueDate = safeGet(() => task.dueDate());
                   if (dueDate && dueDate < now) {
                     overdueCount++;
                   }
-                } catch (e) {}
-              }
-              
-              if (task.flagged()) {
-                flaggedCount++;
-              }
-            } catch (e) {}
+                }
+                
+                if (task.flagged()) {
+                  flaggedCount++;
+                }
+              } catch (e) {}
+            }
           }
           
           projectData.stats = {

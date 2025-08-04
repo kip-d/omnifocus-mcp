@@ -14,6 +14,10 @@ export const MANAGE_TAGS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  const action = {{action}};
+  const tagName = {{tagName}};
+  const newName = {{newName}};
+  const targetTag = {{targetTag}};
   
   try {
     const app = Application('OmniFocus');

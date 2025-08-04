@@ -14,7 +14,7 @@ const logger = createLogger('server');
 const server = new Server(
   {
     name: 'omnifocus-mcp-cached',
-    version: '1.7.1',
+    version: '1.7.2',
   },
   {
     capabilities: {

@@ -1,4 +1,4 @@
-# OmniFocus MCP Server v1.6.0
+# OmniFocus MCP Server v1.7.2
 
 A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides advanced task management, analytics, and automation capabilities. Built with TypeScript and the official OmniAutomation API.
 
@@ -44,11 +44,6 @@ A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides 
 - `complete_task` - Mark tasks as completed
 - `delete_task` - Remove tasks permanently
 
-#### Note on Batch Operations
-Batch operations are not currently supported due to OmniFocus JXA API limitations. 
-Individual task operations (create, update, complete, delete) work perfectly and are 
-recommended for all workflows. If OmniFocus updates their API in the future, batch 
-operations may be re-implemented for performance optimization.
 
 #### Date Range Queries
 - `date_range_query` - Query tasks by date ranges
@@ -64,9 +59,10 @@ operations may be re-implemented for performance optimization.
 
 #### Project Operations
 - `list_projects` - List and filter projects with caching
-  - Filter by: status (active, on hold, dropped, completed), flags, folder
+  - Filter by: status (active, onHold, dropped, done), flags, folder
   - Results cached for 10 minutes
   - Includes task counts
+  - Note: Status values are normalized from OmniFocus's internal format
 - `create_project` - Create new projects with folder support
   - Automatically creates folders if they don't exist
   - Set name, note, dates, flags, and parent folder

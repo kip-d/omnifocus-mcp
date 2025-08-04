@@ -17,6 +17,33 @@ npm install
 npm run build
 ```
 
+#### package-lock.json shows as dirty after build
+**Solution**: This is normal if dependencies were updated. Best practices:
+
+1. **Use `npm ci` in production/deployment**:
+   ```bash
+   npm ci          # Installs from lock file exactly
+   npm run build   # Should not modify lock file
+   ```
+
+2. **If package-lock.json changes are legitimate**:
+   ```bash
+   git add package-lock.json
+   git commit -m "Update package-lock.json"
+   ```
+
+3. **Common causes of package-lock.json changes**:
+   - Different npm/Node versions between environments
+   - Running `npm install` instead of `npm ci`
+   - Automatic dependency updates
+
+4. **Prevention**:
+   - Use `.nvmrc` file to ensure consistent Node versions
+   - Always use `npm ci` for production builds
+   - Commit package-lock.json changes when they occur
+
+**Note**: package-lock.json should always be committed to the repository. Only build artifacts (dist/, build/) should be in .gitignore.
+
 ### Connection Issues
 
 #### "OmniFocus permissions not granted"
