@@ -14,6 +14,7 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  const options = {{options}};
   
   try {
     const app = Application('OmniFocus');

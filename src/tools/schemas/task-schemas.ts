@@ -320,7 +320,7 @@ export const UpcomingTasksToolSchema = z.object({
     .int()
     .positive()
     .max(1000)
-    .default(100)
+    .default(50)
     .describe('Maximum number of tasks to return')
 });
 

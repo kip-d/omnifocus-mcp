@@ -51,9 +51,31 @@ export const TODAYS_AGENDA_SCRIPT = `
     let optimizationUsed = 'standard_filter';
     
     try {
-      // Get only incomplete tasks to start with
-      allTasks = doc.flattenedTasks.whose({completed: false})();
-      optimizationUsed = 'incomplete_filter';
+      // Try to get tasks with specific criteria for better performance
+      if (options.includeOverdue !== false || options.includeFlagged !== false) {
+        // For agenda, we want tasks that are either due soon or flagged
+        const endDate = new Date(tomorrow);
+        endDate.setDate(endDate.getDate() + 7); // Look ahead 7 days
+        
+        try {
+          // Get incomplete tasks that are either flagged or have due dates
+          allTasks = doc.flattenedTasks.whose({
+            completed: false,
+            _or: [
+              {flagged: true},
+              {dueDate: {_not: null}}
+            ]
+          })();
+          optimizationUsed = 'smart_agenda_filter';
+        } catch (e) {
+          // Fallback to simpler query
+          allTasks = doc.flattenedTasks.whose({completed: false})();
+          optimizationUsed = 'incomplete_filter';
+        }
+      } else {
+        allTasks = doc.flattenedTasks.whose({completed: false})();
+        optimizationUsed = 'incomplete_filter';
+      }
     } catch (taskError) {
       try {
         // Fallback to all tasks if filter fails

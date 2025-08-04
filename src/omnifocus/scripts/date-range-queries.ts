@@ -332,18 +332,30 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
     
     const tasks = [];
     
-    // Get all tasks and filter incomplete ones
-    const allTasks = doc.flattenedTasks();
-    const incompleteTasks = [];
-    for (let i = 0; i < allTasks.length; i++) {
-      if (!safeGet(() => allTasks[i].completed(), false)) {
-        incompleteTasks.push(allTasks[i]);
+    // Get only incomplete tasks to start with
+    let allTasks;
+    try {
+      // Try to use OmniFocus query to pre-filter
+      allTasks = doc.flattenedTasks.whose({
+        completed: false,
+        dueDate: {_not: null}
+      })();
+    } catch (e) {
+      // Fallback to getting all incomplete tasks
+      try {
+        allTasks = doc.flattenedTasks.whose({completed: false})();
+      } catch (e2) {
+        // Final fallback
+        allTasks = doc.flattenedTasks();
       }
     }
     
     // Filter for tasks in date range
-    for (let i = 0; i < incompleteTasks.length && tasks.length < limit; i++) {
-      const task = incompleteTasks[i];
+    for (let i = 0; i < allTasks.length && tasks.length < limit; i++) {
+      const task = allTasks[i];
+      
+      // Skip completed tasks if we couldn't pre-filter
+      if (safeGet(() => task.completed(), false)) continue;
       const dueDate = safeGet(() => task.dueDate());
       
       if (dueDate) {

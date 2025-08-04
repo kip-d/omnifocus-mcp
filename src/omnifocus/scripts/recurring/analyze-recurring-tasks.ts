@@ -14,6 +14,7 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  const options = {{options}};
   
   try {
     const app = Application('OmniFocus');
@@ -334,7 +335,7 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
           
           // Final fallback based on common task types
           if (!frequencyDesc) {
-            if (taskName.includes('bill') || taskName.includes('payment') || taskName.includes(') || taskName.includes('subscription')) {
+            if (taskName.includes('bill') || taskName.includes('payment') || taskName.includes('pay') || taskName.includes('subscription')) {
               frequencyDesc = 'Monthly';
               ruleData.unit = 'months';
               ruleData.steps = 1;
