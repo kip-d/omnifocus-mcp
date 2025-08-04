@@ -210,37 +210,48 @@ export const GET_ACTIVE_TAGS_SCRIPT = `
       const doc = app.defaultDocument();
       const startTime = Date.now();
       
-      // Use a Set for O(1) lookups and uniqueness
-      const activeTagNames = new Set();
+      // Get all tags first
+      const allTags = doc.flattenedTags();
+      if (!allTags) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve tags from OmniFocus",
+          details: "doc.flattenedTags() returned null or undefined"
+        });
+      }
       
-      // Instead of processing all tags, process tasks and collect their tags
-      const allTasks = doc.flattenedTasks.whose({completed: false})();
+      // Check each tag for available tasks (much faster than iterating through all tasks)
+      const activeTags = [];
       
-      // Process tasks in batches to avoid timeout
-      const maxTasksToProcess = Math.min(allTasks.length, 2000);
-      
-      for (let i = 0; i < maxTasksToProcess; i++) {
-        const task = allTasks[i];
-        if (!task) continue;
-        
-        const taskTags = safeGetTags(task);
-        for (let j = 0; j < taskTags.length; j++) {
-          activeTagNames.add(taskTags[j]);
+      for (let i = 0; i < allTags.length; i++) {
+        const tag = allTags[i];
+        try {
+          // Use availableTaskCount property which is pre-computed by OmniFocus
+          const availableCount = safeGet(() => tag.availableTaskCount(), 0);
+          if (availableCount > 0) {
+            const tagName = safeGet(() => tag.name());
+            if (tagName) {
+              activeTags.push(tagName);
+            }
+          }
+        } catch (e) {
+          // Skip tags that error
+          continue;
         }
       }
       
-      // Convert Set to array and sort
-      const tags = Array.from(activeTagNames).sort();
+      // Sort alphabetically
+      activeTags.sort();
       
       const endTime = Date.now();
       
       return JSON.stringify({
-        tags: tags,
+        tags: activeTags,
         summary: {
-          totalTags: tags.length,
+          totalTags: activeTags.length,
           query_time_ms: endTime - startTime,
           mode: 'active_only',
-          note: 'Only includes tags with incomplete tasks'
+          note: 'Only includes tags with available (incomplete, non-deferred) tasks'
         }
       });
       

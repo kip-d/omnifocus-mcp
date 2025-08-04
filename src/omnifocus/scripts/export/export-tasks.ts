@@ -186,6 +186,64 @@ export const EXPORT_TASKS_SCRIPT = `
         data: csv,
         count: tasks.length
       });
+    } else if (format === 'markdown') {
+      // Build Markdown
+      let markdown = '# OmniFocus Tasks Export\\n\\n';
+      markdown += \`Export date: \${new Date().toISOString()}\\n\\n\`;
+      markdown += \`Total tasks: \${tasks.length}\\n\\n\`;
+      
+      // Group by project
+      const byProject = {};
+      const inbox = [];
+      
+      for (const task of tasks) {
+        if (task.project) {
+          if (!byProject[task.project]) {
+            byProject[task.project] = [];
+          }
+          byProject[task.project].push(task);
+        } else {
+          inbox.push(task);
+        }
+      }
+      
+      // Inbox tasks
+      if (inbox.length > 0) {
+        markdown += '## Inbox\\n\\n';
+        for (const task of inbox) {
+          markdown += \`- [\${task.completed ? 'x' : ' '}] \${task.name}\`;
+          if (task.flagged) markdown += ' 🚩';
+          if (task.dueDate) markdown += \` 📅 Due: \${task.dueDate}\`;
+          if (task.tags && task.tags.length > 0) markdown += \` 🏷️ \${task.tags.join(', ')}\`;
+          markdown += '\\n';
+          if (task.note) {
+            markdown += \`  - Note: \${task.note.replace(/\\n/g, '\\n    ')}\\n\`;
+          }
+        }
+        markdown += '\\n';
+      }
+      
+      // Project tasks
+      for (const projectName in byProject) {
+        markdown += \`## \${projectName}\\n\\n\`;
+        for (const task of byProject[projectName]) {
+          markdown += \`- [\${task.completed ? 'x' : ' '}] \${task.name}\`;
+          if (task.flagged) markdown += ' 🚩';
+          if (task.dueDate) markdown += \` 📅 Due: \${task.dueDate}\`;
+          if (task.tags && task.tags.length > 0) markdown += \` 🏷️ \${task.tags.join(', ')}\`;
+          markdown += '\\n';
+          if (task.note) {
+            markdown += \`  - Note: \${task.note.replace(/\\n/g, '\\n    ')}\\n\`;
+          }
+        }
+        markdown += '\\n';
+      }
+      
+      return JSON.stringify({
+        format: 'markdown',
+        data: markdown,
+        count: tasks.length
+      });
     } else {
       // Default to JSON
       return JSON.stringify({

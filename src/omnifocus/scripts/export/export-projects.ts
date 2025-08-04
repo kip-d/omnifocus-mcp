@@ -186,6 +186,92 @@ export const EXPORT_PROJECTS_SCRIPT = `
         data: csv,
         count: projects.length
       });
+    } else if (format === 'markdown') {
+      // Build Markdown
+      let markdown = '# OmniFocus Projects Export\\n\\n';
+      markdown += \`Export date: \${new Date().toISOString()}\\n\\n\`;
+      markdown += \`Total projects: \${projects.length}\\n\\n\`;
+      
+      // Group by status
+      const byStatus = {
+        active: [],
+        onHold: [],
+        done: [],
+        dropped: []
+      };
+      
+      for (const project of projects) {
+        byStatus[project.status].push(project);
+      }
+      
+      // Active projects
+      if (byStatus.active.length > 0) {
+        markdown += '## Active Projects\\n\\n';
+        for (const project of byStatus.active) {
+          markdown += \`### \${project.name}\\n\\n\`;
+          if (project.note) {
+            markdown += \`\${project.note}\\n\\n\`;
+          }
+          if (project.dueDate) {
+            markdown += \`- 📅 Due: \${project.dueDate}\\n\`;
+          }
+          if (project.deferDate) {
+            markdown += \`- ⏳ Deferred until: \${project.deferDate}\\n\`;
+          }
+          if (includeStats && project.stats) {
+            markdown += \`- 📊 Tasks: \${project.stats.availableTasks} available / \${project.stats.totalTasks} total (\${project.stats.completionRate}% complete)\\n\`;
+            if (project.stats.overdueCount > 0) {
+              markdown += \`- ⚠️ Overdue tasks: \${project.stats.overdueCount}\\n\`;
+            }
+            if (project.stats.flaggedCount > 0) {
+              markdown += \`- 🚩 Flagged tasks: \${project.stats.flaggedCount}\\n\`;
+            }
+          }
+          markdown += '\\n';
+        }
+      }
+      
+      // On Hold projects
+      if (byStatus.onHold.length > 0) {
+        markdown += '## On Hold Projects\\n\\n';
+        for (const project of byStatus.onHold) {
+          markdown += \`### \${project.name}\\n\`;
+          if (project.note) {
+            markdown += \`\${project.note}\\n\`;
+          }
+          if (includeStats && project.stats) {
+            markdown += \`Tasks: \${project.stats.totalTasks} (\${project.stats.completionRate}% complete)\\n\`;
+          }
+          markdown += '\\n';
+        }
+      }
+      
+      // Completed projects
+      if (byStatus.done.length > 0) {
+        markdown += '## Completed Projects\\n\\n';
+        for (const project of byStatus.done) {
+          markdown += \`- ✅ \${project.name}\`;
+          if (project.completionDate) {
+            markdown += \` (completed \${project.completionDate})\`;
+          }
+          markdown += '\\n';
+        }
+        markdown += '\\n';
+      }
+      
+      // Dropped projects
+      if (byStatus.dropped.length > 0) {
+        markdown += '## Dropped Projects\\n\\n';
+        for (const project of byStatus.dropped) {
+          markdown += \`- ❌ \${project.name}\\n\`;
+        }
+      }
+      
+      return JSON.stringify({
+        format: 'markdown',
+        data: markdown,
+        count: projects.length
+      });
     } else {
       // Default to JSON
       return JSON.stringify({

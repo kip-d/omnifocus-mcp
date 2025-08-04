@@ -46,20 +46,28 @@ export const TODAYS_AGENDA_SCRIPT = `
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     
-    // Optimization: Start with all tasks but we'll filter efficiently
+    // Optimization: Use OmniFocus's query capabilities to pre-filter
     let allTasks;
-    try {
-      allTasks = doc.flattenedTasks();
-    } catch (taskError) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus: " + taskError.toString(),
-        details: "doc.flattenedTasks() threw an error",
-        errorType: "TASK_RETRIEVAL_ERROR"
-      });
-    }
-    
     let optimizationUsed = 'standard_filter';
+    
+    try {
+      // Get only incomplete tasks to start with
+      allTasks = doc.flattenedTasks.whose({completed: false})();
+      optimizationUsed = 'incomplete_filter';
+    } catch (taskError) {
+      try {
+        // Fallback to all tasks if filter fails
+        allTasks = doc.flattenedTasks();
+        optimizationUsed = 'standard_filter';
+      } catch (fallbackError) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve tasks from OmniFocus: " + fallbackError.toString(),
+          details: "doc.flattenedTasks() threw an error",
+          errorType: "TASK_RETRIEVAL_ERROR"
+        });
+      }
+    }
     
     // Check if we got valid results
     if (!allTasks) {
@@ -81,7 +89,7 @@ export const TODAYS_AGENDA_SCRIPT = `
     }
     
     const startTime = Date.now();
-    const maxTasks = options.limit || 200; // Add reasonable limit
+    const maxTasks = options.limit || 50; // Reduced default limit for better performance
     
     let dueTodayCount = 0;
     let overdueCount = 0;
@@ -91,7 +99,7 @@ export const TODAYS_AGENDA_SCRIPT = `
     const checkOverdue = options.includeOverdue !== false;
     const checkFlagged = options.includeFlagged !== false;
     const checkAvailable = options.includeAvailable === true;  // Default false, only true if explicitly set
-    const includeDetails = options.includeDetails !== false;
+    const includeDetails = options.includeDetails === true;  // Default false for better performance
     
     // Performance metrics
     let tasksScanned = 0;
