@@ -8,6 +8,7 @@ import {
 import { BasePrompt } from './base.js';
 import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
+import { GTDPrinciplesPrompt } from './gtd/GTDPrinciplesPrompt.js';
 import { TagPerformancePrompt } from './reference/TagPerformancePrompt.js';
 import { ToolDiscoveryPrompt } from './reference/ToolDiscoveryPrompt.js';
 import { CommonPatternsPrompt } from './reference/CommonPatternsPrompt.js';
@@ -23,6 +24,7 @@ export function registerPrompts(server: Server): void {
   // Register all prompts
   const promptInstances = [
     // GTD Workflow Prompts
+    new GTDPrinciplesPrompt(),
     new WeeklyReviewPrompt(),
     new InboxProcessingPrompt(),
     
