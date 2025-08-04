@@ -27,6 +27,7 @@ import { OverdueAnalysisTool } from './analytics/OverdueAnalysisTool.js';
 // Import tag tools
 import { ListTagsTool } from './tags/ListTagsTool.js';
 import { ManageTagsTool } from './tags/ManageTagsTool.js';
+import { GetActiveTagsTool } from './tags/GetActiveTagsTool.js';
 
 // Import export tools
 import { ExportTasksTool } from './export/ExportTasksTool.js';
@@ -88,6 +89,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // Tag tools
     new ListTagsTool(cache),
     new ManageTagsTool(cache),
+    new GetActiveTagsTool(cache),
 
     // Export tools
     new ExportTasksTool(cache),

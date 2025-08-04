@@ -1,22 +1,29 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
+import { LIST_TAGS_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/tags/list-tags-optimized.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTagsSchema } from '../schemas/tag-schemas.js';
 
 export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
   name = 'list_tags';
-  description = 'List all tags/contexts in OmniFocus. Set includeUsageStats=true to get task counts for each tag (defaults to false for performance)';
+  description = 'List all tags/contexts in OmniFocus. Use fastMode=true or namesOnly=true for better performance. Set includeUsageStats=true to get task counts (slow).';
   schema = ListTagsSchema;
 
   async executeValidated(args: z.infer<typeof ListTagsSchema>): Promise<any> {
     const timer = new OperationTimer();
 
     try {
-      const { sortBy = 'name', includeEmpty = true, includeUsageStats = false } = args;
+      const { 
+        sortBy = 'name', 
+        includeEmpty = true, 
+        includeUsageStats = false,
+        fastMode = false,
+        namesOnly = false
+      } = args;
 
       // Create cache key
-      const cacheKey = `list_${sortBy}_${includeEmpty}_${includeUsageStats}`;
+      const cacheKey = `list_${sortBy}_${includeEmpty}_${includeUsageStats}_${fastMode}_${namesOnly}`;
 
       // Check cache
       const cached = this.cache.get<any>('tags', cacheKey);
@@ -31,13 +38,18 @@ export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
             summary: cached.summary,
             sort_by: sortBy,
             include_empty: includeEmpty,
+            performance_mode: namesOnly ? 'names_only' : fastMode ? 'fast' : 'full',
           },
         );
       }
 
+      // Use optimized script if any performance mode is enabled
+      const useOptimized = fastMode || namesOnly || !includeUsageStats;
+      const scriptToUse = useOptimized ? LIST_TAGS_OPTIMIZED_SCRIPT : LIST_TAGS_SCRIPT;
+      
       // Execute script
-      const script = this.omniAutomation.buildScript(LIST_TAGS_SCRIPT, {
-        options: { sortBy, includeEmpty, includeUsageStats },
+      const script = this.omniAutomation.buildScript(scriptToUse, {
+        options: { sortBy, includeEmpty, includeUsageStats, fastMode, namesOnly },
       });
       const result = await this.omniAutomation.execute<any>(script);
 

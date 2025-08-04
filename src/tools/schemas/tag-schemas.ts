@@ -29,7 +29,15 @@ export const ListTagsSchema = z.object({
   
   includeTaskCounts: coerceBoolean()
     .default(true)
-    .describe('Include task count information for each tag')
+    .describe('Include task count information for each tag'),
+  
+  fastMode: coerceBoolean()
+    .default(false)
+    .describe('Fast mode: Skip parent/child relationships for better performance'),
+  
+  namesOnly: coerceBoolean()
+    .default(false)
+    .describe('Ultra-fast mode: Return only tag names without IDs or hierarchy')
 });
 
 // Manage tags parameters
