@@ -122,6 +122,13 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
   private zodToJsonSchema(schema: z.ZodType): any {
     // This is a simplified implementation
     // For full compatibility, use a library like zod-to-json-schema
+    
+    // Handle refinements (e.g., z.object().refine())
+    if (schema instanceof z.ZodEffects) {
+      // Extract the inner schema from refinement
+      return this.zodToJsonSchema(schema._def.schema);
+    }
+    
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape;
       const properties: Record<string, any> = {};
@@ -200,6 +207,10 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
         const: schema._def.value,
         description: schema.description,
       };
+    }
+    if (schema instanceof z.ZodEffects) {
+      // Handle refinements
+      return this.zodTypeToJsonSchema(schema._def.schema);
     }
     if (schema instanceof z.ZodObject) {
       // Handle nested objects properly

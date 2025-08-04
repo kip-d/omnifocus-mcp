@@ -168,6 +168,15 @@ export const EXPORT_TASKS_SCRIPT = `
     // Format output based on requested format
     if (format === 'csv') {
       // Build CSV
+      if (tasks.length === 0) {
+        return JSON.stringify({
+          format: 'csv',
+          data: 'name,completed,flagged\\n',
+          count: 0,
+          message: 'No tasks found matching the filter criteria'
+        });
+      }
+      
       const headers = Object.keys(tasks[0] || {});
       let csv = headers.join(',') + '\\n';
       
