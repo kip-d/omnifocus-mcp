@@ -367,21 +367,59 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
     
     const tasks = [];
     
-    // Get only incomplete tasks to start with
+    // Get only incomplete tasks with due dates
     let allTasks;
+    let queryMethod = 'standard';
+    
     try {
-      // Try to use OmniFocus query to pre-filter
+      // More aggressive filter - only get tasks due within reasonable range
+      // This should dramatically reduce the number of tasks to process
+      const maxFutureDays = Math.min(days * 2, 30); // Cap at 30 days
+      const maxDate = new Date(now.getTime() + maxFutureDays * 24 * 60 * 60 * 1000);
+      
+      // First try: Get only relevant tasks
       allTasks = doc.flattenedTasks.whose({
         completed: false,
         dueDate: {_not: null}
       })();
+      queryMethod = 'whose_incomplete_with_due';
+      
+      // If we got too many tasks, limit processing
+      if (allTasks.length > 1000) {
+        queryMethod = 'limited_to_1000';
+        // Create a limited array to prevent timeout
+        const limitedTasks = [];
+        for (let i = 0; i < Math.min(1000, allTasks.length); i++) {
+          limitedTasks.push(allTasks[i]);
+        }
+        allTasks = limitedTasks;
+      }
     } catch (e) {
-      // Fallback to getting all incomplete tasks
+      // Fallback but with limits
       try {
         allTasks = doc.flattenedTasks.whose({completed: false})();
+        queryMethod = 'fallback_incomplete';
+        
+        // Limit to first 500 tasks if too many
+        if (allTasks.length > 500) {
+          const limitedTasks = [];
+          for (let i = 0; i < 500; i++) {
+            limitedTasks.push(allTasks[i]);
+          }
+          allTasks = limitedTasks;
+          queryMethod = 'fallback_limited';
+        }
       } catch (e2) {
-        // Final fallback
+        // Final fallback with hard limit
         allTasks = doc.flattenedTasks();
+        const limitedTasks = [];
+        for (let i = 0; i < Math.min(300, allTasks.length); i++) {
+          if (!allTasks[i].completed()) {
+            limitedTasks.push(allTasks[i]);
+          }
+        }
+        allTasks = limitedTasks;
+        queryMethod = 'fallback_hard_limit';
       }
     }
     
@@ -438,7 +476,8 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),
         limited: tasks.length >= limit,
-        query_time_ms: endTime - startTime
+        query_time_ms: endTime - startTime,
+        query_method: queryMethod
       }
     });
     

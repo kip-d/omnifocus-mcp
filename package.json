@@ -1,6 +1,6 @@
 {
   "name": "omnifocus-mcp-cached",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Professional MCP server for OmniFocus with smart caching and analytics",
   "type": "module",
   "main": "./dist/index.js",

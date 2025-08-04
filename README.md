@@ -1,4 +1,4 @@
-# OmniFocus MCP Server v1.7.2
+# OmniFocus MCP Server v1.7.3
 
 A comprehensive Model Context Protocol (MCP) server for OmniFocus that provides advanced task management, analytics, and automation capabilities. Built with TypeScript and the official OmniAutomation API.
 

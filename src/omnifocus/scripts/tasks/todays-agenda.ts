@@ -127,10 +127,15 @@ export const TODAYS_AGENDA_SCRIPT = `
     let tasksScanned = 0;
     let filterTimeTotal = 0;
     
-    // Safety limit to prevent runaway loops
-    const maxIterations = Math.min(allTasks.length, 10000);
+    // Limit iterations for performance - agenda should focus on most relevant tasks
+    const maxIterations = Math.min(allTasks.length, 500); // Reduced from 10000
     
-    for (let i = 0; i < maxIterations && tasks.length < maxTasks; i++) {
+    // First pass: collect tasks into buckets for better performance
+    const overdueTasks = [];
+    const todayTasks = [];
+    const flaggedTasks = [];
+    
+    for (let i = 0; i < maxIterations; i++) {
       const task = allTasks[i];
       
       // Skip completed tasks first (cheapest check)

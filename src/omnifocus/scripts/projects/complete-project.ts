@@ -13,6 +13,9 @@ export const COMPLETE_PROJECT_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  // Parameter declarations
+  const projectId = {{projectId}};
+  const completeAllTasks = {{completeAllTasks}};
   
   try {
     const app = Application('OmniFocus');

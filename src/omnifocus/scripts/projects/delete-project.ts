@@ -13,6 +13,9 @@ export const DELETE_PROJECT_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
+  // Parameter declarations
+  const projectId = {{projectId}};
+  const deleteTasks = {{deleteTasks}};
   
   try {
     const app = Application('OmniFocus');
