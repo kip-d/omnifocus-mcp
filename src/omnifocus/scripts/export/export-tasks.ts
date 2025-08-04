@@ -34,7 +34,11 @@ export const EXPORT_TASKS_SCRIPT = `
     }
     const allFields = fields || ['name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'flagged'];
     
-    for (let i = 0; i < allTasks.length; i++) {
+    // Apply limit from filter if present
+    const maxTasks = (filter && filter.limit) ? filter.limit : allTasks.length;
+    let tasksAdded = 0;
+    
+    for (let i = 0; i < allTasks.length && tasksAdded < maxTasks; i++) {
       const task = allTasks[i];
       
       // Apply filters
@@ -158,6 +162,7 @@ export const EXPORT_TASKS_SCRIPT = `
       }
       
       tasks.push(taskData);
+      tasksAdded++;
     }
     
     // Format output based on requested format
@@ -189,8 +194,8 @@ export const EXPORT_TASKS_SCRIPT = `
     } else if (format === 'markdown') {
       // Build Markdown
       let markdown = '# OmniFocus Tasks Export\\n\\n';
-      markdown += \`Export date: \${new Date().toISOString()}\\n\\n\`;
-      markdown += \`Total tasks: \${tasks.length}\\n\\n\`;
+      markdown += 'Export date: ' + new Date().toISOString() + '\\n\\n';
+      markdown += 'Total tasks: ' + tasks.length + '\\n\\n';
       
       // Group by project
       const byProject = {};
@@ -211,13 +216,13 @@ export const EXPORT_TASKS_SCRIPT = `
       if (inbox.length > 0) {
         markdown += '## Inbox\\n\\n';
         for (const task of inbox) {
-          markdown += \`- [\${task.completed ? 'x' : ' '}] \${task.name}\`;
+          markdown += '- [' + (task.completed ? 'x' : ' ') + '] ' + task.name;
           if (task.flagged) markdown += ' 🚩';
-          if (task.dueDate) markdown += \` 📅 Due: \${task.dueDate}\`;
-          if (task.tags && task.tags.length > 0) markdown += \` 🏷️ \${task.tags.join(', ')}\`;
+          if (task.dueDate) markdown += ' 📅 Due: ' + task.dueDate;
+          if (task.tags && task.tags.length > 0) markdown += ' 🏷️ ' + task.tags.join(', ');
           markdown += '\\n';
           if (task.note) {
-            markdown += \`  - Note: \${task.note.replace(/\\n/g, '\\n    ')}\\n\`;
+            markdown += '  - Note: ' + task.note.replace(/\\n/g, '\\n    ') + '\\n';
           }
         }
         markdown += '\\n';
@@ -225,15 +230,15 @@ export const EXPORT_TASKS_SCRIPT = `
       
       // Project tasks
       for (const projectName in byProject) {
-        markdown += \`## \${projectName}\\n\\n\`;
+        markdown += '## ' + projectName + '\\n\\n';
         for (const task of byProject[projectName]) {
-          markdown += \`- [\${task.completed ? 'x' : ' '}] \${task.name}\`;
+          markdown += '- [' + (task.completed ? 'x' : ' ') + '] ' + task.name;
           if (task.flagged) markdown += ' 🚩';
-          if (task.dueDate) markdown += \` 📅 Due: \${task.dueDate}\`;
-          if (task.tags && task.tags.length > 0) markdown += \` 🏷️ \${task.tags.join(', ')}\`;
+          if (task.dueDate) markdown += ' 📅 Due: ' + task.dueDate;
+          if (task.tags && task.tags.length > 0) markdown += ' 🏷️ ' + task.tags.join(', ');
           markdown += '\\n';
           if (task.note) {
-            markdown += \`  - Note: \${task.note.replace(/\\n/g, '\\n    ')}\\n\`;
+            markdown += '  - Note: ' + task.note.replace(/\\n/g, '\\n    ') + '\\n';
           }
         }
         markdown += '\\n';

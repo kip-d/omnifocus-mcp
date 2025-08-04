@@ -202,7 +202,26 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
       };
     }
     if (schema instanceof z.ZodObject) {
-      return this.zodToJsonSchema(schema);
+      // Handle nested objects properly
+      const shape = schema.shape;
+      const properties: Record<string, any> = {};
+      const required: string[] = [];
+
+      for (const [key, value] of Object.entries(shape)) {
+        properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
+        
+        // Check if field is required in nested object
+        if (!(value instanceof z.ZodOptional)) {
+          required.push(key);
+        }
+      }
+
+      return {
+        type: 'object',
+        properties,
+        required: required.length > 0 ? required : undefined,
+        description: schema.description,
+      };
     }
 
     // Default fallback
