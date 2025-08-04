@@ -91,10 +91,17 @@ operations may be re-implemented for performance optimization.
   - Recurring task patterns
 
 #### Tag Management
-- `list_tags` - Get all available tags
-  - Hierarchical tag structure
-  - Usage counts
+- `list_tags` - Get all available tags with performance modes
+  - **Performance Modes**:
+    - `namesOnly: true` - Ultra-fast (~130ms), returns just tag names
+    - `fastMode: true` - Fast (~270ms), skips hierarchy info
+    - Default - Full mode (~700ms), includes all tag details
+  - Options: `includeEmpty`, `includeUsageStats`, `sortBy`
   - Cached for performance
+- `get_active_tags` - Get only tags with incomplete tasks
+  - Much faster for GTD workflows
+  - Returns simple array of tag names
+  - Perfect for filtering and autocomplete
 - `manage_tags` - Create, rename, or delete tags
   - Maintains tag hierarchy
 
@@ -308,6 +315,49 @@ Add to your Claude Desktop configuration file (`~/Library/Application Support/Cl
       "status": "onHold",
       "note": "Postponed until Q2"
     }
+  }
+}
+```
+
+### Tag Operations with Performance Modes
+
+#### Get Tags for Autocomplete (Ultra-fast)
+```typescript
+{
+  "tool": "list_tags",
+  "arguments": {
+    "namesOnly": true  // ~130ms for 100+ tags
+  }
+}
+```
+
+#### Get Active Tags Only (GTD Workflows)
+```typescript
+{
+  "tool": "get_active_tags",
+  "arguments": {}
+}
+// Returns only tags with incomplete tasks
+```
+
+#### List Tags with IDs (Fast Mode)
+```typescript
+{
+  "tool": "list_tags",
+  "arguments": {
+    "fastMode": true,      // ~270ms, no hierarchy
+    "includeEmpty": false  // Optional: hide unused tags
+  }
+}
+```
+
+#### Full Tag Analysis (Slower)
+```typescript
+{
+  "tool": "list_tags",
+  "arguments": {
+    "includeUsageStats": true,  // Warning: slow (~3s)
+    "sortBy": "usage"           // Sort by most used
   }
 }
 ```

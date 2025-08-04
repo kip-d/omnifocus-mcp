@@ -8,6 +8,7 @@ import {
 import { BasePrompt } from './base.js';
 import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
+import { TagPerformancePrompt } from './reference/TagPerformancePrompt.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('prompts');
@@ -19,6 +20,7 @@ export function registerPrompts(server: Server): void {
   const promptInstances = [
     new WeeklyReviewPrompt(),
     new InboxProcessingPrompt(),
+    new TagPerformancePrompt(),
   ];
   
   promptInstances.forEach(prompt => {

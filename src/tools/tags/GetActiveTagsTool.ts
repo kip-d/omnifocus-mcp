@@ -7,7 +7,7 @@ const GetActiveTagsSchema = z.object({});
 
 export class GetActiveTagsTool extends BaseTool<typeof GetActiveTagsSchema> {
   name = 'get_active_tags';
-  description = 'Get only tags that have incomplete tasks assigned. Much faster than list_tags for finding relevant tags.';
+  description = 'Get only tags with incomplete tasks (typically <50 tags). Much faster than list_tags when you only need actionable tags. Returns simple array of tag names. Use this for GTD workflows, task filtering, or when empty tags are irrelevant.';
   schema = GetActiveTagsSchema;
 
   async executeValidated(_args: z.infer<typeof GetActiveTagsSchema>): Promise<any> {

@@ -7,7 +7,7 @@ import { ListTagsSchema } from '../schemas/tag-schemas.js';
 
 export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
   name = 'list_tags';
-  description = 'List all tags/contexts in OmniFocus. Use fastMode=true or namesOnly=true for better performance. Set includeUsageStats=true to get task counts (slow).';
+  description = 'List all tags/contexts in OmniFocus. Performance modes: namesOnly=true (fastest, ~130ms), fastMode=true (fast, ~270ms, no hierarchy), default (full, ~700ms). Set includeEmpty=false to exclude unused tags. For active tags only, use get_active_tags tool instead.';
   schema = ListTagsSchema;
 
   async executeValidated(args: z.infer<typeof ListTagsSchema>): Promise<any> {
