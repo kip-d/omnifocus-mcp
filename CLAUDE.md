@@ -63,9 +63,13 @@ npm run test:all     # Run all tests
 npm run lint         # Lint TypeScript code
 npm run typecheck    # Type checking without building
 
-# MCP Testing
-npx @modelcontextprotocol/inspector dist/index.js  # Test with MCP Inspector
+# MCP Testing (preferred methods that don't open browser windows)
 node tests/integration/test-as-claude-desktop.js    # Simulate Claude Desktop protocol
+node tests/integration/test-list-tasks.js           # Test specific functionality
+node tests/integration/test-create-task.js          # Test task creation
+
+# MCP Inspector (opens browser window - avoid for automated testing)
+npx @modelcontextprotocol/inspector dist/index.js  # Interactive browser-based testing
 ```
 
 ## Architecture Overview
