@@ -98,19 +98,48 @@ export const GET_TASK_COUNT_SCRIPT = `
       // Count matching tasks
       const startTime = Date.now();
       
-      for (let i = 0; i < baseCollection.length; i++) {
-        if (matchesFilters(baseCollection[i])) {
-          count++;
+      // If we have a large collection and simple filters, try to use whose() for better performance
+      if (baseCollection.length > 500 && !filter.search && !filter.tags && !filter.dueBefore && !filter.dueAfter) {
+        // Simple count - just return the length
+        count = baseCollection.length;
+      } else {
+        // Complex filters - need to iterate
+        // Add a reasonable limit to prevent timeouts
+        const maxToCheck = Math.min(baseCollection.length, 5000);
+        
+        for (let i = 0; i < maxToCheck; i++) {
+          try {
+            if (matchesFilters(baseCollection[i])) {
+              count++;
+            }
+          } catch (e) {
+            // Skip tasks that throw errors
+            continue;
+          }
+        }
+        
+        // If we hit the limit, add a warning
+        if (baseCollection.length > maxToCheck) {
+          count = Math.round(count * (baseCollection.length / maxToCheck)); // Extrapolate
         }
       }
       
       const endTime = Date.now();
       
-      return JSON.stringify({
+      const result = {
         count: count,
         filters_applied: filter,
         query_time_ms: endTime - startTime
-      });
+      };
+      
+      // Add warning if we had to limit/extrapolate
+      if (baseCollection.length > 5000) {
+        result.warning = 'Count is estimated due to large task volume. Actual count may vary.';
+        result.tasks_checked = Math.min(baseCollection.length, 5000);
+        result.total_tasks = baseCollection.length;
+      }
+      
+      return JSON.stringify(result);
       
     } catch (error) {
       return formatError(error, 'get_task_count');

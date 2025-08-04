@@ -38,7 +38,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
     return new Promise((resolve, reject) => {
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
-        timeout: 60000, // 60 second timeout
+        timeout: 120000, // 120 second timeout for large databases
       });
 
       let stdout = '';

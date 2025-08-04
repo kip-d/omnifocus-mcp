@@ -1,9 +1,5 @@
-/**
- * Shared helper functions for all OmniFocus JXA scripts
- * These are injected into scripts that need them
- */
 
-export const SAFE_UTILITIES = `
+  
   // Safe utility functions for OmniFocus automation
   function safeGet(getter, defaultValue = null) {
     try {
@@ -144,12 +140,8 @@ export const SAFE_UTILITIES = `
       return false;
     }
   }
-`;
 
-/**
- * Helper to extract project validation
- */
-export const PROJECT_VALIDATION = `
+
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
     
@@ -177,7 +169,7 @@ export const PROJECT_VALIDATION = `
     
     if (!foundProject) {
       // Check if it's a numeric-only ID (Claude Desktop bug)
-      const isNumericOnly = /^\\d+$/.test(projectId);
+      const isNumericOnly = /^\d+$/.test(projectId);
       let errorMessage = 'Project not found: ' + projectId;
       
       if (isNumericOnly) {
@@ -195,12 +187,8 @@ export const PROJECT_VALIDATION = `
       project: foundProject 
     };
   }
-`;
 
-/**
- * Task serialization helper
- */
-export const TASK_SERIALIZATION = `
+
   function serializeTask(task, includeDetails = true) {
     const taskObj = {
       id: safeGet(() => task.id()),
@@ -228,12 +216,8 @@ export const TASK_SERIALIZATION = `
     
     return taskObj;
   }
-`;
 
-/**
- * Error formatting helper
- */
-export const ERROR_HANDLING = `
+
   function formatError(error, context = '') {
     const errorObj = {
       error: true,
@@ -247,21 +231,115 @@ export const ERROR_HANDLING = `
     
     return JSON.stringify(errorObj);
   }
-`;
 
-/**
- * Get all helpers combined
- */
-export function getAllHelpers(): string {
-  return [
-    SAFE_UTILITIES,
-    PROJECT_VALIDATION,
-    TASK_SERIALIZATION,
-    ERROR_HANDLING
-  ].join('\n');
-}
-
-/**
- * Legacy export for backward compatibility
- */
-export const SAFE_UTILITIES_SCRIPT = SAFE_UTILITIES;
+  
+  (() => {
+    const app = Application('OmniFocus');
+    const doc = app.defaultDocument();
+    const filter = {"completed": false};
+    
+    try {
+      let count = 0;
+      let baseCollection;
+      
+      // Start with the most restrictive collection based on filters
+      if (filter.inInbox === true) {
+        baseCollection = doc.inboxTasks();
+      } else if (filter.completed === false && filter.effectivelyCompleted !== true) {
+        // Start with incomplete tasks for better performance
+        baseCollection = doc.flattenedTasks.whose({completed: false})();
+      } else if (filter.completed === true) {
+        // Start with completed tasks
+        baseCollection = doc.flattenedTasks.whose({completed: true})();
+      } else {
+        // No optimization possible, use all tasks
+        baseCollection = doc.flattenedTasks();
+      }
+      
+      // Helper function to check if task matches all filters
+      function matchesFilters(task) {
+        // Skip if effectively completed (unless we want completed tasks)
+        if (filter.completed !== true && isTaskEffectivelyCompleted(task)) {
+          return false;
+        }
+        
+        // Flagged filter
+        if (filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {
+          return false;
+        }
+        
+        // Project filter
+        if (filter.projectId) {
+          const project = task.containingProject();
+          if (!project || safeGet(() => project.id()) !== filter.projectId) {
+            return false;
+          }
+        }
+        
+        // Inbox filter
+        if (filter.inInbox !== undefined && safeGet(() => task.inInbox(), false) !== filter.inInbox) {
+          return false;
+        }
+        
+        // Tag filters
+        if (filter.tags && filter.tags.length > 0) {
+          const taskTags = safeGetTags(task);
+          const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
+          if (!hasAllTags) {
+            return false;
+          }
+        }
+        
+        // Date filters
+        if (filter.dueBefore || filter.dueAfter) {
+          const dueDate = task.dueDate();
+          if (!dueDate || !isValidDate(dueDate)) {
+            return false;
+          }
+          if (filter.dueBefore && dueDate >= new Date(filter.dueBefore)) {
+            return false;
+          }
+          if (filter.dueAfter && dueDate <= new Date(filter.dueAfter)) {
+            return false;
+          }
+        }
+        
+        // Available filter
+        if (filter.available !== undefined && isTaskAvailable(task) !== filter.available) {
+          return false;
+        }
+        
+        // Search filter
+        if (filter.search) {
+          const searchTerm = filter.search.toLowerCase();
+          const name = safeGet(() => task.name(), '').toLowerCase();
+          const note = safeGet(() => task.note(), '').toLowerCase();
+          if (!name.includes(searchTerm) && !note.includes(searchTerm)) {
+            return false;
+          }
+        }
+        
+        return true;
+      }
+      
+      // Count matching tasks
+      const startTime = Date.now();
+      
+      for (let i = 0; i < baseCollection.length; i++) {
+        if (matchesFilters(baseCollection[i])) {
+          count++;
+        }
+      }
+      
+      const endTime = Date.now();
+      
+      return JSON.stringify({
+        count: count,
+        filters_applied: filter,
+        query_time_ms: endTime - startTime
+      });
+      
+    } catch (error) {
+      return formatError(error, 'get_task_count');
+    }
+  })();

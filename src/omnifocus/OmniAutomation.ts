@@ -16,7 +16,7 @@ export class OmniAutomationError extends Error {
 
 export class OmniAutomation {
   private readonly maxScriptSize = 100000; // 100KB limit for scripts
-  private readonly timeout = 60000; // 60 second timeout (increased for reliability)
+  private readonly timeout = 120000; // 120 second timeout for large databases
 
   public async execute<T = unknown>(script: string): Promise<T> {
     if (script.length > this.maxScriptSize) {

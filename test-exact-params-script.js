@@ -1,22 +1,242 @@
-import { getAllHelpers } from '../shared/helpers.js';
 
-/**
- * Script to export tasks from OmniFocus in various formats
- * 
- * Features:
- * - Export to JSON or CSV format
- * - Flexible field selection
- * - Comprehensive filtering options
- * - Preserves all task metadata
- * - Proper CSV escaping for complex data
- */
-export const EXPORT_TASKS_SCRIPT = `
-  ${getAllHelpers()}
+  
+  // Safe utility functions for OmniFocus automation
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetDate(getter) {
+    try {
+      const date = getter();
+      if (!date) return null;
+      
+      // Use isValidDate to check if it's a valid Date object
+      if (!isValidDate(date)) return null;
+      
+      return date.toISOString();
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetProject(task) {
+    try {
+      const project = task.containingProject();
+      if (project) {
+        return {
+          name: safeGet(() => project.name()),
+          id: safeGet(() => project.id())
+        };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTags(task) {
+    try {
+      const tags = task.tags();
+      if (!tags) return [];
+      const tagNames = [];
+      for (let i = 0; i < tags.length; i++) {
+        const tagName = safeGet(() => tags[i].name());
+        if (tagName) {
+          tagNames.push(tagName);
+        }
+      }
+      return tagNames;
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  function isValidDate(date) {
+    return date && date.toString() !== 'missing value' && !isNaN(date.getTime());
+  }
+  
+  function isTaskAvailable(task) {
+    try {
+      const deferDate = task.deferDate();
+      if (!deferDate || !isValidDate(deferDate)) {
+        return true; // No defer date means available
+      }
+      return deferDate <= new Date();
+    } catch (e) {
+      return true; // If we can't check, assume available
+    }
+  }
+  
+  function isTaskEffectivelyCompleted(task) {
+    try {
+      // Check if directly completed
+      if (task.completed()) return true;
+      
+      // Check if dropped
+      if (task.dropped && task.dropped()) return true;
+      
+      // Check if parent project is completed/dropped
+      const container = task.containingProject();
+      if (container) {
+        if (container.completed && container.completed()) return true;
+        if (container.dropped && container.dropped()) return true;
+        if (container.status && container.status() === 'dropped') return true;
+        if (container.status && container.status() === 'done') return true;
+      }
+      
+      return false;
+    } catch (e) {
+      // If there's an error checking, assume not completed
+      return false;
+    }
+  }
+  
+  function isFlagged(obj) {
+    try {
+      return obj.flagged() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function safeGetEstimatedMinutes(task) {
+    try {
+      const estimate = task.estimatedMinutes();
+      return typeof estimate === 'number' ? estimate : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetFolder(project) {
+    try {
+      const container = project.container();
+      if (container && container.constructor.name === 'Folder') {
+        return safeGet(() => container.name());
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function safeGetTaskCount(project) {
+    try {
+      return project.numberOfTasks() || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  
+  function safeIsCompleted(task) {
+    try {
+      return task.completed() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+
+  function validateProject(projectId, doc) {
+    if (!projectId) return { valid: true, project: null };
+    
+    // Try whose() first for performance
+    let foundProject = null;
+    try {
+      const projects = doc.flattenedProjects.whose({id: projectId})();
+      if (projects && projects.length > 0) {
+        foundProject = projects[0];
+      }
+    } catch (e) {
+      // whose() failed, fall back to iteration
+    }
+    
+    // Fall back to iteration if whose() didn't work
+    if (!foundProject) {
+      const projects = doc.flattenedProjects();
+      for (let i = 0; i < projects.length; i++) {
+        if (projects[i].id() === projectId) {
+          foundProject = projects[i];
+          break;
+        }
+      }
+    }
+    
+    if (!foundProject) {
+      // Check if it's a numeric-only ID (Claude Desktop bug)
+      const isNumericOnly = /^\d+$/.test(projectId);
+      let errorMessage = 'Project not found: ' + projectId;
+      
+      if (isNumericOnly) {
+        errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
+      }
+      
+      return { 
+        valid: false, 
+        error: errorMessage 
+      };
+    }
+    
+    return { 
+      valid: true, 
+      project: foundProject 
+    };
+  }
+
+
+  function serializeTask(task, includeDetails = true) {
+    const taskObj = {
+      id: safeGet(() => task.id()),
+      name: safeGet(() => task.name()),
+      completed: safeGet(() => task.completed(), false),
+      flagged: isFlagged(task),
+      inInbox: safeGet(() => task.inInbox(), false)
+    };
+    
+    if (includeDetails) {
+      taskObj.note = safeGet(() => task.note(), '');
+      taskObj.dueDate = safeGetDate(() => task.dueDate());
+      taskObj.deferDate = safeGetDate(() => task.deferDate());
+      taskObj.completionDate = safeGetDate(() => task.completionDate());
+      taskObj.estimatedMinutes = safeGetEstimatedMinutes(task);
+      
+      const project = safeGetProject(task);
+      if (project) {
+        taskObj.project = project.name;
+        taskObj.projectId = project.id;
+      }
+      
+      taskObj.tags = safeGetTags(task);
+    }
+    
+    return taskObj;
+  }
+
+
+  function formatError(error, context = '') {
+    const errorObj = {
+      error: true,
+      message: error.message || String(error),
+      context: context
+    };
+    
+    if (error.stack) {
+      errorObj.stack = error.stack;
+    }
+    
+    return JSON.stringify(errorObj);
+  }
+
   
   (() => {
-    const filter = {{filter}};
-    const format = {{format}};
-    const fields = {{fields}};
+    const filter = {"completed": false};
+    const format = "csv";
+    const fields = ["id", "name", "project", "dueDate", "flagged", "completed"];
     
     try {
     const app = Application('OmniFocus');
@@ -177,14 +397,14 @@ export const EXPORT_TASKS_SCRIPT = `
       if (tasks.length === 0) {
         return JSON.stringify({
           format: 'csv',
-          data: 'name,completed,flagged\\n',
+          data: 'name,completed,flagged\n',
           count: 0,
           message: 'No tasks found matching the filter criteria'
         });
       }
       
       const headers = Object.keys(tasks[0] || {});
-      let csv = headers.join(',') + '\\n';
+      let csv = headers.join(',') + '\n';
       
       for (const task of tasks) {
         const row = headers.map(h => {
@@ -198,7 +418,7 @@ export const EXPORT_TASKS_SCRIPT = `
           }
           return value.toString();
         });
-        csv += row.join(',') + '\\n';
+        csv += row.join(',') + '\n';
       }
       
       return JSON.stringify({
@@ -210,9 +430,9 @@ export const EXPORT_TASKS_SCRIPT = `
       });
     } else if (format === 'markdown') {
       // Build Markdown
-      let markdown = '# OmniFocus Tasks Export\\n\\n';
-      markdown += 'Export date: ' + new Date().toISOString() + '\\n\\n';
-      markdown += 'Total tasks: ' + tasks.length + '\\n\\n';
+      let markdown = '# OmniFocus Tasks Export\n\n';
+      markdown += 'Export date: ' + new Date().toISOString() + '\n\n';
+      markdown += 'Total tasks: ' + tasks.length + '\n\n';
       
       // Group by project
       const byProject = {};
@@ -231,34 +451,34 @@ export const EXPORT_TASKS_SCRIPT = `
       
       // Inbox tasks
       if (inbox.length > 0) {
-        markdown += '## Inbox\\n\\n';
+        markdown += '## Inbox\n\n';
         for (const task of inbox) {
           markdown += '- [' + (task.completed ? 'x' : ' ') + '] ' + task.name;
           if (task.flagged) markdown += ' 🚩';
           if (task.dueDate) markdown += ' 📅 Due: ' + task.dueDate;
           if (task.tags && task.tags.length > 0) markdown += ' 🏷️ ' + task.tags.join(', ');
-          markdown += '\\n';
+          markdown += '\n';
           if (task.note) {
-            markdown += '  - Note: ' + task.note.replace(/\\n/g, '\\n    ') + '\\n';
+            markdown += '  - Note: ' + task.note.replace(/\n/g, '\n    ') + '\n';
           }
         }
-        markdown += '\\n';
+        markdown += '\n';
       }
       
       // Project tasks
       for (const projectName in byProject) {
-        markdown += '## ' + projectName + '\\n\\n';
+        markdown += '## ' + projectName + '\n\n';
         for (const task of byProject[projectName]) {
           markdown += '- [' + (task.completed ? 'x' : ' ') + '] ' + task.name;
           if (task.flagged) markdown += ' 🚩';
           if (task.dueDate) markdown += ' 📅 Due: ' + task.dueDate;
           if (task.tags && task.tags.length > 0) markdown += ' 🏷️ ' + task.tags.join(', ');
-          markdown += '\\n';
+          markdown += '\n';
           if (task.note) {
-            markdown += '  - Note: ' + task.note.replace(/\\n/g, '\\n    ') + '\\n';
+            markdown += '  - Note: ' + task.note.replace(/\n/g, '\n    ') + '\n';
           }
         }
-        markdown += '\\n';
+        markdown += '\n';
       }
       
       return JSON.stringify({
@@ -280,4 +500,3 @@ export const EXPORT_TASKS_SCRIPT = `
     return formatError(error, 'export_tasks');
   }
   })();
-`;
