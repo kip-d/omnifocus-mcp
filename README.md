@@ -190,6 +190,8 @@ The first time you use the MCP server, macOS will prompt you to grant permission
 
 Add to your Claude Desktop configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
+> **Note**: Claude Desktop doesn't yet support MCP prompts. For full feature access including 8 interactive GTD and reference prompts, see our [MCP Clients Guide](docs/MCP_CLIENTS_GUIDE.md) for alternatives like Cline.
+
 ```json
 {
   "mcpServers": {
@@ -459,6 +461,24 @@ src/
 ├── utils/          # Logging and helpers
 └── index.ts        # Server entry point
 ```
+
+## MCP Prompts (Advanced Clients Only)
+
+The OmniFocus MCP server includes 8 interactive prompts for MCP clients that support them:
+
+### GTD Workflow Prompts
+- `gtd_principles` - Core GTD methodology and implementation guide
+- `gtd_weekly_review` - Interactive weekly review process
+- `gtd_process_inbox` - Step-by-step inbox processing
+
+### Reference Prompts
+- `tool_discovery_guide` - Comprehensive guide to all 28 tools
+- `common_patterns_guide` - Best practices and anti-patterns
+- `troubleshooting_guide` - Solutions for common issues
+- `tag_performance_guide` - Tag query optimization strategies
+- `quick_reference` - Performance tips and cheat sheet
+
+> **Note**: These prompts require an MCP client that supports the prompts feature. See our [MCP Clients Guide](docs/MCP_CLIENTS_GUIDE.md) for compatible clients.
 
 ## Known Limitations
 
