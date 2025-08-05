@@ -81,14 +81,91 @@ npm run build
 #### "Cannot convert undefined or null to object"
 **Solution**: Update to latest version. This was fixed in v1.4.0.
 
+#### "Project not found" Errors with Numeric IDs
+
+**CRITICAL ISSUE**: Claude Desktop has a confirmed bug where it extracts numeric portions from alphanumeric project IDs.
+
+**Example**: When you provide project ID `"az5Ieo4ip7K"`, Claude Desktop may pass only `"547"` to the tool, causing "Project not found" errors.
+
+**Symptoms**:
+- Task updates fail with "Project not found" errors
+- Error messages show numeric IDs (like "547") instead of full alphanumeric IDs
+- Occurs even when full project IDs are provided in prompts
+
+**Solutions**:
+1. Use `list_projects` to get the correct full project ID:
+   ```javascript
+   {
+     "tool": "list_projects",
+     "arguments": {
+       "search": "your project name"
+     }
+   }
+   ```
+2. Copy the full alphanumeric ID (e.g., `"az5Ieo4ip7K"`) from results
+3. Alternative workaround - move to inbox first, then manually assign in OmniFocus:
+   ```javascript
+   {
+     "tool": "update_task", 
+     "arguments": {
+       "taskId": "your-task-id",
+       "projectId": null  // Move to inbox
+     }
+   }
+   ```
+
 #### Tags not being assigned
 **Known limitation**: Tags cannot be assigned during task creation due to JXA API constraints.
+
+**Current Status**:
+- Tag creation and listing work perfectly
+- Tag assignment DURING task creation is not supported
+- Tag assignment via update_task after creation has mixed results
+
 **Workaround**:
 ```javascript
-// Step 1: Create task
-const task = await create_task({ name: "My Task" });
+// Step 1: Create task without tags
+const task = await create_task({ 
+  name: "My Task",
+  projectId: "someProjectId"
+});
+
 // Step 2: Update with tags
-await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+const result = await update_task({ 
+  taskId: task.id, 
+  tags: ["work", "urgent"] 
+});
+
+// Check if warning was returned
+if (result.warning) {
+  console.log("Tag assignment issue:", result.warning);
+  // Tags may need to be applied manually in OmniFocus
+}
+```
+
+**Best Practice**: For reliable tag management, consider using the OmniFocus UI directly.
+
+#### Project Movement Issues
+
+**Known Limitation**: Moving tasks between projects using JXA has reliability issues.
+
+**What happens**: 
+- The server may need to delete and recreate the task
+- Task maintains all properties but gets a new ID
+- Response includes note about recreation
+
+**Example**:
+```javascript
+// Moving a task to a project
+const result = await update_task({ 
+  taskId: "abc123", 
+  projectId: "xyz789" 
+});
+
+// Check if task was recreated
+if (result.note && result.note.includes("recreated")) {
+  console.log("Task was moved via recreation. New ID:", result.id);
+}
 ```
 
 ### MCP-Specific Issues
@@ -113,10 +190,44 @@ Test your server:
 npx @modelcontextprotocol/inspector dist/index.js
 ```
 
+**Note**: If Inspector won't start, ensure you've built the project first with `npm run build`.
+
 #### Verify installation
 ```bash
 node dist/index.js --version
 ```
+
+#### Test Basic Connection
+```javascript
+{
+  "tool": "get_version_info",
+  "arguments": {}
+}
+```
+
+### Known Claude Desktop Bugs
+
+1. **ID Parsing**: Extracts numbers from alphanumeric IDs
+2. **Type Conversion**: May convert strings to numbers
+3. **JSON Parsing**: Complex nested objects may fail
+
+These are Claude Desktop issues, not server bugs. Use workarounds provided above.
+
+### JXA whose() Constraints
+
+- Cannot query for "not null" directly (use `{_not: null}` syntax)
+- String operators require underscore prefix: `_contains`, `_beginsWith`, `_endsWith`
+- Date operators use symbols (`>`, `<`), NOT underscores
+- Complex queries may timeout with large databases
+
+## Emergency Recovery
+
+If nothing works:
+1. Restart OmniFocus
+2. Rebuild the server: `npm run build`
+3. Clear Claude Desktop config and re-add
+4. Grant permissions again in System Settings
+5. Test with simple query like `get_version_info`
 
 ## Getting Help
 
