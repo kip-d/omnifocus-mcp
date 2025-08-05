@@ -32,7 +32,7 @@ export const EXPORT_TASKS_SCRIPT = `
         details: "doc.flattenedTasks() returned null or undefined"
       });
     }
-    const allFields = fields || ['name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'flagged'];
+    const allFields = fields || ['name', 'project', 'dueDate', 'tags', 'flagged', 'note'];
     
     // Apply limit from filter if present, with reasonable default to prevent timeout
     const maxTasks = (filter && filter.limit) ? filter.limit : Math.min(1000, allTasks.length);
@@ -101,26 +101,34 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (allFields.includes('note')) {
         const note = safeGet(() => task.note());
-        if (note) taskData.note = note;
+        taskData.note = note || '';
       }
       
       if (allFields.includes('project')) {
         try {
           const project = safeGetProject(task);
-          if (project) {
-            taskData.project = project.name;
-            taskData.projectId = project.id;
-          }
-        } catch (e) {}
+          taskData.project = project ? project.name : '';
+        } catch (e) {
+          taskData.project = '';
+        }
+      }
+      
+      if (allFields.includes('projectId')) {
+        try {
+          const project = safeGetProject(task);
+          taskData.projectId = project ? project.id : '';
+        } catch (e) {
+          taskData.projectId = '';
+        }
       }
       
       if (allFields.includes('tags')) {
         try {
           const tags = safeGetTags(task);
-          if (tags && tags.length > 0) {
-            taskData.tags = tags;
-          }
-        } catch (e) {}
+          taskData.tags = tags || [];
+        } catch (e) {
+          taskData.tags = [];
+        }
       }
       
       if (allFields.includes('deferDate')) {
@@ -133,12 +141,13 @@ export const EXPORT_TASKS_SCRIPT = `
         taskData.dueDate = dueDate || '';
       }
       
-      if (allFields.includes('completed') || allFields.includes('completionDate')) {
+      if (allFields.includes('completed')) {
         taskData.completed = safeGet(() => task.completed(), false);
-        if (allFields.includes('completionDate')) {
-          const completionDate = safeGetDate(() => task.completionDate());
-          taskData.completionDate = completionDate || '';
-        }
+      }
+      
+      if (allFields.includes('completionDate')) {
+        const completionDate = safeGetDate(() => task.completionDate());
+        taskData.completionDate = completionDate || '';
       }
       
       if (allFields.includes('flagged')) {
@@ -147,9 +156,7 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (allFields.includes('estimated')) {
         const minutes = safeGet(() => task.estimatedMinutes());
-        if (minutes && minutes > 0) {
-          taskData.estimatedMinutes = minutes;
-        }
+        taskData.estimatedMinutes = minutes || 0;
       }
       
       if (allFields.includes('created') || allFields.includes('createdDate')) {
@@ -175,15 +182,18 @@ export const EXPORT_TASKS_SCRIPT = `
     if (format === 'csv') {
       // Build CSV
       if (tasks.length === 0) {
+        // Use requested fields for headers even when no data
+        const emptyHeaders = allFields.join(',');
         return JSON.stringify({
           format: 'csv',
-          data: 'name,completed,flagged\\n',
+          data: emptyHeaders + '\\n',
           count: 0,
           message: 'No tasks found matching the filter criteria'
         });
       }
       
-      const headers = Object.keys(tasks[0] || {});
+      // Use requested fields order for headers
+      const headers = allFields;
       let csv = headers.join(',') + '\\n';
       
       for (const task of tasks) {
