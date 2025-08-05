@@ -19,14 +19,16 @@ export const ExportTasksSchema = z.object({
     tags: z.array(z.string()).optional().describe('Filter by tags (requires all specified tags)'),
     available: coerceBoolean().optional().describe('Only available tasks (not deferred/blocked)'),
     completed: coerceBoolean().optional().describe('Filter by completion status'),
-    flagged: coerceBoolean().optional().describe('Only flagged tasks')
+    flagged: coerceBoolean().optional().describe('Only flagged tasks'),
+    limit: z.number().optional().describe('Maximum number of tasks to export')
   })
     .optional()
     .describe('Filter criteria'),
   
   fields: z.array(z.enum([
     'id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 
-    'completed', 'flagged', 'estimated', 'created', 'modified'
+    'completed', 'completionDate', 'flagged', 'estimated', 'created', 'createdDate', 
+    'modified', 'modifiedDate'
   ]))
     .optional()
     .describe('Fields to include in export (default: all common fields)')

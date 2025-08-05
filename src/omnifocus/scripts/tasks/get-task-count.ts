@@ -18,6 +18,15 @@ export const GET_TASK_COUNT_SCRIPT = `
       // Start with the most restrictive collection based on filters
       if (filter.inInbox === true) {
         baseCollection = doc.inboxTasks();
+      } else if (filter.completed === false && filter.flagged === true) {
+        // Optimize for incomplete + flagged tasks
+        baseCollection = doc.flattenedTasks.whose({completed: false, flagged: true})();
+      } else if (filter.completed === true && filter.flagged === true) {
+        // Optimize for completed + flagged tasks
+        baseCollection = doc.flattenedTasks.whose({completed: true, flagged: true})();
+      } else if (filter.flagged === true && filter.completed === undefined) {
+        // Just flagged tasks
+        baseCollection = doc.flattenedTasks.whose({flagged: true})();
       } else if (filter.completed === false && filter.effectivelyCompleted !== true) {
         // Start with incomplete tasks for better performance
         baseCollection = doc.flattenedTasks.whose({completed: false})();
@@ -36,8 +45,10 @@ export const GET_TASK_COUNT_SCRIPT = `
           return false;
         }
         
-        // Flagged filter
-        if (filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {
+        // Flagged filter (skip if already filtered in base collection)
+        const alreadyFilteredByFlagged = (filter.completed !== undefined && filter.flagged === true) || 
+                                        (filter.flagged === true && filter.completed === undefined);
+        if (!alreadyFilteredByFlagged && filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {
           return false;
         }
         
@@ -99,7 +110,7 @@ export const GET_TASK_COUNT_SCRIPT = `
       const startTime = Date.now();
       
       // If we have a large collection and simple filters, try to use whose() for better performance
-      if (baseCollection.length > 500 && !filter.search && !filter.tags && !filter.dueBefore && !filter.dueAfter) {
+      if (baseCollection.length > 500 && !filter.search && !filter.tags && !filter.dueBefore && !filter.dueAfter && filter.flagged === undefined && filter.available === undefined && !filter.projectId) {
         // Simple count - just return the length
         count = baseCollection.length;
       } else {

@@ -5,7 +5,7 @@ import { ExportTasksSchema } from '../schemas/export-schemas.js';
 
 export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
   name = 'export_tasks';
-  description = 'Export tasks to JSON/CSV with filtering. Format: json|csv|markdown. Apply any list_tasks filters. Specify fields array or get all. Returns file content for saving.';
+  description = 'Export tasks to JSON/CSV/Markdown with filtering. Format: json|csv|markdown. Apply any list_tasks filters. Fields: id, name, note, project, tags, deferDate, dueDate, completed, completionDate, flagged, estimated, created/createdDate, modified/modifiedDate. Returns file content for saving.';
   schema = ExportTasksSchema;
 
   async executeValidated(args: z.infer<typeof ExportTasksSchema>): Promise<any> {

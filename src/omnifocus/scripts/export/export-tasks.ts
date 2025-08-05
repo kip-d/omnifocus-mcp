@@ -133,9 +133,9 @@ export const EXPORT_TASKS_SCRIPT = `
         if (dueDate) taskData.dueDate = dueDate;
       }
       
-      if (allFields.includes('completed')) {
+      if (allFields.includes('completed') || allFields.includes('completionDate')) {
         taskData.completed = safeGet(() => task.completed(), false);
-        if (taskData.completed) {
+        if (taskData.completed || allFields.includes('completionDate')) {
           const completionDate = safeGetDate(() => task.completionDate());
           if (completionDate) taskData.completionDate = completionDate;
         }
@@ -152,12 +152,12 @@ export const EXPORT_TASKS_SCRIPT = `
         }
       }
       
-      if (allFields.includes('created')) {
+      if (allFields.includes('created') || allFields.includes('createdDate')) {
         const created = safeGetDate(() => task.creationDate());
         if (created) taskData.createdDate = created;
       }
       
-      if (allFields.includes('modified')) {
+      if (allFields.includes('modified') || allFields.includes('modifiedDate')) {
         const modified = safeGetDate(() => task.modificationDate());
         if (modified) taskData.modifiedDate = modified;
       }
