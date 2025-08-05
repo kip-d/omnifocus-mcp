@@ -138,6 +138,9 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         let groupKey = 'Other';
         
         switch(options.groupBy) {
+          case 'none':
+            groupKey = 'All Tasks';
+            break;
           case 'project':
             try {
               const project = safeGetProject(task);

@@ -144,7 +144,7 @@ export const GET_RECURRING_PATTERNS_SCRIPT = `
           } else if (dayMatch) {
             ruleData.unit = 'days';
             ruleData.steps = parseInt(dayMatch[1]);
-          } else if (taskName.includes(') || taskName.includes('bill') || taskName.includes('subscription')) {
+          } else if (taskName.includes('payment') || taskName.includes('bill') || taskName.includes('subscription')) {
             ruleData.unit = 'months';
             ruleData.steps = 1;
           }

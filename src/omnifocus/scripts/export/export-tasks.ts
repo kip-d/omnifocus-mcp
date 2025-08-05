@@ -125,19 +125,19 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (allFields.includes('deferDate')) {
         const deferDate = safeGetDate(() => task.deferDate());
-        if (deferDate) taskData.deferDate = deferDate;
+        taskData.deferDate = deferDate || '';
       }
       
       if (allFields.includes('dueDate')) {
         const dueDate = safeGetDate(() => task.dueDate());
-        if (dueDate) taskData.dueDate = dueDate;
+        taskData.dueDate = dueDate || '';
       }
       
       if (allFields.includes('completed') || allFields.includes('completionDate')) {
         taskData.completed = safeGet(() => task.completed(), false);
-        if (taskData.completed || allFields.includes('completionDate')) {
+        if (allFields.includes('completionDate')) {
           const completionDate = safeGetDate(() => task.completionDate());
-          if (completionDate) taskData.completionDate = completionDate;
+          taskData.completionDate = completionDate || '';
         }
       }
       
@@ -154,12 +154,12 @@ export const EXPORT_TASKS_SCRIPT = `
       
       if (allFields.includes('created') || allFields.includes('createdDate')) {
         const created = safeGetDate(() => task.creationDate());
-        if (created) taskData.createdDate = created;
+        taskData.createdDate = created || '';
       }
       
       if (allFields.includes('modified') || allFields.includes('modifiedDate')) {
         const modified = safeGetDate(() => task.modificationDate());
-        if (modified) taskData.modifiedDate = modified;
+        taskData.modifiedDate = modified || '';
       }
       
       tasks.push(taskData);
