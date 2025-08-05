@@ -157,9 +157,8 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       } else {
         expect(response.success).toBe(true);
         expect(response.data).toHaveProperty('task');
-        expect(response.data.task).toHaveProperty('task');
-        expect(response.data.task.task).toHaveProperty('id');
-        expect(response.data.task.task).toHaveProperty('name');
+        expect(response.data.task).toHaveProperty('taskId');
+        expect(response.data.task).toHaveProperty('name');
       }
     });
   });
