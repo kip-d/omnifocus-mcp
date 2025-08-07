@@ -12,10 +12,31 @@ export const CREATE_TASK_SCRIPT = `
     const taskData = {{taskData}};
     
     try {
-      // Create the task in inbox or specified project
+      // Determine the target container (inbox, project, or parent task)
       let targetContainer = doc.inboxTasks;
+      let parentTask = null;
       
-      if (taskData.projectId) {
+      if (taskData.parentTaskId) {
+        // Find parent task in all tasks
+        const allTasks = doc.flattenedTasks();
+        for (let i = 0; i < allTasks.length; i++) {
+          if (allTasks[i].id() === taskData.parentTaskId) {
+            parentTask = allTasks[i];
+            break;
+          }
+        }
+        
+        if (!parentTask) {
+          return JSON.stringify({ 
+            error: true, 
+            message: "Parent task with ID '" + taskData.parentTaskId + "' not found" 
+          });
+        }
+        
+        // Use parent task's children as target container
+        targetContainer = parentTask.tasks;
+        
+      } else if (taskData.projectId) {
         const validation = validateProject(taskData.projectId, doc);
         if (!validation.valid) {
           return JSON.stringify({ error: true, message: validation.error });

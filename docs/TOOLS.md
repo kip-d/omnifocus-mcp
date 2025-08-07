@@ -44,6 +44,7 @@ Create new tasks in inbox or specific project.
 - `name` (string, required): Task name
 - `note` (string): Task note/description
 - `projectId` (string): Project to assign task to
+- `parentTaskId` (string): Parent task ID to create as subtask (for action groups)
 - `flagged` (boolean): Flag status
 - `dueDate` (string): Due date in ISO format
 - `deferDate` (string): Defer date in ISO format
@@ -51,7 +52,9 @@ Create new tasks in inbox or specific project.
 - `tags` (string[]): Tags to assign (requires separate update due to JXA limitation)
 - `sequential` (boolean): Whether subtasks must be completed in order (default: false/parallel)
 
-**Example:**
+**Examples:**
+
+Create a regular task:
 ```javascript
 {
   "tool": "create_task",
@@ -61,6 +64,37 @@ Create new tasks in inbox or specific project.
     "dueDate": "2024-01-15T17:00:00Z",
     "flagged": true,
     "estimatedMinutes": 30
+  }
+}
+```
+
+Create an action group with subtasks:
+```javascript
+// First create the parent task
+{
+  "tool": "create_task",
+  "arguments": {
+    "name": "Plan Party",
+    "sequential": true,  // Subtasks must be done in order
+    "projectId": "abc123"
+  }
+}
+// Returns: { taskId: "parentId123" }
+
+// Then create subtasks
+{
+  "tool": "create_task",
+  "arguments": {
+    "name": "Make guest list",
+    "parentTaskId": "parentId123"
+  }
+}
+
+{
+  "tool": "create_task",
+  "arguments": {
+    "name": "Send invitations",
+    "parentTaskId": "parentId123"
   }
 }
 ```
@@ -76,6 +110,7 @@ Update existing task properties.
 - `dueDate` (string): Due date (null to clear)
 - `deferDate` (string): Defer date (null to clear)
 - `projectId` (string): Move to project (null for inbox)
+- `parentTaskId` (string): Move to parent task (null to make top-level)
 - `tags` (string[]): Update tags
 - `estimatedMinutes` (number): Time estimate
 - `sequential` (boolean): Whether subtasks must be completed in order

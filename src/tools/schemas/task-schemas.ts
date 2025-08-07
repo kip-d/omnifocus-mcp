@@ -145,6 +145,10 @@ export const CreateTaskSchema = z.object({
     .optional()
     .describe('Project ID to assign the task to'),
   
+  parentTaskId: IdSchema
+    .optional()
+    .describe('Parent task ID to create this task as a subtask/child'),
+  
   flagged: coerceBoolean()
     .default(false)
     .describe('Whether the task is flagged'),
@@ -188,6 +192,10 @@ export const UpdateTaskSchema = z.object({
   
   projectId: z.union([IdSchema, z.null()])
     .describe('New project ID from list_projects (or null to move to inbox)')
+    .optional(),
+  
+  parentTaskId: z.union([IdSchema, z.null()])
+    .describe('Parent task ID to make this a subtask (or null to make it a top-level task)')
     .optional(),
   
   flagged: coerceBoolean()

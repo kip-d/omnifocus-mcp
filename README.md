@@ -78,8 +78,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-### Create Sequential Task (Action Group)
+### Create Action Group with Subtasks
 ```javascript
+// Create parent task (action group)
 {
   "tool": "create_task",
   "arguments": {
@@ -88,7 +89,16 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
     "projectId": "xyz789"
   }
 }
-// Note: Add subtasks manually in OmniFocus
+// Returns: { taskId: "abc123" }
+
+// Add subtasks
+{
+  "tool": "create_task",
+  "arguments": {
+    "name": "Make guest list",
+    "parentTaskId": "abc123"  // Creates as subtask
+  }
+}
 ```
 
 ### Get Today's Agenda

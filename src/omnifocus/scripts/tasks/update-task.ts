@@ -180,6 +180,51 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     
+    // Update parent task assignment (move to/from action groups)
+    if (updates.parentTaskId !== undefined) {
+      try {
+        if (updates.parentTaskId === null || updates.parentTaskId === "") {
+          // Move to project root (no parent)
+          const currentProject = safeGetProject(task);
+          if (currentProject) {
+            doc.moveTasks([task], currentProject);
+          } else {
+            // Move to inbox if no project
+            doc.moveTasks([task], doc.inboxTasks);
+          }
+        } else {
+          // Find the new parent task
+          const allTasks = doc.flattenedTasks();
+          let newParent = null;
+          
+          for (let i = 0; i < allTasks.length; i++) {
+            if (allTasks[i].id() === updates.parentTaskId) {
+              newParent = allTasks[i];
+              break;
+            }
+          }
+          
+          if (!newParent) {
+            return JSON.stringify({
+              error: true,
+              message: "Parent task with ID '" + updates.parentTaskId + "' not found"
+            });
+          }
+          
+          // Move task to be a child of the parent using moveTasks
+          doc.moveTasks([task], newParent);
+        }
+      } catch (parentError) {
+        // If direct assignment fails, we might need to recreate the task
+        // For now, return a helpful error
+        return JSON.stringify({
+          error: true,
+          message: "Failed to move task to parent. This operation may require manual adjustment in OmniFocus.",
+          details: parentError.toString()
+        });
+      }
+    }
+    
     // Update tags with error handling
     if (updates.tags !== undefined) {
       try {

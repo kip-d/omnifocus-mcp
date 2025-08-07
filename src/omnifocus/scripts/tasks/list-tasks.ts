@@ -258,6 +258,13 @@ export const LIST_TASKS_SCRIPT = `
       taskObj.projectId = project.id;
     }
     
+    // Get parent task if this is a subtask
+    const parentTask = safeGet(() => task.parent());
+    if (parentTask) {
+      taskObj.parentTaskId = safeGet(() => parentTask.id());
+      taskObj.parentTaskName = safeGet(() => parentTask.name());
+    }
+    
     const dueDate = safeGetDate(() => task.dueDate());
     if (dueDate) taskObj.dueDate = dueDate;
     

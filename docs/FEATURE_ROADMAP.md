@@ -7,6 +7,7 @@ This document tracks feature requests from user testing and planned improvements
 ### v1.8.0 (Current Development)
 - [x] Sequential/parallel support for projects
 - [x] Sequential/parallel support for tasks (action groups)
+- [x] Parent/child task relationships (create subtasks via parentTaskId)
 
 ## High Priority Features 🔴
 
@@ -36,10 +37,11 @@ This document tracks feature requests from user testing and planned improvements
 - **Use case**: Project templates, bulk imports
 
 ### Parent/Child Task Relationships
-- [ ] Support creating tasks with subtasks in one call
-- [ ] Ability to add subtasks to existing tasks
-- [ ] Maintain sequential/parallel settings
-- **Challenge**: JXA API limitations
+- [x] Support creating tasks as subtasks via parentTaskId
+- [x] Maintain sequential/parallel settings on parent tasks
+- [ ] Support moving existing tasks to become subtasks (update_task)
+- [ ] Batch create tasks with subtasks in one call
+- **Status**: Basic functionality implemented!
 
 ### Perspectives Access
 - [ ] `list_perspectives` - Get available perspectives
