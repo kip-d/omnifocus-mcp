@@ -95,6 +95,11 @@ export const UPDATE_PROJECT_SCRIPT = `
       changes.push(updates.flagged ? "Flagged" : "Unflagged");
     }
     
+    if (updates.sequential !== undefined) {
+      targetProject.sequential = updates.sequential;
+      changes.push(updates.sequential ? "Set to sequential (tasks must be done in order)" : "Set to parallel (tasks can be done in any order)");
+    }
+    
     if (updates.status) {
       if (updates.status === 'active') {
         targetProject.status = app.Project.Status.active;

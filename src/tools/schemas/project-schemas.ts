@@ -101,7 +101,11 @@ export const CreateProjectSchema = z.object({
   
   deferDate: DateTimeSchema
     .optional()
-    .describe('Defer date for the project')
+    .describe('Defer date for the project'),
+  
+  sequential: coerceBoolean()
+    .default(false)
+    .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)')
 });
 
 // Update project parameters
@@ -137,7 +141,11 @@ export const UpdateProjectSchema = z.object({
     
     deferDate: z.union([DateTimeSchema, z.null()])
       .optional()
-      .describe('New defer date (or null to clear)')
+      .describe('New defer date (or null to clear)'),
+    
+    sequential: coerceBoolean()
+      .optional()
+      .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)')
   })
   .refine(data => Object.keys(data).length > 0, {
     message: 'At least one update field must be provided'

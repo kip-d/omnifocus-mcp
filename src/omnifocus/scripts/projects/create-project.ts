@@ -60,6 +60,10 @@ export const CREATE_PROJECT_SCRIPT = `
       projectProps.flagged = options.flagged;
     }
     
+    if (options.sequential !== undefined) {
+      projectProps.sequential = options.sequential;
+    }
+    
     // Create project
     const newProject = app.Project(projectProps);
     

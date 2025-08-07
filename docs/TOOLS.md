@@ -49,6 +49,7 @@ Create new tasks in inbox or specific project.
 - `deferDate` (string): Defer date in ISO format
 - `estimatedMinutes` (number): Time estimate
 - `tags` (string[]): Tags to assign (requires separate update due to JXA limitation)
+- `sequential` (boolean): Whether subtasks must be completed in order (default: false/parallel)
 
 **Example:**
 ```javascript
@@ -77,6 +78,7 @@ Update existing task properties.
 - `projectId` (string): Move to project (null for inbox)
 - `tags` (string[]): Update tags
 - `estimatedMinutes` (number): Time estimate
+- `sequential` (boolean): Whether subtasks must be completed in order
 
 ### complete_task
 Mark a task as completed.
@@ -128,6 +130,7 @@ Create new project with optional folder.
 - `dueDate` (string): Due date
 - `deferDate` (string): Defer date
 - `flagged` (boolean): Flag status
+- `sequential` (boolean): Whether tasks must be completed in order (default: false/parallel)
 - `completionDate` (string): For completed projects
 
 ### update_project
@@ -136,7 +139,7 @@ Update project properties.
 **Parameters:**
 - `projectId` (string, required): Project ID
 - `updates` (object): Object containing properties to update
-  - `name`, `note`, `status`, `flagged`, `dueDate`, `deferDate`, `folder`
+  - `name`, `note`, `status`, `flagged`, `dueDate`, `deferDate`, `folder`, `sequential`
 
 ### complete_project
 Mark project as done.

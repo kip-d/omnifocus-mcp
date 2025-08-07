@@ -6,7 +6,7 @@ import { UpdateProjectSchema } from '../schemas/project-schemas.js';
 
 export class UpdateProjectTool extends BaseTool<typeof UpdateProjectSchema> {
   name = 'update_project';
-  description = 'Update an existing project in OmniFocus. Pass projectId and updates object with fields to change (name, note, status, flagged, folder, dates). Can move between folders. Invalidates cache.';
+  description = 'Update an existing project in OmniFocus. Pass projectId and updates object with fields to change (name, note, status, flagged, folder, dates, sequential). Can move between folders. Invalidates cache.';
   schema = UpdateProjectSchema;
 
   async executeValidated(args: z.infer<typeof UpdateProjectSchema>): Promise<any> {

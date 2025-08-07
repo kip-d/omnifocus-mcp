@@ -87,6 +87,9 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.estimatedMinutes !== undefined) {
       task.estimatedMinutes = updates.estimatedMinutes;
     }
+    if (updates.sequential !== undefined) {
+      task.sequential = updates.sequential;
+    }
     
     // Update project assignment with better error handling
     if (updates.projectId !== undefined) {
@@ -120,6 +123,7 @@ export const UPDATE_TASK_SCRIPT = `
             dueDate: safeGetDate(() => task.dueDate()),
             deferDate: safeGetDate(() => task.deferDate()),
             estimatedMinutes: safeGetEstimatedMinutes(task),
+            sequential: safeGet(() => task.sequential(), false),
             completed: safeGet(() => task.completed(), false),
             completionDate: safeGetDate(() => task.completionDate())
           };
@@ -156,6 +160,11 @@ export const UPDATE_TASK_SCRIPT = `
             
             const newTask = app.Task(newTaskObj);
             targetProject.tasks.push(newTask);
+            
+            // Set sequential property after creation
+            if (taskData.sequential !== undefined) {
+              newTask.sequential = taskData.sequential;
+            }
             
             // If task was completed, mark it complete
             if (taskData.completed && taskData.completionDate) {

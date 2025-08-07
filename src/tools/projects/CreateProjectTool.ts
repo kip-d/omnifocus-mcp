@@ -6,7 +6,7 @@ import { CreateProjectSchema } from '../schemas/project-schemas.js';
 
 export class CreateProjectTool extends BaseTool<typeof CreateProjectSchema> {
   name = 'create_project';
-  description = 'Create a new project in OmniFocus. Specify folder to organize (creates if needed). Set status, flagged, dueDate, deferDate. Returns project ID for task assignment. Invalidates cache.';
+  description = 'Create a new project in OmniFocus. Specify folder to organize (creates if needed). Set status, flagged, dueDate, deferDate, sequential (for task order). Returns project ID for task assignment. Invalidates cache.';
   schema = CreateProjectSchema;
 
   async executeValidated(args: z.infer<typeof CreateProjectSchema>): Promise<any> {

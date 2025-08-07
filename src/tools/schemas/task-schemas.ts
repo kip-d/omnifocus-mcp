@@ -165,7 +165,11 @@ export const CreateTaskSchema = z.object({
   
   tags: z.array(TagNameSchema)
     .optional()
-    .describe('Tags to assign (note: requires separate update call due to JXA limitations)')
+    .describe('Tags to assign (note: requires separate update call due to JXA limitations)'),
+  
+  sequential: coerceBoolean()
+    .default(false)
+    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.')
 });
 
 // Update task parameters
@@ -216,7 +220,11 @@ export const UpdateTaskSchema = z.object({
   
   tags: z.array(TagNameSchema)
     .optional()
-    .describe('New tags (replaces all existing tags)')
+    .describe('New tags (replaces all existing tags)'),
+  
+  sequential: coerceBoolean()
+    .optional()
+    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.')
 });
 
 // Complete task parameters

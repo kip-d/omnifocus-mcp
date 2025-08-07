@@ -59,6 +59,11 @@ export const CREATE_TASK_SCRIPT = `
         task.estimatedMinutes = taskData.estimatedMinutes;
       }
       
+      // Set sequential property if provided (for action groups)
+      if (taskData.sequential !== undefined) {
+        task.sequential = taskData.sequential;
+      }
+      
       // Note: Tags cannot be assigned during creation in JXA
       // This is a known limitation of the OmniFocus JXA API
       

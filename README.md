@@ -8,6 +8,7 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
 - Task management (create, update, complete, delete)
 - Project and folder organization  
+- Sequential/parallel support for both projects and tasks
 - GTD analytics and productivity insights
 - Tag management
 - Data export (CSV, JSON, Markdown)
@@ -63,6 +64,31 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
     "flagged": true
   }
 }
+```
+
+### Create Sequential Project
+```javascript
+{
+  "tool": "create_project",
+  "arguments": {
+    "name": "Website Redesign",
+    "sequential": true,  // Tasks must be done in order
+    "folder": "Work"
+  }
+}
+```
+
+### Create Sequential Task (Action Group)
+```javascript
+{
+  "tool": "create_task",
+  "arguments": {
+    "name": "Plan Party",
+    "sequential": true,  // Subtasks must be done in order
+    "projectId": "xyz789"
+  }
+}
+// Note: Add subtasks manually in OmniFocus
 ```
 
 ### Get Today's Agenda

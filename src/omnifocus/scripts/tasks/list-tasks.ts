@@ -309,6 +309,12 @@ export const LIST_TASKS_SCRIPT = `
     const estimatedMinutes = safeGetEstimatedMinutes(task);
     if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
     
+    // Sequential property (for action groups)
+    const sequential = safeGet(() => task.sequential(), false);
+    if (numberOfTasks > 0) {
+      taskObj.sequential = sequential;
+    }
+    
     // Add repetition rule and recurring status analysis
     if (!skipRecurringAnalysis) {
       const repetitionRule = safeGet(() => task.repetitionRule());
