@@ -44,13 +44,30 @@ export class CreateProjectTool extends BaseTool<typeof CreateProjectSchema> {
         parsedResult = result;
       }
 
+      // Check for errors in parsed result
+      if (parsedResult.error) {
+        return createErrorResponse(
+          'create_project',
+          'CREATION_FAILED',
+          parsedResult.message || 'Failed to create project',
+          { details: parsedResult.details },
+          timer.toMetadata(),
+        );
+      }
+
       return createEntityResponse(
         'create_project',
         'project',
-        parsedResult,
+        {
+          projectId: parsedResult.project?.id || parsedResult.id,
+          name: parsedResult.project?.name || args.name,
+          folder: args.folder,
+          nextReviewDate: parsedResult.project?.nextReviewDate,
+          reviewInterval: parsedResult.project?.reviewInterval,
+        },
         {
           ...timer.toMetadata(),
-          created_id: parsedResult.id || parsedResult.projectId,
+          created_id: parsedResult.project?.id || parsedResult.id,
           folder: args.folder,
           input_params: {
             name: args.name,
@@ -58,6 +75,7 @@ export class CreateProjectTool extends BaseTool<typeof CreateProjectSchema> {
             has_due_date: !!args.dueDate,
             has_defer_date: !!args.deferDate,
             has_folder: !!args.folder,
+            has_review: !!args.reviewInterval,
             flagged: args.flagged || false,
           },
         },

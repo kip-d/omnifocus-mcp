@@ -144,6 +144,126 @@ export const SAFE_UTILITIES = `
       return false;
     }
   }
+  
+  function getTaskStatus(task) {
+    try {
+      const status = task.taskStatus();
+      // Convert the Task.Status enum to string
+      if (status) {
+        return status.toString();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  function isTaskBlocked(task) {
+    try {
+      const status = task.taskStatus();
+      return status && status.toString() === 'Blocked';
+    } catch (e) {
+      // Fallback logic for blocked status
+      try {
+        // A task is blocked if it's in a sequential project/group and has incomplete predecessors
+        const parent = task.parent();
+        if (parent && parent.sequential && parent.sequential()) {
+          const siblings = parent.tasks();
+          for (let i = 0; i < siblings.length; i++) {
+            const sibling = siblings[i];
+            if (sibling.id() === task.id()) {
+              break; // Found our task, so all previous siblings should be complete
+            }
+            if (!sibling.completed()) {
+              return true; // Previous sibling not complete, so we're blocked
+            }
+          }
+        }
+        
+        // Check if containing project is sequential and has incomplete preceding tasks
+        const project = task.containingProject();
+        if (project && project.sequential && project.sequential()) {
+          const projectTasks = project.tasks();
+          for (let i = 0; i < projectTasks.length; i++) {
+            const projectTask = projectTasks[i];
+            if (projectTask.id() === task.id()) {
+              break; // Found our task
+            }
+            if (!projectTask.completed()) {
+              return true; // Previous task in sequential project not complete
+            }
+          }
+        }
+        
+        return false;
+      } catch (fallbackError) {
+        return false;
+      }
+    }
+  }
+  
+  function isTaskNext(task) {
+    try {
+      const status = task.taskStatus();
+      return status && status.toString() === 'Next';
+    } catch (e) {
+      // Fallback logic for next action status
+      try {
+        // A task is next if it's available and not blocked
+        if (!isTaskAvailableForWork(task) || isTaskBlocked(task)) {
+          return false;
+        }
+        
+        // In sequential projects, only the first incomplete task is next
+        const project = task.containingProject();
+        if (project && project.sequential && project.sequential()) {
+          const projectTasks = project.tasks();
+          for (let i = 0; i < projectTasks.length; i++) {
+            const projectTask = projectTasks[i];
+            if (!projectTask.completed()) {
+              return projectTask.id() === task.id(); // Only first incomplete task is next
+            }
+          }
+        }
+        
+        return true; // In parallel projects, all available tasks are next actions
+      } catch (fallbackError) {
+        return false;
+      }
+    }
+  }
+  
+  function isTaskAvailableForWork(task) {
+    try {
+      const status = task.taskStatus();
+      return status && status.toString() === 'Available';
+    } catch (e) {
+      // Fallback logic for available status
+      try {
+        // Available means: not completed, not blocked, not deferred, project is active
+        if (task.completed()) return false;
+        
+        // Check if task is deferred
+        const deferDate = task.deferDate();
+        if (deferDate && isValidDate(deferDate) && deferDate > new Date()) {
+          return false;
+        }
+        
+        // Check if project is active
+        const project = task.containingProject();
+        if (project) {
+          const projectStatus = project.status();
+          if (projectStatus === 'dropped' || projectStatus === 'done' || projectStatus === 'onHold') {
+            return false;
+          }
+        }
+        
+        return !isTaskBlocked(task);
+      } catch (fallbackError) {
+        return false;
+      }
+    }
+  }
 `;
 
 /**
@@ -207,7 +327,12 @@ export const TASK_SERIALIZATION = `
       name: safeGet(() => task.name()),
       completed: safeGet(() => task.completed(), false),
       flagged: isFlagged(task),
-      inInbox: safeGet(() => task.inInbox(), false)
+      inInbox: safeGet(() => task.inInbox(), false),
+      // Add status properties
+      taskStatus: getTaskStatus(task),
+      blocked: isTaskBlocked(task),
+      next: isTaskNext(task),
+      available: isTaskAvailableForWork(task)
     };
     
     if (includeDetails) {

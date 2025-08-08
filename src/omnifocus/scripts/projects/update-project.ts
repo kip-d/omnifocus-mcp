@@ -1,4 +1,5 @@
 import { getAllHelpers } from '../shared/helpers.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to update an existing project in OmniFocus
@@ -7,11 +8,14 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Update name, note, dates, and flagged status
  * - Change project status (active, onHold, dropped, done)
  * - Move project to different folder
+ * - Update review dates and intervals for GTD workflows
+ * - Configure advanced properties (completedByChildren, singleton)
  * - Duplicate name checking
  * - Detailed change tracking
  */
 export const UPDATE_PROJECT_SCRIPT = `
   ${getAllHelpers()}
+  ${REPEAT_HELPERS}
   
   (() => {
   const projectId = {{projectId}};
@@ -117,6 +121,75 @@ export const UPDATE_PROJECT_SCRIPT = `
       }
     }
     
+    // Review-related updates
+    if (updates.lastReviewDate !== undefined) {
+      if (updates.lastReviewDate === null) {
+        targetProject.lastReviewDate = null;
+        changes.push("Last review date cleared");
+      } else {
+        targetProject.lastReviewDate = new Date(updates.lastReviewDate);
+        changes.push("Last review date set to " + updates.lastReviewDate);
+      }
+    }
+    
+    if (updates.nextReviewDate !== undefined) {
+      if (updates.nextReviewDate === null) {
+        targetProject.nextReviewDate = null;
+        changes.push("Next review date cleared");
+      } else {
+        targetProject.nextReviewDate = new Date(updates.nextReviewDate);
+        changes.push("Next review date set to " + updates.nextReviewDate);
+      }
+    }
+    
+    if (updates.reviewInterval !== undefined) {
+      try {
+        if (updates.reviewInterval === null) {
+          targetProject.reviewInterval = null;
+          changes.push("Review interval cleared");
+        } else {
+          const interval = new app.Project.ReviewInterval();
+          interval.unit = updates.reviewInterval.unit;
+          interval.steps = updates.reviewInterval.steps;
+          targetProject.reviewInterval = interval;
+          changes.push("Review interval set to every " + updates.reviewInterval.steps + " " + updates.reviewInterval.unit + "(s)");
+        }
+      } catch (reviewError) {
+        changes.push("Warning: Could not set review interval: " + reviewError.message);
+      }
+    }
+    
+    // Advanced project properties
+    if (updates.completedByChildren !== undefined) {
+      targetProject.completedByChildren = updates.completedByChildren;
+      changes.push(updates.completedByChildren ? "Project will auto-complete when all tasks are done" : "Project will not auto-complete");
+    }
+    
+    if (updates.singleton !== undefined) {
+      targetProject.singleton = updates.singleton;
+      changes.push(updates.singleton ? "Converted to single action list" : "Converted to project with sequential/parallel tasks");
+    }
+    
+    // Update repeat rule if provided
+    if (updates.clearRepeatRule) {
+      try {
+        targetProject.repetitionRule = null;
+        changes.push("Repeat rule cleared");
+      } catch (error) {
+        changes.push("Warning: Failed to clear repeat rule: " + error.message);
+      }
+    } else if (updates.repeatRule) {
+      try {
+        const repetitionRule = createRepetitionRule(updates.repeatRule);
+        if (repetitionRule) {
+          targetProject.repetitionRule = repetitionRule;
+          changes.push("Repeat rule updated");
+        }
+      } catch (error) {
+        changes.push("Warning: Failed to update repeat rule: " + error.message);
+      }
+    }
+    
     if (updates.folder !== undefined) {
       // Handle folder movement
       try {
@@ -173,7 +246,15 @@ export const UPDATE_PROJECT_SCRIPT = `
       success: true,
       project: {
         id: targetProject.id(),
-        name: targetProject.name()
+        name: targetProject.name(),
+        lastReviewDate: targetProject.lastReviewDate ? targetProject.lastReviewDate().toISOString() : null,
+        nextReviewDate: targetProject.nextReviewDate ? targetProject.nextReviewDate().toISOString() : null,
+        reviewInterval: targetProject.reviewInterval ? {
+          unit: targetProject.reviewInterval().unit,
+          steps: targetProject.reviewInterval().steps
+        } : null,
+        completedByChildren: targetProject.completedByChildren ? targetProject.completedByChildren() : false,
+        singleton: targetProject.singleton ? targetProject.singleton() : false
       },
       changes: changes,
       message: "Project updated successfully"

@@ -11,6 +11,9 @@ import { CreateTaskTool } from './tasks/CreateTaskTool.js';
 import { UpdateTaskTool } from './tasks/UpdateTaskTool.js';
 import { CompleteTaskTool } from './tasks/CompleteTaskTool.js';
 import { DeleteTaskTool } from './tasks/DeleteTaskTool.js';
+import { NextActionsTool } from './tasks/NextActionsTool.js';
+import { BlockedTasksTool } from './tasks/BlockedTasksTool.js';
+import { AvailableTasksTool } from './tasks/AvailableTasksTool.js';
 
 // Import project tools
 import { ListProjectsTool } from './projects/ListProjectsTool.js';
@@ -18,6 +21,13 @@ import { CreateProjectTool } from './projects/CreateProjectTool.js';
 import { UpdateProjectTool } from './projects/UpdateProjectTool.js';
 import { CompleteProjectTool } from './projects/CompleteProjectTool.js';
 import { DeleteProjectTool } from './projects/DeleteProjectTool.js';
+
+// Import folder tools
+import { ListFoldersTool } from './folders/ListFoldersTool.js';
+import { CreateFolderTool } from './folders/CreateFolderTool.js';
+import { UpdateFolderTool } from './folders/UpdateFolderTool.js';
+import { DeleteFolderTool } from './folders/DeleteFolderTool.js';
+import { MoveFolderTool } from './folders/MoveFolderTool.js';
 
 // Import analytics tools
 import { ProductivityStatsTool } from './analytics/ProductivityStatsTool.js';
@@ -50,6 +60,11 @@ import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
 // Import diagnostic tools
 import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
 
+// Import review tools
+import { ProjectsForReviewTool } from './reviews/ProjectsForReviewTool.js';
+import { MarkProjectReviewedTool } from './reviews/MarkProjectReviewedTool.js';
+import { SetReviewScheduleTool } from './reviews/SetReviewScheduleTool.js';
+
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
@@ -66,6 +81,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new CompleteTaskTool(cache),
     new DeleteTaskTool(cache),
 
+    // Advanced status tools
+    new NextActionsTool(cache),
+    new BlockedTasksTool(cache),
+    new AvailableTasksTool(cache),
+
     // Batch operations removed due to OmniFocus JXA limitations
     // Use individual task operations which work perfectly
 
@@ -80,6 +100,13 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new UpdateProjectTool(cache),
     new CompleteProjectTool(cache),
     new DeleteProjectTool(cache),
+
+    // Folder tools
+    new ListFoldersTool(cache),
+    new CreateFolderTool(cache),
+    new UpdateFolderTool(cache),
+    new DeleteFolderTool(cache),
+    new MoveFolderTool(cache),
 
     // Analytics tools
     new ProductivityStatsTool(cache),
@@ -105,6 +132,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     
     // Diagnostic tools
     new RunDiagnosticsTool(cache),
+    
+    // Review tools (GTD project review workflows)
+    new ProjectsForReviewTool(cache),
+    new MarkProjectReviewedTool(cache),
+    new SetReviewScheduleTool(cache),
   ];
 
   // Register handlers

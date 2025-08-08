@@ -131,6 +131,7 @@ For detailed documentation, see `/docs/TOOLS.md`.
 
 - **Tags**: Cannot be assigned during task creation (JXA limitation). Create task first, then update with tags.
 - **Project Movement**: Moving tasks between projects may require recreation with new ID
+- **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.
 - **Performance**: Large queries (2000+ tasks) may be slow. Use `skipAnalysis: true` for faster queries.
 
 See `/docs/TROUBLESHOOTING.md` for solutions.

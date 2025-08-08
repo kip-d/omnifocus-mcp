@@ -9,6 +9,7 @@ import {
   SearchTextSchema,
   PerformanceOptionsSchema
 } from './shared-schemas.js';
+import { RepeatRuleSchema, ExistingRepeatRuleSchema } from './repeat-schemas.js';
 import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
@@ -32,7 +33,13 @@ export const TaskSchema = z.object({
   available: z.boolean().optional(),
   remainingCount: z.number().optional(),
   repetitionMethod: z.string().optional(),
-  primaryKey: z.string().optional()
+  repetitionRule: ExistingRepeatRuleSchema.optional(),
+  primaryKey: z.string().optional(),
+  
+  // Advanced status properties
+  taskStatus: z.string().optional(),
+  blocked: z.boolean().optional(),
+  next: z.boolean().optional()
 });
 
 // List tasks parameters - with coercion for MCP string inputs
@@ -84,6 +91,19 @@ export const ListTasksSchema = z.object({
   includeCompleted: coerceBoolean()
     .optional()
     .describe('Include completed tasks in results'),
+  
+  // Advanced status filters
+  taskStatus: z.enum(['Available', 'Blocked', 'Completed', 'Dropped', 'DueSoon', 'Next', 'Overdue'])
+    .optional()
+    .describe('Filter by specific task status'),
+  
+  blocked: coerceBoolean()
+    .optional()
+    .describe('Filter for blocked tasks (waiting on other incomplete tasks)'),
+  
+  next: coerceBoolean()
+    .optional()
+    .describe('Filter for next actions (available tasks not blocked by others)'),
   
   sortBy: z.enum(['dueDate', 'deferDate', 'name', 'project', 'flagged'])
     .optional()
@@ -173,7 +193,11 @@ export const CreateTaskSchema = z.object({
   
   sequential: coerceBoolean()
     .default(false)
-    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.')
+    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.'),
+  
+  repeatRule: RepeatRuleSchema
+    .optional()
+    .describe('Repeat/recurrence rule for the task. Supports complex patterns including weekly days and monthly positions.')
 });
 
 // Update task parameters
@@ -232,7 +256,15 @@ export const UpdateTaskSchema = z.object({
   
   sequential: coerceBoolean()
     .optional()
-    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.')
+    .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.'),
+  
+  repeatRule: RepeatRuleSchema
+    .optional()
+    .describe('New repeat/recurrence rule for the task. Replaces existing repeat rule.'),
+  
+  clearRepeatRule: coerceBoolean()
+    .optional()
+    .describe('Set to true to remove the existing repeat rule')
 });
 
 // Complete task parameters

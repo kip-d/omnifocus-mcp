@@ -15,8 +15,10 @@ export class CacheManager {
   private config: CacheConfig = {
     tasks: { ttl: 60 * 1000 },        // 1 minute (was 30 seconds)
     projects: { ttl: 600 * 1000 },    // 10 minutes (was 5 minutes)
+    folders: { ttl: 600 * 1000 },     // 10 minutes (folders change less frequently)
     analytics: { ttl: 3600 * 1000 },  // 1 hour
     tags: { ttl: 1200 * 1000 },       // 20 minutes (was 10 minutes)
+    reviews: { ttl: 300 * 1000 },     // 5 minutes (review data is time-sensitive)
   };
 
   constructor(config?: Partial<CacheConfig>) {

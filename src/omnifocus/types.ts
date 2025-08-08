@@ -54,6 +54,11 @@ export interface OmniFocusTask {
   sequential?: boolean;
   inInbox: boolean;
 
+  // Advanced status properties
+  taskStatus?: string; // 'Available', 'Blocked', 'Completed', 'Dropped', 'DueSoon', 'Next', 'Overdue'
+  next?: boolean; // True if this is a next action
+  available?: boolean; // True if available to work on now
+
   // Recurring task information
   repetitionRule?: RepetitionRule; // Raw repetition configuration (extracted/inferred)
   recurringStatus?: RecurringTaskStatus; // LLM-friendly recurring analysis
@@ -202,6 +207,11 @@ export interface TaskFilter {
   search?: string;
   inInbox?: boolean;
   available?: boolean;
+  
+  // Advanced status filters
+  taskStatus?: 'Available' | 'Blocked' | 'Completed' | 'Dropped' | 'DueSoon' | 'Next' | 'Overdue';
+  blocked?: boolean;
+  next?: boolean;
 }
 
 export interface ProjectFilter {

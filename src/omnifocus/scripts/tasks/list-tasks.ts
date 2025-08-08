@@ -1,4 +1,5 @@
 import { getAllHelpers } from '../shared/helpers.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to list tasks with advanced filtering in OmniFocus
@@ -12,6 +13,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  */
 export const LIST_TASKS_SCRIPT = `
   ${getAllHelpers()}
+  ${REPEAT_HELPERS}
   
   (() => {
     const filter = {{filter}};
@@ -245,7 +247,12 @@ export const LIST_TASKS_SCRIPT = `
       name: safeGet(() => task.name(), 'Unnamed Task'),
       completed: safeIsCompleted(task),
       flagged: isFlagged(task),
-      inInbox: safeGet(() => task.inInbox(), false)
+      inInbox: safeGet(() => task.inInbox(), false),
+      // Add status properties
+      taskStatus: getTaskStatus(task),
+      blocked: isTaskBlocked(task),
+      next: isTaskNext(task),
+      available: isTaskAvailableForWork(task)
     };
     
     // Add optional properties using safe utilities
@@ -272,6 +279,12 @@ export const LIST_TASKS_SCRIPT = `
     if (deferDate) taskObj.deferDate = deferDate;
     
     taskObj.tags = safeGetTags(task);
+    
+    // Extract repeat rule information if present
+    const repetitionRule = safeGet(() => task.repetitionRule());
+    if (repetitionRule) {
+      taskObj.repetitionRule = extractRepeatRuleInfo(repetitionRule);
+    }
     
     const added = safeGetDate(() => task.added());
     if (added) taskObj.added = added;
@@ -402,11 +415,25 @@ export const LIST_TASKS_SCRIPT = `
       if (!hasAllTags) return false;
     }
     
-    // Available filter
+    // Available filter (legacy - use available property filter below)
     if (filter.available) {
       if (task.completed() || task.dropped()) return false;
       const deferDate = safeGet(() => task.deferDate());
       if (deferDate && deferDate > new Date()) return false;
+    }
+    
+    // Advanced status filters
+    if (filter.taskStatus !== undefined) {
+      const taskStatus = getTaskStatus(task);
+      if (taskStatus !== filter.taskStatus) return false;
+    }
+    
+    if (filter.blocked !== undefined) {
+      if (isTaskBlocked(task) !== filter.blocked) return false;
+    }
+    
+    if (filter.next !== undefined) {
+      if (isTaskNext(task) !== filter.next) return false;
     }
     
     return true;
@@ -559,7 +586,10 @@ export const LIST_TASKS_SCRIPT = `
           dueAfter: filter.dueAfter,
           deferBefore: filter.deferBefore,
           deferAfter: filter.deferAfter,
-          available: filter.available
+          available: filter.available,
+          taskStatus: filter.taskStatus,
+          blocked: filter.blocked,
+          next: filter.next
         },
         performance_note: hasMore ? 
           "More tasks available. Consider using more specific filters for better performance." : 

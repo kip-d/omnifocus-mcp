@@ -1,10 +1,12 @@
 import { getAllHelpers } from '../shared/helpers.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to create a new task in OmniFocus
  */
 export const CREATE_TASK_SCRIPT = `
   ${getAllHelpers()}
+  ${REPEAT_HELPERS}
   
   (() => {
     const app = Application('OmniFocus');
@@ -83,6 +85,24 @@ export const CREATE_TASK_SCRIPT = `
       // Set sequential property if provided (for action groups)
       if (taskData.sequential !== undefined) {
         task.sequential = taskData.sequential;
+      }
+      
+      // Set repeat rule if provided
+      if (taskData.repeatRule) {
+        try {
+          const repetitionRule = createRepetitionRule(taskData.repeatRule);
+          if (repetitionRule) {
+            task.repetitionRule = repetitionRule;
+            console.log('Applied repeat rule to task:', taskData.repeatRule);
+          }
+          
+          // Apply defer another settings if specified
+          applyDeferAnother(task, taskData.repeatRule);
+          
+        } catch (error) {
+          console.log('Warning: Failed to apply repeat rule:', error.message);
+          // Continue without repeat rule rather than failing task creation
+        }
       }
       
       // Note: Tags cannot be assigned during creation in JXA

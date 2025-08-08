@@ -7,8 +7,10 @@ export interface CacheEntry<T> {
 export interface CacheConfig {
   tasks: { ttl: number };
   projects: { ttl: number };
+  folders: { ttl: number };
   analytics: { ttl: number };
   tags: { ttl: number };
+  reviews: { ttl: number };
 }
 
 export type CacheCategory = keyof CacheConfig;

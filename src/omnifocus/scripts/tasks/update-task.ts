@@ -1,4 +1,5 @@
 import { getAllHelpers } from '../shared/helpers.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
@@ -11,6 +12,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  */
 export const UPDATE_TASK_SCRIPT = `
   ${getAllHelpers()}
+  ${REPEAT_HELPERS}
   
   (() => {
     const taskId = {{taskId}};
@@ -89,6 +91,31 @@ export const UPDATE_TASK_SCRIPT = `
     }
     if (updates.sequential !== undefined) {
       task.sequential = updates.sequential;
+    }
+    
+    // Update repeat rule if provided
+    if (updates.clearRepeatRule) {
+      try {
+        task.repetitionRule = null;
+        console.log('Cleared repeat rule from task');
+      } catch (error) {
+        console.log('Warning: Failed to clear repeat rule:', error.message);
+      }
+    } else if (updates.repeatRule) {
+      try {
+        const repetitionRule = createRepetitionRule(updates.repeatRule);
+        if (repetitionRule) {
+          task.repetitionRule = repetitionRule;
+          console.log('Updated repeat rule for task:', updates.repeatRule);
+        }
+        
+        // Apply defer another settings if specified
+        applyDeferAnother(task, updates.repeatRule);
+        
+      } catch (error) {
+        console.log('Warning: Failed to update repeat rule:', error.message);
+        // Continue without repeat rule update rather than failing
+      }
     }
     
     // Update project assignment with better error handling
@@ -186,11 +213,37 @@ export const UPDATE_TASK_SCRIPT = `
         if (updates.parentTaskId === null || updates.parentTaskId === "") {
           // Move to project root (no parent)
           const currentProject = safeGetProject(task);
-          if (currentProject) {
-            doc.moveTasks([task], currentProject);
+          if (currentProject && currentProject.id) {
+            // Find the actual project object
+            const projects = doc.flattenedProjects();
+            let targetProject = null;
+            for (let i = 0; i < projects.length; i++) {
+              if (projects[i].id() === currentProject.id) {
+                targetProject = projects[i];
+                break;
+              }
+            }
+            if (targetProject) {
+              // Try moveTasks with project.ending first
+              try {
+                doc.moveTasks([task], targetProject.ending);
+              } catch (e1) {
+                // Fallback to moveTasks with project directly
+                try {
+                  doc.moveTasks([task], targetProject);
+                } catch (e2) {
+                  // Last resort: assignedContainer
+                  task.assignedContainer = targetProject;
+                }
+              }
+            }
           } else {
             // Move to inbox if no project
-            doc.moveTasks([task], doc.inboxTasks);
+            try {
+              doc.moveTasks([task], doc.inboxTasks.ending);
+            } catch (e) {
+              task.assignedContainer = doc.inboxTasks;
+            }
           }
         } else {
           // Find the new parent task
@@ -211,16 +264,62 @@ export const UPDATE_TASK_SCRIPT = `
             });
           }
           
-          // Move task to be a child of the parent using moveTasks
-          doc.moveTasks([task], newParent);
+          // Try multiple approaches to move task to parent
+          let moveSucceeded = false;
+          let lastError = null;
+          
+          // Method 1: Push to parent's tasks collection (like create_task does)
+          try {
+            // First remove from current location if possible
+            const currentContainer = task.assignedContainer();
+            newParent.tasks.push(task);
+            moveSucceeded = true;
+          } catch (e1) {
+            lastError = e1;
+            // Method 2: moveTasks with ending property (not a function call!)
+            try {
+              doc.moveTasks([task], newParent.ending);
+              moveSucceeded = true;
+            } catch (e2) {
+              lastError = e2;
+              // Method 3: moveTasks with task directly
+              try {
+                doc.moveTasks([task], newParent);
+                moveSucceeded = true;
+              } catch (e3) {
+                lastError = e3;
+                // Method 4: moveTasks with beginning property
+                try {
+                  doc.moveTasks([task], newParent.beginning);
+                  moveSucceeded = true;
+                } catch (e4) {
+                  lastError = e4;
+                  // Method 5: assignedContainer as last resort
+                  try {
+                    task.assignedContainer = newParent;
+                    moveSucceeded = true;
+                  } catch (e5) {
+                    lastError = e5;
+                  }
+                }
+              }
+            }
+          }
+          
+          if (!moveSucceeded) {
+            return JSON.stringify({
+              error: true,
+              message: "Failed to move task to parent after trying all methods",
+              details: lastError ? lastError.toString() : "Unknown error"
+            });
+          }
         }
       } catch (parentError) {
-        // If direct assignment fails, we might need to recreate the task
-        // For now, return a helpful error
+        // Unexpected error
         return JSON.stringify({
           error: true,
-          message: "Failed to move task to parent. This operation may require manual adjustment in OmniFocus.",
-          details: parentError.toString()
+          message: "Failed to move task to parent. Error: " + parentError.toString(),
+          details: "This may be a JXA limitation with moving existing tasks between parents."
         });
       }
     }
@@ -338,6 +437,10 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.dueDate !== undefined) response.changes.dueDate = updates.dueDate;
     if (updates.deferDate !== undefined) response.changes.deferDate = updates.deferDate;
     if (updates.estimatedMinutes !== undefined) response.changes.estimatedMinutes = updates.estimatedMinutes;
+    if (updates.parentTaskId !== undefined) response.changes.parentTaskId = updates.parentTaskId;
+    if (updates.sequential !== undefined) response.changes.sequential = updates.sequential;
+    if (updates.clearRepeatRule) response.changes.repeatRule = null;
+    if (updates.repeatRule !== undefined) response.changes.repeatRule = updates.repeatRule;
     if (updates.tags !== undefined) {
       response.changes.tags = updates.tags;
       // Verify if tags were actually applied

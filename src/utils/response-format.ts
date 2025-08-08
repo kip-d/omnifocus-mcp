@@ -106,6 +106,27 @@ export function createListResponse<T>(
 }
 
 /**
+ * Create a collection response for list operations
+ */
+export function createCollectionResponse<T>(
+  operation: string,
+  collectionType: string,
+  collectionData: { [key: string]: any; count?: number },
+  metadata: Partial<StandardMetadata> = {},
+): StandardResponse<typeof collectionData> {
+  const items = collectionData[collectionType] as T[] || [];
+  return createSuccessResponse(
+    operation,
+    collectionData,
+    {
+      total_count: collectionData.count || items.length,
+      returned_count: items.length,
+      ...metadata,
+    },
+  );
+}
+
+/**
  * Create a single entity response (for CRUD operations)
  */
 export function createEntityResponse<T>(
