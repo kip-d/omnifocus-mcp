@@ -148,10 +148,12 @@ export const UPDATE_PROJECT_SCRIPT = `
           targetProject.reviewInterval = null;
           changes.push("Review interval cleared");
         } else {
-          const interval = new app.Project.ReviewInterval();
-          interval.unit = updates.reviewInterval.unit;
-          interval.steps = updates.reviewInterval.steps;
-          targetProject.reviewInterval = interval;
+          // Set review interval as a plain object (JXA doesn't have ReviewInterval constructor)
+          targetProject.reviewInterval = {
+            unit: updates.reviewInterval.unit,
+            steps: updates.reviewInterval.steps,
+            fixed: updates.reviewInterval.fixed || false
+          };
           changes.push("Review interval set to every " + updates.reviewInterval.steps + " " + updates.reviewInterval.unit + "(s)");
         }
       } catch (reviewError) {

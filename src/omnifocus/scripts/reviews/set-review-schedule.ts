@@ -93,11 +93,12 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
         try {
           const changes = [];
           
-          // Set review interval
-          const interval = new app.Project.ReviewInterval();
-          interval.unit = reviewInterval.unit;
-          interval.steps = reviewInterval.steps;
-          targetProject.reviewInterval = interval;
+          // Set review interval as a plain object (JXA doesn't have ReviewInterval constructor)
+          targetProject.reviewInterval = {
+            unit: reviewInterval.unit,
+            steps: reviewInterval.steps,
+            fixed: false  // Default to false for flexible scheduling
+          };
           changes.push("Review interval set to every " + reviewInterval.steps + " " + reviewInterval.unit + "(s)");
           
           // Set or calculate next review date

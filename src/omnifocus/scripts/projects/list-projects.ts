@@ -19,26 +19,7 @@ export const LIST_PROJECTS_SCRIPT = `
     const includeStats = {{includeStats}};
     const projects = [];
   
-  // Additional helper functions for projects
-  function safeGetStatus(project) {
-    try {
-      const status = project.status();
-      if (!status) return 'active';
-      
-      // OmniFocus returns status as "active status", "done status", etc.
-      // We need to normalize these to match our API expectations
-      const statusStr = status.toString().toLowerCase();
-      
-      if (statusStr.includes('active')) return 'active';
-      if (statusStr.includes('done')) return 'done';
-      if (statusStr.includes('hold')) return 'onHold';
-      if (statusStr.includes('dropped')) return 'dropped';
-      
-      return 'active'; // Default fallback
-    } catch (e) {
-      return 'active';
-    }
-  }
+  // safeGetStatus is now provided by the shared helpers
   
   try {
     const app = Application('OmniFocus');

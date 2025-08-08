@@ -4,6 +4,7 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { createErrorResponse, OperationTimer } from '../utils/response-format.js';
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -63,8 +64,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
         );
       }
       
-      // Handle other errors
-      this.handleError(error);
+      // Handle other errors - throw for validation errors to break flow
+      this.throwMcpError(error);
     }
   }
 
@@ -75,11 +76,62 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
 
   /**
    * Handle errors consistently across all tools
+   * Returns a standardized error response instead of throwing
    */
-  protected handleError(error: unknown): never {
+  protected handleError(error: unknown): any {
     this.logger.error(`Error in ${this.name}:`, error);
+    const timer = new OperationTimer();
 
     // Check for permission errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
+      return createErrorResponse(
+        this.name,
+        'PERMISSION_DENIED',
+        'Not authorized to send Apple events to OmniFocus',
+        {
+          instructions: `To grant permissions:
+1. You may see a permission dialog - click "OK" to grant access
+2. Or manually grant permissions:
+   - Open System Settings → Privacy & Security → Automation
+   - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
+   - Enable the checkbox next to OmniFocus
+3. After granting permissions, try your request again`,
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    if (error instanceof Error && error.name === 'OmniAutomationError') {
+      return createErrorResponse(
+        this.name,
+        'OMNIFOCUS_ERROR',
+        error.message || 'OmniFocus script execution failed',
+        {
+          script: (error as any).script,
+          stderr: (error as any).stderr,
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    // Generic error handling
+    return createErrorResponse(
+      this.name,
+      'INTERNAL_ERROR',
+      error instanceof Error ? error.message : 'An unknown error occurred',
+      { originalError: error },
+      timer.toMetadata(),
+    );
+  }
+
+  /**
+   * Throw an MCP error for cases where we need to break execution flow
+   * Use this sparingly - prefer returning handleError() for consistent response format
+   */
+  protected throwMcpError(error: unknown): never {
+    this.logger.error(`Throwing MCP error in ${this.name}:`, error);
+
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
       throw new McpError(

@@ -36,13 +36,24 @@ export class ProjectsForReviewTool extends BaseTool<typeof ProjectsForReviewSche
       });
       const result = await this.omniAutomation.execute<any>(script);
 
+      // Check if result is null/undefined
+      if (!result) {
+        return createErrorResponse(
+          'projects_for_review',
+          'NULL_RESULT',
+          'OmniFocus script returned no result',
+          { rawResult: result },
+          timer.toMetadata(),
+        );
+      }
+
       // Check if script returned an error
       if (result.error) {
         return createErrorResponse(
           'projects_for_review',
           'SCRIPT_ERROR',
-          result.message || 'Failed to get projects for review',
-          result.details,
+          result.message || result.error || 'Failed to get projects for review',
+          { details: result.details, rawResult: result },
           timer.toMetadata(),
         );
       }

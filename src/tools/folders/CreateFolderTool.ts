@@ -26,8 +26,8 @@ export class CreateFolderTool extends BaseTool<typeof CreateFolderSchema> {
         return createErrorResponse(
           'create_folder',
           'SCRIPT_ERROR',
-          result.message || 'Failed to create folder',
-          { details: result.details },
+          result.message || result.error || 'Failed to create folder',
+          { details: result.details, rawResult: result },
           timer.toMetadata(),
         );
       }
@@ -49,8 +49,19 @@ export class CreateFolderTool extends BaseTool<typeof CreateFolderSchema> {
         return createErrorResponse(
           'create_folder',
           'CREATION_FAILED',
-          parsedResult.message || 'Failed to create folder',
-          { details: parsedResult.details },
+          parsedResult.message || parsedResult.error || 'Failed to create folder',
+          { details: parsedResult.details, rawResult: parsedResult },
+          timer.toMetadata(),
+        );
+      }
+
+      // Check if we have a folder result
+      if (!parsedResult.folder && !parsedResult.id) {
+        return createErrorResponse(
+          'create_folder',
+          'INVALID_RESULT',
+          'Script completed but returned unexpected result format',
+          { rawResult: parsedResult },
           timer.toMetadata(),
         );
       }

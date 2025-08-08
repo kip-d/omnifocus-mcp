@@ -3,7 +3,7 @@ import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { parsingError } from '../../utils/error-messages.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { CreateTaskResponse } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
 import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
@@ -30,7 +30,13 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
-        throw new McpError(ErrorCode.InternalError, result.message || 'Unknown error');
+        return createErrorResponse(
+          'create_task',
+          'SCRIPT_ERROR',
+          result.message || 'Failed to create task',
+          { rawResult: result },
+          timer.toMetadata(),
+        );
       }
 
       // Parse the JSON result since the script returns a JSON string
