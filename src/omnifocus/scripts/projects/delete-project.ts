@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a project from OmniFocus
- * 
+ *
  * Features:
  * - Delete project by marking as dropped
  * - Optionally delete all tasks within project

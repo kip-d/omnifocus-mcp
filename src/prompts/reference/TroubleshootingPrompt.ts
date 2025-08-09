@@ -194,16 +194,16 @@ export class TroubleshootingPrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Help me troubleshoot issues with OmniFocus MCP.'
-        }
+          text: 'Help me troubleshoot issues with OmniFocus MCP.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: TROUBLESHOOTING_GUIDE
-        }
-      }
+          text: TROUBLESHOOTING_GUIDE,
+        },
+      },
     ];
   }
 }

@@ -1,6 +1,6 @@
 /**
  * Tag scripts for OmniFocus automation
- * 
+ *
  * This file serves as a facade that re-exports scripts from
  * their modular locations while maintaining backward compatibility.
  */

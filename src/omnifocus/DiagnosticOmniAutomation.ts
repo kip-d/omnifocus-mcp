@@ -6,7 +6,7 @@ const logger = createLogger('diagnostic-omniautomation');
 
 export class DiagnosticOmniAutomation extends OmniAutomation {
   private diagnosticLog: string[] = [];
-  
+
   private log(message: string, data?: any) {
     const logEntry = `[${new Date().toISOString()}] ${message}${data ? ': ' + JSON.stringify(data) : ''}`;
     this.diagnosticLog.push(logEntry);
@@ -19,7 +19,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
   async execute<T = any>(script: string): Promise<T> {
     this.log('Starting script execution', { scriptLength: script.length });
-    
+
     // Access maxScriptSize through parent class method or hardcode it
     const maxSize = 100000; // Same as parent class
     if (script.length > maxSize) {
@@ -32,7 +32,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
   private async executeDiagnostic<T = any>(script: string): Promise<T> {
     const wrappedScript = this.wrapScriptWithDiagnostics(script);
-    
+
     this.log('Wrapped script created', { wrappedLength: wrappedScript.length });
     this.log('First 500 chars of wrapped script', wrappedScript.substring(0, 500));
 
@@ -63,7 +63,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
       proc.on('close', (code) => {
         this.log('Process closed', { code, stdoutLength: stdout.length, stderrLength: stderr.length });
-        
+
         if (code !== 0) {
           this.log('Script execution failed with non-zero code', { code, stderr });
           reject(new OmniAutomationError(`Script execution failed with code ${code}`, script, stderr));
@@ -75,7 +75,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
         }
 
         const trimmedOutput = stdout.trim();
-        
+
         if (!trimmedOutput) {
           this.log('Script returned empty output');
           resolve(null as T);
@@ -86,24 +86,24 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
         try {
           const result = JSON.parse(trimmedOutput);
-          this.log('Successfully parsed output', { 
+          this.log('Successfully parsed output', {
             resultType: typeof result,
             hasError: result && result.error ? true : false,
-            errorMessage: result && result.error ? result.message : undefined
+            errorMessage: result && result.error ? result.message : undefined,
           });
-          
+
           // Log diagnostic info from the script if available
           if (result && result.diagnostics) {
             this.log('Script diagnostics received', result.diagnostics);
           }
-          
+
           resolve(result);
         } catch (parseError: any) {
-          this.log('Failed to parse JSON output', { 
+          this.log('Failed to parse JSON output', {
             parseError: parseError.message,
-            outputSample: trimmedOutput.substring(0, 200)
+            outputSample: trimmedOutput.substring(0, 200),
           });
-          
+
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
             reject(new OmniAutomationError('Invalid JSON response from script', script, trimmedOutput));
           } else {

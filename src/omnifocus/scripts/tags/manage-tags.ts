@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to manage tags in OmniFocus (create, rename, delete, merge)
- * 
+ *
  * Features:
  * - Create new tags with duplicate checking
  * - Rename tags with collision detection

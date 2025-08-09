@@ -102,7 +102,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
 
     // System tools
     new GetVersionInfoTool(cache),
-    
+
     // Diagnostic tools
     new RunDiagnosticsTool(cache),
   ];

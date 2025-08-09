@@ -257,7 +257,7 @@ export function getAllHelpers(): string {
     SAFE_UTILITIES,
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
-    ERROR_HANDLING
+    ERROR_HANDLING,
   ].join('\n');
 }
 

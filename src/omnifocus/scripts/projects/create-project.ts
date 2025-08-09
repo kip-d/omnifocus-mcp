@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new project in OmniFocus
- * 
+ *
  * Features:
  * - Create project with name, note, dates, and flagged status
  * - Place in specific folder (creates folder if needed)

@@ -93,16 +93,16 @@ export class ToolDiscoveryPrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Show me a guide to all available OmniFocus tools and when to use each one.'
-        }
+          text: 'Show me a guide to all available OmniFocus tools and when to use each one.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: TOOL_DISCOVERY_GUIDE
-        }
-      }
+          text: TOOL_DISCOVERY_GUIDE,
+        },
+      },
     ];
   }
 }

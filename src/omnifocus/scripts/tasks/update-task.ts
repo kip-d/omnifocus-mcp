@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
- * 
+ *
  * Handles:
  * - Basic property updates (name, note, flags, dates, etc.)
  * - Project reassignment (with recreation fallback for JXA limitations)

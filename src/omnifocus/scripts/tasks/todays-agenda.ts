@@ -2,12 +2,12 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to get today's agenda from OmniFocus
- * 
+ *
  * Optimized performance query that returns:
  * - Overdue tasks
  * - Tasks due today
  * - Flagged tasks
- * 
+ *
  * Performance optimizations:
  * - Efficient filtering with early returns
  * - Configurable detail levels

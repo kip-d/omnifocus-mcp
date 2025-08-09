@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export projects from OmniFocus in various formats
- * 
+ *
  * Features:
  * - Export to JSON or CSV format
  * - Optional project statistics

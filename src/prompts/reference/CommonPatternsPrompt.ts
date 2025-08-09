@@ -283,16 +283,16 @@ export class CommonPatternsPrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Show me common patterns and best practices for using OmniFocus MCP tools.'
-        }
+          text: 'Show me common patterns and best practices for using OmniFocus MCP tools.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: COMMON_PATTERNS_GUIDE
-        }
-      }
+          text: COMMON_PATTERNS_GUIDE,
+        },
+      },
     ];
   }
 }

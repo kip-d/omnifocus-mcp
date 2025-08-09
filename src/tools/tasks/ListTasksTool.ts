@@ -75,7 +75,7 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
         // Ensure recurringStatus has properly typed 'type' field
         recurringStatus: task.recurringStatus ? {
           ...task.recurringStatus,
-          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped',
         } : undefined,
       }));
 

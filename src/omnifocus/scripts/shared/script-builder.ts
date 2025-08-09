@@ -14,16 +14,16 @@ export interface ScriptParameters {
  */
 export function buildParameterDeclarations(params: ScriptParameters): string {
   const declarations: string[] = [];
-  
+
   // Sort keys for consistent output
   const sortedKeys = Object.keys(params).sort();
-  
+
   for (const key of sortedKeys) {
     // Each parameter gets its own const declaration
     // This ensures the parameter exists even if the placeholder isn't replaced
     declarations.push(`const ${key} = {{${key}}};`);
   }
-  
+
   return declarations.join('\n  ');
 }
 
@@ -35,7 +35,7 @@ export function buildParameterDeclarations(params: ScriptParameters): string {
  */
 export function buildScriptWithParameters(scriptBody: string, params: ScriptParameters): string {
   const paramDeclarations = buildParameterDeclarations(params);
-  
+
   return `(() => {
   // Automatically injected parameter declarations
   ${paramDeclarations}
@@ -54,12 +54,12 @@ export function buildScriptWithParameters(scriptBody: string, params: ScriptPara
 export function extractExpectedParameters(template: string): string[] {
   const regex = /\{\{(\w+)\}\}/g;
   const params = new Set<string>();
-  
+
   let match;
   while ((match = regex.exec(template)) !== null) {
     params.add(match[1]);
   }
-  
+
   return Array.from(params).sort();
 }
 
@@ -70,18 +70,18 @@ export function extractExpectedParameters(template: string): string[] {
  * @returns Object with validation result and any missing parameters
  */
 export function validateScriptParameters(
-  template: string, 
-  providedParams: ScriptParameters
+  template: string,
+  providedParams: ScriptParameters,
 ): { valid: boolean; missing: string[]; extra: string[] } {
   const expected = extractExpectedParameters(template);
   const provided = Object.keys(providedParams);
-  
+
   const missing = expected.filter(param => !provided.includes(param));
   const extra = provided.filter(param => !expected.includes(param));
-  
+
   return {
     valid: missing.length === 0,
     missing,
-    extra
+    extra,
   };
 }

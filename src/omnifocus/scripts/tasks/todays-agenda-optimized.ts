@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized script to get today's agenda from OmniFocus
- * 
+ *
  * Performance optimizations:
  * - Use separate queries for different task categories
  * - Limit total tasks processed

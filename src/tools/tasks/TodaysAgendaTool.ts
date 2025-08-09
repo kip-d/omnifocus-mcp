@@ -15,10 +15,10 @@ export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
     try {
       // Log incoming args for debugging
       this.logger.debug('TodaysAgendaTool.execute called with args:', args);
-      
+
       // Ensure args is an object
       const safeArgs = args || {};
-      
+
       const {
         includeFlagged = true,
         includeOverdue = true,
@@ -26,7 +26,7 @@ export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
         includeDetails = false,  // Default to false for better performance
         limit = 50,  // Reduced default limit to prevent timeouts
       } = safeArgs;
-      
+
       this.logger.debug('Using parameters:', { includeFlagged, includeOverdue, includeAvailable, includeDetails, limit });
 
       // Create cache key

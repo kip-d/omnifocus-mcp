@@ -14,12 +14,12 @@ export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
     const timer = new OperationTimer();
 
     try {
-      const { 
-        sortBy = 'name', 
-        includeEmpty = true, 
+      const {
+        sortBy = 'name',
+        includeEmpty = true,
         includeUsageStats = false,
         fastMode = false,
-        namesOnly = false
+        namesOnly = false,
       } = args;
 
       // Create cache key
@@ -46,7 +46,7 @@ export class ListTagsTool extends BaseTool<typeof ListTagsSchema> {
       // Use optimized script if any performance mode is enabled
       const useOptimized = fastMode || namesOnly || !includeUsageStats;
       const scriptToUse = useOptimized ? LIST_TAGS_OPTIMIZED_SCRIPT : LIST_TAGS_SCRIPT;
-      
+
       // Execute script
       const script = this.omniAutomation.buildScript(scriptToUse, {
         options: { sortBy, includeEmpty, includeUsageStats, fastMode, namesOnly },

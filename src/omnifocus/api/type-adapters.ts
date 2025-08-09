@@ -1,6 +1,6 @@
 /**
  * Type adapter layer for OmniFocus API
- * 
+ *
  * This module provides type-safe adapters between the official OmniFocus API types
  * and our internal MCP representation types. It handles the conversion and validation
  * of data structures while maintaining type safety.
@@ -250,12 +250,12 @@ export function adaptProject(ofProject: OFProject, includeStats = false): OmniFo
   const tasks = safeGet(() => ofProject.flattenedTasks());
   if (tasks && Array.isArray(tasks)) {
     project.numberOfTasks = tasks.length;
-    
+
     // Count completed and available tasks if stats are requested
     if (includeStats) {
       let completed = 0;
       let available = 0;
-      
+
       for (const task of tasks) {
         if (safeGet(() => task.completed())) {
           completed++;
@@ -263,7 +263,7 @@ export function adaptProject(ofProject: OFProject, includeStats = false): OmniFo
           available++;
         }
       }
-      
+
       project.numberOfCompletedTasks = completed;
       project.numberOfAvailableTasks = available;
     }
@@ -312,7 +312,7 @@ export function adaptTag(ofTag: OFTag): OmniFocusTag {
  */
 function adaptRepetitionRule(ofRule: OFRepetitionRule | null): RepetitionRule | undefined {
   if (!ofRule) return undefined;
-  
+
   // Due to JXA limitations, we can't access properties directly
   // This is a placeholder that would be enhanced with inference logic
   return {

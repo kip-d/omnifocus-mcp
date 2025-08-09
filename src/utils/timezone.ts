@@ -19,12 +19,12 @@ export function getSystemTimezone(): string {
         .replace('Time Zone: ', '');
       return tz;
     }
-    
+
     // Fallback to environment variable
     if (process.env.TZ) {
       return process.env.TZ;
     }
-    
+
     // Final fallback - read from /etc/localtime symlink
     try {
       const tzPath = execSync('readlink /etc/localtime', { encoding: 'utf8' }).trim();
@@ -36,7 +36,7 @@ export function getSystemTimezone(): string {
     } catch {
       // Ignore if readlink fails
     }
-    
+
     // If all else fails, default to UTC
     console.warn('Could not detect system timezone, defaulting to UTC');
     return 'UTC';
@@ -57,7 +57,7 @@ export function getCurrentTimezoneOffset(): number {
 /**
  * Convert a local date/time string to UTC ISO string
  * Handles the user's system timezone automatically
- * 
+ *
  * @param localDateStr Date string in format "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"
  * @param timezone Optional timezone override (defaults to system timezone)
  * @returns UTC ISO string for use with OmniFocus API
@@ -65,9 +65,9 @@ export function getCurrentTimezoneOffset(): number {
 export function localToUTC(localDateStr: string, _timezone?: string): string {
   // Parse the input to determine format
   const hasTime = localDateStr.includes(' ') || localDateStr.includes('T');
-  
+
   let dateStr: string;
-  
+
   if (!hasTime) {
     // Date only - assume start of day in local time
     dateStr = `${localDateStr}T00:00:00`;
@@ -78,39 +78,39 @@ export function localToUTC(localDateStr: string, _timezone?: string): string {
       dateStr += ':00'; // Add seconds if missing
     }
   }
-  
+
   // Create date in local timezone
   const localDate = new Date(dateStr);
-  
+
   // Check if date is valid
   if (isNaN(localDate.getTime())) {
     throw new Error(`Invalid date format: ${localDateStr}`);
   }
-  
+
   // Convert to UTC
   return localDate.toISOString();
 }
 
 /**
  * Convert UTC ISO string to local time display string
- * 
+ *
  * @param utcStr UTC ISO string from OmniFocus
  * @param format Optional format: 'date', 'datetime', or 'time'
  * @returns Formatted string in user's local time
  */
 export function utcToLocal(utcStr: string, format: 'date' | 'datetime' | 'time' = 'datetime'): string {
   const date = new Date(utcStr);
-  
+
   if (isNaN(date.getTime())) {
     throw new Error(`Invalid UTC date: ${utcStr}`);
   }
-  
+
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const hour = String(date.getHours()).padStart(2, '0');
   const minute = String(date.getMinutes()).padStart(2, '0');
-  
+
   switch (format) {
     case 'date':
       return `${year}-${month}-${day}`;
@@ -129,18 +129,18 @@ export function utcToLocal(utcStr: string, format: 'date' | 'datetime' | 'time' 
  * - Local format: 2024-01-15 10:30
  * - Date only: 2024-01-15
  * - Relative: "tomorrow", "next week" (requires additional parsing)
- * 
+ *
  * @param dateStr Input date string
  * @returns UTC ISO string or null if invalid
  */
 export function parseFlexibleDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
-  
+
   // Check if already in ISO format with timezone
   if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/)) {
     return new Date(dateStr).toISOString();
   }
-  
+
   // Try to parse as local time
   try {
     return localToUTC(dateStr);
@@ -164,11 +164,11 @@ export function getTimezoneInfo(): {
   const offset = getCurrentTimezoneOffset();
   const offsetHours = -offset / 60; // Negative because getTimezoneOffset returns opposite sign
   const offsetString = `UTC${offsetHours >= 0 ? '+' : ''}${offsetHours}`;
-  
+
   return {
     timezone,
     offset,
     offsetHours,
-    offsetString
+    offsetString,
   };
 }

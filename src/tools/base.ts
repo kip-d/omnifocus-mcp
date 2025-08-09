@@ -40,10 +40,10 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
     try {
       // Validate input with Zod
       const validated = this.schema.parse(args);
-      
+
       // Log the validated input
       this.logger.debug(`Executing ${this.name} with validated args:`, validated);
-      
+
       // Execute the tool-specific logic
       return await this.executeValidated(validated);
     } catch (error) {
@@ -53,16 +53,16 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
           const path = issue.path.join('.');
           return `${path}: ${issue.message}`;
         }).join(', ');
-        
+
         throw new McpError(
           ErrorCode.InvalidParams,
           `Invalid parameters: ${issues}`,
           {
-            validation_errors: error.issues
-          }
+            validation_errors: error.issues,
+          },
         );
       }
-      
+
       // Handle other errors
       this.handleError(error);
     }
@@ -122,13 +122,13 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
   private zodToJsonSchema(schema: z.ZodType): any {
     // This is a simplified implementation
     // For full compatibility, use a library like zod-to-json-schema
-    
+
     // Handle refinements (e.g., z.object().refine())
     if (schema instanceof z.ZodEffects) {
       // Extract the inner schema from refinement
       return this.zodToJsonSchema(schema._def.schema);
     }
-    
+
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape;
       const properties: Record<string, any> = {};
@@ -136,7 +136,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
 
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
-        
+
         // Check if field is required
         if (!(value instanceof z.ZodOptional)) {
           required.push(key);
@@ -220,7 +220,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
 
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
-        
+
         // Check if field is required in nested object
         if (!(value instanceof z.ZodOptional)) {
           required.push(key);

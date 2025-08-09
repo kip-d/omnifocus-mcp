@@ -103,16 +103,16 @@ export class QuickReferencePrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Show me a quick reference for OmniFocus MCP.'
-        }
+          text: 'Show me a quick reference for OmniFocus MCP.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: QUICK_REFERENCE
-        }
-      }
+          text: QUICK_REFERENCE,
+        },
+      },
     ];
   }
 }

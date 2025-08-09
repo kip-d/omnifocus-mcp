@@ -1,6 +1,6 @@
 /**
  * API Type Imports and Extensions
- * 
+ *
  * This module imports the official OmniFocus TypeScript definitions
  * and provides any necessary extensions or utility types.
  */

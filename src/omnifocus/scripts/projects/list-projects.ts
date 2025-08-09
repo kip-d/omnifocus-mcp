@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all projects in OmniFocus with filtering and statistics
- * 
+ *
  * Features:
  * - Filter by status (active, onHold, dropped, done)
  * - Filter by flagged state

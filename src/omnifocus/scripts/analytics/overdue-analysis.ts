@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze overdue tasks in OmniFocus
- * 
+ *
  * Features:
  * - Overdue task identification and aging analysis
  * - Chronically overdue task detection (3+ months)

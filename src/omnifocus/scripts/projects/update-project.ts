@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update an existing project in OmniFocus
- * 
+ *
  * Features:
  * - Update name, note, dates, and flagged status
  * - Change project status (active, onHold, dropped, done)

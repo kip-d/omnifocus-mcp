@@ -18,48 +18,48 @@ export class RobustOmniAutomation extends OmniAutomation {
     if (timeSinceLastSuccess > this.connectionTimeout) {
       logger.warn('Connection may be stale, testing connection first', {
         timeSinceLastSuccess,
-        lastSuccessTime: new Date(this.lastSuccessTime).toISOString()
+        lastSuccessTime: new Date(this.lastSuccessTime).toISOString(),
       });
-      
+
       // Test connection with a simple script
       const testResult = await this.testConnection();
       if (!testResult) {
         throw new OmniAutomationError(
           'Connection test failed - OmniFocus may be unresponsive',
           script,
-          'Connection timeout after ' + Math.round(timeSinceLastSuccess / 1000) + ' seconds'
+          'Connection timeout after ' + Math.round(timeSinceLastSuccess / 1000) + ' seconds',
         );
       }
     }
 
     try {
       const result = await super.execute<T>(script);
-      
+
       // Reset failure counter on success
       this.consecutiveFailures = 0;
       this.lastSuccessTime = Date.now();
-      
+
       return result;
     } catch (error: any) {
       this.consecutiveFailures++;
-      
+
       // Log detailed error information
       logger.error('Script execution failed', {
         consecutiveFailures: this.consecutiveFailures,
         timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
         errorMessage: error.message,
-        errorType: error.constructor.name
+        errorType: error.constructor.name,
       });
 
       // If we've had too many consecutive failures, try to diagnose
       if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
         const diagnosis = await this.diagnoseConnection();
         logger.error('Connection diagnosis after repeated failures', diagnosis);
-        
+
         throw new OmniAutomationError(
           `Script execution failed after ${this.consecutiveFailures} attempts. ${diagnosis.summary}`,
           script,
-          JSON.stringify(diagnosis)
+          JSON.stringify(diagnosis),
         );
       }
 
@@ -68,7 +68,7 @@ export class RobustOmniAutomation extends OmniAutomation {
         const enhancedError = new OmniAutomationError(
           `${error.message} - This often indicates OmniFocus has become unresponsive or the document is no longer available`,
           script,
-          error.stderr || error.message
+          error.stderr || error.message,
         );
         throw enhancedError;
       }
@@ -101,7 +101,7 @@ export class RobustOmniAutomation extends OmniAutomation {
       timestamp: new Date().toISOString(),
       consecutiveFailures: this.consecutiveFailures,
       timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
-      tests: {}
+      tests: {},
     };
 
     // Test 1: Can we create app reference?
