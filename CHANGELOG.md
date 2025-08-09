@@ -47,6 +47,78 @@ list_projects({ limit: 100, performanceMode: 'normal' })
 list_tags({ fastMode: false, includeTaskCounts: true })
 ```
 
+## [1.8.0] - 2025-08-08
+
+### Added
+- **Tool Consolidation Architecture**: Refactored from 40+ individual tools to 5 consolidated + 25 standard tools
+- **LLM Usage Optimization**: Consolidated tools specifically designed for better LLM interaction patterns
+- **Parent-Child Task Relationships**: Full implementation of OmniFocus action groups
+- **Sequential/Parallel Support**: Added support for project and task execution modes
+- **Review and Batch Tools**: Consolidated workflow tools for enhanced productivity
+- **Massive Feature Expansion**: 82% increase in functionality (22→40 tools)
+
+### Fixed
+- **Claude Desktop Integration**: Proper handling of stringified parameters from Claude Desktop
+- **User Testing Issues**: Resolved critical v1.8.0 issues identified in user testing
+- **Batch Operations**: Enhanced batch operations with better error handling
+- **Date Format Documentation**: Comprehensive date format requirements and validation
+
+### Changed
+- **Architecture**: Major consolidation of tools for better maintainability and LLM usage
+- **Workflow Optimization**: Streamlined common GTD workflows through tool consolidation
+- **Performance**: Improved performance through architectural changes
+
+### Technical
+- **Tool Organization**: Better separation between consolidated workflow tools and individual operation tools
+- **Parameter Handling**: Improved parameter validation and type coercion
+- **Integration**: Enhanced Claude Desktop compatibility
+
+## [1.7.5] - 2025-08-05
+
+### Fixed
+- **Critical Script Execution**: Resolved failures in export_tasks and get_task_count functions
+- **User Testing Issues**: Comprehensive fixes from v1.7.5 user testing feedback
+- **Export Logic**: Complete cleanup of export_tasks logic and error handling
+- **Integration Tests**: Fixed task creation integration test issues
+
+### Documentation
+- **Personal Project Notice**: Added clarity about project status and usage
+- **README Cleanup**: Major cleanup and reorganization of README documentation
+- **Quality Criteria**: Added quality criteria to CLAUDE.md for development standards
+
+## [1.7.4] - 2025-08-04
+
+### Fixed
+- **Export Tasks Timeout**: Resolved timeout issues in export functionality
+- **Script Execution Errors**: Eliminated script execution errors affecting export operations
+- **Performance**: Improved overall script execution performance
+
+## [1.7.3] - 2025-08-04
+
+### Fixed
+- **Script Execution Errors**: Eliminated remaining script execution errors
+- **Performance Improvements**: Further performance optimizations across all tools
+- **Error Handling**: Enhanced error handling and recovery mechanisms
+
+## [1.7.2] - 2025-08-04
+
+### Fixed
+- **Critical Bugs**: Resolved critical bugs affecting core functionality
+- **Performance Issues**: Major performance improvements across the system
+- **Tool Reliability**: Enhanced reliability of all MCP tools
+
+## [1.7.1] - 2025-08-04
+
+### Fixed
+- **Test Report Issues**: Addressed issues identified in comprehensive testing
+- **Schema Handling**: Enhanced schema validation and error handling
+- **Performance Optimizations**: Continued performance improvements from v1.7.0 testing
+
+### Added
+- **LLM Discoverability**: Comprehensive tool description improvements for better LLM interaction
+- **MCP Prompt Support**: Advanced MCP prompt support for sophisticated clients
+- **Tag Performance Features**: Enhanced tag listing with multiple performance modes
+
 ## [1.7.0] - 2025-08-03
 
 ### Changed

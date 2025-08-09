@@ -60,14 +60,18 @@ describe('Completed Project Task Handling', () => {
     });
 
     it('should use isTaskEffectivelyCompleted in date-range-queries script', async () => {
-      const { GET_TASKS_IN_DATE_RANGE_SCRIPT } = await import('../../src/omnifocus/scripts/date-range-queries.js');
+      const { 
+        GET_TASKS_IN_DATE_RANGE_SCRIPT,
+        GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT,
+        GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT 
+      } = await import('../../src/omnifocus/scripts/date-range-queries.js');
       
-      // Verify date range queries use the correct completion check
+      // Verify date range queries use the correct completion check in property assignment
       expect(GET_TASKS_IN_DATE_RANGE_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
-      // The second part might have different formatting/spacing
-      const hasCompletedCheck = GET_TASKS_IN_DATE_RANGE_SCRIPT.includes('isTaskEffectivelyCompleted(task)) continue') ||
-                                GET_TASKS_IN_DATE_RANGE_SCRIPT.includes('isTaskEffectivelyCompleted(task))');
-      expect(hasCompletedCheck).toBe(true);
+      
+      // Verify the optimized scripts use it in continue statements
+      expect(GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
+      expect(GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
     });
   });
 
