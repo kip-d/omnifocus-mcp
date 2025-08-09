@@ -91,8 +91,8 @@ export const ListProjectsSchema = z.object({
 
   performanceMode: z.enum(['normal', 'lite'])
     .optional()
-    .default('normal')
-    .describe('Performance mode: "lite" skips expensive operations like task counts and next task lookups for faster queries on large databases'),
+    .default('lite')  // Default to lite for fast overview queries
+    .describe('Performance mode: "lite" (default) returns basic project info quickly. Use "normal" for weekly reviews or when you need task counts, next actions, etc.'),
 });
 
 // Create project parameters

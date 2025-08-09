@@ -79,7 +79,7 @@ describe('ListProjectsTool', () => {
           includeTaskCounts: true,
           sortBy: 'name',
           sortOrder: 'asc',
-          performanceMode: 'normal'
+          performanceMode: 'lite'
         },
         limit: 10,
         includeStats: true
@@ -105,7 +105,7 @@ describe('ListProjectsTool', () => {
           includeTaskCounts: true,
           sortBy: 'name',
           sortOrder: 'asc',
-          performanceMode: 'normal'
+          performanceMode: 'lite'
         },
         limit: 10,
         includeStats: false

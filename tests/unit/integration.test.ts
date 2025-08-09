@@ -171,7 +171,7 @@ describe('OmniFocus MCP Server Integration Tests', () => {
           status: ['active'],
           limit: 10, // Limit to 10 projects for faster test execution
           includeStats: false, // Disable stats for faster execution
-          performanceMode: 'lite', // Use lite mode to skip expensive operations
+          // performanceMode defaults to 'lite' now, no need to specify
         },
       });
 
