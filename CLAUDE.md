@@ -22,6 +22,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **IMPORTANT**: this is a typescript project
 - **NEVER skip integration tests before considering a feature "done" or a release**
 
+## Important Usage Notes
+
+### Date Format Requirements
+- **Use local time format**: `YYYY-MM-DD HH:mm` (e.g., "2025-03-31 17:00")
+- **Avoid ISO 8601 with Z**: Don't use `2025-03-31T17:00:00.000Z` format
+- **Relative dates work**: "tomorrow at 5pm", "next Monday", "in 2 weeks"
+- This applies to all date fields: dueDate, deferDate, completionDate, nextReviewDate
+
+### Known Limitations
+- **Cannot move existing tasks to parents**: Tasks must be created with parentTaskId
+- **Tags cannot be assigned during creation**: Create task first, then update with tags
+- **Repeat rules for projects temporarily disabled**: Under investigation
+- **Large database queries may be slow**: Upcoming tasks can take 30+ seconds with 2000+ tasks
+
 ## Performance Optimization
 
 The `list_tasks` tool now includes performance optimizations:

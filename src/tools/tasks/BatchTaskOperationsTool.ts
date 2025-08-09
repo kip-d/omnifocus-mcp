@@ -264,8 +264,18 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
       try {
         normalized.taskIds = JSON.parse(normalized.taskIds);
       } catch (e) {
-        this.logger.warn('Failed to parse taskIds string, keeping as-is');
+        // Try splitting comma-separated string as fallback
+        if (normalized.taskIds.includes(',')) {
+          normalized.taskIds = normalized.taskIds.split(',').map((id: string) => id.trim());
+        } else {
+          this.logger.warn('Failed to parse taskIds string, keeping as-is');
+        }
       }
+    }
+    
+    // Ensure taskIds is an array
+    if (normalized.taskIds && !Array.isArray(normalized.taskIds)) {
+      normalized.taskIds = [normalized.taskIds];
     }
     
     // Parse updates object if it's a string
@@ -276,6 +286,20 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
         this.logger.warn('Failed to parse updates string, keeping as-is');
       }
     }
+    
+    // Parse completionDate if it's provided as a string but not in updates
+    if (normalized.completionDate && typeof normalized.completionDate === 'string') {
+      // Already a string, which is what we want for dates
+    }
+    
+    // Log normalized args for debugging
+    this.logger.debug('Normalized batch args:', {
+      operation: normalized.operation,
+      taskIdsType: typeof normalized.taskIds,
+      taskIdsIsArray: Array.isArray(normalized.taskIds),
+      taskIdsLength: normalized.taskIds?.length,
+      hasUpdates: !!normalized.updates,
+    });
     
     return normalized as BatchTaskOperationsInput;
   }
