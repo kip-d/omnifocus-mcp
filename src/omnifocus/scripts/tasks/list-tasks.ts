@@ -162,11 +162,9 @@ export const LIST_TASKS_SCRIPT = `
   
   // Helper to safely check if task is completed
   function safeIsCompleted(task) {
-    try {
-      return task.completed() === true;
-    } catch (e) {
-      return false;
-    }
+    // Use the isCompleted helper which checks both task completion
+    // and parent project completion status
+    return isCompleted(task);
   }
   
   // Helper function to parse a repetition rule object
@@ -375,7 +373,7 @@ export const LIST_TASKS_SCRIPT = `
 
   function matchesFilters(task, filter) {
     // Basic property filters (cheapest checks first)
-    if (filter.completed !== undefined && task.completed() !== filter.completed) return false;
+    if (filter.completed !== undefined && isCompleted(task) !== filter.completed) return false;
     if (filter.flagged !== undefined && task.flagged() !== filter.flagged) return false;
     if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) return false;
     
@@ -417,7 +415,7 @@ export const LIST_TASKS_SCRIPT = `
     
     // Available filter (legacy - use available property filter below)
     if (filter.available) {
-      if (task.completed() || task.dropped()) return false;
+      if (isCompleted(task) || task.dropped()) return false;
       const deferDate = safeGet(() => task.deferDate());
       if (deferDate && deferDate > new Date()) return false;
     }
