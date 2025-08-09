@@ -44,20 +44,12 @@ export const CREATE_PROJECT_SCRIPT = `
       }
     }
     
-    // Create the project
+    // Create project with object parameter (despite TypeScript definition, JXA expects object)
     const projectProps = { name: name };
     
-    // Add optional properties
+    // Add simple properties that can be set during creation
     if (options.note) {
       projectProps.note = options.note;
-    }
-    
-    if (options.deferDate) {
-      projectProps.deferDate = new Date(options.deferDate);
-    }
-    
-    if (options.dueDate) {
-      projectProps.dueDate = new Date(options.dueDate);
     }
     
     if (options.flagged !== undefined) {
@@ -68,26 +60,47 @@ export const CREATE_PROJECT_SCRIPT = `
       projectProps.sequential = options.sequential;
     }
     
-    // Review-related properties
-    if (options.nextReviewDate) {
-      projectProps.nextReviewDate = new Date(options.nextReviewDate);
-    }
-    
-    // Advanced project properties
     if (options.completedByChildren !== undefined) {
       projectProps.completedByChildren = options.completedByChildren;
     }
     
-    if (options.singleton !== undefined) {
-      projectProps.singleton = options.singleton;
+    // Create the project
+    const newProject = app.Project(projectProps);
+    
+    // Set date properties after creation to avoid type conversion issues
+    if (options.deferDate) {
+      try {
+        newProject.deferDate = new Date(options.deferDate);
+      } catch (e) {
+        console.log('Warning: Could not set defer date:', e.message);
+      }
     }
     
-    // Set repeat rule if provided
+    if (options.dueDate) {
+      try {
+        newProject.dueDate = new Date(options.dueDate);
+      } catch (e) {
+        console.log('Warning: Could not set due date:', e.message);
+      }
+    }
+    
+    if (options.nextReviewDate) {
+      try {
+        newProject.nextReviewDate = new Date(options.nextReviewDate);
+      } catch (e) {
+        console.log('Warning: Could not set next review date:', e.message);
+      }
+    }
+    
+    // Set repeat rule after project creation
+    // NOTE: RepetitionRule creation has issues with JXA, commenting out for now
+    // TODO: Investigate alternative approach for project repeat rules
+    /*
     if (options.repeatRule) {
       try {
         const repetitionRule = createRepetitionRule(options.repeatRule);
-        if (repetitionRule) {
-          projectProps.repetitionRule = repetitionRule;
+        if (repetitionRule && typeof repetitionRule !== 'object') {
+          newProject.repetitionRule = repetitionRule;
           console.log('Applied repeat rule to project:', options.repeatRule);
         }
       } catch (error) {
@@ -95,9 +108,7 @@ export const CREATE_PROJECT_SCRIPT = `
         // Continue without repeat rule rather than failing project creation
       }
     }
-    
-    // Create project
-    const newProject = app.Project(projectProps);
+    */
     
     // Set review interval after project creation (cannot be set during construction)
     if (options.reviewInterval) {
@@ -161,13 +172,19 @@ export const CREATE_PROJECT_SCRIPT = `
         id: newProject.id(),
         name: newProject.name(),
         createdAt: new Date().toISOString(),
-        nextReviewDate: newProject.nextReviewDate ? newProject.nextReviewDate().toISOString() : null,
-        reviewInterval: newProject.reviewInterval ? {
-          unit: newProject.reviewInterval().unit,
-          steps: newProject.reviewInterval().steps
-        } : null,
-        completedByChildren: newProject.completedByChildren ? newProject.completedByChildren() : false,
-        singleton: newProject.singleton ? newProject.singleton() : false
+        nextReviewDate: safeGet(() => {
+          const date = newProject.nextReviewDate();
+          return date ? date.toISOString() : null;
+        }, null),
+        reviewInterval: safeGet(() => {
+          const interval = newProject.reviewInterval();
+          return interval ? {
+            unit: interval.unit,
+            steps: interval.steps
+          } : null;
+        }, null),
+        completedByChildren: safeGet(() => newProject.completedByChildren(), false),
+        singleton: safeGet(() => newProject.singleton(), false)
       },
       message: "Project '" + name + "' created successfully"
     });

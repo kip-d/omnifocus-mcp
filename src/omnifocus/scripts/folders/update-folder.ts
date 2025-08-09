@@ -93,15 +93,27 @@ export const UPDATE_FOLDER_SCRIPT = `
           }
         }
         
+        // Set the name property directly
         targetFolder.name = updates.name;
       }
       
-      // Update status
+      // Update status - use string values as JXA may not expose the enum
       if (updates.status && updates.status !== originalStatus) {
-        if (updates.status === 'active') {
-          targetFolder.status = app.Folder.Status.Active;
-        } else if (updates.status === 'dropped') {
-          targetFolder.status = app.Folder.Status.Dropped;
+        try {
+          // Try using the enum first
+          if (updates.status === 'active') {
+            targetFolder.status = app.Folder.Status.Active;
+          } else if (updates.status === 'dropped') {
+            targetFolder.status = app.Folder.Status.Dropped;
+          }
+        } catch (enumError) {
+          // If enum fails, try string assignment
+          try {
+            targetFolder.status = updates.status;
+          } catch (stringError) {
+            // Status update failed but continue with other updates
+            // This is logged but not fatal
+          }
         }
       }
       

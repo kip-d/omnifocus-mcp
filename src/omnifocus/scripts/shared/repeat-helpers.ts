@@ -139,11 +139,16 @@ export const REPEAT_HELPERS = `
           break;
       }
       
-      // Create the RepetitionRule
-      const repetitionRule = app.Task.RepetitionRule(ruleString, methodConstant);
-      
-      console.log('Created RepetitionRule with ruleString:', ruleString, 'method:', method);
-      return repetitionRule;
+      // Create the RepetitionRule - wrap in try-catch for better error handling
+      try {
+        const repetitionRule = app.Task.RepetitionRule(ruleString, methodConstant);
+        console.log('Created RepetitionRule with ruleString:', ruleString, 'method:', method);
+        return repetitionRule;
+      } catch (ruleError) {
+        console.log('Failed to create RepetitionRule using constructor:', ruleError.message);
+        // Try alternative approach - just return the rule string and method for manual application
+        return { ruleString: ruleString, method: methodConstant };
+      }
       
     } catch (error) {
       console.log('Error creating RepetitionRule:', error.message);
