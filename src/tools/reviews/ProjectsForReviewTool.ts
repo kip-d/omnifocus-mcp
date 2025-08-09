@@ -6,7 +6,7 @@ import { ProjectsForReviewSchema } from '../schemas/project-schemas.js';
 
 export class ProjectsForReviewTool extends BaseTool<typeof ProjectsForReviewSchema> {
   name = 'projects_for_review';
-  description = 'List projects that are due for review based on their review schedule. Use overdue=true for only overdue reviews, or set daysAhead to include upcoming reviews. Essential for GTD weekly reviews.';
+  description = '**DEPRECATED**: Use manage_reviews with operation: "list_for_review" instead. List projects that are due for review based on their review schedule. Use overdue=true for only overdue reviews, or set daysAhead to include upcoming reviews. Essential for GTD weekly reviews.';
   schema = ProjectsForReviewSchema;
 
   async executeValidated(args: z.infer<typeof ProjectsForReviewSchema>): Promise<any> {

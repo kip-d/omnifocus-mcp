@@ -7,3 +7,4 @@ export * from './export-schemas.js';
 export * from './system-schemas.js';
 export * from './shared-schemas.js';
 export * from './repeat-schemas.js';
+export * from './consolidated-schemas.js';

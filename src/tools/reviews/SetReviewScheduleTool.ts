@@ -6,7 +6,7 @@ import { SetReviewScheduleSchema } from '../schemas/project-schemas.js';
 
 export class SetReviewScheduleTool extends BaseTool<typeof SetReviewScheduleSchema> {
   name = 'set_review_schedule';
-  description = 'Set review schedule for multiple projects at once. Useful for batch configuring review intervals (daily, weekly, monthly, yearly) and next review dates for GTD workflows.';
+  description = '**DEPRECATED**: Use manage_reviews with operation: "set_schedule" or "clear_schedule" instead. Set review schedule for multiple projects at once. Useful for batch configuring review intervals (daily, weekly, monthly, yearly) and next review dates for GTD workflows.';
   schema = SetReviewScheduleSchema;
 
   async executeValidated(args: z.infer<typeof SetReviewScheduleSchema>): Promise<any> {

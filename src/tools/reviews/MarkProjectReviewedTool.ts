@@ -6,7 +6,7 @@ import { MarkProjectReviewedSchema } from '../schemas/project-schemas.js';
 
 export class MarkProjectReviewedTool extends BaseTool<typeof MarkProjectReviewedSchema> {
   name = 'mark_project_reviewed';
-  description = 'Mark a project as reviewed, updating the lastReviewDate and optionally calculating the next review date based on the review interval. Essential for GTD project reviews.';
+  description = '**DEPRECATED**: Use manage_reviews with operation: "mark_reviewed" instead. Mark a project as reviewed, updating the lastReviewDate and optionally calculating the next review date based on the review interval. Essential for GTD project reviews.';
   schema = MarkProjectReviewedSchema;
 
   async executeValidated(args: z.infer<typeof MarkProjectReviewedSchema>): Promise<any> {

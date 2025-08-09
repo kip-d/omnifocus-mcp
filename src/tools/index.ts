@@ -15,6 +15,9 @@ import { NextActionsTool } from './tasks/NextActionsTool.js';
 import { BlockedTasksTool } from './tasks/BlockedTasksTool.js';
 import { AvailableTasksTool } from './tasks/AvailableTasksTool.js';
 
+// Import new consolidated task query tool
+import { QueryTasksTool } from './tasks/QueryTasksTool.js';
+
 // Import project tools
 import { ListProjectsTool } from './projects/ListProjectsTool.js';
 import { CreateProjectTool } from './projects/CreateProjectTool.js';
@@ -28,6 +31,10 @@ import { CreateFolderTool } from './folders/CreateFolderTool.js';
 import { UpdateFolderTool } from './folders/UpdateFolderTool.js';
 import { DeleteFolderTool } from './folders/DeleteFolderTool.js';
 import { MoveFolderTool } from './folders/MoveFolderTool.js';
+
+// Import new consolidated folder tools
+import { ManageFolderTool } from './folders/ManageFolderTool.js';
+import { QueryFoldersTool } from './folders/QueryFoldersTool.js';
 
 // Import analytics tools
 import { ProductivityStatsTool } from './analytics/ProductivityStatsTool.js';
@@ -65,13 +72,20 @@ import { ProjectsForReviewTool } from './reviews/ProjectsForReviewTool.js';
 import { MarkProjectReviewedTool } from './reviews/MarkProjectReviewedTool.js';
 import { SetReviewScheduleTool } from './reviews/SetReviewScheduleTool.js';
 
+// Import new consolidated tools
+import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
+import { BatchTaskOperationsTool } from './tasks/BatchTaskOperationsTool.js';
+
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
   // Initialize all tools
   const tools = [
-    // Task tools - Read operations
-    new ListTasksTool(cache),
+    // New consolidated task query tool (recommended for all query operations)
+    new QueryTasksTool(cache),
+    
+    // Task tools - Read operations (legacy tools - use query_tasks instead)
+    new ListTasksTool(cache),          // Deprecated: use query_tasks with queryType: "list"
     new GetTaskCountTool(cache),
     new TodaysAgendaTool(cache),
 
@@ -81,18 +95,18 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new CompleteTaskTool(cache),
     new DeleteTaskTool(cache),
 
-    // Advanced status tools
-    new NextActionsTool(cache),
-    new BlockedTasksTool(cache),
-    new AvailableTasksTool(cache),
+    // Advanced status tools (legacy - use query_tasks instead)
+    new NextActionsTool(cache),        // Deprecated: use query_tasks with queryType: "next_actions"
+    new BlockedTasksTool(cache),       // Deprecated: use query_tasks with queryType: "blocked"
+    new AvailableTasksTool(cache),     // Deprecated: use query_tasks with queryType: "available"
 
     // Batch operations removed due to OmniFocus JXA limitations
     // Use individual task operations which work perfectly
 
-    // Date range query tools
-    new DateRangeQueryTool(cache),
-    new OverdueTasksTool(cache),
-    new UpcomingTasksTool(cache),
+    // Date range query tools (legacy - use query_tasks instead)
+    new DateRangeQueryTool(cache),     // For complex date range queries
+    new OverdueTasksTool(cache),       // Deprecated: use query_tasks with queryType: "overdue"
+    new UpcomingTasksTool(cache),      // Deprecated: use query_tasks with queryType: "upcoming"
 
     // Project tools
     new ListProjectsTool(cache),
@@ -101,7 +115,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new CompleteProjectTool(cache),
     new DeleteProjectTool(cache),
 
-    // Folder tools
+    // Folder tools - new consolidated tools (recommended)
+    new ManageFolderTool(cache),
+    new QueryFoldersTool(cache),
+
+    // Legacy folder tools (deprecated but kept for backward compatibility)
     new ListFoldersTool(cache),
     new CreateFolderTool(cache),
     new UpdateFolderTool(cache),
@@ -133,10 +151,14 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // Diagnostic tools
     new RunDiagnosticsTool(cache),
     
-    // Review tools (GTD project review workflows)
-    new ProjectsForReviewTool(cache),
-    new MarkProjectReviewedTool(cache),
-    new SetReviewScheduleTool(cache),
+    // New consolidated tools (recommended for better LLM usage)
+    new ManageReviewsTool(cache),
+    new BatchTaskOperationsTool(cache),
+    
+    // Legacy review tools (deprecated but kept for backward compatibility)
+    new ProjectsForReviewTool(cache),    // Deprecated: use manage_reviews with operation: "list_for_review"
+    new MarkProjectReviewedTool(cache),  // Deprecated: use manage_reviews with operation: "mark_reviewed"
+    new SetReviewScheduleTool(cache),    // Deprecated: use manage_reviews with operation: "set_schedule"
   ];
 
   // Register handlers
