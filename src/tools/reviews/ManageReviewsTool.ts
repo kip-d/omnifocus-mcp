@@ -16,18 +16,21 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     const timer = new OperationTimer();
 
     try {
-      switch (args.operation) {
+      // Handle Claude Desktop sometimes sending stringified parameters
+      const normalizedArgs = this.normalizeArgs(args);
+      
+      switch (normalizedArgs.operation) {
         case 'list_for_review':
-          return this.listForReview(args, timer);
+          return this.listForReview(normalizedArgs, timer);
           
         case 'mark_reviewed':
-          return this.markReviewed(args, timer);
+          return this.markReviewed(normalizedArgs, timer);
           
         case 'set_schedule':
-          return this.setSchedule(args, timer);
+          return this.setSchedule(normalizedArgs, timer);
           
         case 'clear_schedule':
-          return this.clearSchedule(args, timer);
+          return this.clearSchedule(normalizedArgs, timer);
           
         default:
           // TypeScript should prevent this, but just in case
@@ -332,5 +335,39 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         },
       },
     );
+  }
+
+  private normalizeArgs(args: any): ManageReviewsInput {
+    // Handle Claude Desktop sometimes sending stringified parameters
+    const normalized = { ...args };
+    
+    // Parse projectIds if it's a string
+    if (typeof normalized.projectIds === 'string') {
+      try {
+        normalized.projectIds = JSON.parse(normalized.projectIds);
+      } catch (e) {
+        this.logger.warn('Failed to parse projectIds string, keeping as-is');
+      }
+    }
+    
+    // Parse reviewInterval if it's a string
+    if (typeof normalized.reviewInterval === 'string') {
+      try {
+        normalized.reviewInterval = JSON.parse(normalized.reviewInterval);
+      } catch (e) {
+        this.logger.warn('Failed to parse reviewInterval string, keeping as-is');
+      }
+    }
+    
+    // Parse other potentially stringified arrays/objects
+    if (typeof normalized.tags === 'string') {
+      try {
+        normalized.tags = JSON.parse(normalized.tags);
+      } catch (e) {
+        this.logger.warn('Failed to parse tags string, keeping as-is');
+      }
+    }
+    
+    return normalized as ManageReviewsInput;
   }
 }

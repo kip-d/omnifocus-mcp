@@ -16,15 +16,18 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
     const timer = new OperationTimer();
 
     try {
-      switch (args.operation) {
+      // Handle Claude Desktop sometimes sending stringified parameters
+      const normalizedArgs = this.normalizeArgs(args);
+      
+      switch (normalizedArgs.operation) {
         case 'update':
-          return this.batchUpdate(args, timer);
+          return this.batchUpdate(normalizedArgs, timer);
           
         case 'complete':
-          return this.batchComplete(args, timer);
+          return this.batchComplete(normalizedArgs, timer);
           
         case 'delete':
-          return this.batchDelete(args, timer);
+          return this.batchDelete(normalizedArgs, timer);
           
         default:
           // TypeScript should prevent this, but just in case
@@ -250,5 +253,30 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
         },
       },
     );
+  }
+
+  private normalizeArgs(args: any): BatchTaskOperationsInput {
+    // Handle Claude Desktop sometimes sending stringified parameters
+    const normalized = { ...args };
+    
+    // Parse taskIds if it's a string
+    if (typeof normalized.taskIds === 'string') {
+      try {
+        normalized.taskIds = JSON.parse(normalized.taskIds);
+      } catch (e) {
+        this.logger.warn('Failed to parse taskIds string, keeping as-is');
+      }
+    }
+    
+    // Parse updates object if it's a string
+    if (typeof normalized.updates === 'string') {
+      try {
+        normalized.updates = JSON.parse(normalized.updates);
+      } catch (e) {
+        this.logger.warn('Failed to parse updates string, keeping as-is');
+      }
+    }
+    
+    return normalized as BatchTaskOperationsInput;
   }
 }
