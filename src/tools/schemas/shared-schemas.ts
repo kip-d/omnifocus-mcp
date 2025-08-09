@@ -39,8 +39,8 @@ export const PaginationSchema = z.object({
     .int()
     .positive()
     .max(1000)
-    .default(100)
-    .describe('Maximum number of results to return'),
+    .default(25)  // Daily-first: reduced from 100 for quicker response
+    .describe('Maximum number of results to return (default: 25 for daily use, increase for reviews)'),
   offset: coerceNumber()
     .int()
     .nonnegative()
@@ -62,10 +62,12 @@ export const ExportFormatSchema = z.enum(['json', 'csv', 'markdown'])
 export const PerformanceOptionsSchema = z.object({
   skipAnalysis: coerceBoolean()
     .optional()
-    .describe('Skip expensive analysis for better performance'),
+    .default(true)  // Daily-first: skip expensive recurring analysis by default
+    .describe('Skip expensive recurring task analysis (default: true for daily use, set false for weekly reviews)'),
   includeDetails: coerceBoolean()
     .optional()
-    .describe('Include detailed information (may impact performance)'),
+    .default(false)  // Daily-first: minimal details for quick scanning
+    .describe('Include detailed information like notes and subtasks (default: false for daily use)'),
 });
 
 // Common error response

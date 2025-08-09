@@ -80,6 +80,7 @@ describe('ListTasksTool', () => {
       expect(params).toEqual({
         filter: { 
           completed: false,
+          includeDetails: false,  // Daily-first default
           limit: 10,
           skipAnalysis: true,
           offset: 0,
@@ -111,7 +112,7 @@ describe('ListTasksTool', () => {
       expect(result.metadata.performance_metrics.analysis_time_ms).toBe(0);
     });
 
-    it('should default skipAnalysis to false', async () => {
+    it('should default skipAnalysis to true for daily-first performance', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
@@ -120,8 +121,8 @@ describe('ListTasksTool', () => {
           performance_metrics: {
             tasks_scanned: 100,
             filter_time_ms: 50,
-            analysis_time_ms: 150,
-            analysis_skipped: false
+            analysis_time_ms: 0,  // No analysis time when skipped by default
+            analysis_skipped: true  // Daily-first default
           }
         }
       });
@@ -136,8 +137,9 @@ describe('ListTasksTool', () => {
       expect(params).toEqual({
         filter: { 
           completed: false,
-          limit: 100,
-          skipAnalysis: false,
+          includeDetails: false,  // Daily-first default
+          limit: 25,  // Daily-first limit
+          skipAnalysis: true,  // Daily-first default
           offset: 0,
           sortOrder: 'asc'
         }

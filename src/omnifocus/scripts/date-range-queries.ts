@@ -301,7 +301,7 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
           id: safeGet(() => task.id(), 'unknown'),
           name: safeGet(() => task.name(), 'Unnamed Task'),
           dueDate: dueDate,
-          completed: safeGet(() => task.completed(), false),
+          completed: isTaskEffectivelyCompleted(task),
           flagged: safeGet(() => task.flagged(), false)
         };
         

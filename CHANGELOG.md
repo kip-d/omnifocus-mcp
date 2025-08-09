@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2025-08-09
+
+### Added
+- **Daily-First Philosophy**: Complete optimization strategy for common workflows
+- `performanceMode` parameter for projects (lite/normal modes)
+- Comprehensive test coverage: 154 new unit tests
+- Documentation: DAILY_FIRST_PHILOSOPHY.md and DATE_HANDLING.md
+- Early detection for OmniFocus not running (fails fast with clear errors)
+
+### Changed
+- **BREAKING DEFAULTS** (but backwards compatible):
+  - Task queries: `limit: 25` (was 100), `skipAnalysis: true` (was false), `includeDetails: false`
+  - Project queries: `limit: 20` (was 100), `performanceMode: 'lite'` (was normal)
+  - Tag queries: `fastMode: true` (was false), `includeTaskCounts: false` (was true)
+- All tools now optimized for daily GTD workflows (quick capture, status checks, completion)
+- Weekly review operations available via explicit parameters
+
+### Fixed
+- Tasks in completed projects now correctly show as completed
+- Date-range queries properly check parent project completion status
+- Function references corrected to use `isTaskEffectivelyCompleted`
+- Integration test timeout for list_projects (now uses lite mode)
+
+### Performance
+- Daily operations now 5-10x faster (200-500ms vs 2-10s)
+- list_projects in lite mode: ~0.2s for 10 projects
+- list_tasks with skipAnalysis: 30% faster
+- Tag queries with fastMode: 5x faster (130ms vs 700ms)
+
+### Migration Guide
+To restore pre-1.9.0 behavior, explicitly set parameters:
+```javascript
+// Old behavior for tasks
+list_tasks({ limit: 100, skipAnalysis: false, includeDetails: true })
+
+// Old behavior for projects  
+list_projects({ limit: 100, performanceMode: 'normal' })
+
+// Old behavior for tags
+list_tags({ fastMode: false, includeTaskCounts: true })
+```
+
 ## [1.7.0] - 2025-08-03
 
 ### Changed

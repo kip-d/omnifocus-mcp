@@ -86,8 +86,8 @@ export const ListProjectsSchema = z.object({
     .int()
     .positive()
     .max(1000)
-    .default(100)
-    .describe('Maximum number of projects to return'),
+    .default(20)  // Daily-first: reduced from 100 for quick project overview
+    .describe('Maximum number of projects to return (default: 20 for daily use, increase for comprehensive reviews)'),
 
   performanceMode: z.enum(['normal', 'lite'])
     .optional()

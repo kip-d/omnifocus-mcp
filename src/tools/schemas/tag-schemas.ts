@@ -28,15 +28,15 @@ export const ListTagsSchema = z.object({
     .describe('Calculate task usage statistics for each tag (slower on large databases)'),
 
   includeTaskCounts: coerceBoolean()
-    .default(true)
-    .describe('Include task count information for each tag'),
+    .default(false)  // Daily-first: skip counts for faster tag listing
+    .describe('Include task count information for each tag (default: false for daily use, enable for tag management)'),
 
   fastMode: coerceBoolean()
-    .default(false)
-    .describe('Fast mode: Skip parent/child relationships for better performance'),
+    .default(true)  // Daily-first: skip hierarchy processing for speed
+    .describe('Fast mode: Skip parent/child relationships for better performance (default: true for daily use)'),
 
   namesOnly: coerceBoolean()
-    .default(false)
+    .default(false)  // Keep false as we still need IDs for tag operations
     .describe('Ultra-fast mode: Return only tag names without IDs or hierarchy'),
 });
 
