@@ -142,8 +142,8 @@ export const EXPORT_TASKS_SCRIPT = `
       }
       
       if (allFields.includes('completed')) {
-        // Use isCompleted helper to check both task and parent project completion
-        taskData.completed = isCompleted(task);
+        // Use isTaskEffectivelyCompleted helper to check both task and parent project completion
+        taskData.completed = isTaskEffectivelyCompleted(task);
       }
       
       if (allFields.includes('completionDate')) {

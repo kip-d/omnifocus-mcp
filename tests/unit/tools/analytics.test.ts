@@ -1,0 +1,651 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ProductivityStatsTool } from '../../../src/tools/analytics/ProductivityStatsTool.js';
+import { TaskVelocityTool } from '../../../src/tools/analytics/TaskVelocityTool.js';
+import { OverdueAnalysisTool } from '../../../src/tools/analytics/OverdueAnalysisTool.js';
+import { CacheManager } from '../../../src/cache/CacheManager.js';
+import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
+
+// Mock dependencies
+vi.mock('../../../src/cache/CacheManager.js', () => ({
+  CacheManager: vi.fn()
+}));
+vi.mock('../../../src/omnifocus/OmniAutomation.js', () => ({
+  OmniAutomation: vi.fn()
+}));
+vi.mock('../../../src/utils/logger.js', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  }))
+}));
+
+describe('Analytics Tools', () => {
+  let mockCache: any;
+  let mockOmniAutomation: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    
+    mockCache = {
+      get: vi.fn(),
+      set: vi.fn(),
+      clear: vi.fn(),
+      invalidate: vi.fn(),
+    };
+    
+    mockOmniAutomation = {
+      buildScript: vi.fn(),
+      execute: vi.fn(),
+    };
+
+    (CacheManager as any).mockImplementation(() => mockCache);
+    (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
+  });
+
+  describe('ProductivityStatsTool', () => {
+    let tool: ProductivityStatsTool;
+
+    beforeEach(() => {
+      tool = new ProductivityStatsTool(mockCache);
+    });
+
+    describe('basic functionality', () => {
+      it('should have correct name and description', () => {
+        expect(tool.name).toBe('get_productivity_stats');
+        expect(tool.description).toContain('productivity statistics');
+        expect(tool.description).toContain('today|week|month|quarter|year');
+      });
+
+      it('should validate schema correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: { completed: 10, created: 15 },
+          summary: { completionRate: 0.67 },
+          trends: {},
+        });
+
+        const result = await tool.execute({
+          period: 'week',
+          groupBy: 'project',
+          includeCompleted: true,
+        });
+
+        expect(result).toHaveProperty('period', 'week');
+        expect(result).toHaveProperty('groupBy', 'project');
+        expect(result.from_cache).toBe(false);
+      });
+
+      it('should reject invalid period values', async () => {
+        await expect(tool.execute({
+          period: 'last_week', // Invalid - should be 'week'
+        })).rejects.toThrow();
+
+        await expect(tool.execute({
+          period: 'current_month', // Invalid - should be 'month'  
+        })).rejects.toThrow();
+      });
+
+      it('should use default values correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: {},
+          summary: {},
+          trends: {},
+        });
+
+        await tool.execute({});
+
+        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+          expect.any(String),
+          {
+            options: {
+              period: 'week',
+              groupBy: 'project', 
+              includeCompleted: true,
+            }
+          }
+        );
+      });
+    });
+
+    describe('caching behavior', () => {
+      it('should return cached data when available', async () => {
+        const cachedData = {
+          period: 'week',
+          stats: { cached: true },
+          summary: { completionRate: 0.75 },
+          trends: {},
+        };
+        
+        mockCache.get.mockReturnValue(cachedData);
+
+        const result = await tool.execute({ period: 'week' });
+
+        expect(result.from_cache).toBe(true);
+        expect(result.stats).toEqual({ cached: true });
+        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+      });
+
+      it('should generate correct cache keys', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: {}, summary: {}, trends: {}
+        });
+
+        await tool.execute({
+          period: 'month',
+          groupBy: 'tag',
+          includeCompleted: false,
+        });
+
+        expect(mockCache.get).toHaveBeenCalledWith(
+          'analytics',
+          'productivity_month_tag_false'
+        );
+        expect(mockCache.set).toHaveBeenCalledWith(
+          'analytics',
+          'productivity_month_tag_false',
+          expect.any(Object)
+        );
+      });
+
+      it('should cache results correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: { completed: 25, created: 30 },
+          summary: { completionRate: 0.83 },
+          trends: { direction: 'up' },
+        });
+
+        const result = await tool.execute({ period: 'today' });
+
+        expect(mockCache.set).toHaveBeenCalledWith(
+          'analytics',
+          'productivity_today_project_true',
+          {
+            period: 'today',
+            groupBy: 'project',
+            stats: { completed: 25, created: 30 },
+            summary: { completionRate: 0.83 },
+            trends: { direction: 'up' },
+            from_cache: false,
+          }
+        );
+      });
+    });
+
+    describe('calculation accuracy and edge cases', () => {
+      it('should handle empty data correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: {},
+          summary: { completionRate: 0, totalCompleted: 0, totalCreated: 0 },
+          trends: {},
+        });
+
+        const result = await tool.execute({ period: 'today' });
+
+        expect(result.summary.completionRate).toBe(0);
+        expect(result.summary.totalCompleted).toBe(0);
+        expect(result.summary.totalCreated).toBe(0);
+      });
+
+      it('should handle script errors gracefully', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          error: true,
+          message: 'Script execution failed',
+        });
+
+        const result = await tool.execute({ period: 'week' });
+
+        expect(result.error).toBe(true);
+        expect(result.message).toBe('Script execution failed');
+      });
+
+      it('should handle all groupBy options', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          stats: {}, summary: {}, trends: {}
+        });
+
+        const groupByOptions = ['project', 'tag', 'day', 'week', 'none'];
+        
+        for (const groupBy of groupByOptions) {
+          await tool.execute({ groupBy: groupBy as any });
+          expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+              options: expect.objectContaining({ groupBy })
+            })
+          );
+        }
+      });
+    });
+  });
+
+  describe('TaskVelocityTool', () => {
+    let tool: TaskVelocityTool;
+
+    beforeEach(() => {
+      tool = new TaskVelocityTool(mockCache);
+    });
+
+    describe('basic functionality', () => {
+      it('should have correct name and description', () => {
+        expect(tool.name).toBe('get_task_velocity');
+        expect(tool.description).toContain('velocity and throughput');
+        expect(tool.description).toContain('day|week|month');
+      });
+
+      it('should handle filtering options correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: { current: 10, average: 8 },
+          throughput: { weekly: 40 },
+          breakdown: {},
+          projections: {},
+        });
+
+        await tool.execute({
+          period: 'week',
+          projectId: 'project123',
+          tags: ['urgent', 'work'],
+        });
+
+        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+          expect.any(String),
+          {
+            options: {
+              period: 'week',
+              projectId: 'project123',
+              tags: ['urgent', 'work'],
+            }
+          }
+        );
+      });
+
+      it('should generate cache keys with all parameters', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: {}, throughput: {}, breakdown: {}, projections: {}
+        });
+
+        await tool.execute({
+          period: 'month',
+          projectId: 'proj456',
+          tags: ['personal', 'health'],
+        });
+
+        expect(mockCache.get).toHaveBeenCalledWith(
+          'analytics',
+          'velocity_month_proj456_["personal","health"]'
+        );
+      });
+    });
+
+    describe('caching behavior', () => {
+      it('should handle cache keys without optional parameters', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: {}, throughput: {}, breakdown: {}, projections: {}
+        });
+
+        await tool.execute({ period: 'day' });
+
+        expect(mockCache.get).toHaveBeenCalledWith(
+          'analytics',
+          'velocity_day_all_[]'
+        );
+      });
+
+      it('should cache for 30 minutes as per comment', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: { current: 15 },
+          throughput: { daily: 5 },
+          breakdown: {},
+          projections: {},
+        });
+
+        const result = await tool.execute({ period: 'week' });
+
+        expect(mockCache.set).toHaveBeenCalledWith(
+          'analytics',
+          expect.any(String),
+          expect.objectContaining({
+            period: 'week',
+            velocity: { current: 15 },
+            from_cache: false,
+          })
+        );
+      });
+    });
+
+    describe('calculation accuracy', () => {
+      it('should preserve all velocity calculation results', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: {
+            current: 12,
+            average: 10.5,
+            trend: 'increasing',
+          },
+          throughput: {
+            tasksPerWeek: 42,
+          },
+          breakdown: {
+            byProject: { work: 8, personal: 4 }
+          },
+          projections: {
+            nextWeek: 13,
+            confidence: 0.85,
+          },
+        });
+
+        const result = await tool.execute({ period: 'week' });
+
+        expect(result.velocity.current).toBe(12);
+        expect(result.velocity.average).toBe(10.5);
+        expect(result.velocity.trend).toBe('increasing');
+        expect(result.throughput.tasksPerWeek).toBe(42);
+        expect(result.breakdown.byProject.work).toBe(8);
+        expect(result.projections.nextWeek).toBe(13);
+      });
+
+      it('should handle empty velocity data', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          velocity: { current: 0, average: 0 },
+          throughput: {},
+          breakdown: {},
+          projections: {},
+        });
+
+        const result = await tool.execute({ period: 'day' });
+
+        expect(result.velocity.current).toBe(0);
+        expect(result.velocity.average).toBe(0);
+      });
+    });
+  });
+
+  describe('OverdueAnalysisTool', () => {
+    let tool: OverdueAnalysisTool;
+
+    beforeEach(() => {
+      tool = new OverdueAnalysisTool(mockCache);
+    });
+
+    describe('basic functionality', () => {
+      it('should have correct name and description', () => {
+        expect(tool.name).toBe('analyze_overdue_tasks');
+        expect(tool.description).toContain('overdue tasks for patterns');
+        expect(tool.description).toContain('project|tag|duration');
+      });
+
+      it('should validate limit parameter correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: { totalOverdue: 5 },
+          overdueTasks: [],
+          patterns: {},
+          recommendations: [],
+          groupedAnalysis: {},
+        });
+
+        await tool.execute({ limit: 50 });
+
+        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+          expect.any(String),
+          {
+            options: expect.objectContaining({ limit: 50 })
+          }
+        );
+      });
+
+      it('should reject invalid limit values', async () => {
+        await expect(tool.execute({ limit: 0 })).rejects.toThrow();
+        await expect(tool.execute({ limit: -5 })).rejects.toThrow();
+        await expect(tool.execute({ limit: 1000 })).rejects.toThrow(); // Max is 500
+      });
+
+      it('should handle all groupBy options', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: {}, overdueTasks: [], patterns: {}, 
+          recommendations: [], groupedAnalysis: {}
+        });
+
+        const groupByOptions = ['project', 'tag', 'age', 'priority'];
+        
+        for (const groupBy of groupByOptions) {
+          await tool.execute({ groupBy: groupBy as any });
+          expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+              options: expect.objectContaining({ groupBy })
+            })
+          );
+        }
+      });
+    });
+
+    describe('caching behavior', () => {
+      it('should generate correct cache keys', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: {}, overdueTasks: [], patterns: {},
+          recommendations: [], groupedAnalysis: {}
+        });
+
+        await tool.execute({
+          includeRecentlyCompleted: false,
+          groupBy: 'age',
+          limit: 200,
+        });
+
+        expect(mockCache.get).toHaveBeenCalledWith(
+          'analytics',
+          'overdue_false_age_200'
+        );
+      });
+
+      it('should cache for 10 minutes as per comment', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: { totalOverdue: 12 },
+          overdueTasks: [],
+          patterns: { mostCommonProject: 'Work' },
+          recommendations: ['Prioritize old tasks'],
+          groupedAnalysis: {},
+        });
+
+        const result = await tool.execute({ groupBy: 'project' });
+
+        expect(mockCache.set).toHaveBeenCalledWith(
+          'analytics',
+          expect.any(String),
+          expect.objectContaining({
+            summary: { totalOverdue: 12 },
+            patterns: { mostCommonProject: 'Work' },
+            from_cache: false,
+          })
+        );
+      });
+
+      it('should return cached overdue analysis when available', async () => {
+        const cachedData = {
+          summary: { totalOverdue: 8 },
+          overdueTasks: [{ id: '1', name: 'Old task' }],
+          patterns: { cached: true },
+          recommendations: ['Use cache'],
+          groupedAnalysis: {},
+        };
+        
+        mockCache.get.mockReturnValue(cachedData);
+
+        const result = await tool.execute({ limit: 100 });
+
+        expect(result.from_cache).toBe(true);
+        expect(result.summary.totalOverdue).toBe(8);
+        expect(result.patterns.cached).toBe(true);
+        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('calculation accuracy and edge cases', () => {
+      it('should handle no overdue tasks', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: {
+            totalOverdue: 0,
+            oldestOverdueDays: 0,
+            averageOverdueDays: 0,
+          },
+          overdueTasks: [],
+          patterns: {},
+          recommendations: ['No overdue tasks - great job!'],
+          groupedAnalysis: {},
+        });
+
+        const result = await tool.execute({ limit: 100 });
+
+        expect(result.summary.totalOverdue).toBe(0);
+        expect(result.overdueTasks).toEqual([]);
+        expect(result.recommendations).toContain('No overdue tasks - great job!');
+      });
+
+      it('should preserve all analysis data correctly', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: {
+            totalOverdue: 15,
+            oldestOverdueDays: 45,
+            averageOverdueDays: 12.3,
+          },
+          overdueTasks: [
+            { id: '1', name: 'Task 1', daysOverdue: 45 },
+            { id: '2', name: 'Task 2', daysOverdue: 7 },
+          ],
+          patterns: {
+            mostOverdueProject: 'Personal',
+            commonTags: ['urgent'],
+          },
+          recommendations: [
+            'Focus on oldest tasks first',
+            'Review project priorities',
+          ],
+          groupedAnalysis: {
+            byProject: {
+              'Work': { count: 8, avgDays: 10 },
+              'Personal': { count: 7, avgDays: 15 },
+            }
+          },
+        });
+
+        const result = await tool.execute({
+          includeRecentlyCompleted: true,
+          groupBy: 'project',
+        });
+
+        expect(result.summary.totalOverdue).toBe(15);
+        expect(result.summary.oldestOverdueDays).toBe(45);
+        expect(result.summary.averageOverdueDays).toBe(12.3);
+        expect(result.overdueTasks).toHaveLength(2);
+        expect(result.patterns.mostOverdueProject).toBe('Personal');
+        expect(result.recommendations).toHaveLength(2);
+        expect(result.groupedAnalysis.byProject.Work.count).toBe(8);
+      });
+
+      it('should handle boolean coercion for includeRecentlyCompleted', async () => {
+        mockCache.get.mockReturnValue(null);
+        mockOmniAutomation.buildScript.mockReturnValue('test script');
+        mockOmniAutomation.execute.mockResolvedValue({
+          summary: {}, overdueTasks: [], patterns: {},
+          recommendations: [], groupedAnalysis: {}
+        });
+
+        // Test string boolean values
+        await tool.execute({ includeRecentlyCompleted: 'true' as any });
+        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            options: expect.objectContaining({ includeRecentlyCompleted: true })
+          })
+        );
+
+        await tool.execute({ includeRecentlyCompleted: 'false' as any });
+        expect(mockOmniAutomation.buildScript).toHaveBeenLastCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            options: expect.objectContaining({ includeRecentlyCompleted: false })
+          })
+        );
+      });
+    });
+  });
+
+  describe('error handling across all analytics tools', () => {
+    it('should handle execution errors gracefully in ProductivityStatsTool', async () => {
+      const tool = new ProductivityStatsTool(mockCache);
+      mockCache.get.mockReturnValue(null);
+      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      mockOmniAutomation.execute.mockRejectedValue(new Error('Network error'));
+
+      const result = await tool.execute({ period: 'week' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error.message).toBe('Network error');
+      expect(result.metadata).toBeDefined();
+    });
+
+    it('should handle execution errors gracefully in TaskVelocityTool', async () => {
+      const tool = new TaskVelocityTool(mockCache);
+      mockCache.get.mockReturnValue(null);
+      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      mockOmniAutomation.execute.mockRejectedValue(new Error('Script timeout'));
+
+      const result = await tool.execute({ period: 'month' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error.message).toBe('Script timeout');
+    });
+
+    it('should handle execution errors gracefully in OverdueAnalysisTool', async () => {
+      const tool = new OverdueAnalysisTool(mockCache);
+      mockCache.get.mockReturnValue(null);
+      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      mockOmniAutomation.execute.mockRejectedValue(new Error('Permission denied'));
+
+      const result = await tool.execute({ limit: 50 });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error.message).toBe('Permission denied');
+    });
+  });
+});

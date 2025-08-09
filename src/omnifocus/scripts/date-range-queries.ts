@@ -218,7 +218,7 @@ export const GET_TASKS_IN_DATE_RANGE_SCRIPT = `
     const obj = {
       id: safeGet(() => task.id(), 'unknown'),
       name: safeGet(() => task.name(), 'Unnamed Task'),
-      completed: isCompleted(task)
+      completed: isTaskEffectivelyCompleted(task)
     };
     
     // Add all date fields for context
@@ -292,7 +292,7 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT = `
       const task = allTasks[i];
       
       // Skip completed tasks if not including them
-      if (!includeCompleted && isCompleted(task)) continue;
+      if (!includeCompleted && isTaskEffectivelyCompleted(task)) continue;
       
       const dueDate = safeGet(() => task.dueDate());
       
@@ -428,7 +428,7 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
       const task = allTasks[i];
       
       // Skip completed tasks if we couldn't pre-filter
-      if (isCompleted(task)) continue;
+      if (isTaskEffectivelyCompleted(task)) continue;
       const dueDate = safeGet(() => task.dueDate());
       
       if (dueDate) {

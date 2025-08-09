@@ -88,6 +88,11 @@ export const ListProjectsSchema = z.object({
     .max(1000)
     .default(100)
     .describe('Maximum number of projects to return'),
+
+  performanceMode: z.enum(['normal', 'lite'])
+    .optional()
+    .default('normal')
+    .describe('Performance mode: "lite" skips expensive operations like task counts and next task lookups for faster queries on large databases'),
 });
 
 // Create project parameters

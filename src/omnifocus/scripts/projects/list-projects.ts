@@ -17,13 +17,37 @@ export const LIST_PROJECTS_SCRIPT = `
     const filter = {{filter}};
     const limit = {{limit}};
     const includeStats = {{includeStats}};
+    
+    // Performance mode: 'lite' skips expensive operations like task counts
+    const performanceMode = filter.performanceMode || 'normal';
     const projects = [];
   
   // safeGetStatus is now provided by the shared helpers
   
   try {
     const app = Application('OmniFocus');
+    
+    // Quick check if OmniFocus is running
+    try {
+      app.name();
+    } catch (e) {
+      return JSON.stringify({
+        error: true,
+        message: "OmniFocus is not running or not accessible",
+        details: "Failed to access OmniFocus application"
+      });
+    }
+    
     const doc = app.defaultDocument();
+    
+    // Check if document is available
+    if (!doc) {
+      return JSON.stringify({
+        error: true,
+        message: "OmniFocus document is not available",
+        details: "No default document found - OmniFocus may be starting up"
+      });
+    }
     
     const allProjects = doc.flattenedProjects();
     
@@ -36,7 +60,13 @@ export const LIST_PROJECTS_SCRIPT = `
       });
     }
     
+    // Track how many projects we've added (for early exit with limit)
+    let addedCount = 0;
+    
     for (let i = 0; i < allProjects.length; i++) {
+      // Early exit if we've reached the limit
+      if (limit && addedCount >= limit) break;
+      
       const project = allProjects[i];
       
       // Apply filters
@@ -79,33 +109,38 @@ export const LIST_PROJECTS_SCRIPT = `
       const deferDate = safeGetDate(() => project.deferDate());
       if (deferDate) projectObj.deferDate = deferDate;
       
-      // Enhanced properties from API exploration
-      // Next actionable task
-      const nextTask = safeGet(() => project.nextTask());
-      if (nextTask) {
-        projectObj.nextTask = {
-          id: safeGet(() => nextTask.id(), 'unknown'),
-          name: safeGet(() => nextTask.name(), 'Unnamed Task'),
-          flagged: safeGet(() => nextTask.flagged(), false),
-          dueDate: safeGetDate(() => nextTask.dueDate())
-        };
-      }
-      
-      // Root task provides access to project hierarchy
-      const rootTask = safeGet(() => project.rootTask());
-      if (rootTask) {
-        // Sequential vs parallel
+      // Enhanced properties - skip in lite mode for performance
+      if (performanceMode !== 'lite') {
+        // Next actionable task
+        const nextTask = safeGet(() => project.nextTask());
+        if (nextTask) {
+          projectObj.nextTask = {
+            id: safeGet(() => nextTask.id(), 'unknown'),
+            name: safeGet(() => nextTask.name(), 'Unnamed Task'),
+            flagged: safeGet(() => nextTask.flagged(), false),
+            dueDate: safeGetDate(() => nextTask.dueDate())
+          };
+        }
+        
+        // Root task provides access to project hierarchy
+        const rootTask = safeGet(() => project.rootTask());
+        if (rootTask) {
+          // Sequential vs parallel
+          projectObj.sequential = safeGet(() => project.sequential(), false);
+          
+          // Completion behavior
+          projectObj.completedByChildren = safeGet(() => project.completedByChildren(), false);
+          
+          // Task counts from root task (more accurate)
+          projectObj.taskCounts = {
+            total: safeGet(() => rootTask.numberOfTasks(), 0),
+            available: safeGet(() => rootTask.numberOfAvailableTasks(), 0),
+            completed: safeGet(() => rootTask.numberOfCompletedTasks(), 0)
+          };
+        }
+      } else {
+        // In lite mode, just get basic sequential property without task counts
         projectObj.sequential = safeGet(() => project.sequential(), false);
-        
-        // Completion behavior
-        projectObj.completedByChildren = safeGet(() => project.completedByChildren(), false);
-        
-        // Task counts from root task (more accurate)
-        projectObj.taskCounts = {
-          total: safeGet(() => rootTask.numberOfTasks(), 0),
-          available: safeGet(() => rootTask.numberOfAvailableTasks(), 0),
-          completed: safeGet(() => rootTask.numberOfCompletedTasks(), 0)
-        };
       }
       
       // Review dates
@@ -129,8 +164,10 @@ export const LIST_PROJECTS_SCRIPT = `
         }
       }
       
-      // Basic task count (always included for backward compatibility)
-      projectObj.numberOfTasks = safeGetTaskCount(project);
+      // Basic task count - skip in lite mode for performance
+      if (performanceMode !== 'lite') {
+        projectObj.numberOfTasks = safeGetTaskCount(project);
+      }
       
       // Collect detailed statistics only if requested
       if (includeStats === true) {
@@ -214,9 +251,10 @@ export const LIST_PROJECTS_SCRIPT = `
       }
       
       projects.push(projectObj);
+      addedCount++;
       
       // Check if we've reached the limit
-      if (projects.length >= limit) {
+      if (limit && projects.length >= limit) {
         break;
       }
     }
@@ -226,7 +264,9 @@ export const LIST_PROJECTS_SCRIPT = `
       metadata: {
         total_available: allProjects.length,
         returned_count: projects.length,
-        limit_applied: limit
+        limit_applied: limit,
+        performance_mode: performanceMode,
+        stats_included: includeStats === true
       }
     });
   } catch (error) {

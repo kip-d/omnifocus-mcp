@@ -26,9 +26,9 @@ export const TODAYS_AGENDA_SCRIPT = `
   
   // Helper function for safe completed check
   function safeIsCompleted(task) {
-    // Use the isCompleted helper which checks both task completion
+    // Use the isTaskEffectivelyCompleted helper which checks both task completion
     // and parent project completion status
-    return isCompleted(task);
+    return isTaskEffectivelyCompleted(task);
   }
   
   // Helper function for safe flagged check (duplicated for clarity)
