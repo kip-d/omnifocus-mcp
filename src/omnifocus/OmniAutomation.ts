@@ -30,15 +30,15 @@ export class OmniAutomation {
     // Check if script already has its own IIFE wrapper and app/doc initialization
     const hasIIFE = script.includes('(() =>') || script.includes('(function');
     const hasAppInit = script.includes("Application('OmniFocus')");
-    
+
     // Only wrap if the script doesn't already have its own structure
     const wrappedScript = hasIIFE && hasAppInit ? script : this.wrapScript(script);
 
-    logger.debug('Executing OmniAutomation script', { 
+    logger.debug('Executing OmniAutomation script', {
       scriptLength: script.length,
       hasIIFE,
       hasAppInit,
-      wrapped: wrappedScript !== script
+      wrapped: wrappedScript !== script,
     });
     logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
@@ -86,17 +86,17 @@ export class OmniAutomation {
 
         try {
           const result = JSON.parse(trimmedOutput);
-          logger.debug('Script execution successful', { 
+          logger.debug('Script execution successful', {
             outputLength: trimmedOutput.length,
             resultType: typeof result,
-            hasError: result && result.error ? true : false
+            hasError: result && result.error ? true : false,
           });
           resolve(result);
         } catch (parseError) {
-          logger.error('Failed to parse script output:', { 
-            output: trimmedOutput.substring(0, 500), 
+          logger.error('Failed to parse script output:', {
+            output: trimmedOutput.substring(0, 500),
             outputLength: trimmedOutput.length,
-            error: parseError 
+            error: parseError,
           });
 
           // Try to return the raw output if it might be useful

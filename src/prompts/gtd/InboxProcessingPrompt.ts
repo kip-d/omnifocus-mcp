@@ -4,45 +4,45 @@ import { BasePrompt, PromptArgument } from '../base.js';
 export class InboxProcessingPrompt extends BasePrompt {
   name = 'gtd_process_inbox';
   description = 'Process inbox items using GTD methodology (2-minute rule, delegate, defer, do)';
-  
+
   arguments: PromptArgument[] = [
     {
       name: 'batch_size',
       description: 'Process items in batches of this size (default: 5)',
-      required: false
+      required: false,
     },
     {
       name: 'auto_create_projects',
       description: 'Automatically create projects for multi-step items (default: false)',
-      required: false
-    }
+      required: false,
+    },
   ];
-  
+
   generateMessages(args: Record<string, unknown>): PromptMessage[] {
     const batchSize = (args.batch_size as number) || 5;
     const autoCreateProjects = args.auto_create_projects === true;
-    
+
     return [
       {
         role: 'user',
         content: {
           type: 'text',
-          text: 'I need help processing my OmniFocus inbox using GTD principles.'
-        }
+          text: 'I need help processing my OmniFocus inbox using GTD principles.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: `I'll help you process your inbox using the GTD methodology. Let me first check what's in your inbox.`
-        }
+          text: 'I\'ll help you process your inbox using the GTD methodology. Let me first check what\'s in your inbox.',
+        },
       },
       {
         role: 'user',
         content: {
           type: 'text',
-          text: `Show me the first ${batchSize} items in my inbox with their creation dates.`
-        }
+          text: `Show me the first ${batchSize} items in my inbox with their creation dates.`,
+        },
       },
       {
         role: 'assistant',
@@ -66,15 +66,15 @@ export class InboxProcessingPrompt extends BasePrompt {
    - Single action → Add to appropriate context/project
    - Project → ${autoCreateProjects ? 'Create a project with at least one next action' : 'Identify it as a project and define next actions'}
 
-Let's start processing your inbox items one by one.`
-        }
+Let's start processing your inbox items one by one.`,
+        },
       },
       {
         role: 'user',
         content: {
           type: 'text',
-          text: 'For the first inbox item, help me determine if it\'s actionable and what to do with it.'
-        }
+          text: 'For the first inbox item, help me determine if it\'s actionable and what to do with it.',
+        },
       },
       {
         role: 'assistant',
@@ -92,9 +92,9 @@ Common contexts to consider:
 - @LowEnergy, @HighEnergy
 - @Quick (< 15 min), @Medium (15-60 min), @Long (> 60 min)
 
-Would you like to set up any specific contexts or tags before we continue processing?`
-        }
-      }
+Would you like to set up any specific contexts or tags before we continue processing?`,
+        },
+      },
     ];
   }
 }

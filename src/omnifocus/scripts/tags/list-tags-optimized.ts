@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized script to list tags in OmniFocus
- * 
+ *
  * Optimizations:
  * - Fast mode: Skip parent/child relationships for basic listing
  * - Early filtering of empty tags to reduce processing

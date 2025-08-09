@@ -47,10 +47,10 @@ export class ListProjectsTool extends BaseTool<typeof ListProjectsSchema> {
 
       // Execute script
       const { limit, includeStats, ...filter } = args;
-      const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+      const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
         filter,
         limit: limit || 100,
-        includeStats: includeStats || false
+        includeStats: includeStats || false,
       });
       const result = await this.omniAutomation.execute<any>(script);
 

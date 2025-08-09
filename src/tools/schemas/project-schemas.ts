@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { 
-  DateTimeSchema, 
-  OptionalDateTimeSchema, 
-  IdSchema, 
+import {
+  DateTimeSchema,
+  OptionalDateTimeSchema,
+  IdSchema,
   ProjectStatusSchema,
-  SearchTextSchema 
+  SearchTextSchema,
 } from './shared-schemas.js';
 import { RepeatRuleSchema, ExistingRepeatRuleSchema } from './repeat-schemas.js';
 import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
@@ -51,43 +51,43 @@ export const ListProjectsSchema = z.object({
   status: z.array(ProjectStatusSchema)
     .optional()
     .describe('Filter by project status'),
-  
+
   flagged: coerceBoolean()
     .optional()
     .describe('Filter by flagged status'),
-  
+
   folder: z.string()
     .optional()
     .describe('Filter by folder name'),
-  
+
   search: SearchTextSchema
     .optional()
     .describe('Search in project names and notes'),
-  
+
   includeTaskCounts: coerceBoolean()
     .default(true)
     .describe('Include task count information'),
-  
+
   includeStats: coerceBoolean()
     .default(false)
     .describe('Calculate detailed task statistics for each project (slower on large databases)'),
-  
+
   sortBy: z.enum(['name', 'dueDate', 'modificationDate', 'status'])
     .optional()
     .default('name')
     .describe('Sort field'),
-  
+
   sortOrder: z.enum(['asc', 'desc'])
     .optional()
     .default('asc')
     .describe('Sort order'),
-  
+
   limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
     .default(100)
-    .describe('Maximum number of projects to return')
+    .describe('Maximum number of projects to return'),
 });
 
 // Create project parameters
@@ -95,31 +95,31 @@ export const CreateProjectSchema = z.object({
   name: z.string()
     .min(1)
     .describe('Project name (required)'),
-  
+
   note: z.string()
     .optional()
     .describe('Project note/description'),
-  
+
   folder: z.string()
     .optional()
     .describe('Folder to create project in (will be created if needed)'),
-  
+
   status: ProjectStatusSchema
     .default('active')
     .describe('Initial project status'),
-  
+
   flagged: coerceBoolean()
     .default(false)
     .describe('Whether the project is flagged'),
-  
+
   dueDate: DateTimeSchema
     .optional()
     .describe('Due date for the project'),
-  
+
   deferDate: DateTimeSchema
     .optional()
     .describe('Defer date for the project'),
-  
+
   sequential: coerceBoolean()
     .default(false)
     .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)'),
@@ -151,37 +151,37 @@ export const CreateProjectSchema = z.object({
 export const UpdateProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to update'),
-  
+
   updates: z.object({
     name: z.string()
       .min(1)
       .optional()
       .describe('New project name'),
-    
+
     note: z.string()
       .optional()
       .describe('New project note'),
-    
+
     status: ProjectStatusSchema
       .optional()
       .describe('New project status'),
-    
+
     flagged: coerceBoolean()
       .optional()
       .describe('New flagged status'),
-    
+
     folder: z.string()
       .optional()
       .describe('Move to different folder'),
-    
+
     dueDate: z.union([DateTimeSchema, z.null()])
       .optional()
       .describe('New due date (or null to clear)'),
-    
+
     deferDate: z.union([DateTimeSchema, z.null()])
       .optional()
       .describe('New defer date (or null to clear)'),
-    
+
     sequential: coerceBoolean()
       .optional()
       .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)'),
@@ -217,32 +217,32 @@ export const UpdateProjectSchema = z.object({
       .describe('Set to true to remove the existing repeat rule')
   })
   .refine(data => Object.keys(data).length > 0, {
-    message: 'At least one update field must be provided'
-  })
+    message: 'At least one update field must be provided',
+  }),
 });
 
 // Complete project parameters
 export const CompleteProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to complete'),
-  
+
   completionDate: DateTimeSchema
     .optional()
     .describe('Completion date (defaults to now)'),
-  
+
   completeAllTasks: coerceBoolean()
     .default(false)
-    .describe('Complete all incomplete tasks in the project')
+    .describe('Complete all incomplete tasks in the project'),
 });
 
 // Delete project parameters
 export const DeleteProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to delete'),
-  
+
   deleteTasks: coerceBoolean()
     .default(false)
-    .describe('Delete all tasks in the project (otherwise they move to Inbox)')
+    .describe('Delete all tasks in the project (otherwise they move to Inbox)'),
 });
 
 // Projects for review parameters

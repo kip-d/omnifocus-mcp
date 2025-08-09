@@ -1,6 +1,6 @@
 /**
  * Tag Performance Guide for LLMs using OmniFocus MCP
- * 
+ *
  * This guide helps LLMs choose the optimal tag querying strategy
  */
 

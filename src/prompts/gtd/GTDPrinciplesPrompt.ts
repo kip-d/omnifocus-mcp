@@ -203,16 +203,16 @@ export class GTDPrinciplesPrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Explain GTD principles and how to implement them with OmniFocus MCP.'
-        }
+          text: 'Explain GTD principles and how to implement them with OmniFocus MCP.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: GTD_PRINCIPLES_GUIDE
-        }
-      }
+          text: GTD_PRINCIPLES_GUIDE,
+        },
+      },
     ];
   }
 }

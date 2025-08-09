@@ -13,16 +13,16 @@ export class TagPerformancePrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Show me how to efficiently query tags in OmniFocus.'
-        }
+          text: 'Show me how to efficiently query tags in OmniFocus.',
+        },
       },
       {
         role: 'assistant',
         content: {
           type: 'text',
-          text: TAG_PERFORMANCE_GUIDE
-        }
-      }
+          text: TAG_PERFORMANCE_GUIDE,
+        },
+      },
     ];
   }
 }

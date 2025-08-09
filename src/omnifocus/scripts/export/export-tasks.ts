@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export tasks from OmniFocus in various formats
- * 
+ *
  * Features:
  * - Export to JSON or CSV format
  * - Flexible field selection

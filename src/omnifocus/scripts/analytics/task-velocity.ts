@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to calculate task velocity and throughput metrics in OmniFocus
- * 
+ *
  * Features:
  * - Interval-based velocity tracking (daily, weekly, monthly)
  * - Task creation vs completion rates

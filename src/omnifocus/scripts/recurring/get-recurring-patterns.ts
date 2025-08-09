@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze and summarize recurring task patterns in OmniFocus
- * 
+ *
  * Features:
  * - Pattern detection and grouping
  * - Frequency distribution analysis

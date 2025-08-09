@@ -25,7 +25,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         dueDate: args.dueDate ? localToUTC(args.dueDate) : undefined,
         deferDate: args.deferDate ? localToUTC(args.deferDate) : undefined,
       };
-      
+
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData });
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
 
@@ -57,7 +57,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         throw new McpError(
           ErrorCode.InternalError,
           'Invalid response from create task script',
-          { received: parsedResult }
+          { received: parsedResult },
         );
       }
 

@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze recurring tasks in OmniFocus
- * 
+ *
  * Features:
  * - Detects recurring patterns from repetition rules
  * - Smart inference from task names and project context

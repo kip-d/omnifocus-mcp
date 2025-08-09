@@ -20,7 +20,7 @@ export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
         ...args,
         completionDate: args.completionDate ? localToUTC(args.completionDate) : undefined,
       };
-      
+
       // Try JXA first, fall back to URL scheme if access denied
       try {
         const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, processedArgs as unknown as Record<string, unknown>);

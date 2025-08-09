@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to complete a project in OmniFocus
- * 
+ *
  * Features:
  * - Mark project as done/completed
  * - Optionally complete all remaining tasks

@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all tags in OmniFocus with optional usage statistics
- * 
+ *
  * Features:
  * - Lists all tags with hierarchical information
  * - Optional usage statistics (task counts by tag)

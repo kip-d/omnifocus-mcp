@@ -45,7 +45,7 @@ export const PaginationSchema = z.object({
     .int()
     .nonnegative()
     .default(0)
-    .describe('Number of results to skip')
+    .describe('Number of results to skip'),
 });
 
 // Search text validation
@@ -65,7 +65,7 @@ export const PerformanceOptionsSchema = z.object({
     .describe('Skip expensive analysis for better performance'),
   includeDetails: coerceBoolean()
     .optional()
-    .describe('Include detailed information (may impact performance)')
+    .describe('Include detailed information (may impact performance)'),
 });
 
 // Common error response
@@ -73,7 +73,7 @@ export const ErrorResponseSchema = z.object({
   error: z.boolean(),
   message: z.string(),
   code: z.string().optional(),
-  details: z.record(z.any()).optional()
+  details: z.record(z.any()).optional(),
 });
 
 // Success response wrapper
@@ -84,7 +84,7 @@ export function createSuccessResponseSchema<T extends z.ZodType>(dataSchema: T) 
     metadata: z.object({
       cached: z.boolean().optional(),
       queryTime: z.number().optional(),
-      totalCount: z.number().optional()
-    }).optional()
+      totalCount: z.number().optional(),
+    }).optional(),
   });
 }

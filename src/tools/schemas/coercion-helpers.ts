@@ -10,20 +10,20 @@ export const coerceBoolean = () => z.preprocess(
   (val) => {
     // If already a boolean, return as-is
     if (typeof val === 'boolean') return val;
-    
+
     // Convert to string and lowercase for comparison
     const strVal = String(val).toLowerCase().trim();
-    
+
     // True values
     if (strVal === 'true' || strVal === '1' || strVal === 'yes') return true;
-    
+
     // False values
     if (strVal === 'false' || strVal === '0' || strVal === 'no' || strVal === '') return false;
-    
+
     // For any other non-empty string, default to true (Zod's default behavior)
     return Boolean(strVal);
   },
-  z.boolean()
+  z.boolean(),
 );
 
 /**

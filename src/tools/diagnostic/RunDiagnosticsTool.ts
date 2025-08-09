@@ -18,7 +18,7 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
   async executeValidated(args: z.infer<typeof RunDiagnosticsSchema>): Promise<any> {
     const results: any = {
       timestamp: new Date().toISOString(),
-      tests: {}
+      tests: {},
     };
 
     try {
@@ -31,18 +31,18 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
           docAvailable: doc ? true : false
         });
       `;
-      
+
       try {
         const result = await this.diagnosticOmni.execute<any>(basicScript);
         results.tests.basic_connection = {
           success: true,
-          result: result
+          result: result,
         };
       } catch (error: any) {
         results.tests.basic_connection = {
           success: false,
           error: error.message,
-          stderr: error.stderr
+          stderr: error.stderr,
         };
       }
 
@@ -92,18 +92,18 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
           collections: collections
         });
       `;
-      
+
       try {
         const result = await this.diagnosticOmni.execute<any>(collectionScript);
         results.tests.collection_access = {
           success: true,
-          result: result
+          result: result,
         };
       } catch (error: any) {
         results.tests.collection_access = {
           success: false,
           error: error.message,
-          stderr: error.stderr
+          stderr: error.stderr,
         };
       }
 
@@ -153,18 +153,18 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
           tests: tests
         });
       `;
-      
+
       try {
         const result = await this.diagnosticOmni.execute<any>(propertyScript);
         results.tests.property_access = {
           success: true,
-          result: result
+          result: result,
         };
       } catch (error: any) {
         results.tests.property_access = {
           success: false,
           error: error.message,
-          stderr: error.stderr
+          stderr: error.stderr,
         };
       }
 
@@ -172,21 +172,21 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
       if (args.testScript === 'list_tasks') {
         this.logger.info('Running Test 4: Actual LIST_TASKS_SCRIPT');
         const { LIST_TASKS_SCRIPT } = await import('../../omnifocus/scripts/tasks.js');
-        const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { 
-          filter: { limit: 1 } 
+        const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+          filter: { limit: 1 },
         });
-        
+
         try {
           const result = await this.diagnosticOmni.execute<any>(script);
           results.tests.list_tasks_script = {
             success: true,
-            result: result
+            result: result,
           };
         } catch (error: any) {
           results.tests.list_tasks_script = {
             success: false,
             error: error.message,
-            stderr: error.stderr
+            stderr: error.stderr,
           };
         }
       }
@@ -199,8 +199,8 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
         data: results,
         metadata: {
           operation: 'run_diagnostics',
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
     } catch (error) {
       return this.handleError(error);

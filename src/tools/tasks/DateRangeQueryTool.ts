@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { 
+import {
   GET_TASKS_IN_DATE_RANGE_SCRIPT,
   GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT,
-  GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT
+  GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../schemas/task-schemas.js';
@@ -170,7 +170,7 @@ export class OverdueTasksTool extends BaseTool<typeof OverdueTasksToolSchema> {
   async executeValidated(args: z.infer<typeof OverdueTasksToolSchema>): Promise<any> {
     // Delegate to DateRangeQueryTool using shared cache
     const dateRangeTool = new DateRangeQueryTool(this.cache);
-    
+
     return dateRangeTool.execute({
       queryType: 'overdue',
       includeCompleted: args.includeCompleted,
@@ -187,7 +187,7 @@ export class UpcomingTasksTool extends BaseTool<typeof UpcomingTasksToolSchema> 
   async executeValidated(args: z.infer<typeof UpcomingTasksToolSchema>): Promise<any> {
     // Delegate to DateRangeQueryTool using shared cache
     const dateRangeTool = new DateRangeQueryTool(this.cache);
-    
+
     return dateRangeTool.execute({
       queryType: 'upcoming',
       days: args.days,

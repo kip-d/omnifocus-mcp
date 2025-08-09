@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to calculate productivity statistics in OmniFocus
- * 
+ *
  * Features:
  * - Period-based analysis (today, week, month, quarter, year)
  * - Completion rate tracking

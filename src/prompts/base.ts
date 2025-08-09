@@ -1,8 +1,8 @@
-import { 
+import {
   PromptMessage,
   PromptReference,
   GetPromptResult,
-  Prompt
+  Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 
 export interface PromptArgument {
@@ -15,16 +15,16 @@ export abstract class BasePrompt {
   abstract name: string;
   abstract description: string;
   abstract arguments: PromptArgument[];
-  
+
   abstract generateMessages(args: Record<string, unknown>): PromptMessage[];
-  
+
   toPromptReference(): PromptReference {
     return {
       type: 'ref/prompt',
-      name: this.name
+      name: this.name,
     };
   }
-  
+
   toPrompt(): Prompt {
     return {
       name: this.name,
@@ -32,15 +32,15 @@ export abstract class BasePrompt {
       arguments: this.arguments.map(arg => ({
         name: arg.name,
         description: arg.description,
-        required: arg.required ?? false
-      }))
+        required: arg.required ?? false,
+      })),
     };
   }
-  
+
   toGetPromptResult(args: Record<string, unknown>): GetPromptResult {
     return {
       description: this.description,
-      messages: this.generateMessages(args)
+      messages: this.generateMessages(args),
     };
   }
 }

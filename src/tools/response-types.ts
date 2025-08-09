@@ -4,10 +4,10 @@
  */
 
 import { StandardResponse } from '../utils/response-format.js';
-import { 
+import {
   OmniFocusTask,
   OmniFocusProject,
-  OmniFocusTag
+  OmniFocusTag,
 } from '../omnifocus/types.js';
 
 // Re-export the shared types for convenience

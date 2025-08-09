@@ -7,7 +7,7 @@
  * Generic wrapper for OmniFocus JXA responses
  * Provides type safety while acknowledging the dynamic nature of JXA returns
  */
-export type OmniFocusResponse<T> = 
+export type OmniFocusResponse<T> =
   | { success: true; data: T }
   | { success: false; error: OmniFocusError };
 
@@ -63,7 +63,7 @@ export interface YearlyRepetitionRule extends BaseRepetitionRule {
   dayOfMonth?: number;
 }
 
-export type RepetitionRule = 
+export type RepetitionRule =
   | HourlyRepetitionRule
   | DailyRepetitionRule
   | WeeklyRepetitionRule

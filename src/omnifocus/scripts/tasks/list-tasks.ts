@@ -3,7 +3,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to list tasks with advanced filtering in OmniFocus
- * 
+ *
  * Features:
  * - Advanced filtering (completed, flagged, project, dates, tags, search)
  * - Recurring task analysis with plugin system
