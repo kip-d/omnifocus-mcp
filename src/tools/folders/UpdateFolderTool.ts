@@ -6,7 +6,7 @@ import { UpdateFolderSchema } from '../schemas/folder-schemas.js';
 
 export class UpdateFolderTool extends BaseTool<typeof UpdateFolderSchema> {
   name = 'update_folder';
-  description = 'Update folder properties in OmniFocus. Change name and/or status (active/dropped). Validates duplicate names within parent. Invalidates cache.';
+  description = '[DEPRECATED] Update folder properties in OmniFocus. Use manage_folder with operation:"update" instead. Change name and/or status (active/dropped). Validates duplicate names within parent. Invalidates cache.';
   schema = UpdateFolderSchema;
 
   async executeValidated(args: z.infer<typeof UpdateFolderSchema>): Promise<any> {

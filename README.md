@@ -111,9 +111,18 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-## Available Tools
+## Available Tools (44 Total)
 
-**Tasks**: `list_tasks`, `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
+### Consolidated Tools (Recommended for AI Agents)
+
+**Task Queries**: `query_tasks` - Unified interface for all task querying (replaces 7 individual tools)  
+**Folder Management**: `manage_folder` - Complete folder operations with operation parameter  
+**Review Management**: `manage_reviews` - GTD review workflow management  
+**Batch Operations**: `batch_task_operations` - Efficient multi-task operations
+
+### Standard Tools
+
+**Task CRUD**: `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
 
 **Projects**: `list_projects`, `create_project`, `update_project`, `complete_project`, `delete_project`
 
@@ -123,9 +132,19 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 **Export**: `export_tasks`, `export_projects`, `bulk_export`
 
-**Date Queries**: `date_range_query`, `overdue_tasks`, `upcoming_tasks`
+### Legacy Tools (Deprecated but Functional)
 
-For detailed documentation, see `/docs/TOOLS.md`.
+**Individual Task Queries**: `list_tasks`, `next_actions`, `blocked_tasks`, `available_tasks`, `overdue_tasks`, `upcoming_tasks` *(use `query_tasks` instead)*
+
+**Individual Folder Tools**: `create_folder`, `update_folder`, `delete_folder`, `move_folder` *(use `manage_folder` instead)*
+
+**Individual Review Tools**: `projects_for_review`, `mark_project_reviewed`, `set_review_schedule` *(use `manage_reviews` instead)*
+
+### Documentation
+
+- `/docs/TOOLS.md` - Detailed tool documentation
+- `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
+- `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
 
 ## Known Limitations
 

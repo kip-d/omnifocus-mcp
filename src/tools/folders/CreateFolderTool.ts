@@ -6,7 +6,7 @@ import { CreateFolderSchema } from '../schemas/folder-schemas.js';
 
 export class CreateFolderTool extends BaseTool<typeof CreateFolderSchema> {
   name = 'create_folder';
-  description = 'Create a new folder in OmniFocus. Specify parent folder for hierarchy organization, position (beginning/ending/before/after), and status. Returns folder ID. Invalidates cache.';
+  description = '[DEPRECATED] Create a new folder in OmniFocus. Use manage_folder with operation:"create" instead. Specify parent folder for hierarchy organization, position (beginning/ending/before/after), and status. Returns folder ID. Invalidates cache.';
   schema = CreateFolderSchema;
 
   async executeValidated(args: z.infer<typeof CreateFolderSchema>): Promise<any> {

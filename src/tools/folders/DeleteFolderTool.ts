@@ -6,7 +6,7 @@ import { DeleteFolderSchema } from '../schemas/folder-schemas.js';
 
 export class DeleteFolderTool extends BaseTool<typeof DeleteFolderSchema> {
   name = 'delete_folder';
-  description = 'Delete a folder in OmniFocus with safety checks. Can move contents to another folder or root. Use force:true to delete folders with contents. Invalidates cache.';
+  description = '[DEPRECATED] Delete a folder in OmniFocus with safety checks. Use manage_folder with operation:"delete" instead. Can move contents to another folder or root. Use force:true to delete folders with contents. Invalidates cache.';
   schema = DeleteFolderSchema;
 
   async executeValidated(args: z.infer<typeof DeleteFolderSchema>): Promise<any> {

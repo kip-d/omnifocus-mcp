@@ -2,10 +2,208 @@
 
 This document provides comprehensive documentation for all available tools in the OmniFocus MCP Server.
 
-## Task Operations
+## 📢 Important: Tool Consolidation
+
+**For AI agents and new integrations, use the [Consolidated Tools](#consolidated-tools-recommended) first.** These tools reduce decision complexity and provide better error handling.
+
+Legacy tools remain available for backward compatibility but are deprecated. See [`TOOL_CONSOLIDATION.md`](/docs/TOOL_CONSOLIDATION.md) for migration guidance.
+
+---
+
+## Consolidated Tools (Recommended)
+
+### query_tasks
+**Unified task querying interface.** Replaces 7 individual task query tools with a single, consistent interface.
+
+**Parameters:**
+- `queryType` (string, required): Type of query to perform:
+  - `"list"` - General purpose task listing with filters
+  - `"search"` - Text search in task names and notes (requires `searchTerm`)
+  - `"next_actions"` - GTD next actions (available, actionable tasks)
+  - `"blocked"` - Tasks waiting on prerequisites or dependencies
+  - `"available"` - All currently workable tasks
+  - `"overdue"` - Tasks past their due date
+  - `"upcoming"` - Tasks due in next N days (use `daysAhead` parameter)
+
+**Common Parameters (all query types):**
+- `completed` (boolean): Filter by completion status
+- `flagged` (boolean): Filter by flagged status
+- `projectId` (string): Filter by project ID
+- `tags` (string[]): Filter by tags
+- `limit` (number): Maximum tasks to return (default: 100)
+- `includeDetails` (boolean): Include full task details (default: true)
+- `skipAnalysis` (boolean): Skip recurring task analysis for 30% faster queries
+
+**Query-specific Parameters:**
+- `searchTerm` (string): Required for "search" queryType
+- `daysAhead` (number): Days to look ahead for "upcoming" queryType (default: 7)
+- `includeToday` (boolean): Include today's tasks in "upcoming" queries
+- `showBlockingTasks` (boolean): For "blocked" queries, show what's blocking each task
+- `includeFlagged` (boolean): For "available" queries, include flagged tasks
+
+**Examples:**
+
+General task list:
+```javascript
+{
+  "tool": "query_tasks",
+  "arguments": {
+    "queryType": "list",
+    "completed": false,
+    "tags": ["work"],
+    "limit": 50
+  }
+}
+```
+
+Search for tasks:
+```javascript
+{
+  "tool": "query_tasks", 
+  "arguments": {
+    "queryType": "search",
+    "searchTerm": "budget review",
+    "completed": false
+  }
+}
+```
+
+Get next actions:
+```javascript
+{
+  "tool": "query_tasks",
+  "arguments": {
+    "queryType": "next_actions",
+    "includeFlagged": true
+  }
+}
+```
+
+### manage_folder
+**Unified folder management interface.** Combines create, update, delete, move, and status operations.
+
+**Parameters:**
+- `operation` (string, required): Operation to perform:
+  - `"create"` - Create new folder
+  - `"update"` - Update folder properties  
+  - `"delete"` - Delete folder (with optional content handling)
+  - `"move"` - Move folder to new parent
+  - `"set_status"` - Change folder status
+  - `"duplicate"` - Duplicate folder (not yet implemented)
+
+**Operation-specific Parameters:**
+
+**Create operation:**
+- `name` (string, required): Folder name
+- `parent` (string): Parent folder ID
+- `position` (string): "beginning", "end", "before", "after"
+- `relativeToFolder` (string): Reference folder for position
+- `status` (string): "active", "on_hold", "dropped", "done"
+
+**Update operation:**
+- `folderId` (string, required): Folder ID to update
+- `name` (string): New name
+- `status` (string): New status
+
+**Delete operation:**
+- `folderId` (string, required): Folder ID to delete
+- `moveContentsTo` (string): Folder ID to move contents to
+- `force` (boolean): Force deletion even if folder has contents
+
+**Move operation:**
+- `folderId` (string, required): Folder ID to move
+- `parentId` (string): New parent folder ID
+- `position` (string): Position in new parent
+- `relativeToFolder` (string): Reference folder for position
+
+**Examples:**
+
+Create folder:
+```javascript
+{
+  "tool": "manage_folder",
+  "arguments": {
+    "operation": "create",
+    "name": "New Project Area",
+    "parent": "parentFolder123"
+  }
+}
+```
+
+Update folder:
+```javascript
+{
+  "tool": "manage_folder",
+  "arguments": {
+    "operation": "update", 
+    "folderId": "folder123",
+    "name": "Updated Name",
+    "status": "on_hold"
+  }
+}
+```
+
+### manage_reviews
+**Unified review management for GTD workflows.** Handles project review scheduling and completion.
+
+**Parameters:**
+- `operation` (string, required): Review operation:
+  - `"list_for_review"` - Get projects needing review
+  - `"mark_reviewed"` - Mark project as reviewed  
+  - `"set_schedule"` - Set review schedule for project
+
+**Operation-specific Parameters:**
+
+**List for review:**
+- `overdue` (boolean): Include overdue reviews only
+- `upcoming` (boolean): Include upcoming reviews
+- `limit` (number): Maximum projects to return
+
+**Mark reviewed:**
+- `projectId` (string, required): Project to mark as reviewed
+- `reviewDate` (string): Review completion date (defaults to now)
+
+**Set schedule:**
+- `projectId` (string, required): Project to schedule
+- `reviewInterval` (string): "daily", "weekly", "monthly", "quarterly", "yearly"
+- `nextReviewDate` (string): Specific next review date
+
+### batch_task_operations
+**Efficient batch operations on multiple tasks.**
+
+**Parameters:**
+- `operation` (string, required): Batch operation:
+  - `"complete"` - Mark multiple tasks as completed
+  - `"delete"` - Delete multiple tasks
+  - `"update"` - Update multiple tasks with same changes
+
+**Operation-specific Parameters:**
+- `taskIds` (string[], required): Array of task IDs to operate on
+- `updates` (object): For update operation, object with fields to change
+
+**Example:**
+
+Batch complete tasks:
+```javascript
+{
+  "tool": "batch_task_operations",
+  "arguments": {
+    "operation": "complete",
+    "taskIds": ["task1", "task2", "task3"]
+  }
+}
+```
+
+---
+
+## Legacy Task Operations
+
+> **⚠️ Deprecated:** Use [`query_tasks`](#query_tasks) instead for all task querying operations.
 
 ### list_tasks
-Advanced task filtering with smart caching.
+**DEPRECATED:** Use `query_tasks` with `queryType: "list"` instead.
+
+*Advanced task filtering with smart caching.*
 
 **Parameters:**
 - `completed` (boolean): Filter by completion status
@@ -128,18 +326,40 @@ Permanently delete a task.
 - `taskId` (string, required): Task ID to delete
 
 ### get_task_count
-Get count of tasks matching filters without returning task data.
+**DEPRECATED:** Use `query_tasks` with `includeDetails: false` instead.
+
+*Get count of tasks matching filters without returning task data.*
 
 **Parameters:** Same as `list_tasks` except `limit`, `offset`, and `includeDetails`
 
-### todays_agenda
-Get today's tasks with optimized defaults.
+### todays_agenda  
+Get today's tasks with optimized defaults. *(Still recommended - no consolidation needed)*
 
 **Parameters:**
 - `includeOverdue` (boolean): Include overdue tasks (default: true)
 - `includeFlagged` (boolean): Include flagged tasks
 - `includeDetails` (boolean): Include full details (default: false)
 - `limit` (number): Maximum tasks (default: 50)
+
+---
+
+## Legacy Folder Operations
+
+> **⚠️ Deprecated:** Use [`manage_folder`](#manage_folder) instead for all folder operations.
+
+### create_folder
+**DEPRECATED:** Use `manage_folder` with `operation: "create"` instead.
+
+### update_folder  
+**DEPRECATED:** Use `manage_folder` with `operation: "update"` instead.
+
+### delete_folder
+**DEPRECATED:** Use `manage_folder` with `operation: "delete"` instead.
+
+### move_folder
+**DEPRECATED:** Use `manage_folder` with `operation: "move"` instead.
+
+---
 
 ## Project Operations
 
@@ -269,7 +489,9 @@ Export all OmniFocus data.
 ## Date Range Queries
 
 ### date_range_query
-Query tasks by date ranges with operators.
+**DEPRECATED:** Use `query_tasks` with appropriate filters instead.
+
+*Query tasks by date ranges with operators.*
 
 **Parameters:**
 - `dateField` (string): "dueDate", "deferDate", "completionDate"
@@ -279,14 +501,18 @@ Query tasks by date ranges with operators.
 - `includeCompleted` (boolean): Include completed tasks
 
 ### overdue_tasks
-Get all overdue tasks.
+**DEPRECATED:** Use `query_tasks` with `queryType: "overdue"` instead.
+
+*Get all overdue tasks.*
 
 **Parameters:**
 - `includeDeferred` (boolean): Include deferred overdue
 - `sortBy` (string): "dueDate", "project", "priority"
 
 ### upcoming_tasks
-Get tasks due in next N days.
+**DEPRECATED:** Use `query_tasks` with `queryType: "upcoming"` instead.
+
+*Get tasks due in next N days.*
 
 **Parameters:**
 - `days` (number): Days to look ahead (default: 7)
@@ -308,6 +534,23 @@ Extract and analyze recurring rules.
 **Parameters:**
 - `sortBy` (string): "frequency", "nextDue", "overdue"
 
+---
+
+## Legacy Review Operations
+
+> **⚠️ Deprecated:** Use [`manage_reviews`](#manage_reviews) instead for all review operations.
+
+### projects_for_review
+**DEPRECATED:** Use `manage_reviews` with `operation: "list_for_review"` instead.
+
+### mark_project_reviewed
+**DEPRECATED:** Use `manage_reviews` with `operation: "mark_reviewed"` instead.
+
+### set_review_schedule
+**DEPRECATED:** Use `manage_reviews` with `operation: "set_schedule"` instead.
+
+---
+
 ## System Tools
 
 ### get_version_info
@@ -321,3 +564,27 @@ Run comprehensive system diagnostics.
 **Parameters:**
 - `includePerformance` (boolean): Include performance metrics
 - `includeCacheStats` (boolean): Include cache statistics
+
+---
+
+## Migration Quick Reference
+
+### Consolidated Tool Mappings
+
+| Legacy Tool | Consolidated Tool | Parameters |
+|------------|-------------------|------------|
+| `list_tasks` | `query_tasks` | `{ queryType: "list", ...filters }` |
+| `next_actions` | `query_tasks` | `{ queryType: "next_actions" }` |
+| `blocked_tasks` | `query_tasks` | `{ queryType: "blocked" }` |
+| `available_tasks` | `query_tasks` | `{ queryType: "available" }` |
+| `overdue_tasks` | `query_tasks` | `{ queryType: "overdue" }` |
+| `upcoming_tasks` | `query_tasks` | `{ queryType: "upcoming", daysAhead: N }` |
+| `create_folder` | `manage_folder` | `{ operation: "create", name: "..." }` |
+| `update_folder` | `manage_folder` | `{ operation: "update", folderId: "...", ...updates }` |
+| `delete_folder` | `manage_folder` | `{ operation: "delete", folderId: "..." }` |
+| `move_folder` | `manage_folder` | `{ operation: "move", folderId: "...", parentId: "..." }` |
+| `projects_for_review` | `manage_reviews` | `{ operation: "list_for_review" }` |
+| `mark_project_reviewed` | `manage_reviews` | `{ operation: "mark_reviewed", projectId: "..." }` |
+| `set_review_schedule` | `manage_reviews` | `{ operation: "set_schedule", projectId: "...", reviewInterval: "..." }` |
+
+For detailed examples and advanced usage, see [`TOOL_CONSOLIDATION.md`](TOOL_CONSOLIDATION.md) and [`LLM_USAGE_GUIDE.md`](LLM_USAGE_GUIDE.md).

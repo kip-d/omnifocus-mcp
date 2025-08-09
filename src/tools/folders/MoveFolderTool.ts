@@ -6,7 +6,7 @@ import { MoveFolderSchema } from '../schemas/folder-schemas.js';
 
 export class MoveFolderTool extends BaseTool<typeof MoveFolderSchema> {
   name = 'move_folder';
-  description = 'Move a folder within the OmniFocus hierarchy. Change parent folder and position (beginning/ending/before/after). Prevents circular hierarchies and duplicate names. Invalidates cache.';
+  description = '[DEPRECATED] Move a folder within the OmniFocus hierarchy. Use manage_folder with operation:"move" instead. Change parent folder and position (beginning/ending/before/after). Prevents circular hierarchies and duplicate names. Invalidates cache.';
   schema = MoveFolderSchema;
 
   async executeValidated(args: z.infer<typeof MoveFolderSchema>): Promise<any> {

@@ -6,7 +6,7 @@ import { ListFoldersSchema } from '../schemas/folder-schemas.js';
 
 export class ListFoldersTool extends BaseTool<typeof ListFoldersSchema> {
   name = 'list_folders';
-  description = 'List folders in OmniFocus with hierarchy information. Filter by status or search, include parent/child relationships and project counts. Sort by name, depth, or status.';
+  description = '[DEPRECATED] List folders in OmniFocus with hierarchy information. Use query_folders with operation:"list" instead. Filter by status or search, include parent/child relationships and project counts. Sort by name, depth, or status.';
   schema = ListFoldersSchema;
 
   async executeValidated(args: z.infer<typeof ListFoldersSchema>): Promise<any> {

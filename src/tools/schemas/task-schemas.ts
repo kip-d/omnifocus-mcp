@@ -434,3 +434,119 @@ export const UpcomingTasksSchema = z.object({
   limit: true,
   offset: true
 }));
+
+// Consolidated Query Tasks Schema - consolidates 8 task query tools into one
+export const QueryTasksToolSchema = z.object({
+  queryType: z.enum([
+    'list',          // General list with filters (replaces list_tasks)
+    'search',        // Search in task names/notes (new functionality)
+    'next_actions',  // Available next actions (replaces next_actions)
+    'blocked',       // Tasks blocked by other tasks (replaces blocked_tasks) 
+    'available',     // All available/workable tasks (replaces available_tasks)
+    'overdue',       // Past due tasks (replaces get_overdue_tasks)
+    'upcoming'       // Due in next N days (replaces get_upcoming_tasks)
+  ])
+    .describe('Type of task query to perform'),
+  
+  // For search query type
+  searchTerm: SearchTextSchema
+    .optional()
+    .describe('Search term for names and notes (search query type)'),
+  
+  // Core filtering (applies to most query types)
+  completed: coerceBoolean()
+    .optional()
+    .describe('Filter by completion status'),
+    
+  flagged: coerceBoolean()
+    .optional()
+    .describe('Filter by flagged status'),
+    
+  projectId: z.string()
+    .optional()
+    .describe('Filter by project ID'),
+    
+  tags: z.array(TagNameSchema)
+    .optional()
+    .describe('Filter by tag names (tasks must have ALL specified tags)'),
+  
+  // Date filtering (mainly for list, search query types)
+  dueBefore: DateTimeSchema
+    .optional()
+    .describe('Filter tasks due before this date'),
+    
+  dueAfter: DateTimeSchema
+    .optional()
+    .describe('Filter tasks due after this date'),
+    
+  deferBefore: DateTimeSchema
+    .optional()
+    .describe('Filter tasks deferred before this date'),
+    
+  deferAfter: DateTimeSchema
+    .optional()
+    .describe('Filter tasks deferred after this date'),
+  
+  // Specialized parameters for specific query types
+  
+  // For upcoming query type
+  daysAhead: coerceNumber()
+    .int()
+    .positive()
+    .max(365)
+    .default(7)
+    .describe('Number of days to look ahead (upcoming query type)'),
+    
+  includeToday: coerceBoolean()
+    .default(true)
+    .describe('Include tasks due today (upcoming query type)'),
+  
+  // For overdue query type
+  includeCompleted: coerceBoolean()
+    .default(false)
+    .describe('Include completed overdue tasks (overdue query type)'),
+  
+  // For blocked query type
+  showBlockingTasks: coerceBoolean()
+    .default(true)
+    .describe('Include information about blocking tasks (blocked query type)'),
+    
+  // For available query type
+  includeFlagged: coerceBoolean()
+    .default(true)
+    .describe('Include flagged tasks (available query type)'),
+  
+  // Common parameters
+  available: coerceBoolean()
+    .optional()
+    .describe('Filter by availability (considering defer dates)'),
+    
+  inInbox: coerceBoolean()
+    .optional()
+    .describe('Filter for inbox tasks only'),
+    
+  includeDetails: coerceBoolean()
+    .default(true)
+    .describe('Include task details like notes, project info, and tags'),
+    
+  sortBy: z.enum(['dueDate', 'deferDate', 'name', 'project', 'flagged'])
+    .optional()
+    .describe('Sort results by field'),
+    
+  sortOrder: z.enum(['asc', 'desc'])
+    .optional()
+    .default('asc')
+    .describe('Sort order'),
+    
+  limit: coerceNumber()
+    .int()
+    .positive()
+    .max(1000)
+    .default(100)
+    .describe('Maximum number of tasks to return'),
+    
+  // Performance options
+  skipAnalysis: coerceBoolean()
+    .default(false)
+    .describe('Skip recurring task analysis for 30% faster queries')
+});
