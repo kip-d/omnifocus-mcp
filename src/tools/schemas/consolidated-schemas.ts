@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { 
-  DateTimeSchema, 
+  LocalDateTimeSchema,
   IdSchema,
 } from './shared-schemas.js';
 import { ReviewIntervalSchema } from './project-schemas.js';
@@ -28,9 +28,9 @@ const MarkReviewedOperation = z.object({
   operation: z.literal('mark_reviewed'),
   projectId: IdSchema
     .describe('ID of the project to mark as reviewed'),
-  reviewDate: DateTimeSchema
+  reviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Date of the review (defaults to now)'),
+    .describe('Date of the review in your local time (defaults to now)'),
   updateNextReviewDate: coerceBoolean()
     .default(true)
     .describe('Whether to automatically calculate the next review date based on the review interval'),
@@ -43,9 +43,9 @@ const SetScheduleOperation = z.object({
     .describe('IDs of projects to update review schedules for'),
   reviewInterval: ReviewIntervalSchema
     .describe('Review interval to apply to all projects'),
-  nextReviewDate: DateTimeSchema
+  nextReviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Next review date to set (if not provided, calculated from review interval)'),
+    .describe('Next review date to set in your local time (if not provided, calculated from review interval)'),
 });
 
 const ClearScheduleOperation = z.object({
@@ -73,8 +73,8 @@ const UpdateTasksOperation = z.object({
     name: z.string().optional(),
     note: z.string().optional(),
     flagged: z.boolean().optional(),
-    dueDate: DateTimeSchema.optional(),
-    deferDate: DateTimeSchema.optional(),
+    dueDate: LocalDateTimeSchema.optional(),
+    deferDate: LocalDateTimeSchema.optional(),
     tags: z.array(z.string()).optional(),
     project: z.string().optional(),
     context: z.string().optional(),
@@ -86,9 +86,9 @@ const CompleteTasksOperation = z.object({
   taskIds: z.array(IdSchema)
     .min(1)
     .describe('IDs of tasks to complete'),
-  completionDate: DateTimeSchema
+  completionDate: LocalDateTimeSchema
     .optional()
-    .describe('Completion date (defaults to now)'),
+    .describe('Completion date in your local time (defaults to now)'),
 });
 
 const DeleteTasksOperation = z.object({

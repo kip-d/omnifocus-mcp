@@ -8,12 +8,12 @@ export class InboxProcessingPrompt extends BasePrompt {
   arguments: PromptArgument[] = [
     {
       name: 'batch_size',
-      description: 'Process items in batches of this size (default: 5)',
+      description: 'Batch size for processing (default: 5)',
       required: false,
     },
     {
       name: 'auto_create_projects',
-      description: 'Automatically create projects for multi-step items (default: false)',
+      description: 'Auto-create projects for multi-step items (default: false)',
       required: false,
     },
   ];

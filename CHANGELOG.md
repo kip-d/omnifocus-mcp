@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2025-08-09
+
+### Added
+- **Relative Date Support**: Parse "tomorrow", "next monday", "in 3 days" etc.
+- **MCP Prompts Documentation**: How to access prompts in Claude Desktop UI
+- **Enhanced Timezone Detection**: Multiple fallback methods with Intl API priority
+- **Better Error Messages**: Include timezone context and format examples
+- **Comprehensive Date Tests**: 29 new tests for date handling edge cases
+
+### Changed
+- Unified date schemas: Projects now use LocalDateTimeSchema for consistency
+- Shortened prompt argument descriptions to prevent UI truncation
+- Improved timezone detection reliability with system-specific methods
+
+### Fixed
+- Date-only strings (YYYY-MM-DD) now correctly parse as local midnight
+- Test failure in date-range-queries checking wrong script exports
+- Project creation/update date format consistency with tasks
+
+### Documentation
+- Added MCP prompts access guide in README
+- Corrected DATE_HANDLING.md to reflect actual behavior
+- Confirmed OmniFocus API does not accept natural language dates
+
 ## [1.9.0] - 2025-08-09
 
 ### Added

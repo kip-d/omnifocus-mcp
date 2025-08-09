@@ -8,17 +8,17 @@ export class WeeklyReviewPrompt extends BasePrompt {
   arguments: PromptArgument[] = [
     {
       name: 'review_days',
-      description: 'Number of days to look back for completed tasks (default: 7)',
+      description: 'Days to review completed tasks (default: 7)',
       required: false,
     },
     {
       name: 'stale_project_days',
-      description: 'Consider projects stale if not reviewed in this many days (default: 30)',
+      description: 'Days before marking projects stale (default: 30)',
       required: false,
     },
     {
       name: 'include_someday_maybe',
-      description: 'Include review of someday/maybe projects (default: true)',
+      description: 'Include someday/maybe projects (default: true)',
       required: false,
     },
   ];

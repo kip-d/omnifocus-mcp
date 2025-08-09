@@ -41,6 +41,26 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
+## Using MCP Prompts in Claude Desktop
+
+This server includes 8 pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
+
+1. Click the **"+"** button (bottom-left of the input box)
+2. Select **"Add from omnifocus"** from the menu
+3. Choose from available prompts:
+   - **GTD Workflows:**
+     - `gtd_process_inbox` - Process inbox with 2-minute rule
+     - `gtd_weekly_review` - Complete weekly review with stale project detection
+     - `gtd_principles` - Core GTD methodology guide
+   - **Reference Guides:**
+     - `quick_reference` - Essential tips and emergency commands
+     - `tool_discovery_guide` - All tools with performance characteristics
+     - `common_patterns_guide` - Best practices and workflows
+     - `troubleshooting_guide` - Common errors and solutions
+     - `tag_performance_guide` - Optimize tag queries
+
+These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows.
+
 ## Basic Usage
 
 ### List Tasks

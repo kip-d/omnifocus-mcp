@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  DateTimeSchema,
+  LocalDateTimeSchema,
   OptionalDateTimeSchema,
   IdSchema,
   ProjectStatusSchema,
@@ -117,22 +117,23 @@ export const CreateProjectSchema = z.object({
     .default(false)
     .describe('Whether the project is flagged'),
 
-  dueDate: DateTimeSchema
+  dueDate: LocalDateTimeSchema
     .optional()
-    .describe('Due date for the project'),
+    .describe('Due date in your local time (e.g., 2024-01-15 or 2024-01-15 14:30)'),
 
-  deferDate: DateTimeSchema
+  deferDate: LocalDateTimeSchema
     .optional()
-    .describe('Defer date for the project'),
+    .describe('Defer date in your local time (e.g., 2024-01-15 or 2024-01-15 09:00)'),
 
   sequential: coerceBoolean()
     .default(false)
     .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)'),
   
   // Review-related fields
-  nextReviewDate: DateTimeSchema
+  nextReviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Date when this project should next be reviewed'),
+    .describe('Date when this project should next be reviewed (in your local time)'),
+    
   
   reviewInterval: ReviewIntervalSchema
     .optional()
@@ -179,26 +180,26 @@ export const UpdateProjectSchema = z.object({
       .optional()
       .describe('Move to different folder'),
 
-    dueDate: z.union([DateTimeSchema, z.null()])
+    dueDate: z.union([LocalDateTimeSchema, z.null()])
       .optional()
-      .describe('New due date (or null to clear)'),
+      .describe('New due date in your local time (or null to clear)'),
 
-    deferDate: z.union([DateTimeSchema, z.null()])
+    deferDate: z.union([LocalDateTimeSchema, z.null()])
       .optional()
-      .describe('New defer date (or null to clear)'),
+      .describe('New defer date in your local time (or null to clear)'),
 
     sequential: coerceBoolean()
       .optional()
       .describe('Whether tasks must be completed in order (sequential) or can be done in any order (parallel)'),
     
     // Review-related fields
-    lastReviewDate: z.union([DateTimeSchema, z.null()])
+    lastReviewDate: z.union([LocalDateTimeSchema, z.null()])
       .optional()
-      .describe('Date when project was last reviewed (or null to clear)'),
+      .describe('Date when project was last reviewed in your local time (or null to clear)'),
     
-    nextReviewDate: z.union([DateTimeSchema, z.null()])
+    nextReviewDate: z.union([LocalDateTimeSchema, z.null()])
       .optional()
-      .describe('Date when project should next be reviewed (or null to clear)'),
+      .describe('Date when project should next be reviewed in your local time (or null to clear)'),
     
     reviewInterval: z.union([ReviewIntervalSchema, z.null()])
       .optional()
@@ -231,9 +232,9 @@ export const CompleteProjectSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to complete'),
 
-  completionDate: DateTimeSchema
+  completionDate: LocalDateTimeSchema
     .optional()
-    .describe('Completion date (defaults to now)'),
+    .describe('Completion date in your local time (defaults to now)'),
 
   completeAllTasks: coerceBoolean()
     .default(false)
@@ -284,9 +285,9 @@ export const MarkProjectReviewedSchema = z.object({
   projectId: IdSchema
     .describe('ID of the project to mark as reviewed'),
   
-  reviewDate: DateTimeSchema
+  reviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Date of the review (defaults to now)'),
+    .describe('Date of the review in your local time (defaults to now)'),
   
   updateNextReviewDate: coerceBoolean()
     .default(true)
@@ -302,7 +303,7 @@ export const SetReviewScheduleSchema = z.object({
   reviewInterval: ReviewIntervalSchema
     .describe('Review interval to apply to all projects'),
   
-  nextReviewDate: DateTimeSchema
+  nextReviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Next review date to set (if not provided, calculated from review interval)')
+    .describe('Next review date to set in your local time (if not provided, calculated from review interval)')
 });

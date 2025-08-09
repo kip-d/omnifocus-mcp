@@ -11,24 +11,38 @@ import { execSync } from 'child_process';
  */
 export function getSystemTimezone(): string {
   try {
-    // Try to get timezone from system
+    // Method 1: Try macOS systemsetup command
     if (process.platform === 'darwin') {
-      // macOS - use systemsetup command
-      const tz = execSync('systemsetup -gettimezone', { encoding: 'utf8' })
-        .trim()
-        .replace('Time Zone: ', '');
-      return tz;
+      try {
+        const tz = execSync('systemsetup -gettimezone', { encoding: 'utf8', timeout: 2000 })
+          .trim()
+          .replace('Time Zone: ', '');
+        if (tz && tz !== 'You need administrator access to run this tool... exiting!') {
+          return tz;
+        }
+      } catch {
+        // Fall through to other methods
+      }
     }
 
-    // Fallback to environment variable
+    // Method 2: Use JavaScript's Intl API (more reliable)
+    try {
+      const resolvedOptions = Intl.DateTimeFormat().resolvedOptions();
+      if (resolvedOptions.timeZone) {
+        return resolvedOptions.timeZone;
+      }
+    } catch {
+      // Fall through to other methods
+    }
+
+    // Method 3: Environment variable
     if (process.env.TZ) {
       return process.env.TZ;
     }
 
-    // Final fallback - read from /etc/localtime symlink
+    // Method 4: Read from /etc/localtime symlink (Linux/Unix)
     try {
-      const tzPath = execSync('readlink /etc/localtime', { encoding: 'utf8' }).trim();
-      // Extract timezone from path like /usr/share/zoneinfo/America/New_York
+      const tzPath = execSync('readlink /etc/localtime', { encoding: 'utf8', timeout: 1000 }).trim();
       const match = tzPath.match(/zoneinfo\/(.+)$/);
       if (match) {
         return match[1];
@@ -37,8 +51,22 @@ export function getSystemTimezone(): string {
       // Ignore if readlink fails
     }
 
-    // If all else fails, default to UTC
-    console.warn('Could not detect system timezone, defaulting to UTC');
+    // Method 5: Try Windows timezone (if on Windows)
+    if (process.platform === 'win32') {
+      try {
+        const winTz = execSync('tzutil /g', { encoding: 'utf8', timeout: 1000 }).trim();
+        if (winTz) {
+          // Note: Windows timezone names need mapping to IANA names, but this is a start
+          return winTz;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    // Final fallback - use UTC offset to guess
+    const offset = new Date().getTimezoneOffset();
+    console.warn(`Could not detect system timezone name. Using UTC offset ${-offset / 60} hours. This may cause date interpretation issues.`);
     return 'UTC';
   } catch (error) {
     console.error('Error detecting timezone:', error);
@@ -84,7 +112,8 @@ export function localToUTC(localDateStr: string, _timezone?: string): string {
 
   // Check if date is valid
   if (isNaN(localDate.getTime())) {
-    throw new Error(`Invalid date format: ${localDateStr}`);
+    const tzInfo = getTimezoneInfo();
+    throw new Error(`Invalid date format: "${localDateStr}". Expected formats: "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Current timezone: ${tzInfo.timezone} (${tzInfo.offsetString}). Examples: "2024-01-15" (becomes midnight in ${tzInfo.timezone}) or "2024-01-15 14:30" (becomes 2:30 PM in ${tzInfo.timezone}).`);
   }
 
   // Convert to UTC
@@ -102,7 +131,8 @@ export function utcToLocal(utcStr: string, format: 'date' | 'datetime' | 'time' 
   const date = new Date(utcStr);
 
   if (isNaN(date.getTime())) {
-    throw new Error(`Invalid UTC date: ${utcStr}`);
+    const tzInfo = getTimezoneInfo();
+    throw new Error(`Invalid UTC date: "${utcStr}". Expected ISO 8601 format like "2024-01-15T14:30:00.000Z". Current timezone: ${tzInfo.timezone} (${tzInfo.offsetString}) for local conversion.`);
   }
 
   const year = date.getFullYear();
@@ -138,17 +168,98 @@ export function parseFlexibleDate(dateStr: string | null | undefined): string | 
 
   // Check if already in ISO format with timezone
   if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/)) {
-    return new Date(dateStr).toISOString();
+    try {
+      return new Date(dateStr).toISOString();
+    } catch {
+      return null;
+    }
+  }
+
+  // Try relative date parsing first
+  const relativeDateResult = parseRelativeDate(dateStr);
+  if (relativeDateResult) {
+    return relativeDateResult;
   }
 
   // Try to parse as local time
   try {
     return localToUTC(dateStr);
-  } catch {
-    // Could implement relative date parsing here in the future
-    // For now, return null for unparseable dates
+  } catch (error) {
+    // Enhanced error logging for debugging
+    const tzInfo = getTimezoneInfo();
+    console.warn(`Failed to parse date "${dateStr}" in timezone ${tzInfo.timezone}. Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
     return null;
   }
+}
+
+/**
+ * Parse relative date strings like "tomorrow", "next Monday", etc.
+ * 
+ * @param dateStr Relative date string
+ * @returns UTC ISO string or null if not a recognized relative date
+ */
+export function parseRelativeDate(dateStr: string): string | null {
+  const lowerStr = dateStr.toLowerCase().trim();
+  const now = new Date();
+  
+  // Reset to start of day in LOCAL timezone, then convert to UTC
+  // This ensures relative dates respect the user's timezone
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  switch (lowerStr) {
+    case 'today':
+      return today.toISOString();
+      
+    case 'tomorrow':
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString();
+      
+    case 'yesterday':
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return yesterday.toISOString();
+  }
+  
+  // Handle "next [day of week]"
+  const nextDayMatch = lowerStr.match(/^next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/);
+  if (nextDayMatch) {
+    const targetDay = nextDayMatch[1];
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const targetDayIndex = dayNames.indexOf(targetDay);
+    
+    if (targetDayIndex !== -1) {
+      const daysUntilTarget = (targetDayIndex - today.getDay() + 7) % 7;
+      const nextDay = new Date(today);
+      nextDay.setDate(today.getDate() + (daysUntilTarget || 7)); // If today is the target day, go to next week
+      return nextDay.toISOString();
+    }
+  }
+  
+  // Handle "in X days"
+  const inDaysMatch = lowerStr.match(/^in\s+(\d+)\s+days?$/);
+  if (inDaysMatch) {
+    const days = parseInt(inDaysMatch[1], 10);
+    if (days >= 0 && days <= 365) {
+      const futureDate = new Date(today);
+      futureDate.setDate(today.getDate() + days);
+      return futureDate.toISOString();
+    }
+  }
+  
+  // Handle "X days ago"
+  const daysAgoMatch = lowerStr.match(/^(\d+)\s+days?\s+ago$/);
+  if (daysAgoMatch) {
+    const days = parseInt(daysAgoMatch[1], 10);
+    if (days >= 0 && days <= 365) {
+      const pastDate = new Date(today);
+      pastDate.setDate(today.getDate() - days);
+      return pastDate.toISOString();
+    }
+  }
+  
+  return null;
 }
 
 /**

@@ -34,25 +34,43 @@ The OmniFocus MCP bridge handles dates in **local time** for user input and conv
 
 ## Known Issues
 
-### 1. JavaScript Date Constructor Ambiguity
+### 1. Schema Date Format Inconsistency (Fixed for Tasks, Issue Remains for Projects)
 
-The `new Date()` constructor interprets strings inconsistently:
+**Status**: Tasks now use consistent LocalDateTimeSchema for creation/updates. Projects still have inconsistency.
+
+**Task Schemas** ✅ **CORRECT**:
+- Creation/Update: Uses `LocalDateTimeSchema` (expects local time format)
+- Queries: Uses `DateTimeSchema` (expects ISO format with Z)
+
+**Project Schemas** ❌ **INCONSISTENT**:
+- Creation/Update: Uses `DateTimeSchema` (expects ISO format - inconsistent with tasks)
+- Queries: Uses `DateTimeSchema` (consistent within projects, but different from tasks)
+
+**JavaScript Date Constructor**: Our implementation correctly handles this ambiguity:
 
 ```javascript
+// Plain JavaScript (problematic):
 new Date("2024-01-15")           // UTC midnight ❌
 new Date("2024-01-15T00:00:00")  // Local midnight ✅
-new Date("2024-01-15 00:00:00")  // Local midnight ✅
-new Date("2024-01-15T00:00:00Z") // UTC midnight ✅
+
+// Our localToUTC() function (works correctly):
+localToUTC("2024-01-15")         // Converts to local midnight, then to UTC ✅
+localToUTC("2024-01-15 14:30")   // Converts to local 2:30 PM, then to UTC ✅
 ```
 
-**Current Issue**: Date-only inputs are incorrectly treated as UTC instead of local time.
+**Resolution**: Date-only inputs now work correctly for tasks. Projects need schema updates.
 
-### 2. API Inconsistency
+### 2. Cross-Entity Schema Inconsistency
 
-- **Creation/Update**: Expects local time format (`LocalDateTimeSchema`)
-- **Queries**: Expects ISO format (`DateTimeSchema`)
+**Task Operations** ✅ **WORKING CORRECTLY**:
+- **Creation/Update**: Expects local time format (`LocalDateTimeSchema`) - e.g., "2024-01-15" or "2024-01-15 14:30"
+- **Queries**: Expects ISO format (`DateTimeSchema`) - e.g., "2024-01-15T14:30:00Z"
 
-This forces users to use different date formats for different operations.
+**Project Operations** ❌ **INCONSISTENT WITH TASKS**:
+- **Creation/Update**: Currently expects ISO format (`DateTimeSchema`) - should use `LocalDateTimeSchema` for consistency
+- **Queries**: Uses ISO format (`DateTimeSchema`) - this is correct
+
+**User Impact**: Users must remember different date formats for tasks vs projects, creating confusion.
 
 ### 3. Timezone Detection
 
@@ -119,9 +137,9 @@ const localDisplay = utcToLocal(task.dueDate, 'datetime');
 
 ### High Priority
 
-1. **Fix Date-Only Handling**: Treat `YYYY-MM-DD` as local midnight, not UTC
-2. **Unify Date Formats**: Use LocalDateTimeSchema for all user-facing operations
-3. **Improve Timezone Detection**: Add fallback methods and validation
+1. ✅ **Fixed Date-Only Handling**: `YYYY-MM-DD` now correctly treats as local midnight
+2. 🔄 **Unify Date Formats**: Use LocalDateTimeSchema for all creation/update operations (partial - tasks ✅, projects ❌)
+3. **Improve Timezone Detection**: Add fallback methods and better error handling for system timezone detection failures
 4. **Add Clear Documentation**: Include timezone info in all date-related error messages
 
 ### Medium Priority
@@ -152,9 +170,11 @@ create_task({
 // User wants task due "sometime on January 15"
 create_task({
   name: "Submit report",
-  dueDate: "2024-01-15"  // Currently broken - treats as UTC midnight
-  // Should be: "2024-01-15 00:00" for local midnight
+  dueDate: "2024-01-15"  // ✅ WORKS CORRECTLY - treats as local midnight
 })
+// Result: Creates task due at midnight in user's timezone
+// E.g., for EST user: stores as 2024-01-15T05:00:00.000Z (UTC)
+// Which displays as 2024-01-15 00:00 EST
 ```
 
 ### Scenario 3: Query Today's Tasks
@@ -188,10 +208,16 @@ node -e "const {parseFlexibleDate} = require('./dist/utils/timezone.js'); consol
 
 ## Summary
 
-Date handling in OmniFocus MCP is functional but has several inconsistencies that can lead to confusion. The main issues are:
+Date handling in OmniFocus MCP works correctly for the core functionality, but has some remaining inconsistencies:
 
-1. **Format inconsistency** between creation and querying
-2. **Date-only ambiguity** in JavaScript Date constructor
-3. **Timezone detection** reliability
+**Working Correctly** ✅:
+1. **Date-only inputs** ("2024-01-15") properly convert to local midnight
+2. **Task creation/updates** use consistent local time format
+3. **Time conversion** from local to UTC and back works reliably
+
+**Remaining Issues** ❌:
+1. **Project vs Task inconsistency** - projects use ISO format for creation, tasks use local format
+2. **Timezone detection** reliability on some systems (falls back to UTC)
+3. **Error messages** lack timezone context for debugging
 
 Following the best practices above will minimize issues, but the system would benefit from the recommended improvements to provide a more robust and consistent date handling experience.
