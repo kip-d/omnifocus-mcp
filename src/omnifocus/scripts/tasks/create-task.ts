@@ -87,13 +87,21 @@ export const CREATE_TASK_SCRIPT = `
         task.sequential = taskData.sequential;
       }
       
-      // Set repeat rule if provided
+      // Set repeat rule if provided (using evaluateJavascript bridge)
       if (taskData.repeatRule) {
         try {
-          const repetitionRule = createRepetitionRule(taskData.repeatRule);
-          if (repetitionRule) {
-            task.repetitionRule = repetitionRule;
-            console.log('Applied repeat rule to task:', taskData.repeatRule);
+          const ruleData = prepareRepetitionRuleData(taskData.repeatRule);
+          if (ruleData && ruleData.needsBridge) {
+            // Get the task ID for the bridge
+            const taskId = task.id();
+            
+            // Apply repetition rule via evaluateJavascript bridge
+            const success = applyRepetitionRuleViaBridge(taskId, ruleData);
+            if (success) {
+              console.log('Applied repeat rule to task via bridge:', taskData.repeatRule);
+            } else {
+              console.log('Warning: Could not apply repeat rule via bridge');
+            }
           }
           
           // Apply defer another settings if specified

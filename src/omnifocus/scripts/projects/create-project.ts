@@ -92,23 +92,28 @@ export const CREATE_PROJECT_SCRIPT = `
       }
     }
     
-    // Set repeat rule after project creation
-    // NOTE: RepetitionRule creation has issues with JXA, commenting out for now
-    // TODO: Investigate alternative approach for project repeat rules
-    /*
+    // Set repeat rule after project creation (using evaluateJavascript bridge)
     if (options.repeatRule) {
       try {
-        const repetitionRule = createRepetitionRule(options.repeatRule);
-        if (repetitionRule && typeof repetitionRule !== 'object') {
-          newProject.repetitionRule = repetitionRule;
-          console.log('Applied repeat rule to project:', options.repeatRule);
+        const ruleData = prepareRepetitionRuleData(options.repeatRule);
+        if (ruleData && ruleData.needsBridge) {
+          // Get the project ID for the bridge
+          const projectId = newProject.id();
+          
+          // Apply repetition rule via evaluateJavascript bridge
+          // Note: Projects also use Task.RepetitionRule
+          const success = applyRepetitionRuleViaBridge(projectId, ruleData);
+          if (success) {
+            console.log('Applied repeat rule to project via bridge:', options.repeatRule);
+          } else {
+            console.log('Warning: Could not apply repeat rule to project via bridge');
+          }
         }
       } catch (error) {
         console.log('Warning: Failed to apply repeat rule to project:', error.message);
         // Continue without repeat rule rather than failing project creation
       }
     }
-    */
     
     // Set review interval after project creation (cannot be set during construction)
     if (options.reviewInterval) {

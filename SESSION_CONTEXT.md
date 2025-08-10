@@ -28,32 +28,39 @@
 
 ## High Priority Roadmap Items
 
-### 1. Project Review Settings 🔴
+### 1. Project Review Settings ✅ COMPLETED (2025-08-09)
 ```javascript
-// Need to add to create_project and update_project:
+// Now fully implemented in create_project and update_project:
 {
-  reviewInterval: "weekly",  // daily, weekly, monthly, quarterly, yearly
-  reviewIntervalStep: 2,     // e.g., every 2 weeks
+  reviewInterval: {
+    unit: "week",      // day, week, month, year
+    steps: 2,          // e.g., every 2 weeks
+    fixed: false       // fixed vs floating
+  },
   nextReviewDate: "2025-01-15"
 }
 ```
-- Status: Partially implemented (read-only in list_projects)
+- Status: Fully implemented and tested
 - Location: src/tools/projects/
 
-### 2. Task Recurrence Settings 🔴
+### 2. Task Recurrence Settings ✅ SOLVED (2025-08-10)
 ```javascript
-// Need to add to create_task:
+// Now fully working via evaluateJavascript() bridge:
 {
-  repetitionRule: {
-    frequency: "weekly",     // daily, weekly, monthly, yearly
-    interval: 1,            // every N days/weeks/etc
-    daysOfWeek: ["monday", "wednesday", "friday"],
+  repeatRule: {
+    unit: "week",           // day, week, month, year
+    steps: 1,              // every N units
+    weekdays: ["monday", "wednesday", "friday"],
     method: "fixed"         // fixed, start-after-completion, due-after-completion
   }
 }
 ```
-- Note: RepetitionRule creation has JXA issues (see TODO in create-project.ts:96)
-- Status: Analysis exists in list_tasks, but no creation support
+- **Initial investigation**: Found RepetitionRule API not accessible via JXA
+- **Breakthrough**: Discovered `app.evaluateJavascript()` bridges JXA to Omni Automation
+- **Solution**: Hybrid approach - create in JXA, apply recurrence via bridge
+- **Status**: Fully implemented and working for both tasks and projects
+- **Impact**: This was an 8+ hour investigation that nearly ended in failure
+- **Community action needed**: See EVALUATEJAVASCRIPT_BRIDGE_RESEARCH.md for Omni Group request
 
 ### 3. Batch Operations 🟡
 - `batch_create_tasks` - Create multiple tasks in one call

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2025-08-10
+
+### Added
+- **Project Review Settings**: Full implementation in create_project and update_project
+  - Set review intervals (day, week, month, year with steps)
+  - Configure next review dates
+  - Support for fixed vs floating schedules
+  - Clear review settings via update_project
+
+### Fixed
+- **RepetitionRule Support**: Implemented recurring tasks/projects via evaluateJavascript() bridge!
+  - Discovered `app.evaluateJavascript()` bridges JXA to Omni Automation
+  - Implemented hybrid approach: create in JXA, add recurrence via bridge
+  - Full support for daily, weekly, monthly recurrence patterns
+  - Supports fixed, defer-until-date, and due-after-completion methods
+  - Successfully tested with all recurrence types
+
+### Documentation
+- Added `/docs/JXA-LIMITATIONS.md` with detailed technical limitations
+- Updated README with recurrence limitation notice
+- Added project review settings examples to README
+- Updated SESSION_CONTEXT and TODO files to reflect completion
+
 ## [1.9.1] - 2025-08-09
 
 ### Added

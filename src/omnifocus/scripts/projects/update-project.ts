@@ -182,10 +182,15 @@ export const UPDATE_PROJECT_SCRIPT = `
       }
     } else if (updates.repeatRule) {
       try {
-        const repetitionRule = createRepetitionRule(updates.repeatRule);
-        if (repetitionRule) {
-          targetProject.repetitionRule = repetitionRule;
-          changes.push("Repeat rule updated");
+        const ruleData = prepareRepetitionRuleData(updates.repeatRule);
+        if (ruleData && ruleData.needsBridge) {
+          // Apply repetition rule via evaluateJavascript bridge
+          const success = applyRepetitionRuleViaBridge(targetProject.id(), ruleData);
+          if (success) {
+            changes.push("Repeat rule updated via bridge");
+          } else {
+            changes.push("Warning: Could not update repeat rule via bridge");
+          }
         }
       } catch (error) {
         changes.push("Warning: Failed to update repeat rule: " + error.message);

@@ -98,6 +98,22 @@ These prompts provide guided conversations with pre-configured questions and res
 }
 ```
 
+### Create Project with Review Settings
+```javascript
+{
+  "tool": "create_project",
+  "arguments": {
+    "name": "Quarterly Goals",
+    "reviewInterval": {
+      "unit": "week",   // day, week, month, year
+      "steps": 1,       // Review every 1 week
+      "fixed": false    // Floating schedule
+    },
+    "nextReviewDate": "2025-01-15"
+  }
+}
+```
+
 ### Create Action Group with Subtasks
 ```javascript
 // Create parent task (action group)
@@ -168,12 +184,13 @@ These prompts provide guided conversations with pre-configured questions and res
 
 ## Known Limitations
 
+- **Recurrence/Repetition**: ✅ **NOW WORKING** via `evaluateJavascript()` bridge! Tasks and projects can be created with recurrence rules. The implementation uses a hybrid approach that bridges JXA to Omni Automation. See `/docs/JXA-LIMITATIONS.md` for technical details.
 - **Tags**: Cannot be assigned during task creation (JXA limitation). Create task first, then update with tags.
 - **Project Movement**: Moving tasks between projects may require recreation with new ID
 - **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.
 - **Performance**: Large queries (2000+ tasks) may be slow. Use `skipAnalysis: true` for faster queries.
 
-See `/docs/TROUBLESHOOTING.md` for solutions.
+See `/docs/TROUBLESHOOTING.md` for solutions and `/docs/JXA-LIMITATIONS.md` for technical details.
 
 ## Documentation
 

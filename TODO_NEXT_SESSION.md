@@ -2,27 +2,29 @@
 
 ## Immediate Tasks
 
-### 1. Project Review Settings (HIGH PRIORITY)
-- [ ] Add `reviewInterval` parameter to `create_project` tool
-- [ ] Add `reviewIntervalStep` for intervals like "every 2 weeks"
-- [ ] Add `nextReviewDate` parameter for initial review date
-- [ ] Update `update_project` to modify review settings
-- [ ] Test with actual OmniFocus to ensure JXA compatibility
+### 1. Project Review Settings (HIGH PRIORITY) ✅ COMPLETED
+- [x] Add `reviewInterval` parameter to `create_project` tool
+- [x] Add `reviewIntervalStep` for intervals like "every 2 weeks" (implemented as `steps`)
+- [x] Add `nextReviewDate` parameter for initial review date
+- [x] Update `update_project` to modify review settings
+- [x] Test with actual OmniFocus to ensure JXA compatibility
 
-### 2. Fix RepetitionRule JXA Issue
-- [ ] Investigate workaround for RepetitionRule creation bug (create-project.ts:96)
-- [ ] Try alternative approaches:
-  - Create task/project first, then add recurrence
-  - Use AppleScript bridge instead of JXA
-  - Find different property access method
-- [ ] Document solution or limitations
+### 2. ~~Fix RepetitionRule JXA Issue~~ ✅ SOLVED (2025-08-10)
+- [x] Investigated workaround for RepetitionRule creation bug
+- [x] Tried alternative approaches:
+  - [x] Direct API access - Not available in JXA
+  - [x] AppleScript bridge - Complex escaping issues
+  - [x] Different property access methods - All failed
+  - [x] **evaluateJavascript() bridge - SUCCESS!**
+- [x] Documented solution in `/docs/JXA-LIMITATIONS.md`
+- **RESULT**: Fully working via `app.evaluateJavascript()` bridge
 
-### 3. Task Recurrence Implementation
-- [ ] Add `repetitionRule` to `create_task` schema
-- [ ] Support frequency types: daily, weekly, monthly, yearly
-- [ ] Support repetition methods: fixed, start-after-completion, due-after-completion
-- [ ] Add to `update_task` for modifying recurrence
-- [ ] Create comprehensive tests
+### 3. ~~Task Recurrence Implementation~~ ✅ COMPLETED (2025-08-10)
+- [x] Added `repeatRule` to schemas
+- [x] Implemented via evaluateJavascript bridge
+- [x] Full support for all recurrence patterns
+- [x] Works for both tasks and projects
+- [x] Documented solution and community action needed
 
 ## Nice-to-Have Tasks
 

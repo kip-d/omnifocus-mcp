@@ -106,13 +106,13 @@ export const REPEAT_HELPERS = `
         return 'None';
     }
   }
-
-  // Create OmniFocus RepetitionRule from our repeat rule object
-  function createRepetitionRule(rule) {
+  
+  // Prepare repetition rule data for evaluateJavascript bridge
+  // Returns rule configuration for use with the bridge
+  function prepareRepetitionRuleData(rule) {
     if (!rule || !rule.unit || !rule.steps) return null;
     
     try {
-      const app = Application('OmniFocus');
       const ruleString = convertToRRULE(rule);
       const method = convertToOmniMethod(rule.method || 'fixed');
       
@@ -121,39 +121,64 @@ export const REPEAT_HELPERS = `
         return null;
       }
       
-      // Create RepetitionRule using the appropriate method constant
-      let methodConstant;
-      switch (method) {
-        case 'Fixed':
-          methodConstant = app.Task.RepetitionMethod.Fixed;
-          break;
+      // Return data for evaluateJavascript bridge
+      return {
+        ruleString: ruleString,
+        method: method,
+        needsBridge: true
+      };
+      
+    } catch (error) {
+      console.log('Error preparing repetition rule data:', error.message);
+      return null;
+    }
+  }
+  
+  // Apply repetition rule to task using evaluateJavascript bridge
+  // This bridges JXA to Omni Automation to access RepetitionRule API
+  function applyRepetitionRuleViaBridge(taskId, ruleData) {
+    if (!ruleData || !ruleData.ruleString || !taskId) return false;
+    
+    try {
+      const app = Application('OmniFocus');
+      
+      // Map method to Omni Automation constant
+      let methodConstant = 'Task.RepetitionMethod.Fixed';
+      switch (ruleData.method) {
         case 'DeferUntilDate':
-          methodConstant = app.Task.RepetitionMethod.DeferUntilDate;
+          methodConstant = 'Task.RepetitionMethod.DeferUntilDate';
           break;
         case 'DueDate':
-          methodConstant = app.Task.RepetitionMethod.DueDate;
-          break;
-        case 'None':
-        default:
-          methodConstant = app.Task.RepetitionMethod.None;
+          methodConstant = 'Task.RepetitionMethod.DueDate';
           break;
       }
       
-      // Create the RepetitionRule - wrap in try-catch for better error handling
-      try {
-        const repetitionRule = app.Task.RepetitionRule(ruleString, methodConstant);
-        console.log('Created RepetitionRule with ruleString:', ruleString, 'method:', method);
-        return repetitionRule;
-      } catch (ruleError) {
-        console.log('Failed to create RepetitionRule using constructor:', ruleError.message);
-        // Try alternative approach - just return the rule string and method for manual application
-        return { ruleString: ruleString, method: methodConstant };
+      // Use evaluateJavascript to apply the repetition rule
+      const result = app.evaluateJavascript(
+        'const task = Task.byIdentifier("' + taskId + '");' +
+        'if (task) {' +
+        '  const rule = new Task.RepetitionRule(' +
+        '    "' + ruleData.ruleString + '",' +
+        '    ' + methodConstant +
+        '  );' +
+        '  task.repetitionRule = rule;' +
+        '  "success";' +
+        '} else {' +
+        '  "task_not_found";' +
+        '}'
+      );
+      
+      if (result === 'success') {
+        console.log('Applied repetition rule via evaluateJavascript bridge');
+        return true;
+      } else {
+        console.log('Failed to apply repetition rule:', result);
+        return false;
       }
       
     } catch (error) {
-      console.log('Error creating RepetitionRule:', error.message);
-      console.log('Rule data:', JSON.stringify(rule));
-      return null;
+      console.log('Error applying repetition rule via bridge:', error.message);
+      return false;
     }
   }
 

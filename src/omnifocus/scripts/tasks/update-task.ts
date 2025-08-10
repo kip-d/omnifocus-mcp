@@ -103,10 +103,15 @@ export const UPDATE_TASK_SCRIPT = `
       }
     } else if (updates.repeatRule) {
       try {
-        const repetitionRule = createRepetitionRule(updates.repeatRule);
-        if (repetitionRule) {
-          task.repetitionRule = repetitionRule;
-          console.log('Updated repeat rule for task:', updates.repeatRule);
+        const ruleData = prepareRepetitionRuleData(updates.repeatRule);
+        if (ruleData && ruleData.needsBridge) {
+          // Apply repetition rule via evaluateJavascript bridge
+          const success = applyRepetitionRuleViaBridge(task.id(), ruleData);
+          if (success) {
+            console.log('Updated repeat rule for task via bridge:', updates.repeatRule);
+          } else {
+            console.log('Warning: Could not update repeat rule via bridge');
+          }
         }
         
         // Apply defer another settings if specified
