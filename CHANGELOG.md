@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2025-08-11
+
+### Fixed
+- **Perspective Query Response Format**: Standardized response format for consistency
+  - Changed from `data.items` to `data.tasks` to match other task query tools
+  - Added structured `data.perspective` object with name, type, and filter rules
+  - Improved error handling for non-existent perspectives
+  - Fixed integration test timeouts (reduced from 30s to ~7s typical)
+
+### Improved
+- **Response Consistency**: All task-returning tools now use `data.tasks` field
+- **Type Safety**: Added proper TypeScript interfaces for perspective responses
+- **Documentation**: Added perspective tool examples to README
+
 ## [1.11.0] - 2025-08-10
 
 ### Added

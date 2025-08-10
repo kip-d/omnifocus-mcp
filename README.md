@@ -11,6 +11,7 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 - Sequential/parallel support for both projects and tasks
 - GTD analytics and productivity insights
 - Tag management
+- **Perspective support** - List and query OmniFocus perspectives
 - Data export (CSV, JSON, Markdown)
 - Smart caching for performance
 
@@ -94,6 +95,24 @@ These prompts provide guided conversations with pre-configured questions and res
     "name": "Website Redesign",
     "sequential": true,  // Tasks must be done in order
     "folder": "Work"
+  }
+}
+```
+
+### Work with Perspectives
+```javascript
+// List all perspectives
+{
+  "tool": "list_perspectives",
+  "arguments": {}
+}
+
+// Query tasks from a perspective
+{
+  "tool": "query_perspective",
+  "arguments": {
+    "perspectiveName": "Inbox",
+    "limit": "10"
   }
 }
 ```

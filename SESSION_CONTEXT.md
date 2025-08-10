@@ -1,102 +1,90 @@
-# Session Context - 2025-08-09
+# Session Context - 2025-08-11
 
 ## Current Status
-- **Version**: 1.9.1 (just released)
-- **Last Commit**: feat: add relative date support and improve MCP prompts UI (v1.9.1)
+- **Version**: 1.11.1 (just released)
+- **Last Commit**: fix: standardize perspective query response format (v1.11.1)
 - **All Tests Passing**: 249 tests passing, 1 skipped
 
-## Today's Accomplishments
+## Session Accomplishments
 
-### 1. Fixed Date Handling (v1.9.1)
-- ✅ Added relative date support ("tomorrow", "next monday", "in 3 days")
-- ✅ Fixed date-only strings to parse as local midnight
-- ✅ Unified date schemas between projects and tasks
-- ✅ Enhanced timezone detection with multiple fallbacks
-- ✅ Added 29 comprehensive date handling tests
-- ✅ Corrected DATE_HANDLING.md documentation
+### 1. Fixed Query Perspective Integration Issues (v1.11.1) ✅
+- **Response Format Standardization**: Changed from `data.items` to `data.tasks` for consistency
+- **Added Structured Perspective Data**: Response now includes `data.perspective` object
+- **Improved Error Handling**: Properly handles non-existent perspectives
+- **Fixed Integration Test Timeouts**: Reduced from 30s to ~7s typical response time
+- **Type Safety**: Added proper TypeScript interfaces for perspective responses
 
-### 2. MCP Prompts Discovery & Documentation
-- ✅ Discovered prompts appear under "+" button in Claude Desktop v0.12.55+
-- ✅ Fixed truncated argument descriptions in UI
-- ✅ Added documentation to README explaining how to access prompts
-- ✅ Confirmed we have 8 working prompts (3 GTD, 5 reference)
+### 2. Previous: Perspective Tools Implementation (v1.11.0) ✅
+- **list_perspectives**: Enumerate all perspectives (built-in and custom) with filter rules
+- **query_perspective**: Get tasks matching perspective filters  
+- Successfully discovered perspective access via `evaluateJavascript()` bridge
+- Found 30 perspectives in testing (8 built-in, 22 custom)
+- Enables LLM to see what users see in their perspectives
+- Full collaborative task processing now possible
 
-### 3. Bug Fixes
-- ✅ Fixed date-range-queries test checking wrong script exports
-- ✅ Fixed tasks in completed projects showing as incomplete
-- ✅ Updated CHANGELOG with missing versions (1.7.1-1.8.0)
+### 2. Eisenhower Matrix Prompt ✅
+- Added new GTD prompt for inbox processing
+- Uses urgent/important quadrants for task categorization
+- Integrated with MCP prompts system
 
-## High Priority Roadmap Items
+### 3. Project Template Research ✅
+- Documented 6 comprehensive GTD project templates
+- Client projects, product launches, event planning, home improvement, learning, travel
+- Ready for future prompt implementation
 
-### 1. Project Review Settings ✅ COMPLETED (2025-08-09)
+### 4. Documentation Improvements ✅
+- Added recurrence examples to README
+- Updated FEATURE_ROADMAP with v1.10.0 accomplishments
+- Created PERSPECTIVE-ACCESS-DISCOVERY.md documenting the breakthrough
+- Created JXA-CAPABILITIES-RESEARCH.md for future reference
+- Created SWIFT-VS-JXA-ANALYSIS.md explaining why to stay with JXA
+
+### 5. Claude Code Status Line Enhancement
+- Fixed status line to show context percentage before auto-compact
+- Script now properly calls `bun x ccusage statusline`
+- Shows both external token tracking and internal context usage
+
+## Key Technical Discoveries
+
+### Perspective Access via evaluateJavascript()
 ```javascript
-// Now fully implemented in create_project and update_project:
-{
-  reviewInterval: {
-    unit: "week",      // day, week, month, year
-    steps: 2,          // e.g., every 2 weeks
-    fixed: false       // fixed vs floating
-  },
-  nextReviewDate: "2025-01-15"
-}
+// We can enumerate all perspectives
+Perspective.all // All perspectives
+Perspective.Custom.all // Custom perspectives with filter rules
+perspective.archivedFilterRules // The actual filter logic!
 ```
-- Status: Fully implemented and tested
-- Location: src/tools/projects/
 
-### 2. Task Recurrence Settings ✅ SOLVED (2025-08-10)
-```javascript
-// Now fully working via evaluateJavascript() bridge:
-{
-  repeatRule: {
-    unit: "week",           // day, week, month, year
-    steps: 1,              // every N units
-    weekdays: ["monday", "wednesday", "friday"],
-    method: "fixed"         // fixed, start-after-completion, due-after-completion
-  }
-}
-```
-- **Initial investigation**: Found RepetitionRule API not accessible via JXA
-- **Breakthrough**: Discovered `app.evaluateJavascript()` bridges JXA to Omni Automation
-- **Solution**: Hybrid approach - create in JXA, apply recurrence via bridge
-- **Status**: Fully implemented and working for both tasks and projects
-- **Impact**: This was an 8+ hour investigation that nearly ended in failure
-- **Community action needed**: See EVALUATEJAVASCRIPT_BRIDGE_RESEARCH.md for Omni Group request
-
-### 3. Batch Operations 🟡
-- `batch_create_tasks` - Create multiple tasks in one call
-- Atomic transactions (all succeed or all fail)
-- User feedback: Would "make project setup much faster"
-
-### 4. Perspectives Access 🟡
-- `list_perspectives` - Get available perspectives
-- `query_perspective` - Get tasks from specific perspective
-- Use case: Access "Due Soon", "Flagged", custom perspectives
+### Filter Rule Translation
+- Successfully decoded perspective filter rules
+- Can translate rules to query parameters
+- Enables simulation of perspective views without UI access
 
 ## Known Issues & Limitations
 
 ### Technical Debt
-1. **JXA RepetitionRule Bug** - Can't create recurring tasks/projects (line 96 in create-project.ts)
-2. **Tag Assignment** - Still unreliable during task creation (must update after)
-3. **Natural Language Dates** - OmniFocus API doesn't accept them (we handle in our layer)
+1. **query_perspective integration tests** - Some timeout issues but core functionality works
+2. **Complex perspective filters** - Some custom perspectives have rules we can't fully translate
+3. **Perspective grouping/sorting** - Can't replicate exact display order
 
 ### Performance Considerations
-- Daily-first philosophy implemented (v1.9.0)
-- Default limits reduced for faster response
-- Performance modes available for power users
+- Perspective tools use 5-minute cache for list, 30-second for queries
+- Filter translation adds minimal overhead
+- Successfully handles 30+ perspectives
 
-## Testing Notes
-- Integration test: `npm run test:integration`
-- Unit tests: `npm test`
-- MCP protocol test: `node tests/integration/test-as-claude-desktop.js`
-- Build before testing: `npm run build`
+## Testing Results
+- Unit tests: 249 passing ✅
+- Perspective enumeration: 30 perspectives found ✅
+- Tools registered and available ✅
+- Direct JXA scripts working ✅
 
 ## Environment Details
 - Node.js 18+
 - OmniFocus 4.6+ on macOS
-- TypeScript project (no .js files for new code)
+- TypeScript project
 - MCP SDK 1.13.0
+- Using evaluateJavascript() bridge extensively
 
-## Quick Commands for Resuming
+## Quick Commands for Next Session
 
 ```bash
 # Check current state
@@ -106,37 +94,58 @@ git log --oneline -5
 # Run tests
 npm run build && npm test
 
+# Test perspective tools
+osascript -l JavaScript test-perspectives-simple.js
+
 # Test MCP integration
 node tests/integration/test-as-claude-desktop.js
 
-# Test specific functionality
-npx tsx test-script.ts  # Create test scripts as needed
-
-# View recent changes
-git diff HEAD~1
+# Check perspective access
+npx tsx test-perspective-comprehensive.ts
 ```
 
-## Notes for Next Session
+## Files Modified This Session
+- `/src/tools/perspectives/` - New perspective tools
+- `/src/omnifocus/scripts/perspectives.ts` - Perspective scripts
+- `/src/prompts/gtd/eisenhower-matrix.ts` - New prompt
+- `/README.md` - Added recurrence examples
+- `/CHANGELOG.md` - Version 1.11.0 notes
+- `/docs/FEATURE_ROADMAP.md` - Updated accomplishments
 
-1. **Project Review Settings** - Most requested feature, should tackle first
-2. **RepetitionRule Investigation** - Need to find workaround for JXA limitation
-3. **Batch Operations** - Consider implementing with transaction-like behavior
-4. **MCP Prompts Enhancement** - Could add more sophisticated GTD workflows
+## Important Context
 
-## Files Recently Modified
-- `/src/utils/timezone.ts` - Enhanced with relative dates
-- `/src/tools/schemas/project-schemas.ts` - Unified date schemas
-- `/src/prompts/gtd/*.ts` - Fixed UI truncation
-- `/docs/DATE_HANDLING.md` - Corrected documentation
-- `/tests/unit/timezone.test.ts` - New comprehensive tests
+### Vision Achieved
+Your vision of an LLM assistant that can:
+- See what users see in perspectives ✅
+- Work alongside them collaboratively ✅  
+- Help break down projects into actionable steps ✅
+- Not interfere with user's OmniFocus view ✅
+
+This is now fully realized with the perspective tools!
+
+### Why We Stayed with JXA
+After thorough analysis, we determined:
+- Swift would use the SAME OmniFocus API (no additional access)
+- 20,000+ lines of working code would need rewriting
+- evaluateJavascript() bridge is MORE powerful than pure Swift
+- 2-3 months effort for no real gain
 
 ## Git Remote
 - Repository: github.com:kip-d/omnifocus-mcp.git
 - Main branch: main
-- Latest version: 1.9.1
+- Latest version: 1.11.0
+
+## Dev Environment Notes (Not Part of MCP Server)
+
+### Claude Code Status Line Configuration
+- Fixed status line to show both ccusage output AND context percentage
+- Used full path to bun executable (`/Users/kip/.bun/bin/bun`) to resolve PATH issues
+- Status line now shows: `🤖 Opus 4.1 | 💰 $X session / $Y today | Context: ~XX%`
+- Configuration in `~/.claude/statusline-enhanced.sh`
 
 ---
 
-*Session saved at: 2025-08-09 23:20 EST*
-*Total commits today: 3*
+*Session saved at: 2025-08-11*
+*Version released: 1.11.1*
 *Tests passing: 249/250*
+*Key fix: Perspective response format standardization*

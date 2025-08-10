@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListTasksResponse } from '../response-types.js';
+import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { StandardResponse } from '../../utils/response-format.js';
+import { OmniFocusTask } from '../response-types.js';
 
 // Input schema
 const QueryPerspectiveSchema = z.object({
@@ -18,7 +19,17 @@ const QueryPerspectiveSchema = z.object({
     .describe('Include task details like notes and subtasks')
 });
 
-interface QueryPerspectiveResponse extends ListTasksResponse {
+interface QueryPerspectiveData {
+  tasks: OmniFocusTask[];
+  perspective: {
+    name: string;
+    type: 'builtin' | 'custom' | 'unknown';
+    filterRules: any;
+    filterRulesApplied: boolean;
+  };
+}
+
+interface QueryPerspectiveResponse extends StandardResponse<QueryPerspectiveData> {
   perspectiveName: string;
   perspectiveType?: 'builtin' | 'custom' | 'unknown';
   filterRules?: any;
@@ -81,13 +92,30 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
         perspectiveType = 'custom';
       }
 
-      const response = createListResponse(
-        'query_perspective',
-        result.tasks || [],
-        timer.toMetadata()
-      ) as QueryPerspectiveResponse;
+      // Create response with tasks field instead of items
+      const tasks = result.tasks || [];
+      const response = {
+        success: true,
+        data: {
+          tasks: tasks,
+          perspective: {
+            name: perspectiveName,
+            type: perspectiveType,
+            filterRules: result.filterRules,
+            filterRulesApplied: !!result.filterRules
+          }
+        },
+        metadata: {
+          operation: 'query_perspective',
+          timestamp: new Date().toISOString(),
+          from_cache: false,
+          total_count: tasks.length,
+          returned_count: tasks.length,
+          query_time_ms: timer.toMetadata().query_time_ms || 0
+        }
+      } as QueryPerspectiveResponse;
 
-      // Add perspective-specific properties
+      // Add top-level perspective properties for backward compatibility
       response.perspectiveName = perspectiveName;
       response.perspectiveType = perspectiveType;
       response.filterRules = result.filterRules;
@@ -135,15 +163,29 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
 
     if (!queryParams) {
       // Unknown perspective, return empty result
-      const response = createListResponse(
-        'query_perspective',
-        [],
-        timer.toMetadata()
-      ) as unknown as QueryPerspectiveResponse;
-
-      response.perspectiveName = perspectiveName;
-      response.perspectiveType = 'unknown';
-      response.simulatedQuery = true;
+      const response = {
+        success: true,
+        data: {
+          tasks: [],
+          perspective: {
+            name: perspectiveName,
+            type: 'unknown' as const,
+            filterRules: null,
+            filterRulesApplied: false
+          }
+        },
+        metadata: {
+          operation: 'query_perspective',
+          timestamp: new Date().toISOString(),
+          from_cache: false,
+          total_count: 0,
+          returned_count: 0,
+          query_time_ms: timer.toMetadata().query_time_ms || 0
+        },
+        perspectiveName: perspectiveName,
+        perspectiveType: 'unknown' as const,
+        simulatedQuery: true
+      } as QueryPerspectiveResponse;
 
       return response;
     }
@@ -159,16 +201,33 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
       skipAnalysis: 'true'
     });
 
-    const response = createListResponse(
-      'query_perspective',
-      tasksResult.data?.items || [],
-      timer.toMetadata()
-    ) as QueryPerspectiveResponse;
-
-    response.perspectiveName = perspectiveName;
-    response.perspectiveType = ['Flagged', 'Inbox', 'Forecast'].includes(perspectiveName) ? 'builtin' : 'custom';
-    response.filterRules = queryParams;
-    response.simulatedQuery = true;
+    const tasks = tasksResult.data?.items || [];
+    const perspectiveType = ['Flagged', 'Inbox', 'Forecast'].includes(perspectiveName) ? 'builtin' : 'custom';
+    
+    const response: QueryPerspectiveResponse = {
+      success: true,
+      data: {
+        tasks: tasks,
+        perspective: {
+          name: perspectiveName,
+          type: perspectiveType,
+          filterRules: queryParams,
+          filterRulesApplied: true
+        }
+      },
+      metadata: {
+        operation: 'query_perspective',
+        timestamp: new Date().toISOString(),
+        from_cache: false,
+        total_count: tasks.length,
+        returned_count: tasks.length,
+        query_time_ms: timer.toMetadata().query_time_ms || 0
+      },
+      perspectiveName: perspectiveName,
+      perspectiveType: perspectiveType,
+      filterRules: queryParams,
+      simulatedQuery: true
+    };
 
     return response;
   }
