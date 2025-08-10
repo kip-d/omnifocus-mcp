@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2025-08-10
+
+### Added
+- **Perspective Tools**: Access and query OmniFocus perspectives
+  - `list_perspectives`: Enumerate all perspectives (built-in and custom) with filter rules
+  - `query_perspective`: Get tasks matching a perspective's filters
+  - Successfully reads perspective filter rules via evaluateJavascript() bridge
+  - Supports both built-in perspectives (Flagged, Inbox, etc.) and custom perspectives
+  - Enables LLM assistants to see what users see in their perspectives
+- **Eisenhower Matrix Prompt**: New GTD prompt for inbox processing using urgent/important quadrants
+- **Project Template Research**: Documented 6 common GTD project templates for future prompt implementation
+
+### Improved
+- Added comprehensive recurrence examples to README
+- Updated FEATURE_ROADMAP with completed v1.10.0 accomplishments
+- Enhanced documentation with perspective access capabilities
+
+### Technical
+- Discovered perspectives are accessible via Omni Automation API
+- Built filter rule translator for simulating perspective queries
+- Integrated perspective tools with existing caching system
+
 ## [1.10.0] - 2025-08-10
 
 ### Added

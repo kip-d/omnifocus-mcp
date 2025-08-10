@@ -76,6 +76,10 @@ import { SetReviewScheduleTool } from './reviews/SetReviewScheduleTool.js';
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
 import { BatchTaskOperationsTool } from './tasks/BatchTaskOperationsTool.js';
 
+// Import perspective tools
+import { ListPerspectivesTool } from './perspectives/ListPerspectivesTool.js';
+import { QueryPerspectiveTool } from './perspectives/QueryPerspectiveTool.js';
+
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
@@ -154,6 +158,10 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // New consolidated tools (recommended for better LLM usage)
     new ManageReviewsTool(cache),
     new BatchTaskOperationsTool(cache),
+    
+    // Perspective tools - NEW! Access user perspectives
+    new ListPerspectivesTool(cache),
+    new QueryPerspectiveTool(cache),
     
     // Legacy review tools (deprecated but kept for backward compatibility)
     new ProjectsForReviewTool(cache),    // Deprecated: use manage_reviews with operation: "list_for_review"

@@ -9,6 +9,7 @@ import { BasePrompt } from './base.js';
 import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
 import { GTDPrinciplesPrompt } from './gtd/GTDPrinciplesPrompt.js';
+import { EisenhowerMatrixPrompt } from './gtd/eisenhower-matrix.js';
 import { TagPerformancePrompt } from './reference/TagPerformancePrompt.js';
 import { ToolDiscoveryPrompt } from './reference/ToolDiscoveryPrompt.js';
 import { CommonPatternsPrompt } from './reference/CommonPatternsPrompt.js';
@@ -27,6 +28,7 @@ export function registerPrompts(server: Server): void {
     new GTDPrinciplesPrompt(),
     new WeeklyReviewPrompt(),
     new InboxProcessingPrompt(),
+    new EisenhowerMatrixPrompt(),
 
     // Reference/Documentation Prompts
     new TagPerformancePrompt(),

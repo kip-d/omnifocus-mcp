@@ -147,7 +147,7 @@ These prompts provide guided conversations with pre-configured questions and res
 }
 ```
 
-## Available Tools (44 Total)
+## Available Tools (46 Total)
 
 ### Consolidated Tools (Recommended for AI Agents)
 
@@ -161,6 +161,8 @@ These prompts provide guided conversations with pre-configured questions and res
 **Task CRUD**: `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
 
 **Projects**: `list_projects`, `create_project`, `update_project`, `complete_project`, `delete_project`
+
+**Perspectives**: `list_perspectives`, `query_perspective` - Access user's custom perspectives and their contents
 
 **Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`
 
@@ -182,9 +184,101 @@ These prompts provide guided conversations with pre-configured questions and res
 - `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
 - `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
 
+## Recurrence Examples
+
+### Daily Task
+```javascript
+// Review inbox every morning
+create_task({
+  name: "Review OmniFocus inbox",
+  dueDate: "2025-01-15 09:00",
+  repeatRule: {
+    unit: "day",
+    steps: 1,
+    method: "fixed"  // Due again next day regardless of completion
+  }
+})
+```
+
+### Weekly on Specific Days
+```javascript
+// Team standup on Mon/Wed/Fri
+create_task({
+  name: "Team standup",
+  dueDate: "2025-01-13 10:00",  // Starting Monday
+  repeatRule: {
+    unit: "week",
+    steps: 1,
+    weekdays: ["monday", "wednesday", "friday"],
+    method: "fixed"
+  }
+})
+```
+
+### Monthly on Specific Day
+```javascript
+// Pay rent on 1st of each month
+create_task({
+  name: "Pay rent",
+  dueDate: "2025-02-01",
+  repeatRule: {
+    unit: "month",
+    steps: 1,
+    method: "fixed"
+  }
+})
+```
+
+### Monthly on Position (e.g., 2nd Tuesday)
+```javascript
+// Team retrospective on 2nd Tuesday of each month
+create_task({
+  name: "Team retrospective",
+  dueDate: "2025-01-14 14:00",
+  repeatRule: {
+    unit: "month",
+    steps: 1,
+    weekPosition: "2",  // 2nd occurrence
+    weekday: "tuesday",
+    method: "fixed"
+  }
+})
+```
+
+### After Completion
+```javascript
+// Water plants 3 days after last watering
+create_task({
+  name: "Water plants",
+  repeatRule: {
+    unit: "day",
+    steps: 3,
+    method: "start-after-completion"  // Next due 3 days after marking complete
+  }
+})
+```
+
+### With Defer Date
+```javascript
+// Quarterly review (defer 1 week before due)
+create_task({
+  name: "Quarterly business review",
+  dueDate: "2025-03-31",
+  repeatRule: {
+    unit: "month",
+    steps: 3,
+    method: "fixed",
+    deferAnother: {
+      unit: "week",
+      steps: 1  // Becomes available 1 week before due
+    }
+  }
+})
+```
+
 ## Known Limitations
 
-- **Recurrence/Repetition**: ✅ **NOW WORKING** via `evaluateJavascript()` bridge! Tasks and projects can be created with recurrence rules. The implementation uses a hybrid approach that bridges JXA to Omni Automation. See `/docs/JXA-LIMITATIONS.md` for technical details.
+- **Recurrence/Repetition**: ✅ **NOW WORKING** via `evaluateJavascript()` bridge! See examples above. Implementation uses a hybrid approach bridging JXA to Omni Automation. Technical details in `/docs/JXA-LIMITATIONS.md`.
 - **Tags**: Cannot be assigned during task creation (JXA limitation). Create task first, then update with tags.
 - **Project Movement**: Moving tasks between projects may require recreation with new ID
 - **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.

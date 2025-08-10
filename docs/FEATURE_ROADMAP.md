@@ -4,29 +4,40 @@ This document tracks feature requests from user testing and planned improvements
 
 ## Completed Features ✅
 
-### v1.8.0 (Current Development)
+### v1.10.0 (2025-08-10)
+- [x] **Task Recurrence** - Full implementation via evaluateJavascript() bridge
+  - All recurrence patterns supported (daily, weekly, monthly, yearly)
+  - Complex patterns like "2nd Tuesday of month" working
+  - Both fixed and after-completion methods
+  - Defer-another functionality for quarterly reviews
+- [x] **Project Recurrence** - Same implementation as tasks
+  - Recurring projects now fully functional
+  - Review intervals maintained on recurrence
+
+### v1.9.1 (2025-08-09)
+- [x] **Relative Date Support** - "tomorrow", "next Monday", "in 3 days"
+- [x] **Enhanced Timezone Handling** - Multiple fallback strategies
+- [x] **MCP Prompts UI Fix** - Descriptions no longer truncated in Claude Desktop
+
+### v1.9.0 (2025-08-09)
+- [x] **Project Review Settings** - Full implementation
+  - reviewInterval with unit/steps/fixed parameters
+  - nextReviewDate and lastReviewDate support
+  - Review management tools consolidated
+- [x] **Daily-First Optimizations** - Reduced default limits for faster response
+
+### v1.8.0
 - [x] Sequential/parallel support for projects
 - [x] Sequential/parallel support for tasks (action groups)
 - [x] Parent/child task relationships (create subtasks via parentTaskId)
 
 ## High Priority Features 🔴
 
-### Project Review Settings
-- [ ] Add `reviewInterval` parameter to `create_project`
-  - Support units: daily, weekly, monthly, quarterly, yearly
-  - Support step count (e.g., every 2 weeks)
-- [ ] Add `reviewInterval` to `update_project`
-- [ ] Add `nextReviewDate` parameter for initial review date
-- **Status**: Partially implemented (read-only in list_projects)
-
-### Task Recurrence Settings
-- [ ] Add `repetitionRule` parameter to `create_task`
-  - Support frequency types: daily, weekly, monthly, yearly
-  - Support interval (every N days/weeks/etc)
-  - Support specific days (e.g., every Monday, Wednesday, Friday)
-- [ ] Add `repetitionMethod` (fixed, start-after-completion, due-after-completion)
-- [ ] Update `update_task` to modify recurrence
-- **Status**: Analysis exists in list_tasks, but no creation support
+### Perspectives Access
+- [ ] `list_perspectives` - Enumerate available perspectives
+- [ ] `query_perspective` - Get tasks visible in a specific perspective
+- **Challenge**: Not exposed in JXA API, exploring Omni Automation bridge
+- **Use case**: Power users with custom GTD perspectives
 
 ## Nice-to-Have Features 🟡
 
@@ -102,5 +113,5 @@ This document tracks feature requests from user testing and planned improvements
 
 ---
 
-*Last updated: 2025-08-07*
+*Last updated: 2025-08-10*
 *Based on user testing feedback and developer analysis*
