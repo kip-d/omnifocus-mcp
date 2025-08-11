@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - 2025-08-11
+
+### Hotfix - Schema Validation for Overdue Queries
+
+Fixed validation error when using `query_tasks_by_date` with `queryType="overdue"`.
+
+### Fixed
+- Schema validation no longer requires `days` parameter for overdue queries
+- The `days` parameter now properly accepts undefined/null for non-upcoming queries
+- Error message "Number must be greater than 0" no longer appears for overdue queries
+
+### Technical Details
+The schema was incorrectly validating the `days` parameter even when it wasn't needed for overdue queries. Now properly handles conditional parameters based on query type.
+
 ## [1.14.0] - 2025-08-11
 
 ### Massive Performance Breakthrough - 75-93% Faster! 🚀

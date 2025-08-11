@@ -312,12 +312,20 @@ export const DateRangeQueryToolSchema = z.object({
     .describe('Include tasks without the specified date field (for date_range query)'),
 
   // For upcoming queries
-  days: coerceNumber()
-    .int()
-    .positive()
-    .max(365)
+  days: z.union([
+    coerceNumber().int().min(1).max(365),
+    z.undefined(),
+    z.null(),
+    z.literal('')
+  ])
+    .optional()
+    .transform(val => {
+      // Convert empty string, null, undefined to undefined
+      if (val === '' || val === null || val === undefined) return undefined;
+      return val;
+    })
     .default(7)
-    .describe('Number of days to look ahead (for upcoming query)'),
+    .describe('Number of days to look ahead (for upcoming query only, not used for overdue)'),
 
   includeToday: coerceBoolean()
     .default(true)
