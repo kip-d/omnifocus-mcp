@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-// v1.14.0: Using optimized scripts WITHOUT whose() - 7x faster!
+// v1.15.0: Using ultra-optimized scripts with faster JavaScript filtering
 import {
-  GET_TASKS_IN_DATE_RANGE_OPTIMIZED_SCRIPT,
-  GET_OVERDUE_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT,
-  GET_UPCOMING_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-optimized-v2.js';
+  GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT,
+  GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+  GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../schemas/task-schemas.js';
 
@@ -65,7 +65,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
             includeNullDates: args.includeNullDates || false,
             limit: args.limit || 100,
           };
-          script = this.omniAutomation.buildScript(GET_TASKS_IN_DATE_RANGE_OPTIMIZED_SCRIPT, { params: scriptParams });
+          script = this.omniAutomation.buildScript(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT, { params: scriptParams });
           cacheKey = `date_range_${scriptParams.dateField}_${scriptParams.startDate}_${scriptParams.endDate}_${scriptParams.includeNullDates}_${scriptParams.limit}`;
           break;
 
@@ -74,7 +74,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
             limit: args.limit || 50,
             includeCompleted: args.includeCompleted || false,
           };
-          script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT, scriptParams);
+          script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, scriptParams);
           cacheKey = `overdue_${scriptParams.includeCompleted}_${scriptParams.limit}`;
           break;
 
@@ -84,7 +84,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
             includeToday: args.includeToday !== false,
             limit: args.limit || 100,
           };
-          script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT, scriptParams);
+          script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, scriptParams);
           cacheKey = `upcoming_${scriptParams.days}_${scriptParams.includeToday}_${scriptParams.limit}`;
           break;
 
