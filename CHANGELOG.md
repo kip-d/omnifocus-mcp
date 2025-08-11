@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.2] - 2025-08-11
+
+### Emergency Rollback - Complete Hybrid Reversion 🚨
+
+This release completely reverts the hybrid architecture approach after v1.13.1 testing showed it still had unacceptable performance.
+
+### Reverted
+- **Complete removal of hybrid implementation**
+  - All tools now use original pure JXA scripts
+  - Removed all hybrid script files and imports
+  - Reverted ListTasksTool, DateRangeQueryTool, TodaysAgendaTool, ExportTasksTool
+- **Back to v1.12.0 performance characteristics**
+  - Predictable, stable performance
+  - No more iterating through all tasks unnecessarily
+  - Proven implementation that worked reliably
+
+### Technical Details
+- The hybrid approach fundamentally couldn't efficiently pre-filter tasks
+- The `evaluateJavascript()` bridge added overhead without sufficient benefit
+- JXA's `whose()` method, while limited, is still more efficient for filtering
+
+### User Testing Results That Forced Rollback
+- v1.13.1 upcoming tasks: Still 4.2s (target <1s)
+- v1.13.1 overdue tasks: Worse at 7.2s (target <1s)
+- v1.13.1 basic list: 5.5s (unacceptable)
+- Decision: Complete reversion to stable v1.12.0 approach
+
 ## [1.13.1] - 2025-08-11
 
 ### Critical Performance Fixes 🔥

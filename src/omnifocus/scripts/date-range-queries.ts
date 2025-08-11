@@ -5,11 +5,8 @@
 
 import { getAllHelpers } from './shared/helpers.js';
 
-// Export hybrid scripts for better performance
-export { 
-  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
-  GET_OVERDUE_TASKS_HYBRID_SCRIPT 
-} from './date-range-queries-hybrid.js';
+// REVERTED: Hybrid scripts removed due to critical performance issues
+// The hybrid approach caused 4-22x slower performance than original JXA
 
 /**
  * Get tasks due within a specific date range using whose()

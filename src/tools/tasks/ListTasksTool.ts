@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-// Import both hybrid and original scripts
-import { LIST_TASKS_HYBRID_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks-hybrid.js';
+// REVERTED: Using original JXA script only - hybrid approach had critical performance issues
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
@@ -39,16 +38,10 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
         }
       }
 
-      // Choose script based on whether we're searching
-      // Search can't be optimized with hybrid approach, so use original JXA
-      const useHybrid = !filter.search;
-      const scriptToUse = useHybrid ? LIST_TASKS_HYBRID_SCRIPT : LIST_TASKS_SCRIPT;
-      
-      // Execute script - pass filter with limit and skipAnalysis included
+      // Execute original JXA script - hybrid approach reverted due to performance issues
       const scriptParams = { ...filter, limit, skipAnalysis };
       this.logger.debug('Script params:', scriptParams);
-      this.logger.debug('Using hybrid:', useHybrid);
-      const script = this.omniAutomation.buildScript(scriptToUse, { filter: scriptParams });
+      const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });
       this.logger.debug('Generated script length:', script.length);
       const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
 
