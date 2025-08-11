@@ -25,7 +25,7 @@ export const GET_UPCOMING_TASKS_HYBRID_SCRIPT = `
       const startDate = includeToday ? now : new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
       
-      // Build the Omni Automation script
+      // Build the Omni Automation script  
       const omniScript = \`
         (() => {
           const startDate = new Date('\${startDate.toISOString()}');
@@ -33,38 +33,33 @@ export const GET_UPCOMING_TASKS_HYBRID_SCRIPT = `
           const limit = \${limit};
           const tasks = [];
           
-          // Use Omni Automation's flattenedTasks - MUCH faster than JXA
-          const allTasks = flattenedTasks;
+          // Use where() clause for efficient filtering in Omni Automation
+          // This is the proper way to filter in OmniJS
+          const query = flattenedTasks.where(task => {
+            return !task.completed && 
+                   task.dueDate !== null &&
+                   task.dueDate >= startDate && 
+                   task.dueDate <= endDate;
+          });
+          
           let count = 0;
           
-          for (const task of allTasks) {
-            // Skip completed tasks
-            if (task.completed) continue;
+          for (const task of query) {
+            const dueDate = task.dueDate;
             
-            // Check due date
-            if (task.dueDate) {
-              const dueDate = task.dueDate;
-              
-              // Check if in range
-              if (dueDate >= startDate && dueDate <= endDate) {
-                tasks.push({
-                  id: task.id.primaryKey,
-                  name: task.name,
-                  dueDate: dueDate.toISOString(),
-                  flagged: task.flagged,
-                  project: task.containingProject ? task.containingProject.name : null,
-                  projectId: task.containingProject ? task.containingProject.id.primaryKey : null,
-                  daysUntilDue: Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24))
-                });
-                
-                count++;
-                if (count >= limit) break;
-              }
-              
-              // Since tasks are not necessarily sorted, we can't stop early
-              // But we can stop once we have enough
-              if (count >= limit) break;
-            }
+            // Already filtered by where(), just collect the data
+            tasks.push({
+              id: task.id.primaryKey,
+              name: task.name,
+              dueDate: dueDate.toISOString(),
+              flagged: task.flagged,
+              project: task.containingProject ? task.containingProject.name : null,
+              projectId: task.containingProject ? task.containingProject.id.primaryKey : null,
+              daysUntilDue: Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24))
+            });
+            
+            count++;
+            if (count >= limit) break;
           }
           
           // Sort by due date
@@ -142,15 +137,15 @@ export const GET_OVERDUE_TASKS_HYBRID_SCRIPT = `
           const includeCompleted = \${includeCompleted};
           const tasks = [];
           
-          // Use Omni Automation's flattenedTasks
-          const allTasks = flattenedTasks;
+          // Use where() clause for efficient filtering
+          const query = flattenedTasks.where(task => {
+            if (!includeCompleted && task.completed) return false;
+            return task.dueDate !== null && task.dueDate < now;
+          });
           
-          for (const task of allTasks) {
-            // Skip completed tasks if not including them
-            if (!includeCompleted && task.completed) continue;
-            
-            // Check if overdue
-            if (task.dueDate && task.dueDate < now) {
+          for (const task of query) {
+            // Already filtered for overdue tasks
+            if (task.dueDate) {
               const daysOverdue = Math.floor((now - task.dueDate) / (1000 * 60 * 60 * 24));
               
               tasks.push({

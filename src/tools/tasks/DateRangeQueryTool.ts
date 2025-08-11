@@ -2,9 +2,11 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import {
   GET_TASKS_IN_DATE_RANGE_SCRIPT,
-  GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT,
-  GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries.js';
+import {
+  GET_OVERDUE_TASKS_FIXED_SCRIPT,
+  GET_UPCOMING_TASKS_FIXED_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries-fixed.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../schemas/task-schemas.js';
 
@@ -73,7 +75,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
             limit: args.limit || 50,
             includeCompleted: args.includeCompleted || false,
           };
-          script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_OPTIMIZED_SCRIPT, scriptParams);
+          script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_FIXED_SCRIPT, scriptParams);
           cacheKey = `overdue_${scriptParams.includeCompleted}_${scriptParams.limit}`;
           break;
 
@@ -83,7 +85,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
             includeToday: args.includeToday !== false,
             limit: args.limit || 100,
           };
-          script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT, scriptParams);
+          script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_FIXED_SCRIPT, scriptParams);
           cacheKey = `upcoming_${scriptParams.days}_${scriptParams.includeToday}_${scriptParams.limit}`;
           break;
 

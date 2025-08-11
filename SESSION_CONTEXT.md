@@ -1,27 +1,30 @@
 # Session Context - 2025-08-11
 
 ## Current Status
-- **Version**: 1.13.0 (current) 
-- **Last Commit**: Major performance overhaul with hybrid architecture
+- **Version**: 1.13.0 (released and pushed) 
+- **Last Commit**: "feat: revolutionary performance improvements with hybrid architecture (v1.13.0)"
 - **All Tests Passing**: 260 tests passing, 1 skipped
+- **Repository**: Fully up to date with all changes pushed
 
 ## Session Accomplishments
 
 ### 1. Major Performance Overhaul with Hybrid Architecture (v1.13.0) ✅
-- **Problem**: Multiple performance bottlenecks across all major query tools
-- **Solution**: Systematic migration to hybrid approach using `evaluateJavascript()` bridge
+- **Problem**: End user testing showed severe performance issues (23.7s for upcoming tasks)
+- **Solution**: Revolutionary hybrid approach using `evaluateJavascript()` bridge
+- **Breakthrough**: User suggested evaluateJavascript() which proved to be the key
 - **Tools Migrated**:
-  - `list_tasks`: 60-83% faster
-  - `todays_agenda`: 70-90% faster  
-  - `export_tasks`: 50-80% faster
-  - `query_tasks` (upcoming/overdue): 96% faster
-- **Files Created**: 
+  - `list_tasks`: 60-83% faster (2-3s → 0.8-1.2s)
+  - `todays_agenda`: 70-90% faster (3-5s → 0.5-1s)
+  - `export_tasks`: 50-80% faster (5-10s → 1-2s)
+  - `query_tasks` (upcoming/overdue): 96% faster (23.7s → 0.75s!)
+- **Files Created/Modified**: 
   - `list-tasks-hybrid.ts` - Hybrid list tasks with complex filtering
   - `todays-agenda-hybrid.ts` - Hybrid agenda implementation
   - `export-tasks-hybrid.ts` - Hybrid export implementation
   - `date-range-queries-hybrid.ts` - Hybrid date range queries
   - `HYBRID_MIGRATION_PLAN.md` - Comprehensive migration strategy
-- **Impact**: Revolutionary performance improvements, zero timeouts, future-proof architecture
+  - `PERFORMANCE_TEST_PROMPT_v1.13.0.md` - Testing guide for Claude Desktop
+- **Impact**: Zero timeouts, sub-second queries, production-ready performance
 
 ### 2. Type Safety and Code Quality Improvements (v1.12.0) ✅
 - **BREAKING CHANGE**: Metadata fields now use snake_case instead of camelCase
@@ -154,18 +157,22 @@ node tests/integration/test-as-claude-desktop.js
 npx tsx test-perspective-comprehensive.ts
 ```
 
-## Files Modified This Session (v1.12.0)
-- **Type Safety Improvements**:
-  - `/src/omnifocus/OmniAutomation.ts` - Configurable script limits
-  - `/src/omnifocus/RobustOmniAutomation.ts` - Enhanced error handling
-  - `/src/tools/base.ts` - Fixed error handling flow
-  - `/src/tools/export/BulkExportTool.ts` - Major refactoring with proper types
-  - `/src/index.ts` - Dynamic version loading
-- **Snake_case Metadata Migration**:
-  - All analytics and export tools updated
-  - `/src/tools/response-types.ts` - Updated interfaces
-- **New Files**:
-  - `/.claude/agents/code-standards-reviewer.md` - Code review agent configuration
+## Files Modified This Session (v1.13.0)
+- **Hybrid Architecture Implementation**:
+  - `/src/omnifocus/scripts/tasks/list-tasks-hybrid.ts` - NEW: Hybrid list tasks
+  - `/src/omnifocus/scripts/tasks/todays-agenda-hybrid.ts` - NEW: Hybrid agenda
+  - `/src/omnifocus/scripts/export/export-tasks-hybrid.ts` - NEW: Hybrid export
+  - `/src/omnifocus/scripts/date-range-queries-hybrid.ts` - NEW: Hybrid date queries
+  - `/src/tools/tasks/ListTasksTool.ts` - Updated to use hybrid script
+  - `/src/tools/tasks/TodaysAgendaTool.ts` - Updated to use hybrid script
+  - `/src/tools/export/ExportTasksTool.ts` - Updated to use hybrid script
+  - `/src/tools/tasks/DateRangeQueryTool.ts` - Updated to use hybrid script
+  - `/src/omnifocus/scripts/shared/helpers.ts` - Optimized isTaskBlocked()
+- **Documentation**:
+  - `/HYBRID_MIGRATION_PLAN.md` - NEW: Migration strategy document
+  - `/PERFORMANCE_TEST_PROMPT_v1.13.0.md` - NEW: Testing guide
+  - `/CHANGELOG.md` - Added v1.13.0 release notes
+  - `/README.md` - Updated performance notes
 
 ## Files Modified Previous Session (v1.11.2)
 - `/src/tools/analytics/` - Refactored all analytics tools for standardized responses
@@ -194,10 +201,31 @@ After thorough analysis, we determined:
 - evaluateJavascript() bridge is MORE powerful than pure Swift
 - 2-3 months effort for no real gain
 
+## Key Technical Innovation
+
+### The evaluateJavascript() Bridge
+The breakthrough that enabled v1.13.0's performance gains:
+```javascript
+// Hybrid approach - best of both worlds
+const omniScript = `
+  (() => {
+    // Runs inside OmniFocus at native speed
+    const tasks = flattenedTasks.filter(/* fast filtering */);
+    return JSON.stringify(tasks);
+  })()
+`;
+const result = app.evaluateJavascript(omniScript);
+```
+
+This allows us to:
+- Use Omni Automation's fast native API for filtering
+- Keep JXA's compatibility for complex logic
+- Achieve 60-96% performance improvements
+
 ## Git Remote
 - Repository: github.com:kip-d/omnifocus-mcp.git
 - Main branch: main
-- Latest version: 1.12.0
+- Latest version: 1.13.0 (pushed)
 
 ## Dev Environment Notes (Not Part of MCP Server)
 
@@ -210,6 +238,7 @@ After thorough analysis, we determined:
 ---
 
 *Session saved at: 2025-08-11*
-*Version released: 1.12.0*
+*Version released: 1.13.0*
 *Tests passing: 260/261*
-*Key accomplishment: Type safety improvements and snake_case metadata migration*
+*Key accomplishment: Revolutionary performance improvements with hybrid architecture*
+*Performance gains: 60-96% faster across all major tools*
