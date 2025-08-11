@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export.js';
-import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { ExportProjectsResponse } from '../response-types.js';
 import { ExportProjectsSchema } from '../schemas/export-schemas.js';
 
 export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
@@ -9,7 +10,7 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
   description = 'Export all projects to JSON/CSV. Format: json|csv (default json). Set includeStats=true for task metrics per project (slower). Returns file content for saving.';
   schema = ExportProjectsSchema;
 
-  async executeValidated(args: z.infer<typeof ExportProjectsSchema>): Promise<any> {
+  async executeValidated(args: z.infer<typeof ExportProjectsSchema>): Promise<ExportProjectsResponse> {
     const timer = new OperationTimer();
 
     try {
@@ -29,28 +30,23 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
       }>(script);
 
       if (result.error) {
-        return createErrorResponse(
-          'export_projects',
-          'SCRIPT_ERROR',
-          result.message || 'Failed to export projects',
-          { details: result },
-          timer.toMetadata(),
-        );
+        return this.handleError(new Error(result.message || 'Failed to export projects'));
       }
 
       return createSuccessResponse(
         'export_projects',
         {
-          format: result.format,
-          count: result.count,
+          format: result.format as 'json' | 'csv' | 'markdown',
           data: result.data,
+          count: result.count,
+          includeStats,
         },
         {
           ...timer.toMetadata(),
-          exported_at: new Date().toISOString(),
+          export_date: new Date().toISOString(),
           include_stats: includeStats,
-          format: format,
-        },
+          project_count: result.count,
+        }
       );
     } catch (error) {
       return this.handleError(error);

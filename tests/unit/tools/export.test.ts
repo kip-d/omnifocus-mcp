@@ -21,21 +21,32 @@ vi.mock('../../../src/utils/logger.js', () => ({
 }));
 vi.mock('../../../src/utils/response-format.js', () => ({
   createSuccessResponse: vi.fn((operation, data, metadata) => ({
-    operation,
     success: true,
     data,
-    metadata,
+    metadata: {
+      operation,
+      timestamp: new Date().toISOString(),
+      from_cache: false,
+      ...metadata,
+    },
   })),
   createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
-    operation,
-    error: true,
-    code,
-    message,
-    details,
-    metadata,
+    success: false,
+    data: null,
+    metadata: {
+      operation,
+      timestamp: new Date().toISOString(),
+      from_cache: false,
+      ...metadata,
+    },
+    error: {
+      code,
+      message,
+      details,
+    },
   })),
   OperationTimer: vi.fn().mockImplementation(() => ({
-    toMetadata: vi.fn(() => ({ duration_ms: 100 })),
+    toMetadata: vi.fn(() => ({ query_time_ms: 100 })),
   })),
 }));
 
@@ -94,7 +105,8 @@ describe('Export Tools', () => {
             fields: undefined,
           }
         );
-        expect(result.format).toBe('json');
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('json');
       });
 
       it('should validate export format correctly', async () => {
@@ -107,8 +119,9 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'csv' });
 
-        expect(result.format).toBe('csv');
-        expect(result.data).toContain('id,name');
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('csv');
+        expect(result.data.data).toContain('id,name');
       });
 
       it('should reject invalid export formats', async () => {
@@ -180,7 +193,8 @@ describe('Export Tools', () => {
             fields: ['id', 'name', 'project', 'tags'],
           }
         );
-        expect(result.data).toContain('id,name,project,tags');
+        expect(result.success).toBe(true);
+        expect(result.data.data).toContain('id,name,project,tags');
       });
 
       it('should validate field names correctly', async () => {
@@ -228,8 +242,9 @@ describe('Export Tools', () => {
           fields: ['id', 'name', 'project', 'tags']
         });
 
-        expect(result.count).toBe(1);
-        expect(result.data).toContain('Urgent Work Task');
+        expect(result.success).toBe(true);
+        expect(result.data.count).toBe(1);
+        expect(result.data.data).toContain('Urgent Work Task');
       });
     });
 
@@ -248,12 +263,13 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'json' });
 
-        expect(result.format).toBe('json');
-        expect(result.count).toBe(2);
-        expect(result.data).toBe(JSON.stringify(mockTasks));
-        expect(result.metadata.exportedAt).toBeDefined();
-        expect(result.metadata.filters).toEqual({});
-        expect(result.metadata.fields).toBe('default');
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('json');
+        expect(result.data.count).toBe(2);
+        expect(result.data.data).toBe(JSON.stringify(mockTasks));
+        expect(result.metadata.export_date).toBeDefined();
+        expect(result.metadata.filters_applied).toBe(false);
+        expect(result.metadata.fields_specified).toBe(false);
       });
 
       it('should handle CSV format correctly', async () => {
@@ -267,12 +283,13 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'csv' });
 
-        expect(result.format).toBe('csv');
-        expect(result.count).toBe(2);
-        expect(result.data).toBe(csvData);
-        expect(result.data).toContain('id,name,completed');
-        expect(result.data).toContain('"Task 1"');
-        expect(result.data).toContain('"Task 2"');
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('csv');
+        expect(result.data.count).toBe(2);
+        expect(result.data.data).toBe(csvData);
+        expect(result.data.data).toContain('id,name,completed');
+        expect(result.data.data).toContain('"Task 1"');
+        expect(result.data.data).toContain('"Task 2"');
       });
 
       it('should handle Markdown format correctly', async () => {
@@ -286,12 +303,13 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'markdown' });
 
-        expect(result.format).toBe('markdown');
-        expect(result.count).toBe(2);
-        expect(result.data).toBe(markdownData);
-        expect(result.data).toContain('# Tasks Export');
-        expect(result.data).toContain('- [ ] Task 1');
-        expect(result.data).toContain('- [x] Task 2');
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('markdown');
+        expect(result.data.count).toBe(2);
+        expect(result.data.data).toBe(markdownData);
+        expect(result.data.data).toContain('# Tasks Export');
+        expect(result.data.data).toContain('- [ ] Task 1');
+        expect(result.data.data).toContain('- [x] Task 2');
       });
 
       it('should preserve data integrity across formats', async () => {
@@ -312,7 +330,8 @@ describe('Export Tools', () => {
         });
 
         const jsonResult = await tool.execute({ format: 'json' });
-        const parsedJson = JSON.parse(jsonResult.data);
+        expect(jsonResult.success).toBe(true);
+        const parsedJson = JSON.parse(jsonResult.data.data);
         expect(parsedJson[0]).toEqual(taskData);
 
         // Test CSV 
@@ -324,8 +343,9 @@ describe('Export Tools', () => {
         });
 
         const csvResult = await tool.execute({ format: 'csv' });
-        expect(csvResult.data).toContain('Complex Task with ""Quotes""');
-        expect(csvResult.data).toContain('Project with Spaces');
+        expect(csvResult.success).toBe(true);
+        expect(csvResult.data.data).toContain('Complex Task with ""Quotes""');
+        expect(csvResult.data.data).toContain('Project with Spaces');
       });
 
       it('should handle empty results correctly', async () => {
@@ -340,9 +360,10 @@ describe('Export Tools', () => {
           filter: { completed: true, limit: 100 }
         });
 
-        expect(result.count).toBe(0);
-        expect(result.data).toBe('[]');
-        expect(result.metadata.filters).toEqual({ completed: true, limit: 100 });
+        expect(result.success).toBe(true);
+        expect(result.data.count).toBe(0);
+        expect(result.data.data).toBe('[]');
+        expect(result.metadata.filters_applied).toBe(true);
       });
     });
 
@@ -356,8 +377,8 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'json' });
 
-        expect(result.error).toBe(true);
-        expect(result.message).toBe('Script execution failed');
+        expect(result.success).toBe(false);
+        expect(result.error.message).toBe('Script execution failed');
       });
 
       it('should handle automation errors gracefully', async () => {
@@ -366,11 +387,10 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'csv' });
 
-        // Should return an error response (exact format may vary based on handleError implementation)
+        // Should return an error response
         expect(result).toBeDefined();
-        // Check that it's an error by looking for error properties or non-success indicators
-        const isError = result.success === false || result.error || result.operation === 'export_tasks';
-        expect(isError).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
       });
 
       it('should validate projectId format', async () => {
@@ -460,6 +480,7 @@ describe('Export Tools', () => {
           }
         );
 
+        expect(result.success).toBe(true);
         const projects = JSON.parse(result.data.data);
         expect(projects[0]).toHaveProperty('stats');
         expect(projects[0].stats.totalTasks).toBe(15);
@@ -501,12 +522,12 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'json' });
 
+        expect(result.success).toBe(true);
         expect(result.data.format).toBe('json');
         expect(result.data.count).toBe(2);
         expect(result.data.data).toBe(JSON.stringify(mockProjects));
-        expect(result.metadata.exported_at).toBeDefined();
+        expect(result.metadata.export_date).toBeDefined();
         expect(result.metadata.include_stats).toBe(false);
-        expect(result.metadata.format).toBe('json');
       });
 
       it('should handle CSV format correctly', async () => {
@@ -520,6 +541,7 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'csv' });
 
+        expect(result.success).toBe(true);
         expect(result.data.format).toBe('csv');
         expect(result.data.count).toBe(2);
         expect(result.data.data).toBe(csvData);
@@ -551,6 +573,7 @@ describe('Export Tools', () => {
           includeStats: true,
         });
 
+        expect(result.success).toBe(true);
         const projects = JSON.parse(result.data.data);
         expect(projects[0].stats).toBeDefined();
         expect(projects[0].stats.totalTasks).toBe(25);
@@ -575,6 +598,7 @@ describe('Export Tools', () => {
         });
 
         const result = await tool.execute({ format: 'json' });
+        expect(result.success).toBe(true);
         const projects = JSON.parse(result.data.data);
         expect(projects[0]).toEqual(complexProject);
       });
@@ -589,6 +613,7 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'json' });
 
+        expect(result.success).toBe(true);
         expect(result.data.count).toBe(0);
         expect(result.data.data).toBe('[]');
       });
@@ -603,6 +628,7 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ includeStats: true });
 
+        expect(result.success).toBe(true);
         // Should include metadata indicating stats were included
         expect(result.metadata.include_stats).toBe(true);
         // The description mentions this is slower, so we verify the flag is tracked
@@ -616,6 +642,7 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ includeStats: false });
 
+        expect(result.success).toBe(true);
         expect(result.metadata.include_stats).toBe(false);
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
@@ -634,10 +661,9 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'json' });
 
-        expect(result.error).toBe(true);
-        expect(result.code).toBe('SCRIPT_ERROR');
-        expect(result.message).toBe('Failed to access projects');
-        expect(result.metadata.duration_ms).toBeDefined();
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBeDefined();
+        expect(result.error.message).toBe('Failed to access projects');
       });
 
       it('should handle automation errors gracefully', async () => {
@@ -646,11 +672,10 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({ format: 'csv' });
 
-        // Should return an error response (exact format may vary based on handleError implementation)
+        // Should return an error response
         expect(result).toBeDefined();
-        // Check that it's an error by looking for error properties or non-success indicators
-        const isError = result.success === false || result.error || result.operation === 'export_projects';
-        expect(isError).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
       });
 
       it('should validate format parameter', async () => {
@@ -673,11 +698,11 @@ describe('Export Tools', () => {
           includeStats: true,
         });
 
+        expect(result.success).toBe(true);
         expect(result.metadata).toBeDefined();
-        expect(result.metadata.duration_ms).toBeDefined();
-        expect(result.metadata.exported_at).toBeDefined();
+        expect(result.metadata.query_time_ms).toBeDefined();
+        expect(result.metadata.export_date).toBeDefined();
         expect(result.metadata.include_stats).toBe(true);
-        expect(result.metadata.format).toBe('csv');
       });
 
       it('should use correct operation timer', async () => {
@@ -688,8 +713,9 @@ describe('Export Tools', () => {
 
         const result = await tool.execute({});
 
+        expect(result.success).toBe(true);
         // OperationTimer should be used and provide metadata
-        expect(result.metadata.duration_ms).toBeDefined();
+        expect(result.metadata.query_time_ms).toBeDefined();
       });
     });
   });
@@ -706,9 +732,10 @@ describe('Export Tools', () => {
       const tasksResult = await tasksTool.execute({ format: 'json' });
       const projectsResult = await projectsTool.execute({ format: 'json' });
 
-      expect(tasksResult).toHaveProperty('error');
-      expect(projectsResult).toHaveProperty('error'); 
-      expect(tasksResult.message).toBe(projectsResult.message);
+      expect(tasksResult.success).toBe(false);
+      expect(projectsResult.success).toBe(false);
+      expect(tasksResult.error).toBeDefined();
+      expect(projectsResult.error).toBeDefined();
     });
 
     it('should use consistent format validation', async () => {
@@ -741,10 +768,12 @@ describe('Export Tools', () => {
       const tasksResult = await tasksTool.execute({});
       const projectsResult = await projectsTool.execute({});
 
+      expect(tasksResult.success).toBe(true);
+      expect(projectsResult.success).toBe(true);
       expect(tasksResult.metadata).toBeDefined();
       expect(projectsResult.metadata).toBeDefined();
-      expect(tasksResult.metadata.exportedAt).toBeDefined();
-      expect(projectsResult.metadata.exported_at).toBeDefined();
+      expect(tasksResult.metadata.export_date).toBeDefined();
+      expect(projectsResult.metadata.export_date).toBeDefined();
     });
   });
 });

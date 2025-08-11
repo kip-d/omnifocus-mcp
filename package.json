@@ -21,6 +21,8 @@
     "test:e2e": "node tests/e2e/claude-desktop-protocol.test.ts",
     "test:all": "npm run test && npm run test:integration",
     "lint": "eslint src --ext .ts",
+    "lint:strict": "eslint src --ext .ts --config .eslintrc.mcp.json",
+    "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [

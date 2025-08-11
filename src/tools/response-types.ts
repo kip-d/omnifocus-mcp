@@ -223,31 +223,20 @@ export interface OverdueAnalysisResponseData {
 
 export type OverdueAnalysisResponse = StandardResponse<OverdueAnalysisResponseData>;
 
-// Export tool responses
+// Export tool responses - simplified structure for file content
 export interface ExportTasksResponseData {
-  export: {
-    format: 'json' | 'csv' | 'taskpaper';
-    data: string | object;
-    metadata: {
-      exportDate: string;
-      taskCount: number;
-      format: string;
-    };
-  };
+  format: 'json' | 'csv' | 'markdown';
+  data: string | object;
+  count: number;
 }
 
 export type ExportTasksResponse = StandardResponse<ExportTasksResponseData>;
 
 export interface ExportProjectsResponseData {
-  export: {
-    format: 'json' | 'csv' | 'markdown';
-    data: string | object;
-    metadata: {
-      exportDate: string;
-      projectCount: number;
-      format: string;
-    };
-  };
+  format: 'json' | 'csv' | 'markdown';
+  data: string | object;
+  count: number;
+  includeStats?: boolean;
 }
 
 export type ExportProjectsResponse = StandardResponse<ExportProjectsResponseData>;

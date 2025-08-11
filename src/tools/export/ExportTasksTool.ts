@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export.js';
+import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { ExportTasksResponse } from '../response-types.js';
 import { ExportTasksSchema } from '../schemas/export-schemas.js';
 
 export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
@@ -8,7 +10,8 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
   description = 'Export tasks to JSON/CSV/Markdown with filtering. Format: json|csv|markdown. Apply any list_tasks filters. Fields: id, name, note, project, tags, deferDate, dueDate, completed, completionDate, flagged, estimated, created/createdDate, modified/modifiedDate. Returns file content for saving.';
   schema = ExportTasksSchema;
 
-  async executeValidated(args: z.infer<typeof ExportTasksSchema>): Promise<any> {
+  async executeValidated(args: z.infer<typeof ExportTasksSchema>): Promise<ExportTasksResponse> {
+    const timer = new OperationTimer();
     try {
       const { format = 'json', filter = {}, fields } = args;
 
@@ -27,22 +30,24 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
       }>(script);
 
       if (result.error) {
-        return {
-          error: true,
-          message: result.message,
-        };
+        return this.handleError(new Error(result.message || 'Failed to export tasks'));
       }
 
-      return {
-        format: result.format,
-        count: result.count,
-        data: result.data,
-        metadata: {
-          exportedAt: new Date().toISOString(),
-          filters: filter,
-          fields: fields || 'default',
+      return createSuccessResponse(
+        'export_tasks',
+        {
+          format: result.format as 'json' | 'csv' | 'markdown',
+          data: result.data,
+          count: result.count,
         },
-      };
+        {
+          ...timer.toMetadata(),
+          export_date: new Date().toISOString(),
+          filters_applied: Object.keys(filter).length > 0,
+          fields_specified: !!fields,
+          task_count: result.count,
+        }
+      );
     } catch (error) {
       return this.handleError(error);
     }

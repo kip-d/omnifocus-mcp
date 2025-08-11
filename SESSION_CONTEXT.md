@@ -1,20 +1,39 @@
 # Session Context - 2025-08-11
 
 ## Current Status
-- **Version**: 1.11.1 (just released)
-- **Last Commit**: fix: standardize perspective query response format (v1.11.1)
-- **All Tests Passing**: 249 tests passing, 1 skipped
+- **Version**: 1.11.2 (just released)
+- **Last Commit**: feat: enforce code consistency with standardized responses (v1.11.2)
+- **All Tests Passing**: 260 tests passing, 1 skipped
 
 ## Session Accomplishments
 
-### 1. Fixed Query Perspective Integration Issues (v1.11.1) ✅
+### 1. Code Consistency Refactoring (v1.11.2) ✅
+- **Refactored Analytics Tools**: ProductivityStatsTool, TaskVelocityTool, OverdueAnalysisTool now use standardized response format
+- **Refactored Export Tools**: ExportTasksTool, ExportProjectsTool, BulkExportTool with simplified response structure
+- **Created CODING_STANDARDS.md**: Comprehensive documentation of all coding patterns
+- **Added Consistency Tests**: New response-format-consistency.test.ts ensures all tools follow standards
+- **ESLint Enforcement**: Created .eslintrc.mcp.json and custom rules to prevent future inconsistencies
+- **Fixed the philosophy**: "don't fix the tests, fix the code that is failing the tests"
+
+### 2. Created OmniFocus Tasks for Project Template Research ✅
+- Added 8 tasks with links to research resources:
+  - OmniGroup Forum examples
+  - Reddit GTD discussions
+  - Productivityist templates
+  - Doist template guide
+  - Todoist project templates
+  - Process Street templates
+  - ProjectManager.com templates
+  - Zenkit project management templates
+
+### 3. Fixed Query Perspective Integration Issues (v1.11.1) ✅
 - **Response Format Standardization**: Changed from `data.items` to `data.tasks` for consistency
 - **Added Structured Perspective Data**: Response now includes `data.perspective` object
 - **Improved Error Handling**: Properly handles non-existent perspectives
 - **Fixed Integration Test Timeouts**: Reduced from 30s to ~7s typical response time
 - **Type Safety**: Added proper TypeScript interfaces for perspective responses
 
-### 2. Previous: Perspective Tools Implementation (v1.11.0) ✅
+### 4. Previous: Perspective Tools Implementation (v1.11.0) ✅
 - **list_perspectives**: Enumerate all perspectives (built-in and custom) with filter rules
 - **query_perspective**: Get tasks matching perspective filters  
 - Successfully discovered perspective access via `evaluateJavascript()` bridge
@@ -22,24 +41,24 @@
 - Enables LLM to see what users see in their perspectives
 - Full collaborative task processing now possible
 
-### 2. Eisenhower Matrix Prompt ✅
+### 5. Eisenhower Matrix Prompt ✅
 - Added new GTD prompt for inbox processing
 - Uses urgent/important quadrants for task categorization
 - Integrated with MCP prompts system
 
-### 3. Project Template Research ✅
+### 6. Project Template Research ✅
 - Documented 6 comprehensive GTD project templates
 - Client projects, product launches, event planning, home improvement, learning, travel
 - Ready for future prompt implementation
 
-### 4. Documentation Improvements ✅
+### 7. Documentation Improvements ✅
 - Added recurrence examples to README
 - Updated FEATURE_ROADMAP with v1.10.0 accomplishments
 - Created PERSPECTIVE-ACCESS-DISCOVERY.md documenting the breakthrough
 - Created JXA-CAPABILITIES-RESEARCH.md for future reference
 - Created SWIFT-VS-JXA-ANALYSIS.md explaining why to stay with JXA
 
-### 5. Claude Code Status Line Enhancement
+### 8. Claude Code Status Line Enhancement
 - Fixed status line to show context percentage before auto-compact
 - Script now properly calls `bun x ccusage statusline`
 - Shows both external token tracking and internal context usage
@@ -72,10 +91,11 @@ perspective.archivedFilterRules // The actual filter logic!
 - Successfully handles 30+ perspectives
 
 ## Testing Results
-- Unit tests: 249 passing ✅
+- Unit tests: 260 passing ✅
 - Perspective enumeration: 30 perspectives found ✅
 - Tools registered and available ✅
 - Direct JXA scripts working ✅
+- Code consistency tests: All tools follow standardized patterns ✅
 
 ## Environment Details
 - Node.js 18+
@@ -105,12 +125,15 @@ npx tsx test-perspective-comprehensive.ts
 ```
 
 ## Files Modified This Session
-- `/src/tools/perspectives/` - New perspective tools
-- `/src/omnifocus/scripts/perspectives.ts` - Perspective scripts
-- `/src/prompts/gtd/eisenhower-matrix.ts` - New prompt
-- `/README.md` - Added recurrence examples
-- `/CHANGELOG.md` - Version 1.11.0 notes
-- `/docs/FEATURE_ROADMAP.md` - Updated accomplishments
+- `/src/tools/analytics/` - Refactored all analytics tools for standardized responses
+- `/src/tools/export/` - Refactored all export tools for consistent structure
+- `/src/tools/response-types.ts` - Added comprehensive type definitions
+- `/tests/unit/response-format-consistency.test.ts` - New consistency tests
+- `/CODING_STANDARDS.md` - New comprehensive coding standards documentation
+- `/.eslintrc.mcp.json` - New ESLint configuration for pattern enforcement
+- `/eslint-rules/index.js` - Custom ESLint rules for MCP patterns
+- `/package.json` - Version bump to 1.11.2
+- `/CHANGELOG.md` - Version 1.11.2 notes
 
 ## Important Context
 
@@ -133,7 +156,7 @@ After thorough analysis, we determined:
 ## Git Remote
 - Repository: github.com:kip-d/omnifocus-mcp.git
 - Main branch: main
-- Latest version: 1.11.0
+- Latest version: 1.11.2
 
 ## Dev Environment Notes (Not Part of MCP Server)
 
@@ -146,6 +169,6 @@ After thorough analysis, we determined:
 ---
 
 *Session saved at: 2025-08-11*
-*Version released: 1.11.1*
-*Tests passing: 249/250*
-*Key fix: Perspective response format standardization*
+*Version released: 1.11.2*
+*Tests passing: 260/261*
+*Key accomplishment: Code consistency refactoring with ESLint enforcement*

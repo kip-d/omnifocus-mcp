@@ -73,9 +73,10 @@ describe('Analytics Tools', () => {
           includeCompleted: true,
         });
 
-        expect(result).toHaveProperty('period', 'week');
-        expect(result).toHaveProperty('groupBy', 'project');
-        expect(result.from_cache).toBe(false);
+        expect(result.success).toBe(true);
+        expect(result.metadata).toHaveProperty('period', 'week');
+        expect(result.metadata).toHaveProperty('group_by', 'project');
+        expect(result.metadata.from_cache).toBe(false);
       });
 
       it('should reject invalid period values', async () => {
@@ -115,18 +116,17 @@ describe('Analytics Tools', () => {
     describe('caching behavior', () => {
       it('should return cached data when available', async () => {
         const cachedData = {
-          period: 'week',
           stats: { cached: true },
-          summary: { completionRate: 0.75 },
-          trends: {},
+          summary: { completionRate: 0.75 }
         };
         
         mockCache.get.mockReturnValue(cachedData);
 
         const result = await tool.execute({ period: 'week' });
 
-        expect(result.from_cache).toBe(true);
-        expect(result.stats).toEqual({ cached: true });
+        expect(result.success).toBe(true);
+        expect(result.metadata.from_cache).toBe(true);
+        expect(result.data.stats).toEqual({ cached: true });
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
@@ -165,16 +165,17 @@ describe('Analytics Tools', () => {
 
         const result = await tool.execute({ period: 'today' });
 
+        expect(result.success).toBe(true);
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
           'productivity_today_project_true',
           {
-            period: 'today',
-            groupBy: 'project',
-            stats: { completed: 25, created: 30 },
-            summary: { completionRate: 0.83 },
-            trends: { direction: 'up' },
-            from_cache: false,
+            stats: { 
+              completed: 25, 
+              created: 30,
+              trends: { direction: 'up' }
+            },
+            summary: { completionRate: 0.83 }
           }
         );
       });
@@ -192,9 +193,10 @@ describe('Analytics Tools', () => {
 
         const result = await tool.execute({ period: 'today' });
 
-        expect(result.summary.completionRate).toBe(0);
-        expect(result.summary.totalCompleted).toBe(0);
-        expect(result.summary.totalCreated).toBe(0);
+        expect(result.success).toBe(true);
+        expect(result.data.summary.completionRate).toBe(0);
+        expect(result.data.summary.totalCompleted).toBe(0);
+        expect(result.data.summary.totalCreated).toBe(0);
       });
 
       it('should handle script errors gracefully', async () => {
@@ -207,8 +209,9 @@ describe('Analytics Tools', () => {
 
         const result = await tool.execute({ period: 'week' });
 
-        expect(result.error).toBe(true);
-        expect(result.message).toBe('Script execution failed');
+        expect(result.success).toBe(false);
+        expect(result.error).toBeDefined();
+        expect(result.error.message).toContain('Script execution failed');
       });
 
       it('should handle all groupBy options', async () => {
@@ -279,7 +282,9 @@ describe('Analytics Tools', () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          velocity: {}, throughput: {}, breakdown: {}, projections: {}
+          averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
+          completionRates: { overall: 0, byProject: {}, byTag: {} },
+          velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' }
         });
 
         await tool.execute({
@@ -300,7 +305,9 @@ describe('Analytics Tools', () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          velocity: {}, throughput: {}, breakdown: {}, projections: {}
+          averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
+          completionRates: { overall: 0, byProject: {}, byTag: {} },
+          velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' }
         });
 
         await tool.execute({ period: 'day' });
@@ -323,13 +330,16 @@ describe('Analytics Tools', () => {
 
         const result = await tool.execute({ period: 'week' });
 
+        expect(result.success).toBe(true);
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
           expect.any(String),
           expect.objectContaining({
-            period: 'week',
-            velocity: { current: 15 },
-            from_cache: false,
+            stats: expect.objectContaining({
+              velocity: expect.any(Object),
+              averageTimeToComplete: expect.any(Object),
+              completionRates: expect.any(Object)
+            })
           })
         );
       });
@@ -340,47 +350,47 @@ describe('Analytics Tools', () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
+          averageTimeToComplete: {
+            overall: 10.5,
+            byProject: { work: 8, personal: 4 },
+            byTag: {}
+          },
+          completionRates: {
+            overall: 0.85,
+            byProject: { work: 0.9, personal: 0.8 },
+            byTag: {}
+          },
           velocity: {
-            current: 12,
-            average: 10.5,
-            trend: 'increasing',
-          },
-          throughput: {
+            tasksPerDay: 12,
             tasksPerWeek: 42,
-          },
-          breakdown: {
-            byProject: { work: 8, personal: 4 }
-          },
-          projections: {
-            nextWeek: 13,
-            confidence: 0.85,
+            trend: 'increasing',
           },
         });
 
         const result = await tool.execute({ period: 'week' });
 
-        expect(result.velocity.current).toBe(12);
-        expect(result.velocity.average).toBe(10.5);
-        expect(result.velocity.trend).toBe('increasing');
-        expect(result.throughput.tasksPerWeek).toBe(42);
-        expect(result.breakdown.byProject.work).toBe(8);
-        expect(result.projections.nextWeek).toBe(13);
+        expect(result.success).toBe(true);
+        expect(result.data.stats.velocity.tasksPerDay).toBe(12);
+        expect(result.data.stats.velocity.tasksPerWeek).toBe(42);
+        expect(result.data.stats.velocity.trend).toBe('increasing');
+        expect(result.data.stats.completionRates.overall).toBe(0.85);
+        expect(result.data.stats.averageTimeToComplete.overall).toBe(10.5);
       });
 
       it('should handle empty velocity data', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          velocity: { current: 0, average: 0 },
-          throughput: {},
-          breakdown: {},
-          projections: {},
+          averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
+          completionRates: { overall: 0, byProject: {}, byTag: {} },
+          velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' },
         });
 
         const result = await tool.execute({ period: 'day' });
 
-        expect(result.velocity.current).toBe(0);
-        expect(result.velocity.average).toBe(0);
+        expect(result.success).toBe(true);
+        expect(result.data.stats.velocity.tasksPerDay).toBe(0);
+        expect(result.data.stats.averageTimeToComplete.overall).toBe(0);
       });
     });
   });
@@ -473,42 +483,49 @@ describe('Analytics Tools', () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          summary: { totalOverdue: 12 },
+          summary: { totalOverdue: 12, overduePercentage: 0.24, averageDaysOverdue: 8, oldestOverdueDate: '2024-12-01' },
           overdueTasks: [],
-          patterns: { mostCommonProject: 'Work' },
+          patterns: [{ type: 'project', value: 'Work', count: 8, percentage: 66.7 }],
           recommendations: ['Prioritize old tasks'],
           groupedAnalysis: {},
         });
 
         const result = await tool.execute({ groupBy: 'project' });
 
+        expect(result.success).toBe(true);
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
           expect.any(String),
           expect.objectContaining({
-            summary: { totalOverdue: 12 },
-            patterns: { mostCommonProject: 'Work' },
-            from_cache: false,
+            stats: expect.objectContaining({
+              summary: expect.objectContaining({ totalOverdue: 12 }),
+              patterns: expect.any(Array),
+              insights: expect.any(Array)
+            }),
+            summary: expect.any(Object)
           })
         );
       });
 
       it('should return cached overdue analysis when available', async () => {
         const cachedData = {
-          summary: { totalOverdue: 8 },
-          overdueTasks: [{ id: '1', name: 'Old task' }],
-          patterns: { cached: true },
-          recommendations: ['Use cache'],
-          groupedAnalysis: {},
+          stats: {
+            summary: { totalOverdue: 8, overduePercentage: 0.2, averageDaysOverdue: 5, oldestOverdueDate: '2025-01-01' },
+            overdueTasks: [{ id: '1', name: 'Old task', dueDate: '2025-01-01', daysOverdue: 10, tags: [] }],
+            patterns: [{ type: 'test', value: 'cached', count: 1, percentage: 100 }],
+            insights: { cached: true }
+          },
+          summary: { recommendations: ['Use cache'] }
         };
         
         mockCache.get.mockReturnValue(cachedData);
 
         const result = await tool.execute({ limit: 100 });
 
-        expect(result.from_cache).toBe(true);
-        expect(result.summary.totalOverdue).toBe(8);
-        expect(result.patterns.cached).toBe(true);
+        expect(result.success).toBe(true);
+        expect(result.metadata.from_cache).toBe(true);
+        expect(result.data.stats.summary.totalOverdue).toBe(8);
+        expect(result.data.stats.patterns[0].value).toBe('cached');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
     });
@@ -520,20 +537,21 @@ describe('Analytics Tools', () => {
         mockOmniAutomation.execute.mockResolvedValue({
           summary: {
             totalOverdue: 0,
-            oldestOverdueDays: 0,
-            averageOverdueDays: 0,
+            overduePercentage: 0,
+            averageDaysOverdue: 0,
+            oldestOverdueDate: '',
           },
           overdueTasks: [],
-          patterns: {},
-          recommendations: ['No overdue tasks - great job!'],
-          groupedAnalysis: {},
+          patterns: [],
+          recommendations: ['No overdue tasks - great job!']
         });
 
         const result = await tool.execute({ limit: 100 });
 
-        expect(result.summary.totalOverdue).toBe(0);
-        expect(result.overdueTasks).toEqual([]);
-        expect(result.recommendations).toContain('No overdue tasks - great job!');
+        expect(result.success).toBe(true);
+        expect(result.data.stats.summary.totalOverdue).toBe(0);
+        expect(result.data.stats.overdueTasks).toEqual([]);
+        expect(result.data.stats.insights).toEqual(['No overdue tasks - great job!']);
       });
 
       it('should preserve all analysis data correctly', async () => {
@@ -542,17 +560,18 @@ describe('Analytics Tools', () => {
         mockOmniAutomation.execute.mockResolvedValue({
           summary: {
             totalOverdue: 15,
-            oldestOverdueDays: 45,
-            averageOverdueDays: 12.3,
+            overduePercentage: 0.3,
+            averageDaysOverdue: 12.3,
+            oldestOverdueDate: '2024-11-01',
           },
           overdueTasks: [
-            { id: '1', name: 'Task 1', daysOverdue: 45 },
-            { id: '2', name: 'Task 2', daysOverdue: 7 },
+            { id: '1', name: 'Task 1', dueDate: '2024-11-01', daysOverdue: 45, tags: [] },
+            { id: '2', name: 'Task 2', dueDate: '2025-01-01', daysOverdue: 7, tags: ['urgent'] },
           ],
-          patterns: {
-            mostOverdueProject: 'Personal',
-            commonTags: ['urgent'],
-          },
+          patterns: [
+            { type: 'project', value: 'Personal', count: 7, percentage: 46.7 },
+            { type: 'tag', value: 'urgent', count: 5, percentage: 33.3 }
+          ],
           recommendations: [
             'Focus on oldest tasks first',
             'Review project priorities',
@@ -562,7 +581,7 @@ describe('Analytics Tools', () => {
               'Work': { count: 8, avgDays: 10 },
               'Personal': { count: 7, avgDays: 15 },
             }
-          },
+          }
         });
 
         const result = await tool.execute({
@@ -570,13 +589,16 @@ describe('Analytics Tools', () => {
           groupBy: 'project',
         });
 
-        expect(result.summary.totalOverdue).toBe(15);
-        expect(result.summary.oldestOverdueDays).toBe(45);
-        expect(result.summary.averageOverdueDays).toBe(12.3);
-        expect(result.overdueTasks).toHaveLength(2);
-        expect(result.patterns.mostOverdueProject).toBe('Personal');
-        expect(result.recommendations).toHaveLength(2);
-        expect(result.groupedAnalysis.byProject.Work.count).toBe(8);
+        expect(result.success).toBe(true);
+        expect(result.data.stats.summary.totalOverdue).toBe(15);
+        expect(result.data.stats.summary.oldestOverdueDate).toBe('2024-11-01');
+        expect(result.data.stats.summary.averageDaysOverdue).toBe(12.3);
+        expect(result.data.stats.overdueTasks).toHaveLength(2);
+        expect(result.data.stats.patterns).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ type: 'project', value: 'Personal' })
+          ])
+        );
       });
 
       it('should handle boolean coercion for includeRecentlyCompleted', async () => {
