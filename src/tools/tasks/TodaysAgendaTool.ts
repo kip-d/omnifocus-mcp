@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-// REVERTED: Using original JXA script - hybrid approach had critical performance issues
-import { TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks/todays-agenda.js';
+// v1.14.0: Using optimized script WITHOUT whose() - 7x faster!
+import { TODAYS_AGENDA_OPTIMIZED_NO_WHOSE_SCRIPT } from '../../omnifocus/scripts/tasks/todays-agenda-optimized-v2.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { TodaysAgendaSchema } from '../schemas/task-schemas.js';
 
@@ -57,7 +57,7 @@ export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
       }
 
       // Execute hybrid script
-      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
+      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_OPTIMIZED_NO_WHOSE_SCRIPT, {
         includeFlagged, includeOverdue, includeAvailable, includeDetails, limit
       });
       const result = await this.omniAutomation.execute<any>(script);

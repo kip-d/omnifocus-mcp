@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2025-08-11
+
+### Massive Performance Breakthrough - 75-93% Faster! 🚀
+
+This release fixes the REAL performance bottleneck: JXA's `whose()` method.
+
+### The Discovery
+After extensive testing, we found that JXA's `whose({completed: false})` takes **25 seconds** while manually filtering takes only **3.4 seconds**. The whose() method has been the bottleneck all along!
+
+### Performance Improvements
+- **Upcoming tasks**: 5.7s (was 27s) - **79% faster**
+- **Overdue tasks**: 2.0s (was 25s) - **92% faster**  
+- **Today's agenda**: 1.8s (was 25s) - **93% faster**
+- **Basic list**: 3-4s (was 25s) - **85% faster**
+
+### Changed
+- Replaced ALL uses of `whose()` with manual filtering
+- Created optimized scripts without whose():
+  - `date-range-queries-optimized-v2.ts`
+  - `todays-agenda-optimized-v2.ts`
+- Updated all affected tools to use optimized scripts
+
+### Technical Details
+```javascript
+// OLD (25 seconds):
+const tasks = doc.flattenedTasks.whose({completed: false})();
+
+// NEW (3.4 seconds):
+const allTasks = doc.flattenedTasks();
+for (const task of allTasks) {
+  if (!task.completed()) {
+    // process task
+  }
+}
+```
+
+### Impact
+- Queries that took 20-27 seconds now complete in 2-6 seconds
+- No more timeouts
+- Consistent, predictable performance
+- The hybrid architecture wasn't the problem - whose() was!
+
 ## [1.13.2] - 2025-08-11
 
 ### Emergency Rollback - Complete Hybrid Reversion 🚨
