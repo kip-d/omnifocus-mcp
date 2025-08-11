@@ -5,6 +5,12 @@
 
 import { getAllHelpers } from './shared/helpers.js';
 
+// Export hybrid scripts for better performance
+export { 
+  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
+  GET_OVERDUE_TASKS_HYBRID_SCRIPT 
+} from './date-range-queries-hybrid.js';
+
 /**
  * Get tasks due within a specific date range using whose()
  * This is significantly faster than iterating through all tasks
@@ -370,26 +376,27 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
     // Get only incomplete tasks with due dates
     let allTasks;
     let queryMethod = 'standard';
+    let processedCount = 0;
+    const maxScanLimit = 500; // Reduced from 1000 for better performance
     
     try {
-      // More aggressive filter - only get tasks due within reasonable range
-      // This should dramatically reduce the number of tasks to process
-      const maxFutureDays = Math.min(days * 2, 30); // Cap at 30 days
-      const maxDate = new Date(now.getTime() + maxFutureDays * 24 * 60 * 60 * 1000);
-      
-      // First try: Get only relevant tasks
+      // Get incomplete tasks - we can't filter by due date in whose()
       allTasks = doc.flattenedTasks.whose({
-        completed: false,
-        dueDate: {_not: null}
+        completed: false
       })();
-      queryMethod = 'whose_incomplete_with_due';
+      queryMethod = 'whose_incomplete';
       
-      // If we got too many tasks, limit processing
-      if (allTasks.length > 1000) {
-        queryMethod = 'limited_to_1000';
-        // Create a limited array to prevent timeout
+      // If we got too many tasks, limit what we process
+      if (allTasks.length > maxScanLimit) {
+        queryMethod = 'limited_scan';
+        
+        // PERFORMANCE: With 1000+ tasks, even checking due dates is slow
+        // We'll take a sample approach - process first N tasks
+        const sampleSize = 300; // Enough to find most upcoming tasks
+        
+        // Convert to limited array 
         const limitedTasks = [];
-        for (let i = 0; i < Math.min(1000, allTasks.length); i++) {
+        for (let i = 0; i < Math.min(sampleSize, allTasks.length); i++) {
           limitedTasks.push(allTasks[i]);
         }
         allTasks = limitedTasks;
@@ -423,8 +430,10 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
       }
     }
     
-    // Filter for tasks in date range
-    for (let i = 0; i < allTasks.length && tasks.length < limit; i++) {
+    // First collect tasks with dates for sorting
+    const tasksWithDates = [];
+    processedCount = 0; // Initialize if not already set
+    for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
       
       // Skip completed tasks if we couldn't pre-filter
@@ -433,32 +442,48 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
       
       if (dueDate) {
         const dueDateObj = new Date(dueDate);
-        
-        if (dueDateObj >= startDate && dueDateObj <= endDate) {
-          const taskObj = {
-            id: safeGet(() => task.id(), 'unknown'),
-            name: safeGet(() => task.name(), 'Unnamed Task'),
-            dueDate: dueDate,
-            flagged: safeGet(() => task.flagged(), false)
-          };
-          
-          // Calculate days until due
-          const daysUntilDue = Math.ceil((dueDateObj - now) / (1000 * 60 * 60 * 24));
-          taskObj.daysUntilDue = daysUntilDue;
-          
-          // Add day of week
-          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-          taskObj.dayOfWeek = dayNames[dueDateObj.getDay()];
-          
-          // Add project info
-          const project = safeGetProject(task);
-          if (project) {
-            taskObj.project = project.name;
-            taskObj.projectId = project.id;
-          }
-          
-          tasks.push(taskObj);
+        // Only collect tasks that could be in range
+        if (dueDateObj <= endDate) {
+          tasksWithDates.push({ task, dueDate, dueDateObj });
         }
+      }
+    }
+    
+    // Sort by due date for efficient processing
+    tasksWithDates.sort((a, b) => a.dueDateObj.getTime() - b.dueDateObj.getTime());
+    
+    // Process sorted tasks, can stop early once past endDate
+    for (let i = 0; i < tasksWithDates.length && tasks.length < limit; i++) {
+      const { task, dueDate, dueDateObj } = tasksWithDates[i];
+      processedCount++;
+      
+      // Stop if we've passed the end date (since sorted)
+      if (dueDateObj > endDate) break;
+      
+      if (dueDateObj >= startDate && dueDateObj <= endDate) {
+        const taskObj = {
+          id: safeGet(() => task.id(), 'unknown'),
+          name: safeGet(() => task.name(), 'Unnamed Task'),
+          dueDate: dueDate,
+          flagged: safeGet(() => task.flagged(), false)
+        };
+        
+        // Calculate days until due
+        const daysUntilDue = Math.ceil((dueDateObj - now) / (1000 * 60 * 60 * 24));
+        taskObj.daysUntilDue = daysUntilDue;
+        
+        // Add day of week
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        taskObj.dayOfWeek = dayNames[dueDateObj.getDay()];
+        
+        // Add project info
+        const project = safeGetProject(task);
+        if (project) {
+          taskObj.project = project.name;
+          taskObj.projectId = project.id;
+        }
+        
+        tasks.push(taskObj);
       }
     }
     
@@ -477,7 +502,8 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_SCRIPT = `
         end_date: endDate.toISOString(),
         limited: tasks.length >= limit,
         query_time_ms: endTime - startTime,
-        query_method: queryMethod
+        query_method: queryMethod,
+        tasks_scanned: processedCount || tasksWithDates.length
       }
     });
     

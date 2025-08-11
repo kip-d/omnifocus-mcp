@@ -13,6 +13,7 @@ export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { UPDATE_TASK_SCRIPT } from './tasks/update-task.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
 export { LIST_TASKS_SCRIPT } from './tasks/list-tasks.js';
+export { LIST_TASKS_HYBRID_SCRIPT } from './tasks/list-tasks-hybrid.js';
 
 // Legacy helper export
 export { SAFE_UTILITIES_SCRIPT } from './shared/helpers.js';

@@ -160,37 +160,65 @@ export const SAFE_UTILITIES = `
   
   function isTaskBlocked(task) {
     try {
+      // First try the direct API - most efficient
       const status = task.taskStatus();
       return status && status.toString() === 'Blocked';
     } catch (e) {
       // Fallback logic for blocked status
       try {
-        // A task is blocked if it's in a sequential project/group and has incomplete predecessors
+        // IMPORTANT: Tasks in the inbox cannot be blocked because they have no project context
+        // Sequential blocking only applies within projects or action groups
+        
+        // Check parent first (action group) - this is the most common case
         const parent = task.parent();
-        if (parent && parent.sequential && parent.sequential()) {
-          const siblings = parent.tasks();
-          for (let i = 0; i < siblings.length; i++) {
-            const sibling = siblings[i];
-            if (sibling.id() === task.id()) {
-              break; // Found our task, so all previous siblings should be complete
+        if (parent && parent.sequential) {
+          // Cache the sequential check result
+          const isSequential = parent.sequential();
+          if (isSequential) {
+            const taskId = task.id(); // Cache our ID
+            const siblings = parent.tasks();
+            
+            // Early exit if we're the first task
+            if (siblings.length > 0 && siblings[0].id() === taskId) {
+              return false;
             }
-            if (!sibling.completed()) {
-              return true; // Previous sibling not complete, so we're blocked
+            
+            for (let i = 0; i < siblings.length; i++) {
+              const sibling = siblings[i];
+              if (sibling.id() === taskId) {
+                break; // Found our task, so all previous siblings should be complete
+              }
+              if (!sibling.completed()) {
+                return true; // Previous sibling not complete, so we're blocked
+              }
             }
           }
         }
         
-        // Check if containing project is sequential and has incomplete preceding tasks
-        const project = task.containingProject();
-        if (project && project.sequential && project.sequential()) {
-          const projectTasks = project.tasks();
-          for (let i = 0; i < projectTasks.length; i++) {
-            const projectTask = projectTasks[i];
-            if (projectTask.id() === task.id()) {
-              break; // Found our task
-            }
-            if (!projectTask.completed()) {
-              return true; // Previous task in sequential project not complete
+        // Only check project if no parent group or parent is not sequential
+        // This avoids redundant checks
+        if (!parent || !parent.sequential || !parent.sequential()) {
+          const project = task.containingProject();
+          if (project && project.sequential) {
+            const isSequential = project.sequential();
+            if (isSequential) {
+              const taskId = task.id(); // Cache our ID
+              const projectTasks = project.tasks();
+              
+              // Early exit if we're the first task
+              if (projectTasks.length > 0 && projectTasks[0].id() === taskId) {
+                return false;
+              }
+              
+              for (let i = 0; i < projectTasks.length; i++) {
+                const projectTask = projectTasks[i];
+                if (projectTask.id() === taskId) {
+                  break; // Found our task
+                }
+                if (!projectTask.completed()) {
+                  return true; // Previous task in sequential project not complete
+                }
+              }
             }
           }
         }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export.js';
+// Use hybrid script for massive performance improvement
+import { EXPORT_TASKS_HYBRID_SCRIPT } from '../../omnifocus/scripts/export/export-tasks-hybrid.js';
 import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
 import { ExportTasksResponse } from '../response-types.js';
 import { ExportTasksSchema } from '../schemas/export-schemas.js';
@@ -15,8 +16,8 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
     try {
       const { format = 'json', filter = {}, fields } = args;
 
-      // Execute export script
-      const script = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
+      // Execute hybrid export script
+      const script = this.omniAutomation.buildScript(EXPORT_TASKS_HYBRID_SCRIPT, {
         format,
         filter,
         fields,

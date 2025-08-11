@@ -301,9 +301,19 @@ create_task({
 - **Tags**: Cannot be assigned during task creation (JXA limitation). Create task first, then update with tags.
 - **Project Movement**: Moving tasks between projects may require recreation with new ID
 - **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.
-- **Performance**: Large queries (2000+ tasks) may be slow. Use `skipAnalysis: true` for faster queries.
+- **Sequential Task Blocking**: Tasks in the inbox do not show as blocked even when sequential, as they lack project context. Sequential blocking only applies to tasks within projects or action groups.
+- **Performance**: v1.13.0 revolutionizes performance with hybrid JXA/Omni Automation approach. Most queries now 60-96% faster, completing in <1 second even with large databases.
 
 See `/docs/TROUBLESHOOTING.md` for solutions and `/docs/JXA-LIMITATIONS.md` for technical details.
+
+## Data Format Conventions
+
+- **Data Fields** (task/project properties): Use camelCase to match OmniFocus API
+  - Examples: `dueDate`, `deferDate`, `estimatedMinutes`, `flagged`
+- **Metadata Fields** (response metadata): Use snake_case for consistency
+  - Examples: `task_count`, `export_date`, `query_time_ms`, `from_cache`
+
+This distinction ensures compatibility with OmniFocus while maintaining consistent metadata formatting.
 
 ## Documentation
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+// Use hybrid script for massive performance improvement
+import { LIST_TASKS_HYBRID_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks-hybrid.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
@@ -37,10 +38,10 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
         }
       }
 
-      // Execute script - pass filter with limit and skipAnalysis included
+      // Execute hybrid script - pass filter with limit and skipAnalysis included
       const scriptParams = { ...filter, limit, skipAnalysis };
       this.logger.debug('Script params:', scriptParams);
-      const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });
+      const script = this.omniAutomation.buildScript(LIST_TASKS_HYBRID_SCRIPT, { filter: scriptParams });
       this.logger.debug('Generated script length:', script.length);
       const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { TODAYS_AGENDA_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/tasks/todays-agenda-optimized.js';
+// Use hybrid script for massive performance improvement
+import { TODAYS_AGENDA_HYBRID_SCRIPT } from '../../omnifocus/scripts/tasks/todays-agenda-hybrid.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { TodaysAgendaSchema } from '../schemas/task-schemas.js';
 
@@ -55,9 +56,9 @@ export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
         );
       }
 
-      // Execute script
-      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_OPTIMIZED_SCRIPT, {
-        options: { includeFlagged, includeOverdue, includeAvailable, includeDetails, limit },
+      // Execute hybrid script
+      const script = this.omniAutomation.buildScript(TODAYS_AGENDA_HYBRID_SCRIPT, {
+        includeFlagged, includeOverdue, includeAvailable, includeDetails, limit
       });
       const result = await this.omniAutomation.execute<any>(script);
 
