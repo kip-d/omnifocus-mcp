@@ -60,7 +60,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

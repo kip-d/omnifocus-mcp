@@ -30,7 +30,7 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
       }>(script);
 
       if (result.error) {
-        return this.handleError(new Error(result.message || 'Failed to export tasks'));
+        return this.handleError(new Error(result.message || 'Failed to export tasks')) as any;
       }
 
       return createSuccessResponse(
@@ -49,7 +49,7 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }

@@ -76,7 +76,7 @@ export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
         throw jxaError;
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

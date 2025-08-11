@@ -40,7 +40,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

@@ -70,7 +70,7 @@ export class GetTaskCountTool extends BaseTool<typeof GetTaskCountSchema> {
         },
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }

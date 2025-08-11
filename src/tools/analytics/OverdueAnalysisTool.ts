@@ -47,7 +47,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
       const result = await this.omniAutomation.execute<any>(script);
 
       if (result && result.error) {
-        return this.handleError(new Error(result.message || 'Failed to analyze overdue tasks'));
+        return this.handleError(new Error(result.message || 'Failed to analyze overdue tasks')) as OverdueAnalysisResponse;
       }
 
       const responseData: OverdueAnalysisResponseData = {
@@ -80,7 +80,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as OverdueAnalysisResponse;
     }
   }
 }

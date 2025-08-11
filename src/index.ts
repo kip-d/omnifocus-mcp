@@ -11,10 +11,11 @@ import { getVersionInfo } from './utils/version.js';
 const logger = createLogger('server');
 
 // Create server instance
+const versionInfo = getVersionInfo();
 const server = new Server(
   {
     name: 'omnifocus-mcp-cached',
-    version: '1.7.4',
+    version: versionInfo.version,
   },
   {
     capabilities: {

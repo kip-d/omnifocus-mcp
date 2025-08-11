@@ -140,7 +140,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         },
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

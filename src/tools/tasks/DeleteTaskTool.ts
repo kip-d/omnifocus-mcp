@@ -83,7 +83,7 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
         throw jxaError;
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

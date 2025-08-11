@@ -30,7 +30,7 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
       }>(script);
 
       if (result.error) {
-        return this.handleError(new Error(result.message || 'Failed to export projects'));
+        return this.handleError(new Error(result.message || 'Failed to export projects')) as any;
       }
 
       return createSuccessResponse(
@@ -49,7 +49,7 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }

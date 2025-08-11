@@ -245,23 +245,23 @@ export interface BulkExportResponseData {
   exports: {
     tasks?: {
       format: string;
-      taskCount: number;
+      task_count: number;
       exported: boolean;
     };
     projects?: {
       format: string;
-      projectCount: number;
+      project_count: number;
       exported: boolean;
     };
     tags?: {
       format: string;
-      tagCount: number;
+      tag_count: number;
       exported: boolean;
     };
   };
   summary: {
     totalExported: number;
-    exportDate: string;
+    export_date: string;
   };
 }
 

@@ -140,7 +140,7 @@ export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
 
       return response;
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }

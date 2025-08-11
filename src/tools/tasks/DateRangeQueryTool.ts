@@ -152,7 +152,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
         },
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 

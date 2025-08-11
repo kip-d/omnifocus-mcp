@@ -3,8 +3,8 @@ import { BaseTool } from '../base.js';
 import { ExportTasksTool } from './ExportTasksTool.js';
 import { ExportProjectsTool } from './ExportProjectsTool.js';
 import { ListTagsTool } from '../tags/ListTagsTool.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
-import { BulkExportResponse, BulkExportResponseData } from '../response-types.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { BulkExportResponse, BulkExportResponseData, ExportTasksResponse, ExportProjectsResponse, ListTasksResponse } from '../response-types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { BulkExportSchema } from '../schemas/export-schemas.js';
@@ -16,13 +16,14 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
 
   async executeValidated(args: z.infer<typeof BulkExportSchema>): Promise<BulkExportResponse> {
     const timer = new OperationTimer();
+    const {
+      outputDirectory,
+      format = 'json',
+      includeCompleted = true,
+      includeProjectStats = true,
+    } = args;
+    
     try {
-      const {
-        outputDirectory,
-        format = 'json',
-        includeCompleted = true,
-        includeProjectStats = true,
-      } = args;
 
       // Ensure directory exists
       await fs.mkdir(outputDirectory, { recursive: true });
@@ -33,7 +34,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
       // Export tasks
       const taskExporter = new ExportTasksTool(this.cache);
       const taskFilter = includeCompleted ? {} : { completed: false };
-      const taskResult = await taskExporter.execute({ format, filter: taskFilter });
+      const taskResult = await taskExporter.execute({ format, filter: taskFilter }) as ExportTasksResponse;
 
       if (taskResult.success && taskResult.data) {
         const taskFile = path.join(outputDirectory, `tasks.${format}`);
@@ -47,7 +48,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         
         exports.tasks = {
           format: format,
-          taskCount: taskCount,
+          task_count: taskCount,
           exported: true,
         };
         totalExported += taskCount;
@@ -58,7 +59,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
       const projectResult = await projectExporter.execute({
         format,
         includeStats: includeProjectStats,
-      });
+      }) as ExportProjectsResponse;
 
       if (projectResult.success && projectResult.data) {
         const projectFile = path.join(outputDirectory, `projects.${format}`);
@@ -72,7 +73,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         
         exports.projects = {
           format: format,
-          projectCount: projectCount,
+          project_count: projectCount,
           exported: true,
         };
         totalExported += projectCount;
@@ -80,7 +81,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
 
       // Export tags (JSON only)
       const tagExporter = new ListTagsTool(this.cache);
-      const tagResult = await tagExporter.execute({ includeEmpty: true });
+      const tagResult = await tagExporter.execute({ includeEmpty: true }) as ListTasksResponse;
 
       if (tagResult.success && tagResult.data) {
         const tagFile = path.join(outputDirectory, 'tags.json');
@@ -91,7 +92,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         
         exports.tags = {
           format: 'json',
-          tagCount: tagCount,
+          tag_count: tagCount,
           exported: true,
         };
         totalExported += tagCount;
@@ -103,7 +104,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
           exports,
           summary: {
             totalExported,
-            exportDate: new Date().toISOString(),
+            export_date: new Date().toISOString(),
           },
         },
         {
@@ -115,7 +116,59 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      // Provide specific recovery information for file system errors
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('eacces') || errorMessage.includes('permission')) {
+          return createErrorResponse(
+            'bulk_export',
+            'PERMISSION_DENIED',
+            `Cannot write to directory: ${outputDirectory}`,
+            {
+              recovery: [
+                'Check that the directory exists and is writable',
+                'Try using a different output directory',
+                'Ensure you have write permissions to the parent directory',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata()
+          );
+        }
+        if (errorMessage.includes('enospc')) {
+          return createErrorResponse(
+            'bulk_export',
+            'DISK_FULL',
+            'Not enough disk space to complete export',
+            {
+              recovery: [
+                'Free up disk space and try again',
+                'Choose a different output directory on a drive with more space',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata()
+          );
+        }
+        if (errorMessage.includes('enoent')) {
+          return createErrorResponse(
+            'bulk_export',
+            'PATH_NOT_FOUND',
+            `Output directory path not found: ${outputDirectory}`,
+            {
+              recovery: [
+                'Verify the output directory path is correct',
+                'Create the parent directory first',
+                'Use an absolute path instead of a relative path',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata()
+          );
+        }
+      }
+      // Fall back to generic error handling
+      return this.handleError(error) as any;
     }
   }
 }

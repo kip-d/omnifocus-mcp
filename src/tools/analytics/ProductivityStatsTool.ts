@@ -46,7 +46,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
       const result = await this.omniAutomation.execute<any>(script);
 
       if (result && result.error) {
-        return this.handleError(new Error(result.message || 'Failed to get productivity stats'));
+        return this.handleError(new Error(result.message || 'Failed to get productivity stats')) as ProductivityStatsResponse;
       }
 
       const responseData: ProductivityStatsResponseData = {
@@ -80,7 +80,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as ProductivityStatsResponse;
     }
   }
 }

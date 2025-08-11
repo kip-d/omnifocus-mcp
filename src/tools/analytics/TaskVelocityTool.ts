@@ -46,7 +46,7 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
       const result = await this.omniAutomation.execute<any>(script);
 
       if (result && result.error) {
-        return this.handleError(new Error(result.message || 'Failed to get task velocity'));
+        return this.handleError(new Error(result.message || 'Failed to get task velocity')) as TaskVelocityResponse;
       }
 
       const responseData: TaskVelocityResponseData = {
@@ -85,7 +85,7 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
         }
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as TaskVelocityResponse;
     }
   }
 }

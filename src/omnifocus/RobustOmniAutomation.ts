@@ -12,7 +12,7 @@ export class RobustOmniAutomation extends OmniAutomation {
   private readonly maxConsecutiveFailures: number = 3;
   private readonly connectionTimeout: number = 5 * 60 * 1000; // 5 minutes
 
-  async execute<T = any>(script: string): Promise<T> {
+  async execute<T = unknown>(script: string): Promise<T> {
     // Check if we need to test the connection
     const timeSinceLastSuccess = Date.now() - this.lastSuccessTime;
     if (timeSinceLastSuccess > this.connectionTimeout) {
@@ -33,22 +33,26 @@ export class RobustOmniAutomation extends OmniAutomation {
     }
 
     try {
+      // Try to execute the script
       const result = await super.execute<T>(script);
 
-      // Reset failure counter on success
+      // Success - reset failure counter
       this.consecutiveFailures = 0;
       this.lastSuccessTime = Date.now();
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.consecutiveFailures++;
 
       // Log detailed error information
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorType = error instanceof Error ? error.constructor.name : 'Unknown';
+      
       logger.error('Script execution failed', {
         consecutiveFailures: this.consecutiveFailures,
         timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
-        errorMessage: error.message,
-        errorType: error.constructor.name,
+        errorMessage: errorMessage,
+        errorType: errorType,
       });
 
       // If we've had too many consecutive failures, try to diagnose
@@ -64,11 +68,11 @@ export class RobustOmniAutomation extends OmniAutomation {
       }
 
       // For "Cannot convert undefined or null to object" errors, add more context
-      if (error.message && error.message.includes('Cannot convert undefined or null to object')) {
+      if (error instanceof Error && error.message.includes('Cannot convert undefined or null to object')) {
         const enhancedError = new OmniAutomationError(
           `${error.message} - This often indicates OmniFocus has become unresponsive or the document is no longer available`,
           script,
-          error.stderr || error.message,
+          (error as any).stderr || error.message,
         );
         throw enhancedError;
       }
@@ -82,13 +86,12 @@ export class RobustOmniAutomation extends OmniAutomation {
       return JSON.stringify({
         success: true,
         appAvailable: typeof app !== 'undefined',
-        docAvailable: typeof doc !== 'undefined' && doc !== null,
-        timestamp: new Date().toISOString()
+        docAvailable: typeof document !== 'undefined'
       });
     `;
 
     try {
-      const result = await super.execute<any>(testScript);
+      const result = await super.execute<{success: boolean; appAvailable: boolean; docAvailable: boolean}>(testScript);
       return result && result.success && result.docAvailable;
     } catch (error) {
       logger.error('Connection test failed', { error });
@@ -96,80 +99,94 @@ export class RobustOmniAutomation extends OmniAutomation {
     }
   }
 
-  private async diagnoseConnection(): Promise<any> {
-    const diagnosis: any = {
-      timestamp: new Date().toISOString(),
-      consecutiveFailures: this.consecutiveFailures,
-      timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
+  private async diagnoseConnection(): Promise<{ tests: Record<string, { success: boolean; error?: string; result?: unknown }>; summary: string }> {
+    interface DiagnosisTests {
+      [key: string]: { success: boolean; error?: string; result?: unknown };
+    }
+    
+    const diagnosis: { tests: DiagnosisTests; summary: string } = {
       tests: {},
+      summary: '',
     };
 
-    // Test 1: Can we create app reference?
+    // Test 1: Can we reach the application?
     try {
-      const appTest = await super.execute<any>(`
+      const appTest = await super.execute<unknown>(`
         return JSON.stringify({
-          canCreateApp: typeof Application !== 'undefined',
-          appName: typeof app !== 'undefined' ? app.name() : 'no app'
+          name: app.name,
+          version: app.version
         });
       `);
-      diagnosis.tests.appCreation = { success: true, result: appTest };
-    } catch (error: any) {
-      diagnosis.tests.appCreation = { success: false, error: error.message };
+      diagnosis.tests.application = {
+        success: true,
+        result: appTest,
+      };
+    } catch (error: unknown) {
+      diagnosis.tests.application = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
 
-    // Test 2: Can we access document?
+    // Test 2: Can we access the document?
     try {
-      const docTest = await super.execute<any>(`
-        const testApp = Application('OmniFocus');
-        const testDoc = testApp.defaultDocument();
+      const docTest = await super.execute<unknown>(`
+        const doc = document;
         return JSON.stringify({
-          docType: typeof testDoc,
-          docNull: testDoc === null,
-          docUndefined: testDoc === undefined
+          hasDoc: doc !== null && doc !== undefined,
+          name: doc ? doc.name : null
         });
       `);
-      diagnosis.tests.documentAccess = { success: true, result: docTest };
-    } catch (error: any) {
-      diagnosis.tests.documentAccess = { success: false, error: error.message };
+      diagnosis.tests.document = {
+        success: true,
+        result: docTest,
+      };
+    } catch (error: unknown) {
+      diagnosis.tests.document = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
 
-    // Test 3: Can we access collections with fresh references?
+    // Test 3: Can we access basic collections?
     try {
-      const collectionTest = await super.execute<any>(`
-        const freshApp = Application('OmniFocus');
-        const freshDoc = freshApp.defaultDocument();
-        if (!freshDoc) {
-          return JSON.stringify({ error: 'No document' });
-        }
-        
-        let results = {};
-        try {
-          const tasks = freshDoc.flattenedTasks();
-          results.tasks = { accessible: true, type: typeof tasks };
-        } catch (e) {
-          results.tasks = { accessible: false, error: e.toString() };
-        }
-        
-        return JSON.stringify(results);
+      const collectionTest = await super.execute<unknown>(`
+        const doc = document;
+        const flattenedTasks = doc.flattenedTasks;
+        const flattenedProjects = doc.flattenedProjects;
+        return JSON.stringify({
+          hasTasks: flattenedTasks !== null && flattenedTasks !== undefined,
+          hasProjects: flattenedProjects !== null && flattenedProjects !== undefined,
+          taskCount: flattenedTasks ? flattenedTasks.length : 0,
+          projectCount: flattenedProjects ? flattenedProjects.length : 0
+        });
       `);
-      diagnosis.tests.collectionAccess = { success: true, result: collectionTest };
-    } catch (error: any) {
-      diagnosis.tests.collectionAccess = { success: false, error: error.message };
+      diagnosis.tests.collection = {
+        success: true,
+        result: collectionTest,
+      };
+    } catch (error: unknown) {
+      diagnosis.tests.collection = {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
 
     // Generate summary
-    const allTestsFailed = Object.values(diagnosis.tests).every((test: any) => !test.success);
+    const allTestsFailed = Object.values(diagnosis.tests).every((test) => !test.success);
+
     if (allTestsFailed) {
-      diagnosis.summary = 'Complete connection failure - OmniFocus may need to be restarted';
-    } else if (!diagnosis.tests.documentAccess?.success) {
-      diagnosis.summary = 'Document access failed - OmniFocus document may be closed';
-    } else if (!diagnosis.tests.collectionAccess?.success) {
-      diagnosis.summary = 'Collection access failed - Possible permission or state issue';
+      diagnosis.summary = 'OmniFocus appears to be completely unreachable. Please ensure it is running and try again.';
+    } else if (!diagnosis.tests.application?.success) {
+      diagnosis.summary = 'Cannot reach OmniFocus application. Please ensure it is running.';
+    } else if (!diagnosis.tests.document?.success) {
+      diagnosis.summary = 'Cannot access OmniFocus document. Please ensure a document is open.';
+    } else if (!diagnosis.tests.collection?.success) {
+      diagnosis.summary = 'Cannot access OmniFocus data collections. The document may be corrupted or locked.';
     } else {
-      diagnosis.summary = 'Partial connection failure - Intermittent issue detected';
+      diagnosis.summary = 'Connection tests passed but script execution still failing.';
     }
 
     return diagnosis;
   }
-
 }

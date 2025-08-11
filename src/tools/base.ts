@@ -4,7 +4,7 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { createErrorResponse, OperationTimer } from '../utils/response-format.js';
+import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
 import { 
   permissionError, 
   formatErrorWithRecovery, 
@@ -44,7 +44,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
   /**
    * Execute the tool with validation
    */
-  async execute(args: unknown): Promise<any> {
+  async execute(args: unknown): Promise<StandardResponse<unknown>> {
     try {
       // Validate input with Zod
       const validated = this.schema.parse(args);
@@ -71,8 +71,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
         );
       }
       
-      // Handle other errors - throw for validation errors to break flow
-      this.throwMcpError(error);
+      // Handle other errors - return standardized error response
+      return this.handleError(error);
     }
   }
 
@@ -85,7 +85,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
    * Handle errors consistently across all tools
    * Returns a standardized error response instead of throwing
    */
-  protected handleError(error: unknown): any {
+  protected handleError(error: unknown): StandardResponse<unknown> {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimer();
 

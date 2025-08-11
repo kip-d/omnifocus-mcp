@@ -96,7 +96,7 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
 
       return standardResponse;
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }

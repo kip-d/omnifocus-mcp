@@ -142,7 +142,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         },
       );
     } catch (error) {
-      return this.handleError(error);
+      return this.handleError(error) as any;
     }
   }
 }
