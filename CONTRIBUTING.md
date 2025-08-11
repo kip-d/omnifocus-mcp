@@ -14,14 +14,14 @@ Thank you for your interest in contributing to the OmniFocus MCP Server! This gu
 
 ### Prerequisites
 - Node.js 18+ 
-- OmniFocus 3+ (Pro recommended for testing all features)
+- OmniFocus 4.6+ Pro (required for full automation API support)
 - macOS (required for OmniAutomation)
 - TypeScript knowledge
 
 ### Development Setup
 ```bash
 # Fork and clone the repository
-git clone https://github.com/yourusername/omnifocus-mcp.git
+git clone https://github.com/kip-d/omnifocus-mcp.git
 cd omnifocus-mcp
 
 # Install dependencies
@@ -41,7 +41,7 @@ npm run dev
 
 ### 1. Check Existing Issues
 Before starting work:
-- Check [open issues](https://github.com/yourusername/omnifocus-mcp/issues)
+- Check [open issues](https://github.com/kip-d/omnifocus-mcp/issues)
 - Look for issues labeled `good first issue` or `help wanted`
 - Comment on the issue to claim it
 
@@ -157,11 +157,8 @@ Run all test suites:
 # Unit tests
 npm test
 
-# Integration tests
+# Integration tests (tests MCP protocol communication)
 npm run test:integration
-
-# E2E tests
-npm run test:e2e
 
 # Linting
 npm run lint
@@ -169,9 +166,11 @@ npm run lint
 # Type checking
 npm run typecheck
 
-# Full test suite
+# Full test suite (runs unit and integration tests)
 npm run test:all
 ```
+
+**Note**: The E2E test suite (`test:e2e`) is currently not functional due to Vitest configuration issues.
 
 ### Performance Testing
 For performance-sensitive features:
@@ -291,8 +290,17 @@ Add screenshots for UI changes
 - [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 
 ### OmniFocus Documentation
-- [OmniAutomation](https://omni-automation.com/)
-- [OmniFocus API Reference](src/omnifocus/api/OmniFocus.d.ts)
+- [OmniAutomation](https://omni-automation.com/) - Official automation documentation
+- [OmniFocus Specifications](https://www.omnigroup.com/omnifocus/specs/) - File formats and sync specifications
+- [Local API Reference](src/omnifocus/api/OmniFocus.d.ts) - TypeScript definitions extracted from OmniFocus 4.6.1
+
+**Why OmniFocus Pro?** The Pro version includes:
+- Full automation API access required for all MCP operations
+- Advanced perspective creation and customization
+- Focus mode and custom review cycles
+- AppleScript and JavaScript for Automation support
+
+**Platform Note**: This MCP server requires macOS as it uses OmniAutomation via JXA (JavaScript for Automation), which is only available on macOS. Mobile devices cannot run MCP servers.
 
 ### Project Documentation
 - [Architecture Decisions](docs/architecture-decisions.md)
@@ -301,9 +309,8 @@ Add screenshots for UI changes
 
 ## ❓ Getting Help
 
-- **Questions**: Open a [Discussion](https://github.com/yourusername/omnifocus-mcp/discussions)
-- **Bugs**: Open an [Issue](https://github.com/yourusername/omnifocus-mcp/issues)
-- **Security**: Email security@yourdomain.com
+- **Bugs & Questions**: Open an [Issue](https://github.com/kip-d/omnifocus-mcp/issues)
+- **Security**: Report vulnerabilities via [Security Advisories](https://github.com/kip-d/omnifocus-mcp/security/advisories/new)
 
 ## 🙏 Recognition
 
