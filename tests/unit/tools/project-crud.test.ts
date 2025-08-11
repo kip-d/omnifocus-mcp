@@ -178,7 +178,7 @@ describe('Project CRUD Operations', () => {
 
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('PERMISSION_DENIED');
-        expect(result.error.message).toContain('Not authorized');
+        expect(result.error.message).toContain('Permission denied');
       });
     });
   });

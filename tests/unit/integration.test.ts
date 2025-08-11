@@ -151,15 +151,13 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(result).toBeDefined();
       const response = JSON.parse(result.content[0].text);
       
-      // Check for either success or OmniFocus not running error
-      if (response.success === false) {
-        expect(response.error.message).toContain('OmniFocus');
-      } else {
-        expect(response.success).toBe(true);
-        expect(response.data).toHaveProperty('task');
-        expect(response.data.task).toHaveProperty('taskId');
-        expect(response.data.task).toHaveProperty('name');
-      }
+      // We now expect this to fail because tags are not supported during creation
+      expect(response.success).toBe(false);
+      expect(response.error.code).toBe('TAGS_NOT_SUPPORTED');
+      expect(response.error.message).toContain('Cannot assign tags during task creation');
+      expect(response.error.details).toBeDefined();
+      expect(response.error.details.recovery).toBeInstanceOf(Array);
+      expect(response.error.details.recovery[0]).toContain('Create the task first without tags');
     });
   });
 

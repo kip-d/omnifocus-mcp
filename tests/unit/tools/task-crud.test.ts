@@ -79,6 +79,7 @@ describe('Task CRUD Operations', () => {
       });
 
       it('should create a task with all optional fields', async () => {
+        // Note: tags are now rejected during creation due to JXA limitations
         const taskData = {
           name: 'Complex task',
           note: 'Task description',
@@ -91,21 +92,17 @@ describe('Task CRUD Operations', () => {
           sequential: true,
           parentTaskId: 'parent-789'
         };
-        const expectedResult = {
-          taskId: 'task-456',
-          name: 'Complex task',
-          projectId: 'proj-456',
-          created: true
-        };
-
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(taskData);
 
-        expect(result.success).toBe(true);
-        expect(result.data.task).toEqual(expectedResult);
-        expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
+        // Now we expect it to fail with a helpful error about tags
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('TAGS_NOT_SUPPORTED');
+        expect(result.error.message).toContain('Cannot assign tags during task creation');
+        expect(result.error.details).toBeDefined();
+        expect(result.error.details.recovery).toBeDefined();
+        expect(result.error.details.recovery).toContain('Create the task first without tags');
+        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should handle object response from script', async () => {
@@ -182,7 +179,7 @@ describe('Task CRUD Operations', () => {
 
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('PERMISSION_DENIED');
-        expect(result.error.message).toContain('Not authorized');
+        expect(result.error.message).toContain('Permission denied');
       });
     });
   });

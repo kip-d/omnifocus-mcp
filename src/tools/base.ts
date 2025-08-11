@@ -5,6 +5,13 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponse, OperationTimer } from '../utils/response-format.js';
+import { 
+  permissionError, 
+  formatErrorWithRecovery, 
+  scriptTimeoutError,
+  omniFocusNotRunningError,
+  scriptExecutionError
+} from '../utils/error-messages.js';
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -82,45 +89,89 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimer();
 
-    // Check for permission errors
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
+    const errorString = errorMessage.toLowerCase();
+
+    // Check for permission errors
+    if (errorString.includes('-1743') || errorString.includes('not allowed') || errorString.includes('authorization')) {
+      const errorDetails = permissionError(this.name);
       return createErrorResponse(
         this.name,
         'PERMISSION_DENIED',
-        'Not authorized to send Apple events to OmniFocus',
+        errorDetails.message,
         {
-          instructions: `To grant permissions:
-1. You may see a permission dialog - click "OK" to grant access
-2. Or manually grant permissions:
-   - Open System Settings → Privacy & Security → Automation
-   - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
-   - Enable the checkbox next to OmniFocus
-3. After granting permissions, try your request again`,
+          recovery: errorDetails.recovery,
+          formatted: formatErrorWithRecovery(errorDetails),
         },
         timer.toMetadata(),
       );
     }
 
+    // Check for timeout errors
+    if (errorString.includes('timeout') || errorString.includes('timed out')) {
+      const errorDetails = scriptTimeoutError(this.name);
+      return createErrorResponse(
+        this.name,
+        'SCRIPT_TIMEOUT',
+        errorDetails.message,
+        {
+          recovery: errorDetails.recovery,
+          formatted: formatErrorWithRecovery(errorDetails),
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    // Check if OmniFocus is not running
+    if (errorString.includes('not running') || errorString.includes('can\'t find process')) {
+      const errorDetails = omniFocusNotRunningError(this.name);
+      return createErrorResponse(
+        this.name,
+        'OMNIFOCUS_NOT_RUNNING',
+        errorDetails.message,
+        {
+          recovery: errorDetails.recovery,
+          formatted: formatErrorWithRecovery(errorDetails),
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    // OmniAutomation specific errors
     if (error instanceof Error && error.name === 'OmniAutomationError') {
+      const errorDetails = scriptExecutionError(
+        this.name,
+        error.message || 'Script execution failed',
+        'Check that OmniFocus is not showing any dialogs'
+      );
       return createErrorResponse(
         this.name,
         'OMNIFOCUS_ERROR',
-        error.message || 'OmniFocus script execution failed',
+        errorDetails.message,
         {
           script: (error as any).script,
           stderr: (error as any).stderr,
+          recovery: errorDetails.recovery,
+          formatted: formatErrorWithRecovery(errorDetails),
         },
         timer.toMetadata(),
       );
     }
 
-    // Generic error handling
+    // Generic error handling with improved suggestions
     return createErrorResponse(
       this.name,
       'INTERNAL_ERROR',
       error instanceof Error ? error.message : 'An unknown error occurred',
-      { originalError: error },
+      { 
+        originalError: error,
+        recovery: [
+          'Try the operation again',
+          'Check that OmniFocus is running and responsive',
+          'Verify your parameters are correct',
+          'If the issue persists, restart OmniFocus',
+        ],
+      },
       timer.toMetadata(),
     );
   }

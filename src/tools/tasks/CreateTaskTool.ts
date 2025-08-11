@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { parsingError } from '../../utils/error-messages.js';
+import { 
+  parsingError, 
+  tagCreationLimitationError, 
+  formatErrorWithRecovery,
+  invalidDateError
+} from '../../utils/error-messages.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { CreateTaskResponse } from '../types.js';
 import { StandardResponse } from '../../utils/response-format.js';
@@ -19,22 +24,73 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
     const timer = new OperationTimer();
 
     try {
-      // Convert local dates to UTC for OmniFocus
-      const taskData = {
-        ...args,
-        dueDate: args.dueDate ? localToUTC(args.dueDate) : undefined,
-        deferDate: args.deferDate ? localToUTC(args.deferDate) : undefined,
-      };
+      // Check for tag limitation upfront
+      if (args.tags && args.tags.length > 0) {
+        const errorDetails = tagCreationLimitationError();
+        return createErrorResponse(
+          'create_task',
+          'TAGS_NOT_SUPPORTED',
+          errorDetails.message,
+          {
+            recovery: errorDetails.recovery,
+            formatted: formatErrorWithRecovery(errorDetails),
+            tags: args.tags,
+          },
+          timer.toMetadata(),
+        );
+      }
 
-      const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      // Convert local dates to UTC for OmniFocus with better error handling
+      let convertedTaskData;
+      try {
+        convertedTaskData = {
+          ...args,
+          dueDate: args.dueDate ? localToUTC(args.dueDate) : undefined,
+          deferDate: args.deferDate ? localToUTC(args.deferDate) : undefined,
+        };
+      } catch (dateError) {
+        const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : 'dueDate';
+        const errorDetails = invalidDateError(fieldName, args[fieldName] || '');
+        return createErrorResponse(
+          'create_task',
+          'INVALID_DATE_FORMAT',
+          errorDetails.message,
+          {
+            recovery: errorDetails.recovery,
+            formatted: formatErrorWithRecovery(errorDetails),
+            providedValue: args[fieldName],
+          },
+          timer.toMetadata(),
+        );
+      }
+
+      const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
       const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
+        // Enhanced error response with recovery suggestions
+        const errorMessage = result.message || 'Failed to create task';
+        const recovery = [];
+        
+        if (errorMessage.toLowerCase().includes('project')) {
+          recovery.push('Use list_projects to find valid project IDs');
+          recovery.push('Ensure the project exists and is not completed');
+        } else if (errorMessage.toLowerCase().includes('parent')) {
+          recovery.push('Use list_tasks to find valid parent task IDs');
+          recovery.push('Ensure the parent task exists and can have subtasks');
+        } else {
+          recovery.push('Check that all required parameters are provided');
+          recovery.push('Verify OmniFocus is running and not showing dialogs');
+        }
+
         return createErrorResponse(
           'create_task',
           'SCRIPT_ERROR',
-          result.message || 'Failed to create task',
-          { rawResult: result },
+          errorMessage,
+          { 
+            rawResult: result,
+            recovery,
+          },
           timer.toMetadata(),
         );
       }
@@ -45,10 +101,15 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       } catch (parseError) {
         this.logger.error(`Failed to parse create task result: ${result}`);
+        const errorDetails = parsingError('task creation', String(result), 'valid JSON');
         throw new McpError(
           ErrorCode.InternalError,
-          parsingError('task creation', String(result), 'valid JSON'),
-          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
+          errorDetails.message,
+          { 
+            received: result, 
+            parseError: parseError instanceof Error ? parseError.message : String(parseError),
+            recovery: errorDetails.recovery,
+          },
         );
       }
 
