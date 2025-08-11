@@ -1,25 +1,26 @@
 # TODO for Next Session
 
+## Critical Performance Follow-up
+
+### 1. Monitor v1.15.0 Performance in Production ⚠️ HIGH PRIORITY
+- [ ] Get user testing feedback on v1.15.0 performance improvements
+- [ ] Validate sub-second query times with large databases (2000+ tasks)
+- [ ] Check if any edge cases cause performance regressions
+- [ ] Gather metrics on real-world usage patterns
+
+### 2. Investigate evaluateJavascript() Bridge Potential
+- [ ] Now that whose() is eliminated, revisit hybrid approach
+- [ ] Test if Omni Automation can provide even faster filtering
+- [ ] Explore using bridge for batch operations
+- [ ] Document safe vs unsafe bridge usage patterns
+
 ## Immediate Tasks
 
-### ~~1. Fix query_perspective Integration Issues~~ ✅ COMPLETED v1.11.1
-- [x] Debug why query_perspective times out in integration tests
-- [x] Ensure proper error handling for non-existent perspectives
-- [x] Test with various perspective types (built-in vs custom)
-- [x] Add fallback for perspectives without accessible filter rules
-- [x] Standardized response format from `data.items` to `data.tasks`
-
-### ~~2. Code Consistency Refactoring~~ ✅ COMPLETED v1.11.2
-- [x] Refactored all analytics tools for standardized responses
-- [x] Refactored all export tools for consistent structure
-- [x] Created comprehensive unit tests for response format consistency
-- [x] Created ESLint configuration and custom rules for pattern enforcement
-- [x] Fixed all 260 tests to pass with new standardized format
-- [x] Created CODING_STANDARDS.md documentation
-
-### ~~3. OmniFocus Task Creation for Template Research~~ ✅ COMPLETED
-- [x] Created 8 tasks with research links for project templates
-- [x] Tasks added to user's OmniFocus for personal review
+### 3. Clean Up Performance Test Files
+- [ ] Decide which performance test files to keep
+- [ ] Add the useful ones to git
+- [ ] Document performance testing procedures
+- [ ] Create benchmark suite for regression testing
 
 ### 4. Implement Project Template Prompts
 - [ ] Create `project_template` prompt using research from PROJECT_TEMPLATE_RESEARCH.md
@@ -27,118 +28,111 @@
 - [ ] Add parameter system for customizing templates
 - [ ] Test template creation with real OmniFocus data
 
-### 5. Enhance Perspective Tools
+### 5. Enhance Perspective Tools with New Performance
+- [ ] Apply v1.15.0 optimizations to perspective queries
+- [ ] Remove any remaining whose() usage in perspective code
 - [ ] Add perspective statistics (task counts per perspective)
-- [ ] Implement better filter rule translation for complex perspectives
-- [ ] Add support for perspective grouping/sorting preferences
 - [ ] Create prompt that uses perspectives for workflow guidance
 
-## Nice-to-Have Tasks
+## Performance Optimization Opportunities
 
-### 6. Focus Session/Pomodoro Prompt
-- [ ] Design focus session prompt for time-boxed work
-- [ ] Integrate with task selection from perspectives
-- [ ] Add timer/reminder functionality suggestions
-- [ ] Create break management recommendations
+### 6. Apply Learnings to Other Tools
+- [ ] Audit all scripts for remaining whose() usage
+- [ ] Replace safeGet() with direct try/catch where appropriate
+- [ ] Convert to timestamp comparisons throughout
+- [ ] Implement early exit patterns in all loops
 
-### 7. Improve Error Messages
-- [ ] Review all error messages for clarity
-- [ ] Add recovery suggestions for common failures
-- [ ] Improve JXA error translation
-- [ ] Add user-friendly explanations for API limitations
+### 7. Create Performance Guidelines
+- [ ] Document JXA performance anti-patterns (especially whose())
+- [ ] Create filtering best practices guide
+- [ ] Add performance testing to CI/CD pipeline
+- [ ] Set performance budgets for each tool
 
-### 8. Performance Optimizations
-- [ ] Profile perspective query performance
-- [ ] Consider parallel perspective queries
-- [ ] Optimize filter rule translation
-- [ ] Add perspective query result caching strategy
+### 8. Optimize Remaining Slow Operations
+- [ ] Profile project queries for optimization opportunities
+- [ ] Investigate tag operations performance
+- [ ] Optimize recurring task analysis
+- [ ] Consider lazy loading for large result sets
 
-### 9. Enhanced MCP Prompts
-- [ ] Perspective-based weekly review
-- [ ] Project breakdown assistant using perspectives
-- [ ] Daily planning with Today perspective integration
-- [ ] Context-based task batching prompt
+## Code Quality & Maintenance
 
-## Testing & Quality
+### 9. Update Documentation with Performance Learnings
+- [ ] Add performance section to README
+- [ ] Document the whose() catastrophe for future reference
+- [ ] Create JXA performance tips guide
+- [ ] Update CLAUDE.md with optimization patterns
 
-### 10. Comprehensive Testing
-- [ ] Fix query_perspective integration test timeout
-- [ ] Add more perspective tool unit tests
-- [ ] Test with large perspective counts (50+)
-- [ ] Verify caching behavior for perspectives
+### 10. Lint and Type Safety Cleanup
+- [ ] Fix the ~1800 existing lint warnings
+- [ ] Replace remaining `any` types
+- [ ] Add stricter TypeScript settings
+- [ ] Create pre-commit hooks for code quality
 
-### 11. Documentation Updates
-- [ ] Add perspective tools examples to README
-- [ ] Create troubleshooting guide for perspective access
-- [ ] Document filter rule translation patterns
-- [ ] Add perspective-based workflow guides
+## Nice-to-Have Features
 
-## Known Issues to Address
+### 11. Performance Monitoring Dashboard
+- [ ] Add performance metrics to tool responses
+- [ ] Create performance tracking over time
+- [ ] Alert on performance regressions
+- [ ] Generate performance reports
 
-### From This Session
-1. **query_perspective timeouts** - Integration tests fail but direct scripts work
-2. **Some perspective filter rules return "not found"** - Need investigation
-3. **Claude Code status line** - Verify context percentage is displaying correctly
+### 12. Smart Query Optimization
+- [ ] Detect query patterns and auto-optimize
+- [ ] Implement query result prediction/prefetching
+- [ ] Add intelligent caching based on usage
+- [ ] Create query complexity analyzer
+
+### 13. Enhanced MCP Prompts
+- [ ] Perspective-based weekly review with sub-second response
+- [ ] Lightning-fast project breakdown assistant
+- [ ] Instant daily planning with Today perspective
+- [ ] Real-time context switching prompts
+
+## Known Issues to Monitor
+
+### From Today's Session
+1. **whose() method** - NEVER use it, always filter manually
+2. **safeGet() overhead** - Replace with direct try/catch where possible
+3. **Date object creation** - Use timestamps for comparisons
 
 ### Ongoing Technical Debt
 1. **Tag assignment during creation** - Still requires update after create
-2. **Complex date queries** - Limited by whose() clause restrictions
-3. **Transaction support** - No native atomic operations
-
-## Code Quality Improvements
-
-### ~~12. Cleanup Tasks~~ ✅ VERIFIED NOT NEEDED
-- [x] ~~Remove test files from root directory~~ - No test files found in root
-- [x] ~~Organize test files into proper test directories~~ - Already properly organized
-- [ ] Review and remove unnecessary debug logs
-- [ ] Consolidate perspective test scripts
-
-### 13. Type Safety
-- [ ] Add better typing for perspective filter rules
-- [ ] Create interfaces for perspective responses
-- [ ] Type the evaluateJavascript bridge responses
-- [ ] Improve error type definitions
-
-## Future Features (Lower Priority)
-
-### 14. Advanced Perspective Features
-- [ ] Perspective switching via URL schemes
-- [ ] Custom perspective creation from MCP
-- [ ] Perspective-based reporting
-- [ ] Perspective usage analytics
-
-### 15. Workflow Automation
-- [ ] Template instantiation with variable substitution
-- [ ] Bulk project creation from templates
-- [ ] Automated review scheduling based on perspective content
-- [ ] Smart task distribution across perspectives
+2. **Transaction support** - No native atomic operations
+3. **Lint warnings** - ~1800 warnings need addressing
 
 ## Research Items
 
-### 16. Investigate Further
-- [ ] Can we access perspective window settings?
-- [ ] Is perspective sidebar state accessible?
-- [ ] Can we determine currently active perspective?
-- [ ] Explore Window object in Omni Automation
+### 14. Performance Research
+- [ ] Benchmark OmniFocus API methods systematically
+- [ ] Test performance with 10,000+ task databases
+- [ ] Investigate native Omni Automation performance limits
+- [ ] Research AppleScript vs JXA performance differences
 
-## Success Metrics for This Session ✅
-
-✅ query_perspective working in all test scenarios (v1.11.1)
-✅ Code consistency refactoring complete (v1.11.2)
-✅ All 260 tests passing
-✅ ESLint enforcement in place
-✅ OmniFocus tasks created for template research
+### 15. Alternative Approaches
+- [ ] Investigate direct SQLite access (if possible)
+- [ ] Research OmniFocus URL scheme performance
+- [ ] Explore batch operation possibilities
+- [ ] Consider WebSocket for real-time updates
 
 ## Success Metrics for Next Session
 
+⬜ User feedback confirms v1.15.0 performance improvements
+⬜ All remaining whose() usage eliminated
 ⬜ At least one project template prompt implemented
-⬜ Improve error messages with recovery suggestions
-⬜ Documentation updated with perspective examples
-⬜ Performance profiling of perspective queries
+⬜ Performance regression test suite created
+⬜ Documentation updated with performance guidelines
+
+## Lessons Learned to Remember
+
+1. **Always question assumptions** - The hybrid approach wasn't the problem
+2. **Measure everything** - Simple benchmarks revealed the whose() catastrophe
+3. **User feedback is gold** - Each complaint led to a breakthrough
+4. **Small optimizations compound** - 67% + 93% = 95%+ total improvement
+5. **Direct is often better** - try/catch beats safeGet() wrapper
 
 ---
 
-*Updated: 2025-08-11*
+*Updated: 2025-08-11 (Evening)*
 *For: Next development session*
-*Priority: Implement project templates, improve error messages*
-*Note: Fresh session with refactored, consistent codebase!*
+*Priority: Monitor v1.15.0 performance, apply learnings broadly*
+*Note: We achieved 95%+ performance improvement - ensure it stays that way!*

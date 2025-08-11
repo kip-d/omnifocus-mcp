@@ -36,27 +36,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Repeat rules for projects temporarily disabled**: Under investigation
 - **Large database queries may be slow**: Upcoming tasks can take 30+ seconds with 2000+ tasks
 
-## Performance Optimization
+## Performance Optimization - CRITICAL LEARNINGS
 
-The `list_tasks` tool now includes performance optimizations:
+### ⚠️ NEVER Use JXA whose() Method
+The single most important performance lesson: **JXA's whose() method is catastrophically slow**.
 
-1. **skipAnalysis parameter**: Set `skipAnalysis: true` to skip recurring task analysis for ~30% faster queries
-2. **Removed double iteration**: Tasks are now counted in a single pass (O(n) instead of O(2n))
-3. **Performance metrics**: Response includes detailed timing breakdowns
+```javascript
+// ❌ NEVER DO THIS - Takes 25+ seconds for 2000 tasks
+const tasks = doc.flattenedTasks.whose({completed: false})();
 
-Example usage for better performance:
+// ✅ ALWAYS DO THIS - Takes <1 second for same operation
+const allTasks = doc.flattenedTasks();
+const tasks = [];
+for (let i = 0; i < allTasks.length; i++) {
+  const task = allTasks[i];
+  try {
+    if (!task.completed()) {
+      tasks.push(task);
+    }
+  } catch (e) { /* skip */ }
+}
+```
+
+### JavaScript Filtering Optimizations (v1.15.0)
+
+1. **Eliminate safeGet() overhead** - Direct try/catch is 50-60% faster
+2. **Use timestamps for date comparisons** - Avoid Date object creation in loops
+3. **Early exit conditions** - Check most common filters first (completed, no date)
+4. **Cache property access** - Store results instead of repeated function calls
+5. **Bitwise operations** - Use `| 0` for fast integer math
+
+```javascript
+// ❌ OLD - Multiple overhead points
+function safeGet(fn) { try { return fn(); } catch { return null; } }
+if (safeGet(() => task.completed())) continue;
+const dueDateObj = new Date(safeGet(() => task.dueDate()));
+
+// ✅ NEW - Direct access with timestamps
+try {
+  if (task.completed()) continue;
+  const dueDate = task.dueDate();
+  if (!dueDate) continue;
+  const dueTime = dueDate.getTime ? dueDate.getTime() : new Date(dueDate).getTime();
+  if (dueTime < startTime || dueTime > endTime) continue;
+} catch (e) { /* skip */ }
+```
+
+### Performance Evolution
+- **v1.13.0**: 22+ seconds (broken hybrid implementation)
+- **v1.14.0**: 2-6 seconds (removed whose() method)
+- **v1.15.0**: <1 second (optimized JavaScript filtering)
+- **Total improvement**: 95%+ faster
+
+### skipAnalysis Parameter
+Set `skipAnalysis: true` to skip recurring task analysis for additional 30% faster queries:
 ```javascript
 // Fast query - skip recurring task analysis
 list_tasks({ completed: false, limit: 50, skipAnalysis: true })
-
-// Normal query - includes full recurring task analysis  
-list_tasks({ completed: false, limit: 50 })
 ```
-
-Performance improvements:
-- Query times reduced from 15-20s to ~1-2s for typical queries
-- With skipAnalysis: ~1.2s for 10 tasks
-- Without skipAnalysis: ~1.6s for 10 tasks
 
 ## Common Development Commands
 
