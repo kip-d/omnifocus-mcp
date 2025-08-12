@@ -4,7 +4,7 @@ import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 // Import hybrid scripts directly - they provide better performance
 import {
   GET_OVERDUE_TASKS_HYBRID_SCRIPT,
-  GET_UPCOMING_TASKS_HYBRID_SCRIPT
+  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-hybrid.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
@@ -37,25 +37,25 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
       switch (queryType) {
         case 'overdue':
           return this.handleOverdueTasks(args, timer);
-          
+
         case 'upcoming':
           return this.handleUpcomingTasks(args, timer);
-          
+
         case 'list':
         case 'search':
         case 'next_actions':
         case 'blocked':
         case 'available':
           return this.handleListBasedQuery(queryType, args, timer);
-          
+
         default:
           return createErrorResponse(
             'query_tasks',
             'INVALID_QUERY_TYPE',
             `Invalid query type: ${queryType}`,
-            { 
+            {
               validTypes: ['list', 'search', 'next_actions', 'blocked', 'available', 'overdue', 'upcoming'],
-              provided: queryType 
+              provided: queryType,
             },
             timer.toMetadata(),
           );
@@ -68,14 +68,14 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
 
   private async handleOverdueTasks(args: z.infer<typeof QueryTasksToolSchema>, timer: OperationTimer): Promise<any> {
     const { limit = 50, includeCompleted = false } = args;
-    
+
     const scriptParams = {
       limit,
       includeCompleted,
     };
-    
+
     const cacheKey = `query_tasks_overdue_${scriptParams.includeCompleted}_${scriptParams.limit}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
@@ -124,22 +124,22 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
         from_cache: false,
         query_type: 'overdue',
         summary: result.summary,
-        description: 'Tasks past their due date'
+        description: 'Tasks past their due date',
       },
     );
   }
 
   private async handleUpcomingTasks(args: z.infer<typeof QueryTasksToolSchema>, timer: OperationTimer): Promise<any> {
     const { daysAhead = 7, includeToday = true, limit = 50 } = args;
-    
+
     const scriptParams = {
       days: daysAhead,
       includeToday,
       limit,
     };
-    
+
     const cacheKey = `query_tasks_upcoming_${scriptParams.days}_${scriptParams.includeToday}_${scriptParams.limit}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
@@ -188,15 +188,15 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
         from_cache: false,
         query_type: 'upcoming',
         summary: result.summary,
-        description: `Tasks due in next ${daysAhead} days`
+        description: `Tasks due in next ${daysAhead} days`,
       },
     );
   }
 
   private async handleListBasedQuery(
     queryType: 'list' | 'search' | 'next_actions' | 'blocked' | 'available',
-    args: z.infer<typeof QueryTasksToolSchema>, 
-    timer: OperationTimer
+    args: z.infer<typeof QueryTasksToolSchema>,
+    timer: OperationTimer,
   ): Promise<ListTasksResponse> {
     const {
       searchTerm,
@@ -217,7 +217,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
       skipAnalysis = false,
       // Query-type specific params
       showBlockingTasks = true,
-      includeFlagged = true
+      includeFlagged = true,
     } = args;
 
     // Build filter based on query type
@@ -236,7 +236,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
       skipAnalysis,
       includeDetails,
       sortBy,
-      sortOrder
+      sortOrder,
     };
 
     // Apply query-type specific logic
@@ -244,26 +244,26 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
       case 'search':
         filter.search = searchTerm;
         break;
-        
+
       case 'next_actions':
         filter.completed = false;
         filter.next = true;
         filter.available = true;
         filter.skipAnalysis = false; // Need full analysis for accurate next action detection
         break;
-        
+
       case 'blocked':
         filter.completed = false;
         filter.blocked = true;
         filter.skipAnalysis = false; // Need full analysis for accurate blocking detection
         break;
-        
+
       case 'available':
         filter.completed = false;
         filter.available = true;
         filter.skipAnalysis = false; // Need full analysis for accurate availability detection
         break;
-        
+
       case 'list':
         // Use filters as provided
         break;
@@ -271,7 +271,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
 
     // Clean up undefined values
     filter = Object.fromEntries(
-      Object.entries(filter).filter(([_, value]) => value !== undefined)
+      Object.entries(filter).filter(([_, value]) => value !== undefined),
     );
 
     // Create cache key
@@ -356,7 +356,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
       added: task.added ? new Date(task.added) : undefined,
       recurringStatus: task.recurringStatus ? {
         ...task.recurringStatus,
-        type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+        type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped',
       } : undefined,
     };
   }

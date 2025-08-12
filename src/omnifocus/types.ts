@@ -207,7 +207,7 @@ export interface TaskFilter {
   search?: string;
   inInbox?: boolean;
   available?: boolean;
-  
+
   // Advanced status filters
   taskStatus?: 'Available' | 'Blocked' | 'Completed' | 'Dropped' | 'DueSoon' | 'Next' | 'Overdue';
   blocked?: boolean;

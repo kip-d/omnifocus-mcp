@@ -46,7 +46,7 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
           export_date: new Date().toISOString(),
           include_stats: includeStats,
           project_count: result.count,
-        }
+        },
       );
     } catch (error) {
       return this.handleError(error) as any;

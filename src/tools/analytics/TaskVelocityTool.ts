@@ -35,7 +35,7 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
             period,
             project_id: projectId,
             tags,
-          }
+          },
         );
       }
 
@@ -82,7 +82,7 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
           period,
           project_id: projectId,
           tags,
-        }
+        },
       );
     } catch (error) {
       return this.handleError(error) as TaskVelocityResponse;

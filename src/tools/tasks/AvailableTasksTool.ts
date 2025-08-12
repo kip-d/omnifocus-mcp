@@ -10,30 +10,30 @@ const AvailableTasksSchema = z.object({
   projectId: z.string()
     .optional()
     .describe('Filter available tasks for a specific project'),
-  
+
   tags: z.array(z.string())
     .optional()
     .describe('Filter available tasks by tags (tasks must have ALL specified tags)'),
-  
+
   includeDetails: coerceBoolean()
     .default(true)
     .describe('Include task details like notes, project info, and tags'),
-  
+
   includeFlagged: coerceBoolean()
     .default(true)
     .describe('Include flagged tasks in the results'),
-  
+
   sortBy: z.enum(['dueDate', 'project', 'flagged', 'name'])
     .optional()
     .default('dueDate')
     .describe('Sort results by field'),
-  
+
   limit: coerceNumber()
     .int()
     .positive()
     .max(500)
     .default(100)
-    .describe('Maximum number of available tasks to return')
+    .describe('Maximum number of available tasks to return'),
 });
 
 export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
@@ -56,7 +56,7 @@ export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
         limit,
         skipAnalysis: false, // Need full analysis for accurate availability detection
         includeDetails,
-        sortBy
+        sortBy,
       };
 
       // Create cache key
@@ -109,7 +109,7 @@ export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
         added: task.added ? new Date(task.added) : undefined,
         recurringStatus: task.recurringStatus ? {
           ...task.recurringStatus,
-          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped',
         } : undefined,
       }));
 
@@ -131,7 +131,7 @@ export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
           description: 'All tasks currently available to work on',
           includes_flagged: includeFlagged,
           sorted_by: sortBy,
-          usage_tip: 'These tasks can all be worked on immediately without waiting for other tasks'
+          usage_tip: 'These tasks can all be worked on immediately without waiting for other tasks',
         },
       );
 

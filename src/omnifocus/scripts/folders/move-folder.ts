@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to move a folder within the OmniFocus hierarchy
- * 
+ *
  * Features:
  * - Move folder to different parent
  * - Position within new parent (beginning, ending, before, after)

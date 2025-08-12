@@ -23,7 +23,7 @@ export class PermissionChecker {
   /**
    * Check if we have permission to access OmniFocus
    */
-  async checkPermissions(): Promise<PermissionStatus> {
+  checkPermissions(): PermissionStatus {
     // Return cached result if we've already checked
     if (this.permissionStatus !== null) {
       return this.permissionStatus;

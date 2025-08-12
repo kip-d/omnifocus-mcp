@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to set review schedules for multiple projects
- * 
+ *
  * Features:
  * - Batch update review intervals for multiple projects
  * - Set next review dates (calculated or specified)

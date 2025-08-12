@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list folders in OmniFocus with hierarchy information
- * 
+ *
  * Features:
  * - List all folders with filtering options
  * - Include parent/child hierarchy information

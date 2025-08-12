@@ -87,7 +87,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
   const tools = [
     // New consolidated task query tool (recommended for all query operations)
     new QueryTasksTool(cache),
-    
+
     // Task tools - Read operations (legacy tools - use query_tasks instead)
     new ListTasksTool(cache),          // Deprecated: use query_tasks with queryType: "list"
     new GetTaskCountTool(cache),
@@ -154,15 +154,15 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
 
     // Diagnostic tools
     new RunDiagnosticsTool(cache),
-    
+
     // New consolidated tools (recommended for better LLM usage)
     new ManageReviewsTool(cache),
     new BatchTaskOperationsTool(cache),
-    
+
     // Perspective tools - NEW! Access user perspectives
     new ListPerspectivesTool(cache),
     new QueryPerspectiveTool(cache),
-    
+
     // Legacy review tools (deprecated but kept for backward compatibility)
     new ProjectsForReviewTool(cache),    // Deprecated: use manage_reviews with operation: "list_for_review"
     new MarkProjectReviewedTool(cache),  // Deprecated: use manage_reviews with operation: "mark_reviewed"

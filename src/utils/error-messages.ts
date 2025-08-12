@@ -67,11 +67,11 @@ export function scriptExecutionError(operation: string, details: string, suggest
     'Check that no modal windows are open in OmniFocus',
     'Try bringing OmniFocus to the foreground',
   ];
-  
+
   if (suggestion) {
     recovery.unshift(suggestion);
   }
-  
+
   return {
     message: `Failed to ${operation} in OmniFocus: ${details}`,
     recovery,
@@ -186,7 +186,7 @@ export function perspectiveError(perspectiveName: string, notFound: boolean = tr
       ],
     };
   }
-  
+
   return {
     message: `Cannot access perspective '${perspectiveName}'.`,
     recovery: [
@@ -203,12 +203,12 @@ export function perspectiveError(perspectiveName: string, notFound: boolean = tr
  */
 export function formatErrorWithRecovery(error: ErrorWithRecovery): string {
   const parts = [error.message];
-  
+
   if (error.recovery && error.recovery.length > 0) {
     parts.push('', 'How to fix:');
     parts.push(...error.recovery.map(step => `  • ${step}`));
   }
-  
+
   return parts.join('\n');
 }
 

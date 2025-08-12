@@ -74,14 +74,14 @@ export class ProjectsForReviewTool extends BaseTool<typeof ProjectsForReviewSche
       const parsedProjects = result.projects.map((project: any) => {
         const nextReviewDate = project.nextReviewDate ? new Date(project.nextReviewDate) : null;
         const lastReviewDate = project.lastReviewDate ? new Date(project.lastReviewDate) : null;
-        
+
         let reviewStatus = 'no_schedule';
         let daysUntilReview = null;
-        
+
         if (nextReviewDate) {
           const msUntilReview = nextReviewDate.getTime() - now.getTime();
           daysUntilReview = Math.ceil(msUntilReview / (1000 * 60 * 60 * 24));
-          
+
           if (daysUntilReview < 0) {
             reviewStatus = 'overdue';
           } else if (daysUntilReview === 0) {
@@ -102,7 +102,7 @@ export class ProjectsForReviewTool extends BaseTool<typeof ProjectsForReviewSche
           nextReviewDate,
           reviewStatus,
           daysUntilReview,
-          daysSinceLastReview: lastReviewDate ? 
+          daysSinceLastReview: lastReviewDate ?
             Math.floor((now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24)) : null,
         };
       });

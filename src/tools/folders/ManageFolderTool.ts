@@ -5,14 +5,14 @@ import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-fol
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { 
+import {
   CreateFolderOperationSchema,
   UpdateFolderOperationSchema,
   DeleteFolderOperationSchema,
   MoveFolderOperationSchema,
   SetFolderStatusOperationSchema,
   DuplicateFolderOperationSchema,
-  ManageFolderSchema
+  ManageFolderSchema,
 } from '../schemas/folder-schemas.js';
 
 export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
@@ -27,17 +27,17 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     try {
       switch (operation) {
         case 'create':
-          return await this.handleCreate(args as z.infer<typeof CreateFolderOperationSchema>, timer);
+          return await this.handleCreate(args, timer);
         case 'update':
-          return await this.handleUpdate(args as z.infer<typeof UpdateFolderOperationSchema>, timer);
+          return await this.handleUpdate(args, timer);
         case 'delete':
-          return await this.handleDelete(args as z.infer<typeof DeleteFolderOperationSchema>, timer);
+          return await this.handleDelete(args, timer);
         case 'move':
-          return await this.handleMove(args as z.infer<typeof MoveFolderOperationSchema>, timer);
+          return await this.handleMove(args, timer);
         case 'set_status':
-          return await this.handleSetStatus(args as z.infer<typeof SetFolderStatusOperationSchema>, timer);
+          return await this.handleSetStatus(args, timer);
         case 'duplicate':
-          return await this.handleDuplicate(args as z.infer<typeof DuplicateFolderOperationSchema>, timer);
+          return await this.handleDuplicate(args, timer);
         default:
           return createErrorResponse(
             'manage_folder',
@@ -123,7 +123,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
   private async handleUpdate(args: z.infer<typeof UpdateFolderOperationSchema>, timer: OperationTimer): Promise<any> {
     const { folderId, name, status } = args;
     const updates: any = {};
-    
+
     if (name !== undefined) updates.name = name;
     if (status !== undefined) updates.status = status;
 

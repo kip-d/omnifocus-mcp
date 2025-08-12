@@ -1,6 +1,6 @@
 /**
  * SMART Hybrid implementation using lessons learned
- * 
+ *
  * Strategy:
  * 1. Use JXA whose() for initial bulk filtering (database-level, fast)
  * 2. Use JXA for date comparisons (already has the data)

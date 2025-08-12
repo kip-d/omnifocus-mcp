@@ -35,11 +35,11 @@ export const TaskSchema = z.object({
   repetitionMethod: z.string().optional(),
   repetitionRule: ExistingRepeatRuleSchema.optional(),
   primaryKey: z.string().optional(),
-  
+
   // Advanced status properties
   taskStatus: z.string().optional(),
   blocked: z.boolean().optional(),
-  next: z.boolean().optional()
+  next: z.boolean().optional(),
 });
 
 // List tasks parameters - with coercion for MCP string inputs
@@ -91,20 +91,20 @@ export const ListTasksSchema = z.object({
   includeCompleted: coerceBoolean()
     .optional()
     .describe('Include completed tasks in results'),
-  
+
   // Advanced status filters
   taskStatus: z.enum(['Available', 'Blocked', 'Completed', 'Dropped', 'DueSoon', 'Next', 'Overdue'])
     .optional()
     .describe('Filter by specific task status'),
-  
+
   blocked: coerceBoolean()
     .optional()
     .describe('Filter for blocked tasks (waiting on other incomplete tasks)'),
-  
+
   next: coerceBoolean()
     .optional()
     .describe('Filter for next actions (available tasks not blocked by others)'),
-  
+
   sortBy: z.enum(['dueDate', 'deferDate', 'name', 'project', 'flagged'])
     .optional()
     .describe('Sort results by field'),
@@ -194,10 +194,10 @@ export const CreateTaskSchema = z.object({
   sequential: coerceBoolean()
     .default(false)
     .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.'),
-  
+
   repeatRule: RepeatRuleSchema
     .optional()
-    .describe('Repeat/recurrence rule for the task. Supports complex patterns including weekly days and monthly positions.')
+    .describe('Repeat/recurrence rule for the task. Supports complex patterns including weekly days and monthly positions.'),
 });
 
 // Update task parameters
@@ -257,14 +257,14 @@ export const UpdateTaskSchema = z.object({
   sequential: coerceBoolean()
     .optional()
     .describe('Whether subtasks must be completed in order (sequential) or can be done in any order (parallel). Only applies if task has subtasks.'),
-  
+
   repeatRule: RepeatRuleSchema
     .optional()
     .describe('New repeat/recurrence rule for the task. Replaces existing repeat rule.'),
-  
+
   clearRepeatRule: coerceBoolean()
     .optional()
-    .describe('Set to true to remove the existing repeat rule')
+    .describe('Set to true to remove the existing repeat rule'),
 });
 
 // Complete task parameters
@@ -316,7 +316,7 @@ export const DateRangeQueryToolSchema = z.object({
     coerceNumber().int().min(1).max(365),
     z.undefined(),
     z.null(),
-    z.literal('')
+    z.literal(''),
   ])
     .optional()
     .transform(val => {
@@ -449,54 +449,54 @@ export const QueryTasksToolSchema = z.object({
     'list',          // General list with filters (replaces list_tasks)
     'search',        // Search in task names/notes (new functionality)
     'next_actions',  // Available next actions (replaces next_actions)
-    'blocked',       // Tasks blocked by other tasks (replaces blocked_tasks) 
+    'blocked',       // Tasks blocked by other tasks (replaces blocked_tasks)
     'available',     // All available/workable tasks (replaces available_tasks)
     'overdue',       // Past due tasks (replaces get_overdue_tasks)
-    'upcoming'       // Due in next N days (replaces get_upcoming_tasks)
+    'upcoming',       // Due in next N days (replaces get_upcoming_tasks)
   ])
     .describe('Type of task query to perform'),
-  
+
   // For search query type
   searchTerm: SearchTextSchema
     .optional()
     .describe('Search term for names and notes (search query type)'),
-  
+
   // Core filtering (applies to most query types)
   completed: coerceBoolean()
     .optional()
     .describe('Filter by completion status'),
-    
+
   flagged: coerceBoolean()
     .optional()
     .describe('Filter by flagged status'),
-    
+
   projectId: z.string()
     .optional()
     .describe('Filter by project ID'),
-    
+
   tags: z.array(TagNameSchema)
     .optional()
     .describe('Filter by tag names (tasks must have ALL specified tags)'),
-  
+
   // Date filtering (mainly for list, search query types)
   dueBefore: DateTimeSchema
     .optional()
     .describe('Filter tasks due before this date'),
-    
+
   dueAfter: DateTimeSchema
     .optional()
     .describe('Filter tasks due after this date'),
-    
+
   deferBefore: DateTimeSchema
     .optional()
     .describe('Filter tasks deferred before this date'),
-    
+
   deferAfter: DateTimeSchema
     .optional()
     .describe('Filter tasks deferred after this date'),
-  
+
   // Specialized parameters for specific query types
-  
+
   // For upcoming query type
   daysAhead: coerceNumber()
     .int()
@@ -504,57 +504,57 @@ export const QueryTasksToolSchema = z.object({
     .max(365)
     .default(7)
     .describe('Number of days to look ahead (upcoming query type)'),
-    
+
   includeToday: coerceBoolean()
     .default(true)
     .describe('Include tasks due today (upcoming query type)'),
-  
+
   // For overdue query type
   includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed overdue tasks (overdue query type)'),
-  
+
   // For blocked query type
   showBlockingTasks: coerceBoolean()
     .default(true)
     .describe('Include information about blocking tasks (blocked query type)'),
-    
+
   // For available query type
   includeFlagged: coerceBoolean()
     .default(true)
     .describe('Include flagged tasks (available query type)'),
-  
+
   // Common parameters
   available: coerceBoolean()
     .optional()
     .describe('Filter by availability (considering defer dates)'),
-    
+
   inInbox: coerceBoolean()
     .optional()
     .describe('Filter for inbox tasks only'),
-    
+
   includeDetails: coerceBoolean()
     .default(true)
     .describe('Include task details like notes, project info, and tags'),
-    
+
   sortBy: z.enum(['dueDate', 'deferDate', 'name', 'project', 'flagged'])
     .optional()
     .describe('Sort results by field'),
-    
+
   sortOrder: z.enum(['asc', 'desc'])
     .optional()
     .default('asc')
     .describe('Sort order'),
-    
+
   limit: coerceNumber()
     .int()
     .positive()
     .max(1000)
     .default(100)
     .describe('Maximum number of tasks to return'),
-    
+
   // Performance options
   skipAnalysis: coerceBoolean()
     .default(false)
-    .describe('Skip recurring task analysis for 30% faster queries')
+    .describe('Skip recurring task analysis for 30% faster queries'),
 });

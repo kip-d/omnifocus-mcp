@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update folder properties in OmniFocus
- * 
+ *
  * Features:
  * - Update folder name and status
  * - Proper error handling and validation

@@ -188,47 +188,49 @@ export function parseFlexibleDate(dateStr: string | null | undefined): string | 
     // Enhanced error logging for debugging
     const tzInfo = getTimezoneInfo();
     console.warn(`Failed to parse date "${dateStr}" in timezone ${tzInfo.timezone}. Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    
+
     return null;
   }
 }
 
 /**
  * Parse relative date strings like "tomorrow", "next Monday", etc.
- * 
+ *
  * @param dateStr Relative date string
  * @returns UTC ISO string or null if not a recognized relative date
  */
 export function parseRelativeDate(dateStr: string): string | null {
   const lowerStr = dateStr.toLowerCase().trim();
   const now = new Date();
-  
+
   // Reset to start of day in LOCAL timezone, then convert to UTC
   // This ensures relative dates respect the user's timezone
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   switch (lowerStr) {
     case 'today':
       return today.toISOString();
-      
-    case 'tomorrow':
+
+    case 'tomorrow': {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       return tomorrow.toISOString();
-      
-    case 'yesterday':
+    }
+
+    case 'yesterday': {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       return yesterday.toISOString();
+    }
   }
-  
+
   // Handle "next [day of week]"
   const nextDayMatch = lowerStr.match(/^next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/);
   if (nextDayMatch) {
     const targetDay = nextDayMatch[1];
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const targetDayIndex = dayNames.indexOf(targetDay);
-    
+
     if (targetDayIndex !== -1) {
       const daysUntilTarget = (targetDayIndex - today.getDay() + 7) % 7;
       const nextDay = new Date(today);
@@ -236,7 +238,7 @@ export function parseRelativeDate(dateStr: string): string | null {
       return nextDay.toISOString();
     }
   }
-  
+
   // Handle "in X days"
   const inDaysMatch = lowerStr.match(/^in\s+(\d+)\s+days?$/);
   if (inDaysMatch) {
@@ -247,7 +249,7 @@ export function parseRelativeDate(dateStr: string): string | null {
       return futureDate.toISOString();
     }
   }
-  
+
   // Handle "X days ago"
   const daysAgoMatch = lowerStr.match(/^(\d+)\s+days?\s+ago$/);
   if (daysAgoMatch) {
@@ -258,7 +260,7 @@ export function parseRelativeDate(dateStr: string): string | null {
       return pastDate.toISOString();
     }
   }
-  
+
   return null;
 }
 

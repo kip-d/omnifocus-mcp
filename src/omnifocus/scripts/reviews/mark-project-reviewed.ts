@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to mark a project as reviewed
- * 
+ *
  * Features:
  * - Set lastReviewDate to specified date (or now)
  * - Optionally calculate nextReviewDate based on review interval

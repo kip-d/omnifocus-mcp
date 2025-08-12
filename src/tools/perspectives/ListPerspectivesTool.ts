@@ -13,7 +13,7 @@ const ListPerspectivesSchema = z.object({
   sortBy: z.enum(['name', 'type'])
     .optional()
     .default('name')
-    .describe('Sort order for perspectives')
+    .describe('Sort order for perspectives'),
 });
 
 // Perspective type
@@ -64,7 +64,7 @@ export class ListPerspectivesTool extends BaseTool<typeof ListPerspectivesSchema
           'list_perspectives',
           'SCRIPT_ERROR',
           result.error,
-          timer
+          timer,
         );
       }
 
@@ -76,7 +76,7 @@ export class ListPerspectivesTool extends BaseTool<typeof ListPerspectivesSchema
         perspectives = perspectives.map(p => ({
           ...p,
           filterRules: null,
-          filterAggregation: undefined
+          filterAggregation: undefined,
         }));
       }
 
@@ -99,7 +99,7 @@ export class ListPerspectivesTool extends BaseTool<typeof ListPerspectivesSchema
       const response = createListResponse(
         'list_perspectives',
         perspectives,
-        timer.toMetadata()
+        timer.toMetadata(),
       ) as ListPerspectivesResponse;
 
       // Add extra properties to data
@@ -117,7 +117,7 @@ export class ListPerspectivesTool extends BaseTool<typeof ListPerspectivesSchema
       return createErrorResponse(
         'list_perspectives',
         'UNKNOWN_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        error instanceof Error ? error.message : 'Unknown error',
       ) as ListPerspectivesResponse;
     }
   }

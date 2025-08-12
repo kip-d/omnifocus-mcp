@@ -58,7 +58,7 @@ export class TodaysAgendaTool extends BaseTool<typeof TodaysAgendaSchema> {
 
       // Execute hybrid script
       const script = this.omniAutomation.buildScript(TODAYS_AGENDA_OPTIMIZED_NO_WHOSE_SCRIPT, {
-        includeFlagged, includeOverdue, includeAvailable, includeDetails, limit
+        includeFlagged, includeOverdue, includeAvailable, includeDetails, limit,
       });
       const result = await this.omniAutomation.execute<any>(script);
 

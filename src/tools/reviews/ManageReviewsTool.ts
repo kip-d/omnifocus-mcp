@@ -1,8 +1,8 @@
 import { BaseTool } from '../base.js';
-import { 
-  PROJECTS_FOR_REVIEW_SCRIPT, 
+import {
+  PROJECTS_FOR_REVIEW_SCRIPT,
   MARK_PROJECT_REVIEWED_SCRIPT,
-  SET_REVIEW_SCHEDULE_SCRIPT 
+  SET_REVIEW_SCHEDULE_SCRIPT,
 } from '../../omnifocus/scripts/reviews.js';
 import { createListResponse, createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
@@ -18,20 +18,20 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     try {
       // Handle Claude Desktop sometimes sending stringified parameters
       const normalizedArgs = this.normalizeArgs(args);
-      
+
       switch (normalizedArgs.operation) {
         case 'list_for_review':
           return this.listForReview(normalizedArgs, timer);
-          
+
         case 'mark_reviewed':
           return this.markReviewed(normalizedArgs, timer);
-          
+
         case 'set_schedule':
           return this.setSchedule(normalizedArgs, timer);
-          
+
         case 'clear_schedule':
           return this.clearSchedule(normalizedArgs, timer);
-          
+
         default:
           // TypeScript should prevent this, but just in case
           return createErrorResponse(
@@ -49,7 +49,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
   private async listForReview(
     args: Extract<ManageReviewsInput, { operation: 'list_for_review' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     // Create cache key from filter
     const cacheKey = JSON.stringify(args);
@@ -112,14 +112,14 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     const parsedProjects = result.projects.map((project: any) => {
       const nextReviewDate = project.nextReviewDate ? new Date(project.nextReviewDate) : null;
       const lastReviewDate = project.lastReviewDate ? new Date(project.lastReviewDate) : null;
-      
+
       let reviewStatus = 'no_schedule';
       let daysUntilReview = null;
-      
+
       if (nextReviewDate) {
         const msUntilReview = nextReviewDate.getTime() - now.getTime();
         daysUntilReview = Math.ceil(msUntilReview / (1000 * 60 * 60 * 24));
-        
+
         if (daysUntilReview < 0) {
           reviewStatus = 'overdue';
         } else if (daysUntilReview === 0) {
@@ -140,7 +140,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         nextReviewDate,
         reviewStatus,
         daysUntilReview,
-        daysSinceLastReview: lastReviewDate ? 
+        daysSinceLastReview: lastReviewDate ?
           Math.floor((now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24)) : null,
       };
     });
@@ -172,7 +172,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
   private async markReviewed(
     args: Extract<ManageReviewsInput, { operation: 'mark_reviewed' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { projectId, reviewDate, updateNextReviewDate } = args;
 
@@ -231,7 +231,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
   private async setSchedule(
     args: Extract<ManageReviewsInput, { operation: 'set_schedule' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { projectIds, reviewInterval, nextReviewDate } = args;
 
@@ -287,7 +287,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
   private async clearSchedule(
     args: Extract<ManageReviewsInput, { operation: 'clear_schedule' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { projectIds } = args;
 
@@ -340,7 +340,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   private normalizeArgs(args: any): ManageReviewsInput {
     // Handle Claude Desktop sometimes sending stringified parameters
     const normalized = { ...args };
-    
+
     // Parse projectIds if it's a string
     if (typeof normalized.projectIds === 'string') {
       try {
@@ -349,7 +349,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         this.logger.warn('Failed to parse projectIds string, keeping as-is');
       }
     }
-    
+
     // Parse reviewInterval if it's a string
     if (typeof normalized.reviewInterval === 'string') {
       try {
@@ -358,7 +358,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         this.logger.warn('Failed to parse reviewInterval string, keeping as-is');
       }
     }
-    
+
     // Parse other potentially stringified arrays/objects
     if (typeof normalized.tags === 'string') {
       try {
@@ -367,7 +367,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         this.logger.warn('Failed to parse tags string, keeping as-is');
       }
     }
-    
+
     return normalized as ManageReviewsInput;
   }
 }

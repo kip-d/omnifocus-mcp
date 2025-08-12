@@ -22,7 +22,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
       includeCompleted = true,
       includeProjectStats = true,
     } = args;
-    
+
     try {
 
       // Ensure directory exists
@@ -45,7 +45,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         } else {
           await fs.writeFile(taskFile, JSON.stringify(taskResult.data.data, null, 2), 'utf-8');
         }
-        
+
         exports.tasks = {
           format: format,
           task_count: taskCount,
@@ -70,7 +70,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         } else {
           await fs.writeFile(projectFile, JSON.stringify(projectResult.data.data, null, 2), 'utf-8');
         }
-        
+
         exports.projects = {
           format: format,
           project_count: projectCount,
@@ -89,7 +89,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         const tagCount = tagResult.metadata?.total_count || tagItems.length;
 
         await fs.writeFile(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
-        
+
         exports.tags = {
           format: 'json',
           tag_count: tagCount,
@@ -113,7 +113,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
           export_format: format,
           include_completed: includeCompleted,
           include_project_stats: includeProjectStats,
-        }
+        },
       );
     } catch (error) {
       // Provide specific recovery information for file system errors
@@ -132,7 +132,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
               ],
               path: outputDirectory,
             },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
         }
         if (errorMessage.includes('enospc')) {
@@ -147,7 +147,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
               ],
               path: outputDirectory,
             },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
         }
         if (errorMessage.includes('enoent')) {
@@ -163,7 +163,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
               ],
               path: outputDirectory,
             },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
         }
       }

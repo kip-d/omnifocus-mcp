@@ -40,20 +40,19 @@ async function runServer() {
 
   // Perform initial permission check (non-blocking)
   const permissionChecker = PermissionChecker.getInstance();
-  permissionChecker.checkPermissions()
-    .then(result => {
-      if (!result.hasPermission) {
-        logger.warn('OmniFocus permissions not granted. Tools will provide instructions when used.');
-        if (result.instructions) {
-          logger.info('Permission instructions:', result.instructions);
-        }
-      } else {
-        logger.info('OmniFocus permissions verified');
+  try {
+    const result = permissionChecker.checkPermissions();
+    if (!result.hasPermission) {
+      logger.warn('OmniFocus permissions not granted. Tools will provide instructions when used.');
+      if (result.instructions) {
+        logger.info('Permission instructions:', result.instructions);
       }
-    })
-    .catch(error => {
-      logger.error('Failed to check permissions:', error);
-    });
+    } else {
+      logger.info('OmniFocus permissions verified');
+    }
+  } catch (error) {
+    logger.error('Failed to check permissions:', error);
+  }
 
   // Register all tools and prompts AFTER server creation but BEFORE connection
   await registerTools(server, cacheManager);

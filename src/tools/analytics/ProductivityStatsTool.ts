@@ -35,7 +35,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
             period,
             group_by: groupBy,
             include_completed: includeCompleted,
-          }
+          },
         );
       }
 
@@ -77,7 +77,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
           period,
           group_by: groupBy,
           include_completed: includeCompleted,
-        }
+        },
       );
     } catch (error) {
       return this.handleError(error) as ProductivityStatsResponse;

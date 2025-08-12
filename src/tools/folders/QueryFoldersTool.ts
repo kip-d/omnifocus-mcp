@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_FOLDERS_SCRIPT } from '../../omnifocus/scripts/folders/list-folders.js';
 import { createCollectionResponse, createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { 
+import {
   QueryFoldersSchema,
   ListFoldersOperationSchema,
   GetFolderOperationSchema,
   SearchFoldersOperationSchema,
-  GetFolderProjectsOperationSchema
+  GetFolderProjectsOperationSchema,
 } from '../schemas/folder-schemas.js';
 
 export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
@@ -22,13 +22,13 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     try {
       switch (operation) {
         case 'list':
-          return await this.handleList(args as z.infer<typeof ListFoldersOperationSchema>, timer);
+          return await this.handleList(args, timer);
         case 'get':
-          return await this.handleGet(args as z.infer<typeof GetFolderOperationSchema>, timer);
+          return await this.handleGet(args, timer);
         case 'search':
-          return await this.handleSearch(args as z.infer<typeof SearchFoldersOperationSchema>, timer);
+          return await this.handleSearch(args, timer);
         case 'get_projects':
-          return await this.handleGetProjects(args as z.infer<typeof GetFolderProjectsOperationSchema>, timer);
+          return await this.handleGetProjects(args, timer);
         default:
           return createErrorResponse(
             'query_folders',
@@ -50,7 +50,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       includeProjects = false,
       sortBy = 'name',
       sortOrder = 'asc',
-      limit = 100
+      limit = 100,
     } = args;
 
     const cacheKey = 'folders';
@@ -79,7 +79,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       includeProjects,
       sortBy,
       sortOrder,
-      limit
+      limit,
     };
 
     const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
@@ -132,7 +132,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       options: {
         includeHierarchy: true,
         includeProjects: includeDetails,
-        limit: 1000 // Set high limit to ensure we get all folders for filtering
+        limit: 1000, // Set high limit to ensure we get all folders for filtering
       },
     });
     const result = await this.omniAutomation.execute<any>(script);
@@ -193,7 +193,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         search: searchTerm,
         includeHierarchy: true,
         includeProjects: includeDetails,
-        limit
+        limit,
       },
     });
     const result = await this.omniAutomation.execute<any>(script);
@@ -237,7 +237,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       options: {
         includeHierarchy: false,
         includeProjects: true,
-        limit: 1000
+        limit: 1000,
       },
     });
     const result = await this.omniAutomation.execute<any>(script);

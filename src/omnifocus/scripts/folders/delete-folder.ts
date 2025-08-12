@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a folder in OmniFocus
- * 
+ *
  * Features:
  * - Delete folder with safety checks
  * - Move contents to another folder or root

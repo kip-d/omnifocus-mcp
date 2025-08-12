@@ -10,21 +10,21 @@ const NextActionsSchema = z.object({
   projectId: z.string()
     .optional()
     .describe('Filter next actions for a specific project'),
-  
+
   tags: z.array(z.string())
     .optional()
     .describe('Filter next actions by tags (tasks must have ALL specified tags)'),
-  
+
   includeDetails: coerceBoolean()
     .default(true)
     .describe('Include task details like notes, project info, and tags'),
-  
+
   limit: coerceNumber()
     .int()
     .positive()
     .max(200)
     .default(50)
-    .describe('Maximum number of next actions to return')
+    .describe('Maximum number of next actions to return'),
 });
 
 export class NextActionsTool extends BaseTool<typeof NextActionsSchema> {
@@ -47,7 +47,7 @@ export class NextActionsTool extends BaseTool<typeof NextActionsSchema> {
         tags,
         limit,
         skipAnalysis: false, // Need full analysis for accurate next action detection
-        includeDetails
+        includeDetails,
       };
 
       // Create cache key
@@ -100,7 +100,7 @@ export class NextActionsTool extends BaseTool<typeof NextActionsSchema> {
         added: task.added ? new Date(task.added) : undefined,
         recurringStatus: task.recurringStatus ? {
           ...task.recurringStatus,
-          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped',
         } : undefined,
       }));
 
@@ -114,7 +114,7 @@ export class NextActionsTool extends BaseTool<typeof NextActionsSchema> {
           filters_applied: filter,
           limit_applied: limit,
           tool_type: 'next_actions',
-          description: 'Available next actions across all projects'
+          description: 'Available next actions across all projects',
         },
       );
 

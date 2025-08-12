@@ -5,12 +5,12 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
-import { 
-  permissionError, 
-  formatErrorWithRecovery, 
+import {
+  permissionError,
+  formatErrorWithRecovery,
   scriptTimeoutError,
   omniFocusNotRunningError,
-  scriptExecutionError
+  scriptExecutionError,
 } from '../utils/error-messages.js';
 
 /**
@@ -70,7 +70,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
           },
         );
       }
-      
+
       // Handle other errors - return standardized error response
       return this.handleError(error);
     }
@@ -142,7 +142,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
       const errorDetails = scriptExecutionError(
         this.name,
         error.message || 'Script execution failed',
-        'Check that OmniFocus is not showing any dialogs'
+        'Check that OmniFocus is not showing any dialogs',
       );
       return createErrorResponse(
         this.name,
@@ -163,7 +163,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
       this.name,
       'INTERNAL_ERROR',
       error instanceof Error ? error.message : 'An unknown error occurred',
-      { 
+      {
         originalError: error,
         recovery: [
           'Try the operation again',

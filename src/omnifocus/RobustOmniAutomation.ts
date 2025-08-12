@@ -47,7 +47,7 @@ export class RobustOmniAutomation extends OmniAutomation {
       // Log detailed error information
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorType = error instanceof Error ? error.constructor.name : 'Unknown';
-      
+
       logger.error('Script execution failed', {
         consecutiveFailures: this.consecutiveFailures,
         timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
@@ -103,7 +103,7 @@ export class RobustOmniAutomation extends OmniAutomation {
     interface DiagnosisTests {
       [key: string]: { success: boolean; error?: string; result?: unknown };
     }
-    
+
     const diagnosis: { tests: DiagnosisTests; summary: string } = {
       tests: {},
       summary: '',

@@ -27,6 +27,16 @@ export interface VersionInfo {
   };
 }
 
+interface PackageJson {
+  name: string;
+  version: string;
+  description: string;
+  repository?: {
+    url?: string;
+  };
+  homepage?: string;
+}
+
 export function getVersionInfo(): VersionInfo {
   // Get package.json version - find project root using script location
   // This works regardless of what working directory the process was started from
@@ -43,7 +53,7 @@ export function getVersionInfo(): VersionInfo {
     throw new Error(`Cannot find package.json at ${packagePath}. Script location: ${scriptPath}`);
   }
 
-  const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+  const packageJson = JSON.parse(readFileSync(packagePath, 'utf8')) as PackageJson;
 
   // Get git information
   let gitCommitHash = 'unknown';
@@ -75,12 +85,12 @@ export function getVersionInfo(): VersionInfo {
     try {
       const status = execSync('git status --porcelain', gitOptions).trim();
       gitDirty = status.length > 0;
-    } catch (e) {
+    } catch {
       // If git status fails, assume clean
     }
 
     gitCommitHash = shortHash; // Use short hash for display
-  } catch (error) {
+  } catch {
     // If git commands fail, use defaults
   }
 

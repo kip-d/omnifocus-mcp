@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { 
-  parsingError, 
-  tagCreationLimitationError, 
+import {
+  parsingError,
+  tagCreationLimitationError,
   formatErrorWithRecovery,
-  invalidDateError
+  invalidDateError,
 } from '../../utils/error-messages.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { CreateTaskResponse } from '../types.js';
@@ -71,7 +71,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         // Enhanced error response with recovery suggestions
         const errorMessage = result.message || 'Failed to create task';
         const recovery = [];
-        
+
         if (errorMessage.toLowerCase().includes('project')) {
           recovery.push('Use list_projects to find valid project IDs');
           recovery.push('Ensure the project exists and is not completed');
@@ -87,7 +87,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
           'create_task',
           'SCRIPT_ERROR',
           errorMessage,
-          { 
+          {
             rawResult: result,
             recovery,
           },
@@ -105,8 +105,8 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         throw new McpError(
           ErrorCode.InternalError,
           errorDetails.message,
-          { 
-            received: result, 
+          {
+            received: result,
             parseError: parseError instanceof Error ? parseError.message : String(parseError),
             recovery: errorDetails.recovery,
           },

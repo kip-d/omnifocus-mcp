@@ -1,8 +1,8 @@
 import { BaseTool } from '../base.js';
-import { 
-  UPDATE_TASK_SCRIPT, 
-  COMPLETE_TASK_SCRIPT, 
-  DELETE_TASK_SCRIPT 
+import {
+  UPDATE_TASK_SCRIPT,
+  COMPLETE_TASK_SCRIPT,
+  DELETE_TASK_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { BatchTaskOperationsSchema, BatchTaskOperationsInput } from '../schemas/consolidated-schemas.js';
@@ -18,17 +18,17 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
     try {
       // Handle Claude Desktop sometimes sending stringified parameters
       const normalizedArgs = this.normalizeArgs(args);
-      
+
       switch (normalizedArgs.operation) {
         case 'update':
           return this.batchUpdate(normalizedArgs, timer);
-          
+
         case 'complete':
           return this.batchComplete(normalizedArgs, timer);
-          
+
         case 'delete':
           return this.batchDelete(normalizedArgs, timer);
-          
+
         default:
           // TypeScript should prevent this, but just in case
           return createErrorResponse(
@@ -46,7 +46,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
 
   private async batchUpdate(
     args: Extract<BatchTaskOperationsInput, { operation: 'update' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { taskIds, updates } = args;
     const results = [];
@@ -116,7 +116,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
 
   private async batchComplete(
     args: Extract<BatchTaskOperationsInput, { operation: 'complete' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { taskIds, completionDate } = args;
     const results = [];
@@ -189,7 +189,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
 
   private async batchDelete(
     args: Extract<BatchTaskOperationsInput, { operation: 'delete' }>,
-    timer: OperationTimer
+    timer: OperationTimer,
   ): Promise<any> {
     const { taskIds } = args;
     const results = [];
@@ -258,7 +258,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
   private normalizeArgs(args: any): BatchTaskOperationsInput {
     // Handle Claude Desktop sometimes sending stringified parameters
     const normalized = { ...args };
-    
+
     // Parse taskIds if it's a string
     if (typeof normalized.taskIds === 'string') {
       try {
@@ -272,12 +272,12 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
         }
       }
     }
-    
+
     // Ensure taskIds is an array
     if (normalized.taskIds && !Array.isArray(normalized.taskIds)) {
       normalized.taskIds = [normalized.taskIds];
     }
-    
+
     // Parse updates object if it's a string
     if (typeof normalized.updates === 'string') {
       try {
@@ -286,12 +286,12 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
         this.logger.warn('Failed to parse updates string, keeping as-is');
       }
     }
-    
+
     // Parse completionDate if it's provided as a string but not in updates
     if (normalized.completionDate && typeof normalized.completionDate === 'string') {
       // Already a string, which is what we want for dates
     }
-    
+
     // Log normalized args for debugging
     this.logger.debug('Normalized batch args:', {
       operation: normalized.operation,
@@ -300,7 +300,7 @@ export class BatchTaskOperationsTool extends BaseTool<typeof BatchTaskOperations
       taskIdsLength: normalized.taskIds?.length,
       hasUpdates: !!normalized.updates,
     });
-    
+
     return normalized as BatchTaskOperationsInput;
   }
 }

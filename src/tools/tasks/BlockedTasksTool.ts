@@ -10,25 +10,25 @@ const BlockedTasksSchema = z.object({
   projectId: z.string()
     .optional()
     .describe('Filter blocked tasks for a specific project'),
-  
+
   tags: z.array(z.string())
     .optional()
     .describe('Filter blocked tasks by tags (tasks must have ALL specified tags)'),
-  
+
   includeDetails: coerceBoolean()
     .default(true)
     .describe('Include task details like notes, project info, and tags'),
-  
+
   showBlockingTasks: coerceBoolean()
     .default(true)
     .describe('Include information about what tasks are blocking each blocked task'),
-  
+
   limit: coerceNumber()
     .int()
     .positive()
     .max(200)
     .default(50)
-    .describe('Maximum number of blocked tasks to return')
+    .describe('Maximum number of blocked tasks to return'),
 });
 
 export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
@@ -50,7 +50,7 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
         tags,
         limit,
         skipAnalysis: false, // Need full analysis for accurate blocking detection
-        includeDetails
+        includeDetails,
       };
 
       // Create cache key
@@ -103,7 +103,7 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
         added: task.added ? new Date(task.added) : undefined,
         recurringStatus: task.recurringStatus ? {
           ...task.recurringStatus,
-          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped'
+          type: task.recurringStatus.type as 'non-recurring' | 'new-instance' | 'rescheduled' | 'manual-override' | 'analysis-skipped',
         } : undefined,
       }));
 
@@ -119,7 +119,7 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
           tool_type: 'blocked_tasks',
           description: 'Tasks blocked by incomplete prerequisite tasks',
           show_blocking_tasks: showBlockingTasks,
-          usage_tip: 'Focus on completing prerequisite tasks to unblock these items'
+          usage_tip: 'Focus on completing prerequisite tasks to unblock these items',
         },
       );
 

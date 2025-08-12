@@ -10,7 +10,7 @@ import { OmniAutomation } from '../OmniAutomation.js';
 export const LIST_PERSPECTIVES_SCRIPT = {
   name: 'listPerspectives',
   description: 'Get all available perspectives with filter rules',
-  
+
   omniFocusScript: `
     (() => {
       const result = {
@@ -63,7 +63,7 @@ export const LIST_PERSPECTIVES_SCRIPT = {
       return JSON.stringify(result);
     })()
   `,
-  
+
   jxaWrapper: (_builder: OmniAutomation) => {
     const jsCode = LIST_PERSPECTIVES_SCRIPT.omniFocusScript.replace(/\n/g, '\\n').replace(/"/g, '\\"');
     return `
@@ -113,7 +113,7 @@ export const LIST_PERSPECTIVES_SCRIPT = {
         }
       })()
     `;
-  }
+  },
 };
 
 /**
@@ -122,7 +122,7 @@ export const LIST_PERSPECTIVES_SCRIPT = {
 export const QUERY_PERSPECTIVE_SCRIPT = {
   name: 'queryPerspective',
   description: 'Get tasks that would appear in a specific perspective',
-  
+
   omniFocusScript: (perspectiveName: string, limit: number = 100) => `
     (() => {
       const result = {
@@ -230,11 +230,11 @@ export const QUERY_PERSPECTIVE_SCRIPT = {
       return JSON.stringify(result);
     })()
   `,
-  
+
   jxaWrapper: (_builder: OmniAutomation, perspectiveName: string, limit: number = 100) => {
     const omniFocusCode = QUERY_PERSPECTIVE_SCRIPT.omniFocusScript(perspectiveName, limit);
     const jsCode = omniFocusCode.replace(/\n/g, '\\n').replace(/"/g, '\\"');
-    
+
     return `
       (() => {
         const app = Application('OmniFocus');
@@ -248,5 +248,5 @@ export const QUERY_PERSPECTIVE_SCRIPT = {
         }
       })()
     `;
-  }
+  },
 };

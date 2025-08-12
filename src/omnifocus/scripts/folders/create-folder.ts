@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new folder in OmniFocus
- * 
+ *
  * Features:
  * - Create folder with name and status
  * - Position within parent folder hierarchy

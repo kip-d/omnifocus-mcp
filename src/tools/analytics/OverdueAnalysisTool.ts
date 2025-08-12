@@ -12,7 +12,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
 
   async executeValidated(args: z.infer<typeof OverdueAnalysisSchema>): Promise<OverdueAnalysisResponse> {
     const timer = new OperationTimer();
-    
+
     try {
       const {
         includeRecentlyCompleted = true,
@@ -36,7 +36,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
             include_recently_completed: includeRecentlyCompleted,
             group_by: groupBy,
             limit,
-          }
+          },
         );
       }
 
@@ -77,7 +77,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
           include_recently_completed: includeRecentlyCompleted,
           group_by: groupBy,
           limit,
-        }
+        },
       );
     } catch (error) {
       return this.handleError(error) as OverdueAnalysisResponse;
