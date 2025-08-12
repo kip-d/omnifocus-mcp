@@ -107,8 +107,7 @@ npm start            # Run the compiled server from dist/
 # Testing
 npm test             # Run unit tests with Vitest
 npm run test:integration  # Run integration tests
-npm run test:e2e     # Run end-to-end tests
-npm run test:all     # Run all tests
+npm run test:all     # Run all tests (unit + integration)
 
 # Code Quality
 npm run lint         # Lint TypeScript code

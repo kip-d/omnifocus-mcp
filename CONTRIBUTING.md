@@ -170,8 +170,6 @@ npm run typecheck
 npm run test:all
 ```
 
-**Note**: The E2E test suite (`test:e2e`) is currently not functional due to Vitest configuration issues.
-
 ### Performance Testing
 For performance-sensitive features:
 ```bash

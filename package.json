@@ -18,7 +18,6 @@
     "start": "node ./dist/index.js",
     "test": "vitest tests/unit",
     "test:integration": "node tests/integration/test-as-claude-desktop.js",
-    "test:e2e": "node tests/e2e/claude-desktop-protocol.test.ts",
     "test:all": "npm run test && npm run test:integration",
     "lint": "eslint src --ext .ts",
     "lint:strict": "eslint src --ext .ts --config .eslintrc.mcp.json",

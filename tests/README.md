@@ -14,10 +14,6 @@ Integration tests that verify MCP protocol communication and tool functionality.
 - Tool-specific integration tests
 - Run with: `npm run test:integration`
 
-### `/e2e`
-End-to-end tests that verify complete workflows.
-- Run with: `npm run test:e2e`
-
 ### `/manual`
 Manual test scripts for debugging and development. These are not part of the automated test suite.
 - Direct JXA script tests
@@ -46,9 +42,6 @@ npm test
 
 # Run integration tests
 npm run test:integration
-
-# Run e2e tests
-npm run test:e2e
 
 # Run specific manual test
 node tests/manual/test-perspectives.js
