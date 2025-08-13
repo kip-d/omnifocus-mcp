@@ -197,13 +197,13 @@ list_tasks({
 
 ```bash
 # Test timezone detection
-node -e "const {getTimezoneInfo} = require('./dist/utils/timezone.js'); console.log(getTimezoneInfo())"
+node --eval 'const { getTimezoneInfo } = await import("./dist/utils/timezone.js"); console.log(getTimezoneInfo())' --input-type=module
 
 # Test date conversion
-node -e "const {localToUTC} = require('./dist/utils/timezone.js'); console.log(localToUTC('2024-01-15 14:30'))"
+node --eval 'const { localToUTC } = await import("./dist/utils/timezone.js"); console.log(localToUTC("2024-01-15 14:30"))' --input-type=module
 
 # Test date parsing
-node -e "const {parseFlexibleDate} = require('./dist/utils/timezone.js'); console.log(parseFlexibleDate('2024-01-15'))"
+node --eval 'const { parseFlexibleDate } = await import("./dist/utils/timezone.js"); console.log(parseFlexibleDate("2024-01-15"))' --input-type=module
 ```
 
 ## Summary
