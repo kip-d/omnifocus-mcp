@@ -73,11 +73,16 @@ list_tasks({
 })
 ```
 
-## Implementation Strategy
+## Perspective Tools
 
-### Phase 1: Perspective Enumeration Tool
+The MCP now exposes dedicated tools for working with perspectives. See
+[TOOLS.md](./TOOLS.md) and the
+[README's perspective examples](../README.md#work-with-perspectives) for usage
+details.
+
+### `list_perspectives`
 ```typescript
-// New tool: list_perspectives
+// Enumerate built-in and custom perspectives
 {
   perspectives: [
     {
@@ -97,16 +102,15 @@ list_tasks({
 }
 ```
 
-### Phase 2: Perspective Query Tool
+### `query_perspective`
 ```typescript
-// New tool: query_perspective
 query_perspective({
   perspectiveName: "Today"
 })
 // Returns tasks matching that perspective's filters
 ```
 
-### Phase 3: Smart Translation
+## Filter Rule Translation
 Map perspective filter rules to our existing query parameters:
 - `actionAvailability: "available"` → `available: true`
 - `actionStatus: "flagged"` → `flagged: true`
@@ -129,13 +133,10 @@ This enables powerful collaborative workflows:
 - "Your 'Today' perspective shows 8 urgent items. Here's my prioritization suggestion..."
 - "Based on your 'Due or Flagged' perspective, you have 3 overdue projects needing attention."
 
-## Next Steps
+## Future Enhancements
 
-1. Create `list_perspectives` tool
-2. Create `query_perspective` tool  
-3. Build filter rule translator
-4. Add perspective support to prompts
-5. Document perspective-based workflows
+1. Expand filter rule translator for complex custom perspectives
+2. Document additional perspective-based workflows
 
 ## Code Example
 
