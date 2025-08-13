@@ -44,13 +44,14 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ## Using MCP Prompts in Claude Desktop
 
-This server includes 8 pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
+This server provides nine pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
 
 1. Click the **"+"** button (bottom-left of the input box)
 2. Select **"Add from omnifocus"** from the menu
 3. Choose from available prompts:
    - **GTD Workflows:**
      - `gtd_process_inbox` - Process inbox with 2-minute rule
+     - `eisenhower_matrix_inbox` - Process inbox items using the Eisenhower Matrix (Urgent/Important quadrants)
      - `gtd_weekly_review` - Complete weekly review with stale project detection
      - `gtd_principles` - Core GTD methodology guide
    - **Reference Guides:**
