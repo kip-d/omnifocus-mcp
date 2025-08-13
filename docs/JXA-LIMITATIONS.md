@@ -10,7 +10,7 @@ There are two different JavaScript environments for OmniFocus automation:
    - Used by this MCP server
    - Runs outside OmniFocus
    - Limited API access
-   - Cannot access RepetitionRule, RepetitionMethod, etc.
+   - Directly cannot access RepetitionRule, RepetitionMethod, etc., without using `evaluateJavascript`
 
 2. **Omni Automation** - Internal OmniFocus plugin/script system
    - Runs inside OmniFocus
@@ -56,25 +56,26 @@ app.Task.RepetitionMethod.Fixed // TypeError: undefined is not an object
 
 ### Impact
 
-- Cannot create recurring tasks programmatically via JXA
-- Cannot create recurring projects programmatically via JXA
-- Cannot modify recurrence rules on existing tasks/projects via JXA
+- Previously could not create recurring tasks programmatically via pure JXA
+- Previously could not create recurring projects programmatically via pure JXA
+- Previously could not modify recurrence rules on existing tasks/projects via pure JXA
 
 ### Attempted Workarounds
 
+Before discovering the `evaluateJavascript` bridge, several approaches failed:
 1. **Direct Constructor Access**: `app.Task.RepetitionRule(ruleString, method)` - Not available
 2. **Property Assignment**: `task.repetitionRule = {...}` - Type conversion error
-3. **String Property**: `task.repetitionString = 'FREQ=DAILY'` - Accepted but doesn't work
-4. **Copy from Existing**: Cannot copy RepetitionRule objects between tasks
-5. **AppleScript Bridge**: Requires privilege escalation, security issues
+3. **String Property**: `task.repetitionString = 'FREQ=DAILY'` - Accepted but didn't work
+4. **Copy from Existing**: Copying RepetitionRule objects between tasks wasn't possible
+5. **AppleScript Bridge**: Required privilege escalation and had security issues
 
 ### Current Status
 
-**NOT SUPPORTED** - Recurrence creation/modification is not possible via JXA as of OmniFocus 4.6.1.
+Recurrence creation and modification can now be handled through the `evaluateJavascript` bridge shown above. Direct JXA still lacks these APIs, but calling into Omni Automation enables full recurrence support.
 
-### Recommended Alternative
+### Alternative: AppleScript
 
-Use AppleScript directly for automation that requires recurrence:
+AppleScript remains an option if you prefer scripting directly within OmniFocus:
 
 ```applescript
 tell application "OmniFocus"
@@ -140,4 +141,4 @@ const filtered = allTasks.filter(t =>
 
 ## Summary
 
-While JXA provides access to most OmniFocus functionality, critical features like recurrence are not available. For complete automation capabilities, AppleScript remains the more reliable choice despite its less modern syntax.
+While JXA provides access to most OmniFocus functionality, some features—such as recurrence—require using the `evaluateJavascript` bridge to Omni Automation. AppleScript remains a viable alternative for those who prefer its syntax.
