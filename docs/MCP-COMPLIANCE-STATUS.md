@@ -1,6 +1,6 @@
 # MCP Compliance Status
 
-Last Updated: 2025-08-03
+Last Updated: 2025-08-13
 
 ## Overview
 This document tracks our compliance with the Model Context Protocol (MCP) specification and implementation status of core features.
@@ -15,11 +15,11 @@ This document tracks our compliance with the Model Context Protocol (MCP) specif
 - Export functionality
 - Tag management
 
-### ✅ Prompts (Implemented, Awaiting Client Support)
-**Status**: Server-side complete, client support pending
+### ✅ Prompts (Implemented and Supported)
+**Status**: Fully supported in Claude Desktop v0.12.55+
 - `gtd_weekly_review` - Weekly GTD review with stale project detection
 - `gtd_process_inbox` - Inbox processing with GTD methodology
-- **Note**: Claude Desktop does not yet support MCP Prompts
+- **Note**: Claude Desktop v0.12.55+ supports MCP prompts
 
 ### ❌ Resources (Not Implemented)
 **Status**: Planned in proposals
@@ -57,7 +57,6 @@ This document tracks our compliance with the Model Context Protocol (MCP) specif
 
 1. **High Priority**
    - Implement consent mechanisms for security
-   - Wait for Claude Desktop prompt support
 
 2. **Medium Priority**
    - Implement MCP Resources
@@ -72,4 +71,4 @@ This document tracks our compliance with the Model Context Protocol (MCP) specif
 - **MCP Compliance**: ~85% (missing only Resources)
 - **Best Practices**: >90% compliance
 - **Main Gap**: Resources not implemented
-- **Blocker**: Claude Desktop prompt support
+- **Blocker**: None (Claude Desktop v0.12.55+ supports MCP prompts)
