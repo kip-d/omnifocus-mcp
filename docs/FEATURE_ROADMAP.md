@@ -31,13 +31,9 @@ This document tracks feature requests from user testing and planned improvements
 - [x] Sequential/parallel support for tasks (action groups)
 - [x] Parent/child task relationships (create subtasks via parentTaskId)
 
-## High Priority Features 🔴
-
 ### Perspectives Access
-- [ ] `list_perspectives` - Enumerate available perspectives
-- [ ] `query_perspective` - Get tasks visible in a specific perspective
-- **Challenge**: Not exposed in JXA API, exploring Omni Automation bridge
-- **Use case**: Power users with custom GTD perspectives
+- [x] `list_perspectives` - Enumerate available perspectives ([TypeScript](../src/tools/perspectives/ListPerspectivesTool.ts))
+- [x] `query_perspective` - Get tasks visible in a specific perspective ([TypeScript](../src/tools/perspectives/QueryPerspectiveTool.ts))
 
 ## Nice-to-Have Features 🟡
 
@@ -53,11 +49,6 @@ This document tracks feature requests from user testing and planned improvements
 - [ ] Support moving existing tasks to become subtasks (update_task)
 - [ ] Batch create tasks with subtasks in one call
 - **Status**: Basic functionality implemented!
-
-### Perspectives Access
-- [ ] `list_perspectives` - Get available perspectives
-- [ ] `query_perspective` - Get tasks from a specific perspective
-- **Use case**: Access built-in views like "Due Soon", "Flagged"
 
 ### Tag Management Improvements
 - [ ] `create_tag` - Already exists as `manage_tags`
