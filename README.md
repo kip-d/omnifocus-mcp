@@ -64,11 +64,13 @@ These prompts provide guided conversations with pre-configured questions and res
 
 ## Basic Usage
 
-### List Tasks
+### Query Tasks (List)
+The `list_tasks` tool is deprecated and retained only for backward compatibility. Use `query_tasks` with `queryType: "list"` instead:
 ```javascript
 {
-  "tool": "list_tasks",
+  "tool": "query_tasks",
   "arguments": {
+    "queryType": "list",
     "completed": false,
     "limit": 50
   }
