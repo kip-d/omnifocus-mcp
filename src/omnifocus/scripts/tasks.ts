@@ -14,6 +14,7 @@ export { UPDATE_TASK_SCRIPT } from './tasks/update-task.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
 export { LIST_TASKS_SCRIPT } from './tasks/list-tasks.js';
 export { LIST_TASKS_HYBRID_SCRIPT } from './tasks/list-tasks-hybrid.js';
+export { LIST_TASKS_OPTIMIZED_SCRIPT } from './tasks/list-tasks-optimized.js';
 
 // Legacy helper export
 export { SAFE_UTILITIES_SCRIPT } from './shared/helpers.js';

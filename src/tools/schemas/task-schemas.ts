@@ -295,21 +295,21 @@ export const DateRangeQueryToolSchema = z.object({
     .describe('Type of date query to perform'),
 
   // For date_range queries
-  startDate: DateTimeSchema
+  startDate: LocalDateTimeSchema
     .optional()
-    .describe('Start date (ISO format). Required for date_range query when endDate is not provided.'),
+    .describe('Start date (YYYY-MM-DD or YYYY-MM-DD HH:mm format). Required for date_range query when endDate is not provided.'),
 
-  endDate: DateTimeSchema
+  endDate: LocalDateTimeSchema
     .optional()
-    .describe('End date (ISO format). Required for date_range query when startDate is not provided.'),
+    .describe('End date (YYYY-MM-DD or YYYY-MM-DD HH:mm format). Required for date_range query when startDate is not provided.'),
 
   dateField: z.enum(['dueDate', 'deferDate', 'completionDate'])
     .default('dueDate')
-    .describe('Which date field to query on (for date_range query)'),
+    .describe('Which date field to query on (ONLY used when queryType="date_range", ignored for overdue/upcoming)'),
 
   includeNullDates: coerceBoolean()
     .default(false)
-    .describe('Include tasks without the specified date field (for date_range query)'),
+    .describe('Include tasks without the specified date field (ONLY used when queryType="date_range", ignored for overdue/upcoming)'),
 
   // For upcoming queries
   days: z.union([
@@ -325,16 +325,16 @@ export const DateRangeQueryToolSchema = z.object({
       return val;
     })
     .default(7)
-    .describe('Number of days to look ahead (for upcoming query only, not used for overdue)'),
+    .describe('Number of days to look ahead (ONLY used when queryType="upcoming", ignored for overdue/date_range)'),
 
   includeToday: coerceBoolean()
     .default(true)
-    .describe('Include today in upcoming tasks (for upcoming query)'),
+    .describe('Include today in upcoming tasks (ONLY used when queryType="upcoming", ignored for overdue/date_range)'),
 
   // For overdue queries
   includeCompleted: coerceBoolean()
     .default(false)
-    .describe('Include completed tasks (for overdue query)'),
+    .describe('Include completed tasks (ONLY used when queryType="overdue", ignored for upcoming/date_range)'),
 
   // Common parameters
   limit: coerceNumber()

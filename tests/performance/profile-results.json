@@ -1,0 +1,74 @@
+{
+  "timings": {
+    "1_enumerate_all_tasks": 292,
+    "2_single_prop_all_tasks": 2461,
+    "3_multi_prop_100_tasks": 475,
+    "4_with_safget_100_tasks": 533,
+    "5_direct_trycatch_100_tasks": 425,
+    "6_project_access_100_tasks": 199,
+    "7_tag_access_100_tasks": 107,
+    "8_date_filtering_all_tasks": 4123,
+    "9_whose_completed_false": 23429,
+    "10_manual_filter_completed": 2617
+  },
+  "counts": {
+    "total_tasks": 2403,
+    "named_tasks": 2399,
+    "processed_subset": 100,
+    "tasks_with_projects": 93,
+    "total_tags": 54,
+    "overdue_tasks": 77,
+    "incomplete_via_whose": 1454,
+    "incomplete_via_manual": 1454
+  },
+  "breakdown": {
+    "1_enumerate_all_tasks": {
+      "ms": 292,
+      "percent": "0.8%"
+    },
+    "2_single_prop_all_tasks": {
+      "ms": 2461,
+      "percent": "7.1%"
+    },
+    "3_multi_prop_100_tasks": {
+      "ms": 475,
+      "percent": "1.4%"
+    },
+    "4_with_safget_100_tasks": {
+      "ms": 533,
+      "percent": "1.5%"
+    },
+    "5_direct_trycatch_100_tasks": {
+      "ms": 425,
+      "percent": "1.2%"
+    },
+    "6_project_access_100_tasks": {
+      "ms": 199,
+      "percent": "0.6%"
+    },
+    "7_tag_access_100_tasks": {
+      "ms": 107,
+      "percent": "0.3%"
+    },
+    "8_date_filtering_all_tasks": {
+      "ms": 4123,
+      "percent": "11.9%"
+    },
+    "9_whose_completed_false": {
+      "ms": 23429,
+      "percent": "67.6%"
+    },
+    "10_manual_filter_completed": {
+      "ms": 2617,
+      "percent": "7.6%"
+    }
+  },
+  "insights": {
+    "ms_per_task_enumeration": "0.122",
+    "ms_per_property_access": "1.024",
+    "ms_per_task_full_read": "4.750",
+    "safget_overhead_percent": "20.3%",
+    "safget_overhead_ms": 108,
+    "whose_vs_manual_ratio": "9.0x slower"
+  }
+}

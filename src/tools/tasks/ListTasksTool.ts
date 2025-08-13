@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-// REVERTED: Using original JXA script only - hybrid approach had critical performance issues
+// REVERTED: Optimization made performance worse, using original script
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
@@ -38,7 +38,7 @@ export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
         }
       }
 
-      // Execute original JXA script - hybrid approach reverted due to performance issues
+      // Execute original JXA script
       const scriptParams = { ...filter, limit, skipAnalysis };
       this.logger.debug('Script params:', scriptParams);
       const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter: scriptParams });

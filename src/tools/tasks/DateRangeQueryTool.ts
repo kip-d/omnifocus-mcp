@@ -11,7 +11,7 @@ import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSche
 
 export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema> {
   name = 'query_tasks_by_date';
-  description = 'Query tasks by date range with optimized performance. Use queryType: overdue|upcoming|date_range. For date_range: specify dateField (dueDate|deferDate|completionDate), includeNullDates=true for tasks without dates. Default limit=100.';
+  description = 'Query tasks by date with optimized performance. Choose queryType: "overdue" (past due tasks, uses includeCompleted param), "upcoming" (next N days, uses days/includeToday params), or "date_range" (custom range, uses startDate/endDate/dateField/includeNullDates params). Each queryType uses different parameters - see schema for details.';
   schema = DateRangeQueryToolSchema;
 
   async executeValidated(args: z.infer<typeof DateRangeQueryToolSchema>): Promise<any> {
@@ -36,7 +36,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
         return createErrorResponse(
           'query_tasks_by_date',
           'INVALID_DATE',
-          'Invalid startDate format. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+          'Invalid startDate format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm format',
           { provided: args.startDate },
           timer.toMetadata(),
         );
@@ -46,7 +46,7 @@ export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema
         return createErrorResponse(
           'query_tasks_by_date',
           'INVALID_DATE',
-          'Invalid endDate format. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+          'Invalid endDate format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm format',
           { provided: args.endDate },
           timer.toMetadata(),
         );

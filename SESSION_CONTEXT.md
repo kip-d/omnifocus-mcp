@@ -72,9 +72,13 @@
 | v1.13.1 | Fixed hybrid but still iterating all tasks | Partial fix | 4-7 seconds (unacceptable) |
 | v1.13.2 | Emergency rollback | Pure JXA | Back to baseline |
 | v1.14.0 | Discovered whose() is the bottleneck | Remove all whose() | 75-93% faster |
-| v1.15.0 | JavaScript filtering overhead | Optimize filtering loop | Additional 67-91% faster |
+| v1.15.0 | JavaScript filtering overhead | Optimize filtering loop | Mixed results (see below) |
 
-**Combined Impact**: Queries that took 20-27 seconds now complete in under 1 second (95%+ improvement)
+**v1.15.0 Reality Check (2,403 task database)**:
+- Basic list (100): 5.5s (SLOWER than v1.14.0's 3.4s) ❌
+- Large query (500): >10s ❌
+- Upcoming/Overdue: 2.6-2.8s (improved but not sub-second) ⚠️
+- **Critical Issue**: Optimizations only applied to date-range queries, NOT to main list_tasks tool
 
 ## Key Technical Learnings
 
@@ -116,7 +120,8 @@ try {
 - Unit tests: 260 passing ✅
 - Type checking: Clean ✅
 - Integration tests: Working with 2,398 tasks ✅
-- Performance validated: Sub-second to 2 seconds max ✅
+- Performance reality: 2.6-5.5 seconds with real data ❌
+- v1.15.0 optimization incomplete: list_tasks never optimized ⚠️
 
 ## Files Created/Modified Today
 
@@ -213,8 +218,77 @@ Each piece of feedback led directly to major breakthroughs.
 
 ---
 
-*Session saved at: 2025-08-12 (evening)*
-*Version: 1.15.0 (stable)*
-*Tests passing: Unit and integration*
-*Lint status: 1,436 issues (mostly unavoidable any-type warnings)*
-*Key accomplishment: Established practical type safety baseline*
+## Today's Session (2025-08-13) - The Great Paradigm Shift
+
+### Morning: PR Review & Housekeeping
+- **Merged 7 AI-generated PRs** - All were legitimate documentation updates
+- **Cleaned up stale branches** - Removed old PR branches
+- **Fixed tool descriptions** - Made parameters clearer to prevent LLM confusion
+
+### Afternoon: Performance Investigation & Reality Check
+
+#### User Testing Results for v1.15.0
+- **Claimed**: "95%+ improvement, sub-second queries"
+- **Reality**: 2.6-5.5 seconds with 2,400 tasks
+- **Discovery**: v1.15.0 optimizations were incomplete - only applied to date-range queries, NOT list_tasks
+
+#### Profiling Discovery
+- Created comprehensive JXA profiling tool
+- **Found**: SafeGet has 20.3% overhead (not 0.5% as estimated)
+- **But also**: JXA bridge is 80% of time, JavaScript only 5%
+- **Conclusion**: Optimization could yield 30-35% improvement
+
+#### The Failed Optimization
+- Implemented "optimized" list_tasks with hybrid approach
+- **Result**: Made performance 25% WORSE
+- **Why**: JXA isn't Node.js - optimizations that work in V8 backfire in JavaScriptCore
+- Batch try/catch caused double work when properties failed
+
+### Evening: The Paradigm Shift 🎯
+
+#### The Realization
+**We've been optimizing the wrong thing entirely!**
+
+In an MCP + LLM context:
+- User types prompt → LLM processes → Queries tools → Calls tool → Processes response → Formats answer
+- Total time: 8-10 seconds
+- Tool execution (5s) is only 50% of experience
+- Shaving 500ms off tool execution = 5% improvement to user
+
+#### What ACTUALLY Matters
+1. **LLM Confusion & Retries** (5-10s waste)
+   - Unclear descriptions → wrong parameters → retry
+   - Too many similar tools → decision paralysis
+
+2. **Response Processing** (2-3s waste)
+   - Returning 100 tasks × 20 properties = 2000 data points
+   - LLM processes everything when user just wanted a count
+
+3. **Tool Selection** (1-2s waste)
+   - 15+ similar tools to choose from
+   - Ambiguous descriptions
+
+### Key Files Created Today
+- `/V1.15.0_PERFORMANCE_REALITY_CHECK.md` - Documented incomplete optimization
+- `/V1.16.0_OPTIMIZATION_ANALYSIS.md` - Analyzed optimization potential
+- `/V1.16.0_RELEASE_PLAN.md` - Initial plan (now obsolete)
+- `/tests/performance/profile-jxa-bottlenecks.js` - Profiling tool
+- `/PROFILING_ANALYSIS.md` - Profiling results
+- `/SAFGET_REMOVAL_TRADEOFFS.md` - Why not to remove safeGet
+- `/V1.16.0_OPTIMIZATION_FAILURE_ANALYSIS.md` - Why optimization failed
+- `/V1.16.0_REAL_UX_OPTIMIZATION.md` - The new direction
+
+### The New Direction for v1.16.0
+**Stop optimizing JavaScript, start optimizing the LLM experience:**
+1. Tool consolidation (15 → 4 tools)
+2. Smarter responses (summaries, not raw data)
+3. Error prevention (accept natural language)
+4. Progressive disclosure (preview → details)
+
+---
+
+*Session saved at: 2025-08-13 (evening)*
+*Version: 1.15.0 (needs major rework)*
+*Tests passing: Yes, but performance worse than claimed*
+*Key realization: Optimize for LLM+User experience, not query speed*
+*Paradigm shift: From micro-optimization to macro UX*
