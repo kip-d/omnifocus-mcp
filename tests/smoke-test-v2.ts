@@ -153,16 +153,16 @@ class SmokeTest {
         name: 'create_task',
         arguments: {
           name: `Test v2 - ${new Date().toISOString()}`,
-          flagged: 'false',
-          sequential: 'false'
+          flagged: false,
+          sequential: false
         }
       });
       
       const duration = (Date.now() - start) / 1000;
       const parsed = JSON.parse(response.content[0].text);
       
-      if (parsed.success && parsed.data && parsed.data.id) {
-        console.log(`  ✓ Created task with ID: ${parsed.data.id}`);
+      if (parsed.success && parsed.data && parsed.data.task && parsed.data.task.taskId) {
+        console.log(`  ✓ Created task with ID: ${parsed.data.task.taskId}`);
         console.log(`  ✓ Response time: ${duration.toFixed(2)}s`);
         this.results.push({ name: testName, passed: true, duration, response: parsed });
       } else {

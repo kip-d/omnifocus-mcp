@@ -33,21 +33,20 @@ export const GET_UPCOMING_TASKS_HYBRID_SCRIPT = `
           const limit = \${limit};
           const tasks = [];
           
-          // Use where() clause for efficient filtering in Omni Automation
-          // This is the proper way to filter in OmniJS
-          const query = flattenedTasks.where(task => {
-            return !task.completed && 
-                   task.dueDate !== null &&
-                   task.dueDate >= startDate && 
-                   task.dueDate <= endDate;
-          });
+          // Get all flattened tasks and iterate manually
+          // Don't use where() - it's only available in OmniJS context
+          const allTasks = flattenedTasks;
           
-          let count = 0;
-          
-          for (const task of query) {
+          for (let i = 0; i < allTasks.length; i++) {
+            const task = allTasks[i];
+            
+            // Check if we should include this task
+            if (task.completed) continue;
+            if (!task.dueDate) continue;
+            if (task.dueDate < startDate || task.dueDate > endDate) continue;
+            
             const dueDate = task.dueDate;
             
-            // Already filtered by where(), just collect the data
             tasks.push({
               id: task.id.primaryKey,
               name: task.name,
@@ -58,8 +57,7 @@ export const GET_UPCOMING_TASKS_HYBRID_SCRIPT = `
               daysUntilDue: Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24))
             });
             
-            count++;
-            if (count >= limit) break;
+            if (tasks.length >= limit) break;
           }
           
           // Sort by due date
@@ -137,30 +135,32 @@ export const GET_OVERDUE_TASKS_HYBRID_SCRIPT = `
           const includeCompleted = \${includeCompleted};
           const tasks = [];
           
-          // Use where() clause for efficient filtering
-          const query = flattenedTasks.where(task => {
-            if (!includeCompleted && task.completed) return false;
-            return task.dueDate !== null && task.dueDate < now;
-          });
+          // Get all flattened tasks and iterate manually
+          // Don't use where() - it's only available in OmniJS context
+          const allTasks = flattenedTasks;
           
-          for (const task of query) {
-            // Already filtered for overdue tasks
-            if (task.dueDate) {
-              const daysOverdue = Math.floor((now - task.dueDate) / (1000 * 60 * 60 * 24));
-              
-              tasks.push({
-                id: task.id.primaryKey,
-                name: task.name,
-                dueDate: task.dueDate.toISOString(),
-                flagged: task.flagged,
-                completed: task.completed,
-                project: task.containingProject ? task.containingProject.name : null,
-                projectId: task.containingProject ? task.containingProject.id.primaryKey : null,
-                daysOverdue: daysOverdue
-              });
-              
-              if (tasks.length >= limit) break;
-            }
+          for (let i = 0; i < allTasks.length; i++) {
+            const task = allTasks[i];
+            
+            // Check if we should include this task
+            if (!includeCompleted && task.completed) continue;
+            if (!task.dueDate) continue;
+            if (task.dueDate >= now) continue; // Not overdue
+            
+            const daysOverdue = Math.floor((now - task.dueDate) / (1000 * 60 * 60 * 24));
+            
+            tasks.push({
+              id: task.id.primaryKey,
+              name: task.name,
+              dueDate: task.dueDate.toISOString(),
+              flagged: task.flagged,
+              completed: task.completed,
+              project: task.containingProject ? task.containingProject.name : null,
+              projectId: task.containingProject ? task.containingProject.id.primaryKey : null,
+              daysOverdue: daysOverdue
+            });
+            
+            if (tasks.length >= limit) break;
           }
           
           // Sort by most overdue first
