@@ -18,6 +18,10 @@ import { AvailableTasksTool } from './tasks/AvailableTasksTool.js';
 // Import new consolidated task query tool
 import { QueryTasksTool } from './tasks/QueryTasksTool.js';
 
+// Import v2.0.0 consolidated tools (alpha)
+import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
+import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
+
 // Import project tools
 import { ListProjectsTool } from './projects/ListProjectsTool.js';
 import { CreateProjectTool } from './projects/CreateProjectTool.js';
@@ -85,6 +89,11 @@ const logger = createLogger('tools');
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
   // Initialize all tools
   const tools = [
+    // v2.0.0-alpha consolidated tools - RECOMMENDED
+    new QueryTasksToolV2(cache),      // Single 'tasks' tool with modes
+    new ProjectsToolV2(cache),         // Single 'projects' tool with operations
+    
+    // v1.x tools - DEPRECATED but kept for backward compatibility
     // New consolidated task query tool (recommended for all query operations)
     new QueryTasksTool(cache),
 

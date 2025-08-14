@@ -1,0 +1,528 @@
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
+import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import {
+  GET_OVERDUE_TASKS_HYBRID_SCRIPT,
+  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries-hybrid.js';
+import { 
+  createTaskResponseV2, 
+  createErrorResponseV2, 
+  OperationTimerV2,
+  normalizeDateInput,
+  normalizeBooleanInput,
+  normalizeStringInput
+} from '../../utils/response-format-v2.js';
+import { OmniFocusTask } from '../response-types.js';
+import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
+
+// Simplified schema with clearer parameter names
+const QueryTasksToolSchemaV2 = z.object({
+  // Primary mode selector
+  mode: z.enum([
+    'all',        // List all tasks (with optional filters)
+    'search',     // Text search in task names
+    'overdue',    // Tasks past their due date
+    'today',      // Tasks due today or available now
+    'upcoming',   // Tasks due in next N days
+    'available',  // Tasks ready to work on
+    'blocked',    // Tasks waiting on others
+    'flagged',    // High priority tasks
+  ]).default('all').describe('Query mode - determines what tasks to return'),
+  
+  // Common filters (work with most modes)
+  search: z.string().optional().describe('Search text to find in task names (for search mode)'),
+  project: z.string().optional().describe('Filter by project name or ID'),
+  tags: z.array(z.string()).optional().describe('Filter by tag names'),
+  completed: z.boolean().optional().describe('Include completed tasks (default: false)'),
+  
+  // Date filters (natural language supported)
+  dueBy: z.string().optional().describe('Show tasks due by this date (e.g., "tomorrow", "friday", "2025-03-15")'),
+  daysAhead: z.number().min(1).max(30).optional().describe('For upcoming mode: number of days to look ahead (default: 7)'),
+  
+  // Response control
+  limit: z.number().min(1).max(200).default(25).describe('Maximum tasks to return (default: 25)'),
+  details: z.boolean().default(false).describe('Include full task details (default: false for speed)'),
+});
+
+type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
+
+export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
+  name = 'tasks';
+  description = 'Query OmniFocus tasks. Use mode to specify what you want: all, search, overdue, today, upcoming, available, blocked, or flagged. Returns summary first for quick answers.';
+  schema = QueryTasksToolSchemaV2;
+
+  async executeValidated(args: QueryTasksArgsV2): Promise<any> {
+    const timer = new OperationTimerV2();
+    
+    try {
+      // Normalize inputs to prevent LLM errors
+      const normalizedArgs = this.normalizeInputs(args);
+      
+      // Route to appropriate handler based on mode
+      switch (normalizedArgs.mode) {
+        case 'overdue':
+          return this.handleOverdueTasks(normalizedArgs, timer);
+        case 'upcoming':
+          return this.handleUpcomingTasks(normalizedArgs, timer);
+        case 'today':
+          return this.handleTodaysTasks(normalizedArgs, timer);
+        case 'search':
+          return this.handleSearchTasks(normalizedArgs, timer);
+        case 'available':
+          return this.handleAvailableTasks(normalizedArgs, timer);
+        case 'blocked':
+          return this.handleBlockedTasks(normalizedArgs, timer);
+        case 'flagged':
+          return this.handleFlaggedTasks(normalizedArgs, timer);
+        case 'all':
+        default:
+          return this.handleAllTasks(normalizedArgs, timer);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide helpful suggestions for common errors
+      let suggestion = undefined;
+      if (errorMessage.includes('timeout')) {
+        suggestion = 'Try reducing the limit parameter or using a more specific mode';
+      } else if (errorMessage.includes('date')) {
+        suggestion = 'Use natural language dates like "tomorrow" or "next week", or ISO format';
+      }
+      
+      return createErrorResponseV2(
+        'tasks',
+        'EXECUTION_ERROR',
+        errorMessage,
+        suggestion,
+        error,
+        timer.toMetadata(),
+      );
+    }
+  }
+
+  private normalizeInputs(args: QueryTasksArgsV2): QueryTasksArgsV2 {
+    const normalized = { ...args };
+    
+    // Normalize date inputs
+    if (normalized.dueBy) {
+      const date = normalizeDateInput(normalized.dueBy);
+      if (date) {
+        normalized.dueBy = date.toISOString();
+      }
+    }
+    
+    // Normalize boolean that might come as string
+    if (normalized.completed !== undefined) {
+      const bool = normalizeBooleanInput(normalized.completed);
+      if (bool !== null) {
+        normalized.completed = bool;
+      }
+    }
+    
+    // Normalize search term
+    if (normalized.search) {
+      normalized.search = normalizeStringInput(normalized.search) || undefined;
+    }
+    
+    // Ensure search mode has search term
+    if (normalized.mode === 'search' && !normalized.search) {
+      throw new Error('Search mode requires a search term');
+    }
+    
+    return normalized;
+  }
+
+  private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const cacheKey = `tasks_overdue_${args.limit}_${args.completed}`;
+    
+    // Check cache for speed
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'overdue' }
+      );
+    }
+    
+    // Execute optimized overdue script
+    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_HYBRID_SCRIPT, {
+      limit: args.limit,
+      includeCompleted: args.completed || false,
+    });
+    
+    const result = await this.omniAutomation.execute<any>(script);
+    
+    if (!result || result.error) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        result?.message || 'Failed to get overdue tasks',
+        'Check if OmniFocus is running and not blocked by dialogs',
+        result?.details,
+        timer.toMetadata(),
+      );
+    }
+    
+    // Parse and cache
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks, summary: result.summary });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'overdue' }
+    );
+  }
+
+  private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const days = args.daysAhead || 7;
+    const cacheKey = `tasks_upcoming_${days}_${args.limit}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days }
+      );
+    }
+    
+    // Execute optimized upcoming script
+    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_HYBRID_SCRIPT, {
+      days,
+      includeToday: true,
+      limit: args.limit,
+    });
+    
+    const result = await this.omniAutomation.execute<any>(script);
+    
+    if (!result || result.error) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        result?.message || 'Failed to get upcoming tasks',
+        'Try reducing the days_ahead parameter',
+        result?.details,
+        timer.toMetadata(),
+      );
+    }
+    
+    // Parse and cache
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'upcoming', days_ahead: days }
+    );
+  }
+
+  private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    // Today = overdue + due today + flagged available
+    const filter = {
+      completed: false,
+      limit: args.limit,
+      includeDetails: args.details,
+      skipAnalysis: !args.details, // Skip expensive analysis if not needed
+    };
+    
+    const cacheKey = `tasks_today_${args.limit}_${args.details}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'today' }
+      );
+    }
+    
+    // Get today's tasks
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { 
+      filter: {
+        ...filter,
+        // Custom filter for "today's" tasks
+        dueBy: new Date().toISOString(),
+      }
+    });
+    
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get today\'s tasks',
+        'Try using overdue or upcoming mode instead',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    // Parse and cache
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'today' }
+    );
+  }
+
+  private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    if (!args.search) {
+      return createErrorResponseV2(
+        'tasks',
+        'MISSING_PARAMETER',
+        'Search term is required for search mode',
+        'Add a search parameter with the text to find',
+        { provided_args: args },
+        timer.toMetadata(),
+      );
+    }
+    
+    const filter = {
+      search: args.search,
+      completed: args.completed || false,
+      limit: args.limit,
+      includeDetails: args.details,
+      projectId: args.project,
+      tags: args.tags,
+    };
+    
+    // Execute search
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Search failed',
+        'Try a simpler search term or check if OmniFocus is running',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const tasks = this.parseTasks(result.tasks);
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { 
+        ...timer.toMetadata(), 
+        from_cache: false, 
+        mode: 'search',
+        search_term: args.search
+      }
+    );
+  }
+
+  private async handleAvailableTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const filter = {
+      completed: false,
+      available: true,
+      limit: args.limit,
+      includeDetails: args.details,
+      projectId: args.project,
+      tags: args.tags,
+      skipAnalysis: false, // Need analysis for accurate availability
+    };
+    
+    const cacheKey = `tasks_available_${args.limit}_${args.project || 'all'}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'available' }
+      );
+    }
+    
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get available tasks',
+        'Try using all mode with fewer filters',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'available' }
+    );
+  }
+
+  private async handleBlockedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const filter = {
+      completed: false,
+      blocked: true,
+      limit: args.limit,
+      includeDetails: args.details,
+      projectId: args.project,
+      tags: args.tags,
+      skipAnalysis: false, // Need analysis for blocking detection
+    };
+    
+    const cacheKey = `tasks_blocked_${args.limit}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'blocked' }
+      );
+    }
+    
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get blocked tasks',
+        'Try using all mode instead',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'blocked' }
+    );
+  }
+
+  private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const filter = {
+      flagged: true,
+      completed: args.completed || false,
+      limit: args.limit,
+      includeDetails: args.details,
+      projectId: args.project,
+      tags: args.tags,
+    };
+    
+    const cacheKey = `tasks_flagged_${args.limit}_${args.completed}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'flagged' }
+      );
+    }
+    
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get flagged tasks',
+        undefined,
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const tasks = this.parseTasks(result.tasks);
+    this.cache.set('tasks', cacheKey, { tasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { ...timer.toMetadata(), from_cache: false, mode: 'flagged' }
+    );
+  }
+
+  private async handleAllTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    const filter: any = {
+      completed: args.completed,
+      limit: args.limit,
+      includeDetails: args.details,
+      projectId: args.project,
+      tags: args.tags,
+    };
+    
+    // Add date filter if provided
+    if (args.dueBy) {
+      filter.dueBefore = args.dueBy;
+    }
+    
+    // Clean undefined values
+    Object.keys(filter).forEach(key => {
+      if (filter[key] === undefined) delete filter[key];
+    });
+    
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get tasks',
+        'Try a more specific mode like overdue or today',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const tasks = this.parseTasks(result.tasks);
+    
+    return createTaskResponseV2(
+      'tasks',
+      tasks,
+      { 
+        ...timer.toMetadata(), 
+        from_cache: false, 
+        mode: 'all',
+        filters_applied: filter
+      }
+    );
+  }
+
+  private parseTasks(tasks: any[]): OmniFocusTask[] {
+    return tasks.map(task => ({
+      ...task,
+      dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+      deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
+      completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
+      added: task.added ? new Date(task.added) : undefined,
+    }));
+  }
+}
