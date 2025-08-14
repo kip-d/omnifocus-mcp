@@ -20,14 +20,15 @@ import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
 const QueryTasksToolSchemaV2 = z.object({
   // Primary mode selector
   mode: z.enum([
-    'all',        // List all tasks (with optional filters)
-    'search',     // Text search in task names
-    'overdue',    // Tasks past their due date
-    'today',      // Tasks due today or available now
-    'upcoming',   // Tasks due in next N days
-    'available',  // Tasks ready to work on
-    'blocked',    // Tasks waiting on others
-    'flagged',    // High priority tasks
+    'all',           // List all tasks (with optional filters)
+    'search',        // Text search in task names
+    'overdue',       // Tasks past their due date
+    'today',         // Tasks due today or available now
+    'upcoming',      // Tasks due in next N days
+    'available',     // Tasks ready to work on
+    'blocked',       // Tasks waiting on others
+    'flagged',       // High priority tasks
+    'smart_suggest', // AI-powered suggestions for "what should I work on?"
   ]).default('all').describe('Query mode - determines what tasks to return'),
   
   // Common filters (work with most modes)
@@ -75,6 +76,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
           return this.handleBlockedTasks(normalizedArgs, timer);
         case 'flagged':
           return this.handleFlaggedTasks(normalizedArgs, timer);
+        case 'smart_suggest':
+          return this.handleSmartSuggest(normalizedArgs, timer);
         case 'all':
         default:
           return this.handleAllTasks(normalizedArgs, timer);
@@ -512,6 +515,97 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
         from_cache: false, 
         mode: 'all',
         filters_applied: filter
+      }
+    );
+  }
+
+  private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+    // Smart suggest combines overdue, today, and flagged tasks to suggest what to work on
+    const cacheKey = `tasks_smart_suggest_${args.limit}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' }
+      );
+    }
+    
+    // Gather data from multiple sources for intelligent suggestions
+    const filter = {
+      completed: false,
+      limit: Math.min(args.limit * 2, 100), // Get more for analysis
+      includeDetails: args.details,
+    };
+    
+    // Execute comprehensive query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    
+    if (!result || 'error' in result) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get task suggestions',
+        'Try using mode: "today" or "overdue" instead',
+        result,
+        timer.toMetadata(),
+      );
+    }
+    
+    const allTasks = this.parseTasks(result.tasks || []);
+    const now = new Date();
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // Smart prioritization algorithm
+    const scoredTasks = allTasks.map(task => {
+      let score = 0;
+      
+      // Overdue tasks get highest priority
+      if (task.dueDate) {
+        const dueDate = new Date(task.dueDate);
+        if (dueDate < now) {
+          const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          score += 100 + Math.min(daysOverdue * 10, 200); // Cap at 300 for very overdue
+        } else if (dueDate <= todayEnd) {
+          score += 80; // Due today
+        }
+      }
+      
+      // Flagged tasks get bonus
+      if (task.flagged) score += 50;
+      
+      // Available tasks get bonus (not blocked, not deferred)
+      // TODO: Add proper status check when type is updated
+      // if (task.status === 'available') score += 30;
+      
+      // Tasks with short estimated duration get bonus (quick wins)
+      if (task.estimatedMinutes && task.estimatedMinutes <= 15) score += 20;
+      
+      return { ...task, _score: score };
+    });
+    
+    // Sort by score and take top items
+    const suggestedTasks = scoredTasks
+      .filter(t => t._score > 0) // Only tasks with positive score
+      .sort((a, b) => b._score - a._score)
+      .slice(0, args.limit)
+      .map(({ _score, ...task }) => task); // Remove score from output
+    
+    // Cache results
+    this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
+    
+    return createTaskResponseV2(
+      'tasks',
+      suggestedTasks,
+      { 
+        ...timer.toMetadata(), 
+        from_cache: false, 
+        mode: 'smart_suggest',
+        algorithm: 'priority_score_v1'
       }
     );
   }

@@ -74,8 +74,9 @@ describe('Analytics Tools', () => {
         });
 
         expect(result.success).toBe(true);
-        expect(result.metadata).toHaveProperty('period', 'week');
-        expect(result.metadata).toHaveProperty('group_by', 'project');
+        // Standard metadata fields only
+        expect(result.metadata.operation).toBe('get_productivity_stats');
+        expect(result.metadata.timestamp).toBeDefined();
         expect(result.metadata.from_cache).toBe(false);
       });
 

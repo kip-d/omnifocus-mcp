@@ -96,24 +96,25 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(result.tools.length).toBeGreaterThan(0);
       
       const toolNames = result.tools.map((t: any) => t.name);
-      expect(toolNames).toContain('list_tasks');
+      expect(toolNames).toContain('tasks');  // v2 consolidated tool
       expect(toolNames).toContain('create_task');
       expect(toolNames).toContain('update_task');
       expect(toolNames).toContain('complete_task');
       expect(toolNames).toContain('delete_task');
-      expect(toolNames).toContain('list_projects');
+      expect(toolNames).toContain('projects');  // v2 consolidated tool
       expect(toolNames).toContain('create_project');
     });
   });
 
   describe('Task Operations', () => {
-    it('should handle list_tasks tool call', { timeout: 20000 }, async () => {
+    it('should handle tasks tool call', { timeout: 20000 }, async () => {
       // Server should already be initialized from previous tests
       const result = await sendRequest('tools/call', {
-        name: 'list_tasks',
+        name: 'tasks',
         arguments: {
-          completed: false,
+          mode: 'all',
           limit: 10,
+          details: false,
         },
       });
 
@@ -130,7 +131,7 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       } else {
         expect(response.success).toBe(true);
         expect(response).toHaveProperty('data');
-        expect(response.data).toHaveProperty('items');
+        expect(response.data).toHaveProperty('tasks');  // v2 tool returns 'tasks' not 'items'
         expect(response).toHaveProperty('metadata');
         expect(response.metadata).toHaveProperty('from_cache');
       }
@@ -162,14 +163,13 @@ describe('OmniFocus MCP Server Integration Tests', () => {
   });
 
   describe('Project Operations', () => {
-    it('should handle list_projects tool call', async () => {
+    it('should handle projects tool call', async () => {
       const result = await sendRequest('tools/call', {
-        name: 'list_projects',
+        name: 'projects',
         arguments: {
-          status: ['active'],
-          limit: 10, // Limit to 10 projects for faster test execution
-          includeStats: false, // Disable stats for faster execution
-          // performanceMode defaults to 'lite' now, no need to specify
+          operation: 'list',
+          limit: 10,
+          details: false,
         },
       });
 
@@ -190,7 +190,7 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       } else {
         expect(response.success).toBe(true);
         expect(response).toHaveProperty('data');
-        expect(response.data).toHaveProperty('items');
+        expect(response.data).toHaveProperty('projects');  // v2 tool returns 'projects' not 'items'
         expect(response).toHaveProperty('metadata');
         expect(response.metadata).toHaveProperty('from_cache');
       }

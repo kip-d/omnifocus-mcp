@@ -267,9 +267,10 @@ describe('Export Tools', () => {
         expect(result.data.format).toBe('json');
         expect(result.data.count).toBe(2);
         expect(result.data.data).toBe(JSON.stringify(mockTasks));
-        expect(result.metadata.export_date).toBeDefined();
-        expect(result.metadata.filters_applied).toBe(false);
-        expect(result.metadata.fields_specified).toBe(false);
+        // Standard metadata fields only
+        expect(result.metadata.operation).toBe('export_tasks');
+        expect(result.metadata.timestamp).toBeDefined();
+        expect(result.metadata.from_cache).toBe(false);
       });
 
       it('should handle CSV format correctly', async () => {
@@ -363,7 +364,7 @@ describe('Export Tools', () => {
         expect(result.success).toBe(true);
         expect(result.data.count).toBe(0);
         expect(result.data.data).toBe('[]');
-        expect(result.metadata.filters_applied).toBe(true);
+        // Standard metadata structure maintained
       });
     });
 
@@ -526,8 +527,9 @@ describe('Export Tools', () => {
         expect(result.data.format).toBe('json');
         expect(result.data.count).toBe(2);
         expect(result.data.data).toBe(JSON.stringify(mockProjects));
-        expect(result.metadata.export_date).toBeDefined();
-        expect(result.metadata.include_stats).toBe(false);
+        // Standard metadata fields only
+        expect(result.metadata.operation).toBe('export_projects');
+        expect(result.metadata.timestamp).toBeDefined();
       });
 
       it('should handle CSV format correctly', async () => {
@@ -579,7 +581,8 @@ describe('Export Tools', () => {
         expect(projects[0].stats.totalTasks).toBe(25);
         expect(projects[0].stats.completionRate).toBe(0.6);
         expect(projects[0].stats.overdueTasks).toBe(2);
-        expect(result.metadata.include_stats).toBe(true);
+        // includeStats is in data, not metadata
+        expect(result.data.includeStats).toBe(true);
       });
 
       it('should preserve data integrity with complex project names', async () => {
@@ -629,8 +632,8 @@ describe('Export Tools', () => {
         const result = await tool.execute({ includeStats: true });
 
         expect(result.success).toBe(true);
-        // Should include metadata indicating stats were included
-        expect(result.metadata.include_stats).toBe(true);
+        // includeStats is in data, not metadata
+        expect(result.data.includeStats).toBe(true);
         // The description mentions this is slower, so we verify the flag is tracked
       });
 
@@ -643,7 +646,8 @@ describe('Export Tools', () => {
         const result = await tool.execute({ includeStats: false });
 
         expect(result.success).toBe(true);
-        expect(result.metadata.include_stats).toBe(false);
+        // includeStats is in data, not metadata
+        expect(result.data.includeStats).toBe(false);
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
           expect.objectContaining({ includeStats: false })
@@ -701,8 +705,9 @@ describe('Export Tools', () => {
         expect(result.success).toBe(true);
         expect(result.metadata).toBeDefined();
         expect(result.metadata.query_time_ms).toBeDefined();
-        expect(result.metadata.export_date).toBeDefined();
-        expect(result.metadata.include_stats).toBe(true);
+        // Standard metadata fields only
+        expect(result.metadata.operation).toBe('export_projects');
+        expect(result.metadata.timestamp).toBeDefined();
       });
 
       it('should use correct operation timer', async () => {
@@ -772,8 +777,9 @@ describe('Export Tools', () => {
       expect(projectsResult.success).toBe(true);
       expect(tasksResult.metadata).toBeDefined();
       expect(projectsResult.metadata).toBeDefined();
-      expect(tasksResult.metadata.export_date).toBeDefined();
-      expect(projectsResult.metadata.export_date).toBeDefined();
+      // Standard metadata fields only
+      expect(tasksResult.metadata.operation).toBe('export_tasks');
+      expect(projectsResult.metadata.operation).toBe('export_projects');
     });
   });
 });

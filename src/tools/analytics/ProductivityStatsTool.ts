@@ -32,9 +32,6 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
           {
             from_cache: true,
             ...timer.toMetadata(),
-            period,
-            group_by: groupBy,
-            include_completed: includeCompleted,
           },
         );
       }
@@ -74,9 +71,6 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
         {
           from_cache: false,
           ...timer.toMetadata(),
-          period,
-          group_by: groupBy,
-          include_completed: includeCompleted,
         },
       );
     } catch (error) {

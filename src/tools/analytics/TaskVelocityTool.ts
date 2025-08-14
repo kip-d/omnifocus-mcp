@@ -32,9 +32,6 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
           {
             from_cache: true,
             ...timer.toMetadata(),
-            period,
-            project_id: projectId,
-            tags,
           },
         );
       }
@@ -79,9 +76,6 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
         {
           from_cache: false,
           ...timer.toMetadata(),
-          period,
-          project_id: projectId,
-          tags,
         },
       );
     } catch (error) {

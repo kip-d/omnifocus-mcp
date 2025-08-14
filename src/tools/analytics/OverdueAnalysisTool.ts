@@ -33,9 +33,6 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
           {
             from_cache: true,
             ...timer.toMetadata(),
-            include_recently_completed: includeRecentlyCompleted,
-            group_by: groupBy,
-            limit,
           },
         );
       }
@@ -74,9 +71,6 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchema> 
         {
           from_cache: false,
           ...timer.toMetadata(),
-          include_recently_completed: includeRecentlyCompleted,
-          group_by: groupBy,
-          limit,
         },
       );
     } catch (error) {

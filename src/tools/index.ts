@@ -87,20 +87,31 @@ import { QueryPerspectiveTool } from './perspectives/QueryPerspectiveTool.js';
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
-  // Initialize all tools
-  const tools = [
-    // v2.0.0-alpha consolidated tools - RECOMMENDED
+  // Check if legacy tools should be enabled
+  const enableLegacyTools = process.env.OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS === 'true';
+  
+  if (!enableLegacyTools) {
+    logger.info('Using v2.0.0 consolidated tools only. Set OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true to enable legacy tools.');
+  } else {
+    logger.warn('Legacy tools enabled for backward compatibility. Consider migrating to v2 tools.');
+  }
+
+  // Initialize tool arrays
+  const v2Tools = [
+    // v2.0.0 consolidated tools - STRONGLY RECOMMENDED
     new QueryTasksToolV2(cache),      // Single 'tasks' tool with modes
     new ProjectsToolV2(cache),         // Single 'projects' tool with operations
-    
-    // v1.x tools - DEPRECATED but kept for backward compatibility
-    // New consolidated task query tool (recommended for all query operations)
+  ];
+
+  const legacyTools = [
+    // v1.x tools - DEPRECATED (only loaded if OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true)
+    // Consolidated task query tool (deprecated - use 'tasks' tool instead)
     new QueryTasksTool(cache),
 
-    // Task tools - Read operations (legacy tools - use query_tasks instead)
-    new ListTasksTool(cache),          // Deprecated: use query_tasks with queryType: "list"
-    new GetTaskCountTool(cache),
-    new TodaysAgendaTool(cache),
+    // Task tools - Read operations (deprecated - use 'tasks' tool instead)
+    new ListTasksTool(cache),          // Deprecated: use 'tasks' tool with mode: "list"
+    new GetTaskCountTool(cache),       // Deprecated: use 'tasks' tool with mode: "count"
+    new TodaysAgendaTool(cache),       // Deprecated: use 'tasks' tool with mode: "today"
 
     // Task tools - Write operations (now enabled with correct JXA syntax)
     new CreateTaskTool(cache),
@@ -108,36 +119,36 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new CompleteTaskTool(cache),
     new DeleteTaskTool(cache),
 
-    // Advanced status tools (legacy - use query_tasks instead)
-    new NextActionsTool(cache),        // Deprecated: use query_tasks with queryType: "next_actions"
-    new BlockedTasksTool(cache),       // Deprecated: use query_tasks with queryType: "blocked"
-    new AvailableTasksTool(cache),     // Deprecated: use query_tasks with queryType: "available"
+    // Advanced status tools (deprecated - use 'tasks' tool instead)
+    new NextActionsTool(cache),        // Deprecated: use 'tasks' tool with mode: "next_actions"
+    new BlockedTasksTool(cache),       // Deprecated: use 'tasks' tool with mode: "blocked"
+    new AvailableTasksTool(cache),     // Deprecated: use 'tasks' tool with mode: "available"
 
     // Batch operations removed due to OmniFocus JXA limitations
     // Use individual task operations which work perfectly
 
-    // Date range query tools (legacy - use query_tasks instead)
-    new DateRangeQueryTool(cache),     // For complex date range queries
-    new OverdueTasksTool(cache),       // Deprecated: use query_tasks with queryType: "overdue"
-    new UpcomingTasksTool(cache),      // Deprecated: use query_tasks with queryType: "upcoming"
+    // Date range query tools (deprecated - use 'tasks' tool instead)
+    new DateRangeQueryTool(cache),     // Deprecated: use 'tasks' tool with mode: "date_range"
+    new OverdueTasksTool(cache),       // Deprecated: use 'tasks' tool with mode: "overdue"
+    new UpcomingTasksTool(cache),      // Deprecated: use 'tasks' tool with mode: "upcoming"
 
-    // Project tools
-    new ListProjectsTool(cache),
-    new CreateProjectTool(cache),
-    new UpdateProjectTool(cache),
-    new CompleteProjectTool(cache),
-    new DeleteProjectTool(cache),
+    // Project tools (deprecated - use 'projects' tool instead)
+    new ListProjectsTool(cache),       // Deprecated: use 'projects' tool with operation: "list"
+    new CreateProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "create"
+    new UpdateProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "update"
+    new CompleteProjectTool(cache),    // Deprecated: use 'projects' tool with operation: "complete"
+    new DeleteProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "delete"
 
     // Folder tools - new consolidated tools (recommended)
     new ManageFolderTool(cache),
     new QueryFoldersTool(cache),
 
-    // Legacy folder tools (deprecated but kept for backward compatibility)
-    new ListFoldersTool(cache),
-    new CreateFolderTool(cache),
-    new UpdateFolderTool(cache),
-    new DeleteFolderTool(cache),
-    new MoveFolderTool(cache),
+    // Legacy folder tools (deprecated - use manage_folder and query_folders instead)
+    new ListFoldersTool(cache),        // Deprecated: use query_folders with operation: "list"
+    new CreateFolderTool(cache),       // Deprecated: use manage_folder with operation: "create"
+    new UpdateFolderTool(cache),       // Deprecated: use manage_folder with operation: "update"
+    new DeleteFolderTool(cache),       // Deprecated: use manage_folder with operation: "delete"
+    new MoveFolderTool(cache),         // Deprecated: use manage_folder with operation: "move"
 
     // Analytics tools
     new ProductivityStatsTool(cache),
@@ -172,10 +183,59 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ListPerspectivesTool(cache),
     new QueryPerspectiveTool(cache),
 
-    // Legacy review tools (deprecated but kept for backward compatibility)
+    // Legacy review tools (deprecated - use manage_reviews instead)
     new ProjectsForReviewTool(cache),    // Deprecated: use manage_reviews with operation: "list_for_review"
     new MarkProjectReviewedTool(cache),  // Deprecated: use manage_reviews with operation: "mark_reviewed"
     new SetReviewScheduleTool(cache),    // Deprecated: use manage_reviews with operation: "set_schedule"
+  ];
+
+  // Essential tools that are always included
+  const essentialTools = [
+    // Task write operations (no v2 consolidation yet)
+    new CreateTaskTool(cache),
+    new UpdateTaskTool(cache),
+    new CompleteTaskTool(cache),
+    new DeleteTaskTool(cache),
+
+    // Consolidated tools (always included)
+    new ManageFolderTool(cache),
+    new QueryFoldersTool(cache),
+    new ManageReviewsTool(cache),
+    new BatchTaskOperationsTool(cache),
+
+    // Analytics tools
+    new ProductivityStatsTool(cache),
+    new TaskVelocityTool(cache),
+    new OverdueAnalysisTool(cache),
+
+    // Tag tools
+    new ListTagsTool(cache),
+    new ManageTagsTool(cache),
+    new GetActiveTagsTool(cache),
+
+    // Export tools
+    new ExportTasksTool(cache),
+    new ExportProjectsTool(cache),
+    new BulkExportTool(cache),
+
+    // Recurring task tools
+    new AnalyzeRecurringTasksTool(cache),
+    new GetRecurringPatternsTool(cache),
+
+    // System tools
+    new GetVersionInfoTool(cache),
+    new RunDiagnosticsTool(cache),
+
+    // Perspective tools
+    new ListPerspectivesTool(cache),
+    new QueryPerspectiveTool(cache),
+  ];
+
+  // Combine tools based on configuration
+  const tools = [
+    ...v2Tools,
+    ...essentialTools,
+    ...(enableLegacyTools ? legacyTools : []),
   ];
 
   // Register handlers

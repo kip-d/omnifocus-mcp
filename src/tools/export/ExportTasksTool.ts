@@ -43,10 +43,6 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
         },
         {
           ...timer.toMetadata(),
-          export_date: new Date().toISOString(),
-          filters_applied: Object.keys(filter).length > 0,
-          fields_specified: !!fields,
-          task_count: result.count,
         },
       );
     } catch (error) {

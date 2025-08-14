@@ -121,16 +121,15 @@ describe('Response Format Consistency Tests', () => {
 
       const result = await tool.execute({ period: 'week' });
 
-      // Check metadata fields are snake_case
+      // Check standard metadata fields are snake_case
       expect(result.metadata).toHaveProperty('from_cache');
       expect(result.metadata).toHaveProperty('query_time_ms');
-      expect(result.metadata).toHaveProperty('group_by');
-      expect(result.metadata).toHaveProperty('include_completed');
+      expect(result.metadata).toHaveProperty('operation');
+      expect(result.metadata).toHaveProperty('timestamp');
       
       // Should NOT have camelCase
       expect(result.metadata).not.toHaveProperty('fromCache');
       expect(result.metadata).not.toHaveProperty('queryTimeMs');
-      expect(result.metadata).not.toHaveProperty('groupBy');
     });
   });
 
@@ -189,7 +188,9 @@ describe('Response Format Consistency Tests', () => {
       expect(result.data).toHaveProperty('format');
       expect(result.data).toHaveProperty('data');
       expect(result.data).toHaveProperty('count');
-      expect(result.metadata).toHaveProperty('export_date');
+      // Standard metadata fields only
+      expect(result.metadata).toHaveProperty('operation');
+      expect(result.metadata).toHaveProperty('timestamp');
     });
   });
 

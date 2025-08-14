@@ -182,7 +182,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     }
     
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, filter);
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+      filter,
+      includeStats: args.details || false
+    });
     const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || result.error) {
@@ -250,7 +253,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     return createSuccessResponseV2(
       'projects',
       { project: result },
-      `Project "${args.name}" created successfully`,
+      undefined, // No summary for create operation
       { ...timer.toMetadata(), operation: 'create' },
     );
   }
@@ -301,7 +304,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     return createSuccessResponseV2(
       'projects',
       { project: result },
-      `Project updated successfully`,
+      undefined, // No summary for update operation
       { ...timer.toMetadata(), operation: 'update' },
     );
   }
@@ -343,7 +346,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     return createSuccessResponseV2(
       'projects',
       { project: result },
-      `Project marked as complete`,
+      undefined, // No summary for complete operation
       { ...timer.toMetadata(), operation: 'complete' },
     );
   }
@@ -385,7 +388,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     return createSuccessResponseV2(
       'projects',
       { deleted: true },
-      `Project deleted successfully`,
+      undefined, // No summary for delete operation
       { ...timer.toMetadata(), operation: 'delete' },
     );
   }
@@ -411,7 +414,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     }
     
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, filter);
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+      filter,
+      includeStats: args.details || false
+    });
     const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || result.error) {
@@ -462,7 +468,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     }
     
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, filter);
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+      filter,
+      includeStats: args.details || false
+    });
     const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || result.error) {

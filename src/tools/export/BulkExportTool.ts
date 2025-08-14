@@ -109,10 +109,6 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
         },
         {
           ...timer.toMetadata(),
-          output_directory: outputDirectory,
-          export_format: format,
-          include_completed: includeCompleted,
-          include_project_stats: includeProjectStats,
         },
       );
     } catch (error) {
