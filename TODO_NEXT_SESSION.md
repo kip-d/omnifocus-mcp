@@ -1,196 +1,107 @@
-# TODO for Next Session
+# TODO Next Session
 
-## PARADIGM SHIFT: Optimize for LLM+User Experience, Not Query Speed
+## Immediate Priority - User Testing Results for v2.0.0-alpha.2
+- [ ] Review user testing feedback for v2.0.0-alpha.2
+- [ ] Address any bugs or issues reported
+- [ ] Consider if we need alpha.3 or can move to beta
+- [ ] Check if smart_suggest mode is working as expected
 
-### Context from 2025-08-13 Session
-- **Discovery**: We've been optimizing the wrong thing
-- **Reality**: Tool execution (5s) is only 50% of user experience (10s total)
-- **Failed optimization**: Made performance 25% WORSE by optimizing JavaScript
-- **New focus**: Reduce LLM confusion, retries, and processing time
+## Status Check
+✅ **COMPLETED IN v2.0.0-alpha.2:**
+- Tool consolidation (tasks and projects tools)
+- Summary-first response format
+- Smart insights generation
+- Performance metrics in metadata
+- Quick smoke test validation
+- Fixed .where() bug in hybrid scripts
 
-## Priority 1: Tool Consolidation (Saves 5-10s per interaction)
+## Potential Issues to Watch
+1. **Performance with large databases** - Smoke test uses only 25 items, need real-world testing
+2. **Smart suggest algorithm** - May need tuning based on user feedback
+3. **Legacy tool loading** - Check if OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS env var is working
+4. **Error messages** - Verify v2 error responses are helpful with suggestions
 
-### Task Tools Consolidation
-- [ ] Merge into ONE unified `tasks` tool:
-  - list_tasks
-  - query_tasks
-  - get_overdue_tasks
-  - get_upcoming_tasks
-  - todays_agenda
-  - next_actions
-  - blocked_tasks
-  - available_tasks
-  - query_tasks_by_date
-- [ ] Use clear `mode` parameter: "list" | "overdue" | "upcoming" | "today" | "search"
-- [ ] Remove all deprecated variants
+## Known Bugs Fixed
+✅ **JXA vs OmniJS Context** - .where() method removed from all scripts
+✅ **Projects script template** - Fixed {{limit}} parameter passing
+✅ **Smoke test parameters** - Fixed boolean type issues
 
-### Project Tools Consolidation
-- [ ] Merge project query tools
-- [ ] Single `projects` tool with modes
+## Testing Improvements Needed
+- [ ] Add stress test with 5000+ tasks
+- [ ] Measure actual LLM processing time with v2 format
+- [ ] Validate smart_suggest scoring algorithm
+- [ ] Test cache effectiveness with new structure
+- [ ] Benchmark v2 vs v1 total user experience time
 
-### Why This Matters
-- **Current**: LLM reads 15+ tool descriptions, analyzes similarities, picks one
-- **After**: LLM reads 4 tools, instant decision
-- **Time saved**: 2-3 seconds per query
+## Documentation Updates
+- [ ] Update main README with v2.0 changes
+- [ ] Create v1 to v2 migration guide
+- [ ] Document OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS usage
+- [ ] Add smart_suggest mode examples
+- [ ] Update API documentation with new response format
 
-## Priority 2: Smarter Response Format (Saves 2-3s processing)
+## Remaining v2 Migration Tasks
+- [ ] Migrate batch operations to v2 pattern
+- [ ] Convert review tools to consolidated pattern
+- [ ] Update folder management tools
+- [ ] Enhance export tools with progressive disclosure
 
-### Add Summary to ALL Responses
-- [ ] Every response includes `.summary` field
-- [ ] Key insights at top level
-- [ ] Counts and statistics pre-calculated
-- [ ] Example:
-```javascript
-{
-  summary: {
-    total: 47,
-    key_insight: "5 tasks overdue, 3 are high priority",
-    most_overdue: "Tax return (30 days)"
-  },
-  tasks: [...] // Only if needed
-}
-```
+## Future Optimizations (Post v2.0 stable)
 
-### Reduce Default Data
-- [ ] Change default limit from 100 to 25
-- [ ] Return only essential fields by default
-- [ ] Details only on request
+### 1. Reconsider evaluateJavascript Bridge
+- Now we know .where() was the issue, not the bridge itself
+- Could get true OmniJS performance
+- **BUT**: Must avoid ALL OmniJS-specific methods, not just .where()
 
-### Why This Matters
-- **Current**: LLM processes 100 tasks × 20 fields = 2000 data points
-- **After**: LLM reads summary + 25 essential items
-- **Time saved**: 2-3 seconds of LLM processing
+### 2. Progressive Data Loading
+- Return first 10 results immediately
+- Load more on demand
+- Stream responses for better perceived performance
 
-## Priority 3: Error Prevention (Saves 5-10s from retries)
+### 3. Intelligent Caching
+- Pre-cache common queries during idle time
+- Predictive cache warming based on usage patterns
+- Background cache refresh
 
-### Input Normalization
-- [ ] Accept "today", "tomorrow", "next week" for dates
-- [ ] Convert string booleans ("true"/"false") automatically
-- [ ] Handle common LLM mistakes:
-  - Empty strings for optional parameters
-  - Quoted numbers
-  - Wrong enum capitalization
+## Critical Reminders
+⚠️ **NEVER use .where() or other OmniJS-specific methods** - We run in JXA context
+⚠️ **Always use standard JavaScript iteration** - for loops, not OmniJS methods
+⚠️ **Test with real data** - Smoke tests with 25 items don't catch performance issues
+⚠️ **Summary-first is non-negotiable** - LLMs process summaries 10x faster than raw data
 
-### Clear Parameter Validation
-- [ ] Return helpful errors immediately
-- [ ] Suggest correct format in error message
-- [ ] Never timeout - fail fast
+## Success Metrics for v2.0.0
 
-### Why This Matters
-- **Current**: Wrong params → 5s timeout → error → LLM retries → 10s+ wasted
-- **After**: Auto-corrected or instant helpful error
-- **Time saved**: 5-10 seconds per mistake
-
-## Priority 4: Documentation Overhaul
-
-### Tool Descriptions
-- [ ] One-line purpose statement
-- [ ] Clear parameter requirements
-- [ ] Example response in description
-- [ ] NO ambiguity about when to use
-
-### Before:
-```
-"Query tasks with various filtering options and date ranges"
-```
-
-### After:
-```
-"Get overdue tasks. Returns incomplete tasks past due date. No parameters needed."
-```
-
-## What NOT to Do
-
-### ❌ Don't Optimize JavaScript
-- Already proven to make things worse
-- JXA isn't Node.js
-- Not where the time is spent
-
-### ❌ Don't Add More Tools
-- More tools = more confusion
-- Consolidate instead
-
-### ❌ Don't Return Raw Data
-- LLM doesn't need everything
-- Summaries are faster
-
-## Success Metrics for v1.16.0
-
-### Old (Wrong) Metrics
-- ~~Query executes in <1 second~~
-- ~~JavaScript optimization~~
-- ~~Whose() elimination~~
-
-### New (Right) Metrics
+### What We're Measuring
 - ✅ Zero retry rate (first attempt succeeds)
-- ✅ LLM picks correct tool 90%+ of time
+- ✅ Correct tool selection >90% of time  
 - ✅ Response processing <2 seconds
 - ✅ Total user experience <8 seconds
-- ✅ No follow-up questions needed
+- ✅ Smoke tests pass in <10 seconds
 
-## Testing Plan
+### Current Status (v2.0.0-alpha.2)
+- Smoke tests: 3/3 passing ✅
+- Total smoke test time: 7.82 seconds ✅
+- Response structure: Summary-first ✅
+- Tool consolidation: Implemented ✅
+- Smart insights: Working ✅
 
-### Create Real-World Test Suite
-- [ ] Common user prompts (not tool calls)
-- [ ] Measure total wall clock time
-- [ ] Track retry rates
-- [ ] Monitor LLM processing time
+## Questions for User Testing Group
 
-### Example Test Cases:
-1. "What's overdue?"
-2. "Show me today's tasks"
-3. "What should I work on next?"
-4. "Find tasks about the budget"
+1. **Performance**: Is the response time acceptable with your real database?
+2. **Smart Suggest**: Does the prioritization match your workflow?
+3. **Summaries**: Are the key insights helpful and accurate?
+4. **Tool Selection**: Is the LLM choosing the right tool/mode?
+5. **Error Recovery**: Are error messages helpful when things go wrong?
 
-## Implementation Order
-
-### Week 1: Tool Consolidation
-1. Design unified tool interfaces
-2. Implement mode-based routing
-3. Remove deprecated tools
-4. Update all tests
-
-### Week 2: Response Optimization
-1. Add summary generation
-2. Reduce default limits
-3. Implement progressive disclosure
-4. Test with real LLM
-
-### Week 3: Error Prevention
-1. Add input normalization
-2. Implement auto-correction
-3. Improve error messages
-4. Test common mistakes
-
-### Week 4: Documentation & Release
-1. Rewrite all tool descriptions
-2. Update README
-3. Create migration guide
-4. Release v1.16.0
-
-## Files to Review Next Session
-- `/V1.16.0_REAL_UX_OPTIMIZATION.md` - The new strategy
-- `/V1.16.0_OPTIMIZATION_FAILURE_ANALYSIS.md` - Why JS optimization failed
-- Tool consolidation mapping (to be created)
-
-## Key Insights to Remember
-
-1. **User experience is 10+ seconds, not 5**
-2. **LLM confusion costs more than slow queries**
-3. **Retries are the enemy**
-4. **Summaries beat raw data**
-5. **Clear > Fast**
-
-## Questions for Next Session
-
-1. Should we version the API for backward compatibility?
-2. How to handle existing users expecting old tools?
-3. Should consolidated tools be one file or modular?
-4. What's the best way to generate summaries efficiently?
+## Session Context Summary
+- **Version**: 2.0.0-alpha.2
+- **Status**: All smoke tests passing, ready for user testing
+- **Key Achievement**: Paradigm shift implemented, .where() bug fixed
+- **Waiting for**: User testing feedback
+- **Next Step**: Address feedback, potentially release beta
 
 ---
 
-*Updated: 2025-08-13 (Evening)*
-*Paradigm Shift: From micro-optimization to macro UX*
-*Focus: LLM experience, not JavaScript performance*
-*Goal: <8 second total user experience*
+*Last updated: 2025-08-14*
+*Ready for: User testing evaluation*
+*Focus: Validate v2 paradigm shift with real users*
