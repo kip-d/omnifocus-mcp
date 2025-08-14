@@ -24,6 +24,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Important Usage Notes
 
+### 🚨 CRITICAL: MCP Bridge Type Coercion Issue
+**The Claude Desktop MCP bridge converts ALL parameters to strings during transport.**
+
+This means when creating Zod schemas for MCP tools, you MUST handle type coercion:
+
+```typescript
+// ❌ WRONG - Will fail with Claude Desktop
+limit: z.number().min(1).max(200).default(25)
+
+// ✅ CORRECT - Handles both direct calls and MCP bridge
+limit: z.union([
+  z.number(),
+  z.string().transform(val => parseInt(val, 10))
+]).pipe(z.number().min(1).max(200)).default(25)
+
+// ✅ CORRECT - Boolean coercion
+details: z.union([
+  z.boolean(),
+  z.string().transform(val => val === 'true' || val === '1')
+]).default(false)
+```
+
+**This issue has caused bugs in:**
+- v2.0.0-alpha.2: Type errors when using through Claude Desktop
+- Previous versions: Similar parameter validation failures
+
+**Always test with BOTH:**
+1. Direct Node.js calls (smoke test) - passes proper types
+2. Claude Desktop - passes stringified parameters
+
 ### Date Format Requirements
 - **Use local time format**: `YYYY-MM-DD HH:mm` (e.g., "2025-03-31 17:00")
 - **Avoid ISO 8601 with Z**: Don't use `2025-03-31T17:00:00.000Z` format
