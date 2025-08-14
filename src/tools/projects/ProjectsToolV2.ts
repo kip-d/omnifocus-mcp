@@ -240,16 +240,19 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
     }
     
     const projectData = {
-      name: args.name,
       note: args.note,
       dueDate: args.dueDate,
       flagged: args.flagged,
       tags: args.tags,
       reviewInterval: args.reviewInterval,
+      sequential: false, // Default to parallel
     };
     
-    // Execute creation
-    const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, projectData);
+    // Execute creation - CREATE_PROJECT_SCRIPT expects {name, options} structure
+    const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
+      name: args.name,
+      options: projectData
+    });
     const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || result.error) {

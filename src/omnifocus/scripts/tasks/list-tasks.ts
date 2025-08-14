@@ -377,11 +377,21 @@ export const LIST_TASKS_SCRIPT = `
     if (filter.flagged !== undefined && task.flagged() !== filter.flagged) return false;
     if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) return false;
     
-    // Project filter (medium cost)
-    if (filter.projectId !== undefined) {
+    // Project filter (medium cost) - supports both name and ID
+    if (filter.project !== undefined || filter.projectId !== undefined) {
       const project = safeGetProject(task);
-      if (filter.projectId === null && project !== null) return false;
-      if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
+      
+      // Check by project name
+      if (filter.project !== undefined) {
+        if (filter.project === null && project !== null) return false;
+        if (filter.project !== null && (!project || project.name !== filter.project)) return false;
+      }
+      
+      // Check by project ID
+      if (filter.projectId !== undefined) {
+        if (filter.projectId === null && project !== null) return false;
+        if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
+      }
     }
     
     // Date filters (medium cost)
@@ -490,11 +500,21 @@ export const LIST_TASKS_SCRIPT = `
               if (filter.deferAfter && (!deferDate || deferDate <= filter.deferAfter)) continue;
             }
             
-            // Project filter
-            if (filter.projectId !== undefined) {
+            // Project filter - supports both name and ID
+            if (filter.project !== undefined || filter.projectId !== undefined) {
               const project = safeGetProject(task);
-              if (filter.projectId === "" && project) continue;
-              if (filter.projectId !== "" && (!project || project.id !== filter.projectId)) continue;
+              
+              // Check by project name
+              if (filter.project !== undefined) {
+                if (filter.project === "" && project) continue;
+                if (filter.project !== "" && (!project || project.name !== filter.project)) continue;
+              }
+              
+              // Check by project ID
+              if (filter.projectId !== undefined) {
+                if (filter.projectId === "" && project) continue;
+                if (filter.projectId !== "" && (!project || project.id !== filter.projectId)) continue;
+              }
             }
             
             // Build task object (same as regular path)

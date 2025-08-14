@@ -307,9 +307,28 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       completed: args.completed || false,
       limit: args.limit,
       includeDetails: args.details,
-      projectId: args.project,
+      project: args.project, // Pass as project name, not ID
       tags: args.tags,
+      skipAnalysis: !args.details, // Skip expensive analysis if not needed
     };
+    
+    // Generate cache key for search
+    const cacheKey = `tasks_search_${JSON.stringify(filter)}`;
+    
+    // Check cache
+    const cached = this.cache.get<any>('tasks', cacheKey);
+    if (cached) {
+      return createTaskResponseV2(
+        'tasks',
+        cached.tasks,
+        { 
+          ...timer.toMetadata(), 
+          from_cache: true, 
+          mode: 'search',
+          search_term: args.search
+        }
+      );
+    }
     
     // Execute search
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
@@ -327,6 +346,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
     }
     
     const tasks = this.parseTasks(result.tasks);
+    
+    // Cache search results
+    this.cache.set('tasks', cacheKey, { tasks });
     
     return createTaskResponseV2(
       'tasks',
@@ -346,7 +368,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       available: true,
       limit: args.limit,
       includeDetails: args.details,
-      projectId: args.project,
+      project: args.project, // Pass as project name, not ID
       tags: args.tags,
       skipAnalysis: false, // Need analysis for accurate availability
     };
@@ -394,7 +416,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       blocked: true,
       limit: args.limit,
       includeDetails: args.details,
-      projectId: args.project,
+      project: args.project, // Pass as project name, not ID
       tags: args.tags,
       skipAnalysis: false, // Need analysis for blocking detection
     };
@@ -442,7 +464,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       completed: args.completed || false,
       limit: args.limit,
       includeDetails: args.details,
-      projectId: args.project,
+      project: args.project, // Pass as project name, not ID
       tags: args.tags,
     };
     
@@ -488,7 +510,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       completed: args.completed,
       limit: args.limit,
       includeDetails: args.details,
-      projectId: args.project,
+      project: args.project, // Pass as project name, not ID
       tags: args.tags,
     };
     
