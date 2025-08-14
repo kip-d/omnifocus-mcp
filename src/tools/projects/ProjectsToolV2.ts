@@ -34,20 +34,35 @@ const ProjectsToolSchemaV2 = z.object({
   status: z.enum(['active', 'on-hold', 'done', 'dropped', 'all']).optional()
     .describe('Filter by project status (for list operation)'),
   folder: z.string().optional().describe('Filter by folder name'),
-  needsReview: z.boolean().optional().describe('Only show projects needing review'),
+  needsReview: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1')
+  ]).optional().describe('Only show projects needing review'),
   
   // For create/update operations
   projectId: z.string().optional().describe('Project ID (required for update/complete/delete)'),
   name: z.string().optional().describe('Project name'),
   note: z.string().optional().describe('Project note/description'),
   dueDate: z.string().optional().describe('Due date (natural language supported)'),
-  reviewInterval: z.number().optional().describe('Review interval in days'),
+  reviewInterval: z.union([
+    z.number(),
+    z.string().transform(val => parseInt(val, 10))
+  ]).optional().describe('Review interval in days'),
   tags: z.array(z.string()).optional().describe('Tags to assign'),
-  flagged: z.boolean().optional().describe('Mark as flagged/important'),
+  flagged: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1')
+  ]).optional().describe('Mark as flagged/important'),
   
-  // Response control
-  limit: z.number().min(1).max(200).default(50).describe('Maximum projects to return'),
-  details: z.boolean().default(true).describe('Include full project details'),
+  // Response control - with type coercion for MCP bridge compatibility
+  limit: z.union([
+    z.number(),
+    z.string().transform(val => parseInt(val, 10))
+  ]).pipe(z.number().min(1).max(200)).default(50).describe('Maximum projects to return'),
+  details: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1')
+  ]).default(true).describe('Include full project details'),
 });
 
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;

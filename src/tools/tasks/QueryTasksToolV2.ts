@@ -35,15 +35,27 @@ const QueryTasksToolSchemaV2 = z.object({
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
   project: z.string().optional().describe('Filter by project name or ID'),
   tags: z.array(z.string()).optional().describe('Filter by tag names'),
-  completed: z.boolean().optional().describe('Include completed tasks (default: false)'),
+  completed: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1')
+  ]).optional().describe('Include completed tasks (default: false)'),
   
   // Date filters (natural language supported)
   dueBy: z.string().optional().describe('Show tasks due by this date (e.g., "tomorrow", "friday", "2025-03-15")'),
-  daysAhead: z.number().min(1).max(30).optional().describe('For upcoming mode: number of days to look ahead (default: 7)'),
+  daysAhead: z.union([
+    z.number(),
+    z.string().transform(val => parseInt(val, 10))
+  ]).pipe(z.number().min(1).max(30)).optional().describe('For upcoming mode: number of days to look ahead (default: 7)'),
   
-  // Response control
-  limit: z.number().min(1).max(200).default(25).describe('Maximum tasks to return (default: 25)'),
-  details: z.boolean().default(false).describe('Include full task details (default: false for speed)'),
+  // Response control - with type coercion for MCP bridge compatibility
+  limit: z.union([
+    z.number(),
+    z.string().transform(val => parseInt(val, 10))
+  ]).pipe(z.number().min(1).max(200)).default(25).describe('Maximum tasks to return (default: 25)'),
+  details: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1')
+  ]).default(false).describe('Include full task details (default: false for speed)'),
 });
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
