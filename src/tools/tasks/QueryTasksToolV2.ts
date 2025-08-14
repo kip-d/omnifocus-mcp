@@ -23,7 +23,7 @@ const QueryTasksToolSchemaV2 = z.object({
     'all',           // List all tasks (with optional filters)
     'search',        // Text search in task names
     'overdue',       // Tasks past their due date
-    'today',         // Tasks due today or available now
+    'today',         // Today perspective: Due soon (≤3 days) OR flagged
     'upcoming',      // Tasks due in next N days
     'available',     // Tasks ready to work on
     'blocked',       // Tasks waiting on others
@@ -237,18 +237,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
-    // Today = overdue + due today
+    // Today perspective = Due Soon OR Flagged (matching typical OmniFocus Today perspective)
+    // "Due Soon" typically means due within the next few days
     const now = new Date();
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    
-    const filter = {
-      completed: false,
-      limit: args.limit,
-      includeDetails: args.details,
-      skipAnalysis: !args.details, // Skip expensive analysis if not needed
-      // Get tasks due by end of today (includes overdue)
-      dueBefore: todayEnd.toISOString(),
-    };
+    const dueSoonEnd = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000)); // 3 days from now
     
     const cacheKey = `tasks_today_${args.limit}_${args.details}`;
     
@@ -262,7 +254,17 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       );
     }
     
-    // Get today's tasks
+    // We need to get BOTH due soon AND flagged tasks
+    // Since LIST_TASKS_SCRIPT doesn't support OR conditions well,
+    // we'll get a broader set and filter in memory
+    const filter = {
+      completed: false,
+      limit: args.limit * 2, // Get more since we'll filter
+      includeDetails: args.details,
+      skipAnalysis: !args.details,
+    };
+    
+    // Get all incomplete tasks (we'll filter for due soon OR flagged)
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
     
@@ -277,13 +279,29 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
       );
     }
     
-    // Parse and cache
-    const tasks = this.parseTasks(result.tasks);
-    this.cache.set('tasks', cacheKey, { tasks });
+    // Parse all tasks
+    const allTasks = this.parseTasks(result.tasks);
+    
+    // Filter for Today perspective: Due Soon OR Flagged
+    const todayTasks = allTasks.filter(task => {
+      // Include if flagged
+      if (task.flagged) return true;
+      
+      // Include if due soon (within 3 days)
+      if (task.dueDate) {
+        const dueDate = new Date(task.dueDate);
+        if (dueDate <= dueSoonEnd) return true;
+      }
+      
+      return false;
+    }).slice(0, args.limit); // Limit after filtering
+    
+    // Cache the filtered results
+    this.cache.set('tasks', cacheKey, { tasks: todayTasks });
     
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      todayTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'today' }
     );
   }
