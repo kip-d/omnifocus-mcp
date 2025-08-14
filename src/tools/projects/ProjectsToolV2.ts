@@ -239,14 +239,22 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
       );
     }
     
-    const projectData = {
+    const projectData: any = {
       note: args.note,
       dueDate: args.dueDate,
       flagged: args.flagged,
       tags: args.tags,
-      reviewInterval: args.reviewInterval,
       sequential: false, // Default to parallel
     };
+    
+    // Convert reviewInterval from days (number) to object format expected by script
+    if (args.reviewInterval) {
+      projectData.reviewInterval = {
+        unit: 'days',
+        steps: args.reviewInterval,
+        fixed: true // Use fixed scheduling by default
+      };
+    }
     
     // Execute creation - CREATE_PROJECT_SCRIPT expects {name, options} structure
     const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {

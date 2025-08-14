@@ -237,12 +237,17 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
-    // Today = overdue + due today + flagged available
+    // Today = overdue + due today
+    const now = new Date();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
     const filter = {
       completed: false,
       limit: args.limit,
       includeDetails: args.details,
       skipAnalysis: !args.details, // Skip expensive analysis if not needed
+      // Get tasks due by end of today (includes overdue)
+      dueBefore: todayEnd.toISOString(),
     };
     
     const cacheKey = `tasks_today_${args.limit}_${args.details}`;
@@ -258,14 +263,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
     }
     
     // Get today's tasks
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { 
-      filter: {
-        ...filter,
-        // Custom filter for "today's" tasks
-        dueBy: new Date().toISOString(),
-      }
-    });
-    
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
     
     if (!result || 'error' in result) {

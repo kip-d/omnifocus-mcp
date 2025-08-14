@@ -521,6 +521,11 @@ export const LIST_TASKS_SCRIPT = `
             const taskObj = buildTaskObject(task, filter, skipRecurringAnalysis);
             tasks.push(taskObj);
             count++;
+            
+            // Early exit when we have enough results
+            if (filter.limit && tasks.length >= filter.limit) {
+              break;
+            }
           }
           
           return JSON.stringify({
@@ -578,6 +583,11 @@ export const LIST_TASKS_SCRIPT = `
       
       tasks.push(taskObj);
       count++;
+      
+      // Early exit when we have enough results
+      if (filter.limit && tasks.length >= filter.limit) {
+        break;
+      }
     }
     
     const endTime = Date.now();

@@ -4,6 +4,19 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
 
+## ⚠️ Known Limitations
+
+### Tags Cannot Be Assigned During Task Creation
+Due to JXA (JavaScript for Automation) constraints, **tags cannot be assigned when creating tasks**. This is a fundamental limitation of the OmniFocus automation API. 
+
+**Workaround**: Create the task first, then immediately update it with tags:
+```javascript
+// Step 1: Create task
+const task = await create_task({ name: "My Task" });
+// Step 2: Update with tags
+await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+```
+
 ## Features
 
 - Task management (create, update, complete, delete)
