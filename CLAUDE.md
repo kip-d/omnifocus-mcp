@@ -58,6 +58,44 @@ for (let i = 0; i < allTasks.length; i++) {
 }
 ```
 
+### 🚨 CRITICAL: JXA vs OmniJS Context Differences
+**THIS IS A COMMON SOURCE OF BUGS - PAY ATTENTION!**
+
+There are TWO different JavaScript contexts in OmniFocus automation:
+1. **JXA (JavaScript for Automation)** - What we primarily use, runs via `osascript`
+2. **OmniJS (Omni Automation)** - OmniFocus's internal JS, runs via `evaluateJavascript`
+
+#### The .where() Method Trap
+```javascript
+// ❌ NEVER use .where() in JXA context - IT DOESN'T EXIST!
+// This will fail with: TypeError: flattenedTasks.where is not a function
+const tasks = doc.flattenedTasks.where(task => !task.completed);
+
+// ❌ NEVER use .where() even in hybrid scripts that look like OmniJS
+// The outer context is still JXA when executed via osascript
+const omniScript = `
+  // This looks like it should work but DOESN'T in our JXA context
+  const query = flattenedTasks.where(task => {
+    return !task.completed && task.dueDate < now;
+  });
+`;
+
+// ✅ ALWAYS use standard JavaScript iteration in ALL contexts
+const allTasks = doc.flattenedTasks();
+for (let i = 0; i < allTasks.length; i++) {
+  const task = allTasks[i];
+  if (!task.completed() && task.dueDate() < now) {
+    // process task
+  }
+}
+```
+
+#### Why This Matters
+- `.where()` is an OmniJS-specific method that ONLY exists when code runs inside OmniFocus
+- Our MCP server runs JXA scripts via `osascript`, NOT OmniJS
+- Even "hybrid" scripts using `evaluateJavascript` still run in JXA context initially
+- **ALWAYS use standard JavaScript array methods and for loops**
+
 ### JavaScript Filtering Optimizations (v1.15.0)
 
 1. **Eliminate safeGet() overhead** - Direct try/catch is 50-60% faster
