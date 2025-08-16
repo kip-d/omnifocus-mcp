@@ -163,6 +163,12 @@ Set `skipAnalysis: true` to skip recurring task analysis for additional 30% fast
 list_tasks({ completed: false, limit: 50, skipAnalysis: true })
 ```
 
+## Critical Reminders (NEVER FORGET)
+⚠️ **NEVER use .where() or other OmniJS-specific methods** - We run in JXA context
+⚠️ **Always use standard JavaScript iteration** - for loops, not OmniJS methods  
+⚠️ **Test with real data** - Smoke tests with 25 items don't catch performance issues
+⚠️ **Summary-first is non-negotiable** - LLMs process summaries 10x faster than raw data
+
 ## Common Development Commands
 
 ```bash

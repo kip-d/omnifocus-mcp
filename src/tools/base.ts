@@ -15,8 +15,13 @@ import {
 
 /**
  * Base class for all MCP tools with Zod schema validation
+ * @template TSchema - The Zod schema type for input validation
+ * @template TResponse - The response type returned by executeValidated (defaults to unknown for flexibility)
  */
-export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
+export abstract class BaseTool<
+  TSchema extends z.ZodType = z.ZodType,
+  TResponse = StandardResponse<unknown> | unknown
+> {
   protected omniAutomation: OmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
@@ -44,7 +49,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
   /**
    * Execute the tool with validation
    */
-  async execute(args: unknown): Promise<StandardResponse<unknown>> {
+  async execute(args: unknown): Promise<TResponse> {
     try {
       // Validate input with Zod
       const validated = this.schema.parse(args);
@@ -72,14 +77,15 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType> {
       }
 
       // Handle other errors - return standardized error response
-      return this.handleError(error);
+      return this.handleError(error) as TResponse;
     }
   }
 
   /**
    * Execute the tool with validated arguments
+   * Returns the response type specified by the tool implementation
    */
-  protected abstract executeValidated(args: z.infer<TSchema>): Promise<any>;
+  protected abstract executeValidated(args: z.infer<TSchema>): Promise<TResponse>;
 
   /**
    * Handle errors consistently across all tools

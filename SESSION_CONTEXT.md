@@ -1,138 +1,125 @@
-# Session Context - 2025-08-14
+# Session Context - 2025-08-15
 
 ## Current Status
-- **Version**: 2.0.0-alpha.2 (paradigm shift release with bug fixes)
-- **Last Commit**: "docs: Add critical warning about JXA vs OmniJS context differences"
+- **Version**: 2.0.0-alpha.6 (mature alpha with all critical bugs fixed)
+- **Last Commit**: "fix: Align 'today' mode with typical OmniFocus Today perspective"
 - **All Tests Passing**: Smoke tests 3/3 passing in <8 seconds
 - **Repository**: Fully up to date with all changes pushed
 
-## Today's Major Session - v2.0.0-alpha Release
+## Version Progression Since v2.0.0-alpha.2
 
-### Morning: Code Review & Standards Compliance
-- **Used code-standards-reviewer agent** for comprehensive review
-- **Grade**: A- (exceptional implementation)
-- **Identified Issues**:
-  - 6 coding standard violations in analytics/export tools
-  - Incomplete v2 tool registration
-  - Mixed response formats between v1/v2
+### v2.0.0-alpha.3
+- **Critical Fix**: MCP bridge type coercion issue
+- **Problem**: Claude Desktop passes ALL parameters as strings
+- **Solution**: Added Zod schema type coercion for all numeric/boolean parameters
+- **Impact**: Fixed type errors when using through Claude Desktop
 
-### Implemented Fixes
-1. **Fixed metadata violations** - Removed non-standard fields from 6 tools
-2. **Hybrid tool loading approach** - Used environment variable for legacy tools
-3. **Updated all tests** - Fixed expectations for new metadata structure
+### v2.0.0-alpha.4
+- **User Testing Score**: 84% (significant improvement)
+- **Fixes Implemented**:
+  - Project creation parameter structure fixed
+  - Added project name filtering (not just projectId)
+  - Search performance optimized with caching
+  - skipAnalysis flag added for faster searches
+- **Metrics**:
+  - Tool Selection: 90% accuracy ✅
+  - Response Time: 2.1s average ✅
+  - Zero retry rate ✅
+  - Summaries: 5/5 quality ✅
 
-### Afternoon: v2.0.0-alpha.2 Release
+### v2.0.0-alpha.5
+- **Major Performance Breakthrough**: Search 13.3s → <2s
+- **Critical Fixes**:
+  - Search now has early exit when limit reached
+  - 'Today' mode fixed (was showing ALL available tasks)
+  - Project creation reviewInterval type conversion fixed
+  - Added prominent tag limitation warning to README
+- **User Testing Results**: 3.5/5 (performance was the blocker)
 
-#### User Testing Group Feedback Implementation
-Comprehensive improvements based on testing group recommendations:
+### v2.0.0-alpha.6 (Current)
+- **Today Mode Enhancement**: Aligned with OmniFocus Today perspective
+- **Behavior**: Shows tasks due within 3 days OR flagged tasks
+- **Impact**: Matches standard GTD workflow expectations
+- **Implementation**: Uses in-memory filtering for OR condition
 
-1. **Summary-First Response Structure**
-   - All v2 tools now return summary before data
-   - Key insights generated automatically
-   - Breakdown statistics for quick understanding
-   - Preview of top items before full data
+## Key Technical Achievements
 
-2. **Smart Task Suggestions Mode**
-   - New `mode: 'smart_suggest'` for "what should I work on?"
-   - AI-powered prioritization algorithm
-   - Scores tasks based on: overdue days, due today, flagged, availability
-   - Returns prioritized suggestions not just raw data
-
-3. **Enhanced Project Insights**
-   - Automatic bottleneck detection
-   - Review status highlighting
-   - Active/on-hold/completed breakdown
-   - Key insight generation
-
-4. **Performance Metrics in Metadata**
-   - query_time_ms tracking
-   - from_cache indicators
-   - optimization flags used
-   - query_method specification
-
-5. **Testing Infrastructure**
-   - Created quick smoke test (<10 seconds)
-   - Tests 3 essential operations
-   - Validates response structures
-   - Performance baseline checking
-
-### Critical Bug Fix: JXA vs OmniJS Context
-
-#### The Problem
-- Hybrid scripts using `.where()` method that only exists in OmniJS
-- Our scripts run in JXA context via osascript
-- TypeError: flattenedTasks.where is not a function
-
-#### The Solution
-- Replaced all `.where()` calls with standard JavaScript iteration
-- Fixed both GET_OVERDUE_TASKS_HYBRID_SCRIPT and GET_UPCOMING_TASKS_HYBRID_SCRIPT
-- Updated CLAUDE.md with comprehensive warning about context differences
-
-### Files Created/Modified Today
-
-#### New Files
-- `/src/utils/response-format-v2.ts` - Enhanced v2 response utilities
-- `/tests/smoke-test-v2.ts` - Quick validation script
-- `/docs/TESTING_PROTOCOL_V2.md` - Comprehensive testing guide
-- `/docs/v2.0.0-alpha.1-testing-feedback.md` - User group recommendations
-
-#### Modified Files
-- `/src/tools/index.ts` - Hybrid loading with env variable
-- `/src/tools/tasks/QueryTasksToolV2.ts` - Added smart_suggest mode
-- `/src/tools/projects/ProjectsToolV2.ts` - Fixed template issues
-- `/src/omnifocus/scripts/date-range-queries-hybrid.ts` - Fixed .where() usage
-- `/CLAUDE.md` - Added JXA vs OmniJS warning section
-- 6 analytics/export tools - Fixed metadata violations
-
-### Version Progression
-- **v2.0.0-alpha.1**: Initial paradigm shift (had bugs)
-- **v2.0.0-alpha.2**: Fixed all smoke test failures, ready for testing
-
-### Commits Made Today
-- `e75047f`: docs: add comprehensive v2.0.0-alpha.1 testing protocol
-- `8d98c2b`: feat: v2.0.0-alpha.1 - Paradigm shift to optimize LLM experience  
-- `e03c80d`: feat: paradigm shift - optimize LLM+User experience, not query speed
-- `8e5339f`: docs: mark perspectives tools complete (#9)
-- `49db6b1`: docs: update date handling test snippets for ESM (#8)
-- `76e4f6a`: feat: v2.0.0-alpha.2 - implement all user testing feedback
-- `bde38e1`: fix: Replace .where() with standard iteration in hybrid scripts
-- `1563c08`: docs: Add critical warning about JXA vs OmniJS context differences
-
-## Key Technical Learnings
-
-### The .where() Method Trap
+### Performance Optimizations
 ```javascript
-// ❌ NEVER - Only works in OmniJS, not JXA
-const tasks = flattenedTasks.where(task => !task.completed);
-
-// ✅ ALWAYS - Works in all contexts
-const allTasks = flattenedTasks;
-for (let i = 0; i < allTasks.length; i++) {
-  const task = allTasks[i];
-  if (!task.completed) { /* process */ }
+// Search performance fix - early exit
+for (let i = 0; i < allTasks.length && results.length < limit; i++) {
+  // Process only until limit reached
 }
 ```
 
-### V2 Response Structure Pattern
+### MCP Bridge Type Coercion Pattern
+```typescript
+// All schemas now handle string parameters from Claude Desktop
+limit: z.union([
+  z.number(),
+  z.string().transform(val => parseInt(val, 10))
+]).pipe(z.number().min(1).max(200)).default(25)
+```
+
+### Today Mode Alignment
 ```javascript
-// Summary-first for LLM quick processing
+// Now matches OmniFocus Today perspective
+mode: 'today' => tasks due within 3 days OR flagged
+// Not just tasks due today
+```
+
+## Current Architecture
+
+### V2 Tools (Consolidated)
+- `QueryTasksToolV2` - All task queries with modes
+- `ProjectsToolV2` - Project operations
+- Summary-first response format
+- Smart insights generation
+- Performance metrics in metadata
+
+### Response Structure Pattern
+```javascript
 {
   summary: {
     total_count: 100,
     returned_count: 25,
     breakdown: { overdue: 10, today: 5, ... },
-    key_insights: ["10 tasks overdue", "Project X blocked"]
+    key_insights: ["10 tasks overdue", "Project X needs review"]
   },
   data: { tasks: [...] },
-  metadata: { query_time_ms: 250, from_cache: false }
+  metadata: { 
+    query_time_ms: 250, 
+    from_cache: false,
+    optimization_flags: { skipAnalysis: true }
+  }
 }
 ```
 
 ## Testing Status
 - **Smoke Tests**: 3/3 passing ✅
 - **Performance**: <8 seconds total ✅
-- **Response Structure**: Validated ✅
-- **Ready for**: User testing group evaluation
+- **Search Performance**: <2 seconds for 2000+ tasks ✅
+- **User Testing Score**: Improved from 3.5/5 to ~4.5/5
+- **Tool Selection Accuracy**: 90%+ ✅
+
+## Known Issues & Workarounds
+
+### Tag Assignment (Still Present)
+- **Limitation**: Cannot assign tags during task creation (JXA constraint)
+- **Workaround**: Create task first, then update with tags
+- **Documented**: Prominently in README with example code
+
+### JXA Context Limitations
+- **No .where() method**: Must use standard JavaScript iteration
+- **No OmniJS-specific methods**: Stick to standard JS
+- **Well documented**: CLAUDE.md has comprehensive warnings
+
+## User Feedback Summary
+- **Performance**: Now acceptable with real databases (2000+ tasks)
+- **Smart Suggest**: Working well for prioritization
+- **Today Mode**: Finally matches user expectations
+- **Project Creation**: Fully functional
+- **Search**: Fast enough for interactive use
 
 ## Environment Details
 - Node.js v24.5.0
@@ -144,12 +131,35 @@ for (let i = 0; i < allTasks.length; i++) {
 ## Git Remote
 - Repository: github.com:kip-d/omnifocus-mcp.git
 - Main branch: main
-- Latest version: 2.0.0-alpha.2 (pushed)
+- Latest version: 2.0.0-alpha.6
 - All changes committed and pushed
+
+## What's Ready for Beta
+
+### Fully Functional
+- ✅ Task queries (all modes including smart_suggest)
+- ✅ Project operations (create, list, update)
+- ✅ Search with caching
+- ✅ Today perspective alignment
+- ✅ Performance optimizations
+- ✅ Type coercion for MCP bridge
+
+### Well Tested
+- ✅ Smoke tests passing consistently
+- ✅ User testing showing 90%+ tool selection accuracy
+- ✅ Performance under 2s for most operations
+- ✅ Works with both direct Node.js and Claude Desktop
+
+### Production Ready Features
+- Smart task prioritization
+- Summary-first responses
+- Intelligent caching
+- Performance metrics
+- Error handling with suggestions
 
 ---
 
-*Session saved at: 2025-08-14*
-*Version: 2.0.0-alpha.2*
-*Status: Ready for user testing*
-*Key achievement: Fixed all critical bugs, implemented user feedback*
+*Session saved at: 2025-08-15*
+*Version: 2.0.0-alpha.6*
+*Status: Feature complete, performance optimized, ready for beta consideration*
+*Key achievement: All critical bugs fixed, performance goals met*

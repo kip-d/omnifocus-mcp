@@ -45,6 +45,11 @@ import { ProductivityStatsTool } from './analytics/ProductivityStatsTool.js';
 import { TaskVelocityTool } from './analytics/TaskVelocityTool.js';
 import { OverdueAnalysisTool } from './analytics/OverdueAnalysisTool.js';
 
+// Import v2 analytics tools
+import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
+import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
+import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
+
 // Import tag tools
 import { ListTagsTool } from './tags/ListTagsTool.js';
 import { ManageTagsTool } from './tags/ManageTagsTool.js';
@@ -101,6 +106,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // v2.0.0 consolidated tools - STRONGLY RECOMMENDED
     new QueryTasksToolV2(cache),      // Single 'tasks' tool with modes
     new ProjectsToolV2(cache),         // Single 'projects' tool with operations
+    
+    // v2 analytics tools - Summary-first format
+    new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
+    new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
+    new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
   ];
 
   const legacyTools = [

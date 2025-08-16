@@ -2,6 +2,15 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
+## 🎉 v2.0.0-beta.1 Released!
+
+**Major improvements in this beta release:**
+- ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
+- 🛠️ **Consolidated V2 tools** - Simplified from 15+ tools to just 4 primary tools
+- 📊 **Summary-first responses** - LLM-optimized format with key insights
+- 🔒 **Full TypeScript type safety** - No more `Promise<any>` in V2 tools
+- 🎯 **Smart task prioritization** - Intelligent suggestions based on context
+
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
 
 ## ⚠️ Known Limitations

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-// Import hybrid scripts directly - they provide better performance
+// Import ultra-optimized scripts for best performance (no whose(), 67-91% faster)
 import {
-  GET_OVERDUE_TASKS_HYBRID_SCRIPT,
-  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-hybrid.js';
+  GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+  GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
 import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
@@ -93,7 +93,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
     }
 
     // Use hybrid script for better performance
-    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_HYBRID_SCRIPT, scriptParams);
+    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, scriptParams);
     const result = await this.omniAutomation.execute<any>(script);
 
     if (!result || result.error) {
@@ -157,7 +157,7 @@ export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
     }
 
     // Use hybrid script for better performance
-    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_HYBRID_SCRIPT, scriptParams);
+    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, scriptParams);
     const result = await this.omniAutomation.execute<any>(script);
 
     if (!result || result.error) {

@@ -38,6 +38,20 @@ export interface ProjectSummary extends Record<string, unknown> {
   bottlenecks?: string[];
 }
 
+export interface AnalyticsSummary extends Record<string, unknown> {
+  analysis_type: string;
+  total_items_analyzed: number;
+  time_period?: string;
+  key_findings: string[];
+  top_issues?: Array<{
+    category: string;
+    count: number;
+    percentage: number;
+  }>;
+  recommendations?: string[];
+  health_score?: number;
+}
+
 export interface StandardMetadataV2 {
   // Operation info
   operation: string;
@@ -65,7 +79,7 @@ export interface StandardResponseV2<T> {
   success: boolean;
   
   // Quick summary for LLM (always first for fastest processing)
-  summary?: TaskSummary | ProjectSummary;
+  summary?: TaskSummary | ProjectSummary | AnalyticsSummary;
   
   // Main payload (may be truncated/limited)
   data: T;
@@ -305,7 +319,7 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
 export function createSuccessResponseV2<T>(
   operation: string,
   data: T,
-  summary?: TaskSummary | ProjectSummary,
+  summary?: TaskSummary | ProjectSummary | AnalyticsSummary,
   metadata: Partial<StandardMetadataV2> = {},
 ): StandardResponseV2<T> {
   return {
@@ -323,9 +337,40 @@ export function createSuccessResponseV2<T>(
 }
 
 /**
+ * Create analytics response with insights
+ */
+export function createAnalyticsResponseV2<T>(
+  operation: string,
+  data: T,
+  analysisType: string,
+  keyFindings: string[],
+  metadata: Partial<StandardMetadataV2> = {},
+): StandardResponseV2<T> {
+  const summary: AnalyticsSummary = {
+    analysis_type: analysisType,
+    total_items_analyzed: 0,
+    key_findings: keyFindings,
+  };
+  
+  // Extract item count from data if available
+  if (data && typeof data === 'object') {
+    const dataObj = data as any;
+    if (dataObj.stats?.overdueTasks?.length) {
+      summary.total_items_analyzed = dataObj.stats.overdueTasks.length;
+    } else if (dataObj.velocity?.tasksCompleted) {
+      summary.total_items_analyzed = dataObj.velocity.tasksCompleted;
+    } else if (dataObj.stats?.totalTasks) {
+      summary.total_items_analyzed = dataObj.stats.totalTasks;
+    }
+  }
+  
+  return createSuccessResponseV2(operation, data, summary, metadata);
+}
+
+/**
  * Create enhanced error response with suggestions
  */
-export function createErrorResponseV2<T = never>(
+export function createErrorResponseV2<T = any>(
   operation: string,
   errorCode: string,
   message: string,
@@ -335,7 +380,7 @@ export function createErrorResponseV2<T = never>(
 ): StandardResponseV2<T> {
   return {
     success: false,
-    data: null as T,
+    data: {} as T,
     metadata: {
       operation,
       timestamp: new Date().toISOString(),

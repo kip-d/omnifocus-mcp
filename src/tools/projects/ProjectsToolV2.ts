@@ -16,6 +16,7 @@ import {
   normalizeBooleanInput,
   normalizeStringInput
 } from '../../utils/response-format-v2.js';
+import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
 
 // Unified schema for all project operations
 const ProjectsToolSchemaV2 = z.object({
@@ -67,12 +68,12 @@ const ProjectsToolSchemaV2 = z.object({
 
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;
 
-export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
+export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, ProjectsResponseV2 | ProjectOperationResponseV2> {
   name = 'projects';
   description = 'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
   schema = ProjectsToolSchemaV2;
 
-  async executeValidated(args: ProjectsArgsV2): Promise<any> {
+  async executeValidated(args: ProjectsArgsV2): Promise<ProjectsResponseV2 | ProjectOperationResponseV2> {
     const timer = new OperationTimerV2();
     
     try {
@@ -103,7 +104,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
             'Use one of: list, create, update, complete, delete, review, active',
             { provided: normalizedArgs.operation },
             timer.toMetadata(),
-          );
+          ) as ProjectsResponseV2;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -123,7 +124,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2> {
         suggestion,
         error,
         timer.toMetadata(),
-      );
+      ) as ProjectsResponseV2;
     }
   }
 

@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import {
-  GET_OVERDUE_TASKS_HYBRID_SCRIPT,
-  GET_UPCOMING_TASKS_HYBRID_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-hybrid.js';
+  GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+  GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
 import { 
   createTaskResponseV2, 
   createErrorResponseV2, 
@@ -15,6 +15,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
+import { TasksResponseV2 } from '../response-types-v2.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -60,12 +61,12 @@ const QueryTasksToolSchemaV2 = z.object({
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
-export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
+export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
   description = 'Query OmniFocus tasks. Use mode to specify what you want: all, search, overdue, today, upcoming, available, blocked, or flagged. Returns summary first for quick answers.';
   schema = QueryTasksToolSchemaV2;
 
-  async executeValidated(args: QueryTasksArgsV2): Promise<any> {
+  async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {
     const timer = new OperationTimerV2();
     
     try {
@@ -162,7 +163,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
     }
     
     // Execute optimized overdue script
-    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_HYBRID_SCRIPT, {
+    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
       limit: args.limit,
       includeCompleted: args.completed || false,
     });
@@ -206,7 +207,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2> {
     }
     
     // Execute optimized upcoming script
-    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_HYBRID_SCRIPT, {
+    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
       days,
       includeToday: true,
       limit: args.limit,
