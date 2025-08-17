@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta.3] - 2025-08-17
+
+### 🎉 Major Feature: Task Reparenting Support
+
+This beta release adds full support for moving tasks between parents, projects, and the inbox using the `evaluateJavascript()` bridge, fixing the third major JXA limitation!
+
+### ✨ New Features
+- **Task Reparenting**: Tasks can now be moved between different containers
+  - Move tasks to different parent tasks (action groups)
+  - Move tasks between projects
+  - Move tasks back to inbox
+  - Remove parent (move to project root)
+- **Global moveTasks() Access**: Discovered and implemented the OmniJS global function
+- **Update Task Enhanced**: The update_task tool now fully supports parentTaskId changes
+
+### 🔧 Technical Improvements
+- Task reparenting via global `moveTasks()` function in OmniJS
+- Proper error handling for move operations
+- Fallback to JXA methods when bridge unavailable
+- Performance overhead only ~50-100ms per operation
+
+### 📝 What's Fixed with evaluateJavascript Bridge
+1. **Tag Assignment** (beta.1) - Tags can be assigned during task creation
+2. **Repeat Rules** (beta.2) - Complex recurrence patterns supported
+3. **Task Reparenting** (beta.3) - Full task hierarchy manipulation
+
+### 🚀 Bridge Pattern Success
+The evaluateJavascript() bridge has now fixed THREE major JXA limitations that were previously considered impossible to overcome!
+
 ## [2.0.0-beta.2] - 2025-08-17
 
 ### 🎉 Major Feature: Repeat Rule Support

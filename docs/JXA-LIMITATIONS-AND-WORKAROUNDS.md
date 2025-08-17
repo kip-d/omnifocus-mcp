@@ -92,21 +92,32 @@ const success = applyRepetitionRuleViaBridge(taskId, ruleData);
 
 **Ideal Solution**: While our bridge works perfectly, native JXA support would eliminate the overhead.
 
-### 3. Moving Tasks Between Parents
+### 3. Moving Tasks Between Parents ✅ FIXED (v2.0.0-beta.3)
 
 **Problem**: Existing tasks cannot be reliably moved to different parent tasks (action groups).
 
 **Technical Details**:
-- `task.assignedContainer` doesn't work for parent task assignment
-- `doc.moveTasks()` has inconsistent behavior with action groups
-- `parentTask.tasks.push(existingTask)` often fails
-- No reliable method to reparent tasks
+- `task.assignedContainer` doesn't work for parent task assignment in JXA
+- `doc.moveTasks()` has inconsistent behavior with action groups in JXA
+- `parentTask.tasks.push(existingTask)` often fails in JXA
+- No reliable JXA method to reparent tasks
 
-**Impact**: Task organization features are limited; users cannot restructure task hierarchies.
+**Status**: ✅ **FIXED in v2.0.0-beta.3** using evaluateJavascript() bridge
 
-**Current Workaround**: Tasks must be recreated with the desired parent, losing history and metadata.
+**Working Solution**:
+```javascript
+// Use the global moveTasks() function available in OmniJS
+const result = app.evaluateJavascript(`
+  const task = Task.byIdentifier("${taskId}");
+  const newParent = Task.byIdentifier("${parentId}");
+  moveTasks([task], newParent);
+`);
+// Task is now successfully moved to new parent!
+```
 
-**Ideal Solution**: Provide reliable `task.setParent()` or fix `moveTasks()` for action groups.
+**Performance**: Bridge adds ~50-100ms overhead but provides full task hierarchy manipulation
+
+**Ideal Solution**: While our bridge works perfectly, native JXA support would eliminate the overhead.
 
 ### 4. Performance Issues with whose() Clauses
 

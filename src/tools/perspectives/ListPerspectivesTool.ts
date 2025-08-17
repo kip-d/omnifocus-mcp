@@ -3,14 +3,14 @@ import { BaseTool } from '../base.js';
 import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { StandardResponse } from '../../utils/response-format.js';
-import { coerceBoolean, coerceString } from '../schemas/schema-utils.js';
+import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
 const ListPerspectivesSchema = z.object({
   includeFilterRules: coerceBoolean()
     .default(false)
     .describe('Include filter rules for custom perspectives'),
   
-  sortBy: coerceString()
+  sortBy: z.string()
     .default('name')
     .describe('Sort order for perspectives'),
 });
