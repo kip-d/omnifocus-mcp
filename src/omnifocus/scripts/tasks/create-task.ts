@@ -113,20 +113,79 @@ export const CREATE_TASK_SCRIPT = `
         }
       }
       
-      // Note: Tags cannot be assigned during creation in JXA
-      // This is a known limitation of the OmniFocus JXA API
-      
       // Get the created task ID
       const taskId = task.id();
       
-      return JSON.stringify({
+      // Apply tags via evaluateJavascript bridge if provided
+      let tagResult = null;
+      if (taskData.tags && taskData.tags.length > 0) {
+        try {
+          // Build the OmniJS script to add tags
+          const tagScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier("' + taskId + '");',
+            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
+            '  ',
+            '  const tagNames = ' + JSON.stringify(taskData.tags) + ';',
+            '  const addedTags = [];',
+            '  const createdTags = [];',
+            '  ',
+            '  for (const name of tagNames) {',
+            '    if (typeof name !== "string" || name.trim() === "") continue;',
+            '    ',
+            '    let tag = flattenedTags.byName(name);',
+            '    if (!tag) {',
+            '      tag = new Tag(name);',
+            '      createdTags.push(name);',
+            '    }',
+            '    task.addTag(tag);',
+            '    addedTags.push(name);',
+            '  }',
+            '  ',
+            '  return JSON.stringify({',
+            '    success: true,',
+            '    tagsAdded: addedTags,',
+            '    tagsCreated: createdTags,',
+            '    totalTags: task.tags.length',
+            '  });',
+            '})()'
+          ].join('');
+          
+          const tagResultStr = app.evaluateJavascript(tagScript);
+          tagResult = JSON.parse(tagResultStr);
+          
+          if (tagResult.success) {
+            console.log('Successfully added ' + tagResult.tagsAdded.length + ' tags to task');
+            if (tagResult.tagsCreated.length > 0) {
+              console.log('Created new tags:', tagResult.tagsCreated.join(', '));
+            }
+          } else {
+            console.log('Warning: Failed to add tags:', tagResult.error);
+            tagResult = null; // Don't include failed result in response
+          }
+          
+        } catch (tagError) {
+          console.log('Warning: Error adding tags via bridge:', tagError.message);
+          // Continue without tags rather than failing task creation
+        }
+      }
+      
+      // Build response
+      const response = {
         taskId: taskId,
         name: task.name(),
-        created: true,
-        note: taskData.tags && taskData.tags.length > 0 
-          ? 'Note: Tags cannot be assigned during task creation due to JXA limitations. Use update_task to add tags.'
-          : undefined
-      });
+        created: true
+      };
+      
+      // Include tag information if tags were processed
+      if (tagResult && tagResult.success) {
+        response.tags = tagResult.tagsAdded;
+        if (tagResult.tagsCreated.length > 0) {
+          response.tagsCreated = tagResult.tagsCreated;
+        }
+      }
+      
+      return JSON.stringify(response);
       
     } catch (error) {
       return formatError(error, 'create_task');

@@ -15,16 +15,18 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
 ## ⚠️ Known Limitations
 
-### Tags Cannot Be Assigned During Task Creation
-Due to JXA (JavaScript for Automation) constraints, **tags cannot be assigned when creating tasks**. This is a fundamental limitation of the OmniFocus automation API. 
+### ~~Tags Cannot Be Assigned During Task Creation~~ ✅ FIXED in v2.0.0-beta.1
+**Update**: Tags can now be assigned during task creation! We've implemented a workaround using the `evaluateJavascript()` bridge that allows immediate tag assignment.
 
-**Workaround**: Create the task first, then immediately update it with tags:
 ```javascript
-// Step 1: Create task
-const task = await create_task({ name: "My Task" });
-// Step 2: Update with tags
-await update_task({ taskId: task.id, tags: ["work", "urgent"] });
+// Now works in a single step!
+const task = await create_task({ 
+  name: "My Task",
+  tags: ["work", "urgent"]  // ✅ Tags are assigned immediately
+});
 ```
+
+For technical details about how we bypassed this JXA limitation, see [JXA Limitations and Workarounds](docs/JXA-LIMITATIONS-AND-WORKAROUNDS.md).
 
 ## Features
 
@@ -323,7 +325,7 @@ create_task({
 ## Known Limitations
 
 - **Recurrence/Repetition**: ✅ **NOW WORKING** via `evaluateJavascript()` bridge! See examples above. Implementation uses a hybrid approach bridging JXA to Omni Automation. Technical details in `/docs/JXA-LIMITATIONS.md`.
-- **Tags**: Cannot be assigned during task creation (JXA limitation). Create task first, then update with tags.
+- **Tags**: ✅ **NOW WORKING** - Can be assigned during task creation using `evaluateJavascript()` bridge (v2.0.0-beta.1).
 - **Project Movement**: Moving tasks between projects may require recreation with new ID
 - **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.
 - **Sequential Task Blocking**: Tasks in the inbox do not show as blocked even when sequential, as they lack project context. Sequential blocking only applies to tasks within projects or action groups.
