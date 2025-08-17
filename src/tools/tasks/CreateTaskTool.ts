@@ -4,7 +4,6 @@ import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import {
   parsingError,
-  tagCreationLimitationError,
   formatErrorWithRecovery,
   invalidDateError,
 } from '../../utils/error-messages.js';
@@ -17,29 +16,13 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   name = 'create_task';
-  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Note: Tags cannot be assigned during creation due to JXA limits - use update_task after. Dates should be in local time format.';
+  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). Dates should be in local time format.';
   schema = CreateTaskSchema;
 
   async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
     const timer = new OperationTimer();
 
     try {
-      // Check for tag limitation upfront
-      if (args.tags && args.tags.length > 0) {
-        const errorDetails = tagCreationLimitationError();
-        return createErrorResponse(
-          'create_task',
-          'TAGS_NOT_SUPPORTED',
-          errorDetails.message,
-          {
-            recovery: errorDetails.recovery,
-            formatted: formatErrorWithRecovery(errorDetails),
-            tags: args.tags,
-          },
-          timer.toMetadata(),
-        );
-      }
-
       // Convert local dates to UTC for OmniFocus with better error handling
       let convertedTaskData;
       try {
