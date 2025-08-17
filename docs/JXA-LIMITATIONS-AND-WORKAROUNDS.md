@@ -65,7 +65,7 @@ app.evaluateJavascript(tagScript);
 
 **Ideal Solution**: Enable tag assignment in JXA's Task constructor or provide `addTag()` method.
 
-### 2. Repeat Rule Assignment
+### 2. Repeat Rule Assignment ✅ FIXED (v2.0.0-beta.2)
 
 **Problem**: Complex repeat rules cannot be created or modified via JXA.
 
@@ -74,22 +74,23 @@ app.evaluateJavascript(tagScript);
 - The `task.repetitionRule` property cannot be set to a proper RepetitionRule object
 - RRULE strings and repetition methods are not exposed in JXA
 
-**Impact**: Tasks with repeat rules require bridge workarounds, adding complexity.
+**Status**: ✅ **FIXED in v2.0.0-beta.2** using evaluateJavascript() bridge
 
-**Current Workaround**:
+**Working Solution**:
 ```javascript
-// Must use evaluateJavascript to access RepetitionRule class
-const result = app.evaluateJavascript(`
-  const task = Task.byIdentifier("${taskId}");
-  const rule = new Task.RepetitionRule(
-    "FREQ=WEEKLY;INTERVAL=1",
-    Task.RepetitionMethod.Fixed
-  );
-  task.repetitionRule = rule;
-`);
+// Now fully implemented and working via bridge
+const ruleData = prepareRepetitionRuleData({
+  unit: 'week',
+  steps: 1,
+  weekdays: ['monday', 'wednesday', 'friday']
+});
+const success = applyRepetitionRuleViaBridge(taskId, ruleData);
+// Creates: "Every Monday, Wednesday, and Friday"
 ```
 
-**Ideal Solution**: Expose RepetitionRule class and methods in JXA.
+**Performance**: Bridge adds ~50-100ms overhead but provides full functionality
+
+**Ideal Solution**: While our bridge works perfectly, native JXA support would eliminate the overhead.
 
 ### 3. Moving Tasks Between Parents
 

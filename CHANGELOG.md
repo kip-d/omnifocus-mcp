@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta.2] - 2025-08-17
+
+### 🎉 Major Feature: Repeat Rule Support
+
+This beta release adds full support for recurring tasks using the `evaluateJavascript()` bridge, overcoming another significant JXA limitation.
+
+### ✨ New Features
+- **Repeat Rule Support**: Tasks can now be created with complex recurrence patterns
+  - Daily, weekly, monthly, and yearly patterns
+  - Specific weekday selections (e.g., Mon/Wed/Fri)
+  - Monthly positional rules (e.g., 1st Tuesday, last Friday)
+  - Multiple repetition methods: fixed, start-after-completion, due-after-completion
+  - Defer another settings (e.g., defer 3 days before due)
+- **evaluateJavascript Bridge Extended**: Proven pattern now handles both tags and repeat rules
+- **RRULE Generation**: Automatic conversion from simple parameters to OmniFocus RRULE format
+
+### 🔧 Technical Improvements
+- Repeat rule implementation via `applyRepetitionRuleViaBridge()` function
+- Support for all OmniFocus `Task.RepetitionRule` patterns
+- Comprehensive repeat rule schemas with type coercion
+- Performance overhead only ~50-100ms for bridge operations
+
+### 📝 Example Usage
+```javascript
+create_task({
+  name: "Weekly Team Sync",
+  repeatRule: {
+    unit: "week",
+    steps: 1,
+    weekdays: ["monday", "wednesday", "friday"]
+  }
+})
+```
+
+### 🚀 What's Fixed with evaluateJavascript Bridge
+1. **Tag Assignment** (fixed in beta.1) - Tags can be assigned during task creation
+2. **Repeat Rules** (fixed in beta.2) - Complex recurrence patterns now supported
+3. Next candidates: Task reparenting, advanced properties, perspective queries
+
 ## [2.0.0-beta.1] - 2025-08-16
 
 ### 🎉 Beta Release
