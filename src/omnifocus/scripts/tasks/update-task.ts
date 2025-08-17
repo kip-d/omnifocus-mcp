@@ -215,88 +215,160 @@ export const UPDATE_TASK_SCRIPT = `
     // Update parent task assignment (move to/from action groups)
     if (updates.parentTaskId !== undefined) {
       try {
+        // Use evaluateJavascript bridge for reliable task reparenting
+        const currentTaskId = task.id();
+        let reparentResult = null;
+        
         if (updates.parentTaskId === null || updates.parentTaskId === "") {
-          // Move to project root (no parent)
-          const currentProject = safeGetProject(task);
-          if (currentProject && currentProject.id) {
-            // Find the actual project object
-            const projects = doc.flattenedProjects();
-            let targetProject = null;
-            for (let i = 0; i < projects.length; i++) {
-              if (projects[i].id() === currentProject.id) {
-                targetProject = projects[i];
-                break;
+          // Move to project root or inbox (remove parent)
+          const reparentScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier("' + currentTaskId + '");',
+            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
+            '  ',
+            '  try {',
+            '    // Remove from parent by moving to project or inbox',
+            '    const db = Database.default;',
+            '    const currentProject = task.containingProject;',
+            '    ',
+            '    if (currentProject) {',
+            '      // Move to project root',
+            '      db.moveTasks([task], currentProject);',
+            '      return JSON.stringify({success: true, message: "Moved to project root"});',
+            '    } else {',
+            '      // Move to inbox',
+            '      db.moveTasks([task], db.inbox);',
+            '      return JSON.stringify({success: true, message: "Moved to inbox"});',
+            '    }',
+            '  } catch (error) {',
+            '    return JSON.stringify({success: false, error: error.message || error.toString()});',
+            '  }',
+            '})()'
+          ].join('');
+          
+          const result = app.evaluateJavascript(reparentScript);
+          reparentResult = JSON.parse(result);
+          
+          if (reparentResult.success) {
+            console.log('Successfully removed parent from task via bridge');
+          } else {
+            // Fallback to JXA methods if bridge fails
+            const currentProject = safeGetProject(task);
+            if (currentProject && currentProject.id) {
+              const projects = doc.flattenedProjects();
+              let targetProject = null;
+              for (let i = 0; i < projects.length; i++) {
+                if (projects[i].id() === currentProject.id) {
+                  targetProject = projects[i];
+                  break;
+                }
               }
-            }
-            if (targetProject) {
-              // Try moveTasks with project.ending first
-              try {
-                doc.moveTasks([task], targetProject.ending);
-              } catch (e1) {
-                // Fallback to moveTasks with project directly
+              if (targetProject) {
                 try {
-                  doc.moveTasks([task], targetProject);
-                } catch (e2) {
-                  // Last resort: assignedContainer
-                  task.assignedContainer = targetProject;
+                  doc.moveTasks([task], targetProject.ending);
+                } catch (e1) {
+                  try {
+                    doc.moveTasks([task], targetProject);
+                  } catch (e2) {
+                    task.assignedContainer = targetProject;
+                  }
                 }
               }
             }
-          } else {
-            // Move to inbox if no project
-            try {
-              doc.moveTasks([task], doc.inboxTasks.ending);
-            } catch (e) {
-              task.assignedContainer = doc.inboxTasks;
-            }
           }
         } else {
-          // Find the new parent task
-          const allTasks = doc.flattenedTasks();
-          let newParent = null;
+          // Move to a new parent task using evaluateJavascript bridge
+          // OmniJS API doesn't have a direct "move" - we need to manipulate the task hierarchy
+          const reparentScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier("' + currentTaskId + '");',
+            '  const newParent = Task.byIdentifier("' + updates.parentTaskId + '");',
+            '  ',
+            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
+            '  if (!newParent) return JSON.stringify({success: false, error: "Parent task not found"});',
+            '  ',
+            '  try {',
+            '    // Get current parent to remove from',
+            '    const currentParent = task.parent;',
+            '    ',
+            '    // Remove from current parent if exists',
+            '    if (currentParent && currentParent.tasks) {',
+            '      const index = currentParent.tasks.indexOf(task);',
+            '      if (index > -1) {',
+            '        currentParent.tasks.splice(index, 1);',
+            '      }',
+            '    }',
+            '    ',
+            '    // Add to new parent',
+            '    if (!newParent.tasks) {',
+            '      newParent.tasks = [];',
+            '    }',
+            '    newParent.tasks.push(task);',
+            '    ',
+            '    return JSON.stringify({',
+            '      success: true,',
+            '      message: "Reparented task",',
+            '      parentName: newParent.name',
+            '    });',
+            '  } catch (error) {',
+            '    return JSON.stringify({',
+            '      success: false,',
+            '      error: "Reparenting failed: " + (error.message || error.toString())',
+            '    });',
+            '  }',
+            '})()'
+          ].join('');
           
-          for (let i = 0; i < allTasks.length; i++) {
-            if (allTasks[i].id() === updates.parentTaskId) {
-              newParent = allTasks[i];
-              break;
+          const result = app.evaluateJavascript(reparentScript);
+          reparentResult = JSON.parse(result);
+          
+          if (reparentResult.success) {
+            console.log('Successfully moved task to parent "' + reparentResult.parentName + '" via bridge');
+          } else {
+            // Fallback to JXA methods if bridge fails
+            const allTasks = doc.flattenedTasks();
+            let newParent = null;
+            
+            for (let i = 0; i < allTasks.length; i++) {
+              if (allTasks[i].id() === updates.parentTaskId) {
+                newParent = allTasks[i];
+                break;
+              }
             }
-          }
-          
-          if (!newParent) {
-            return JSON.stringify({
-              error: true,
-              message: "Parent task with ID '" + updates.parentTaskId + "' not found"
-            });
-          }
-          
-          // Try multiple approaches to move task to parent
-          let moveSucceeded = false;
-          let lastError = null;
-          
-          // Method 1: Push to parent's tasks collection (like create_task does)
-          try {
-            // First remove from current location if possible
-            const currentContainer = task.assignedContainer();
-            newParent.tasks.push(task);
-            moveSucceeded = true;
-          } catch (e1) {
-            lastError = e1;
-            // Method 2: moveTasks with ending property (not a function call!)
+            
+            if (!newParent) {
+              return JSON.stringify({
+                error: true,
+                message: "Parent task with ID '" + updates.parentTaskId + "' not found"
+              });
+            }
+            
+            // Try multiple approaches to move task to parent
+            let moveSucceeded = false;
+            let lastError = null;
+            
+            // Method 1: Push to parent's tasks collection (like create_task does)
             try {
-              doc.moveTasks([task], newParent.ending);
+              newParent.tasks.push(task);
               moveSucceeded = true;
-            } catch (e2) {
-              lastError = e2;
-              // Method 3: moveTasks with task directly
+            } catch (e1) {
+              lastError = e1;
+              // Method 2: moveTasks with ending property
               try {
-                doc.moveTasks([task], newParent);
+                doc.moveTasks([task], newParent.ending);
                 moveSucceeded = true;
-              } catch (e3) {
-                lastError = e3;
-                // Method 4: moveTasks with beginning property
+              } catch (e2) {
+                lastError = e2;
+                // Method 3: moveTasks with task directly
                 try {
-                  doc.moveTasks([task], newParent.beginning);
+                  doc.moveTasks([task], newParent);
                   moveSucceeded = true;
+                } catch (e3) {
+                  lastError = e3;
+                  // Method 4: moveTasks with beginning property
+                  try {
+                    doc.moveTasks([task], newParent.beginning);
+                    moveSucceeded = true;
                 } catch (e4) {
                   lastError = e4;
                   // Method 5: assignedContainer as last resort

@@ -1,124 +1,95 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives.js';
-import { createListResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
-import { OmniAutomation } from '../../omnifocus/OmniAutomation.js';
+import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { StandardResponse } from '../../utils/response-format.js';
+import { coerceBoolean, coerceString } from '../schemas/schema-utils.js';
 
-// Input schema
 const ListPerspectivesSchema = z.object({
-  includeFilterRules: z.string()
-    .optional()
-    .default('true')
+  includeFilterRules: coerceBoolean()
+    .default(false)
     .describe('Include filter rules for custom perspectives'),
-  sortBy: z.enum(['name', 'type'])
-    .optional()
+  
+  sortBy: coerceString()
     .default('name')
     .describe('Sort order for perspectives'),
 });
 
-// Perspective type
-interface OmniFocusPerspective {
+interface PerspectiveInfo {
   name: string;
-  type: 'builtin' | 'custom';
-  identifier: string | null;
-  filterRules: any | null;
-  filterAggregation?: string;
+  identifier?: string;
+  isBuiltIn?: boolean;
+  isActive?: boolean;
+  filterRules?: {
+    available?: boolean | null;
+    flagged?: boolean | null;
+    duration?: number | null;
+    tags?: string[];
+  };
 }
-
-type ListPerspectivesResponse = StandardResponse<{
-  items: OmniFocusPerspective[];
-  builtInCount?: number;
-  customCount?: number;
-}>;
 
 export class ListPerspectivesTool extends BaseTool<typeof ListPerspectivesSchema> {
   name = 'list_perspectives';
   description = 'List all available OmniFocus perspectives (built-in and custom) with their filter rules for understanding user workflows';
   schema = ListPerspectivesSchema;
 
-  async executeValidated(args: z.infer<typeof ListPerspectivesSchema>): Promise<ListPerspectivesResponse> {
+  async executeValidated(args: z.infer<typeof ListPerspectivesSchema>): Promise<StandardResponse<{ perspectives: PerspectiveInfo[] }>> {
     const timer = new OperationTimer();
 
     try {
-      const includeFilterRules = args.includeFilterRules === 'true';
-      const sortBy = args.sortBy || 'name';
-
-      // Create cache key
-      const cacheKey = `perspectives:${includeFilterRules}:${sortBy}`;
-
-      // Check cache (5 minute TTL for perspectives)
-      const cached = this.cache.get<ListPerspectivesResponse>('projects', cacheKey);
-      if (cached) {
-        this.logger.debug('Returning cached perspectives');
-        return cached;
-      }
-
-      // Execute script using the jxaWrapper
-      const builder = new OmniAutomation();
-      const script = LIST_PERSPECTIVES_SCRIPT.jxaWrapper(builder);
-      this.logger.debug('Fetching perspectives from OmniFocus');
+      const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
       const result = await this.omniAutomation.execute<any>(script);
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         return createErrorResponse(
           'list_perspectives',
           'SCRIPT_ERROR',
-          result.error,
-          timer,
+          result.message || 'Failed to list perspectives',
+          { rawResult: result },
+          timer.toMetadata(),
         );
       }
 
-      // Process perspectives
-      let perspectives: OmniFocusPerspective[] = result.perspectives || [];
-
-      // Filter out rules if not requested
-      if (!includeFilterRules) {
-        perspectives = perspectives.map(p => ({
-          ...p,
-          filterRules: null,
-          filterAggregation: undefined,
-        }));
+      // Parse the result
+      let parsedResult;
+      try {
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      } catch (parseError) {
+        return createErrorResponse(
+          'list_perspectives',
+          'PARSE_ERROR',
+          'Failed to parse perspective list',
+          { rawResult: result },
+          timer.toMetadata(),
+        );
       }
 
+      const perspectives = parsedResult.perspectives || [];
+      
       // Sort perspectives
-      if (sortBy === 'type') {
-        perspectives.sort((a, b) => {
-          if (a.type !== b.type) {
-            return a.type === 'builtin' ? -1 : 1;
-          }
-          return a.name.localeCompare(b.name);
+      if (args.sortBy === 'name') {
+        perspectives.sort((a: PerspectiveInfo, b: PerspectiveInfo) => 
+          a.name.localeCompare(b.name)
+        );
+      }
+
+      // Filter out filter rules if not requested
+      if (!args.includeFilterRules) {
+        perspectives.forEach((p: PerspectiveInfo) => {
+          delete p.filterRules;
         });
-      } else {
-        perspectives.sort((a, b) => a.name.localeCompare(b.name));
       }
 
-      // Count by type
-      const builtInCount = perspectives.filter(p => p.type === 'builtin').length;
-      const customCount = perspectives.filter(p => p.type === 'custom').length;
-
-      const response = createListResponse(
+      return createSuccessResponse(
         'list_perspectives',
-        perspectives,
-        timer.toMetadata(),
-      ) as ListPerspectivesResponse;
-
-      // Add extra properties to data
-      if (response.data) {
-        response.data.builtInCount = builtInCount;
-        response.data.customCount = customCount;
-      }
-
-      // Cache the result
-      this.cache.set('projects', cacheKey, response); // Uses default TTL
-
-      return response;
-
+        { perspectives },
+        {
+          ...timer.toMetadata(),
+          ...parsedResult.metadata,
+        },
+      );
     } catch (error) {
-      return createErrorResponse(
-        'list_perspectives',
-        'UNKNOWN_ERROR',
-        error instanceof Error ? error.message : 'Unknown error',
-      ) as ListPerspectivesResponse;
+      return this.handleError(error) as any;
     }
   }
 }
