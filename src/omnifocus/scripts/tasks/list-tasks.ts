@@ -169,15 +169,94 @@ export const LIST_TASKS_SCRIPT = `
   
   // Helper function to parse a repetition rule object
   function safeExtractRuleProperties(rule) {
+    // In JXA context, repetitionRule objects don't have the expected methods
+    // We'll return a basic structure that can be enhanced via bridge
     return {
-      ruleString: safeGet(() => rule.ruleString()),
-      unit: safeGet(() => rule.unit()),
-      steps: safeGet(() => rule.steps()),
-      daysOfWeek: safeGet(() => rule.daysOfWeek()),
-      dayOfMonth: safeGet(() => rule.dayOfMonth()),
-      weekOfMonth: safeGet(() => rule.weekOfMonth()),
-      monthOfYear: safeGet(() => rule.monthOfYear())
+      ruleString: null,
+      unit: null,
+      steps: null,
+      daysOfWeek: null,
+      dayOfMonth: null,
+      weekOfMonth: null,
+      monthOfYear: null,
+      _inferenceSource: 'none'
     };
+  }
+  
+  // Extract repeat rule via evaluateJavascript bridge
+  function extractRepeatRuleViaBridge(taskId) {
+    try {
+      const app = Application('OmniFocus');
+      const result = app.evaluateJavascript(
+        'const task = Task.byIdentifier("' + taskId + '");' +
+        'if (task && task.repetitionRule) {' +
+        '  const rule = task.repetitionRule;' +
+        '  JSON.stringify({' +
+        '    hasRule: true,' +
+        '    ruleString: rule.ruleString || null,' +
+        '    method: rule.method ? rule.method.name : null' +
+        '  });' +
+        '} else {' +
+        '  JSON.stringify({hasRule: false});' +
+        '}'
+      );
+      
+      if (result) {
+        const parsed = JSON.parse(result);
+        if (parsed.hasRule && parsed.ruleString) {
+          // Parse the RRULE to extract details
+          const ruleData = {
+            ruleString: parsed.ruleString,
+            method: parsed.method,
+            _inferenceSource: 'bridge'
+          };
+          
+          // Parse FREQ
+          if (parsed.ruleString.includes('FREQ=DAILY')) {
+            ruleData.unit = 'day';
+            ruleData.steps = 1;
+          } else if (parsed.ruleString.includes('FREQ=WEEKLY')) {
+            ruleData.unit = 'week';
+            ruleData.steps = 1;
+          } else if (parsed.ruleString.includes('FREQ=MONTHLY')) {
+            ruleData.unit = 'month';
+            ruleData.steps = 1;
+          } else if (parsed.ruleString.includes('FREQ=YEARLY')) {
+            ruleData.unit = 'year';
+            ruleData.steps = 1;
+          }
+          
+          // Parse INTERVAL
+          const intervalMatch = parsed.ruleString.match(/INTERVAL=(\d+)/);
+          if (intervalMatch) {
+            ruleData.steps = parseInt(intervalMatch[1]);
+          }
+          
+          // Parse BYDAY for weekly patterns
+          const bydayMatch = parsed.ruleString.match(/BYDAY=([^;]+)/);
+          if (bydayMatch) {
+            const dayMap = {
+              'MO': 'monday',
+              'TU': 'tuesday', 
+              'WE': 'wednesday',
+              'TH': 'thursday',
+              'FR': 'friday',
+              'SA': 'saturday',
+              'SU': 'sunday'
+            };
+            const days = bydayMatch[1].split(',').map(d => dayMap[d.trim()] || d).filter(Boolean);
+            if (days.length > 0) {
+              ruleData.weekdays = days;
+            }
+          }
+          
+          return ruleData;
+        }
+      }
+    } catch (e) {
+      // Bridge failed, return null
+    }
+    return null;
   }
   
   // Helper to parse rule string for additional properties
@@ -339,6 +418,15 @@ export const LIST_TASKS_SCRIPT = `
       if (repetitionRule) {
         let ruleData = safeExtractRuleProperties(repetitionRule);
         
+        // Try to get actual data via evaluateJavascript bridge
+        const taskId = safeGet(() => task.id());
+        if (taskId && (!ruleData.ruleString || ruleData._inferenceSource === 'none')) {
+          const bridgeData = extractRepeatRuleViaBridge(taskId);
+          if (bridgeData) {
+            ruleData = bridgeData;
+          }
+        }
+        
         // Parse ruleString if available
         if (ruleData.ruleString) {
           const parsedRule = safeParseRuleString(ruleData.ruleString);
@@ -347,7 +435,7 @@ export const LIST_TASKS_SCRIPT = `
         
         // Basic fallback - plugins will handle the advanced inference
         if (!ruleData.unit && !ruleData.steps) {
-          ruleData._inferenceSource = 'none';
+          ruleData._inferenceSource = ruleData._inferenceSource || 'none';
         }
         
         taskObj.repetitionRule = ruleData;

@@ -3,6 +3,8 @@
  * These are injected into scripts that need them
  */
 
+import { REPEAT_HELPERS } from './repeat-helpers.js';
+
 export const SAFE_UTILITIES = `
   // Safe utility functions for OmniFocus automation
   function safeGet(getter, defaultValue = null) {
@@ -397,6 +399,26 @@ export const TASK_SERIALIZATION = `
       }
       
       taskObj.tags = safeGetTags(task);
+      
+      // Extract repeat rule information if present
+      try {
+        const repetitionRule = task.repetitionRule();
+        if (repetitionRule) {
+          // Extract the repeat rule info if the function exists
+          if (typeof extractRepeatRuleInfo === 'function') {
+            taskObj.repeatRule = extractRepeatRuleInfo(repetitionRule);
+          } else {
+            // Fallback: at least indicate it's recurring
+            taskObj.repeatRule = {
+              isRecurring: true,
+              ruleString: safeGet(() => repetitionRule.ruleString()),
+              method: safeGet(() => repetitionRule.method().toString())
+            };
+          }
+        }
+      } catch (e) {
+        // No repeat rule or error accessing it
+      }
     }
     
     return taskObj;
@@ -431,6 +453,7 @@ export function getAllHelpers(): string {
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
     ERROR_HANDLING,
+    REPEAT_HELPERS,
   ].join('\n');
 }
 
