@@ -185,6 +185,25 @@ export const CREATE_TASK_SCRIPT = `
         }
       }
       
+      // Include repeat rule information if it was applied
+      if (taskData.repeatRule) {
+        response.repeatRule = {
+          applied: true,
+          unit: taskData.repeatRule.unit,
+          steps: taskData.repeatRule.steps,
+          method: taskData.repeatRule.method || 'fixed'
+        };
+        if (taskData.repeatRule.weekdays) {
+          response.repeatRule.weekdays = taskData.repeatRule.weekdays;
+        }
+        if (taskData.repeatRule.weekPosition) {
+          response.repeatRule.weekPosition = taskData.repeatRule.weekPosition;
+        }
+        if (taskData.repeatRule.weekday) {
+          response.repeatRule.weekday = taskData.repeatRule.weekday;
+        }
+      }
+      
       return JSON.stringify(response);
       
     } catch (error) {
