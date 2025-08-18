@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0-beta.4] - 2025-08-17
+
+### 🎉 Major Feature: Perspective Query Support
+
+Query tasks from any OmniFocus perspective WITHOUT changing the user's window! Access your custom perspectives and built-in views programmatically while respecting the user's workflow.
+
+### ✨ New Features
+- **Perspective Query Tool**: New `query_perspective` and `list_perspectives` tools
+  - Query tasks from built-in perspectives (Flagged, Inbox, Forecast, Review, Projects, Tags)
+  - Access custom user perspectives with full filter rule support
+  - NO window manipulation - user's current view remains unchanged
+  - Natural language friendly for LLM assistants
+
+### 🔧 Technical Implementation
+- Reads perspective `archivedFilterRules` programmatically
+- Applies filter rules to task collections without GUI interaction
+- Comprehensive filter rule engine supporting:
+  - Availability filters (available, remaining, completed, dropped)
+  - Status filters (flagged, due)
+  - Date filters (has due/defer, today, tomorrow)
+  - Project/group filters
+  - Tag filters (any/all/none)
+- Filter aggregation support (all/any/none)
+- 30-second result caching for performance
+
+### 📝 Use Cases
+- LLM assistants can now reference user perspectives naturally
+- "Show me tasks from my Work perspective"
+- "What's in my Weekly Review perspective?"
+- "List all tasks from the Flagged perspective"
+
 ## [2.0.0-beta.3] - 2025-08-17
 
 ### 🎉 Major Feature: Task Reparenting Support

@@ -1,18 +1,12 @@
-import { getAllHelpers } from '../shared/helpers.js';
 
-/**
- * Script to query tasks from a specific perspective
- * Uses evaluateJavascript bridge to apply perspective filters
- */
-export const QUERY_PERSPECTIVE_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
-    const perspectiveName = {{perspectiveName}};
-    const limit = {{limit}} || 50;
-    const includeDetails = {{includeDetails}} || false;
+    const perspectiveName = ""Flagged"";
+    const limit = 5 || 50;
+    const includeDetails = false || false;
     
     try {
       // Use evaluateJavascript to query perspective tasks WITHOUT changing window
@@ -232,4 +226,3 @@ export const QUERY_PERSPECTIVE_SCRIPT = `
       return formatError(error, 'query_perspective');
     }
   })();
-`;

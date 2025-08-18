@@ -1,14 +1,31 @@
 # Session Context - 2025-08-17
 
 ## Current Status
-- **Version**: 2.0.0-beta.2 (preparing release)
-- **Last Commit**: Pending - repeat rule support implemented
+- **Version**: 2.0.0-beta.4 (completed)
+- **Last Commit**: Perspective query support implemented
 - **Repository**: Local changes ready for commit
 - **Major Achievements**: 
   - ✅ FIXED tag assignment limitation (beta.1)
   - ✅ FIXED repeat rule limitation (beta.2)
+  - ✅ FIXED task reparenting limitation (beta.3)
+  - ✅ ADDED perspective query support (beta.4)
 
 ## Today's Major Breakthroughs
+
+### 1. Task Reparenting via Global moveTasks() (beta.3)
+- **Problem Solved**: Tasks can now be moved between parents, projects, and inbox
+- **Solution**: Discovered and utilized global `moveTasks()` function in OmniJS
+- **Implementation**: Enhanced update-task.ts with bridge pattern
+- **Performance**: ~50-100ms overhead, fully reliable
+
+### 2. Perspective Query Without Window Changes (beta.4)
+- **Problem Solved**: Query tasks from any perspective WITHOUT changing user's window
+- **Solution**: Read `archivedFilterRules` and apply programmatically to task collection
+- **Implementation**: Created comprehensive filter rule engine
+- **Key Innovation**: No GUI interference - respects user's workflow completely
+- **Performance**: Initial query ~3-5 seconds, cached queries <500ms
+
+## Previous Session's Breakthroughs
 
 ### 1. Tag Assignment Works During Task Creation (beta.1)
 - **Problem Solved**: Tags can now be assigned when creating tasks

@@ -1,39 +1,40 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives.js';
-import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { StandardResponse } from '../../utils/response-format.js';
-import { OmniFocusTask } from '../response-types.js';
+import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives/query-perspective.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
+import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
 
-// Input schema
 const QueryPerspectiveSchema = z.object({
   perspectiveName: z.string()
     .describe('Name of the perspective to query'),
-  limit: z.string()
-    .optional()
-    .default('100')
+  
+  limit: coerceNumber()
+    .default(50)
     .describe('Maximum number of tasks to return'),
-  includeDetails: z.string()
-    .optional()
-    .default('false')
+  
+  includeDetails: coerceBoolean()
+    .default(false)
     .describe('Include task details like notes and subtasks'),
 });
 
-interface QueryPerspectiveData {
-  tasks: OmniFocusTask[];
-  perspective: {
-    name: string;
-    type: 'builtin' | 'custom' | 'unknown';
-    filterRules: any;
-    filterRulesApplied: boolean;
-  };
+interface PerspectiveTask {
+  id: string;
+  name: string;
+  flagged: boolean;
+  dueDate: string | null;
+  deferDate: string | null;
+  completed: boolean;
+  project: string | null;
+  available: boolean;
+  tags: string[];
 }
 
-interface QueryPerspectiveResponse extends StandardResponse<QueryPerspectiveData> {
+interface QueryPerspectiveData {
   perspectiveName: string;
-  perspectiveType?: 'builtin' | 'custom' | 'unknown';
-  filterRules?: any;
-  simulatedQuery?: boolean;
+  perspectiveType: 'builtin' | 'custom';
+  tasks: PerspectiveTask[];
+  filterRules: any;
+  aggregation: string;
 }
 
 export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema> {
@@ -41,88 +42,84 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
   description = 'Get tasks that would appear in a specific OmniFocus perspective, allowing LLM to see and analyze what the user sees';
   schema = QueryPerspectiveSchema;
 
-  async executeValidated(args: z.infer<typeof QueryPerspectiveSchema>): Promise<QueryPerspectiveResponse> {
+  async executeValidated(args: z.infer<typeof QueryPerspectiveSchema>): Promise<StandardResponse<QueryPerspectiveData>> {
     const timer = new OperationTimer();
 
     try {
-      const { perspectiveName, limit: limitStr, includeDetails: includeDetailsStr } = args;
-      const limit = parseInt(limitStr, 10);
-      const includeDetails = includeDetailsStr === 'true';
+      const { perspectiveName, limit, includeDetails } = args;
 
-      // Create cache key
+      // Create cache key  
       const cacheKey = `perspective:${perspectiveName}:${limit}:${includeDetails}`;
 
       // Check cache (30 second TTL for perspective queries)
-      const cached = this.cache.get<QueryPerspectiveResponse>('tasks', cacheKey);
+      const cached = this.cache.get<StandardResponse<QueryPerspectiveData>>('tasks', cacheKey);
       if (cached) {
         this.logger.debug(`Returning cached tasks for perspective: ${perspectiveName}`);
         return cached;
       }
 
       // Build and execute script
-      const script = QUERY_PERSPECTIVE_SCRIPT.jxaWrapper(
-        this.omniAutomation,
-        perspectiveName,
-        limit,
-      );
+      const script = this.omniAutomation.buildScript(QUERY_PERSPECTIVE_SCRIPT, {
+        perspectiveName: JSON.stringify(perspectiveName),
+        limit: limit,
+        includeDetails: includeDetails,
+      });
 
       this.logger.debug(`Querying perspective: ${perspectiveName}`);
       const result = await this.omniAutomation.execute<any>(script);
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
-        // If perspective not found, try simulation
-        if (result.error.includes('not found')) {
-          return this.simulatePerspective(perspectiveName, limit, includeDetails, timer);
-        }
-
-        const errorResponse = createErrorResponse(
+        return createErrorResponse(
           'query_perspective',
           'SCRIPT_ERROR',
-          result.error,
-        ) as QueryPerspectiveResponse;
-        errorResponse.perspectiveName = perspectiveName;
-        return errorResponse;
+          result.message || result.error || 'Failed to query perspective',
+          { rawResult: result },
+          timer.toMetadata(),
+        );
       }
 
-      // Determine perspective type
-      let perspectiveType: 'builtin' | 'custom' | 'unknown' = 'unknown';
-      if (['Inbox', 'Projects', 'Tags', 'Forecast', 'Flagged', 'Nearby', 'Review'].includes(perspectiveName)) {
-        perspectiveType = 'builtin';
-      } else if (result.filterRules) {
-        perspectiveType = 'custom';
+      // Parse the result
+      let parsedResult;
+      try {
+        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      } catch (parseError) {
+        return createErrorResponse(
+          'query_perspective',
+          'PARSE_ERROR',
+          'Failed to parse perspective query result',
+          { rawResult: result },
+          timer.toMetadata(),
+        );
       }
 
-      // Create response with tasks field instead of items
-      const tasks = result.tasks || [];
-      const response = {
-        success: true,
-        data: {
-          tasks: tasks,
-          perspective: {
-            name: perspectiveName,
-            type: perspectiveType,
-            filterRules: result.filterRules,
-            filterRulesApplied: !!result.filterRules,
-          },
-        },
-        metadata: {
-          operation: 'query_perspective',
-          timestamp: new Date().toISOString(),
-          from_cache: false,
-          total_count: tasks.length,
-          returned_count: tasks.length,
-          query_time_ms: timer.toMetadata().query_time_ms || 0,
-        },
-      } as QueryPerspectiveResponse;
+      if (!parsedResult.success) {
+        return createErrorResponse(
+          'query_perspective',
+          'PERSPECTIVE_NOT_FOUND',
+          parsedResult.error || `Perspective "${perspectiveName}" not found`,
+          { perspectiveName },
+          timer.toMetadata(),
+        );
+      }
 
-      // Add top-level perspective properties for backward compatibility
-      response.perspectiveName = perspectiveName;
-      response.perspectiveType = perspectiveType;
-      response.filterRules = result.filterRules;
-      response.simulatedQuery = false;
+      const response = createSuccessResponse(
+        'query_perspective',
+        {
+          perspectiveName: parsedResult.perspectiveName,
+          perspectiveType: parsedResult.perspectiveType,
+          tasks: parsedResult.tasks || [],
+          filterRules: parsedResult.filterRules,
+          aggregation: parsedResult.aggregation,
+        },
+        {
+          ...timer.toMetadata(),
+          total_count: parsedResult.count || 0,
+          filter_rules_applied: !!parsedResult.filterRules,
+        },
+      );
 
       // Cache the result
-      this.cache.set('tasks', cacheKey, response); // Uses default TTL
+      this.cache.set('tasks', cacheKey, response);
 
       return response;
 
@@ -131,104 +128,9 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
         'query_perspective',
         'UNKNOWN_ERROR',
         error instanceof Error ? error.message : 'Unknown error',
-      ) as QueryPerspectiveResponse;
+        {},
+        timer.toMetadata(),
+      );
     }
-  }
-
-  private async simulatePerspective(
-    perspectiveName: string,
-    limit: number,
-    includeDetails: boolean,
-    timer: OperationTimer,
-  ): Promise<QueryPerspectiveResponse> {
-    this.logger.info(`Simulating perspective: ${perspectiveName}`);
-
-    // Map common perspective names to query parameters
-    const perspectiveQueries: Record<string, any> = {
-      'Flagged': { flagged: true, completed: false },
-      'Inbox': { inInbox: true, completed: false },
-      'Today': {
-        completed: false,
-        // Can't easily do OR in our current filter, so just use flagged for now
-        flagged: true,
-      },
-      'Available': { available: true, completed: false },
-      'Forecast': {
-        // Tasks with due dates
-        completed: false,
-      },
-    };
-
-    const queryParams = perspectiveQueries[perspectiveName];
-
-    if (!queryParams) {
-      // Unknown perspective, return empty result
-      const response = {
-        success: true,
-        data: {
-          tasks: [],
-          perspective: {
-            name: perspectiveName,
-            type: 'unknown' as const,
-            filterRules: null,
-            filterRulesApplied: false,
-          },
-        },
-        metadata: {
-          operation: 'query_perspective',
-          timestamp: new Date().toISOString(),
-          from_cache: false,
-          total_count: 0,
-          returned_count: 0,
-          query_time_ms: timer.toMetadata().query_time_ms || 0,
-        },
-        perspectiveName: perspectiveName,
-        perspectiveType: 'unknown' as const,
-        simulatedQuery: true,
-      } as QueryPerspectiveResponse;
-
-      return response;
-    }
-
-    // Use ListTasksTool to simulate
-    const { ListTasksTool } = await import('../tasks/ListTasksTool.js');
-    const listTasksTool = new ListTasksTool(this.cache);
-
-    const tasksResult = await listTasksTool.executeValidated({
-      ...queryParams,
-      limit: limit.toString(),
-      includeDetails: includeDetails.toString(),
-      skipAnalysis: 'true',
-    });
-
-    const tasks = tasksResult.data?.items || [];
-    const perspectiveType = ['Flagged', 'Inbox', 'Forecast'].includes(perspectiveName) ? 'builtin' : 'custom';
-
-    const response: QueryPerspectiveResponse = {
-      success: true,
-      data: {
-        tasks: tasks,
-        perspective: {
-          name: perspectiveName,
-          type: perspectiveType,
-          filterRules: queryParams,
-          filterRulesApplied: true,
-        },
-      },
-      metadata: {
-        operation: 'query_perspective',
-        timestamp: new Date().toISOString(),
-        from_cache: false,
-        total_count: tasks.length,
-        returned_count: tasks.length,
-        query_time_ms: timer.toMetadata().query_time_ms || 0,
-      },
-      perspectiveName: perspectiveName,
-      perspectiveType: perspectiveType,
-      filterRules: queryParams,
-      simulatedQuery: true,
-    };
-
-    return response;
   }
 }

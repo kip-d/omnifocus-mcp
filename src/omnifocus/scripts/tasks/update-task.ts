@@ -365,14 +365,15 @@ export const UPDATE_TASK_SCRIPT = `
                   try {
                     doc.moveTasks([task], newParent.beginning);
                     moveSucceeded = true;
-                } catch (e4) {
-                  lastError = e4;
-                  // Method 5: assignedContainer as last resort
-                  try {
-                    task.assignedContainer = newParent;
-                    moveSucceeded = true;
-                  } catch (e5) {
-                    lastError = e5;
+                  } catch (e4) {
+                    lastError = e4;
+                    // Method 5: assignedContainer as last resort
+                    try {
+                      task.assignedContainer = newParent;
+                      moveSucceeded = true;
+                    } catch (e5) {
+                      lastError = e5;
+                    }
                   }
                 }
               }
