@@ -126,10 +126,12 @@ export const UPDATE_TASK_SCRIPT = `
     // Update project assignment with better error handling
     if (updates.projectId !== undefined) {
       try {
-        if (updates.projectId === "") {
-          // Move to inbox - set assignedContainer to null
-          task.assignedContainer = null;
-        } else if (updates.projectId === null) {
+        // Handle various ways to specify "move to inbox"
+        // Including the string "null" which Claude Desktop sometimes sends
+        if (updates.projectId === "" || 
+            updates.projectId === null || 
+            updates.projectId === "null" ||
+            updates.projectId === "inbox") {
           // Move to inbox - set assignedContainer to null
           task.assignedContainer = null;
         } else {

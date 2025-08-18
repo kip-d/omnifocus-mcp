@@ -87,9 +87,12 @@ details: z.union([
 - **Relative dates work**: "tomorrow at 5pm", "next Monday", "in 2 weeks"
 - This applies to all date fields: dueDate, deferDate, completionDate, nextReviewDate
 
+### Moving Tasks to Inbox
+- **To move a task to inbox**: Set `projectId` to `"inbox"`, `null`, or empty string
+- **Claude Desktop note**: May send string `"null"` instead of actual null - both are handled
+- **Example**: `update_task({ taskId: "abc123", projectId: "inbox" })`
+
 ### Known Limitations
-- **Cannot move existing tasks to parents**: Tasks must be created with parentTaskId
-- **Tags cannot be assigned during creation**: Create task first, then update with tags
 - **Repeat rules for projects temporarily disabled**: Under investigation
 - **Large database queries may be slow**: Upcoming tasks can take 30+ seconds with 2000+ tasks
 
