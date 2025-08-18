@@ -30,7 +30,8 @@ const QueryTasksToolSchemaV2 = z.object({
     'blocked',       // Tasks waiting on others
     'flagged',       // High priority tasks
     'smart_suggest', // AI-powered suggestions for "what should I work on?"
-  ]).default('all').describe('Query mode - determines what tasks to return'),
+  ]).default('all')
+    .describe('Query mode: "all" = all tasks with optional filters, "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
   
   // Common filters (work with most modes)
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
@@ -63,7 +64,7 @@ type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
 export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
-  description = 'Query OmniFocus tasks. Use mode to specify what you want: all, search, overdue, today, upcoming, available, blocked, or flagged. Returns summary first for quick answers.';
+  description = 'Query OmniFocus tasks with various modes. Common usage: mode="search" with search="meeting" to find tasks, mode="today" for current tasks, mode="overdue" for past due items. Always returns a summary first for quick answers, then detailed task data.';
   schema = QueryTasksToolSchemaV2;
 
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {

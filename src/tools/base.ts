@@ -12,6 +12,9 @@ import {
   omniFocusNotRunningError,
   scriptExecutionError,
 } from '../utils/error-messages.js';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -67,6 +70,9 @@ export abstract class BaseTool<
           return `${path}: ${issue.message}`;
         }).join(', ');
 
+        // Log validation failure for analysis
+        this.logToolFailure(args, 'VALIDATION_ERROR', issues, error.issues);
+
         throw new McpError(
           ErrorCode.InvalidParams,
           `Invalid parameters: ${issues}`,
@@ -76,8 +82,55 @@ export abstract class BaseTool<
         );
       }
 
+      // Log other failures for analysis
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage);
+
       // Handle other errors - return standardized error response
       return this.handleError(error) as TResponse;
+    }
+  }
+
+  /**
+   * Log tool call failures for analysis and improvement
+   */
+  private logToolFailure(
+    args: unknown,
+    errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR',
+    errorMessage: string,
+    validationErrors?: any
+  ): void {
+    try {
+      // Create logs directory if it doesn't exist
+      const logsDir = join(homedir(), '.omnifocus-mcp', 'tool-failures');
+      if (!existsSync(logsDir)) {
+        mkdirSync(logsDir, { recursive: true });
+      }
+
+      // Create failure log entry
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        tool: this.name,
+        errorType,
+        errorMessage,
+        validationErrors,
+        inputArgs: args,
+        // Add schema information to help understand what was expected
+        schemaDescription: this.description,
+      };
+
+      // Append to daily log file
+      const today = new Date().toISOString().split('T')[0];
+      const logFile = join(logsDir, `failures-${today}.jsonl`);
+      
+      // Append as JSON Lines format for easy parsing
+      writeFileSync(logFile, JSON.stringify(logEntry) + '\n', { flag: 'a' });
+      
+      // Also log to debug for immediate visibility
+      this.logger.debug(`Tool failure logged: ${this.name} - ${errorType}`);
+    } catch (logError) {
+      // Don't let logging failures break the tool
+      this.logger.error('Failed to log tool failure:', logError);
     }
   }
 
