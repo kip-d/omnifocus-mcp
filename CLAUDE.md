@@ -89,8 +89,10 @@ details: z.union([
 
 ### Moving Tasks to Inbox
 - **To move a task to inbox**: Set `projectId` to `null` or empty string `""`
-- **Claude Desktop note**: May send string `"null"` instead of actual null - this is now handled
+- **Claude Desktop note**: May send string `"null"` instead of actual null - all three are now handled
+- **Implementation**: Uses `app.moveTasks([task], {to: doc.inboxTasks.beginning})`
 - **Example**: `update_task({ taskId: "abc123", projectId: null })`
+- **Supported values**: `null`, `""` (empty string), `"null"` (string literal)
 
 ### Known Limitations
 - **Repeat rules for projects temporarily disabled**: Under investigation

@@ -214,8 +214,8 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .describe('New task note'),
 
-  projectId: z.union([IdSchema, z.null()])
-    .describe('New project ID from list_projects (or null to move to inbox)')
+  projectId: z.union([IdSchema, z.null(), z.literal('')])
+    .describe('New project ID from list_projects (or null/empty string to move to inbox)')
     .optional(),
 
   parentTaskId: z.union([IdSchema, z.null()])

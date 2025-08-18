@@ -131,8 +131,9 @@ export const UPDATE_TASK_SCRIPT = `
         if (updates.projectId === "" || 
             updates.projectId === null || 
             updates.projectId === "null") {
-          // Move to inbox - set assignedContainer to null
-          task.assignedContainer = null;
+          // Move to inbox using moveTasks with doc.inboxTasks.beginning
+          // This is the correct way to move a task to inbox in JXA
+          app.moveTasks([task], {to: doc.inboxTasks.beginning});
         } else {
           // Validate project exists
           const validation = validateProject(updates.projectId, doc);
