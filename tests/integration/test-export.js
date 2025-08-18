@@ -77,6 +77,13 @@ async function testExportDirect() {
   await new Promise(resolve => setTimeout(resolve, 5000));
   
   proc.kill();
+  
+  // Ensure clean exit
+  console.log('\n✅ Export test completed!');
+  process.exit(0);
 }
 
-testExportDirect().catch(console.error);
+testExportDirect().catch((error) => {
+  console.error('❌ Export test failed:', error);
+  process.exit(1);
+});

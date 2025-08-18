@@ -210,9 +210,30 @@ create_task({
 ### Testing Improvements
 - `/tests/integration/test-as-claude-desktop.js` - Fixed server cleanup to prevent timeouts
 
+### Perspective Query Fixes (Post-Release)
+- Fixed perspective query syntax errors
+- Resolved task inbox movement issues (null vs "null" handling)
+- Created test scripts: `test-perspective-fix.ts` and `test-perspective-v2.ts`
+- Verified perspective queries work correctly (returning Inbox tasks successfully)
+
+## Current Session Status - Integration Tests Fixed!
+
+### Testing Results
+- ✅ Direct OmniAutomation perspective queries working
+- ✅ MCP server tests now exit properly with cleanup utility
+- ✅ Core functionality confirmed working
+- ✅ All integration tests fixed to exit cleanly
+
+### Integration Test Fixes Applied
+- Created universal test cleanup utility at `tests/utils/test-cleanup.ts`
+- Updated test-perspective-v2.ts to use McpTestRunner with proper cleanup
+- Updated test-perspective-fix.ts with explicit process.exit()
+- Added process.exit() to test-v2-tools.js, test-export.js, test-v15-mcp.js
+- All tests now exit cleanly within their timeouts
+
 ---
 
-*Session saved at: 2025-08-18 09:15*
+*Session saved at: 2025-08-18 15:00*
 *Version: 2.0.0-beta.4 (released)*
-*Status: V1 tools successfully preserved for backward compatibility*
-*Next: Production testing and v2.0.0 final preparation*
+*Status: V1 tools preserved, perspective queries working, integration tests fixed*
+*Next: v2.0.0 final release preparation*

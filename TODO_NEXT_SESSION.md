@@ -9,6 +9,7 @@
 - **FIXED INTEGRATION TEST** timeout issue with proper server cleanup
 - **MAINTAINED BACKWARD COMPATIBILITY** via OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS
 - **DOCUMENTED FREEZE STATUS** comprehensively in multiple locations
+- **VERIFIED PERSPECTIVE QUERIES** working correctly (returning Inbox tasks)
 
 ## Performance Metrics
 
@@ -49,24 +50,31 @@
 
 ## Testing Checklist for Next Session
 
+### Integration Test Improvements ✅ COMPLETED!
+- [x] Fixed MCP server test scripts to exit properly after tool calls
+- [x] Updated test-perspective-v2.ts with McpTestRunner cleanup utility
+- [x] Reviewed all integration tests for timeout issues
+- [x] Added proper process.exit() to all test scripts
+- [x] Created universal test cleanup utility at `tests/utils/test-cleanup.ts`
+
 ### V2.0.0 Final Release Testing
 - [ ] Full integration test suite with production data
 - [ ] Performance benchmarks with 5000+ tasks
 - [ ] Stress test perspective queries
-- [ ] Verify V1 tools remain functional when enabled
-- [ ] Test migration from v1.x installations
+- [ ] Verify V1 tools remain functional when enabled (for rollback only)
+- [ ] Test upgrade from v1.x (should be seamless - LLM just uses better tools)
 
 ### Documentation Updates
 - [ ] Complete API reference for V2 tools
-- [ ] Migration guide from V1 to V2 tools
 - [ ] Performance tuning guide
 - [ ] Troubleshooting guide
+- [ ] Update README to highlight v2.0.0 improvements (better LLM experience)
 
 ### Release Preparation
 - [ ] Create comprehensive release notes for v2.0.0
-- [ ] Update README with V2 features
-- [ ] Create upgrade instructions
-- [ ] Plan announcement strategy
+- [ ] Update README with V2 improvements (focus on reliability & speed)
+- [ ] Emphasize seamless upgrade - users just get better performance
+- [ ] Plan announcement strategy (highlight: "It just works better now")
 
 ## Known Remaining Limitations
 
@@ -102,12 +110,17 @@
 ## Next Steps Priority
 
 ### Immediate (Next Session)
-1. **V2.0.0 Final Preparation**
+1. **Fix Integration Test Exit Handling**
+   - Update test scripts to properly exit after MCP calls
+   - Prevent timeout issues in CI/CD pipelines
+   - Clean up test-perspective-*.ts files
+
+2. **V2.0.0 Final Preparation**
    - Run comprehensive test suite
    - Document all V2 features
    - Create migration guide
 
-2. **Production Testing**
+3. **Production Testing**
    - Deploy beta.4 to early adopters
    - Gather feedback on all new features
    - Monitor performance and stability

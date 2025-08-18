@@ -150,4 +150,12 @@ async function testMCPServer() {
   });
 }
 
-testMCPServer().catch(console.error);
+testMCPServer()
+  .then(() => {
+    console.log('\n✅ v1.5.0 MCP test completed!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('❌ v1.5.0 MCP test failed:', error);
+    process.exit(1);
+  });

@@ -302,7 +302,13 @@ async function main() {
     logError(`Test suite failed: ${error.message}`);
     console.error(error);
     process.exit(1);
+  } finally {
+    // Ensure clean exit
+    process.exit(0);
   }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Unhandled error:', error);
+  process.exit(1);
+});

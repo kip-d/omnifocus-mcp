@@ -2,14 +2,17 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
-## 🎉 v2.0.0-beta.1 Released!
+## 🎉 v2.0.0-beta.4 Released!
 
-**Major improvements in this beta release:**
+**Major improvements in this release:**
 - ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
-- 🛠️ **Consolidated V2 tools** - Simplified from 15+ tools to just 4 primary tools
-- 📊 **Summary-first responses** - LLM-optimized format with key insights
-- 🔒 **Full TypeScript type safety** - No more `Promise<any>` in V2 tools
-- 🎯 **Smart task prioritization** - Intelligent suggestions based on context
+- 🛠️ **Better tool reliability** - V2 tools designed for LLM success
+- 📊 **Summary-first responses** - Immediate insights before detailed data
+- 🏷️ **Tag assignment fixed** - Tags can now be set during task creation
+- 🔄 **Full repeat rule support** - Complex recurrence patterns now work
+- 📁 **Task reparenting** - Move tasks between projects and parents
+- 👁️ **Perspective queries** - Query any perspective without changing windows
+- 📚 **Compact API reference** - Add to your AI's system prompt for better performance
 
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
 
@@ -65,6 +68,27 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
+## 🚀 Optimizing Your AI Assistant's Performance
+
+### Quick Setup: Add API Reference to Your Assistant
+
+For the best experience with any AI assistant (Claude, ChatGPT, etc.), you can optionally include the compact API reference in your system prompt. This helps the AI understand all available tools without consuming much context:
+
+1. **Copy the compact reference** from [`docs/API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) (~900 tokens)
+2. **Add to your system prompt** or custom instructions:
+   ```
+   You have access to OmniFocus MCP tools. Here's the API reference:
+   [paste API-REFERENCE-LLM.md content here]
+   ```
+
+This is **completely optional** but provides:
+- ✅ Faster, more accurate tool usage
+- ✅ Better error recovery
+- ✅ Reduced failed tool calls
+- ✅ The AI knows all capabilities upfront
+
+For ultra-minimal setups, use [`docs/API-COMPACT.md`](docs/API-COMPACT.md) (~400 tokens).
 
 ## Using MCP Prompts in Claude Desktop
 
@@ -226,6 +250,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 
 ### Documentation
 
+- `/docs/API-REFERENCE.md` - Complete API documentation (~4,800 tokens)
+- `/docs/API-REFERENCE-LLM.md` - LLM-optimized reference (~900 tokens) 
+- `/docs/API-COMPACT.md` - Ultra-compact reference (~400 tokens)
 - `/docs/TOOLS.md` - Detailed tool documentation
 - `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
 - `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
