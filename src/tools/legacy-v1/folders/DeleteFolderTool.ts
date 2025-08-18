@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { DeleteFolderSchema } from '../schemas/folder-schemas.js';
+import { BaseTool } from '../../base.js';
+import { DELETE_FOLDER_SCRIPT } from '../../../omnifocus/scripts/folders/delete-folder.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { DeleteFolderSchema } from '../../schemas/folder-schemas.js';
 
 export class DeleteFolderTool extends BaseTool<typeof DeleteFolderSchema> {
   name = 'delete_folder';

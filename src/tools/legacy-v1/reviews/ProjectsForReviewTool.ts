@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { PROJECTS_FOR_REVIEW_SCRIPT } from '../../omnifocus/scripts/reviews.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ProjectsForReviewSchema } from '../schemas/project-schemas.js';
+import { BaseTool } from '../../base.js';
+import { PROJECTS_FOR_REVIEW_SCRIPT } from '../../../omnifocus/scripts/reviews.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ProjectsForReviewSchema } from '../../schemas/project-schemas.js';
 
 export class ProjectsForReviewTool extends BaseTool<typeof ProjectsForReviewSchema> {
   name = 'projects_for_review';

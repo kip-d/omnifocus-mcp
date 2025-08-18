@@ -1,65 +1,71 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
-import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
-import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
+import { BaseTool } from '../../base.js';
+import { LIST_TASKS_SCRIPT } from '../../../omnifocus/scripts/tasks.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListTasksResponse, OmniFocusTask } from '../../response-types.js';
+import { ListTasksScriptResult } from '../../../omnifocus/jxa-types.js';
+import { coerceBoolean, coerceNumber } from '../../schemas/coercion-helpers.js';
 
-const BlockedTasksSchema = z.object({
+const AvailableTasksSchema = z.object({
   projectId: z.string()
     .optional()
-    .describe('Filter blocked tasks for a specific project'),
+    .describe('Filter available tasks for a specific project'),
 
   tags: z.array(z.string())
     .optional()
-    .describe('Filter blocked tasks by tags (tasks must have ALL specified tags)'),
+    .describe('Filter available tasks by tags (tasks must have ALL specified tags)'),
 
   includeDetails: coerceBoolean()
     .default(true)
     .describe('Include task details like notes, project info, and tags'),
 
-  showBlockingTasks: coerceBoolean()
+  includeFlagged: coerceBoolean()
     .default(true)
-    .describe('Include information about what tasks are blocking each blocked task'),
+    .describe('Include flagged tasks in the results'),
+
+  sortBy: z.enum(['dueDate', 'project', 'flagged', 'name'])
+    .optional()
+    .default('dueDate')
+    .describe('Sort results by field'),
 
   limit: coerceNumber()
     .int()
     .positive()
-    .max(200)
-    .default(50)
-    .describe('Maximum number of blocked tasks to return'),
+    .max(500)
+    .default(100)
+    .describe('Maximum number of available tasks to return'),
 });
 
-export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
-  name = 'blocked_tasks';
-  description = 'Get all tasks that are blocked by other incomplete tasks. Blocked tasks are waiting for prerequisite tasks to be completed in sequential projects or action groups. Useful for identifying workflow bottlenecks.';
-  schema = BlockedTasksSchema;
+export class AvailableTasksTool extends BaseTool<typeof AvailableTasksSchema> {
+  name = 'available_tasks';
+  description = 'Get all tasks that are currently available to work on. Available tasks are not completed, not blocked, not deferred (or defer date has passed), and in active projects. This is broader than next actions and includes all workable tasks.';
+  schema = AvailableTasksSchema;
 
-  async executeValidated(args: z.infer<typeof BlockedTasksSchema>): Promise<ListTasksResponse> {
+  async executeValidated(args: z.infer<typeof AvailableTasksSchema>): Promise<ListTasksResponse> {
     const timer = new OperationTimer();
 
     try {
-      const { limit = 50, includeDetails = true, showBlockingTasks = true, projectId, tags } = args;
+      const { limit = 100, includeDetails = true, includeFlagged = true, sortBy = 'dueDate', projectId, tags } = args;
 
-      // Build filter for blocked tasks
+      // Build filter for available tasks
       const filter = {
         completed: false, // Only incomplete tasks
-        blocked: true, // Only blocked tasks
+        available: true, // Only available tasks (not deferred, project active, not blocked)
         projectId,
         tags,
         limit,
-        skipAnalysis: false, // Need full analysis for accurate blocking detection
+        skipAnalysis: false, // Need full analysis for accurate availability detection
         includeDetails,
+        sortBy,
       };
 
       // Create cache key
-      const cacheKey = JSON.stringify({ ...filter, tool: 'blocked_tasks', showBlockingTasks });
+      const cacheKey = JSON.stringify({ ...filter, tool: 'available_tasks', includeFlagged });
 
       // Check cache
       const cached = this.cache.get<ListTasksResponse>('tasks', cacheKey);
       if (cached) {
-        this.logger.debug('Returning cached blocked tasks');
+        this.logger.debug('Returning cached available tasks');
         return {
           ...cached,
           metadata: {
@@ -76,9 +82,9 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         return createErrorResponse(
-          'blocked_tasks',
+          'available_tasks',
           'SCRIPT_ERROR',
-          'message' in result ? String(result.message) : 'Failed to get blocked tasks',
+          'message' in result ? String(result.message) : 'Failed to get available tasks',
           'details' in result ? result.details : undefined,
           timer.toMetadata(),
         );
@@ -86,7 +92,7 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
 
       if (!result.tasks || !Array.isArray(result.tasks)) {
         return createErrorResponse(
-          'blocked_tasks',
+          'available_tasks',
           'INVALID_RESPONSE',
           'Invalid response from OmniFocus: tasks array not found',
           'The script returned an unexpected format',
@@ -95,7 +101,7 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
       }
 
       // Parse dates in tasks
-      const parsedTasks = result.tasks.map((task): OmniFocusTask => ({
+      let parsedTasks = result.tasks.map((task): OmniFocusTask => ({
         ...task,
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
         deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
@@ -107,19 +113,25 @@ export class BlockedTasksTool extends BaseTool<typeof BlockedTasksSchema> {
         } : undefined,
       }));
 
+      // Filter flagged tasks if requested
+      if (!includeFlagged) {
+        parsedTasks = parsedTasks.filter(task => !task.flagged);
+      }
+
       // Create response with enhanced metadata
       const response = createListResponse(
-        'blocked_tasks',
+        'available_tasks',
         parsedTasks,
         {
           ...timer.toMetadata(),
           ...result.metadata,
           filters_applied: filter,
           limit_applied: limit,
-          tool_type: 'blocked_tasks',
-          description: 'Tasks blocked by incomplete prerequisite tasks',
-          show_blocking_tasks: showBlockingTasks,
-          usage_tip: 'Focus on completing prerequisite tasks to unblock these items',
+          tool_type: 'available_tasks',
+          description: 'All tasks currently available to work on',
+          includes_flagged: includeFlagged,
+          sorted_by: sortBy,
+          usage_tip: 'These tasks can all be worked on immediately without waiting for other tasks',
         },
       );
 

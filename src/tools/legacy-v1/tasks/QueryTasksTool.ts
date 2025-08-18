@@ -1,15 +1,15 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { BaseTool } from '../../base.js';
+import { LIST_TASKS_SCRIPT } from '../../../omnifocus/scripts/tasks.js';
 // Import ultra-optimized scripts for best performance (no whose(), 67-91% faster)
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
-import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
-import { QueryTasksToolSchema } from '../schemas/task-schemas.js';
+} from '../../../omnifocus/scripts/date-range-queries-optimized-v3.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListTasksResponse, OmniFocusTask } from '../../response-types.js';
+import { ListTasksScriptResult } from '../../../omnifocus/jxa-types.js';
+import { QueryTasksToolSchema } from '../../schemas/task-schemas.js';
 
 export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchema> {
   name = 'query_tasks';

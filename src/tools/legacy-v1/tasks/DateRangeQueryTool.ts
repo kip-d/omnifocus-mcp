@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
+import { BaseTool } from '../../base.js';
 // v1.15.0: Using ultra-optimized scripts with faster JavaScript filtering
 import {
   GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT,
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../schemas/task-schemas.js';
+} from '../../../omnifocus/scripts/date-range-queries-optimized-v3.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { DateRangeQueryToolSchema, OverdueTasksToolSchema, UpcomingTasksToolSchema } from '../../schemas/task-schemas.js';
 
 export class DateRangeQueryTool extends BaseTool<typeof DateRangeQueryToolSchema> {
   name = 'query_tasks_by_date';

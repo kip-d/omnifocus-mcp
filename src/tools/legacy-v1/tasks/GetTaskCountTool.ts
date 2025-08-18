@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { GET_TASK_COUNT_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { GetTaskCountSchema } from '../schemas/task-schemas.js';
+import { BaseTool } from '../../base.js';
+import { GET_TASK_COUNT_SCRIPT } from '../../../omnifocus/scripts/tasks.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { GetTaskCountSchema } from '../../schemas/task-schemas.js';
 
 export class GetTaskCountTool extends BaseTool<typeof GetTaskCountSchema> {
   name = 'get_task_count';

@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
-import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
-import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
+import { BaseTool } from '../../base.js';
+import { LIST_TASKS_SCRIPT } from '../../../omnifocus/scripts/tasks.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListTasksResponse, OmniFocusTask } from '../../response-types.js';
+import { ListTasksScriptResult } from '../../../omnifocus/jxa-types.js';
+import { coerceBoolean, coerceNumber } from '../../schemas/coercion-helpers.js';
 
 const NextActionsSchema = z.object({
   projectId: z.string()

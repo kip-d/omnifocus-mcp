@@ -14,6 +14,23 @@ const rl = createInterface({
 });
 
 let requestId = 1;
+let cleanupDone = false;
+
+// Cleanup function to properly terminate server
+const cleanup = () => {
+  if (cleanupDone) return;
+  cleanupDone = true;
+  
+  server.stdin.end();
+  server.kill('SIGTERM');
+  
+  setTimeout(() => {
+    if (!server.killed) {
+      server.kill('SIGKILL');
+    }
+    process.exit(0);
+  }, 1000);
+};
 
 // Helper to send JSON-RPC request
 const sendRequest = (method, params = {}) => {
@@ -41,10 +58,11 @@ rl.on('line', (line) => {
     } else if (response.id === 2) {
       // After listing tools, try to list tasks
       sendRequest('tools/call', {
-        name: 'list_tasks',
+        name: 'tasks',
         arguments: {
-          completed: false,
-          limit: 5
+          mode: 'overdue',
+          limit: '5',
+          details: 'false'
         }
       });
     } else if (response.id === 3) {
@@ -54,8 +72,8 @@ rl.on('line', (line) => {
         arguments: {
           name: 'Test task from MCP client',
           note: 'Created via MCP integration test',
-          flagged: true,
-          tags: ['test']
+          flagged: 'true',
+          sequential: 'false'
         }
       });
     } else if (response.id === 4) {
@@ -66,20 +84,25 @@ rl.on('line', (line) => {
       });
     } else if (response.id === 5) {
       // After version info, list projects
-      const versionResult = JSON.parse(response.result.content[0].text);
-      console.log(`\n📋 Version: ${versionResult.name} v${versionResult.version} (${versionResult.build.buildId})`);
+      try {
+        const versionResult = JSON.parse(response.result.content[0].text);
+        console.log(`\n📋 Version: ${versionResult.data.name} v${versionResult.data.version} (${versionResult.data.build.buildId})`);
+      } catch (e) {
+        console.log('Version info received');
+      }
       
       sendRequest('tools/call', {
-        name: 'list_projects',
+        name: 'projects',
         arguments: {
-          status: ['active']
+          operation: 'list',
+          limit: '5',
+          details: 'false'
         }
       });
     } else if (response.id === 6) {
       // Done with tests
       console.log('\n✅ All tests completed successfully!');
-      server.kill();
-      process.exit(0);
+      cleanup();
     }
   } catch (e) {
     // Ignore non-JSON lines
@@ -96,9 +119,24 @@ sendRequest('initialize', {
   }
 });
 
-// Timeout after 30 seconds
+// Timeout after 10 seconds
 setTimeout(() => {
   console.error('\n❌ Test timeout!');
-  server.kill();
+  cleanup();
   process.exit(1);
-}, 30000);
+}, 10000);
+
+// Handle server errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  cleanup();
+  process.exit(1);
+});
+
+// Handle unexpected server exit
+server.on('exit', (code) => {
+  if (!cleanupDone) {
+    console.error(`Server exited unexpectedly with code ${code}`);
+    process.exit(1);
+  }
+});

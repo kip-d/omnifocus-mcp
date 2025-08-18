@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { CreateFolderSchema } from '../schemas/folder-schemas.js';
+import { BaseTool } from '../../base.js';
+import { CREATE_FOLDER_SCRIPT } from '../../../omnifocus/scripts/folders/create-folder.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { CreateFolderSchema } from '../../schemas/folder-schemas.js';
 
 export class CreateFolderTool extends BaseTool<typeof CreateFolderSchema> {
   name = 'create_folder';

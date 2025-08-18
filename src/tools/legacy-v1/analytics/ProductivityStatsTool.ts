@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
-import { ProductivityStatsSchema } from '../schemas/analytics-schemas.js';
-import { ProductivityStatsResponse, ProductivityStatsResponseData } from '../response-types.js';
+import { BaseTool } from '../../base.js';
+import { PRODUCTIVITY_STATS_SCRIPT } from '../../../omnifocus/scripts/analytics.js';
+import { createSuccessResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ProductivityStatsSchema } from '../../schemas/analytics-schemas.js';
+import { ProductivityStatsResponse, ProductivityStatsResponseData } from '../../response-types.js';
 
 export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSchema> {
   name = 'get_productivity_stats';

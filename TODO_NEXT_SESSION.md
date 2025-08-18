@@ -1,14 +1,14 @@
 # TODO Next Session
 
-## Current Version: 2.0.0-beta.4 (completed)
-**Status**: Four major features completed - tag assignment, repeat rules, task reparenting, and perspective queries!
-**Ready for**: Release and production testing
+## Current Version: 2.0.0-beta.4 (released)
+**Status**: V1 tools preserved for backward compatibility, all major features complete!
+**Ready for**: Production testing and v2.0.0 final release
 
 ## 🎉 Major Achievements This Session
-- **FIXED TASK REPARENTING** using global moveTasks() function (beta.3)
-- **ADDED PERSPECTIVE QUERIES** without window manipulation (beta.4)
-- Both features use evaluateJavascript() bridge effectively
-- NO GUI interference - fully respects user's workflow
+- **PRESERVED V1 TOOLS** in legacy-v1 directory (frozen/amber status)
+- **FIXED INTEGRATION TEST** timeout issue with proper server cleanup
+- **MAINTAINED BACKWARD COMPATIBILITY** via OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS
+- **DOCUMENTED FREEZE STATUS** comprehensively in multiple locations
 
 ## Performance Metrics
 
@@ -49,24 +49,24 @@
 
 ## Testing Checklist for Next Session
 
-### Integration Tests
-- [ ] Full smoke test suite
-- [ ] Claude Desktop protocol test
-- [ ] Performance benchmarks with 2000+ tasks
-- [ ] Perspective query accuracy verification
+### V2.0.0 Final Release Testing
+- [ ] Full integration test suite with production data
+- [ ] Performance benchmarks with 5000+ tasks
+- [ ] Stress test perspective queries
+- [ ] Verify V1 tools remain functional when enabled
+- [ ] Test migration from v1.x installations
 
-### Perspective Query Tests
-- [ ] Test all built-in perspectives
-- [ ] Create and test custom perspectives
-- [ ] Verify filter rule accuracy
-- [ ] Test cache performance
-- [ ] Ensure no window changes occur
+### Documentation Updates
+- [ ] Complete API reference for V2 tools
+- [ ] Migration guide from V1 to V2 tools
+- [ ] Performance tuning guide
+- [ ] Troubleshooting guide
 
 ### Release Preparation
-- [ ] Create git tag v2.0.0-beta.4
-- [ ] Update release notes
-- [ ] Consider v2.0.0 final release timeline
-- [ ] Document migration guide from v1.x
+- [ ] Create comprehensive release notes for v2.0.0
+- [ ] Update README with V2 features
+- [ ] Create upgrade instructions
+- [ ] Plan announcement strategy
 
 ## Known Remaining Limitations
 
@@ -101,16 +101,16 @@
 
 ## Next Steps Priority
 
-### Immediate (This Week)
-1. **Release v2.0.0-beta.4**
-   - Tag and push
-   - Update release notes
-   - Announce perspective feature
+### Immediate (Next Session)
+1. **V2.0.0 Final Preparation**
+   - Run comprehensive test suite
+   - Document all V2 features
+   - Create migration guide
 
 2. **Production Testing**
-   - Deploy to real users
-   - Gather feedback on perspective queries
-   - Monitor performance metrics
+   - Deploy beta.4 to early adopters
+   - Gather feedback on all new features
+   - Monitor performance and stability
 
 ### Short Term (Next Week)
 1. **Performance Optimization**
@@ -166,14 +166,21 @@ const tasks = flattenedTasks.filter(task =>
 - ✅ Well-documented
 
 ## Critical Reminders
+⚠️ **V1 tools are FROZEN** - never modify files in legacy-v1 directory
+⚠️ **Test both V1 and V2** - ensure backward compatibility works
 ⚠️ **Never change window.perspective** - always filter programmatically
-⚠️ **Test perspective queries** with various filter rules
 ⚠️ **Monitor performance** with large task databases
 ⚠️ **Document edge cases** as they're discovered
 
+## V1 Tools Status
+- **Location**: `src/tools/legacy-v1/`
+- **Status**: FROZEN - preserved for backward compatibility
+- **Activation**: `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true`
+- **Policy**: NO modifications allowed - use V2 tools for all new development
+
 ---
 
-*Last updated: 2025-08-17*
+*Last updated: 2025-08-18*
 *Current version: 2.0.0-beta.4*
-*Major achievements: Reparenting + Perspectives*
-*Status: Ready for release and production testing*
+*Major achievements: V1 tools preserved + all V2 features complete*
+*Status: Ready for v2.0.0 final release preparation*

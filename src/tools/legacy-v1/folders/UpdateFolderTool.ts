@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { UpdateFolderSchema } from '../schemas/folder-schemas.js';
+import { BaseTool } from '../../base.js';
+import { UPDATE_FOLDER_SCRIPT } from '../../../omnifocus/scripts/folders/update-folder.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { UpdateFolderSchema } from '../../schemas/folder-schemas.js';
 
 export class UpdateFolderTool extends BaseTool<typeof UpdateFolderSchema> {
   name = 'update_folder';

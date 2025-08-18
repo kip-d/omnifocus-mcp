@@ -1,16 +1,30 @@
-# Session Context - 2025-08-17
+# Session Context - 2025-08-18
 
 ## Current Status
-- **Version**: 2.0.0-beta.4 (completed)
-- **Last Commit**: Perspective query support implemented
-- **Repository**: Local changes ready for commit
+- **Version**: 2.0.0-beta.4 (released)
+- **Last Commit**: V1 tools preserved in legacy-v1 directory
+- **Repository**: Ready for push
 - **Major Achievements**: 
   - ✅ FIXED tag assignment limitation (beta.1)
   - ✅ FIXED repeat rule limitation (beta.2)
   - ✅ FIXED task reparenting limitation (beta.3)
   - ✅ ADDED perspective query support (beta.4)
+  - ✅ PRESERVED V1 tools for backward compatibility
 
-## Today's Major Breakthroughs
+## Today's Session: V1 Tools Preservation
+
+### V1 Tools "Ambering" (Frozen in Time)
+- **Problem Solved**: Need to maintain backward compatibility without future modifications
+- **Solution**: Moved all V1 tools to `src/tools/legacy-v1/` directory
+- **Implementation**: 
+  - Created legacy directory structure preserving organization
+  - Fixed all import paths (up 2 levels for tools/, 3 for omnifocus/)
+  - Added freeze directives to CLAUDE.md
+  - Created V1_TOOLS_FROZEN.md documentation
+- **Activation**: Set `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true` to enable
+- **Testing**: Verified both with and without environment variable
+
+## Previous Session's Major Breakthroughs
 
 ### 1. Task Reparenting via Global moveTasks() (beta.3)
 - **Problem Solved**: Tasks can now be moved between parents, projects, and inbox
@@ -184,9 +198,21 @@ create_task({
 - ✅ Backwards compatible
 - ✅ Documentation complete
 
+## Key Files Modified This Session
+
+### V1 Tools Preservation
+- `/src/tools/legacy-v1/` - Created directory structure with 24 V1 tools
+- `/src/tools/index.ts` - Updated imports to reference legacy-v1
+- `/CLAUDE.md` - Added V1 freeze directives at top
+- `/V1_TOOLS_FROZEN.md` - Created comprehensive frozen status documentation
+- All legacy tool files - Fixed import paths for new directory structure
+
+### Testing Improvements
+- `/tests/integration/test-as-claude-desktop.js` - Fixed server cleanup to prevent timeouts
+
 ---
 
-*Session saved at: 2025-08-17 17:28*
-*Version: 2.0.0-beta.2 (pending release)*
-*Status: Repeat rule support successfully implemented!*
-*Next: Commit and release beta.2*
+*Session saved at: 2025-08-18 09:15*
+*Version: 2.0.0-beta.4 (released)*
+*Status: V1 tools successfully preserved for backward compatibility*
+*Next: Production testing and v2.0.0 final preparation*

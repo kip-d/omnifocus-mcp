@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { CompleteProjectSchema } from '../schemas/project-schemas.js';
+import { BaseTool } from '../../base.js';
+import { COMPLETE_PROJECT_SCRIPT } from '../../../omnifocus/scripts/projects.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { CompleteProjectSchema } from '../../schemas/project-schemas.js';
 
 export class CompleteProjectTool extends BaseTool<typeof CompleteProjectSchema> {
   name = 'complete_project';

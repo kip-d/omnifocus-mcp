@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
-import { DeleteProjectSchema } from '../schemas/project-schemas.js';
+import { BaseTool } from '../../base.js';
+import { DELETE_PROJECT_SCRIPT } from '../../../omnifocus/scripts/projects.js';
+import { createSuccessResponse, OperationTimer } from '../../../utils/response-format.js';
+import { DeleteProjectSchema } from '../../schemas/project-schemas.js';
 
 export class DeleteProjectTool extends BaseTool<typeof DeleteProjectSchema> {
   name = 'delete_project';

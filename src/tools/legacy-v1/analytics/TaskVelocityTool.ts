@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
-import { TaskVelocitySchema } from '../schemas/analytics-schemas.js';
-import { TaskVelocityResponse, TaskVelocityResponseData } from '../response-types.js';
+import { BaseTool } from '../../base.js';
+import { TASK_VELOCITY_SCRIPT } from '../../../omnifocus/scripts/analytics.js';
+import { createSuccessResponse, OperationTimer } from '../../../utils/response-format.js';
+import { TaskVelocitySchema } from '../../schemas/analytics-schemas.js';
+import { TaskVelocityResponse, TaskVelocityResponseData } from '../../response-types.js';
 
 export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchema> {
   name = 'get_task_velocity';

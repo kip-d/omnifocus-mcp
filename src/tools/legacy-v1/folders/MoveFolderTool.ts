@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { MoveFolderSchema } from '../schemas/folder-schemas.js';
+import { BaseTool } from '../../base.js';
+import { MOVE_FOLDER_SCRIPT } from '../../../omnifocus/scripts/folders/move-folder.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { MoveFolderSchema } from '../../schemas/folder-schemas.js';
 
 export class MoveFolderTool extends BaseTool<typeof MoveFolderSchema> {
   name = 'move_folder';

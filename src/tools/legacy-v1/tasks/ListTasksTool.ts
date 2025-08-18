@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
+import { BaseTool } from '../../base.js';
 // REVERTED: Optimization made performance worse, using original script
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListTasksResponse, OmniFocusTask } from '../response-types.js';
-import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
-import { ListTasksSchema } from '../schemas/task-schemas.js';
+import { LIST_TASKS_SCRIPT } from '../../../omnifocus/scripts/tasks/list-tasks.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListTasksResponse, OmniFocusTask } from '../../response-types.js';
+import { ListTasksScriptResult } from '../../../omnifocus/jxa-types.js';
+import { ListTasksSchema } from '../../schemas/task-schemas.js';
 
 export class ListTasksTool extends BaseTool<typeof ListTasksSchema> {
   name = 'list_tasks';

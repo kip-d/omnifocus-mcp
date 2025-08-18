@@ -2,6 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: V1 Tools Are FROZEN - DO NOT MODIFY
+
+### V1 Tools Location and Status
+- **Location**: `src/tools/legacy-v1/`
+- **Status**: FROZEN - These files must NEVER be modified
+- **Purpose**: Backward compatibility only (enabled via OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true)
+- **Policy**: ALL new development MUST use V2 tools
+
+### What NOT to Do
+- ❌ DO NOT fix bugs in V1 tools
+- ❌ DO NOT add features to V1 tools
+- ❌ DO NOT optimize V1 tools
+- ❌ DO NOT update imports in V1 tools
+- ❌ DO NOT refactor V1 tools
+
+### What to Do Instead
+- ✅ Use V2 tools for ALL new development
+- ✅ Guide users to migrate from V1 to V2
+- ✅ Document V1 issues without fixing them
+- ✅ Focus on V2 tool improvements
+
+### V2 Tool References
+- **Task queries**: Use `QueryTasksToolV2` in `src/tools/tasks/`
+- **Project management**: Use `ProjectsToolV2` in `src/tools/projects/`
+- **Analytics**: Use V2 analytics tools (`*ToolV2.ts` files)
+- **All other tools**: Use the non-legacy versions in `src/tools/`
+
 ## OmniFocus API Reference
 
 - **Official TypeScript definitions**: `src/omnifocus/api/OmniFocus.d.ts`

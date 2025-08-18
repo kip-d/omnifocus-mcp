@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { SET_REVIEW_SCHEDULE_SCRIPT } from '../../omnifocus/scripts/reviews.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { SetReviewScheduleSchema } from '../schemas/project-schemas.js';
+import { BaseTool } from '../../base.js';
+import { SET_REVIEW_SCHEDULE_SCRIPT } from '../../../omnifocus/scripts/reviews.js';
+import { createEntityResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { SetReviewScheduleSchema } from '../../schemas/project-schemas.js';
 
 export class SetReviewScheduleTool extends BaseTool<typeof SetReviewScheduleSchema> {
   name = 'set_review_schedule';

@@ -3,47 +3,50 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import { CacheManager } from '../cache/CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 
-// Import task tools
-import { ListTasksTool } from './tasks/ListTasksTool.js';
-import { GetTaskCountTool } from './tasks/GetTaskCountTool.js';
-import { TodaysAgendaTool } from './tasks/TodaysAgendaTool.js';
+// Import task CRUD tools (still in active use)
 import { CreateTaskTool } from './tasks/CreateTaskTool.js';
 import { UpdateTaskTool } from './tasks/UpdateTaskTool.js';
 import { CompleteTaskTool } from './tasks/CompleteTaskTool.js';
 import { DeleteTaskTool } from './tasks/DeleteTaskTool.js';
-import { NextActionsTool } from './tasks/NextActionsTool.js';
-import { BlockedTasksTool } from './tasks/BlockedTasksTool.js';
-import { AvailableTasksTool } from './tasks/AvailableTasksTool.js';
 
-// Import new consolidated task query tool
-import { QueryTasksTool } from './tasks/QueryTasksTool.js';
+// ============================================================================
+// LEGACY V1 TOOLS - FROZEN - DO NOT MODIFY
+// These imports are from the legacy-v1 directory and should NEVER be changed
+// ============================================================================
+import { ListTasksTool } from './legacy-v1/tasks/ListTasksTool.js';
+import { GetTaskCountTool } from './legacy-v1/tasks/GetTaskCountTool.js';
+import { TodaysAgendaTool } from './legacy-v1/tasks/TodaysAgendaTool.js';
+import { NextActionsTool } from './legacy-v1/tasks/NextActionsTool.js';
+import { BlockedTasksTool } from './legacy-v1/tasks/BlockedTasksTool.js';
+import { AvailableTasksTool } from './legacy-v1/tasks/AvailableTasksTool.js';
+import { QueryTasksTool } from './legacy-v1/tasks/QueryTasksTool.js';
 
 // Import v2.0.0 consolidated tools (alpha)
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
 import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
 
-// Import project tools
-import { ListProjectsTool } from './projects/ListProjectsTool.js';
-import { CreateProjectTool } from './projects/CreateProjectTool.js';
-import { UpdateProjectTool } from './projects/UpdateProjectTool.js';
-import { CompleteProjectTool } from './projects/CompleteProjectTool.js';
-import { DeleteProjectTool } from './projects/DeleteProjectTool.js';
+// LEGACY V1 PROJECT TOOLS - FROZEN
+import { ListProjectsTool } from './legacy-v1/projects/ListProjectsTool.js';
+import { CreateProjectTool } from './legacy-v1/projects/CreateProjectTool.js';
+import { UpdateProjectTool } from './legacy-v1/projects/UpdateProjectTool.js';
+import { CompleteProjectTool } from './legacy-v1/projects/CompleteProjectTool.js';
+import { DeleteProjectTool } from './legacy-v1/projects/DeleteProjectTool.js';
 
-// Import folder tools
-import { ListFoldersTool } from './folders/ListFoldersTool.js';
-import { CreateFolderTool } from './folders/CreateFolderTool.js';
-import { UpdateFolderTool } from './folders/UpdateFolderTool.js';
-import { DeleteFolderTool } from './folders/DeleteFolderTool.js';
-import { MoveFolderTool } from './folders/MoveFolderTool.js';
+// LEGACY V1 FOLDER TOOLS - FROZEN
+import { ListFoldersTool } from './legacy-v1/folders/ListFoldersTool.js';
+import { CreateFolderTool } from './legacy-v1/folders/CreateFolderTool.js';
+import { UpdateFolderTool } from './legacy-v1/folders/UpdateFolderTool.js';
+import { DeleteFolderTool } from './legacy-v1/folders/DeleteFolderTool.js';
+import { MoveFolderTool } from './legacy-v1/folders/MoveFolderTool.js';
 
 // Import new consolidated folder tools
 import { ManageFolderTool } from './folders/ManageFolderTool.js';
 import { QueryFoldersTool } from './folders/QueryFoldersTool.js';
 
-// Import analytics tools
-import { ProductivityStatsTool } from './analytics/ProductivityStatsTool.js';
-import { TaskVelocityTool } from './analytics/TaskVelocityTool.js';
-import { OverdueAnalysisTool } from './analytics/OverdueAnalysisTool.js';
+// LEGACY V1 ANALYTICS TOOLS - FROZEN
+import { ProductivityStatsTool } from './legacy-v1/analytics/ProductivityStatsTool.js';
+import { TaskVelocityTool } from './legacy-v1/analytics/TaskVelocityTool.js';
+import { OverdueAnalysisTool } from './legacy-v1/analytics/OverdueAnalysisTool.js';
 
 // Import v2 analytics tools
 import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
@@ -64,7 +67,8 @@ import { BulkExportTool } from './export/BulkExportTool.js';
 // Individual operations work perfectly and are recommended for all workflows
 
 // Import date range query tools
-import { DateRangeQueryTool, OverdueTasksTool, UpcomingTasksTool } from './tasks/DateRangeQueryTool.js';
+// LEGACY V1 DATE RANGE TOOLS - FROZEN
+import { DateRangeQueryTool, OverdueTasksTool, UpcomingTasksTool } from './legacy-v1/tasks/DateRangeQueryTool.js';
 
 // Import recurring task tools
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
@@ -76,10 +80,10 @@ import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
 // Import diagnostic tools
 import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
 
-// Import review tools
-import { ProjectsForReviewTool } from './reviews/ProjectsForReviewTool.js';
-import { MarkProjectReviewedTool } from './reviews/MarkProjectReviewedTool.js';
-import { SetReviewScheduleTool } from './reviews/SetReviewScheduleTool.js';
+// LEGACY V1 REVIEW TOOLS - FROZEN
+import { ProjectsForReviewTool } from './legacy-v1/reviews/ProjectsForReviewTool.js';
+import { MarkProjectReviewedTool } from './legacy-v1/reviews/MarkProjectReviewedTool.js';
+import { SetReviewScheduleTool } from './legacy-v1/reviews/SetReviewScheduleTool.js';
 
 // Import new consolidated tools
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
@@ -114,7 +118,14 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
   ];
 
   const legacyTools = [
-    // v1.x tools - DEPRECATED (only loaded if OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true)
+    // ============================================================================
+    // LEGACY V1 TOOLS - FROZEN - DO NOT MODIFY
+    // These tools are preserved for backward compatibility only.
+    // They are loaded from src/tools/legacy-v1/ and should NEVER be edited.
+    // All new development must use V2 tools.
+    // Only enabled when OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true
+    // ============================================================================
+    
     // Consolidated task query tool (deprecated - use 'tasks' tool instead)
     new QueryTasksTool(cache),
 

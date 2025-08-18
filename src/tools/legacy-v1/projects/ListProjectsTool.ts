@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects.js';
-import { createListResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListProjectsSchema } from '../schemas/project-schemas.js';
+import { BaseTool } from '../../base.js';
+import { LIST_PROJECTS_SCRIPT } from '../../../omnifocus/scripts/projects.js';
+import { createListResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListProjectsSchema } from '../../schemas/project-schemas.js';
 
 export class ListProjectsTool extends BaseTool<typeof ListProjectsSchema> {
   name = 'list_projects';

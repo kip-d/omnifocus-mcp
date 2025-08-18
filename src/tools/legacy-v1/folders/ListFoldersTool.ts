@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BaseTool } from '../base.js';
-import { LIST_FOLDERS_SCRIPT } from '../../omnifocus/scripts/folders/list-folders.js';
-import { createCollectionResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { ListFoldersSchema } from '../schemas/folder-schemas.js';
+import { BaseTool } from '../../base.js';
+import { LIST_FOLDERS_SCRIPT } from '../../../omnifocus/scripts/folders/list-folders.js';
+import { createCollectionResponse, createErrorResponse, OperationTimer } from '../../../utils/response-format.js';
+import { ListFoldersSchema } from '../../schemas/folder-schemas.js';
 
 export class ListFoldersTool extends BaseTool<typeof ListFoldersSchema> {
   name = 'list_folders';
