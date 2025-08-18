@@ -60,7 +60,7 @@ export class QueryPerspectiveTool extends BaseTool<typeof QueryPerspectiveSchema
 
       // Build and execute script
       const script = this.omniAutomation.buildScript(QUERY_PERSPECTIVE_SCRIPT, {
-        perspectiveName: JSON.stringify(perspectiveName),
+        perspectiveName: perspectiveName,
         limit: limit,
         includeDetails: includeDetails,
       });
