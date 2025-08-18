@@ -130,8 +130,7 @@ export const UPDATE_TASK_SCRIPT = `
         // Including the string "null" which Claude Desktop sometimes sends
         if (updates.projectId === "" || 
             updates.projectId === null || 
-            updates.projectId === "null" ||
-            updates.projectId === "inbox") {
+            updates.projectId === "null") {
           // Move to inbox - set assignedContainer to null
           task.assignedContainer = null;
         } else {

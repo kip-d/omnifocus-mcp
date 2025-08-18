@@ -88,9 +88,9 @@ details: z.union([
 - This applies to all date fields: dueDate, deferDate, completionDate, nextReviewDate
 
 ### Moving Tasks to Inbox
-- **To move a task to inbox**: Set `projectId` to `"inbox"`, `null`, or empty string
-- **Claude Desktop note**: May send string `"null"` instead of actual null - both are handled
-- **Example**: `update_task({ taskId: "abc123", projectId: "inbox" })`
+- **To move a task to inbox**: Set `projectId` to `null` or empty string `""`
+- **Claude Desktop note**: May send string `"null"` instead of actual null - this is now handled
+- **Example**: `update_task({ taskId: "abc123", projectId: null })`
 
 ### Known Limitations
 - **Repeat rules for projects temporarily disabled**: Under investigation

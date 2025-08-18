@@ -20,7 +20,7 @@ Create a recurring task called "Team Standup" that repeats:
 ### 3. 📦 Task Reparenting
 1. Show me tasks in my inbox
 2. Pick any inbox task and move it to a specific project
-3. Then move it back to the inbox (use projectId: "inbox" or null)
+3. Then move it back to the inbox (use projectId: null)
 
 **Expected**: Task moves between locations successfully
 
