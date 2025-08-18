@@ -22,7 +22,8 @@ export const RepeatMethodSchema = z.enum([
   'start-after-completion',   // Start after completion (Task.RepetitionMethod.DeferUntilDate)
   'due-after-completion',     // Due after completion (Task.RepetitionMethod.DueDate)
   'none',                      // No repetition (Task.RepetitionMethod.None)
-]);
+])
+  .describe('Repetition method: "fixed" = repeat on schedule regardless of completion (e.g., every Monday), "start-after-completion" = next occurrence starts N days after completion, "due-after-completion" = next due date is N days after completion, "none" = no repetition');
 
 // Weekdays for weekly patterns
 export const WeekdaySchema = z.enum([
@@ -67,7 +68,7 @@ export const RepeatRuleSchema = z.object({
 
   method: RepeatMethodSchema
     .default('fixed')
-    .describe('How the repetition is calculated'),
+    .describe('How the repetition is calculated: "fixed" = repeat on schedule (e.g., every Monday at 2pm), "start-after-completion" = next occurrence starts N days after you complete this one, "due-after-completion" = next due date is N days after you complete this one'),
 
   // Weekly patterns - specific days of the week
   weekdays: z.array(WeekdaySchema)
