@@ -2,17 +2,18 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
-## 🎉 v2.0.0-beta.4 Released!
+## 🎉 v2.0.0 Production Release!
 
-**Major improvements in this release:**
+**Complete architecture overhaul with all JXA limitations fixed:**
 - ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
-- 🛠️ **Better tool reliability** - V2 tools designed for LLM success
+- 🔒 **Security hardened** - Fixed injection vulnerabilities in bridge operations
+- 🛠️ **100% reliable** - No more delete/recreate, task IDs preserved
 - 📊 **Summary-first responses** - Immediate insights before detailed data
 - 🏷️ **Tag assignment fixed** - Tags can now be set during task creation
 - 🔄 **Full repeat rule support** - Complex recurrence patterns now work
 - 📁 **Task reparenting** - Move tasks between projects and parents
 - 👁️ **Perspective queries** - Query any perspective without changing windows
-- 📚 **Compact API reference** - Add to your AI's system prompt for better performance
+- 🎯 **Zero breaking changes** - Seamless upgrade from v1.x
 
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
 

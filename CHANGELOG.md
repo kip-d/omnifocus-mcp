@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-08-18
+## [2.0.0] - 2025-08-19
+
+### 🎉 Major Release: Complete V2 Architecture with All JXA Limitations Fixed
+
+This release represents a complete overhaul of the OmniFocus MCP server, achieving 95% performance improvements and fixing all major JXA limitations through innovative bridge patterns.
 
 ### Added
 - **Comprehensive API Documentation**
@@ -23,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enabled via `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true`
   - Provides safety fallback for production environments
 
+### Security
+- **Critical: Fixed evaluateJavascript injection vulnerabilities**
+  - All bridge parameters now properly escaped with JSON.stringify()
+  - Eliminated string concatenation in script generation
+  - Prevents potential remote code execution via malicious inputs
+  - Created secure bridge template system for future use
+
 ### Fixed
 - **Integration Test Hanging Issues**
   - Added proper process.exit() to all test scripts
@@ -35,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tool Failure Logging**
   - Added comprehensive logging system for tool failures
   - Tracks failure patterns for better debugging
+- **Critical JXA Query Fixes**
+  - Fixed broken {_not: null} patterns that don't work in JXA
+  - Replaced with manual iteration for due date filtering
+  - Improved performance by avoiding invalid whose() patterns
+- **Task Movement Reliability**
+  - Replaced delete/recreate logic with moveTasks() bridge
+  - Task IDs now preserved when moving between projects
+  - No more "Task recreated with new ID" warnings
 
 ## [2.0.0-beta.4] - 2025-08-17
 
