@@ -187,19 +187,23 @@ export const LIST_TASKS_SCRIPT = `
   function extractRepeatRuleViaBridge(taskId) {
     try {
       const app = Application('OmniFocus');
-      const result = app.evaluateJavascript(
-        'const task = Task.byIdentifier("' + taskId + '");' +
-        'if (task && task.repetitionRule) {' +
-        '  const rule = task.repetitionRule;' +
-        '  JSON.stringify({' +
-        '    hasRule: true,' +
-        '    ruleString: rule.ruleString || null,' +
-        '    method: rule.method ? rule.method.name : null' +
-        '  });' +
-        '} else {' +
-        '  JSON.stringify({hasRule: false});' +
+      const escapedTaskId = JSON.stringify(taskId);
+      
+      const script = [
+        'const task = Task.byIdentifier(' + escapedTaskId + ');',
+        'if (task && task.repetitionRule) {',
+        '  const rule = task.repetitionRule;',
+        '  JSON.stringify({',
+        '    hasRule: true,',
+        '    ruleString: rule.ruleString || null,',
+        '    method: rule.method ? rule.method.name : null',
+        '  });',
+        '} else {',
+        '  JSON.stringify({hasRule: false});',
         '}'
-      );
+      ].join('');
+      
+      const result = app.evaluateJavascript(script);
       
       if (result) {
         const parsed = JSON.parse(result);

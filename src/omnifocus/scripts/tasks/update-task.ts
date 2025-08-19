@@ -6,7 +6,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  *
  * Handles:
  * - Basic property updates (name, note, flags, dates, etc.)
- * - Project reassignment (with recreation fallback for JXA limitations)
+ * - Project reassignment (using moveTasks() bridge for ID preservation)
  * - Tag updates with comprehensive error handling
  * - Claude Desktop numeric ID bug detection
  */
@@ -146,67 +146,49 @@ export const UPDATE_TASK_SCRIPT = `
           
           const targetProject = validation.project;
           
-          // Moving tasks between projects is complex in JXA
-          // We'll use a recreation approach since direct assignment often fails
+          // Use evaluateJavascript bridge with moveTasks() for reliable project movement
+          const currentTaskId = task.id();
+          const escapedTaskId = JSON.stringify(currentTaskId);
+          const escapedProjectId = JSON.stringify(updates.projectId);
           
-          // First, capture all current task properties
-          const taskData = {
-            name: safeGet(() => task.name(), 'Unnamed Task'),
-            note: safeGet(() => task.note(), ''),
-            flagged: safeGet(() => task.flagged(), false),
-            dueDate: safeGetDate(() => task.dueDate()),
-            deferDate: safeGetDate(() => task.deferDate()),
-            estimatedMinutes: safeGetEstimatedMinutes(task),
-            sequential: safeGet(() => task.sequential(), false),
-            completed: safeGet(() => task.completed(), false),
-            completionDate: safeGetDate(() => task.completionDate())
-          };
+          const moveScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
+            '  const targetProject = Project.byIdentifier(' + escapedProjectId + ');',
+            '  ',
+            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
+            '  if (!targetProject) return JSON.stringify({success: false, error: "Project not found"});',
+            '  ',
+            '  try {',
+            '    // Use global moveTasks to move task to new project',
+            '    // This preserves the task ID and all properties',
+            '    moveTasks([task], targetProject.beginning);',
+            '    ',
+            '    return JSON.stringify({',
+            '      success: true,',
+            '      message: "Moved to project",',
+            '      projectName: targetProject.name,',
+            '      taskId: task.id.primaryKey',
+            '    });',
+            '  } catch (error) {',
+            '    return JSON.stringify({',
+            '      success: false,',
+            '      error: "Failed to move task: " + (error.message || error.toString())',
+            '    });',
+            '  }',
+            '})()'  
+          ].join('');
           
-          // Get current tags before deletion
-          const currentTags = safeGetTags(task);
+          const moveResult = app.evaluateJavascript(moveScript);
+          const parsed = JSON.parse(moveResult);
           
-          // Try to delete and recreate the task
-          let deleteSucceeded = false;
-          try {
-            app.delete(task);
-            deleteSucceeded = true;
-          } catch (deleteError) {
-            // If delete fails, try to at least update the reference
+          if (!parsed.success) {
+            // Fall back to direct assignment if bridge fails
             try {
-              task.assignedContainer = targetProject; // task.assignedContainer = projects[i]
-              // If direct assignment worked, we're done - no need to recreate
+              task.assignedContainer = targetProject;
             } catch (assignError) {
-              throw new Error("Failed to move task: could not delete original or reassign");
+              throw new Error(parsed.error || "Failed to move task to project");
             }
-          }
-          
-          if (deleteSucceeded) {
-            // Successfully deleted the task, now recreate it in target project
-            const newTaskObj = {
-              name: taskData.name,
-              note: taskData.note,
-              flagged: taskData.flagged
-            };
-            
-            if (taskData.dueDate) newTaskObj.dueDate = new Date(taskData.dueDate);
-            if (taskData.deferDate) newTaskObj.deferDate = new Date(taskData.deferDate);
-            if (taskData.estimatedMinutes) newTaskObj.estimatedMinutes = taskData.estimatedMinutes;
-            
-            const newTask = app.Task(newTaskObj);
-            targetProject.tasks.push(newTask);
-            
-            // Set sequential property after creation
-            if (taskData.sequential !== undefined) {
-              newTask.sequential = taskData.sequential;
-            }
-            
-            // If task was completed, mark it complete
-            if (taskData.completed && taskData.completionDate) {
-              newTask.markComplete({completionDate: new Date(taskData.completionDate)});
-            }
-            
-            // Update our task reference to the new task
-            task = newTask;
           }
         }
       } catch (projectError) {
@@ -219,13 +201,15 @@ export const UPDATE_TASK_SCRIPT = `
       try {
         // Use evaluateJavascript bridge for reliable task reparenting
         const currentTaskId = task.id();
+        const escapedTaskId = JSON.stringify(currentTaskId);
         let reparentResult = null;
         
         if (updates.parentTaskId === null || updates.parentTaskId === "") {
           // Move to project root or inbox (remove parent)
           const reparentScript = [
             '(() => {',
-            '  const task = Task.byIdentifier("' + currentTaskId + '");',
+            '  const task = Task.byIdentifier(' + escapedTaskId + ');
+
             '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
             '  ',
             '  try {',
@@ -254,7 +238,7 @@ export const UPDATE_TASK_SCRIPT = `
             '      error: "Failed to remove parent: " + (error.message || error.toString())',
             '    });',
             '  }',
-            '})()'
+            '})()'  
           ].join('');
           
           const result = app.evaluateJavascript(reparentScript);
@@ -290,10 +274,12 @@ export const UPDATE_TASK_SCRIPT = `
         } else {
           // Move to a new parent task using evaluateJavascript bridge
           // Use the global moveTasks() function available in OmniJS
+          const escapedParentTaskId = JSON.stringify(updates.parentTaskId);
+          
           const reparentScript = [
             '(() => {',
-            '  const task = Task.byIdentifier("' + currentTaskId + '");',
-            '  const newParent = Task.byIdentifier("' + updates.parentTaskId + '");',
+            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
+            '  const newParent = Task.byIdentifier(' + escapedParentTaskId + ');
             '  ',
             '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
             '  if (!newParent) return JSON.stringify({success: false, error: "Parent task not found"});',
@@ -314,7 +300,7 @@ export const UPDATE_TASK_SCRIPT = `
             '      error: "Failed to move task: " + (error.message || error.toString())',
             '    });',
             '  }',
-            '})()'
+            '})()'  
           ].join('');
           
           const result = app.evaluateJavascript(reparentScript);
@@ -539,10 +525,7 @@ export const UPDATE_TASK_SCRIPT = `
         if (project) {
           response.changes.projectName = project.name;
         }
-        // Check if this was a delete/recreate operation
-        if (taskIdAfterUpdate !== taskId) {
-          response.note = "Task was recreated in the target project due to JXA limitations. New task ID: " + taskIdAfterUpdate;
-        }
+        // Task ID should remain the same with moveTasks() bridge
       } else {
         response.changes.projectName = "Inbox";
       }

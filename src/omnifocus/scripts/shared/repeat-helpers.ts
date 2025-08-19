@@ -154,19 +154,25 @@ export const REPEAT_HELPERS = `
       }
       
       // Use evaluateJavascript to apply the repetition rule
-      const result = app.evaluateJavascript(
-        'const task = Task.byIdentifier("' + taskId + '");' +
-        'if (task) {' +
-        '  const rule = new Task.RepetitionRule(' +
-        '    "' + ruleData.ruleString + '",' +
-        '    ' + methodConstant +
-        '  );' +
-        '  task.repetitionRule = rule;' +
-        '  "success";' +
-        '} else {' +
-        '  "task_not_found";' +
+      // Properly escape parameters to prevent injection
+      const escapedTaskId = JSON.stringify(taskId);
+      const escapedRuleString = JSON.stringify(ruleData.ruleString);
+      
+      const script = [
+        'const task = Task.byIdentifier(' + escapedTaskId + ');',
+        'if (task) {',
+        '  const rule = new Task.RepetitionRule(',
+        '    ' + escapedRuleString + ',',
+        '    ' + methodConstant,
+        '  );',
+        '  task.repetitionRule = rule;',
+        '  "success";',
+        '} else {',
+        '  "task_not_found";',
         '}'
-      );
+      ].join('');
+      
+      const result = app.evaluateJavascript(script);
       
       if (result === 'success') {
         console.log('Applied repetition rule via evaluateJavascript bridge');

@@ -42,13 +42,29 @@ export const TODAYS_AGENDA_OPTIMIZED_SCRIPT = `
     // 1. Get overdue tasks (if needed)
     if (checkOverdue && tasks.length < maxTasks) {
       try {
-        // Get incomplete tasks with due dates
-        const tasksWithDue = doc.flattenedTasks.whose({
-          completed: false,
-          dueDate: {_not: null}
+        // Get incomplete tasks first, then filter for due dates manually
+        // Note: {_not: null} doesn't work in JXA
+        const incompleteTasks = doc.flattenedTasks.whose({
+          completed: false
         })();
         
-        // Process only first 200 for performance
+        // Build list of tasks with due dates
+        const tasksWithDue = [];
+        const checkLimit = Math.min(1000, incompleteTasks.length); // Limit initial scan
+        
+        for (let i = 0; i < checkLimit; i++) {
+          const task = incompleteTasks[i];
+          try {
+            if (task.dueDate()) {
+              tasksWithDue.push(task);
+              if (tasksWithDue.length >= 200) break; // Limit results
+            }
+          } catch (e) {
+            // Skip tasks without due dates
+          }
+        }
+        
+        // Process tasks with due dates for overdue check
         const overdueLimit = Math.min(200, tasksWithDue.length);
         
         for (let i = 0; i < overdueLimit && tasks.length < maxTasks; i++) {
@@ -87,11 +103,26 @@ export const TODAYS_AGENDA_OPTIMIZED_SCRIPT = `
     // 2. Get tasks due today (if needed)
     if (checkDueToday && tasks.length < maxTasks) {
       try {
-        // Reuse the query from overdue if possible
-        const tasksWithDue = doc.flattenedTasks.whose({
-          completed: false,
-          dueDate: {_not: null}
+        // Get incomplete tasks first, then filter for due dates manually
+        const incompleteTasks = doc.flattenedTasks.whose({
+          completed: false
         })();
+        
+        // Build list of tasks with due dates (if not already done)
+        const tasksWithDue = [];
+        const checkLimit = Math.min(1000, incompleteTasks.length);
+        
+        for (let i = 0; i < checkLimit; i++) {
+          const task = incompleteTasks[i];
+          try {
+            if (task.dueDate()) {
+              tasksWithDue.push(task);
+              if (tasksWithDue.length >= 100) break; // Limit for today check
+            }
+          } catch (e) {
+            // Skip tasks without due dates
+          }
+        }
         
         const todayLimit = Math.min(100, tasksWithDue.length);
         

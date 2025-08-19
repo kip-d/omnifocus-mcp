@@ -55,21 +55,27 @@ export const TODAYS_AGENDA_SCRIPT = `
         const endDate = new Date(tomorrow);
         endDate.setDate(endDate.getDate() + 7); // Look ahead 7 days
         
-        try {
-          // Get incomplete tasks that are either flagged or have due dates
-          allTasks = doc.flattenedTasks.whose({
-            completed: false,
-            _or: [
-              {flagged: true},
-              {dueDate: {_not: null}}
-            ]
-          })();
-          optimizationUsed = 'smart_agenda_filter';
-        } catch (e) {
-          // Fallback to simpler query
-          allTasks = doc.flattenedTasks.whose({completed: false})();
-          optimizationUsed = 'incomplete_filter';
+        // Note: {_not: null} doesn't work in JXA, so we need manual filtering
+        // Get all incomplete tasks and filter manually
+        allTasks = doc.flattenedTasks.whose({completed: false})();
+        
+        // Filter for flagged tasks or tasks with due dates
+        const filteredTasks = [];
+        const checkLimit = Math.min(2000, allTasks.length);
+        
+        for (let i = 0; i < checkLimit; i++) {
+          const task = allTasks[i];
+          try {
+            if (task.flagged() || task.dueDate()) {
+              filteredTasks.push(task);
+            }
+          } catch (e) {
+            // Skip tasks that throw errors
+          }
         }
+        
+        allTasks = filteredTasks;
+        optimizationUsed = 'manual_filter_flagged_or_due';
       } else {
         allTasks = doc.flattenedTasks.whose({completed: false})();
         optimizationUsed = 'incomplete_filter';

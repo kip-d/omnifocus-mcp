@@ -120,13 +120,16 @@ export const CREATE_TASK_SCRIPT = `
       let tagResult = null;
       if (taskData.tags && taskData.tags.length > 0) {
         try {
-          // Build the OmniJS script to add tags
+          // Use evaluateJavascript to add tags with proper escaping
+          const escapedTaskId = JSON.stringify(taskId);
+          const escapedTags = JSON.stringify(taskData.tags);
+          
           const tagScript = [
             '(() => {',
-            '  const task = Task.byIdentifier("' + taskId + '");',
+            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
             '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
             '  ',
-            '  const tagNames = ' + JSON.stringify(taskData.tags) + ';',
+            '  const tagNames = ' + escapedTags + ';',
             '  const addedTags = [];',
             '  const createdTags = [];',
             '  ',
