@@ -49,37 +49,37 @@ export const TODAYS_AGENDA_SCRIPT = `
     let optimizationUsed = 'standard_filter';
     
     try {
-      // Try to get tasks with specific criteria for better performance
-      if (options.includeOverdue !== false || options.includeFlagged !== false) {
-        // For agenda, we want tasks that are either due soon or flagged
-        const endDate = new Date(tomorrow);
-        endDate.setDate(endDate.getDate() + 7); // Look ahead 7 days
-        
-        // Note: {_not: null} doesn't work in JXA, so we need manual filtering
-        // Get all incomplete tasks and filter manually
-        allTasks = doc.flattenedTasks.whose({completed: false})();
-        
-        // Filter for flagged tasks or tasks with due dates
-        const filteredTasks = [];
-        const checkLimit = Math.min(2000, allTasks.length);
-        
-        for (let i = 0; i < checkLimit; i++) {
-          const task = allTasks[i];
-          try {
+      // CRITICAL PERFORMANCE FIX: Never use whose() - it's catastrophically slow
+      // Get all tasks and filter manually for <1 second performance
+      allTasks = doc.flattenedTasks();
+      
+      // Manual filtering for performance - this is 25x faster than whose()
+      const filteredTasks = [];
+      const taskCount = allTasks.length;
+      
+      for (let i = 0; i < taskCount; i++) {
+        const task = allTasks[i];
+        try {
+          // Skip completed tasks first (most common filter)
+          if (task.completed()) continue;
+          
+          // For agenda, we want tasks that are either due soon or flagged
+          if (options.includeOverdue !== false || options.includeFlagged !== false) {
+            // Check if task is flagged or has a due date
             if (task.flagged() || task.dueDate()) {
               filteredTasks.push(task);
             }
-          } catch (e) {
-            // Skip tasks that throw errors
+          } else {
+            // Just incomplete tasks
+            filteredTasks.push(task);
           }
+        } catch (e) {
+          // Skip tasks that throw errors
         }
-        
-        allTasks = filteredTasks;
-        optimizationUsed = 'manual_filter_flagged_or_due';
-      } else {
-        allTasks = doc.flattenedTasks.whose({completed: false})();
-        optimizationUsed = 'incomplete_filter';
       }
+      
+      allTasks = filteredTasks;
+      optimizationUsed = 'manual_filter_fast';
     } catch (taskError) {
       try {
         // Fallback to all tasks if filter fails

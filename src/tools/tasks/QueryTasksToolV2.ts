@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { 
+  LIST_TASKS_SCRIPT,
+  TODAYS_AGENDA_ULTRA_FAST_SCRIPT 
+} from '../../omnifocus/scripts/tasks.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
@@ -239,11 +242,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
-    // Today perspective = Due Soon OR Flagged (matching typical OmniFocus Today perspective)
-    // "Due Soon" typically means due within the next few days
-    const now = new Date();
-    const dueSoonEnd = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000)); // 3 days from now
-    
+    // Use the ultra-fast optimized script for today's agenda
     const cacheKey = `tasks_today_${args.limit}_${args.details}`;
     
     // Check cache
@@ -256,19 +255,18 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
     
-    // We need to get BOTH due soon AND flagged tasks
-    // Since LIST_TASKS_SCRIPT doesn't support OR conditions well,
-    // we'll get a broader set and filter in memory
-    const filter = {
-      completed: false,
-      limit: args.limit * 2, // Get more since we'll filter
+    // Use the ultra-fast single-pass algorithm
+    const options = {
+      includeOverdue: true,
+      includeFlagged: true,
+      includeAvailable: true,
       includeDetails: args.details,
-      skipAnalysis: !args.details,
+      limit: args.limit
     };
     
-    // Get all incomplete tasks (we'll filter for due soon OR flagged)
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    // Use the optimized today's agenda script
+    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_ULTRA_FAST_SCRIPT, { options });
+    const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || 'error' in result) {
       return createErrorResponseV2(
@@ -281,30 +279,27 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
     
-    // Parse all tasks
-    const allTasks = this.parseTasks(result.tasks);
+    // The ultra-fast script returns tasks directly
+    const todayTasks = result.tasks || [];
     
-    // Filter for Today perspective: Due Soon OR Flagged
-    const todayTasks = allTasks.filter(task => {
-      // Include if flagged
-      if (task.flagged) return true;
-      
-      // Include if due soon (within 3 days)
-      if (task.dueDate) {
-        const dueDate = new Date(task.dueDate);
-        if (dueDate <= dueSoonEnd) return true;
-      }
-      
-      return false;
-    }).slice(0, args.limit); // Limit after filtering
-    
-    // Cache the filtered results
+    // Cache the results
     this.cache.set('tasks', cacheKey, { tasks: todayTasks });
+    
+    // Return with additional metadata from the ultra-fast script
+    const metadata = {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'today',
+      overdue_count: result.overdueCount || 0,
+      due_today_count: result.dueTodayCount || 0,
+      flagged_count: result.flaggedCount || 0,
+      optimization: result.optimizationUsed || 'ultra_fast'
+    };
     
     return createTaskResponseV2(
       'tasks',
       todayTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'today' }
+      metadata
     );
   }
 

@@ -13,7 +13,8 @@ export const COMPLETE_TASK_SCRIPT = `
     const completionDate = {{completionDate}} ? new Date({{completionDate}}) : new Date();
     
     try {
-      // Find task using whose clause
+      // Find task - use whose() for single ID lookup (this is fast)
+      // whose() is only slow for filtering many tasks, not for ID lookups
       const tasks = doc.flattenedTasks.whose({id: taskId})();
       
       if (tasks.length === 0) {
@@ -33,10 +34,24 @@ export const COMPLETE_TASK_SCRIPT = `
         task.markComplete();
       }
       
+      // Safely get completion date - it might be null for recurring tasks
+      // that create a new instance
+      let completedDate = null;
+      try {
+        const taskCompletionDate = task.completionDate();
+        if (taskCompletionDate) {
+          completedDate = taskCompletionDate.toISOString();
+        }
+      } catch (e) {
+        // If this was a recurring task, the original might be gone
+        // and a new instance created
+        completedDate = new Date().toISOString();
+      }
+      
       return JSON.stringify({
         id: taskId,
         completed: true,
-        completionDate: task.completionDate().toISOString()
+        completionDate: completedDate || new Date().toISOString()
       });
       
     } catch (error) {

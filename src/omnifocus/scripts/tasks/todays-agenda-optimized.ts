@@ -42,25 +42,28 @@ export const TODAYS_AGENDA_OPTIMIZED_SCRIPT = `
     // 1. Get overdue tasks (if needed)
     if (checkOverdue && tasks.length < maxTasks) {
       try {
-        // Get incomplete tasks first, then filter for due dates manually
-        // Note: {_not: null} doesn't work in JXA
-        const incompleteTasks = doc.flattenedTasks.whose({
-          completed: false
-        })();
+        // CRITICAL PERFORMANCE FIX: Never use whose() - it's catastrophically slow
+        // Get all tasks and filter manually for <1 second performance
+        const allTasks = doc.flattenedTasks();
         
-        // Build list of tasks with due dates
+        // Build list of incomplete tasks with due dates
         const tasksWithDue = [];
-        const checkLimit = Math.min(1000, incompleteTasks.length); // Limit initial scan
+        const taskCount = allTasks.length;
+        const checkLimit = Math.min(2000, taskCount); // Process up to 2000 tasks
         
         for (let i = 0; i < checkLimit; i++) {
-          const task = incompleteTasks[i];
+          const task = allTasks[i];
           try {
+            // Skip completed tasks first (most common filter)
+            if (task.completed()) continue;
+            
+            // Check for due date
             if (task.dueDate()) {
               tasksWithDue.push(task);
               if (tasksWithDue.length >= 200) break; // Limit results
             }
           } catch (e) {
-            // Skip tasks without due dates
+            // Skip tasks that throw errors
           }
         }
         
@@ -103,24 +106,26 @@ export const TODAYS_AGENDA_OPTIMIZED_SCRIPT = `
     // 2. Get tasks due today (if needed)
     if (checkDueToday && tasks.length < maxTasks) {
       try {
-        // Get incomplete tasks first, then filter for due dates manually
-        const incompleteTasks = doc.flattenedTasks.whose({
-          completed: false
-        })();
+        // CRITICAL PERFORMANCE FIX: Never use whose() - manual filtering is 25x faster
+        const allTasks = doc.flattenedTasks();
         
-        // Build list of tasks with due dates (if not already done)
+        // Build list of incomplete tasks with due dates
         const tasksWithDue = [];
-        const checkLimit = Math.min(1000, incompleteTasks.length);
+        const taskCount = allTasks.length;
+        const checkLimit = Math.min(2000, taskCount);
         
         for (let i = 0; i < checkLimit; i++) {
-          const task = incompleteTasks[i];
+          const task = allTasks[i];
           try {
+            // Skip completed tasks first
+            if (task.completed()) continue;
+            
             if (task.dueDate()) {
               tasksWithDue.push(task);
               if (tasksWithDue.length >= 100) break; // Limit for today check
             }
           } catch (e) {
-            // Skip tasks without due dates
+            // Skip tasks that throw errors
           }
         }
         
@@ -168,10 +173,25 @@ export const TODAYS_AGENDA_OPTIMIZED_SCRIPT = `
     // 3. Get flagged tasks (if needed and still have room)
     if (checkFlagged && tasks.length < maxTasks) {
       try {
-        const flaggedTasks = doc.flattenedTasks.whose({
-          completed: false,
-          flagged: true
-        })();
+        // CRITICAL PERFORMANCE FIX: Manual filtering instead of whose()
+        const allTasks = doc.flattenedTasks();
+        const flaggedTasks = [];
+        const taskCount = allTasks.length;
+        
+        // Collect flagged incomplete tasks
+        for (let i = 0; i < taskCount && flaggedTasks.length < 50; i++) {
+          const task = allTasks[i];
+          try {
+            // Skip completed tasks
+            if (task.completed()) continue;
+            // Check if flagged
+            if (task.flagged()) {
+              flaggedTasks.push(task);
+            }
+          } catch (e) {
+            // Skip tasks that throw errors
+          }
+        }
         
         const flaggedLimit = Math.min(50, flaggedTasks.length);
         

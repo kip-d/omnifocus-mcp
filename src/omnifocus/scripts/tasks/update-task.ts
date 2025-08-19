@@ -208,8 +208,8 @@ export const UPDATE_TASK_SCRIPT = `
           // Move to project root or inbox (remove parent)
           const reparentScript = [
             '(() => {',
-            '  const task = Task.byIdentifier(' + escapedTaskId + ');
-
+            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
+            '  ',
             '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
             '  ',
             '  try {',
@@ -279,7 +279,7 @@ export const UPDATE_TASK_SCRIPT = `
           const reparentScript = [
             '(() => {',
             '  const task = Task.byIdentifier(' + escapedTaskId + ');',
-            '  const newParent = Task.byIdentifier(' + escapedParentTaskId + ');
+            '  const newParent = Task.byIdentifier(' + escapedParentTaskId + ');',
             '  ',
             '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
             '  if (!newParent) return JSON.stringify({success: false, error: "Parent task not found"});',
