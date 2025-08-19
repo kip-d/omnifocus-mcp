@@ -48,14 +48,12 @@
 - ✅ **Tag assignment** during task creation
 - ✅ Single operation instead of two-step
 
-## Testing Checklist for Next Session
+## Next Session Focus
 
-### Integration Test Improvements ✅ COMPLETED!
-- [x] Fixed MCP server test scripts to exit properly after tool calls
-- [x] Updated test-perspective-v2.ts with McpTestRunner cleanup utility
-- [x] Reviewed all integration tests for timeout issues
-- [x] Added proper process.exit() to all test scripts
-- [x] Created universal test cleanup utility at `tests/utils/test-cleanup.ts`
+### User Testing Feedback
+- [ ] Review feedback from user testing group
+- [ ] Address any issues found during testing
+- [ ] Verify all reported bugs are fixed
 
 ### V2.0.0 Final Release Testing
 - [ ] Full integration test suite with production data

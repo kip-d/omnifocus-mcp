@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CreateProjectTool } from '../../../src/tools/projects/CreateProjectTool.js';
-import { UpdateProjectTool } from '../../../src/tools/projects/UpdateProjectTool.js';
-import { CompleteProjectTool } from '../../../src/tools/projects/CompleteProjectTool.js';
-import { DeleteProjectTool } from '../../../src/tools/projects/DeleteProjectTool.js';
+import { CreateProjectTool } from '../../../src/tools/legacy-v1/projects/CreateProjectTool.js';
+import { UpdateProjectTool } from '../../../src/tools/legacy-v1/projects/UpdateProjectTool.js';
+import { CompleteProjectTool } from '../../../src/tools/legacy-v1/projects/CompleteProjectTool.js';
+import { DeleteProjectTool } from '../../../src/tools/legacy-v1/projects/DeleteProjectTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 

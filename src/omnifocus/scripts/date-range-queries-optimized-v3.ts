@@ -40,7 +40,8 @@ export const GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
         
         try {
           // Early exit - completed check (most common filter)
-          if (task.completed()) continue;
+          // Check if task is effectively completed (including parent project status)
+          if (isTaskEffectivelyCompleted(task)) continue;
           
           // Early exit - date check
           const dueDate = task.dueDate();
@@ -140,7 +141,8 @@ export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
         
         try {
           // Early exit - completed check
-          if (!includeCompleted && task.completed()) continue;
+          // Check if task is effectively completed (including parent project status)
+          if (!includeCompleted && isTaskEffectivelyCompleted(task)) continue;
           
           // Early exit - date check
           const dueDate = task.dueDate();
@@ -161,7 +163,7 @@ export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
             name: task.name(),
             dueDate: new Date(dueTime).toISOString(),
             flagged: task.flagged(),
-            completed: includeCompleted ? task.completed() : false,
+            completed: includeCompleted ? isTaskEffectivelyCompleted(task) : false,
             project: project?.name() || null,
             projectId: project?.id() || null,
             daysOverdue: daysOverdue,
@@ -243,7 +245,8 @@ export const GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT = `
         
         try {
           // Early exit for non-completion date queries
-          if (dateField !== 'completionDate' && task.completed()) continue;
+          // Check if task is effectively completed (including parent project status)
+          if (dateField !== 'completionDate' && isTaskEffectivelyCompleted(task)) continue;
           
           // Get the appropriate date field
           let taskDate;
@@ -264,7 +267,7 @@ export const GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT = `
                 name: task.name(),
                 [dateField]: null,
                 flagged: task.flagged(),
-                completed: task.completed(),
+                completed: isTaskEffectivelyCompleted(task),
                 project: project?.name() || null,
                 projectId: project?.id() || null
               });
@@ -286,7 +289,7 @@ export const GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT = `
             name: task.name(),
             [dateField]: new Date(taskTime).toISOString(),
             flagged: task.flagged(),
-            completed: task.completed(),
+            completed: isTaskEffectivelyCompleted(task),
             project: project?.name() || null,
             projectId: project?.id() || null,
             note: task.note() || null

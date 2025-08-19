@@ -5,15 +5,15 @@ import { OmniAutomation } from '../../src/omnifocus/OmniAutomation';
 // Import all tools to test
 import { CreateTaskTool } from '../../src/tools/tasks/CreateTaskTool';
 import { UpdateTaskTool } from '../../src/tools/tasks/UpdateTaskTool';
-import { ListTasksTool } from '../../src/tools/tasks/ListTasksTool';
-import { ProductivityStatsTool } from '../../src/tools/analytics/ProductivityStatsTool';
-import { TaskVelocityTool } from '../../src/tools/analytics/TaskVelocityTool';
-import { OverdueAnalysisTool } from '../../src/tools/analytics/OverdueAnalysisTool';
+import { ListTasksTool } from '../../src/tools/legacy-v1/tasks/ListTasksTool';
+import { ProductivityStatsTool } from '../../src/tools/legacy-v1/analytics/ProductivityStatsTool';
+import { TaskVelocityTool } from '../../src/tools/legacy-v1/analytics/TaskVelocityTool';
+import { OverdueAnalysisTool } from '../../src/tools/legacy-v1/analytics/OverdueAnalysisTool';
 import { ExportTasksTool } from '../../src/tools/export/ExportTasksTool';
 import { ExportProjectsTool } from '../../src/tools/export/ExportProjectsTool';
 import { BulkExportTool } from '../../src/tools/export/BulkExportTool';
-import { ListProjectsTool } from '../../src/tools/projects/ListProjectsTool';
-import { CreateProjectTool } from '../../src/tools/projects/CreateProjectTool';
+import { ListProjectsTool } from '../../src/tools/legacy-v1/projects/ListProjectsTool';
+import { CreateProjectTool } from '../../src/tools/legacy-v1/projects/CreateProjectTool';
 
 describe('Response Format Consistency Tests', () => {
   let mockCache: CacheManager;

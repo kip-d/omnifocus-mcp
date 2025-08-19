@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ProductivityStatsTool } from '../../../src/tools/analytics/ProductivityStatsTool.js';
-import { TaskVelocityTool } from '../../../src/tools/analytics/TaskVelocityTool.js';
-import { OverdueAnalysisTool } from '../../../src/tools/analytics/OverdueAnalysisTool.js';
+import { ProductivityStatsTool } from '../../../src/tools/legacy-v1/analytics/ProductivityStatsTool.js';
+import { TaskVelocityTool } from '../../../src/tools/legacy-v1/analytics/TaskVelocityTool.js';
+import { OverdueAnalysisTool } from '../../../src/tools/legacy-v1/analytics/OverdueAnalysisTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 

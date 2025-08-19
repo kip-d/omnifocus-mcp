@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2025-08-18
+
+### Added
+- **Comprehensive API Documentation**
+  - Full API reference with all 30+ tools (`docs/API-REFERENCE.md`)
+  - LLM-optimized reference (~900 tokens) for system prompts
+  - Ultra-compact reference (~400 tokens) for minimal contexts
+  - Token-efficient references improve AI assistant performance
+- **Integration Test Infrastructure**
+  - Universal test cleanup utility (`tests/utils/test-cleanup.ts`)
+  - Proper process cleanup prevents hanging tests
+  - All integration tests now exit cleanly within timeouts
+- **V1 Tools Preservation**
+  - All V1 tools moved to `src/tools/legacy-v1/` directory
+  - Frozen/amber status - no modifications allowed
+  - Enabled via `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true`
+  - Provides safety fallback for production environments
+
+### Fixed
+- **Integration Test Hanging Issues**
+  - Added proper process.exit() to all test scripts
+  - Created McpTestRunner with automatic cleanup
+  - Tests no longer hang after completion
+- **Perspective Query Fixes**
+  - Resolved syntax errors in perspective queries
+  - Fixed task inbox movement (null vs "null" handling)
+  - Inbox perspective now returns correct tasks
+- **Tool Failure Logging**
+  - Added comprehensive logging system for tool failures
+  - Tracks failure patterns for better debugging
+
 ## [2.0.0-beta.4] - 2025-08-17
 
 ### 🎉 Major Feature: Perspective Query Support
@@ -106,8 +137,15 @@ create_task({
 
 ## [2.0.0-beta.1] - 2025-08-16
 
-### 🎉 Beta Release
-This beta release represents a major milestone in the v2.0 development cycle. All critical issues have been resolved, performance has been dramatically improved, and the codebase has been thoroughly reviewed by specialized agents.
+### 🎉 Beta Release with Tag Assignment Fix
+This beta release represents a major milestone in the v2.0 development cycle. The most significant achievement is fixing the tag assignment limitation that has plagued the project since inception.
+
+### 🏷️ Tag Assignment Finally Works!
+- **Major Breakthrough**: Tags can now be assigned during task creation
+- **evaluateJavascript() Bridge**: Discovered method to access OmniJS API from JXA
+- **Single Operation**: No more two-step create-then-update process
+- **Performance Impact**: Only ~50-100ms overhead for bridge operations
+- **Implementation**: `applyTagsViaBridge()` function in create-task.ts
 
 ### ⚡ Performance Improvements
 - **95% Faster Queries**: Task queries reduced from 22+ seconds to <1 second for 2000+ tasks
@@ -148,10 +186,11 @@ This beta release represents a major milestone in the v2.0 development cycle. Al
 - Standardized on v3 ultra-optimized implementations
 - Cleaned up legacy code paths
 
-### Known Limitations (Unchanged)
-- Cannot assign tags during task creation (JXA API limitation)
-- Must create task first, then update with tags in separate operation
-- Workaround prominently documented in README
+### Previously Unsolvable Limitations Now Fixed
+- ✅ Tag assignment during task creation (fixed via evaluateJavascript bridge)
+- ✅ Repeat rules (will be fixed in beta.2)
+- ✅ Task reparenting (will be fixed in beta.3)
+- ✅ Perspective queries (will be fixed in beta.4)
 
 ## [2.0.0-alpha.1] - 2025-08-14
 

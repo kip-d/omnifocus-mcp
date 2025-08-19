@@ -79,7 +79,7 @@ describe('Task CRUD Operations', () => {
       });
 
       it('should create a task with all optional fields', async () => {
-        // Note: tags are now rejected during creation due to JXA limitations
+        // Tags now work via evaluateJavascript bridge in v2.0.0-beta.1+
         const taskData = {
           name: 'Complex task',
           note: 'Task description',
@@ -93,16 +93,21 @@ describe('Task CRUD Operations', () => {
           parentTaskId: 'parent-789'
         };
 
+        const scriptResult = {
+          taskId: 'task-123',
+          name: 'Complex task',
+          tags: ['work', 'urgent'],
+          created: true
+        };
+
+        mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+
         const result = await tool.execute(taskData);
 
-        // Now we expect it to fail with a helpful error about tags
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('TAGS_NOT_SUPPORTED');
-        expect(result.error.message).toContain('Cannot assign tags during task creation');
-        expect(result.error.details).toBeDefined();
-        expect(result.error.details.recovery).toBeDefined();
-        expect(result.error.details.recovery).toContain('Create the task first without tags');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+        // Tags should now work successfully
+        expect(result.success).toBe(true);
+        expect(result.data.task).toEqual(scriptResult);
+        expect(mockOmniAutomation.execute).toHaveBeenCalledTimes(1);
       });
 
       it('should handle object response from script', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ListTasksTool } from '../../../src/tools/tasks/ListTasksTool.js';
+import { ListTasksTool } from '../../../src/tools/legacy-v1/tasks/ListTasksTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 import { Logger } from '../../../src/utils/Logger.js';
