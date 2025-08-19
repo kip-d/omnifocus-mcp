@@ -8,7 +8,7 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
-  description = 'Update an existing task in OmniFocus. Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tag assignment works here (unlike create_task). Use clearDueDate=true to remove dates. Updates are cached for consistency.';
+  description = 'Update an existing task in OmniFocus. Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format (e.g., "2024-12-25 16:00" for 4pm on Dec 25).';
   schema = UpdateTaskSchema;
 
   async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {

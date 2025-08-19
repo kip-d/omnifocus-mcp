@@ -16,7 +16,7 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   name = 'create_task';
-  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). Dates should be in local time format.';
+  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format (e.g., "2024-12-25" or "2024-12-25 16:00" for 4pm).';
   schema = CreateTaskSchema;
 
   async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
