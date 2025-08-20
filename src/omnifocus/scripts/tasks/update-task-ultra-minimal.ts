@@ -98,7 +98,10 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
         if (rule.method === 'start-after-completion') method = 'Task.RepetitionMethod.DeferUntilDate';
         else if (rule.method === 'due-after-completion') method = 'Task.RepetitionMethod.DueDate';
         
-        app.evaluateJavascript('Task.byIdentifier("' + taskId + '").repetitionRule = new Task.RepetitionRule("' + rrule + '", ' + method + '); "ok"');
+        const ruleResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); t.repetitionRule = new Task.RepetitionRule("' + rrule + '", ' + method + '); return t.repetitionRule ? "set" : "failed"; })()');
+        if (ruleResult === "failed") {
+          return JSON.stringify({ error: true, message: "Failed to set repeat rule" });
+        }
       }
       
       // Get final state via bridge for consistency
