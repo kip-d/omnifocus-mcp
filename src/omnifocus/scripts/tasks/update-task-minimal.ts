@@ -190,22 +190,38 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
               }
             }
           } else {
-            // Move to specific project
-            const moveScript = 'var t=Task.byIdentifier("' + taskId + '");var p=Project.byIdentifier("' + updates.projectId + '");if(t&&p){moveTasks([t],p.beginning);"ok"}else{"err"}';
+            // Validate project exists before attempting move
+            const validateScript = 'Project.byIdentifier("' + updates.projectId + '") ? "exists" : "not_found"';
+            const validation = app.evaluateJavascript(validateScript);
+            
+            if (validation === "not_found") {
+              // Project doesn't exist - this is an error!
+              return JSON.stringify({
+                error: true,
+                message: "Project not found: " + updates.projectId,
+                suggestion: "Use the projects tool to list available projects and get valid IDs"
+              });
+            }
+            
+            // Project exists, proceed with move
+            const moveScript = 'var t=Task.byIdentifier("' + taskId + '");var p=Project.byIdentifier("' + updates.projectId + '");moveTasks([t],p.beginning);"ok"';
             const result = app.evaluateJavascript(moveScript);
-            if (result === "err") {
-              // Fallback to direct assignment
-              const projects = doc.flattenedProjects();
-              for (let i = 0; i < projects.length; i++) {
-                if (projects[i].id() === updates.projectId) {
-                  task.assignedContainer = projects[i];
-                  break;
-                }
-              }
+            
+            if (result !== "ok") {
+              // Move failed even though project exists
+              return JSON.stringify({
+                error: true,
+                message: "Failed to move task to project",
+                details: "Project exists but move operation failed"
+              });
             }
           }
         } catch (e) {
-          // Ignore project move errors, continue with other updates
+          // Don't silently ignore - report the error
+          return JSON.stringify({
+            error: true,
+            message: "Error updating project: " + e.message
+          });
         }
       }
       
