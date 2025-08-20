@@ -8,6 +8,7 @@ import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
+import { FLAGGED_TASKS_WHOSE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-whose.js';
 import { 
   createTaskResponseV2, 
   createErrorResponseV2, 
@@ -472,15 +473,6 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   }
 
   private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
-    const filter = {
-      flagged: true,
-      completed: args.completed || false,
-      limit: args.limit,
-      includeDetails: args.details,
-      project: args.project, // Pass as project name, not ID
-      tags: args.tags,
-    };
-    
     const cacheKey = `tasks_flagged_${args.limit}_${args.completed}`;
     
     // Check cache
@@ -493,9 +485,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
     
-    // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    // Use optimized flagged script
+    const script = this.omniAutomation.buildScript(FLAGGED_TASKS_WHOSE_SCRIPT, {
+      limit: args.limit,
+      includeCompleted: args.completed || false,
+      includeDetails: args.details || false,
+    });
+    const result = await this.omniAutomation.execute<any>(script);
     
     if (!result || 'error' in result) {
       return createErrorResponseV2(
