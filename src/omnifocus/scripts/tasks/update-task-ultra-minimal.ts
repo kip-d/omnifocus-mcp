@@ -98,7 +98,14 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
         if (rule.method === 'start-after-completion') method = 'Task.RepetitionMethod.DeferUntilDate';
         else if (rule.method === 'due-after-completion') method = 'Task.RepetitionMethod.DueDate';
         
-        const ruleResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); t.repetitionRule = new Task.RepetitionRule("' + rrule + '", ' + method + '); return t.repetitionRule ? "set" : "failed"; })()');
+        // Debug: log what we're about to set
+        console.log('Setting repeat rule:', rrule, 'with method:', method);
+        
+        const ruleResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); if (!t) return "not_found"; t.repetitionRule = new Task.RepetitionRule("' + rrule + '", ' + method + '); return t.repetitionRule ? "set" : "failed"; })()');
+        
+        if (ruleResult === "not_found") {
+          return JSON.stringify({ error: true, message: "Task not found when setting repeat rule" });
+        }
         if (ruleResult === "failed") {
           return JSON.stringify({ error: true, message: "Failed to set repeat rule" });
         }

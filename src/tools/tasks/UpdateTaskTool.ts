@@ -158,6 +158,8 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
     projectId?: string | null;
     parentTaskId?: string | null;
     sequential?: boolean;
+    repeatRule?: any;
+    clearRepeatRule?: boolean;
   }): Record<string, unknown> {
     const sanitized: Record<string, any> = {};
 
@@ -264,6 +266,16 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
     // Handle sequential flag
     if (typeof updates.sequential === 'boolean') {
       sanitized.sequential = updates.sequential;
+    }
+
+    // Handle repeat rule
+    if (updates.repeatRule && typeof updates.repeatRule === 'object') {
+      sanitized.repeatRule = updates.repeatRule;
+    }
+
+    // Handle clear repeat rule flag
+    if (updates.clearRepeatRule === true) {
+      sanitized.clearRepeatRule = true;
     }
 
     return sanitized;
