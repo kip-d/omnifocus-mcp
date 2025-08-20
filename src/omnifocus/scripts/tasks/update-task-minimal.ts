@@ -114,6 +114,64 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
         task.sequential = updates.sequential;
       }
       
+      // Handle repeat rule updates
+      if (updates.clearRepeatRule) {
+        task.repetitionRule = null;
+      } else if (updates.repeatRule) {
+        try {
+          // Use evaluateJavascript for repeat rule updates (more reliable)
+          const rule = updates.repeatRule;
+          let ruleScript = 'var t=Task.byIdentifier("' + taskId + '");';
+          
+          // Build the recurrence rule based on type
+          if (rule.weekdays && rule.weekdays.length > 0) {
+            // Weekly with specific days
+            const dayMap = {
+              'sunday': 'Day.Sunday',
+              'monday': 'Day.Monday', 
+              'tuesday': 'Day.Tuesday',
+              'wednesday': 'Day.Wednesday',
+              'thursday': 'Day.Thursday',
+              'friday': 'Day.Friday',
+              'saturday': 'Day.Saturday'
+            };
+            const days = rule.weekdays.map(d => dayMap[d.toLowerCase()]).join(',');
+            ruleScript += 'var r=new RecurrenceRule();r.frequency=RecurrenceFrequency.Weekly;r.interval=' + (rule.steps || 1) + ';r.daysOfWeek=[' + days + '];';
+          } else {
+            // Simple recurrence
+            const freqMap = {
+              'day': 'Daily',
+              'week': 'Weekly',
+              'month': 'Monthly',
+              'year': 'Yearly'
+            };
+            const freq = freqMap[rule.unit] || 'Daily';
+            ruleScript += 'var r=new RecurrenceRule();r.frequency=RecurrenceFrequency.' + freq + ';r.interval=' + (rule.steps || 1) + ';';
+          }
+          
+          // Set the method
+          if (rule.method === 'start-after-completion') {
+            ruleScript += 'r.method=RepetitionMethod.DeferUntilDate;';
+          } else if (rule.method === 'due-after-completion') {
+            ruleScript += 'r.method=RepetitionMethod.DueAfterCompletion;';
+          } else {
+            ruleScript += 'r.method=RepetitionMethod.Fixed;';
+          }
+          
+          ruleScript += 't.repetitionRule=r;"ok"';
+          
+          const result = app.evaluateJavascript(ruleScript);
+          if (result !== "ok") {
+            // Fallback to direct assignment (less reliable)
+            task.repetitionRule = {
+              recurrenceString: 'FREQ=' + (rule.unit || 'DAILY').toUpperCase() + ';INTERVAL=' + (rule.steps || 1)
+            };
+          }
+        } catch (e) {
+          // Repeat rule update failed, continue
+        }
+      }
+      
       // Project move using evaluateJavascript bridge
       if (updates.projectId !== undefined) {
         try {
