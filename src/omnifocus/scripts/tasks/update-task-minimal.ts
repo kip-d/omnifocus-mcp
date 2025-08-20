@@ -268,6 +268,17 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
         }
       }
       
+      // Get tags via bridge since JXA can't read them properly
+      let taskTags = [];
+      try {
+        const getTagsScript = '(() => { const t = Task.byIdentifier("' + taskId + '"); return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]"; })()';
+        const tagsResult = app.evaluateJavascript(getTagsScript);
+        taskTags = JSON.parse(tagsResult);
+      } catch (e) {
+        // Fallback to JXA method
+        taskTags = safeGetTags(task);
+      }
+      
       // Return updated task
       const updatedTask = {
         id: task.id(),
@@ -277,7 +288,7 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
         dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
         deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
         estimatedMinutes: task.estimatedMinutes() || null,
-        tags: safeGetTags(task)
+        tags: taskTags
       };
       
       const project = safeGetProject(task);
