@@ -302,7 +302,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     if (args.name !== undefined) updates.name = args.name;
     if (args.note !== undefined) updates.note = args.note;
     if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
-    if (args.flagged !== undefined) updates.flagged = args.flagged;
+    // Ensure flagged is a boolean, not a string
+    if (args.flagged !== undefined) {
+      updates.flagged = typeof args.flagged === 'boolean' ? args.flagged : args.flagged === 'true' || args.flagged === true;
+    }
     if (args.tags !== undefined) updates.tags = args.tags;
     if (args.reviewInterval !== undefined) updates.reviewInterval = args.reviewInterval;
     if (args.status !== undefined) updates.status = args.status;
@@ -352,6 +355,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     // Execute completion
     const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, {
       projectId: args.projectId,
+      completeAllTasks: false, // Default to not completing all tasks
     });
     
     const result = await this.omniAutomation.execute<any>(script);
