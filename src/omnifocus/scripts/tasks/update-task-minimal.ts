@@ -212,13 +212,28 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
       // Tag updates using evaluateJavascript
       if (updates.tags !== undefined && Array.isArray(updates.tags)) {
         try {
-          // Build a more robust tag script that handles tag creation if needed
-          const tagCommands = updates.tags.map(tagName => {
-            // Each tag command tries to find or create the tag
-            return 'var tag=Tag.byName("' + tagName + '")||new Tag("' + tagName + '");t.addTag(tag);';
-          }).join('');
+          // Use the same approach as create-task which we know works
+          const tagScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier("' + taskId + '");',
+            '  if (!task) return "err";',
+            '  ',
+            '  // Clear existing tags',
+            '  task.clearTags();',
+            '  ',
+            '  // Add new tags',
+            '  for (const name of ' + JSON.stringify(updates.tags) + ') {',
+            '    if (typeof name !== "string" || name.trim() === "") continue;',
+            '    let tag = flattenedTags.byName(name);',
+            '    if (!tag) {',
+            '      tag = new Tag(name);',
+            '    }',
+            '    task.addTag(tag);',
+            '  }',
+            '  return "ok";',
+            '})()'
+          ].join('');
           
-          const tagScript = 'var t=Task.byIdentifier("' + taskId + '");if(t){t.clearTags();' + tagCommands + '"ok"}else{"err"}';
           const result = app.evaluateJavascript(tagScript);
           
           if (result === "err") {
