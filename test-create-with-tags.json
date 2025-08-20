@@ -1,0 +1,12 @@
+{
+  "method": "tools/call",
+  "params": {
+    "name": "mcp__omnifocus__create_task",
+    "arguments": {
+      "name": "Test Task with Tags",
+      "flagged": "true",
+      "sequential": "false",
+      "tags": ["test", "v2"]
+    }
+  }
+}
