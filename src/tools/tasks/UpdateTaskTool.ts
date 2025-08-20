@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { UPDATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { UPDATE_TASK_MINIMAL_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskResponse } from '../response-types.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
@@ -73,7 +73,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
       });
 
       // Use the full script for comprehensive update support
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, {
+      const script = this.omniAutomation.buildScript(UPDATE_TASK_MINIMAL_SCRIPT, {
         taskId,
         updates: safeUpdates,
       });
