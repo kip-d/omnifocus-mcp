@@ -200,8 +200,7 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
           if (parsed.error) {
             return JSON.stringify({
               error: true,
-              message: parsed.error,
-              suggestion: "Check the repeat rule parameters and try again"
+              message: parsed.error
             });
           }
           
@@ -240,8 +239,7 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
               // Project doesn't exist - this is an error!
               return JSON.stringify({
                 error: true,
-                message: "Project not found: " + updates.projectId,
-                suggestion: "Use the projects tool to list available projects and get valid IDs"
+                message: "Project not found: " + updates.projectId + ". Please provide a valid project ID."
               });
             }
             

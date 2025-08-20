@@ -228,6 +228,38 @@ node tests/integration/test-create-task.js          # Test task creation
 npx @modelcontextprotocol/inspector dist/index.js  # Interactive browser-based testing
 ```
 
+## MCP Server Testing Pattern
+
+**IMPORTANT**: When writing test scripts that interact with the MCP server directly, always send a quit/exit command after your test to avoid timeouts:
+
+```typescript
+function callTool(toolName: string, params: any) {
+  const request = {
+    jsonrpc: '2.0',
+    id: Date.now(),
+    method: 'tools/call',
+    params: { name: toolName, arguments: params }
+  };
+  
+  // CRITICAL: Add exit command to avoid timeout
+  const exitRequest = {
+    jsonrpc: '2.0',
+    id: Date.now() + 1,
+    method: 'quit'
+  };
+  
+  const result = execSync(MCP_COMMAND, {
+    input: JSON.stringify(request) + '\n' + JSON.stringify(exitRequest) + '\n',
+    encoding: 'utf-8'
+  });
+  
+  // Parse response before server exits
+  // ...
+}
+```
+
+This pattern ensures tests complete immediately instead of waiting for the default timeout.
+
 ## Architecture Overview
 
 ### Project Structure
