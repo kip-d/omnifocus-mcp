@@ -117,10 +117,20 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
       // Project move using evaluateJavascript bridge
       if (updates.projectId !== undefined) {
         try {
-          // Handle inbox move
+          // Handle inbox move - check for null, empty string, or "null" string
           if (updates.projectId === null || updates.projectId === "" || updates.projectId === "null") {
-            const moveScript = 'Task.byIdentifier("' + taskId + '").assignedContainer = inbox; "moved"';
-            app.evaluateJavascript(moveScript);
+            // Use moveTasks to move to inbox (more reliable than assignedContainer)
+            const moveScript = 'var t=Task.byIdentifier("' + taskId + '");if(t){moveTasks([t],inbox.beginning);"moved"}else{"err"}';
+            const result = app.evaluateJavascript(moveScript);
+            if (result === "err") {
+              // Fallback to JXA method
+              try {
+                doc.moveTasks([task], {to: doc.inboxTasks.beginning});
+              } catch (e2) {
+                // Last resort: direct assignment
+                task.assignedContainer = doc.inboxTasks;
+              }
+            }
           } else {
             // Move to specific project
             const moveScript = 'var t=Task.byIdentifier("' + taskId + '");var p=Project.byIdentifier("' + updates.projectId + '");if(t&&p){moveTasks([t],p.beginning);"ok"}else{"err"}';
