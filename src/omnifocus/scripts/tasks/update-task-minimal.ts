@@ -178,7 +178,6 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
           }
           
           ruleScript.push(
-            '    ',
             '    // Create and apply the repetition rule',
             '    const repetitionRule = new Task.RepetitionRule(ruleString, method);',
             '    task.repetitionRule = repetitionRule;',

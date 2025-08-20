@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { UPDATE_TASK_MINIMAL_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { UPDATE_TASK_ULTRA_MINIMAL_SCRIPT } from '../../omnifocus/scripts/tasks/update-task-ultra-minimal.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskResponse } from '../response-types.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
@@ -72,10 +72,10 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         safeUpdatesKeys: Object.keys(safeUpdates),
       });
 
-      // Use the full script for comprehensive update support
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_MINIMAL_SCRIPT, {
-        taskId,
-        updates: safeUpdates,
+      // Use ultra-minimal script with JSON string to avoid parameter expansion
+      const script = this.omniAutomation.buildScript(UPDATE_TASK_ULTRA_MINIMAL_SCRIPT, {
+        taskId: taskId, // Don't stringify - buildScript will handle it
+        updatesJson: JSON.stringify(safeUpdates), // Single stringify - buildScript will quote it
       });
 
       const result = await this.omniAutomation.execute<string | { error: boolean; message: string; details?: string }>(script);
