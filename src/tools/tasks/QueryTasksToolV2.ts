@@ -8,7 +8,7 @@ import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
-import { FLAGGED_TASKS_WHOSE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-whose.js';
+import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
 import { 
   createTaskResponseV2, 
   createErrorResponseV2, 
@@ -485,8 +485,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
     
-    // Use optimized flagged script
-    const script = this.omniAutomation.buildScript(FLAGGED_TASKS_WHOSE_SCRIPT, {
+    // Use perspective-based flagged script for best performance
+    const script = this.omniAutomation.buildScript(FLAGGED_TASKS_PERSPECTIVE_SCRIPT, {
       limit: args.limit,
       includeCompleted: args.completed || false,
       includeDetails: args.details || false,
