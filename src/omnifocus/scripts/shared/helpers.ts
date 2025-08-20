@@ -458,6 +458,20 @@ export function getAllHelpers(): string {
 }
 
 /**
+ * Get all helpers with bridge support
+ */
+export function getAllHelpersWithBridge(): string {
+  return [
+    SAFE_UTILITIES,
+    PROJECT_VALIDATION,
+    TASK_SERIALIZATION,
+    ERROR_HANDLING,
+    REPEAT_HELPERS,
+    // Bridge helpers should be imported separately when needed
+  ].join('\n');
+}
+
+/**
  * Legacy export for backward compatibility
  */
 export const SAFE_UTILITIES_SCRIPT = SAFE_UTILITIES;
