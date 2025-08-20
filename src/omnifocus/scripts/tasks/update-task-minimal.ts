@@ -116,59 +116,101 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
       
       // Handle repeat rule updates
       if (updates.clearRepeatRule) {
-        task.repetitionRule = null;
+        // Clear via bridge for consistency
+        const clearScript = '(() => { const t = Task.byIdentifier("' + taskId + '"); if (t) { t.repetitionRule = null; return "cleared"; } return "not_found"; })()';
+        const clearResult = app.evaluateJavascript(clearScript);
+        if (clearResult === "not_found") {
+          return JSON.stringify({
+            error: true,
+            message: "Task not found when clearing repeat rule"
+          });
+        }
       } else if (updates.repeatRule) {
         try {
-          // Use evaluateJavascript for repeat rule updates (more reliable)
           const rule = updates.repeatRule;
-          let ruleScript = 'var t=Task.byIdentifier("' + taskId + '");';
           
-          // Build the recurrence rule based on type
+          // Build proper OmniJS script with correct API
+          let ruleScript = [
+            '(() => {',
+            '  const task = Task.byIdentifier("' + taskId + '");',
+            '  if (!task) return JSON.stringify({error: "Task not found"});',
+            '  ',
+            '  try {',
+            '    // Build the repetition rule with correct API',
+            '    let ruleString = "";',
+            '    let method = Task.RepetitionMethod.Fixed;',
+            '    '
+          ];
+          
+          // Build RRULE string based on parameters
           if (rule.weekdays && rule.weekdays.length > 0) {
             // Weekly with specific days
             const dayMap = {
-              'sunday': 'Day.Sunday',
-              'monday': 'Day.Monday', 
-              'tuesday': 'Day.Tuesday',
-              'wednesday': 'Day.Wednesday',
-              'thursday': 'Day.Thursday',
-              'friday': 'Day.Friday',
-              'saturday': 'Day.Saturday'
+              'sunday': 'SU',
+              'monday': 'MO',
+              'tuesday': 'TU',
+              'wednesday': 'WE',
+              'thursday': 'TH',
+              'friday': 'FR',
+              'saturday': 'SA'
             };
-            const days = rule.weekdays.map(d => dayMap[d.toLowerCase()]).join(',');
-            ruleScript += 'var r=new RecurrenceRule();r.frequency=RecurrenceFrequency.Weekly;r.interval=' + (rule.steps || 1) + ';r.daysOfWeek=[' + days + '];';
+            const days = rule.weekdays.map(d => dayMap[d.toLowerCase()]).filter(d => d).join(',');
+            ruleScript.push('    ruleString = "FREQ=WEEKLY;INTERVAL=' + (rule.steps || 1) + ';BYDAY=' + days + '";');
           } else {
             // Simple recurrence
             const freqMap = {
-              'day': 'Daily',
-              'week': 'Weekly',
-              'month': 'Monthly',
-              'year': 'Yearly'
+              'day': 'DAILY',
+              'week': 'WEEKLY', 
+              'month': 'MONTHLY',
+              'year': 'YEARLY'
             };
-            const freq = freqMap[rule.unit] || 'Daily';
-            ruleScript += 'var r=new RecurrenceRule();r.frequency=RecurrenceFrequency.' + freq + ';r.interval=' + (rule.steps || 1) + ';';
+            const freq = freqMap[rule.unit] || 'DAILY';
+            ruleScript.push('    ruleString = "FREQ=' + freq + ';INTERVAL=' + (rule.steps || 1) + '";');
           }
           
           // Set the method
           if (rule.method === 'start-after-completion') {
-            ruleScript += 'r.method=RepetitionMethod.DeferUntilDate;';
+            ruleScript.push('    method = Task.RepetitionMethod.DeferUntilDate;');
           } else if (rule.method === 'due-after-completion') {
-            ruleScript += 'r.method=RepetitionMethod.DueAfterCompletion;';
+            ruleScript.push('    method = Task.RepetitionMethod.DueDate;');
           } else {
-            ruleScript += 'r.method=RepetitionMethod.Fixed;';
+            ruleScript.push('    method = Task.RepetitionMethod.Fixed;');
           }
           
-          ruleScript += 't.repetitionRule=r;"ok"';
+          ruleScript.push(
+            '    ',
+            '    // Create and apply the repetition rule',
+            '    const repetitionRule = new Task.RepetitionRule(ruleString, method);',
+            '    task.repetitionRule = repetitionRule;',
+            '    ',
+            '    return JSON.stringify({',
+            '      success: true,',
+            '      ruleString: ruleString,',
+            '      method: method.name',
+            '    });',
+            '  } catch (e) {',
+            '    return JSON.stringify({error: "Failed to set repeat rule: " + e.message});',
+            '  }',
+            '})()'
+          );
           
-          const result = app.evaluateJavascript(ruleScript);
-          if (result !== "ok") {
-            // Fallback to direct assignment (less reliable)
-            task.repetitionRule = {
-              recurrenceString: 'FREQ=' + (rule.unit || 'DAILY').toUpperCase() + ';INTERVAL=' + (rule.steps || 1)
-            };
+          const result = app.evaluateJavascript(ruleScript.join('\n'));
+          const parsed = JSON.parse(result);
+          
+          if (parsed.error) {
+            return JSON.stringify({
+              error: true,
+              message: parsed.error,
+              suggestion: "Check the repeat rule parameters and try again"
+            });
           }
+          
+          console.log('Successfully set repeat rule:', parsed.ruleString);
         } catch (e) {
-          // Repeat rule update failed, continue
+          return JSON.stringify({
+            error: true,
+            message: "Failed to update repeat rule: " + e.message
+          });
         }
       }
       
