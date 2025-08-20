@@ -154,10 +154,42 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
       // Tag updates using evaluateJavascript
       if (updates.tags !== undefined && Array.isArray(updates.tags)) {
         try {
-          const tagScript = 'var t=Task.byIdentifier("' + taskId + '");t.clearTags();' + 
-            updates.tags.map(tag => 't.addTag(Tag.byIdentifier("' + tag + '")||Tag.byName("' + tag + '"))').join(';') + 
-            ';"ok"';
-          app.evaluateJavascript(tagScript);
+          // Build a more robust tag script that handles tag creation if needed
+          const tagCommands = updates.tags.map(tagName => {
+            // Each tag command tries to find or create the tag
+            return 'var tag=Tag.byName("' + tagName + '")||new Tag("' + tagName + '");t.addTag(tag);';
+          }).join('');
+          
+          const tagScript = 'var t=Task.byIdentifier("' + taskId + '");if(t){t.clearTags();' + tagCommands + '"ok"}else{"err"}';
+          const result = app.evaluateJavascript(tagScript);
+          
+          if (result === "err") {
+            // Fallback: Try JXA method
+            const allTags = doc.tags();
+            const tagObjects = [];
+            
+            for (const tagName of updates.tags) {
+              let found = false;
+              for (let i = 0; i < allTags.length; i++) {
+                if (allTags[i].name() === tagName) {
+                  tagObjects.push(allTags[i]);
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                // Create new tag if it doesn't exist
+                const newTag = doc.Tag({name: tagName});
+                tagObjects.push(newTag);
+              }
+            }
+            
+            // Clear existing tags and add new ones
+            task.tags = [];
+            for (const tag of tagObjects) {
+              task.tags.push(tag);
+            }
+          }
         } catch (e) {
           // Tags update failed, continue
         }
