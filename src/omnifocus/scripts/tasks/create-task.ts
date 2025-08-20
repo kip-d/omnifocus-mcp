@@ -173,38 +173,70 @@ export const CREATE_TASK_SCRIPT = `
         }
       }
       
-      // Build response
-      const response = {
-        taskId: taskId,
-        name: task.name(),
-        created: true
-      };
-      
-      // Include tag information if tags were processed
-      if (tagResult && tagResult.success) {
-        response.tags = tagResult.tagsAdded;
-        if (tagResult.tagsCreated.length > 0) {
-          response.tagsCreated = tagResult.tagsCreated;
-        }
+      // Get the complete task data via bridge to ensure we see what was actually created
+      // This is CRITICAL - we must read via bridge after writing via bridge
+      let finalTaskData = null;
+      try {
+        const getTaskScript = [
+          '(() => {',
+          '  const task = Task.byIdentifier("' + taskId + '");',
+          '  if (!task) return JSON.stringify({error: "Task not found after creation"});',
+          '  ',
+          '  return JSON.stringify({',
+          '    id: task.id.primaryKey,',
+          '    name: task.name,',
+          '    note: task.note || "",',
+          '    flagged: task.flagged,',
+          '    completed: task.completed,',
+          '    dueDate: task.dueDate ? task.dueDate.toISOString() : null,',
+          '    deferDate: task.deferDate ? task.deferDate.toISOString() : null,',
+          '    estimatedMinutes: task.estimatedMinutes || null,',
+          '    tags: task.tags.map(t => t.name),',
+          '    project: task.containingProject ? task.containingProject.name : null,',
+          '    projectId: task.containingProject ? task.containingProject.id.primaryKey : null,',
+          '    inInbox: task.inInbox,',
+          '    hasRepeatRule: task.repetitionRule !== null',
+          '  });',
+          '})()'
+        ].join('');
+        
+        const taskDataJson = app.evaluateJavascript(getTaskScript);
+        finalTaskData = JSON.parse(taskDataJson);
+      } catch (e) {
+        console.log('Warning: Could not get final task data via bridge:', e.message);
       }
       
-      // Include repeat rule information if it was applied
-      if (taskData.repeatRule) {
+      // Build response with actual task data
+      const response = finalTaskData && !finalTaskData.error ? {
+        taskId: finalTaskData.id,
+        name: finalTaskData.name,
+        note: finalTaskData.note,
+        flagged: finalTaskData.flagged,
+        dueDate: finalTaskData.dueDate,
+        deferDate: finalTaskData.deferDate,
+        estimatedMinutes: finalTaskData.estimatedMinutes,
+        tags: finalTaskData.tags,
+        project: finalTaskData.project,
+        projectId: finalTaskData.projectId,
+        inInbox: finalTaskData.inInbox,
+        created: true
+      } : {
+        // Fallback to basic response if bridge read fails
+        taskId: taskId,
+        name: task.name(),
+        created: true,
+        tags: tagResult && tagResult.success ? tagResult.tagsAdded : [],
+        warning: 'Could not verify final task state'
+      };
+      
+      // Add repeat rule info if it was applied
+      if (taskData.repeatRule && finalTaskData && finalTaskData.hasRepeatRule) {
         response.repeatRule = {
           applied: true,
           unit: taskData.repeatRule.unit,
           steps: taskData.repeatRule.steps,
           method: taskData.repeatRule.method || 'fixed'
         };
-        if (taskData.repeatRule.weekdays) {
-          response.repeatRule.weekdays = taskData.repeatRule.weekdays;
-        }
-        if (taskData.repeatRule.weekPosition) {
-          response.repeatRule.weekPosition = taskData.repeatRule.weekPosition;
-        }
-        if (taskData.repeatRule.weekday) {
-          response.repeatRule.weekday = taskData.repeatRule.weekday;
-        }
       }
       
       return JSON.stringify(response);
