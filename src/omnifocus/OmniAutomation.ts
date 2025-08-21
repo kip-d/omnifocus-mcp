@@ -223,6 +223,14 @@ export class OmniAutomation {
       return `[${items}]`;
     }
 
+    if (typeof value === 'boolean') {
+      return value ? 'true' : 'false';
+    }
+
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
     if (typeof value === 'object' && value !== null) {
       // Safely handle objects
       try {

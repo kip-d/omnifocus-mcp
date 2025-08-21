@@ -215,10 +215,10 @@ describe('Task CRUD Operations', () => {
         const result = await tool.execute(updateData);
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String), // UPDATE_TASK_SCRIPT
+          expect.any(String), // UPDATE_TASK_ULTRA_MINIMAL_SCRIPT
           {
             taskId: 'task-123',
-            updates: expect.objectContaining({ name: 'Updated task name' })
+            updatesJson: JSON.stringify({ name: 'Updated task name' })
           }
         );
         expect(result.success).toBe(true);
