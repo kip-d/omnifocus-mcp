@@ -201,6 +201,19 @@ list_tasks({ completed: false, limit: 50, skipAnalysis: true })
 ⚠️ **Test with real data** - Smoke tests with 25 items don't catch performance issues
 ⚠️ **Summary-first is non-negotiable** - LLMs process summaries 10x faster than raw data
 
+## Documentation Structure
+
+### Active Documentation
+- **User Documentation**: `docs/user/` - Installation, API reference, troubleshooting
+- **Development Docs**: `docs/development/` - Architecture, coding standards, testing guides
+- **Development Journey**: `docs/journey/` - Historical context, performance evolution, lessons learned
+- **Archived Content**: `archive/` - Deprecated documentation and failed experiments
+
+### Key Documents
+- **Script Length Management**: `docs/development/SCRIPT_LENGTH_SOLUTION.md` - How we handle 50KB+ script issues
+- **Performance Journey**: `docs/journey/performance/` - The 25s to 2s optimization story
+- **Technical Discoveries**: `docs/journey/technical/` - JXA learnings and workarounds
+
 ## Common Development Commands
 
 ```bash
