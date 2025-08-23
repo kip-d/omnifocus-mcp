@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-08-19
+## [2.0.0] - 2025-08-21
 
 ### 🎉 Major Release: Complete V2 Architecture with All JXA Limitations Fixed
 
 This release represents a complete overhaul of the OmniFocus MCP server, achieving 95% performance improvements and fixing all major JXA limitations through innovative bridge patterns.
+
+### Breaking Changes
+- **Removed all V1 legacy tools** - Reduces MCP context usage by ~30%
+  - All functionality available through optimized V2 tools
+  - OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS environment variable no longer supported
+  - 24 duplicate V1 tools removed from `src/tools/legacy-v1/`
+  - Cleaner, more maintainable codebase
 
 ### Added
 - **Comprehensive API Documentation**
@@ -21,11 +28,6 @@ This release represents a complete overhaul of the OmniFocus MCP server, achievi
   - Universal test cleanup utility (`tests/utils/test-cleanup.ts`)
   - Proper process cleanup prevents hanging tests
   - All integration tests now exit cleanly within timeouts
-- **V1 Tools Preservation**
-  - All V1 tools moved to `src/tools/legacy-v1/` directory
-  - Frozen/amber status - no modifications allowed
-  - Enabled via `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true`
-  - Provides safety fallback for production environments
 
 ### Security
 - **Critical: Fixed evaluateJavascript injection vulnerabilities**

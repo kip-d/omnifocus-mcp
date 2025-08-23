@@ -9,44 +9,18 @@ import { UpdateTaskTool } from './tasks/UpdateTaskTool.js';
 import { CompleteTaskTool } from './tasks/CompleteTaskTool.js';
 import { DeleteTaskTool } from './tasks/DeleteTaskTool.js';
 
-// ============================================================================
-// LEGACY V1 TOOLS - FROZEN - DO NOT MODIFY
-// These imports are from the legacy-v1 directory and should NEVER be changed
-// ============================================================================
-import { ListTasksTool } from './legacy-v1/tasks/ListTasksTool.js';
-import { GetTaskCountTool } from './legacy-v1/tasks/GetTaskCountTool.js';
-import { TodaysAgendaTool } from './legacy-v1/tasks/TodaysAgendaTool.js';
-import { NextActionsTool } from './legacy-v1/tasks/NextActionsTool.js';
-import { BlockedTasksTool } from './legacy-v1/tasks/BlockedTasksTool.js';
-import { AvailableTasksTool } from './legacy-v1/tasks/AvailableTasksTool.js';
-import { QueryTasksTool } from './legacy-v1/tasks/QueryTasksTool.js';
+// V1 legacy tools have been removed in v2.0.0
 
 // Import v2.0.0 consolidated tools (alpha)
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
 import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
 
-// LEGACY V1 PROJECT TOOLS - FROZEN
-import { ListProjectsTool } from './legacy-v1/projects/ListProjectsTool.js';
-import { CreateProjectTool } from './legacy-v1/projects/CreateProjectTool.js';
-import { UpdateProjectTool } from './legacy-v1/projects/UpdateProjectTool.js';
-import { CompleteProjectTool } from './legacy-v1/projects/CompleteProjectTool.js';
-import { DeleteProjectTool } from './legacy-v1/projects/DeleteProjectTool.js';
 
-// LEGACY V1 FOLDER TOOLS - FROZEN
-import { ListFoldersTool } from './legacy-v1/folders/ListFoldersTool.js';
-import { CreateFolderTool } from './legacy-v1/folders/CreateFolderTool.js';
-import { UpdateFolderTool } from './legacy-v1/folders/UpdateFolderTool.js';
-import { DeleteFolderTool } from './legacy-v1/folders/DeleteFolderTool.js';
-import { MoveFolderTool } from './legacy-v1/folders/MoveFolderTool.js';
 
 // Import new consolidated folder tools
 import { ManageFolderTool } from './folders/ManageFolderTool.js';
 import { QueryFoldersTool } from './folders/QueryFoldersTool.js';
 
-// LEGACY V1 ANALYTICS TOOLS - FROZEN
-import { ProductivityStatsTool } from './legacy-v1/analytics/ProductivityStatsTool.js';
-import { TaskVelocityTool } from './legacy-v1/analytics/TaskVelocityTool.js';
-import { OverdueAnalysisTool } from './legacy-v1/analytics/OverdueAnalysisTool.js';
 
 // Import v2 analytics tools
 import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
@@ -66,9 +40,6 @@ import { BulkExportTool } from './export/BulkExportTool.js';
 // Batch operations removed - OmniFocus JXA API doesn't support bulk operations
 // Individual operations work perfectly and are recommended for all workflows
 
-// Import date range query tools
-// LEGACY V1 DATE RANGE TOOLS - FROZEN
-import { DateRangeQueryTool, OverdueTasksTool, UpcomingTasksTool } from './legacy-v1/tasks/DateRangeQueryTool.js';
 
 // Import recurring task tools
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
@@ -81,9 +52,7 @@ import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
 import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
 
 // LEGACY V1 REVIEW TOOLS - FROZEN
-import { ProjectsForReviewTool } from './legacy-v1/reviews/ProjectsForReviewTool.js';
-import { MarkProjectReviewedTool } from './legacy-v1/reviews/MarkProjectReviewedTool.js';
-import { SetReviewScheduleTool } from './legacy-v1/reviews/SetReviewScheduleTool.js';
+// V1 review tools removed - use ManageReviewsTool instead
 
 // Import new consolidated tools
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
@@ -97,13 +66,7 @@ const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
   // Check if legacy tools should be enabled
-  const enableLegacyTools = process.env.OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS === 'true';
-  
-  if (!enableLegacyTools) {
-    logger.info('Using v2.0.0 consolidated tools only. Set OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true to enable legacy tools.');
-  } else {
-    logger.warn('Legacy tools enabled for backward compatibility. Consider migrating to v2 tools.');
-  }
+  logger.info('OmniFocus MCP v2.0.0 - Optimized tool set for reduced context usage');
 
   // Initialize tool arrays
   const v2Tools = [
@@ -117,98 +80,9 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
   ];
 
-  const legacyTools = [
-    // ============================================================================
-    // LEGACY V1 TOOLS - FROZEN - DO NOT MODIFY
-    // These tools are preserved for backward compatibility only.
-    // They are loaded from src/tools/legacy-v1/ and should NEVER be edited.
-    // All new development must use V2 tools.
-    // Only enabled when OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true
-    // ============================================================================
-    
-    // Consolidated task query tool (deprecated - use 'tasks' tool instead)
-    new QueryTasksTool(cache),
-
-    // Task tools - Read operations (deprecated - use 'tasks' tool instead)
-    new ListTasksTool(cache),          // Deprecated: use 'tasks' tool with mode: "list"
-    new GetTaskCountTool(cache),       // Deprecated: use 'tasks' tool with mode: "count"
-    new TodaysAgendaTool(cache),       // Deprecated: use 'tasks' tool with mode: "today"
-
-    // Task tools - Write operations (now enabled with correct JXA syntax)
-    new CreateTaskTool(cache),
-    new UpdateTaskTool(cache),
-    new CompleteTaskTool(cache),
-    new DeleteTaskTool(cache),
-
-    // Advanced status tools (deprecated - use 'tasks' tool instead)
-    new NextActionsTool(cache),        // Deprecated: use 'tasks' tool with mode: "next_actions"
-    new BlockedTasksTool(cache),       // Deprecated: use 'tasks' tool with mode: "blocked"
-    new AvailableTasksTool(cache),     // Deprecated: use 'tasks' tool with mode: "available"
-
-    // Batch operations removed due to OmniFocus JXA limitations
-    // Use individual task operations which work perfectly
-
-    // Date range query tools (deprecated - use 'tasks' tool instead)
-    new DateRangeQueryTool(cache),     // Deprecated: use 'tasks' tool with mode: "date_range"
-    new OverdueTasksTool(cache),       // Deprecated: use 'tasks' tool with mode: "overdue"
-    new UpcomingTasksTool(cache),      // Deprecated: use 'tasks' tool with mode: "upcoming"
-
-    // Project tools (deprecated - use 'projects' tool instead)
-    new ListProjectsTool(cache),       // Deprecated: use 'projects' tool with operation: "list"
-    new CreateProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "create"
-    new UpdateProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "update"
-    new CompleteProjectTool(cache),    // Deprecated: use 'projects' tool with operation: "complete"
-    new DeleteProjectTool(cache),      // Deprecated: use 'projects' tool with operation: "delete"
-
-    // Folder tools - new consolidated tools (recommended)
-    new ManageFolderTool(cache),
-    new QueryFoldersTool(cache),
-
-    // Legacy folder tools (deprecated - use manage_folder and query_folders instead)
-    new ListFoldersTool(cache),        // Deprecated: use query_folders with operation: "list"
-    new CreateFolderTool(cache),       // Deprecated: use manage_folder with operation: "create"
-    new UpdateFolderTool(cache),       // Deprecated: use manage_folder with operation: "update"
-    new DeleteFolderTool(cache),       // Deprecated: use manage_folder with operation: "delete"
-    new MoveFolderTool(cache),         // Deprecated: use manage_folder with operation: "move"
-
-    // Analytics tools
-    new ProductivityStatsTool(cache),
-    new TaskVelocityTool(cache),
-    new OverdueAnalysisTool(cache),
-
-    // Tag tools
-    new ListTagsTool(cache),
-    new ManageTagsTool(cache),
-    new GetActiveTagsTool(cache),
-
-    // Export tools
-    new ExportTasksTool(cache),
-    new ExportProjectsTool(cache),
-    new BulkExportTool(cache),
-
-    // Recurring task tools
-    new AnalyzeRecurringTasksTool(cache),
-    new GetRecurringPatternsTool(cache),
-
-    // System tools
-    new GetVersionInfoTool(cache),
-
-    // Diagnostic tools
-    new RunDiagnosticsTool(cache),
-
-    // New consolidated tools (recommended for better LLM usage)
-    new ManageReviewsTool(cache),
-    new BatchTaskOperationsTool(cache),
-
-    // Perspective tools - NEW! Access user perspectives
-    new ListPerspectivesTool(cache),
-    new QueryPerspectiveTool(cache),
-
-    // Legacy review tools (deprecated - use manage_reviews instead)
-    new ProjectsForReviewTool(cache),    // Deprecated: use manage_reviews with operation: "list_for_review"
-    new MarkProjectReviewedTool(cache),  // Deprecated: use manage_reviews with operation: "mark_reviewed"
-    new SetReviewScheduleTool(cache),    // Deprecated: use manage_reviews with operation: "set_schedule"
-  ];
+  // Legacy tools have been completely removed in v2.0.0 for better performance
+  // and reduced context window usage. All functionality is available through
+  // the optimized V2 tool set.
 
   // Essential tools that are always included
   const essentialTools = [
@@ -224,10 +98,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ManageReviewsTool(cache),
     new BatchTaskOperationsTool(cache),
 
-    // Analytics tools
-    new ProductivityStatsTool(cache),
-    new TaskVelocityTool(cache),
-    new OverdueAnalysisTool(cache),
+    // Analytics tools are in v2Tools, not needed here
 
     // Tag tools
     new ListTagsTool(cache),
@@ -252,11 +123,10 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new QueryPerspectiveTool(cache),
   ];
 
-  // Combine tools based on configuration
+  // Combine tools - legacy tools removed for better performance
   const tools = [
     ...v2Tools,
     ...essentialTools,
-    ...(enableLegacyTools ? legacyTools : []),
   ];
 
   // Register handlers
