@@ -1,12 +1,38 @@
-# Session Context - 2025-08-21
+# Session Context - 2025-08-21 (Afternoon)
 
 ## Current Status
-- **Version**: 2.0.0 (READY FOR RELEASE - pending final verification)
-- **Last Commit**: 1cc8b42 - Boolean type conversion fix for project updates
-- **Repository**: All fixes committed and pushed
-- **Test Results**: 260/261 unit tests passing, all integration tests passing
+- **Version**: 2.0.0-dev (Development version - major cleanup complete)
+- **Last Commit**: b9d2032 - Cleaned up git tags and project structure
+- **Repository**: All changes committed and pushed
+- **Major Achievement**: Removed V1 tools, reduced context usage by 30%+
 
-## Session Accomplishments (Aug 21, 2025)
+## Session Accomplishments (Aug 21, 2025 - Afternoon)
+
+### 🎉 Major Cleanup: V1 Tool Removal & Git Tag Cleanup
+1. **Removed all V1 legacy tools** - COMPLETE
+   - Deleted 24 V1 tool files from `src/tools/legacy-v1/`
+   - Removed 2,828 lines of duplicate code
+   - Eliminated OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS environment variable
+   - Result: ~30% reduction in MCP context usage
+
+2. **Git tag cleanup** - COMPLETE
+   - Removed 10 intermediate tags (v1.1.1, v1.2.0, betas, etc.)
+   - Kept only 3 major milestones: v1.1.0, v1.15.0, v2.0.0-alpha.1
+   - Result: Cleaner release history
+
+3. **Documentation reorganization** - COMPLETE
+   - 40+ files organized into logical directories
+   - Created comprehensive indexes for each section
+   - Documented script length solution (90% size reduction technique)
+   - Test files moved from root to appropriate directories
+
+4. **Tool consolidation** - ATTEMPTED
+   - Designed consolidation plan for 8 tools → 3 tools
+   - Started implementation of TagsToolV2, ExportToolV2, RecurringTasksToolV2
+   - Needs more work to properly integrate with BaseTool class
+   - Would provide another 50% context reduction when complete
+
+## Session Accomplishments (Aug 21, 2025 - Morning)
 
 ### ✅ User Testing Feedback Addressed
 1. **Project update "Can't convert types" error** - FIXED

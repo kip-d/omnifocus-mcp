@@ -1,12 +1,19 @@
 # TODO Next Session
 
-## Current Version: 2.0.0 (READY FOR RELEASE)
-**Status**: All user testing issues resolved, awaiting final tag
-**Last Update**: 2025-08-21 12:00 EDT
+## Current Version: 2.0.0-dev
+**Status**: Major cleanup complete, tool consolidation in progress
+**Last Update**: 2025-08-21 15:00 EDT
 
-## 🎉 User Testing Complete - All Issues Fixed!
+## 🎉 Major Cleanup Accomplished!
 
-### User Testing Results (Aug 21)
+### What We Did Today (Aug 21 Afternoon)
+- ✅ Removed all V1 legacy tools (24 files, 2828 lines)
+- ✅ Cleaned up git tags (10 intermediate tags removed)
+- ✅ Documentation reorganization (40+ files organized)
+- ✅ Reduced MCP context usage by ~30%
+- 🚧 Started tool consolidation (needs completion)
+
+### Previous Session Results (Aug 21 Morning)
 - **Performance**: 9/10 (Average 1.67 seconds)
 - **Reliability**: 8/10 (One issue found and fixed)
 - **Usability**: 9/10 (Excellent UX, good error messages)
@@ -29,7 +36,25 @@
 - ✅ Performance under 2 seconds
 - ✅ Code cleanup (archived old test files)
 
-## Next Session: Release v2.0.0
+## Next Session: Complete Tool Consolidation
+
+### High Priority - Tool Consolidation
+Continue the tool consolidation to achieve another 50% context reduction:
+
+1. [ ] Fix TagsToolV2, ExportToolV2, RecurringTasksToolV2 to properly extend BaseTool
+   - Need to use `schema` property instead of `inputSchema`
+   - Implement proper cache methods
+   - Fix import paths
+
+2. [ ] Create remaining consolidated tools:
+   - [ ] PerspectivesToolV2 (combines List + Query)
+   - [ ] SystemToolV2 (combines Version + Diagnostics)
+
+3. [ ] Update index.ts to use consolidated tools
+4. [ ] Test all consolidated tools work correctly
+5. [ ] Update documentation for new tool structure
+
+### Then: Release v2.0.0
 
 ### Pre-Release Checklist
 1. [x] User testing complete - 9/10 quality score
