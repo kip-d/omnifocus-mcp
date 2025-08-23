@@ -37,13 +37,10 @@ import { ExportTasksTool } from './export/ExportTasksTool.js';
 import { ExportProjectsTool } from './export/ExportProjectsTool.js';
 import { BulkExportTool } from './export/BulkExportTool.js';
 
-// Batch operations removed - OmniFocus JXA API doesn't support bulk operations
-// Individual operations work perfectly and are recommended for all workflows
-
-
 // Import recurring task tools
 import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
 import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
+
 
 // Import system tools
 import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';

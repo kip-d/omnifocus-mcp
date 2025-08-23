@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-08-21
+## [Unreleased]
+
+### Changed
+- Cleaned up git tags - removed intermediate beta releases to reduce clutter
+- Documentation reorganization - 40+ files organized into logical directories
+- Development continues toward v2.0.0 final release
+
+## [2.0.0-dev] - 2025-08-21
 
 ### 🎉 Major Release: Complete V2 Architecture with All JXA Limitations Fixed
 

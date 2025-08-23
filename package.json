@@ -1,7 +1,7 @@
 {
   "name": "omnifocus-mcp-cached",
-  "version": "2.0.0",
-  "description": "MCP server for OmniFocus v2 - Production release with 95% performance improvement and complete JXA limitation fixes",
+  "version": "2.0.0-dev",
+  "description": "MCP server for OmniFocus v2 - Development version with V1 tools removed",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
