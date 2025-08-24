@@ -160,3 +160,64 @@ export interface TaskVelocityDataV2 {
 }
 
 export type TaskVelocityResponseV2 = StandardResponseV2<TaskVelocityDataV2>;
+// Perspective-related types
+export interface PerspectiveInfoV2 {
+  name: string;
+  identifier?: string;
+  isBuiltIn?: boolean;
+  isActive?: boolean;
+  filterRules?: {
+    available?: boolean | null;
+    flagged?: boolean | null;
+    duration?: number | null;
+    tags?: string[];
+  };
+}
+
+export interface PerspectivesListDataV2 {
+  perspectives: PerspectiveInfoV2[];
+}
+
+export interface PerspectiveQueryDataV2 {
+  perspectiveName: string;
+  perspectiveType: 'builtin' | 'custom';
+  tasks: TaskV2[];
+  filterRules?: any;
+  aggregation?: string;
+}
+
+export type PerspectivesListResponseV2 = StandardResponseV2<PerspectivesListDataV2>;
+export type PerspectiveQueryResponseV2 = StandardResponseV2<PerspectiveQueryDataV2>;
+
+// System-related types
+export interface VersionInfoDataV2 {
+  name: string;
+  version: string;
+  description: string;
+  build: {
+    hash: string;
+    branch: string;
+    commitDate: string;
+    commitMessage: string;
+    dirty: boolean;
+    timestamp: string;
+    buildId: string;
+  };
+  runtime: {
+    node: string;
+    platform: string;
+    arch: string;
+  };
+  git: {
+    repository: string;
+    homepage: string;
+  };
+}
+
+export interface DiagnosticsDataV2 {
+  timestamp: string;
+  basic: Record<string, any>;
+  testScript?: string;
+}
+
+export type SystemResponseV2 = StandardResponseV2<VersionInfoDataV2 | DiagnosticsDataV2>;
