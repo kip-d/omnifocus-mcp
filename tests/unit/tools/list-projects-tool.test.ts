@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ListProjectsTool } from '../../../src/tools/legacy-v1/projects/ListProjectsTool.js';
+import { ProjectsToolV2 } from '../../../src/tools/projects/ProjectsToolV2.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 import { Logger } from '../../../src/utils/Logger.js';
@@ -20,8 +20,8 @@ vi.mock('../../../src/utils/Logger.js', () => ({
   }))
 }));
 
-describe('ListProjectsTool', () => {
-  let tool: ListProjectsTool;
+describe('ProjectsToolV2', () => {
+  let tool: ProjectsToolV2;
   let mockCache: any;
   let mockOmniAutomation: any;
   let mockLogger: any;
@@ -49,7 +49,7 @@ describe('ListProjectsTool', () => {
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
 
-    tool = new ListProjectsTool(mockCache);
+    tool = new ProjectsToolV2(mockCache);
   });
 
   describe('includeStats parameter', () => {

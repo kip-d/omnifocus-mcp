@@ -1,12 +1,64 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
+import { getVersionInfo } from '../../utils/version.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
-import { RunDiagnosticsSchema } from '../schemas/system-schemas.js';
+import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
 
-export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
-  name = 'run_diagnostics';
-  description = 'Run diagnostics to identify OmniFocus connection issues. Tests permissions, script execution, and data access. Optionally provide testScript for custom diagnostics.';
-  schema = RunDiagnosticsSchema;
+// Consolidated schema for all system operations
+const SystemToolSchema = z.object({
+  operation: z.enum(['version', 'diagnostics'])
+    .default('version')
+    .describe('Operation to perform: get version info or run diagnostics'),
+
+  // Diagnostics operation parameters
+  testScript: z.string()
+    .optional()
+    .default('list_tasks')
+    .describe('Optional custom script to test for diagnostics (defaults to basic list_tasks)'),
+});
+
+interface VersionInfo {
+  name: string;
+  version: string;
+  description: string;
+  build: {
+    hash: string;
+    branch: string;
+    commitDate: string;
+    commitMessage: string;
+    dirty: boolean;
+    timestamp: string;
+    buildId: string;
+  };
+  runtime: {
+    node: string;
+    platform: string;
+    arch: string;
+  };
+  git: {
+    repository: string;
+    homepage: string;
+  };
+}
+
+interface DiagnosticsResult {
+  timestamp: string;
+  tests: {
+    [key: string]: {
+      success: boolean;
+      result?: any;
+      error?: string;
+      stderr?: string;
+    };
+  };
+}
+
+type SystemResponse = StandardResponse<VersionInfo | DiagnosticsResult>;
+
+export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
+  name = 'system';
+  description = 'System utilities for OmniFocus MCP: get version information or run diagnostics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection.';
+  schema = SystemToolSchema;
 
   private diagnosticOmni: DiagnosticOmniAutomation;
 
@@ -15,8 +67,52 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
     this.diagnosticOmni = new DiagnosticOmniAutomation();
   }
 
-  async executeValidated(args: z.infer<typeof RunDiagnosticsSchema>): Promise<any> {
-    const results: any = {
+  async executeValidated(args: z.infer<typeof SystemToolSchema>): Promise<SystemResponse> {
+    const { operation } = args;
+
+    switch (operation) {
+      case 'version':
+        return this.getVersion();
+      case 'diagnostics':
+        return this.runDiagnostics(args);
+      default:
+        return createErrorResponse(
+          'system',
+          'INVALID_OPERATION',
+          `Invalid operation: ${operation}`,
+          { operation },
+          { executionTime: 0 },
+        );
+    }
+  }
+
+  private async getVersion(): Promise<StandardResponse<VersionInfo>> {
+    const timer = new OperationTimer();
+
+    try {
+      const versionInfo = getVersionInfo();
+      return createSuccessResponse(
+        'system',
+        versionInfo,
+        {
+          ...timer.toMetadata(),
+          operation: 'version',
+        },
+      );
+    } catch (error) {
+      return createErrorResponse(
+        'system',
+        'VERSION_ERROR',
+        error instanceof Error ? error.message : 'Failed to get version info',
+        { operation: 'version' },
+        timer.toMetadata(),
+      );
+    }
+  }
+
+  private async runDiagnostics(args: z.infer<typeof SystemToolSchema>): Promise<StandardResponse<DiagnosticsResult>> {
+    const timer = new OperationTimer();
+    const results: DiagnosticsResult = {
       timestamp: new Date().toISOString(),
       tests: {},
     };
@@ -168,7 +264,7 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
         };
       }
 
-      // Test 4: Run actual LIST_TASKS_SCRIPT
+      // Test 4: Run actual LIST_TASKS_SCRIPT if requested
       if (args.testScript === 'list_tasks') {
         this.logger.info('Running Test 4: Actual LIST_TASKS_SCRIPT');
         const { LIST_TASKS_SCRIPT } = await import('../../omnifocus/scripts/tasks.js');
@@ -191,19 +287,28 @@ export class RunDiagnosticsTool extends BaseTool<typeof RunDiagnosticsSchema> {
         }
       }
 
-      // Add diagnostic logs
-      results.diagnostic_logs = this.diagnosticOmni.getDiagnosticLog();
+      // Determine overall health
+      const allSuccessful = Object.values(results.tests).every(test => test.success);
 
-      return {
-        success: true,
-        data: results,
-        metadata: {
-          operation: 'run_diagnostics',
-          timestamp: new Date().toISOString(),
+      return createSuccessResponse(
+        'system',
+        results,
+        {
+          ...timer.toMetadata(),
+          operation: 'diagnostics',
+          health: allSuccessful ? 'healthy' : 'degraded',
+          testScript: args.testScript,
         },
-      };
+      );
+
     } catch (error) {
-      return this.handleError(error);
+      return createErrorResponse(
+        'system',
+        'DIAGNOSTICS_ERROR',
+        error instanceof Error ? error.message : 'Failed to run diagnostics',
+        { operation: 'diagnostics' },
+        timer.toMetadata(),
+      );
     }
   }
 }

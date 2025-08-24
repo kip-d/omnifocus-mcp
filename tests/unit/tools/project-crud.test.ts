@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CreateProjectTool } from '../../../src/tools/legacy-v1/projects/CreateProjectTool.js';
-import { UpdateProjectTool } from '../../../src/tools/legacy-v1/projects/UpdateProjectTool.js';
-import { CompleteProjectTool } from '../../../src/tools/legacy-v1/projects/CompleteProjectTool.js';
-import { DeleteProjectTool } from '../../../src/tools/legacy-v1/projects/DeleteProjectTool.js';
+import { ProjectsToolV2 } from '../../../src/tools/projects/ProjectsToolV2.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
@@ -46,11 +43,11 @@ describe('Project CRUD Operations', () => {
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
   });
 
-  describe('CreateProjectTool', () => {
-    let tool: CreateProjectTool;
+  describe('ProjectsToolV2 - Create Operation', () => {
+    let tool: ProjectsToolV2;
 
     beforeEach(() => {
-      tool = new CreateProjectTool(mockCache);
+      tool = new ProjectsToolV2(mockCache);
     });
 
     describe('successful operations', () => {

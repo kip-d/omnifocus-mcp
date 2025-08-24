@@ -42,11 +42,8 @@ import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool
 import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
 
 
-// Import system tools
-import { GetVersionInfoTool } from './system/GetVersionInfoTool.js';
-
-// Import diagnostic tools
-import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
+// Import system tools (consolidated)
+import { SystemToolV2 } from './system/SystemToolV2.js';
 
 // LEGACY V1 REVIEW TOOLS - FROZEN
 // V1 review tools removed - use ManageReviewsTool instead
@@ -55,9 +52,8 @@ import { RunDiagnosticsTool } from './diagnostic/RunDiagnosticsTool.js';
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
 import { BatchTaskOperationsTool } from './tasks/BatchTaskOperationsTool.js';
 
-// Import perspective tools
-import { ListPerspectivesTool } from './perspectives/ListPerspectivesTool.js';
-import { QueryPerspectiveTool } from './perspectives/QueryPerspectiveTool.js';
+// Import perspective tools (consolidated)
+import { PerspectivesToolV2 } from './perspectives/PerspectivesToolV2.js';
 
 const logger = createLogger('tools');
 
@@ -111,13 +107,11 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new AnalyzeRecurringTasksTool(cache),
     new GetRecurringPatternsTool(cache),
 
-    // System tools
-    new GetVersionInfoTool(cache),
-    new RunDiagnosticsTool(cache),
+    // System tools (consolidated)
+    new SystemToolV2(cache),
 
-    // Perspective tools
-    new ListPerspectivesTool(cache),
-    new QueryPerspectiveTool(cache),
+    // Perspective tools (consolidated)
+    new PerspectivesToolV2(cache),
   ];
 
   // Combine tools - legacy tools removed for better performance

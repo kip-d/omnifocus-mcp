@@ -5,15 +5,14 @@ import { OmniAutomation } from '../../src/omnifocus/OmniAutomation';
 // Import all tools to test
 import { CreateTaskTool } from '../../src/tools/tasks/CreateTaskTool';
 import { UpdateTaskTool } from '../../src/tools/tasks/UpdateTaskTool';
-import { ListTasksTool } from '../../src/tools/legacy-v1/tasks/ListTasksTool';
-import { ProductivityStatsTool } from '../../src/tools/legacy-v1/analytics/ProductivityStatsTool';
-import { TaskVelocityTool } from '../../src/tools/legacy-v1/analytics/TaskVelocityTool';
-import { OverdueAnalysisTool } from '../../src/tools/legacy-v1/analytics/OverdueAnalysisTool';
+import { QueryTasksToolV2 } from '../../src/tools/tasks/QueryTasksToolV2';
+import { ProductivityStatsToolV2 } from '../../src/tools/analytics/ProductivityStatsToolV2';
+import { TaskVelocityToolV2 } from '../../src/tools/analytics/TaskVelocityToolV2';
+import { OverdueAnalysisToolV2 } from '../../src/tools/analytics/OverdueAnalysisToolV2';
 import { ExportTasksTool } from '../../src/tools/export/ExportTasksTool';
 import { ExportProjectsTool } from '../../src/tools/export/ExportProjectsTool';
 import { BulkExportTool } from '../../src/tools/export/BulkExportTool';
-import { ListProjectsTool } from '../../src/tools/legacy-v1/projects/ListProjectsTool';
-import { CreateProjectTool } from '../../src/tools/legacy-v1/projects/CreateProjectTool';
+import { ProjectsToolV2 } from '../../src/tools/projects/ProjectsToolV2';
 
 describe('Response Format Consistency Tests', () => {
   let mockCache: CacheManager;
@@ -43,15 +42,14 @@ describe('Response Format Consistency Tests', () => {
       const tools = [
         new CreateTaskTool(mockCache),
         new UpdateTaskTool(mockCache),
-        new ListTasksTool(mockCache),
-        new ProductivityStatsTool(mockCache),
-        new TaskVelocityTool(mockCache),
-        new OverdueAnalysisTool(mockCache),
+        new QueryTasksToolV2(mockCache),
+        new ProductivityStatsToolV2(mockCache),
+        new TaskVelocityToolV2(mockCache),
+        new OverdueAnalysisToolV2(mockCache),
         new ExportTasksTool(mockCache),
         new ExportProjectsTool(mockCache),
         new BulkExportTool(mockCache),
-        new ListProjectsTool(mockCache),
-        new CreateProjectTool(mockCache),
+        new ProjectsToolV2(mockCache),
       ];
 
       // Test that all tools have proper response structure
