@@ -228,6 +228,8 @@ Potential areas for further consolidation:
 3. **Export**: Single export tool with format/type parameters
 4. **Tag Management**: Unified tag operations
 
+For detailed designs and migration steps, see [TOOL_CONSOLIDATION_ROADMAP.md](./TOOL_CONSOLIDATION_ROADMAP.md).
+
 ## Conclusion
 
 Tool consolidation represents a significant improvement in the OmniFocus MCP Server's usability, particularly for AI agents. The consolidated tools reduce cognitive load, improve consistency, and maintain full backward compatibility while providing a superior user experience.
