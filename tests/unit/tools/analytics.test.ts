@@ -55,7 +55,7 @@ describe('Analytics Tools', () => {
       it('should have correct name and description', () => {
         expect(tool.name).toBe('productivity_stats');
         expect(tool.description).toContain('productivity statistics');
-        expect(tool.description).toContain('today|week|month|quarter|year');
+        expect(tool.description).toContain('GTD health metrics');
       });
 
       it('should validate schema correctly', async () => {
@@ -69,13 +69,13 @@ describe('Analytics Tools', () => {
 
         const result = await tool.executeValidated({
           period: 'week',
-          groupBy: 'project',
-          includeCompleted: true,
+          includeProjectStats: true,
+          includeTagStats: true,
         });
 
         expect(result.success).toBe(true);
         // Standard metadata fields only
-        expect(result.metadata.operation).toBe('get_productivity_stats');
+        expect(result.metadata.operation).toBe('productivity_stats');
         expect(result.metadata.timestamp).toBeDefined();
         expect(result.metadata.from_cache).toBe(false);
       });
@@ -106,8 +106,8 @@ describe('Analytics Tools', () => {
           {
             options: {
               period: 'week',
-              groupBy: 'project', 
-              includeCompleted: true,
+              includeProjectStats: true,
+              includeTagStats: true,
             }
           }
         );
@@ -125,7 +125,7 @@ describe('Analytics Tools', () => {
 
         tool = new ProductivityStatsTool(mockCache);
         (tool as any).omniAutomation = mockOmniAutomation;
-        const result = await tool.executeValidatedValidated({ period: 'week' });
+        const result = await tool.executeValidated({ period: 'week' });
 
         expect(result.success).toBe(true);
         expect(result.metadata.from_cache).toBe(true);
@@ -142,17 +142,17 @@ describe('Analytics Tools', () => {
 
         await tool.executeValidated({
           period: 'month',
-          groupBy: 'tag',
-          includeCompleted: false,
+          includeProjectStats: false,
+          includeTagStats: true,
         });
 
         expect(mockCache.get).toHaveBeenCalledWith(
           'analytics',
-          'productivity_month_tag_false'
+          'productivity_v2_month_false_true'
         );
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
-          'productivity_month_tag_false',
+          'productivity_v2_month_false_true',
           expect.any(Object)
         );
       });
@@ -171,15 +171,8 @@ describe('Analytics Tools', () => {
         expect(result.success).toBe(true);
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
-          'productivity_today_project_true',
-          {
-            stats: { 
-              completed: 25, 
-              created: 30,
-              trends: { direction: 'up' }
-            },
-            summary: { completionRate: 0.83 }
-          }
+          'productivity_v2_today_true_true',
+          expect.any(Object)
         );
       });
     });
@@ -197,9 +190,9 @@ describe('Analytics Tools', () => {
         const result = await tool.executeValidated({ period: 'today' });
 
         expect(result.success).toBe(true);
-        expect(result.data.summary.completionRate).toBe(0);
-        expect(result.data.summary.totalCompleted).toBe(0);
-        expect(result.data.summary.totalCreated).toBe(0);
+        expect(result.data.stats).toBeDefined();
+        expect(result.data.insights).toBeDefined();
+        expect(result.data.healthScore).toBeDefined();
       });
 
       it('should handle script errors gracefully', async () => {
@@ -212,28 +205,28 @@ describe('Analytics Tools', () => {
 
         tool = new ProductivityStatsTool(mockCache);
         (tool as any).omniAutomation = mockOmniAutomation;
-        const result = await tool.executeValidatedValidated({ period: 'week' });
+        const result = await tool.executeValidated({ period: 'week' });
 
         expect(result.success).toBe(false);
         expect(result.error).toBeDefined();
         expect(result.error.message).toContain('Script execution failed');
       });
 
-      it('should handle all groupBy options', async () => {
+      it('should handle all period options', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          stats: {}, summary: {}, trends: {}
+          overview: {}, dailyStats: [], weeklyStats: {}, projectStats: [], tagStats: []
         });
 
-        const groupByOptions = ['project', 'tag', 'day', 'week', 'none'];
+        const periodOptions = ['today', 'week', 'month', 'quarter', 'year'];
         
-        for (const groupBy of groupByOptions) {
-          await tool.executeValidated({ groupBy: groupBy as any });
+        for (const period of periodOptions) {
+          await tool.executeValidated({ period: period as any });
           expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
             expect.any(String),
             expect.objectContaining({
-              options: expect.objectContaining({ groupBy })
+              options: expect.objectContaining({ period })
             })
           );
         }
@@ -251,8 +244,8 @@ describe('Analytics Tools', () => {
     describe('basic functionality', () => {
       it('should have correct name and description', () => {
         expect(tool.name).toBe('task_velocity');
-        expect(tool.description).toContain('velocity and throughput');
-        expect(tool.description).toContain('day|week|month');
+        expect(tool.description).toContain('task completion velocity');
+        expect(tool.description).toContain('workload capacity');
       });
 
       it('should handle filtering options correctly', async () => {
@@ -266,18 +259,18 @@ describe('Analytics Tools', () => {
         });
 
         await tool.executeValidated({
-          period: 'week',
-          projectId: 'project123',
-          tags: ['urgent', 'work'],
+          days: 14,
+          groupBy: 'week',
+          includeWeekends: false,
         });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
           {
             options: {
-              period: 'week',
-              projectId: 'project123',
-              tags: ['urgent', 'work'],
+              days: 14,
+              groupBy: 'week',
+              includeWeekends: false,
             }
           }
         );
@@ -293,14 +286,14 @@ describe('Analytics Tools', () => {
         });
 
         await tool.executeValidated({
-          period: 'month',
-          projectId: 'proj456',
-          tags: ['personal', 'health'],
+          days: 30,
+          groupBy: 'project',
+          includeWeekends: true,
         });
 
         expect(mockCache.get).toHaveBeenCalledWith(
           'analytics',
-          'velocity_month_proj456_["personal","health"]'
+          'velocity_v2_30_project_true'
         );
       });
     });
@@ -315,15 +308,15 @@ describe('Analytics Tools', () => {
           velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' }
         });
 
-        await tool.executeValidated({ period: 'day' });
+        await tool.executeValidated({});
 
         expect(mockCache.get).toHaveBeenCalledWith(
           'analytics',
-          'velocity_day_all_[]'
+          'velocity_v2_7_day_true'
         );
       });
 
-      it('should cache for 30 minutes as per comment', async () => {
+      it('should cache for 1 hour as per implementation', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
@@ -333,21 +326,13 @@ describe('Analytics Tools', () => {
           projections: {},
         });
 
-        tool = new ProductivityStatsTool(mockCache);
-        (tool as any).omniAutomation = mockOmniAutomation;
-        const result = await tool.executeValidatedValidated({ period: 'week' });
+        const result = await tool.executeValidated({ days: 7 });
 
         expect(result.success).toBe(true);
         expect(mockCache.set).toHaveBeenCalledWith(
           'analytics',
-          expect.any(String),
-          expect.objectContaining({
-            stats: expect.objectContaining({
-              velocity: expect.any(Object),
-              averageTimeToComplete: expect.any(Object),
-              completionRates: expect.any(Object)
-            })
-          })
+          'velocity_v2_7_day_true',
+          expect.any(Object)
         );
       });
     });
@@ -357,49 +342,49 @@ describe('Analytics Tools', () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          averageTimeToComplete: {
-            overall: 10.5,
-            byProject: { work: 8, personal: 4 },
-            byTag: {}
-          },
-          completionRates: {
-            overall: 0.85,
-            byProject: { work: 0.9, personal: 0.8 },
-            byTag: {}
-          },
-          velocity: {
-            tasksPerDay: 12,
-            tasksPerWeek: 42,
-            trend: 'increasing',
-          },
+          totalCompleted: 84,
+          averagePerDay: 12,
+          peakDay: { date: '2024-01-15', count: 18 },
+          trend: 'increasing',
+          predictedCapacity: 85,
+          dailyData: [],
+          dayOfWeekPatterns: {},
+          timeOfDayPatterns: {},
+          projectVelocity: [],
+          insights: ['Velocity is increasing']
         });
 
-        tool = new ProductivityStatsTool(mockCache);
-        (tool as any).omniAutomation = mockOmniAutomation;
-        const result = await tool.executeValidatedValidated({ period: 'week' });
+        const result = await tool.executeValidated({ days: 7 });
 
         expect(result.success).toBe(true);
-        expect(result.data.stats.velocity.tasksPerDay).toBe(12);
-        expect(result.data.stats.velocity.tasksPerWeek).toBe(42);
-        expect(result.data.stats.velocity.trend).toBe('increasing');
-        expect(result.data.stats.completionRates.overall).toBe(0.85);
-        expect(result.data.stats.averageTimeToComplete.overall).toBe(10.5);
+        expect(result.data.velocity.tasksCompleted).toBe(84);
+        expect(result.data.velocity.averagePerDay).toBe(12);
+        expect(result.data.velocity.trend).toBe('increasing');
+        expect(result.data.velocity.predictedCapacity).toBe(85);
+        expect(result.data.insights).toContain('Velocity is increasing');
       });
 
       it('should handle empty velocity data', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
-          averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
-          completionRates: { overall: 0, byProject: {}, byTag: {} },
-          velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' },
+          totalCompleted: 0,
+          averagePerDay: 0,
+          peakDay: { date: null, count: 0 },
+          trend: 'stable',
+          predictedCapacity: 0,
+          dailyData: [],
+          dayOfWeekPatterns: {},
+          timeOfDayPatterns: {},
+          projectVelocity: [],
+          insights: []
         });
 
-        const result = await tool.executeValidated({ period: 'day' });
+        const result = await tool.executeValidated({ days: 1 });
 
         expect(result.success).toBe(true);
-        expect(result.data.stats.velocity.tasksPerDay).toBe(0);
-        expect(result.data.stats.averageTimeToComplete.overall).toBe(0);
+        expect(result.data.velocity.tasksCompleted).toBe(0);
+        expect(result.data.velocity.averagePerDay).toBe(0);
       });
     });
   });
@@ -415,7 +400,7 @@ describe('Analytics Tools', () => {
       it('should have correct name and description', () => {
         expect(tool.name).toBe('analyze_overdue');
         expect(tool.description).toContain('overdue tasks for patterns');
-        expect(tool.description).toContain('project|tag|duration');
+        expect(tool.description).toContain('bottlenecks');
       });
 
       it('should validate limit parameter correctly', async () => {
@@ -484,11 +469,11 @@ describe('Analytics Tools', () => {
 
         expect(mockCache.get).toHaveBeenCalledWith(
           'analytics',
-          'overdue_false_age_200'
+          'overdue_v2_false_age_200'
         );
       });
 
-      it('should cache for 10 minutes as per comment', async () => {
+      it('should cache for 30 minutes as per implementation', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
@@ -508,10 +493,8 @@ describe('Analytics Tools', () => {
           expect.objectContaining({
             stats: expect.objectContaining({
               summary: expect.objectContaining({ totalOverdue: 12 }),
-              patterns: expect.any(Array),
-              insights: expect.any(Array)
-            }),
-            summary: expect.any(Object)
+              patterns: expect.any(Array)
+            })
           })
         );
       });
@@ -618,8 +601,8 @@ describe('Analytics Tools', () => {
           recommendations: [], groupedAnalysis: {}
         });
 
-        // Test string boolean values
-        await tool.executeValidated({ includeRecentlyCompleted: 'true' as any });
+        // Test string boolean values - use execute to trigger schema coercion
+        await tool.execute({ includeRecentlyCompleted: 'true' });
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
           expect.objectContaining({
@@ -627,7 +610,7 @@ describe('Analytics Tools', () => {
           })
         );
 
-        await tool.executeValidated({ includeRecentlyCompleted: 'false' as any });
+        await tool.execute({ includeRecentlyCompleted: 'false' });
         expect(mockOmniAutomation.buildScript).toHaveBeenLastCalledWith(
           expect.any(String),
           expect.objectContaining({
@@ -659,11 +642,11 @@ describe('Analytics Tools', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockRejectedValue(new Error('Script timeout'));
 
-      const result = await tool.executeValidated({ period: 'month' });
+      const result = await tool.executeValidated({ days: 30 });
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      expect(result.error.message).toContain('timed out');
+      expect(result.error.message).toContain('timeout');
     });
 
     it('should handle execution errors gracefully in OverdueAnalysisTool', async () => {

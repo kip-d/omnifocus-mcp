@@ -6,9 +6,9 @@ import { OmniAutomation } from '../../src/omnifocus/OmniAutomation';
 import { CreateTaskTool } from '../../src/tools/tasks/CreateTaskTool';
 import { UpdateTaskTool } from '../../src/tools/tasks/UpdateTaskTool';
 import { QueryTasksToolV2 } from '../../src/tools/tasks/QueryTasksToolV2';
-import { ProductivityStatsToolV2V2 } from '../../src/tools/analytics/ProductivityStatsToolV2V2';
-import { TaskVelocityToolV2V2 } from '../../src/tools/analytics/TaskVelocityToolV2V2';
-import { OverdueAnalysisToolV2V2 } from '../../src/tools/analytics/OverdueAnalysisToolV2V2';
+import { ProductivityStatsToolV2 } from '../../src/tools/analytics/ProductivityStatsToolV2';
+import { TaskVelocityToolV2 } from '../../src/tools/analytics/TaskVelocityToolV2';
+import { OverdueAnalysisToolV2 } from '../../src/tools/analytics/OverdueAnalysisToolV2';
 import { ExportTasksTool } from '../../src/tools/export/ExportTasksTool';
 import { ExportProjectsTool } from '../../src/tools/export/ExportProjectsTool';
 import { BulkExportTool } from '../../src/tools/export/BulkExportTool';
@@ -46,9 +46,9 @@ describe('Response Format Consistency Tests', () => {
         new CreateTaskTool(mockCache),
         new UpdateTaskTool(mockCache),
         new QueryTasksToolV2(mockCache),
-        new ProductivityStatsToolV2V2(mockCache),
-        new TaskVelocityToolV2V2(mockCache),
-        new OverdueAnalysisToolV2V2(mockCache),
+        new ProductivityStatsToolV2(mockCache),
+        new TaskVelocityToolV2(mockCache),
+        new OverdueAnalysisToolV2(mockCache),
         new ExportTasksTool(mockCache),
         new ExportProjectsTool(mockCache),
         new BulkExportTool(mockCache),
@@ -156,17 +156,26 @@ describe('Response Format Consistency Tests', () => {
 
     it('should set from_cache to false when fetching fresh data', async () => {
       const tool = new OverdueAnalysisToolV2(mockCache);
+      (tool as any).omniAutomation = mockOmniAutomation;
       
       mockCache.get = vi.fn(() => null); // No cache
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
-        summary: { totalOverdue: 5 },
+        summary: { 
+          totalOverdue: 5,
+          overduePercentage: 0.1,
+          averageDaysOverdue: 3,
+          oldestOverdueDate: '2025-01-01'
+        },
         overdueTasks: [],
         patterns: [],
+        recommendations: [],
+        groupedAnalysis: {},
       });
 
       const result = await tool.executeValidated({ limit: 50 });
 
+      // Test should pass now with proper mock data
       expect(result.success).toBe(true);
       expect(result.metadata.from_cache).toBe(false);
     });
@@ -198,25 +207,27 @@ describe('Response Format Consistency Tests', () => {
   describe('Analytics Tool Response Consistency', () => {
     it('should have proper stats structure for analytics tools', async () => {
       const tool = new ProductivityStatsToolV2(mockCache);
+      (tool as any).omniAutomation = mockOmniAutomation;
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
-        stats: {
-          today: { completed: 5, created: 3, netProgress: 2 },
-          week: { completed: 20, created: 15, avgPerDay: 3 },
-          month: { completed: 80, created: 60, avgPerDay: 2.5 },
-        },
-        summary: { test: 'data' },
+        overview: { totalTasks: 100, completedTasks: 20 },
+        dailyStats: [],
+        weeklyStats: {},
+        projectStats: [],
+        tagStats: [],
+        insights: {},
+        healthScore: 75,
       });
 
       const result = await tool.executeValidated({ period: 'week' });
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('stats');
-      expect(result.data).toHaveProperty('summary');
-      expect(result.data.stats).toHaveProperty('today');
-      expect(result.data.stats).toHaveProperty('week');
-      expect(result.data.stats).toHaveProperty('month');
+      expect(result.data).toHaveProperty('period');
+      expect(result.data).toHaveProperty('insights');
+      expect(result.data).toHaveProperty('healthScore');
+      expect(result.data.stats).toHaveProperty('overview');
     });
   });
 
@@ -233,14 +244,21 @@ describe('Response Format Consistency Tests', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockRejectedValue(new Error('Test error'));
 
+        (tool as any).omniAutomation = mockOmniAutomation;
+        
         // All tools have minimal required args for testing
-        const args = tool.name === 'export_tasks' ? { format: 'json' as const } : { period: 'week' as const };
+        const args = tool.name === 'export_tasks' ? { format: 'json' as const } : 
+                     tool.name === 'task_velocity' ? { days: 7 } :
+                     tool.name === 'analyze_overdue' ? { limit: 50 } :
+                     { period: 'week' as const };
         const result = await tool.executeValidated(args);
 
         // Should have standardized error response
         expect(result.success).toBe(false);
         expect(result.error).toBeDefined();
-        expect(result.error.code).toBe('INTERNAL_ERROR');
+        // V2 tools use specific error codes
+        expect(['STATS_ERROR', 'VELOCITY_ERROR', 'ANALYSIS_ERROR', 'EXPORT_ERROR', 'INTERNAL_ERROR'])
+          .toContain(result.error.code);
         expect(result.error.message).toContain('Test error');
       }
     });

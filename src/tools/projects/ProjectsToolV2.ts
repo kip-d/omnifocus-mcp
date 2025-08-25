@@ -201,7 +201,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
       filter,
       limit: args.limit || 10,
-      includeStats: args.details || false
+      includeStats: args.details !== undefined ? args.details : true
     });
     const result = await this.omniAutomation.execute<any>(script);
     
@@ -449,7 +449,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
       filter,
       limit: args.limit || 10,
-      includeStats: args.details || false
+      includeStats: args.details !== undefined ? args.details : true
     });
     const result = await this.omniAutomation.execute<any>(script);
     
@@ -504,7 +504,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
       filter,
       limit: args.limit || 10,
-      includeStats: args.details || false
+      includeStats: args.details !== undefined ? args.details : true
     });
     const result = await this.omniAutomation.execute<any>(script);
     

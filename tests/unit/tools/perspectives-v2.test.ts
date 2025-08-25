@@ -55,12 +55,13 @@ describe('PerspectivesToolV2', () => {
 
       mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
 
-      const result = await tool.executeValidated({ operation: 'list' });
+      const result = await tool.execute({ operation: 'list' });
 
       expect(result.success).toBe(true);
       expect(result.data.perspectives).toHaveLength(3);
-      // Items should be sorted by name - check all three
+      // The tool should sort perspectives by name
       const names = result.data.perspectives.map((p: any) => p.name);
+      // Sorting happens in the tool, so we should see alphabetical order
       expect(names).toEqual(['Custom View', 'Inbox', 'Projects']);
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
     });

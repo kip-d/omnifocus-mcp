@@ -126,8 +126,9 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
       const perspectives = parsedResult.perspectives || [];
       
-      // Sort perspectives
-      if (args.sortBy === 'name') {
+      // Sort perspectives (default to 'name' if not specified)
+      const sortBy = args.sortBy || 'name';
+      if (sortBy === 'name') {
         perspectives.sort((a: PerspectiveInfo, b: PerspectiveInfo) => 
           a.name.localeCompare(b.name)
         );
