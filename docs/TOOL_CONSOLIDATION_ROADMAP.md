@@ -77,8 +77,21 @@ Operations:
 
 ## Timeline
 
-1. Implement `TagsToolV2`, `ExportToolV2`, and `RecurringTasksToolV2`
-2. Introduce `PerspectivesToolV2` and `SystemToolV2`
-3. Update documentation and examples
-4. Remove legacy tools in a subsequent major release
+1. ✅ Implement `TagsToolV2` (COMPLETED)
+2. ✅ Introduce `PerspectivesToolV2` and `SystemToolV2` (COMPLETED)
+3. Implement `ExportToolV2` and `RecurringTasksToolV2` (IN PROGRESS)
+4. Update documentation and examples
+5. Remove legacy tools in a subsequent major release
+
+## Future Consolidation Opportunities
+
+### Folder Tools
+Currently we have `ManageFolderTool` (create/update/delete/move) and `QueryFoldersTool` (list/query).
+These could potentially be consolidated into `FoldersToolV2` with operations:
+- `list` - List all folders
+- `query` - Query specific folders
+- `manage` - Create/update/delete/move folders
+
+**Priority**: Low - ManageFolderTool is already partially consolidated
+**Estimated savings**: Minor (1 tool reduction)
 
