@@ -6,13 +6,16 @@ import { OmniAutomation } from '../../src/omnifocus/OmniAutomation';
 import { CreateTaskTool } from '../../src/tools/tasks/CreateTaskTool';
 import { UpdateTaskTool } from '../../src/tools/tasks/UpdateTaskTool';
 import { QueryTasksToolV2 } from '../../src/tools/tasks/QueryTasksToolV2';
-import { ProductivityStatsToolV2 } from '../../src/tools/analytics/ProductivityStatsToolV2';
-import { TaskVelocityToolV2 } from '../../src/tools/analytics/TaskVelocityToolV2';
-import { OverdueAnalysisToolV2 } from '../../src/tools/analytics/OverdueAnalysisToolV2';
+import { ProductivityStatsToolV2V2 } from '../../src/tools/analytics/ProductivityStatsToolV2V2';
+import { TaskVelocityToolV2V2 } from '../../src/tools/analytics/TaskVelocityToolV2V2';
+import { OverdueAnalysisToolV2V2 } from '../../src/tools/analytics/OverdueAnalysisToolV2V2';
 import { ExportTasksTool } from '../../src/tools/export/ExportTasksTool';
 import { ExportProjectsTool } from '../../src/tools/export/ExportProjectsTool';
 import { BulkExportTool } from '../../src/tools/export/BulkExportTool';
 import { ProjectsToolV2 } from '../../src/tools/projects/ProjectsToolV2';
+import { PerspectivesToolV2 } from '../../src/tools/perspectives/PerspectivesToolV2';
+import { SystemToolV2 } from '../../src/tools/system/SystemToolV2';
+import { TagsToolV2 } from '../../src/tools/tags/TagsToolV2';
 
 describe('Response Format Consistency Tests', () => {
   let mockCache: CacheManager;
@@ -43,9 +46,9 @@ describe('Response Format Consistency Tests', () => {
         new CreateTaskTool(mockCache),
         new UpdateTaskTool(mockCache),
         new QueryTasksToolV2(mockCache),
-        new ProductivityStatsToolV2(mockCache),
-        new TaskVelocityToolV2(mockCache),
-        new OverdueAnalysisToolV2(mockCache),
+        new ProductivityStatsToolV2V2(mockCache),
+        new TaskVelocityToolV2V2(mockCache),
+        new OverdueAnalysisToolV2V2(mockCache),
         new ExportTasksTool(mockCache),
         new ExportProjectsTool(mockCache),
         new BulkExportTool(mockCache),
@@ -62,7 +65,7 @@ describe('Response Format Consistency Tests', () => {
     });
 
     it('should ensure successful responses have required fields', async () => {
-      const tool = new ListTasksTool(mockCache);
+      const tool = new QueryTasksToolV2(mockCache);
       
       // Mock successful execution
       mockOmniAutomation.buildScript.mockReturnValue('test script');
@@ -71,7 +74,7 @@ describe('Response Format Consistency Tests', () => {
         summary: { total: 0 },
       });
 
-      const result = await tool.execute({ limit: 10 });
+      const result = await tool.executeValidated({ mode: 'all', limit: 10 });
 
       // Check required fields
       expect(result).toHaveProperty('success');
@@ -90,7 +93,7 @@ describe('Response Format Consistency Tests', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockRejectedValue(new Error('Test error'));
 
-      const result = await tool.execute({ name: 'Test task' });
+      const result = await tool.executeValidated({ title: 'Test task' });
 
       // Check required fields
       expect(result).toHaveProperty('success');
@@ -105,7 +108,7 @@ describe('Response Format Consistency Tests', () => {
 
   describe('Metadata Field Naming Consistency', () => {
     it('should use snake_case for all metadata fields', async () => {
-      const tool = new ProductivityStatsTool(mockCache);
+      const tool = new ProductivityStatsToolV2(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
@@ -117,7 +120,7 @@ describe('Response Format Consistency Tests', () => {
         summary: {},
       });
 
-      const result = await tool.execute({ period: 'week' });
+      const result = await tool.executeValidated({ period: 'week' });
 
       // Check standard metadata fields are snake_case
       expect(result.metadata).toHaveProperty('from_cache');
@@ -133,7 +136,7 @@ describe('Response Format Consistency Tests', () => {
 
   describe('Cache Behavior Consistency', () => {
     it('should set from_cache to true when returning cached data', async () => {
-      const tool = new TaskVelocityTool(mockCache);
+      const tool = new TaskVelocityToolV2(mockCache);
       
       // Mock cache hit
       mockCache.get = vi.fn(() => ({
@@ -145,14 +148,14 @@ describe('Response Format Consistency Tests', () => {
         summary: {},
       }));
 
-      const result = await tool.execute({ period: 'week' });
+      const result = await tool.executeValidated({ period: 'week' });
 
       expect(result.success).toBe(true);
       expect(result.metadata.from_cache).toBe(true);
     });
 
     it('should set from_cache to false when fetching fresh data', async () => {
-      const tool = new OverdueAnalysisTool(mockCache);
+      const tool = new OverdueAnalysisToolV2(mockCache);
       
       mockCache.get = vi.fn(() => null); // No cache
       mockOmniAutomation.buildScript.mockReturnValue('test script');
@@ -162,7 +165,7 @@ describe('Response Format Consistency Tests', () => {
         patterns: [],
       });
 
-      const result = await tool.execute({ limit: 50 });
+      const result = await tool.executeValidated({ limit: 50 });
 
       expect(result.success).toBe(true);
       expect(result.metadata.from_cache).toBe(false);
@@ -180,7 +183,7 @@ describe('Response Format Consistency Tests', () => {
         count: 0,
       });
 
-      const result = await tool.execute({ format: 'json' });
+      const result = await tool.executeValidated({ format: 'json' });
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('format');
@@ -194,7 +197,7 @@ describe('Response Format Consistency Tests', () => {
 
   describe('Analytics Tool Response Consistency', () => {
     it('should have proper stats structure for analytics tools', async () => {
-      const tool = new ProductivityStatsTool(mockCache);
+      const tool = new ProductivityStatsToolV2(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
@@ -206,7 +209,7 @@ describe('Response Format Consistency Tests', () => {
         summary: { test: 'data' },
       });
 
-      const result = await tool.execute({ period: 'week' });
+      const result = await tool.executeValidated({ period: 'week' });
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('stats');
@@ -220,9 +223,9 @@ describe('Response Format Consistency Tests', () => {
   describe('Error Handling Consistency', () => {
     it('should use handleError for all error cases', async () => {
       const tools = [
-        new ProductivityStatsTool(mockCache),
-        new TaskVelocityTool(mockCache),
-        new OverdueAnalysisTool(mockCache),
+        new ProductivityStatsToolV2(mockCache),
+        new TaskVelocityToolV2(mockCache),
+        new OverdueAnalysisToolV2(mockCache),
         new ExportTasksTool(mockCache),
       ];
 
@@ -232,7 +235,7 @@ describe('Response Format Consistency Tests', () => {
 
         // All tools have minimal required args for testing
         const args = tool.name === 'export_tasks' ? { format: 'json' as const } : { period: 'week' as const };
-        const result = await tool.execute(args);
+        const result = await tool.executeValidated(args);
 
         // Should have standardized error response
         expect(result.success).toBe(false);
@@ -248,7 +251,7 @@ describe('Response Format Consistency Tests', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
 
-      const result = await tool.execute({ name: 'Test task' });
+      const result = await tool.executeValidated({ title: 'Test task' });
 
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('PERMISSION_DENIED');
@@ -263,7 +266,7 @@ describe('Response Format Consistency Tests', () => {
       // If any tool returns Promise<any>, TypeScript compilation will fail
       
       const createTask = new CreateTaskTool(mockCache);
-      const productivity = new ProductivityStatsTool(mockCache);
+      const productivity = new ProductivityStatsToolV2(mockCache);
       const exportTasks = new ExportTasksTool(mockCache);
       
       // These assertions verify the types are properly defined

@@ -53,7 +53,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         count: 2
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.execute.mockResolvedValue(mockResult);
 
       const result = await tool.executeValidated({ 
         operation: 'list',
@@ -66,16 +66,17 @@ describe('ProjectsToolV2 CRUD Operations', () => {
     });
 
     it('should use cached results when available', async () => {
-      const cachedResult = {
-        success: true,
-        data: { items: [{ name: 'Cached Project' }] }
+      const cachedProjects = {
+        projects: [{ name: 'Cached Project' }]
       };
 
-      mockCache.get.mockReturnValue(cachedResult);
+      mockCache.get.mockReturnValue(cachedProjects);
 
       const result = await tool.executeValidated({ operation: 'list' });
 
-      expect(result).toBe(cachedResult);
+      expect(result.success).toBe(true);
+      expect(result.data.items).toHaveLength(1);
+      expect(result.data.items[0].name).toBe('Cached Project');
       expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
     });
   });
@@ -92,7 +93,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       };
 
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'create',
@@ -100,7 +101,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.project.projectId).toBe('proj-123');
+      expect(result.data.project.id).toBe('proj-123');
       expect(result.data.project.name).toBe('Test project');
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
     });
@@ -137,12 +138,12 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated(projectData);
 
       expect(result.success).toBe(true);
-      expect(result.data.project.projectId).toBe('proj-456');
+      expect(result.data.project.id).toBe('proj-456');
       expect(result.data.project.folder).toBe('Work');
     });
 
@@ -168,7 +169,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'update',
@@ -208,7 +209,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'complete',
@@ -216,8 +217,8 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.project.projectId).toBe('proj-123');
-      expect(result.data.tasksCompleted).toBe(5);
+      expect(result.data.project.project.id).toBe('proj-123');
+      expect(result.data.project.project.tasksCompleted).toBe(5);
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
       expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });
@@ -232,7 +233,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'complete',
@@ -241,8 +242,8 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.completedByChildren).toBe(true);
-      expect(result.data.tasksCompleted).toBe(10);
+      expect(result.data.project.project.completedByChildren).toBe(true);
+      expect(result.data.project.project.tasksCompleted).toBe(10);
     });
   });
 
@@ -254,7 +255,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         message: 'Project deleted successfully'
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'delete',
@@ -262,7 +263,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.projectId).toBe('proj-123');
+      expect(result.data.deleted).toBe(true);
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
       expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });

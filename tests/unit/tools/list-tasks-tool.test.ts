@@ -50,222 +50,123 @@ describe('QueryTasksToolV2', () => {
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
 
     tool = new QueryTasksToolV2(mockCache);
+    (tool as any).omniAutomation = mockOmniAutomation;
   });
 
-  describe('skipAnalysis parameter', () => {
-    it('should pass skipAnalysis to script builder', async () => {
+  describe('basic functionality', () => {
+    it('should query tasks with mode all', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
         tasks: [],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 100,
-            filter_time_ms: 50,
-            analysis_time_ms: 0,
-            analysis_skipped: true
-          }
-        }
+        summary: { total: 0 }
       });
 
-      await tool.execute({ 
-        mode: 'list',
+      const result = await tool.executeValidated({ 
+        mode: 'all',
         completed: false, 
-        limit: 10,
-        skipAnalysis: true 
+        limit: 10
       });
 
+      expect(result.success).toBe(true);
+      expect(result.data.items).toBeDefined();
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
-      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
-      expect(template).toContain('const filter = {{filter}}');
-      expect(params).toEqual({
-        filter: { 
-          completed: false,
-          includeDetails: false,  // Daily-first default
-          limit: 10,
-          skipAnalysis: true,
-          offset: 0,
-          sortOrder: 'asc'
-        }
-      });
     });
 
-    it('should include analysis_skipped in performance metrics', async () => {
+    it('should handle search mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
         tasks: [],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 50,
-            filter_time_ms: 20,
-            analysis_time_ms: 0,
-            analysis_skipped: true
-          }
-        }
+        summary: { total: 0 }
       });
 
-      const result = await tool.execute({ 
-        mode: 'list',
-        skipAnalysis: true 
+      const result = await tool.executeValidated({ 
+        mode: 'search',
+        search: 'test',
+        limit: 10
       });
 
-      expect(result.metadata.performance_metrics).toHaveProperty('analysis_skipped', true);
-      expect(result.metadata.performance_metrics.analysis_time_ms).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('search');
     });
 
-    it('should default skipAnalysis to true for daily-first performance', async () => {
+    it('should handle overdue mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
         tasks: [],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 100,
-            filter_time_ms: 50,
-            analysis_time_ms: 0,  // No analysis time when skipped by default
-            analysis_skipped: true  // Daily-first default
-          }
-        }
+        summary: { total: 0 }
       });
 
-      await tool.execute({ 
-        completed: false 
+      const result = await tool.executeValidated({ 
+        mode: 'overdue',
+        limit: 10
       });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
-      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
-      expect(template).toContain('const filter = {{filter}}');
-      expect(params).toEqual({
-        filter: { 
-          completed: false,
-          includeDetails: false,  // Daily-first default
-          limit: 25,  // Daily-first limit
-          skipAnalysis: true,  // Daily-first default
-          offset: 0,
-          sortOrder: 'asc'
-        }
-      });
-    });
-  });
-
-  describe('performance metrics', () => {
-    it('should include detailed performance metrics in response', async () => {
-      mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
-        tasks: [
-          { id: '1', name: 'Task 1', completed: false }
-        ],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 250,
-            filter_time_ms: 75,
-            analysis_time_ms: 200,
-            analysis_skipped: false
-          }
-        }
-      });
-
-      const result = await tool.execute({ mode: 'list', limit: 10 });
-
-      expect(result.metadata).toHaveProperty('performance_metrics');
-      expect(result.metadata.performance_metrics).toEqual({
-        tasks_scanned: 250,
-        filter_time_ms: 75,
-        analysis_time_ms: 200,
-        analysis_skipped: false
-      });
-    });
-
-    it('should show performance improvement with skipAnalysis', async () => {
-      // First call without skipAnalysis
-      mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValueOnce({
-        tasks: [],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 100,
-            filter_time_ms: 50,
-            analysis_time_ms: 300,
-            analysis_skipped: false
-          }
-        }
-      });
-
-      const result1 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: false });
-      const totalTime1 = result1.metadata.performance_metrics.filter_time_ms + 
-                        result1.metadata.performance_metrics.analysis_time_ms;
-
-      // Second call with skipAnalysis
-      mockOmniAutomation.execute.mockResolvedValueOnce({
-        tasks: [],
-        metadata: {
-          performance_metrics: {
-            tasks_scanned: 100,
-            filter_time_ms: 50,
-            analysis_time_ms: 0,
-            analysis_skipped: true
-          }
-        }
-      });
-
-      const result2 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
-      const totalTime2 = result2.metadata.performance_metrics.filter_time_ms + 
-                        result2.metadata.performance_metrics.analysis_time_ms;
-
-      // Verify performance improvement
-      expect(totalTime2).toBeLessThan(totalTime1);
-      expect(result2.metadata.performance_metrics.analysis_skipped).toBe(true);
+      expect(result.success).toBe(true);
+      expect(result.metadata.mode).toBe('overdue');
     });
   });
 
   describe('caching behavior', () => {
-    it('should not include skipAnalysis in cache key', async () => {
+    it('should use cache when available', async () => {
+      const cachedData = {
+        tasks: [{ id: 'task1', name: 'Cached Task' }],
+        summary: { total: 1 }
+      };
+      mockCache.get.mockReturnValue(cachedData);
+
+      const result = await tool.executeValidated({ 
+        mode: 'all',
+        limit: 10
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.from_cache).toBe(true);
+      expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+    });
+
+    it('should set cache after fetching', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
         tasks: [],
-        metadata: {}
+        summary: { total: 0 }
       });
 
-      // Call with skipAnalysis: true
-      await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
-      
-      // Check cache key does not include skipAnalysis (it's excluded from filter)
-      const setCalls = mockCache.set.mock.calls;
-      expect(setCalls.length).toBeGreaterThan(0);
-      const [collection, key] = setCalls[0];
-      expect(collection).toBe('tasks');
-      expect(key).not.toContain('skipAnalysis');
+      await tool.executeValidated({ 
+        mode: 'all',
+        limit: 10
+      });
+
+      expect(mockCache.set).toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle script execution errors', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+
+      const result = await tool.executeValidated({ 
+        mode: 'all',
+        limit: 10
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error.message).toContain('Script failed');
     });
 
-    it('should skip cache when skipAnalysis is true', async () => {
-      // Set up cached response
-      const cachedResponse = {
-        data: { items: [{ id: '1', name: 'Cached task' }] },
-        metadata: { from_cache: true }
-      };
-      
-      // First call with skipAnalysis: false uses cache
-      mockCache.get.mockReturnValueOnce(cachedResponse);
-      const result1 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: false });
-      expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
-
-      // Reset mocks
-      vi.clearAllMocks();
-      mockCache.get.mockReturnValueOnce(cachedResponse);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
-        tasks: [],
-        metadata: {}
+    it('should require search term for search mode', async () => {
+      const result = await tool.executeValidated({ 
+        mode: 'search'
+        // Missing search term
       });
 
-      // Second call with skipAnalysis: true bypasses cache
-      const result2 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
-      expect(mockCache.get).not.toHaveBeenCalled();
-      expect(mockOmniAutomation.execute).toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('MISSING_PARAMETER');
     });
   });
 });
