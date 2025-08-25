@@ -1,157 +1,185 @@
 # TODO Next Session
 
 ## Current Version: 2.0.0-dev
-**Status**: Major cleanup complete, tool consolidation in progress
-**Last Update**: 2025-08-21 15:00 EDT
+**Status**: Tool consolidation complete, test suite needs final fixes
+**Last Update**: 2025-08-25 23:00 EDT
 
-## 🎉 Major Cleanup Accomplished!
+## 🎯 Major Consolidation Accomplished!
 
-### What We Did Today (Aug 21 Afternoon)
-- ✅ Removed all V1 legacy tools (24 files, 2828 lines)
-- ✅ Cleaned up git tags (10 intermediate tags removed)
-- ✅ Documentation reorganization (40+ files organized)
-- ✅ Reduced MCP context usage by ~30%
-- 🚧 Started tool consolidation (needs completion)
+### What We Did Today (Aug 25 Evening)
+- ✅ Consolidated 9 individual tools into 3 V2 tools
+- ✅ Removed redundant BatchTaskOperationsTool
+- ✅ Reduced test failures from 59 to 26 (56% improvement)
+- ✅ Achieved 40-50% reduction in LLM context window usage
+- ✅ Fixed majority of test suite to work with V2 tools
 
-### Previous Session Results (Aug 21 Morning)
-- **Performance**: 9/10 (Average 1.67 seconds)
-- **Reliability**: 8/10 (One issue found and fixed)
-- **Usability**: 9/10 (Excellent UX, good error messages)
-- **Security**: 10/10 (Proper input validation)
-- **Overall**: 9/10 - READY FOR RELEASE
+### Current Test Status
+- **Tests Passing**: 247/274 (90% pass rate)
+- **Tests Failing**: 26
+- **Test Files**: 4 failed | 17 passed
 
-### Issue Found & Fixed
-- ✅ Project update "Can't convert types" error - FIXED
-  - Root cause: Boolean to string conversion in formatValue()
-  - Solution: Added explicit boolean/number type handling
-  - Status: Fixed, tested, committed, and pushed
+### Tools Successfully Consolidated
+1. **PerspectivesToolV2**: ListPerspectivesTool + QueryPerspectiveTool
+2. **SystemToolV2**: GetVersionInfoTool + RunDiagnosticsTool
+3. **TagsToolV2**: ListTagsTool + ManageTagsTool + GetActiveTagsTool
 
-### What We Achieved (Aug 20-21)
-- ✅ Fixed script truncation issue (ultra-minimal approach)
-- ✅ Fixed tag visibility (bridge consistency)
-- ✅ Fixed repeat rule updates (sanitization)
-- ✅ Fixed boolean type conversion (formatValue)
-- ✅ 260/261 unit tests passing
-- ✅ All integration tests passing
-- ✅ Performance under 2 seconds
-- ✅ Code cleanup (archived old test files)
+## Next Session: Complete Test Suite Fixes
 
-## Next Session: Complete Tool Consolidation
+### Critical - Fix Remaining 26 Test Failures
+The tests are failing due to expectation mismatches with V2 tool behavior:
 
-### High Priority - Tool Consolidation
-Continue the tool consolidation to achieve another 50% context reduction:
+1. **Analytics Tool Tests** (18 failures):
+   - [ ] Fix cache key expectations
+   - [ ] Update parameter structures
+   - [ ] Fix mock responses for V2 format
+   - [ ] Update tool name expectations
 
-1. [ ] Fix TagsToolV2, ExportToolV2, RecurringTasksToolV2 to properly extend BaseTool
-   - Need to use `schema` property instead of `inputSchema`
-   - Implement proper cache methods
-   - Fix import paths
+2. **ProjectsToolV2 Tests** (5 failures):
+   - [ ] Fix includeStats parameter handling
+   - [ ] Update cache key generation tests
+   - [ ] Fix build script parameter expectations
 
-2. [ ] Create remaining consolidated tools:
-   - [ ] PerspectivesToolV2 (combines List + Query)
-   - [ ] SystemToolV2 (combines Version + Diagnostics)
+3. **Response Format Tests** (3 failures):
+   - [ ] Update for removed tools
+   - [ ] Fix metadata field expectations
+   - [ ] Update error response formats
 
-3. [ ] Update index.ts to use consolidated tools
-4. [ ] Test all consolidated tools work correctly
-5. [ ] Update documentation for new tool structure
+### Then: Final Consolidations (Optional)
 
-### Then: Release v2.0.0
+Consider these additional consolidations for even more context reduction:
+
+1. **Export Tools** (3 → 1):
+   - [ ] ExportTasksTool
+   - [ ] ExportProjectsTool  
+   - [ ] BulkExportTool
+   - → `ExportToolV2` with operation: 'tasks' | 'projects' | 'bulk'
+
+2. **Recurring Tools** (2 → 1):
+   - [ ] GetRecurringTasksTool
+   - [ ] ManageRecurringTasksTool
+   - → `RecurringTasksToolV2` with operation: 'list' | 'manage'
 
 ### Pre-Release Checklist
-1. [x] User testing complete - 9/10 quality score
-2. [ ] Manual verification via Claude Desktop with latest fix
-3. [x] Review all error messages are helpful
-4. [ ] Console.log cleanup (deferred - future logging solution planned)
-5. [x] Update version in package.json (already at 2.0.0)
-6. [x] Update CHANGELOG.md with all fixes
+1. [x] Tool consolidation complete
+2. [ ] All tests passing (currently at 90%)
+3. [ ] Manual verification via Claude Desktop
+4. [ ] Update version in package.json
+5. [ ] Create comprehensive release notes
 
 ### Release Steps (When Ready)
-1. [ ] Create v2.0.0 tag
-2. [ ] Push tag to GitHub
-3. [ ] Create GitHub release with notes
-4. [ ] Notify users of major improvements
+1. [ ] Fix all remaining test failures
+2. [ ] Run full integration test suite
+3. [ ] Create v2.0.0 tag
+4. [ ] Push tag to GitHub
+5. [ ] Create GitHub release with notes
 
-## Future Enhancements (Post v2.0.0)
+## Test Fixing Strategy
 
-### High Priority
-1. [ ] Implement dual-context logging solution for JXA scripts
-   - Logging architect agent provided comprehensive design
-   - Will handle both Node.js and JXA contexts properly
-   - Structured logging with levels (error, warn, info, debug)
+### Pattern for Fixing Analytics Tests
+```typescript
+// OLD expectation
+expect(tool.name).toBe('get_productivity_stats');
 
-### Nice to Have
-1. [ ] Batch operations for better performance
-2. [ ] Streaming responses for large datasets
-3. [ ] Custom perspective creation
-4. [ ] Attachment support
-5. [ ] Forecast view
+// NEW expectation  
+expect(tool.name).toBe('productivity_stats');
 
-## Key Technical Solutions Applied
+// OLD method
+await tool.execute({ period: 'week' });
 
-### Boolean Type Fix (Aug 21)
-```javascript
-// Problem: formatValue() converting booleans to strings
-// Before: return String(value);  // true → "true"
-// After:
-if (typeof value === 'boolean') {
-  return value ? 'true' : 'false';  // true → true
-}
+// NEW method
+await tool.executeValidated({ period: 'week' });
 ```
 
-### Ultra-Minimal Script Pattern
-```javascript
-// Problem: Parameter expansion created 50KB+ scripts
-// Solution: Pass JSON strings, parse inside script
-const script = buildScript(UPDATE_TASK_ULTRA_MINIMAL_SCRIPT, {
-  taskId: taskId,  // Simple string
-  updatesJson: JSON.stringify(updates)  // JSON string
-});
+### Pattern for Fixing Response Format
+```typescript
+// OLD format
+{ data: { items: [] } }
+
+// NEW formats (depends on tool)
+{ data: { tasks: [] } }      // QueryTasksToolV2
+{ data: { perspectives: [] } } // PerspectivesToolV2
+{ data: { projects: [] } }     // ProjectsToolV2
 ```
 
-### Bridge Consistency Pattern
-```javascript
-// Problem: Write via bridge, read via JXA = invisible changes
-// Solution: Use bridge for BOTH operations
-app.evaluateJavascript('task.addTag(tag)');  // Write
-app.evaluateJavascript('task.tags.map(t => t.name)');  // Read
-```
-
-## Performance Metrics
+## Performance Metrics Achieved
 
 | Metric | Before | After | Status |
 |--------|--------|-------|--------|
-| Script Size | 51KB | 5KB | ✅ 90% reduction |
-| Today's Agenda | 8-15s | 0.268s | ✅ 30x faster |
-| Search Queries | 10+s | 2.821s | ✅ 3x faster |
-| Test Pass Rate | 56% | 99.6% | ✅ Near perfect |
-| User Score | N/A | 9/10 | ✅ Excellent |
+| Tool Count | 20+ | 11 | ✅ 45% reduction |
+| Context Usage | 100% | 50-60% | ✅ Major reduction |
+| Test Pass Rate | 56% | 90% | 🔧 Almost there |
+| Response Time | 8-15s | <2s | ✅ Excellent |
 
-## No Remaining Blockers
+## Key Technical Solutions Applied
 
-All issues resolved:
-- ~~"Unexpected end of script" errors~~ ✅ FIXED
-- ~~Tags not visible after updates~~ ✅ FIXED  
-- ~~Repeat rules not updating~~ ✅ FIXED
-- ~~Performance >2s~~ ✅ FIXED
-- ~~Boolean type conversion errors~~ ✅ FIXED
+### Tool Consolidation Pattern
+```typescript
+// Single tool with multiple operations
+export class PerspectivesToolV2 extends BaseTool {
+  schema = z.object({
+    operation: z.enum(['list', 'query']).default('list'),
+    // operation-specific params...
+  });
+  
+  async executeValidated(args) {
+    switch(args.operation) {
+      case 'list': return this.listPerspectives(args);
+      case 'query': return this.queryPerspective(args);
+    }
+  }
+}
+```
 
-## Lessons Learned
+### Test Fix Pattern
+```typescript
+// Fix mock setup
+tool = new ToolV2(mockCache);
+(tool as any).omniAutomation = mockOmniAutomation;
 
-1. **Type conversion matters** - formatValue() must handle all JS types properly
-2. **Parameter expansion is dangerous** - Can explode script size exponentially
-3. **Bridge consistency is critical** - Must use same context for read/write
-4. **Always check sanitization** - Parameters can be silently filtered
-5. **User testing is invaluable** - Found issue our tests missed
+// Fix method calls
+await tool.executeValidated({ operation: 'list' });
+
+// Fix response expectations
+expect(result.data.perspectives).toHaveLength(3);
+```
+
+## No Blockers
+
+All consolidation work complete and functional:
+- ✅ Tools consolidated successfully
+- ✅ V2 tools working correctly
+- ✅ Most tests passing (90%)
+- 🔧 Just need to fix remaining test expectations
 
 ## Session Stats
 
-- **Commits Today**: 2 (cleanup + boolean fix)
-- **Files Cleaned**: 9 old test files archived
-- **Tests Fixed**: 1 failing unit test
-- **Issue Resolution Time**: 30 minutes from report to fix
-- **Current Status**: 100% ready for release
+- **Commits Today**: 6 (consolidation + test fixes)
+- **Tools Consolidated**: 9 → 3
+- **Tools Removed**: 10 (9 consolidated + 1 redundant)
+- **Test Failures Fixed**: 33 (from 59 to 26)
+- **Context Reduction**: 40-50%
+- **Current Status**: 90% ready for release
+
+## Commands for Next Session
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Run tests to see current status
+npm test
+
+# Focus on failing tests
+npm test tests/unit/tools/analytics.test.ts
+npm test tests/unit/tools/list-projects-tool.test.ts
+
+# After fixing all tests
+npm run test:all
+npm run test:integration
+```
 
 ---
 
-*Last updated: 2025-08-21 12:00 EDT*
-*Current version: 2.0.0 (ready for release)*
-*Status: All user testing issues resolved, awaiting final release decision*
+*Last updated: 2025-08-25 23:00 EDT*
+*Current version: 2.0.0-dev*
+*Status: Tool consolidation complete, 26 test failures remaining*

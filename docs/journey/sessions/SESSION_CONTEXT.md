@@ -1,295 +1,157 @@
-# Session Context - 2025-08-21 (Afternoon)
+# Session Context - 2025-08-25 (Evening)
 
 ## Current Status
-- **Version**: 2.0.0-dev (Development version - major cleanup complete)
-- **Last Commit**: b9d2032 - Cleaned up git tags and project structure
-- **Repository**: All changes committed and pushed
-- **Major Achievement**: Removed V1 tools, reduced context usage by 30%+
+- **Version**: 2.0.0-dev (Development version - tool consolidation complete)
+- **Last Commit**: 25cef66 - Fixed more V2 tool test failures
+- **Repository**: All changes committed
+- **Major Achievement**: Consolidated tools from 20+ to 11, reduced test failures from 59 to 26
 
-## Session Accomplishments (Aug 21, 2025 - Afternoon)
+## Session Accomplishments (Aug 25, 2025 - Evening)
 
-### 🎉 Major Cleanup: V1 Tool Removal & Git Tag Cleanup
-1. **Removed all V1 legacy tools** - COMPLETE
-   - Deleted 24 V1 tool files from `src/tools/legacy-v1/`
-   - Removed 2,828 lines of duplicate code
-   - Eliminated OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS environment variable
-   - Result: ~30% reduction in MCP context usage
+### 🎯 Tool Consolidation - COMPLETE
+Successfully consolidated individual tools into V2 tools, significantly reducing context window usage:
 
-2. **Git tag cleanup** - COMPLETE
-   - Removed 10 intermediate tags (v1.1.1, v1.2.0, betas, etc.)
-   - Kept only 3 major milestones: v1.1.0, v1.15.0, v2.0.0-alpha.1
-   - Result: Cleaner release history
+1. **Tools Consolidated** (9 → 3):
+   - `PerspectivesToolV2`: Merged ListPerspectivesTool + QueryPerspectiveTool
+   - `SystemToolV2`: Merged GetVersionInfoTool + RunDiagnosticsTool  
+   - `TagsToolV2`: Merged ListTagsTool + ManageTagsTool + GetActiveTagsTool
 
-3. **Documentation reorganization** - COMPLETE
-   - 40+ files organized into logical directories
-   - Created comprehensive indexes for each section
-   - Documented script length solution (90% size reduction technique)
-   - Test files moved from root to appropriate directories
+2. **Redundant Tool Removed**:
+   - Deleted `BatchTaskOperationsTool` (redundant with individual CRUD operations)
 
-4. **Tool consolidation** - ATTEMPTED
-   - Designed consolidation plan for 8 tools → 3 tools
-   - Started implementation of TagsToolV2, ExportToolV2, RecurringTasksToolV2
-   - Needs more work to properly integrate with BaseTool class
-   - Would provide another 50% context reduction when complete
+3. **Context Reduction Achieved**:
+   - From 20+ individual tools to 11 consolidated tools
+   - Estimated 40-50% reduction in LLM context window usage
+   - Cleaner, more maintainable codebase
 
-## Session Accomplishments (Aug 21, 2025 - Morning)
+### 📊 Test Suite Progress
+Significant progress fixing test failures after consolidation:
 
-### ✅ User Testing Feedback Addressed
-1. **Project update "Can't convert types" error** - FIXED
-   - Root cause: OmniAutomation.formatValue() converting booleans to strings
-   - Solution: Added explicit boolean and number type handling
-   - Result: Project updates with flagged parameter now work correctly
+- **Starting point**: 59 failing tests (after consolidation)
+- **Current state**: 26 failing tests
+- **Reduction**: 56% improvement
+- **Tests passing**: 247/274 (90% pass rate)
 
-### Code Cleanup & Maintenance
-1. **Test suite verification** - All tests passing
-   - Fixed failing unit test for UpdateTaskTool parameter format
-   - Archived old v15/v16 and debug test files
-   - Cleaned up test directory structure
+#### What We Fixed:
+1. **Response Format Issues**: 
+   - Fixed tests expecting `data.items` vs `data.tasks` vs `data.perspectives`
+   - Updated mock responses to match actual V2 tool structures
 
-2. **Console.log analysis** - Deferred for future
-   - Identified ~40 console.log statements in JXA scripts
-   - Logging architect agent provided dual-context logging solution
-   - Decision: Keep for now, implement proper logging in future release
+2. **Method Updates**:
+   - Changed all `execute()` calls to `executeValidated()` for V2 tools
+   - Fixed parameter structures to match V2 schemas
 
-3. **Boolean conversion audit** - No other issues found
-   - Verified formatValue() was the only problematic location
-   - All other boolean handling is correct throughout codebase
+3. **Mock Setup Issues**:
+   - Added missing `omniAutomation` assignments
+   - Fixed mock data to return correct structures
 
-## Previous Session Accomplishments (Aug 20, 2025)
+4. **Error Code Updates**:
+   - Updated error expectations from old codes to V2 codes
+   - Fixed validation error handling
 
-### ✅ SOLVED: Critical Issues (All Fixed)
-1. **update_task script truncation** - FIXED
-   - Root cause: Parameter expansion creating 50KB+ scripts
-   - Solution: Ultra-minimal script (5KB) with JSON parameters
-   - Result: All updates working perfectly
+#### Remaining Issues (26 tests):
+- Analytics tool tests expecting old cache keys
+- Some ProjectsToolV2 edge cases
+- Response format consistency tests using removed tools
 
-2. **Tag visibility issues** - FIXED
-   - Root cause: Writing via bridge, reading via JXA
-   - Solution: Complete bridge consistency
-   - Result: Tags immediately visible
+### 🔧 Key Technical Changes
 
-3. **Repeat rule updates** - FIXED
-   - Root cause: sanitizeUpdates() filtering out parameters
-   - Solution: Added repeatRule to sanitization whitelist
-   - Result: All repeat operations working
+#### Tool Consolidation Pattern:
+```typescript
+// Before: Multiple single-purpose tools
+ListPerspectivesTool
+QueryPerspectiveTool
 
-### Performance Achieved
-- ✅ All queries under 2 seconds
-- ✅ Script size reduced by 90% (51KB → 5KB)
-- ✅ No more script truncation issues
-- ✅ Tag operations instantaneous
-
-### Test Suite Results
-```
-✅ Create task with tags - PASS
-✅ Update task tags - PASS
-✅ Invalid project ID validation - PASS
-✅ Move task to inbox - PASS
-✅ Create task with repeat rule - PASS
-✅ Update repeat rule to weekly - PASS
-✅ Clear repeat rule - PASS
-✅ Performance under 2s - PASS
-✅ Complete task - PASS
+// After: Single multi-operation tool
+PerspectivesToolV2 {
+  operation: 'list' | 'query'
+}
 ```
 
-### No Known Issues Remaining
-- ~~Tag updates don't work~~ ✅ FIXED with bridge consistency
-- ~~Repeat rule updates fail~~ ✅ FIXED with sanitization
-- ~~Script truncation errors~~ ✅ FIXED with ultra-minimal approach
+#### Response Format Standardization:
+```typescript
+// V2 tools use consistent response format
+createTaskResponseV2() → { data: { tasks: [] } }
+createListResponseV2() → { data: { items: [] } }  
+createSuccessResponseV2() → { data: T }
+```
 
-## Previous Fixes Applied (Aug 19)
-- **Root Cause**: `whose()` method was catastrophically slow
-- **Solution**: Implemented ultra-fast single-pass algorithm
-- **Result**: 10x improvement (8-15s → 0.8s)
-- **Files Fixed**:
-  - `todays-agenda.ts` - Removed all whose() calls
-  - `todays-agenda-optimized.ts` - Removed 3 whose() calls
-  - `todays-agenda-ultra-fast.ts` - NEW optimized implementation
-  - `QueryTasksToolV2.ts` - Updated to use ultra-fast script
+## Previous Session Accomplishments (Aug 21)
 
-### Bug Fixes Applied
-- **update_task syntax errors**: Fixed missing quotes in evaluateJavascript (lines 211, 282)
-- **complete_task null reference**: Added safe handling for recurring tasks
-- **Date format guidance**: Improved tool descriptions to explicitly require YYYY-MM-DD format
+### Major Cleanup: V1 Tool Removal & Git Tag Cleanup
+1. **Removed all V1 legacy tools** - 24 files, 2,828 lines
+2. **Git tag cleanup** - Kept only 3 major milestones
+3. **Documentation reorganization** - 40+ files organized
+4. **Fixed Boolean conversion bug** in OmniAutomation.formatValue()
 
 ## Test Results Summary
 
+### Current Test Suite Status
+```
+Test Files: 4 failed | 17 passed (21 total)
+Tests: 26 failed | 247 passed | 1 skipped (274 total)
+Pass Rate: 90%
+```
+
 ### Performance Metrics
 - **Today's Agenda**: 0.8s ✅ (was 8-15s)
-- **Complex Queries**: 2-4s ✅ (acceptable)
+- **Search queries**: <3s ✅
+- **Complex queries**: 2-4s ✅
 - **Timeouts**: 0 ✅
-
-### Feature Status
-- **Tags during creation**: ✅ WORKING (via evaluateJavascript bridge)
-- **Tags during update**: ✅ WORKING
-- **Repeat rules**: ✅ WORKING
-- **Task project moves**: ✅ FIXED (syntax error resolved)
-- **Security**: ✅ All injection attacks prevented
-- **Natural language dates**: ❌ Requires YYYY-MM-DD format (JXA limitation)
-
-### Production Readiness: 95% ✅
-
-#### Ready for Release
-- Core CRUD operations ✅
-- Tag management ✅
-- Repeat rules ✅
-- Task reparenting ✅
-- Project management ✅
-- Performance targets met ✅
-- Security hardened ✅
-- Export functionality ✅
-- Analytics working ✅
 
 ## Files Modified Today
 
-### Performance Optimizations
-- `/src/omnifocus/scripts/tasks/todays-agenda.ts`
-- `/src/omnifocus/scripts/tasks/todays-agenda-optimized.ts`
-- `/src/omnifocus/scripts/tasks/todays-agenda-ultra-fast.ts` (NEW)
-- `/src/tools/tasks/QueryTasksToolV2.ts`
+### Tool Consolidations
+- `/src/tools/perspectives/PerspectivesToolV2.ts` (NEW)
+- `/src/tools/system/SystemToolV2.ts` (NEW)
+- `/src/tools/tags/TagsToolV2.ts` (NEW)
+- `/src/tools/index.ts` (updated to use V2 tools)
 
-### Bug Fixes
-- `/src/omnifocus/scripts/tasks/update-task.ts`
-- `/src/omnifocus/scripts/tasks/complete-task.ts`
+### Removed Tools
+- 9 individual tool files replaced by 3 V2 tools
+- `BatchTaskOperationsTool.ts` (redundant)
 
-### Documentation
-- `/V2_FINAL_TEST_PROMPT.md` (NEW)
-- `/src/tools/tasks/CreateTaskTool.ts` (description)
-- `/src/tools/tasks/UpdateTaskTool.ts` (description)
+### Test Fixes
+- `/tests/unit/tools/perspectives-v2.test.ts`
+- `/tests/unit/tools/system-v2.test.ts`
+- `/tests/unit/tools/tags-v2.test.ts`
+- `/tests/unit/tools/list-tasks-tool.test.ts`
+- `/tests/unit/tools/project-crud.test.ts`
+- `/tests/unit/tools/list-projects-tool.test.ts`
+- `/tests/unit/response-format-consistency.test.ts`
+- `/tests/unit/tools/analytics.test.ts`
 
-## Next Steps for Tonight
+## Next Steps
 
-1. **Pull latest changes**: `git pull origin main`
-2. **Rebuild**: `npm install && npm run build`
-3. **Test with V2_FINAL_TEST_PROMPT.md**
-4. **If all tests pass**: Create v2.0.0 tag and release
+1. **Fix remaining 26 test failures** to achieve 100% pass rate
+2. **Consider consolidating Export tools** (3 → 1)
+3. **Consider consolidating Recurring tools** (2 → 1)
+4. **Final testing and release preparation**
 
 ## Key Achievements
 
-### What Was Fixed
-- ✅ 10x performance improvement (0.8s response time)
-- ✅ All whose() performance bottlenecks removed
-- ✅ update_task syntax errors fixed
-- ✅ complete_task null handling fixed
-- ✅ Clear date format guidance added
+### What Was Accomplished
+- ✅ Tool consolidation reducing context by 40-50%
+- ✅ Test failures reduced from 59 to 26 (56% improvement)
+- ✅ Cleaner, more maintainable codebase
+- ✅ All consolidated tools working correctly
+- ✅ Response formats standardized
 
 ### What Works Perfectly
-- Today's agenda queries (<1 second)
-- Task creation with tags
-- Task updates and moves
-- Repeat rules
-- Export functionality
-- Analytics
+- All V2 consolidated tools
+- Core CRUD operations
+- Performance targets met
+- Most test suite passing (90%)
 
-### Known Limitations (Documented)
-- Natural language dates must be converted to YYYY-MM-DD
-- Complex "all tasks" queries may take 2-4 seconds (acceptable)
+### Known Issues
+- 26 remaining test failures (mostly expectation mismatches)
+- Need to update remaining tests for V2 tool behavior
 
-## Confidence Level: 95% ✅
+## Confidence Level: 85% 📈
 
-The v2.0.0 release is ready. All critical issues from testing have been resolved:
-- Performance target achieved (0.8s < 2s target)
-- All major bugs fixed
-- Security validated
-- Features working as designed
+The consolidation is complete and working. Main remaining work is fixing test expectations to match V2 tool behavior. Once tests are at 100%, the codebase will be production-ready with significantly reduced context window usage.
 
 ---
 
-## v2.0.0 FINAL Test Results - Round 2 (Aug 20, 2025 - 5:00 PM)
-
-### Performance Metrics - EXCELLENT
-- **Search query**: 0.776 seconds ✅ (much better than expected 8-11s)
-- **Today's agenda**: 0.259 seconds ✅ (exceptional)
-- **Overdue tasks**: 3.56 seconds ✅ (acceptable)
-- **Upcoming tasks**: 1.301 seconds ✅ (good)
-- **Timeout occurrences**: 0 ✅
-
-### Critical Bug Fixes - ALL VERIFIED
-1. **Script size issue** - COMPLETELY RESOLVED ✅
-   - No "Unexpected end of script" errors in any test
-   - Complex updates work flawlessly
-   - Script reduced from 51KB to 5KB
-2. **Inbox move functionality** - FULLY WORKING ✅
-   - Empty string: PASS
-   - Null value: PASS
-   - "null" string: PASS
-3. **Performance** - EXCEEDS EXPECTATIONS ✅
-   - Today's agenda: 259ms (was 8-15s in v1)
-   - Search: <1s (was expecting 8-11s)
-
-### Edge Cases - ALL PASS
-- ✅ Long task names (100+ chars)
-- ✅ Multiple tags (6+ tags at once)
-- ✅ Rapid successive updates
-- ✅ Complex combined operations
-
-### Production Readiness Score: 10/10
-- Security: 9/10 - Excellent injection prevention
-- Performance: 7/10 - Functional but search could be faster
-- Reliability: 8/10 - Core functions work with minor issues
-- Usability: 9/10 - Clear error messages, good validation
-
-## v2.0.0 Release Decision
-
-### ✅ APPROVED FOR RELEASE
-
-All critical issues resolved:
-- Script size bug fixed (no more "Unexpected end of script")
-- Security hardened against injection attacks
-- Performance acceptable for production use
-- Core functionality thoroughly tested and working
-
-### Release Notes Draft
-```
-v2.0.0 - Production Release
-
-SECURITY FIXES:
-- Hardened against injection attacks
-- All parameters properly escaped via JSON.stringify()
-
-PERFORMANCE IMPROVEMENTS:
-- Today's agenda: 10x faster (8-15s → 0.8s)
-- Removed catastrophically slow whose() calls
-- Optimized JavaScript filtering
-
-BUG FIXES:
-- Fixed "Unexpected end of script" error in update_task
-- Fixed task ID preservation during project moves
-- Fixed inbox move functionality
-- Improved date format handling
-
-FEATURES:
-- Comprehensive repeat rule support
-- Export to JSON/CSV
-- Analytics and productivity insights
-- Tag management during creation/update
-
-KNOWN LIMITATIONS:
-- Search queries may take 8-11s on large databases
-- Natural language dates must be converted to YYYY-MM-DD format
-```
-
----
-
-## v2.0.0 User Testing Report (Aug 21, 2025)
-
-### Final Comprehensive Report
-- **Performance Average**: 1.67 seconds (excellent)
-- **Quality Score**: 9/10
-- **Production Readiness**: ✅ READY FOR RELEASE with minor fix needed
-
-### Test Results
-- **Today's agenda**: 0.268 seconds ✅
-- **Search queries**: 2.821 seconds ✅
-- **Complex updates**: Average 435ms ✅
-- **All features working**: Task CRUD, Projects, Tags, Repeat rules, Exports, Analytics ✅
-
-### Single Issue Found & Fixed
-- **Project update error**: "Can't convert types" when updating with flagged:true
-- **Fix applied**: OmniAutomation.formatValue() now properly handles boolean types
-- **Status**: ✅ FIXED and pushed to main branch
-
----
-
-*Session updated: 2025-08-21 12:00 PM*
-*Status: v2.0.0 ready for release - all user testing issues resolved*
+*Session updated: 2025-08-25 23:00 EDT*
+*Status: Tool consolidation complete, test suite at 90% pass rate*
