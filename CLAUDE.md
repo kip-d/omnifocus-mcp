@@ -70,10 +70,15 @@ details: z.union([
 2. Claude Desktop - passes stringified parameters
 
 ### Date Format Requirements
-- **Use local time format**: `YYYY-MM-DD HH:mm` (e.g., "2025-03-31 17:00")
-- **Avoid ISO 8601 with Z**: Don't use `2025-03-31T17:00:00.000Z` format
-- **Relative dates work**: "tomorrow at 5pm", "next Monday", "in 2 weeks"
+- **Primary format**: SQL datetime format `YYYY-MM-DD HH:mm` (e.g., "2025-03-31 17:00") - local time, no timezone
+- **Date-only format**: `YYYY-MM-DD` (e.g., "2025-03-31") - interpreted as start of day
+- **AVOID**: ISO-8601 with Z suffix (e.g., `2025-03-31T17:00:00Z`) - causes timezone issues
+- **Basic keywords**: Only "today", "tomorrow", "next week" are handled by MCP tools
+- **Natural language parsing**: The LLM (Claude) should parse complex dates like "next Monday at 3pm" and provide SQL datetime format
+- **OmniFocus fallback**: If a date string passes through, OmniFocus will try to parse it
 - This applies to all date fields: dueDate, deferDate, completionDate, nextReviewDate
+
+**Architectural principle**: The LLM is responsible for natural language date parsing, not the MCP tools.
 
 ### Moving Tasks to Inbox
 - **To move a task to inbox**: Set `projectId` to `null` or empty string `""`

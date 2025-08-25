@@ -1,0 +1,580 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryTasksToolV2 } from '../../../../src/tools/tasks/QueryTasksToolV2';
+import { CacheManager } from '../../../../src/cache/CacheManager';
+import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
+import { McpError } from '@modelcontextprotocol/sdk/types.js';
+
+vi.mock('../../../../src/cache/CacheManager');
+vi.mock('../../../../src/omnifocus/OmniAutomation');
+
+describe('QueryTasksToolV2', () => {
+  let tool: QueryTasksToolV2;
+  let mockCache: CacheManager;
+  let mockOmni: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    
+    mockCache = {
+      get: vi.fn().mockReturnValue(null),
+      set: vi.fn(),
+      invalidate: vi.fn(),
+    } as any;
+    
+    tool = new QueryTasksToolV2(mockCache);
+    
+    // Mock OmniAutomation
+    mockOmni = {
+      execute: vi.fn(),
+      buildScript: vi.fn((template, params) => `script with ${JSON.stringify(params)}`),
+    };
+    (tool as any).omniAutomation = mockOmni;
+  });
+
+  describe('properties', () => {
+    it('should have correct name and description', () => {
+      expect(tool.name).toBe('tasks');
+      expect(tool.description).toContain('Query OmniFocus tasks');
+      expect(tool.description).toContain('mode="search"');
+      expect(tool.description).toContain('mode="today"');
+    });
+  });
+
+  describe('schema validation', () => {
+    it('should accept valid mode values', async () => {
+      const modes = ['all', 'overdue', 'today', 'upcoming', 'available', 'blocked', 'flagged', 'smart_suggest'];
+      
+      for (const mode of modes) {
+        mockOmni.execute.mockResolvedValueOnce({
+          tasks: [],
+          summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+        });
+        
+        const result = await tool.execute({ mode, limit: 25, details: false });
+        expect(result.success).toBe(true);
+      }
+      
+      // Search mode requires search parameter
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      const searchResult = await tool.execute({ mode: 'search', search: 'test', limit: 25, details: false });
+      expect(searchResult.success).toBe(true);
+    });
+
+    it('should reject invalid mode', async () => {
+      await expect(tool.execute({ mode: 'invalid' }))
+        .rejects.toThrow('Invalid parameters');
+    });
+
+    it('should accept search parameters', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'search',
+        search: 'meeting',
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept project filter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        project: 'Work',
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept tags filter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        tags: ['urgent', 'work'],
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle boolean completed parameter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        completed: true,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should coerce string boolean values', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        completed: 'true' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle dueBy parameter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        dueBy: 'tomorrow',
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle daysAhead parameter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'upcoming',
+        daysAhead: 7,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should coerce string daysAhead to number', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'upcoming',
+        daysAhead: '14' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should enforce daysAhead min/max limits', async () => {
+      await expect(tool.execute({
+        mode: 'upcoming',
+        daysAhead: 0,
+      })).rejects.toThrow('Invalid parameters');
+      
+      await expect(tool.execute({
+        mode: 'upcoming',
+        daysAhead: 31,
+      })).rejects.toThrow('Invalid parameters');
+    });
+
+    it('should handle limit parameter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        limit: 50,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should coerce string limit to number', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        limit: '100' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should enforce limit min/max bounds', async () => {
+      await expect(tool.execute({
+        mode: 'all',
+        limit: 0,
+      })).rejects.toThrow('Invalid parameters');
+      
+      await expect(tool.execute({
+        mode: 'all',
+        limit: 201,
+      })).rejects.toThrow('Invalid parameters');
+    });
+
+    it('should handle details parameter', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        details: true,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should coerce string details to boolean', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        details: 'true' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should use default values', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({});
+      
+      expect(result.success).toBe(true);
+      // Default mode is 'all', limit is 25, details is false
+    });
+  });
+
+  describe('response handling', () => {
+    it('should return task list with summary', async () => {
+      const mockTasks = [
+        {
+          id: 'task1',
+          name: 'Test Task 1',
+          completed: false,
+          flagged: true,
+        },
+        {
+          id: 'task2',
+          name: 'Test Task 2',
+          completed: true,
+          flagged: false,
+        },
+      ];
+      
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: mockTasks,
+        summary: {
+          total_tasks: 2,
+          completed: 1,
+          incomplete: 1,
+          flagged: 1,
+        },
+      });
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(true);
+      // The summary is auto-generated by createTaskResponseV2  
+      expect(result.summary).toBeDefined();
+      expect(result.summary.total_count).toBe(2);
+      expect(result.data.tasks).toHaveLength(2);
+      expect(result.data.tasks[0].name).toBe('Test Task 1');
+    });
+
+    it('should handle empty results', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({ mode: 'search', search: 'nonexistent' });
+      
+      expect(result.success).toBe(true);
+      expect(result.summary.total_count).toBe(0);
+      expect(result.data.tasks).toHaveLength(0);
+    });
+
+    it('should include metadata in response', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata.operation).toBe('tasks');
+      expect(result.metadata.timestamp).toBeDefined();
+      expect(result.metadata.query_time_ms).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('mode-specific behavior', () => {
+    it('should handle search mode', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [{ id: 'task1', name: 'Meeting notes', completed: false }],
+        summary: { total_tasks: 1, completed: 0, incomplete: 1 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'search',
+        search: 'meeting',
+      });
+      
+      expect(result.success).toBe(true);
+      expect(mockOmni.buildScript).toHaveBeenCalled();
+      expect(mockOmni.execute).toHaveBeenCalled();
+    });
+
+    it('should handle today mode', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { 
+          total_tasks: 3,
+          completed: 0,
+          incomplete: 3,
+          dueSoon: 2,
+          flagged: 1,
+        },
+      });
+      
+      const result = await tool.execute({ mode: 'today' });
+      
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+
+    it('should handle overdue mode', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { 
+          total_tasks: 5,
+          completed: 0,
+          incomplete: 5,
+          overdue: 5,
+        },
+      });
+      
+      const result = await tool.execute({ mode: 'overdue' });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle upcoming mode with daysAhead', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 10, completed: 0, incomplete: 10 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'upcoming',
+        daysAhead: 14,
+      });
+      
+      expect(result.success).toBe(true);
+      expect(mockOmni.buildScript).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          days: 14,
+        })
+      );
+    });
+
+    it('should handle flagged mode', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { 
+          total_tasks: 7,
+          completed: 0,
+          incomplete: 7,
+          flagged: 7,
+        },
+      });
+      
+      const result = await tool.execute({ mode: 'flagged' });
+      
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle script execution errors', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        error: true,
+        message: 'Script failed',
+        details: { code: -1743 },
+      });
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      // The actual error message is 'Failed to get tasks'
+      expect(result.error.message).toContain('Failed to get tasks');
+    });
+
+    it('should handle null results', async () => {
+      mockOmni.execute.mockResolvedValueOnce(null);
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should handle missing summary in response', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        // summary missing - createTaskResponseV2 will generate it
+      });
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined(); // Auto-generated
+    });
+
+    it('should handle permission errors', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        error: true,
+        message: 'Error: -1743 - Not allowed to send Apple events',
+        details: { code: -1743 },
+      });
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+      // The suggestion is 'Try a more specific mode like overdue or today'
+      expect(result.error.suggestion).toContain('Try a more specific mode');
+    });
+
+    it('should handle timeout errors', async () => {
+      mockOmni.execute.mockRejectedValueOnce(new Error('Script execution timed out'));
+      
+      const result = await tool.execute({ mode: 'all' });
+      
+      expect(result.success).toBe(false);
+      // The base tool maps timeout errors to SCRIPT_TIMEOUT
+      expect(result.error.code).toBe('SCRIPT_TIMEOUT');
+      expect(result.error.message).toContain('timed out');
+      // Suggestion may or may not be defined
+    });
+  });
+
+  describe('caching behavior', () => {
+    it('should check cache before executing script', async () => {
+      const cachedData = {
+        tasks: [{ id: 'cached', name: 'Cached Task' }],
+        summary: { total_tasks: 1, completed: 0, incomplete: 1 },
+      };
+      
+      mockCache.get.mockReturnValueOnce(cachedData);
+      
+      // Use a mode that actually checks cache (not 'all')
+      const result = await tool.execute({ mode: 'overdue' });
+      
+      expect(mockCache.get).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.metadata.from_cache).toBe(true);
+    });
+
+    it('should cache successful results', async () => {
+      const responseData = {
+        tasks: [{ id: 'new', name: 'New Task' }],
+        summary: { total_tasks: 1, completed: 0, incomplete: 1 },
+      };
+      
+      mockOmni.execute.mockResolvedValueOnce(responseData);
+      
+      // Use a mode that actually caches (not 'all')
+      const result = await tool.execute({ mode: 'overdue' });
+      
+      expect(result.success).toBe(true);
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'tasks',
+        expect.any(String),
+        expect.objectContaining({
+          tasks: expect.any(Array),
+        })
+      );
+    });
+  });
+
+  describe('input normalization', () => {
+    it('should normalize boolean strings', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        completed: '1' as any,
+        details: 'false' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should normalize numeric strings', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'upcoming',
+        daysAhead: '7' as any,
+        limit: '50' as any,
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle null and undefined values', async () => {
+      mockOmni.execute.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+      
+      const result = await tool.execute({
+        mode: 'all',
+        search: undefined,
+        project: undefined, // undefined is allowed, null is not
+      });
+      
+      expect(result.success).toBe(true);
+    });
+  });
+});

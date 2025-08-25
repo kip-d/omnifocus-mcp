@@ -82,6 +82,11 @@ export abstract class BaseTool<
         );
       }
 
+      // Re-throw McpErrors directly (from throwMcpError calls)
+      if (error instanceof McpError) {
+        throw error;
+      }
+
       // Log other failures for analysis
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage);
