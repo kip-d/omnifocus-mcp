@@ -50,7 +50,6 @@ import { SystemToolV2 } from './system/SystemToolV2.js';
 
 // Import new consolidated tools
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
-import { BatchTaskOperationsTool } from './tasks/BatchTaskOperationsTool.js';
 
 // Import perspective tools (consolidated)
 import { PerspectivesToolV2 } from './perspectives/PerspectivesToolV2.js';
@@ -89,7 +88,6 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ManageFolderTool(cache),
     new QueryFoldersTool(cache),
     new ManageReviewsTool(cache),
-    new BatchTaskOperationsTool(cache),
 
     // Analytics tools are in v2Tools, not needed here
 
