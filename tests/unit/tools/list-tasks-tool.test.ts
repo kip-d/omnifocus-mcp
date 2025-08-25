@@ -69,6 +69,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       await tool.execute({ 
+        mode: 'list',
         completed: false, 
         limit: 10,
         skipAnalysis: true 
@@ -105,6 +106,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       const result = await tool.execute({ 
+        mode: 'list',
         skipAnalysis: true 
       });
 
@@ -165,7 +167,7 @@ describe('QueryTasksToolV2', () => {
         }
       });
 
-      const result = await tool.execute({ limit: 10 });
+      const result = await tool.execute({ mode: 'list', limit: 10 });
 
       expect(result.metadata).toHaveProperty('performance_metrics');
       expect(result.metadata.performance_metrics).toEqual({
@@ -192,7 +194,7 @@ describe('QueryTasksToolV2', () => {
         }
       });
 
-      const result1 = await tool.execute({ limit: 10, skipAnalysis: false });
+      const result1 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: false });
       const totalTime1 = result1.metadata.performance_metrics.filter_time_ms + 
                         result1.metadata.performance_metrics.analysis_time_ms;
 
@@ -209,7 +211,7 @@ describe('QueryTasksToolV2', () => {
         }
       });
 
-      const result2 = await tool.execute({ limit: 10, skipAnalysis: true });
+      const result2 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
       const totalTime2 = result2.metadata.performance_metrics.filter_time_ms + 
                         result2.metadata.performance_metrics.analysis_time_ms;
 
@@ -229,7 +231,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       // Call with skipAnalysis: true
-      await tool.execute({ limit: 10, skipAnalysis: true });
+      await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
       
       // Check cache key does not include skipAnalysis (it's excluded from filter)
       const setCalls = mockCache.set.mock.calls;
@@ -248,7 +250,7 @@ describe('QueryTasksToolV2', () => {
       
       // First call with skipAnalysis: false uses cache
       mockCache.get.mockReturnValueOnce(cachedResponse);
-      const result1 = await tool.execute({ limit: 10, skipAnalysis: false });
+      const result1 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: false });
       expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
 
       // Reset mocks
@@ -261,7 +263,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       // Second call with skipAnalysis: true bypasses cache
-      const result2 = await tool.execute({ limit: 10, skipAnalysis: true });
+      const result2 = await tool.execute({ mode: 'list', limit: 10, skipAnalysis: true });
       expect(mockCache.get).not.toHaveBeenCalled();
       expect(mockOmniAutomation.execute).toHaveBeenCalled();
     });

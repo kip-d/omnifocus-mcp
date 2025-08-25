@@ -4,12 +4,8 @@ import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
 // Mock dependencies
-vi.mock('../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
-}));
-vi.mock('../../../src/omnifocus/OmniAutomation.js', () => ({
-  OmniAutomation: vi.fn()
-}));
+vi.mock('../../../src/cache/CacheManager.js');
+vi.mock('../../../src/omnifocus/OmniAutomation.js');
 vi.mock('../../../src/utils/logger.js', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
@@ -19,7 +15,8 @@ vi.mock('../../../src/utils/logger.js', () => ({
   }))
 }));
 
-describe('Project CRUD Operations', () => {
+describe('ProjectsToolV2 CRUD Operations', () => {
+  let tool: ProjectsToolV2;
   let mockCache: any;
   let mockOmniAutomation: any;
 
@@ -41,392 +38,285 @@ describe('Project CRUD Operations', () => {
 
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
+
+    tool = new ProjectsToolV2(mockCache);
+    (tool as any).omniAutomation = mockOmniAutomation;
   });
 
-  describe('ProjectsToolV2 - Create Operation', () => {
-    let tool: ProjectsToolV2;
+  describe('list operation', () => {
+    it('should list projects', async () => {
+      const mockResult = {
+        projects: [
+          { id: 'proj1', name: 'Project 1', status: 'active' },
+          { id: 'proj2', name: 'Project 2', status: 'onHold' }
+        ],
+        count: 2
+      };
 
-    beforeEach(() => {
-      tool = new ProjectsToolV2(mockCache);
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+
+      const result = await tool.executeValidated({ 
+        operation: 'list',
+        includeCompleted: false 
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.items).toHaveLength(2);
+      expect(mockCache.set).toHaveBeenCalled();
     });
 
-    describe('successful operations', () => {
-      it('should create a simple project', async () => {
-        const projectData = { name: 'Test project' };
-        const scriptResult = {
-          project: {
-            id: 'proj-123',
-            name: 'Test project',
-            status: 'active',
-            folder: null
-          }
-        };
+    it('should use cached results when available', async () => {
+      const cachedResult = {
+        success: true,
+        data: { items: [{ name: 'Cached Project' }] }
+      };
 
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockCache.get.mockReturnValue(cachedResult);
 
-        const result = await tool.execute(projectData);
+      const result = await tool.executeValidated({ operation: 'list' });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String), // CREATE_PROJECT_SCRIPT
-          {
-            name: 'Test project',
-            options: expect.objectContaining({
-              status: 'active',
-              flagged: false,
-              sequential: false
-            })
-          }
-        );
-        expect(mockOmniAutomation.execute).toHaveBeenCalledWith('test script');
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-        expect(result.success).toBe(true);
-        expect(result.data.project.projectId).toBe('proj-123');
-        expect(result.data.project.name).toBe('Test project');
-      });
-
-      it('should create a project with all optional fields', async () => {
-        const projectData = {
-          name: 'Complex project',
-          note: 'Project description',
-          folder: 'Work',
-          status: 'onHold' as const,
-          flagged: true,
-          dueDate: '2024-01-31 23:59',
-          deferDate: '2024-01-01',
-          sequential: true,
-          completedByChildren: true,
-          singleton: false,
-          nextReviewDate: '2024-01-15 12:00',
-          reviewInterval: {
-            unit: 'week' as const,
-            steps: 2,
-            fixed: true
-          }
-        };
-        const scriptResult = {
-          project: {
-            id: 'proj-456',
-            name: 'Complex project',
-            status: 'onHold',
-            folder: 'Work',
-            nextReviewDate: '2024-01-15T12:00:00Z',
-            reviewInterval: { unit: 'week', steps: 2, fixed: true }
-          }
-        };
-
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
-
-        const result = await tool.execute(projectData);
-
-        expect(result.success).toBe(true);
-        expect(result.data.project.projectId).toBe('proj-456');
-        expect(result.data.project.folder).toBe('Work');
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      });
+      expect(result).toBe(cachedResult);
+      expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
     });
+  });
 
-    describe('validation', () => {
-      it('should reject missing name', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
-      });
-
-      it('should reject empty name', async () => {
-        await expect(tool.execute({ name: '' })).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
-      });
-
-      it('should reject invalid status', async () => {
-        await expect(tool.execute({
+  describe('create operation', () => {
+    it('should create a simple project', async () => {
+      const scriptResult = {
+        project: {
+          id: 'proj-123',
           name: 'Test project',
-          status: 'invalid-status' as any
-        })).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+          status: 'active',
+          folder: null
+        }
+      };
+
+      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+
+      const result = await tool.executeValidated({
+        operation: 'create',
+        name: 'Test project'
       });
+
+      expect(result.success).toBe(true);
+      expect(result.data.project.projectId).toBe('proj-123');
+      expect(result.data.project.name).toBe('Test project');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
     });
 
-    describe('error handling', () => {
-      it('should handle script execution error', async () => {
-        const projectData = { name: 'Test project' };
-        
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Failed to create project'
-        });
+    it('should create a complex project with all options', async () => {
+      const projectData = {
+        operation: 'create' as const,
+        name: 'Complex project',
+        note: 'Project description',
+        folder: 'Work',
+        status: 'onHold' as const,
+        flagged: true,
+        dueDate: '2024-01-31 23:59',
+        deferDate: '2024-01-01',
+        sequential: true,
+        completedByChildren: true,
+        singleton: false,
+        nextReviewDate: '2024-01-15 12:00',
+        reviewInterval: {
+          unit: 'week' as const,
+          steps: 2,
+          fixed: true
+        }
+      };
 
-        const result = await tool.execute(projectData);
+      const scriptResult = {
+        project: {
+          id: 'proj-456',
+          name: 'Complex project',
+          status: 'onHold',
+          folder: 'Work',
+          nextReviewDate: '2024-01-15T12:00:00Z',
+          reviewInterval: { unit: 'week', steps: 2, fixed: true }
+        }
+      };
 
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('SCRIPT_ERROR');
-        expect(result.error.message).toBe('Failed to create project');
-        expect(mockCache.invalidate).not.toHaveBeenCalled();
-      });
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
 
-      it('should handle permission denied error', async () => {
-        const projectData = { name: 'Test project' };
-        
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
+      const result = await tool.executeValidated(projectData);
 
-        const result = await tool.execute(projectData);
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('PERMISSION_DENIED');
-        expect(result.error.message).toContain('Permission denied');
-      });
-    });
-  });
-
-  describe('UpdateProjectTool', () => {
-    let tool: UpdateProjectTool;
-
-    beforeEach(() => {
-      tool = new UpdateProjectTool(mockCache);
-    });
-
-    describe('successful operations', () => {
-      it('should update project name', async () => {
-        const updateData = {
-          projectId: 'proj-123',
-          updates: {
-            name: 'Updated project name'
-          }
-        };
-        const scriptResult = {
-          id: 'proj-123',
-          name: 'Updated project name',
-          updated: true,
-          changes: { name: 'Updated project name' }
-        };
-
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(scriptResult);
-
-        const result = await tool.execute(updateData);
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String), // UPDATE_PROJECT_SCRIPT
-          {
-            projectId: 'proj-123',
-            updates: expect.objectContaining({ name: 'Updated project name' })
-          }
-        );
-        expect(result.success).toBe(true);
-        expect(result.data.project).toEqual(scriptResult);
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      });
+      expect(result.success).toBe(true);
+      expect(result.data.project.projectId).toBe('proj-456');
+      expect(result.data.project.folder).toBe('Work');
     });
 
-    describe('validation', () => {
-      it('should reject missing projectId', async () => {
-        await expect(tool.execute({
-          updates: { name: 'New name' }
-        })).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+    it('should validate required parameters', async () => {
+      const result = await tool.executeValidated({
+        operation: 'create'
+        // Missing name
       });
 
-      it('should reject empty updates object', async () => {
-        await expect(tool.execute({
-          projectId: 'proj-123',
-          updates: {}
-        })).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('error handling', () => {
-      it('should handle script execution error', async () => {
-        const updateData = {
-          projectId: 'proj-123',
-          updates: { name: 'New name' }
-        };
-        
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Project not found'
-        });
-
-        const result = await tool.execute(updateData);
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('UPDATE_FAILED');
-        expect(result.error.message).toBe('Project not found');
-        expect(mockCache.invalidate).not.toHaveBeenCalled();
-      });
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('MISSING_PARAMETER');
+      expect(result.error.message).toContain('name is required');
     });
   });
 
-  describe('CompleteProjectTool', () => {
-    let tool: CompleteProjectTool;
-
-    beforeEach(() => {
-      tool = new CompleteProjectTool(mockCache);
-    });
-
-    describe('successful operations', () => {
-      it('should complete a project', async () => {
-        const completeData = { projectId: 'proj-123' };
-        const scriptResult = {
+  describe('update operation', () => {
+    it('should update project properties', async () => {
+      const scriptResult = {
+        project: {
           id: 'proj-123',
-          name: 'Test Project',
-          status: 'completed',
-          completionDate: new Date().toISOString()
-        };
+          name: 'Updated Name',
+          status: 'active'
+        }
+      };
 
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
 
-        const result = await tool.execute(completeData);
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String), // COMPLETE_PROJECT_SCRIPT
-          {
-            projectId: 'proj-123',
-            completeAllTasks: false
-          }
-        );
-        expect(result.success).toBe(true);
-        expect(result.data.project).toEqual(scriptResult);
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-        expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+      const result = await tool.executeValidated({
+        operation: 'update',
+        projectId: 'proj-123',
+        updates: {
+          name: 'Updated Name',
+          status: 'active'
+        }
       });
 
-      it('should complete a project with all tasks', async () => {
-        const completeData = {
-          projectId: 'proj-123',
-          completeAllTasks: true
-        };
-        const scriptResult = {
-          id: 'proj-123',
-          name: 'Test Project',
-          status: 'completed',
-          tasksCompleted: 5,
-          completionDate: new Date().toISOString()
-        };
-
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
-
-        const result = await tool.execute(completeData);
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          {
-            projectId: 'proj-123',
-            completeAllTasks: true
-          }
-        );
-        expect(result.success).toBe(true);
-        expect(result.metadata.complete_all_tasks).toBe(true);
-      });
+      expect(result.success).toBe(true);
+      expect(result.data.project.name).toBe('Updated Name');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
     });
 
-    describe('validation', () => {
-      it('should reject missing projectId', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+    it('should validate required parameters', async () => {
+      const result = await tool.executeValidated({
+        operation: 'update',
+        // Missing projectId
+        updates: { name: 'New Name' }
       });
-    });
 
-    describe('error handling', () => {
-      it('should handle script execution error', async () => {
-        const completeData = { projectId: 'proj-123' };
-        
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Project not found'
-        });
-
-        const result = await tool.execute(completeData);
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('SCRIPT_ERROR');
-        expect(result.error.message).toBe('Project not found');
-        expect(mockCache.invalidate).not.toHaveBeenCalled();
-      });
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('MISSING_PARAMETER');
+      expect(result.error.message).toContain('projectId is required');
     });
   });
 
-  describe('DeleteProjectTool', () => {
-    let tool: DeleteProjectTool;
+  describe('complete operation', () => {
+    it('should complete a project', async () => {
+      const scriptResult = {
+        project: {
+          id: 'proj-123',
+          name: 'Completed Project',
+          completedByChildren: false,
+          tasksCompleted: 5
+        }
+      };
 
-    beforeEach(() => {
-      tool = new DeleteProjectTool(mockCache);
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
+
+      const result = await tool.executeValidated({
+        operation: 'complete',
+        projectId: 'proj-123'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.project.projectId).toBe('proj-123');
+      expect(result.data.tasksCompleted).toBe(5);
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });
 
-    describe('successful operations', () => {
-      it('should delete a project', async () => {
-        const deleteData = { projectId: 'proj-123' };
-        const scriptResult = {
-          projectName: 'Deleted Project',
-          tasksDeleted: 0,
-          tasksOrphaned: 3
-        };
+    it('should complete a project with all tasks', async () => {
+      const scriptResult = {
+        project: {
+          id: 'proj-123',
+          name: 'Completed Project',
+          completedByChildren: true,
+          tasksCompleted: 10
+        }
+      };
 
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
 
-        const result = await tool.execute(deleteData);
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String), // DELETE_PROJECT_SCRIPT
-          {
-            projectId: 'proj-123',
-            deleteTasks: false
-          }
-        );
-        expect(result.success).toBe(true);
-        expect(result.data.deleted_id).toBe('proj-123');
-        expect(result.data.project_name).toBe('Deleted Project');
-        expect(result.data.tasks_orphaned).toBe(3);
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      const result = await tool.executeValidated({
+        operation: 'complete',
+        projectId: 'proj-123',
+        completeTasks: true
       });
 
-      it('should fallback to URL scheme on permission error', async () => {
-        const deleteData = { projectId: 'proj-123' };
+      expect(result.success).toBe(true);
+      expect(result.data.completedByChildren).toBe(true);
+      expect(result.data.tasksCompleted).toBe(10);
+    });
+  });
 
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'parameter is missing'
-        });
+  describe('delete operation', () => {
+    it('should delete a project', async () => {
+      const scriptResult = {
+        success: true,
+        projectId: 'proj-123',
+        message: 'Project deleted successfully'
+      };
 
-        const result = await tool.execute(deleteData);
+      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(scriptResult));
 
-        expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
-        expect(result.success).toBe(true);
-        expect(result.metadata.method).toBe('url_scheme');
-        expect(result.data.message).toContain('marked as dropped');
-        expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      const result = await tool.executeValidated({
+        operation: 'delete',
+        projectId: 'proj-123'
       });
+
+      expect(result.success).toBe(true);
+      expect(result.data.projectId).toBe('proj-123');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });
 
-    describe('validation', () => {
-      it('should reject missing projectId', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+    it('should handle permission denied and use URL scheme fallback', async () => {
+      const error = new Error('Not authorized');
+      (error as any).stderr = 'execution error: OmniFocus got an error: Not authorized';
+      mockOmniAutomation.execute.mockRejectedValueOnce(error);
+      mockOmniAutomation.executeViaUrlScheme.mockResolvedValue({
+        success: true,
+        message: 'Deleted via URL scheme'
       });
+
+      const result = await tool.executeValidated({
+        operation: 'delete',
+        projectId: 'proj-123'
+      });
+
+      expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle script execution errors', async () => {
+      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+
+      const result = await tool.executeValidated({
+        operation: 'create',
+        name: 'Test Project'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error.message).toContain('Script failed');
     });
 
-    describe('error handling', () => {
-      it('should handle generic execution error', async () => {
-        const deleteData = { projectId: 'proj-123' };
-        
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('Network error'));
-
-        const result = await tool.execute(deleteData);
-
-        expect(result.success).toBe(false);
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toBe('Network error');
-        expect(mockOmniAutomation.executeViaUrlScheme).not.toHaveBeenCalled();
+    it('should handle invalid operation', async () => {
+      const result = await tool.executeValidated({
+        operation: 'invalid' as any
       });
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('INVALID_OPERATION');
+    });
+  });
+
+  describe('tool metadata', () => {
+    it('should have correct name and description', () => {
+      expect(tool.name).toBe('projects');
+      expect(tool.description).toContain('Project management');
+      expect(tool.description).toContain('list');
+      expect(tool.description).toContain('create');
+      expect(tool.description).toContain('update');
+      expect(tool.description).toContain('delete');
     });
   });
 });

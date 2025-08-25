@@ -66,6 +66,7 @@ describe('ProjectsToolV2', () => {
       });
 
       await tool.execute({ 
+        operation: 'list',
         limit: 10,
         includeStats: true 
       });
@@ -94,7 +95,7 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      await tool.execute({ limit: 10 });
+      await tool.execute({ operation: 'list', limit: 10 });
 
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
       const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
@@ -140,7 +141,7 @@ describe('ProjectsToolV2', () => {
         }
       });
 
-      const result = await tool.execute({ includeStats: true });
+      const result = await tool.execute({ operation: 'list', includeStats: true });
 
       expect(result.data.items[0]).toHaveProperty('stats');
       expect(result.data.items[0].stats).toHaveProperty('active', 7);
@@ -167,7 +168,7 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      const result = await tool.execute({ includeStats: false });
+      const result = await tool.execute({ operation: 'list', includeStats: false });
 
       expect(result.data.items[0]).not.toHaveProperty('stats');
     });
@@ -198,7 +199,7 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      const result = await tool.execute({ includeStats: true });
+      const result = await tool.execute({ operation: 'list', includeStats: true });
       const stats = result.data.items[0].stats;
 
       expect(stats.total).toBe(0);
@@ -222,7 +223,7 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      const result = await tool.execute({ includeStats: true });
+      const result = await tool.execute({ operation: 'list', includeStats: true });
 
       expect(result.data.items[0]).toHaveProperty('statsError');
       expect(result.data.items[0]).not.toHaveProperty('stats');
@@ -238,7 +239,7 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      await tool.execute({ limit: 10, includeStats: true });
+      await tool.execute({ operation: 'list', limit: 10, includeStats: true });
       
       const setCalls = mockCache.set.mock.calls;
       expect(setCalls.length).toBeGreaterThan(0);
@@ -255,10 +256,10 @@ describe('ProjectsToolV2', () => {
         metadata: {}
       });
 
-      await tool.execute({ limit: 10, includeStats: false });
+      await tool.execute({ operation: 'list', limit: 10, includeStats: false });
       const key1 = mockCache.set.mock.calls[0][1];
 
-      await tool.execute({ limit: 10, includeStats: true });
+      await tool.execute({ operation: 'list', limit: 10, includeStats: true });
       const key2 = mockCache.set.mock.calls[1][1];
 
       expect(key1).not.toBe(key2);
@@ -287,9 +288,9 @@ describe('ProjectsToolV2', () => {
         metadata: { query_time_ms: 1500 }
       });
 
-      const result1 = await tool.execute({ includeStats: false });
+      const result1 = await tool.execute({ operation: 'list', includeStats: false });
       
-      const result2 = await tool.execute({ includeStats: true });
+      const result2 = await tool.execute({ operation: 'list', includeStats: true });
 
       expect(result2.metadata.query_time_ms).toBeGreaterThan(result1.metadata.query_time_ms);
     });
