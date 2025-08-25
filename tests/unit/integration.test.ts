@@ -86,7 +86,7 @@ describe('OmniFocus MCP Server Integration Tests', () => {
   });
 
   describe('Tools Discovery', () => {
-    it.skip('should list all available tools after initialization', { timeout: 20000 }, async () => {
+    it('should list all available tools after initialization', { timeout: 20000 }, async () => {
       // Since we initialize in the "Server Initialization" test above,
       // the server should already be initialized. Just call tools/list directly.
       const result = await sendRequest('tools/list');
@@ -96,13 +96,31 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(result.tools.length).toBeGreaterThan(0);
       
       const toolNames = result.tools.map((t: any) => t.name);
-      expect(toolNames).toContain('tasks');  // v2 consolidated tool
+      
+      // V2 consolidated tools
+      expect(toolNames).toContain('tasks');           // QueryTasksToolV2 - consolidated task queries
+      expect(toolNames).toContain('projects');        // ProjectsToolV2 - all project operations
+      
+      // Task CRUD operations (still separate)
       expect(toolNames).toContain('create_task');
       expect(toolNames).toContain('update_task');
       expect(toolNames).toContain('complete_task');
       expect(toolNames).toContain('delete_task');
-      expect(toolNames).toContain('projects');  // v2 consolidated tool
-      expect(toolNames).toContain('create_project');
+      
+      // Analytics tools
+      expect(toolNames).toContain('productivity_stats');
+      expect(toolNames).toContain('task_velocity');
+      expect(toolNames).toContain('analyze_overdue');
+      
+      // Other consolidated tools
+      expect(toolNames).toContain('tags');            // TagsToolV2
+      expect(toolNames).toContain('system');          // SystemToolV2
+      expect(toolNames).toContain('perspectives');    // PerspectivesToolV2
+      
+      // Export tools
+      expect(toolNames).toContain('export_tasks');
+      expect(toolNames).toContain('export_projects');
+      expect(toolNames).toContain('bulk_export');
     });
   });
 
