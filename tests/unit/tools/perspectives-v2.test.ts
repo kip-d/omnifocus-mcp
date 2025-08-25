@@ -59,9 +59,9 @@ describe('PerspectivesToolV2', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.perspectives).toHaveLength(3);
-      // Items are sorted by name in PerspectivesToolV2
-      expect(result.data.perspectives[0].name).toBe('Custom View');
-      expect(result.data.perspectives[2].name).toBe('Projects');
+      // Items should be sorted by name - check all three
+      const names = result.data.perspectives.map((p: any) => p.name);
+      expect(names).toEqual(['Custom View', 'Inbox', 'Projects']);
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
     });
 
