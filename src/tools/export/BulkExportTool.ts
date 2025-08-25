@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { ExportTasksTool } from './ExportTasksTool.js';
 import { ExportProjectsTool } from './ExportProjectsTool.js';
-import { ListTagsTool } from '../tags/ListTagsTool.js';
+import { TagsToolV2 } from '../tags/TagsToolV2.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { BulkExportResponse, BulkExportResponseData, ExportTasksResponse, ExportProjectsResponse, ListTasksResponse } from '../response-types.js';
 import * as fs from 'fs/promises';
@@ -80,7 +80,7 @@ export class BulkExportTool extends BaseTool<typeof BulkExportSchema> {
       }
 
       // Export tags (JSON only)
-      const tagExporter = new ListTagsTool(this.cache);
+      const tagExporter = new TagsToolV2(this.cache);
       const tagResult = await tagExporter.execute({ includeEmpty: true }) as ListTasksResponse;
 
       if (tagResult.success && tagResult.data) {

@@ -27,10 +27,8 @@ import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js'
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
 
-// Import tag tools
-import { ListTagsTool } from './tags/ListTagsTool.js';
-import { ManageTagsTool } from './tags/ManageTagsTool.js';
-import { GetActiveTagsTool } from './tags/GetActiveTagsTool.js';
+// Import tag tools (consolidated)
+import { TagsToolV2 } from './tags/TagsToolV2.js';
 
 // Import export tools
 import { ExportTasksTool } from './export/ExportTasksTool.js';
@@ -91,10 +89,8 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
 
     // Analytics tools are in v2Tools, not needed here
 
-    // Tag tools
-    new ListTagsTool(cache),
-    new ManageTagsTool(cache),
-    new GetActiveTagsTool(cache),
+    // Tag tools (consolidated)
+    new TagsToolV2(cache),
 
     // Export tools
     new ExportTasksTool(cache),
