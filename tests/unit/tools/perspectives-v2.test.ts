@@ -58,10 +58,10 @@ describe('PerspectivesToolV2', () => {
       const result = await tool.executeValidated({ operation: 'list' });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toHaveLength(3);
+      expect(result.data.perspectives).toHaveLength(3);
       // Items are sorted by name in PerspectivesToolV2
-      expect(result.data.items[0].name).toBe('Custom View');
-      expect(result.data.items[2].name).toBe('Projects');
+      expect(result.data.perspectives[0].name).toBe('Custom View');
+      expect(result.data.perspectives[2].name).toBe('Projects');
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
     });
 
@@ -85,8 +85,8 @@ describe('PerspectivesToolV2', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items[0].filterRules).toBeDefined();
-      expect(result.data.items[0].filterRules.flagged).toBe(true);
+      expect(result.data.perspectives[0].filterRules).toBeDefined();
+      expect(result.data.perspectives[0].filterRules.flagged).toBe(true);
     });
 
     it('should handle script execution errors', async () => {

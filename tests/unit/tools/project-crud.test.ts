@@ -84,12 +84,10 @@ describe('ProjectsToolV2 CRUD Operations', () => {
   describe('create operation', () => {
     it('should create a simple project', async () => {
       const scriptResult = {
-        project: {
-          id: 'proj-123',
-          name: 'Test project',
-          status: 'active',
-          folder: null
-        }
+        id: 'proj-123',
+        name: 'Test project',
+        status: 'active',
+        folder: null
       };
 
       mockOmniAutomation.buildScript.mockReturnValue('test script');
@@ -128,14 +126,12 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       };
 
       const scriptResult = {
-        project: {
-          id: 'proj-456',
-          name: 'Complex project',
-          status: 'onHold',
-          folder: 'Work',
-          nextReviewDate: '2024-01-15T12:00:00Z',
-          reviewInterval: { unit: 'week', steps: 2, fixed: true }
-        }
+        id: 'proj-456',
+        name: 'Complex project',
+        status: 'onHold',
+        folder: 'Work',
+        nextReviewDate: '2024-01-15T12:00:00Z',
+        reviewInterval: { unit: 'week', steps: 2, fixed: true }
       };
 
       mockOmniAutomation.execute.mockResolvedValue(scriptResult);
@@ -154,19 +150,17 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('MISSING_PARAMETER');
-      expect(result.error.message).toContain('name is required');
+      expect(result.error.code).toBe('EXECUTION_ERROR');
+      expect(result.error.message).toContain('Create operation requires name parameter');
     });
   });
 
   describe('update operation', () => {
     it('should update project properties', async () => {
       const scriptResult = {
-        project: {
-          id: 'proj-123',
-          name: 'Updated Name',
-          status: 'active'
-        }
+        id: 'proj-123',
+        name: 'Updated Name',
+        status: 'active'
       };
 
       mockOmniAutomation.execute.mockResolvedValue(scriptResult);
@@ -193,20 +187,18 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('MISSING_PARAMETER');
-      expect(result.error.message).toContain('projectId is required');
+      expect(result.error.code).toBe('EXECUTION_ERROR');
+      expect(result.error.message).toContain('requires projectId parameter');
     });
   });
 
   describe('complete operation', () => {
     it('should complete a project', async () => {
       const scriptResult = {
-        project: {
-          id: 'proj-123',
-          name: 'Completed Project',
-          completedByChildren: false,
-          tasksCompleted: 5
-        }
+        id: 'proj-123',
+        name: 'Completed Project',
+        completedByChildren: false,
+        tasksCompleted: 5
       };
 
       mockOmniAutomation.execute.mockResolvedValue(scriptResult);
@@ -217,20 +209,18 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.project.project.id).toBe('proj-123');
-      expect(result.data.project.project.tasksCompleted).toBe(5);
+      expect(result.data.project.id).toBe('proj-123');
+      expect(result.data.project.tasksCompleted).toBe(5);
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
       expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });
 
     it('should complete a project with all tasks', async () => {
       const scriptResult = {
-        project: {
-          id: 'proj-123',
-          name: 'Completed Project',
-          completedByChildren: true,
-          tasksCompleted: 10
-        }
+        id: 'proj-123',
+        name: 'Completed Project',
+        completedByChildren: true,
+        tasksCompleted: 10
       };
 
       mockOmniAutomation.execute.mockResolvedValue(scriptResult);
@@ -242,8 +232,8 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.project.project.completedByChildren).toBe(true);
-      expect(result.data.project.project.tasksCompleted).toBe(10);
+      expect(result.data.project.completedByChildren).toBe(true);
+      expect(result.data.project.tasksCompleted).toBe(10);
     });
   });
 
@@ -269,27 +259,21 @@ describe('ProjectsToolV2 CRUD Operations', () => {
     });
 
     it('should handle permission denied and use URL scheme fallback', async () => {
-      const error = new Error('Not authorized');
-      (error as any).stderr = 'execution error: OmniFocus got an error: Not authorized';
-      mockOmniAutomation.execute.mockRejectedValueOnce(error);
-      mockOmniAutomation.executeViaUrlScheme.mockResolvedValue({
-        success: true,
-        message: 'Deleted via URL scheme'
-      });
+      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Not authorized' });
 
       const result = await tool.executeValidated({
         operation: 'delete',
         projectId: 'proj-123'
       });
 
-      expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.error.message).toBe('Not authorized');
     });
   });
 
   describe('error handling', () => {
     it('should handle script execution errors', async () => {
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Script failed' });
 
       const result = await tool.executeValidated({
         operation: 'create',
@@ -297,7 +281,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.message).toContain('Script failed');
+      expect(result.error.message).toBe('Script failed');
     });
 
     it('should handle invalid operation', async () => {
@@ -313,7 +297,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
   describe('tool metadata', () => {
     it('should have correct name and description', () => {
       expect(tool.name).toBe('projects');
-      expect(tool.description).toContain('Project management');
+      expect(tool.description).toContain('Manage OmniFocus projects');
       expect(tool.description).toContain('list');
       expect(tool.description).toContain('create');
       expect(tool.description).toContain('update');

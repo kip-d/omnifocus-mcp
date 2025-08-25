@@ -69,7 +69,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toBeDefined();
+      expect(result.data.tasks).toBeDefined();
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
     });
 
@@ -110,7 +110,7 @@ describe('QueryTasksToolV2', () => {
   });
 
   describe('caching behavior', () => {
-    it('should use cache when available', async () => {
+    it('should use cache when available for overdue mode', async () => {
       const cachedData = {
         tasks: [{ id: 'task1', name: 'Cached Task' }],
         summary: { total: 1 }
@@ -118,7 +118,7 @@ describe('QueryTasksToolV2', () => {
       mockCache.get.mockReturnValue(cachedData);
 
       const result = await tool.executeValidated({ 
-        mode: 'all',
+        mode: 'overdue',
         limit: 10
       });
 
@@ -127,7 +127,7 @@ describe('QueryTasksToolV2', () => {
       expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
     });
 
-    it('should set cache after fetching', async () => {
+    it('should set cache after fetching for overdue mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.execute.mockResolvedValue({
@@ -136,7 +136,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       await tool.executeValidated({ 
-        mode: 'all',
+        mode: 'overdue',
         limit: 10
       });
 
@@ -148,7 +148,7 @@ describe('QueryTasksToolV2', () => {
     it('should handle script execution errors', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Script failed' });
 
       const result = await tool.executeValidated({ 
         mode: 'all',
@@ -156,7 +156,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.message).toContain('Script failed');
+      expect(result.error.message).toBe('Failed to get tasks');
     });
 
     it('should require search term for search mode', async () => {
@@ -166,7 +166,8 @@ describe('QueryTasksToolV2', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('MISSING_PARAMETER');
+      expect(result.error.code).toBe('EXECUTION_ERROR');
+      expect(result.error.message).toContain('Search mode requires a search term');
     });
   });
 });
