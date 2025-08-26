@@ -22,27 +22,34 @@ const PatternAnalysisSchema = z.object({
     'all'
   ])).min(1).describe('Which patterns to analyze'),
   
-  options: z.object({
-    dormant_threshold_days: z.union([
-      z.number(),
-      z.string().transform(val => parseInt(val, 10))
-    ]).pipe(z.number().min(7).max(365)).default(90).describe('Days without activity to consider dormant'),
-    
-    duplicate_similarity_threshold: z.union([
-      z.number(),
-      z.string().transform(val => parseFloat(val))
-    ]).pipe(z.number().min(0.5).max(1.0)).default(0.85).describe('Similarity threshold for duplicates (0.5-1.0)'),
-    
-    include_completed: z.union([
-      z.boolean(),
-      z.string().transform(val => val === 'true')
-    ]).pipe(z.boolean()).default(false).describe('Include completed tasks in analysis'),
-    
-    max_tasks: z.union([
-      z.number(),
-      z.string().transform(val => parseInt(val, 10))
-    ]).pipe(z.number().min(100).max(10000)).default(3000).describe('Maximum tasks to analyze')
-  }).default({})
+  options: z.union([
+    z.object({
+      dormant_threshold_days: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10))
+      ]).pipe(z.number().min(7).max(365)).default(90).describe('Days without activity to consider dormant'),
+      
+      duplicate_similarity_threshold: z.union([
+        z.number(),
+        z.string().transform(val => parseFloat(val))
+      ]).pipe(z.number().min(0.5).max(1.0)).default(0.85).describe('Similarity threshold for duplicates (0.5-1.0)'),
+      
+      include_completed: z.union([
+        z.boolean(),
+        z.string().transform(val => val === 'true')
+      ]).pipe(z.boolean()).default(false).describe('Include completed tasks in analysis'),
+      
+      max_tasks: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10))
+      ]).pipe(z.number().min(100).max(10000)).default(3000).describe('Maximum tasks to analyze')
+    }),
+    // Handle case where options is passed as a string (common mistake)
+    z.string().transform(() => {
+      console.warn('Pattern analysis options was passed as string, using defaults');
+      return {};
+    })
+  ]).default({}).describe('Options object with threshold settings')
 });
 
 type PatternAnalysisParams = z.infer<typeof PatternAnalysisSchema>;
@@ -86,6 +93,15 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const startTime = Date.now();
     
     try {
+      // Ensure options has default values
+      const options = {
+        dormant_threshold_days: 90,
+        duplicate_similarity_threshold: 0.85,
+        include_completed: false,
+        max_tasks: 3000,
+        ...params.options
+      };
+      
       // Expand 'all' to include all patterns
       const patterns = params.patterns.includes('all') ? 
         ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 
@@ -93,7 +109,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         params.patterns;
       
       // Fetch slimmed task data
-      const slimData = await this.fetchSlimmedData(params.options);
+      const slimData = await this.fetchSlimmedData(options);
       
       // Run requested pattern analyses
       const findings: Record<string, PatternFinding> = {};
@@ -101,12 +117,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       for (const pattern of patterns) {
         switch (pattern) {
           case 'duplicates':
-            findings.duplicates = await this.detectDuplicates(slimData.tasks, params.options);
+            findings.duplicates = await this.detectDuplicates(slimData.tasks, options);
             break;
           case 'dormant_projects':
             findings.dormant_projects = await this.detectDormantProjects(
               slimData.projects, 
-              params.options.dormant_threshold_days
+              options.dormant_threshold_days
             );
             break;
           case 'tag_audit':

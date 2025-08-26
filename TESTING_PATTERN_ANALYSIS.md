@@ -128,7 +128,7 @@ Report issues at: https://github.com/kip-d/omnifocus-mcp/issues
 For power users who want to test specific parameters:
 
 ```javascript
-// Test with custom thresholds
+// CORRECT: Options as an object with specific properties
 {
   "tool": "analyze_patterns",
   "arguments": {
@@ -141,7 +141,16 @@ For power users who want to test specific parameters:
     }
   }
 }
+
+// INCORRECT: Don't pass options as a string
+// ❌ "options": "include_similarity_scores"
 ```
+
+### Valid Options
+- `dormant_threshold_days`: Number of days (7-365, default: 90)
+- `duplicate_similarity_threshold`: Similarity score (0.5-1.0, default: 0.85)
+- `include_completed`: Include completed tasks (true/false, default: false)
+- `max_tasks`: Maximum tasks to analyze (100-10000, default: 3000)
 
 You can test this directly using the MCP inspector:
 ```bash
