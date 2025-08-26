@@ -218,6 +218,20 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 }
 ```
 
+### Analyze Database Patterns (NEW)
+```javascript
+// Find duplicates, dormant projects, and tag issues
+{
+  "tool": "analyze_patterns",
+  "arguments": {
+    "patterns": ["duplicates", "dormant_projects", "tag_audit"],
+    "options": {
+      "dormant_threshold_days": "60"
+    }
+  }
+}
+```
+
 ## Available Tools (46 Total)
 
 ### Consolidated Tools (Recommended for AI Agents)
@@ -235,7 +249,7 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 
 **Perspectives**: `list_perspectives`, `query_perspective` - Access user's custom perspectives and their contents
 
-**Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`
+**Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`, `analyze_patterns` (NEW - database-wide pattern detection)
 
 **Tags**: `list_tags`, `get_active_tags`, `manage_tags`
 
