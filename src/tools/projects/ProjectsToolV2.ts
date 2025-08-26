@@ -307,7 +307,20 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       updates.flagged = typeof args.flagged === 'boolean' ? args.flagged : args.flagged === 'true' || args.flagged === true;
     }
     if (args.tags !== undefined) updates.tags = args.tags;
-    if (args.reviewInterval !== undefined) updates.reviewInterval = args.reviewInterval;
+    
+    // Convert reviewInterval to proper format if provided as a number (days)
+    if (args.reviewInterval !== undefined) {
+      if (typeof args.reviewInterval === 'number') {
+        updates.reviewInterval = {
+          unit: 'days',
+          steps: args.reviewInterval,
+          fixed: true
+        };
+      } else {
+        updates.reviewInterval = args.reviewInterval;
+      }
+    }
+    
     if (args.status !== undefined) updates.status = args.status;
     
     // Execute update
@@ -398,6 +411,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     // Execute deletion
     const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
       projectId: args.projectId,
+      deleteTasks: false, // Don't delete tasks, move them to inbox
     });
     
     const result = await this.omniAutomation.execute<any>(script);

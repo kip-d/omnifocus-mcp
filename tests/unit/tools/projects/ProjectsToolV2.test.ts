@@ -446,12 +446,17 @@ describe('ProjectsToolV2', () => {
 
       expect(result.success).toBe(true);
       // buildScript is called with the parameters
+      // When reviewInterval is a string number, it gets converted to an object
       expect(mockOmni.buildScript).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           projectId: 'p1',
           updates: expect.objectContaining({
-            reviewInterval: 7,
+            reviewInterval: {
+              unit: 'days',
+              steps: 7,
+              fixed: true
+            },
           }),
         })
       );
