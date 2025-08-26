@@ -54,6 +54,7 @@ export const UPDATE_PROJECT_SCRIPT = `
     
     // Apply updates
     const changes = [];
+    const warnings = [];
     
     if (updates.name && updates.name !== targetProject.name()) {
       // Check if new name already exists
@@ -70,8 +71,15 @@ export const UPDATE_PROJECT_SCRIPT = `
     }
     
     if (updates.note !== undefined) {
-      targetProject.note = updates.note;
-      changes.push("Note updated");
+      // Ensure note is a string (JXA type conversion issue)
+      const noteValue = updates.note === null ? '' : String(updates.note);
+      try {
+        targetProject.note = noteValue;
+        changes.push("Note updated");
+      } catch (noteError) {
+        // Some projects may have read-only notes or other restrictions
+        warnings.push("Could not update note - " + (noteError.message || noteError.toString()));
+      }
     }
     
     if (updates.deferDate !== undefined) {
@@ -264,6 +272,7 @@ export const UPDATE_PROJECT_SCRIPT = `
         singleton: targetProject.singleton ? targetProject.singleton() : false
       },
       changes: changes,
+      warnings: warnings.length > 0 ? warnings : undefined,
       message: "Project updated successfully"
     });
   } catch (error) {
