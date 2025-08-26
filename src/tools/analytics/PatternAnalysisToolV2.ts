@@ -1,0 +1,858 @@
+/**
+ * Pattern Analysis Tool - Analyzes patterns across entire OmniFocus database
+ * Implements duplicate detection, dormant projects, tag audits, and more
+ */
+
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
+import { createAnalyticsResponseV2 } from '../../utils/response-format-v2.js';
+import { createLogger } from '../../utils/logger.js';
+
+// Schema for pattern analysis request
+const PatternAnalysisSchema = z.object({
+  patterns: z.array(z.enum([
+    'duplicates',
+    'dormant_projects',
+    'tag_audit',
+    'deadline_health',
+    'waiting_for',
+    'estimation_bias',
+    'next_actions',
+    'review_gaps',
+    'all'
+  ])).min(1).describe('Which patterns to analyze'),
+  
+  options: z.object({
+    dormant_threshold_days: z.union([
+      z.number(),
+      z.string().transform(val => parseInt(val, 10))
+    ]).pipe(z.number().min(7).max(365)).default(90).describe('Days without activity to consider dormant'),
+    
+    duplicate_similarity_threshold: z.union([
+      z.number(),
+      z.string().transform(val => parseFloat(val))
+    ]).pipe(z.number().min(0.5).max(1.0)).default(0.85).describe('Similarity threshold for duplicates (0.5-1.0)'),
+    
+    include_completed: z.union([
+      z.boolean(),
+      z.string().transform(val => val === 'true')
+    ]).pipe(z.boolean()).default(false).describe('Include completed tasks in analysis'),
+    
+    max_tasks: z.union([
+      z.number(),
+      z.string().transform(val => parseInt(val, 10))
+    ]).pipe(z.number().min(100).max(10000)).default(3000).describe('Maximum tasks to analyze')
+  }).default({})
+});
+
+type PatternAnalysisParams = z.infer<typeof PatternAnalysisSchema>;
+
+interface PatternFinding {
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  count: number;
+  items?: any[];
+  recommendation?: string;
+}
+
+interface SlimTask {
+  id: string;
+  name: string;
+  project?: string;
+  projectId?: string;
+  tags: string[];
+  status: string;
+  completed: boolean;
+  flagged: boolean;
+  deferDate?: string;
+  dueDate?: string;
+  completionDate?: string;
+  createdDate?: string;
+  modifiedDate?: string;
+  estimatedMinutes?: number;
+  note?: string;
+  noteHead?: string; // First 160 chars
+  children?: number;
+}
+
+export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema> {
+  name = 'analyze_patterns';
+  description = 'Analyze patterns across entire OmniFocus database for insights and improvements';
+  schema = PatternAnalysisSchema;
+  
+  protected logger = createLogger('PatternAnalysisToolV2');
+
+  protected async executeValidated(params: PatternAnalysisParams): Promise<any> {
+    const startTime = Date.now();
+    
+    try {
+      // Expand 'all' to include all patterns
+      const patterns = params.patterns.includes('all') ? 
+        ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 
+         'waiting_for', 'estimation_bias', 'next_actions', 'review_gaps'] :
+        params.patterns;
+      
+      // Fetch slimmed task data
+      const slimData = await this.fetchSlimmedData(params.options);
+      
+      // Run requested pattern analyses
+      const findings: Record<string, PatternFinding> = {};
+      
+      for (const pattern of patterns) {
+        switch (pattern) {
+          case 'duplicates':
+            findings.duplicates = await this.detectDuplicates(slimData.tasks, params.options);
+            break;
+          case 'dormant_projects':
+            findings.dormant_projects = await this.detectDormantProjects(
+              slimData.projects, 
+              params.options.dormant_threshold_days
+            );
+            break;
+          case 'tag_audit':
+            findings.tag_audit = await this.auditTags(slimData.tasks);
+            break;
+          case 'deadline_health':
+            findings.deadline_health = await this.analyzeDeadlines(slimData.tasks);
+            break;
+          case 'waiting_for':
+            findings.waiting_for = await this.analyzeWaitingFor(slimData.tasks);
+            break;
+          case 'estimation_bias':
+            findings.estimation_bias = await this.analyzeEstimationBias(slimData.tasks);
+            break;
+          case 'next_actions':
+            findings.next_actions = await this.analyzeNextActions(slimData.tasks);
+            break;
+          case 'review_gaps':
+            findings.review_gaps = await this.analyzeReviewGaps(slimData.projects);
+            break;
+        }
+      }
+      
+      // Generate summary insights
+      const summary = this.generateSummary(findings, slimData);
+      
+      const duration = Date.now() - startTime;
+      
+      return createAnalyticsResponseV2(
+        'analyze_patterns',
+        findings,
+        'pattern_analysis',
+        summary.key_insights || [],
+        {
+          tasks_analyzed: slimData.tasks.length,
+          projects_analyzed: slimData.projects.length,
+          patterns_checked: patterns,
+          query_time_ms: duration,
+          from_cache: false
+        }
+      );
+      
+    } catch (error) {
+      this.logger.error('Analysis failed', { error });
+      throw error;
+    }
+  }
+
+  private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[] }> {
+    // Fetch tasks with minimal data for pattern analysis
+    const taskScript = `
+      const app = Application('OmniFocus');
+      const doc = app.defaultDocument;
+      const tasks = [];
+      const projects = [];
+      
+      // Fetch tasks
+      const allTasks = doc.flattenedTasks();
+      const maxTasks = ${options.max_tasks};
+      const includeCompleted = ${options.include_completed};
+      
+      for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
+        const task = allTasks[i];
+        
+        try {
+          const completed = task.completed();
+          if (!includeCompleted && completed) continue;
+          
+          const taskData = {
+            id: task.id(),
+            name: task.name(),
+            completed: completed,
+            flagged: task.flagged(),
+            status: task.taskStatus ? task.taskStatus().toString() : 'unknown'
+          };
+          
+          // Optional fields
+          try { 
+            const container = task.containingProject();
+            if (container) {
+              taskData.project = container.name();
+              taskData.projectId = container.id();
+            }
+          } catch(e) {}
+          
+          try { 
+            const tags = task.tags();
+            taskData.tags = tags ? tags.map(t => t.name()) : [];
+          } catch(e) { taskData.tags = []; }
+          
+          try { taskData.deferDate = task.deferDate()?.toISOString(); } catch(e) {}
+          try { taskData.dueDate = task.dueDate()?.toISOString(); } catch(e) {}
+          try { taskData.completionDate = task.completionDate()?.toISOString(); } catch(e) {}
+          try { taskData.creationDate = task.creationDate()?.toISOString(); } catch(e) {}
+          try { taskData.modificationDate = task.modificationDate()?.toISOString(); } catch(e) {}
+          try { taskData.estimatedMinutes = task.estimatedMinutes(); } catch(e) {}
+          
+          try { 
+            const note = task.note();
+            if (note) {
+              taskData.noteHead = note.substring(0, 160);
+            }
+          } catch(e) {}
+          
+          try { 
+            const children = task.tasks();
+            taskData.children = children ? children.length : 0;
+          } catch(e) {}
+          
+          tasks.push(taskData);
+        } catch(e) {
+          // Skip problematic tasks
+        }
+      }
+      
+      // Fetch projects
+      const allProjects = doc.flattenedProjects();
+      for (let i = 0; i < allProjects.length; i++) {
+        const project = allProjects[i];
+        
+        try {
+          const projectData = {
+            id: project.id(),
+            name: project.name(),
+            status: project.status().toString(),
+            taskCount: project.numberOfTasks(),
+            availableTaskCount: project.numberOfAvailableTasks()
+          };
+          
+          try { projectData.lastReviewDate = project.lastReviewDate()?.toISOString(); } catch(e) {}
+          try { projectData.nextReviewDate = project.nextReviewDate()?.toISOString(); } catch(e) {}
+          try { projectData.creationDate = project.creationDate()?.toISOString(); } catch(e) {}
+          try { projectData.modificationDate = project.modificationDate()?.toISOString(); } catch(e) {}
+          try { projectData.completionDate = project.completionDate()?.toISOString(); } catch(e) {}
+          
+          projects.push(projectData);
+        } catch(e) {
+          // Skip problematic projects
+        }
+      }
+      
+      JSON.stringify({ tasks, projects });
+    `;
+    
+    const result = await this.omniAutomation.execute(taskScript);
+    return JSON.parse(result as string);
+  }
+
+  private async detectDuplicates(tasks: SlimTask[], options: any): Promise<PatternFinding> {
+    const duplicates: Array<{ task1: SlimTask, task2: SlimTask, similarity: number }> = [];
+    const threshold = options.duplicate_similarity_threshold;
+    
+    // Simple duplicate detection based on name similarity
+    for (let i = 0; i < tasks.length - 1; i++) {
+      for (let j = i + 1; j < tasks.length; j++) {
+        const similarity = this.calculateSimilarity(tasks[i].name, tasks[j].name);
+        
+        if (similarity >= threshold) {
+          // Check they're not in the same project (subtasks with similar names are OK)
+          if (tasks[i].projectId !== tasks[j].projectId || !tasks[i].projectId) {
+            duplicates.push({
+              task1: tasks[i],
+              task2: tasks[j],
+              similarity
+            });
+          }
+        }
+      }
+    }
+    
+    // Group duplicate clusters
+    const clusters = this.clusterDuplicates(duplicates);
+    
+    return {
+      type: 'duplicates',
+      severity: clusters.length > 10 ? 'warning' : 'info',
+      count: clusters.length,
+      items: clusters.slice(0, 10), // Top 10 clusters
+      recommendation: clusters.length > 0 ? 
+        `Found ${clusters.length} potential duplicate task clusters. Review and merge or clarify distinctions.` :
+        'No significant duplicates detected.'
+    };
+  }
+
+  private calculateSimilarity(str1: string, str2: string): number {
+    // Normalize strings
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    
+    // Exact match
+    if (s1 === s2) return 1.0;
+    
+    // Calculate Levenshtein distance ratio
+    const maxLen = Math.max(s1.length, s2.length);
+    if (maxLen === 0) return 1.0;
+    
+    const distance = this.levenshteinDistance(s1, s2);
+    return 1 - (distance / maxLen);
+  }
+
+  private levenshteinDistance(str1: string, str2: string): number {
+    const m = str1.length;
+    const n = str2.length;
+    const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+    
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (str1[i - 1] === str2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,    // deletion
+            dp[i][j - 1] + 1,    // insertion
+            dp[i - 1][j - 1] + 1 // substitution
+          );
+        }
+      }
+    }
+    
+    return dp[m][n];
+  }
+
+  private clusterDuplicates(duplicates: any[]): any[] {
+    // Group duplicates into clusters
+    const clusters: Map<string, Set<string>> = new Map();
+    
+    for (const dup of duplicates) {
+      const id1 = dup.task1.id;
+      const id2 = dup.task2.id;
+      
+      let foundCluster = false;
+      for (const [, members] of clusters) {
+        if (members.has(id1) || members.has(id2)) {
+          members.add(id1);
+          members.add(id2);
+          foundCluster = true;
+          break;
+        }
+      }
+      
+      if (!foundCluster) {
+        clusters.set(id1, new Set([id1, id2]));
+      }
+    }
+    
+    // Convert to array format with task details
+    return Array.from(clusters.values()).map(cluster => {
+      const taskIds = Array.from(cluster);
+      const tasks = duplicates
+        .filter(d => taskIds.includes(d.task1.id) || taskIds.includes(d.task2.id))
+        .flatMap(d => [d.task1, d.task2])
+        .filter((task, index, self) => self.findIndex(t => t.id === task.id) === index);
+      
+      return {
+        cluster_size: cluster.size,
+        tasks: tasks.map(t => ({ id: t.id, name: t.name, project: t.project }))
+      };
+    });
+  }
+
+  private async detectDormantProjects(projects: any[], thresholdDays: number): Promise<PatternFinding> {
+    const now = new Date();
+    const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
+    const dormant: any[] = [];
+    
+    for (const project of projects) {
+      // Skip completed/dropped projects
+      if (project.status === 'done' || project.status === 'dropped') continue;
+      
+      // Check last modification date
+      const lastModified = project.modificationDate ? new Date(project.modificationDate) : null;
+      
+      if (lastModified) {
+        const dormantTime = now.getTime() - lastModified.getTime();
+        
+        if (dormantTime > thresholdMs) {
+          dormant.push({
+            id: project.id,
+            name: project.name,
+            days_dormant: Math.floor(dormantTime / (24 * 60 * 60 * 1000)),
+            last_modified: project.modificationDate,
+            task_count: project.taskCount,
+            available_tasks: project.availableTaskCount
+          });
+        }
+      }
+    }
+    
+    // Sort by dormancy duration
+    dormant.sort((a, b) => b.days_dormant - a.days_dormant);
+    
+    return {
+      type: 'dormant_projects',
+      severity: dormant.length > 5 ? 'warning' : 'info',
+      count: dormant.length,
+      items: dormant.slice(0, 10),
+      recommendation: dormant.length > 0 ?
+        `${dormant.length} projects haven't been modified in over ${thresholdDays} days. Consider reviewing, completing, or dropping them.` :
+        'All projects show recent activity.'
+    };
+  }
+
+  private async auditTags(tasks: SlimTask[]): Promise<PatternFinding> {
+    const tagStats = new Map<string, number>();
+    const tagProjects = new Map<string, Set<string>>();
+    
+    // Collect tag usage statistics
+    for (const task of tasks) {
+      for (const tag of task.tags) {
+        tagStats.set(tag, (tagStats.get(tag) || 0) + 1);
+        
+        if (task.projectId) {
+          if (!tagProjects.has(tag)) {
+            tagProjects.set(tag, new Set());
+          }
+          tagProjects.get(tag)!.add(task.projectId);
+        }
+      }
+    }
+    
+    // Analyze tag patterns
+    const findings: any = {
+      total_tags: tagStats.size,
+      unused_tags: [],
+      underused_tags: [],
+      overused_tags: [],
+      potential_synonyms: []
+    };
+    
+    // Find underused tags (used < 3 times)
+    for (const [tag, count] of tagStats) {
+      if (count < 3) {
+        findings.underused_tags.push({ tag, count });
+      } else if (count > 100) {
+        findings.overused_tags.push({ 
+          tag, 
+          count,
+          project_spread: tagProjects.get(tag)?.size || 0
+        });
+      }
+    }
+    
+    // Detect potential synonyms (tags with very similar names)
+    const tags = Array.from(tagStats.keys());
+    for (let i = 0; i < tags.length - 1; i++) {
+      for (let j = i + 1; j < tags.length; j++) {
+        const similarity = this.calculateSimilarity(tags[i], tags[j]);
+        if (similarity > 0.8 && similarity < 1.0) {
+          findings.potential_synonyms.push({
+            tag1: tags[i],
+            tag2: tags[j],
+            similarity,
+            combined_usage: (tagStats.get(tags[i]) || 0) + (tagStats.get(tags[j]) || 0)
+          });
+        }
+      }
+    }
+    
+    // Calculate tag entropy (diversity measure)
+    const totalTagUsage = Array.from(tagStats.values()).reduce((a, b) => a + b, 0);
+    let entropy = 0;
+    for (const count of tagStats.values()) {
+      const p = count / totalTagUsage;
+      if (p > 0) {
+        entropy -= p * Math.log2(p);
+      }
+    }
+    
+    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 
+      'warning' : 'info';
+    
+    return {
+      type: 'tag_audit',
+      severity,
+      count: tagStats.size,
+      items: {
+        ...findings,
+        entropy: entropy.toFixed(2),
+        entropy_interpretation: entropy < 2 ? 'Low diversity - consider more tags' :
+                                entropy > 5 ? 'High diversity - consider consolidation' :
+                                'Moderate diversity'
+      },
+      recommendation: this.generateTagRecommendation(findings)
+    };
+  }
+
+  private generateTagRecommendation(findings: any): string {
+    const recommendations: string[] = [];
+    
+    if (findings.underused_tags.length > 5) {
+      recommendations.push(`${findings.underused_tags.length} tags are rarely used. Consider removing or merging them.`);
+    }
+    
+    if (findings.potential_synonyms.length > 0) {
+      recommendations.push(`Found ${findings.potential_synonyms.length} potential tag synonyms that could be merged.`);
+    }
+    
+    if (findings.overused_tags.length > 0) {
+      recommendations.push(`${findings.overused_tags.length} tags are heavily used. Consider creating more specific sub-tags.`);
+    }
+    
+    return recommendations.length > 0 ? 
+      recommendations.join(' ') :
+      'Tag usage appears well-balanced.';
+  }
+
+  private async analyzeDeadlines(tasks: SlimTask[]): Promise<PatternFinding> {
+    const now = new Date();
+    const findings: any = {
+      overdue: [],
+      due_today: [],
+      due_this_week: [],
+      deadline_bunching: new Map<string, number>()
+    };
+    
+    for (const task of tasks) {
+      if (task.completed) continue;
+      if (!task.dueDate) continue;
+      
+      const dueDate = new Date(task.dueDate);
+      const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      
+      if (daysUntilDue < 0) {
+        findings.overdue.push({
+          id: task.id,
+          name: task.name,
+          project: task.project,
+          days_overdue: Math.abs(daysUntilDue)
+        });
+      } else if (daysUntilDue === 0) {
+        findings.due_today.push({ id: task.id, name: task.name });
+      } else if (daysUntilDue <= 7) {
+        findings.due_this_week.push({ id: task.id, name: task.name, days_until: daysUntilDue });
+      }
+      
+      // Track deadline bunching by date
+      const dateKey = dueDate.toISOString().split('T')[0];
+      findings.deadline_bunching.set(dateKey, (findings.deadline_bunching.get(dateKey) || 0) + 1);
+    }
+    
+    // Find days with too many deadlines
+    const bunchedEntries: Array<[string, number]> = Array.from(findings.deadline_bunching.entries());
+    const bunchedDates = bunchedEntries
+      .filter(([_, count]) => count > 5)
+      .sort((a, b) => b[1] - a[1]);
+    
+    const severity = findings.overdue.length > 10 ? 'critical' :
+                     findings.overdue.length > 5 ? 'warning' : 'info';
+    
+    const deadlineInfo = {
+      overdue_count: findings.overdue.length,
+      overdue_samples: findings.overdue.slice(0, 5),
+      due_today_count: findings.due_today.length,
+      due_this_week_count: findings.due_this_week.length,
+      bunched_dates: bunchedDates.slice(0, 5).map(([date, count]) => ({ date, task_count: count }))
+    };
+    
+    return {
+      type: 'deadline_health',
+      severity,
+      count: findings.overdue.length,
+      items: deadlineInfo as any,
+      recommendation: this.generateDeadlineRecommendation(findings, bunchedDates)
+    };
+  }
+
+  private generateDeadlineRecommendation(findings: any, bunchedDates: any[]): string {
+    const recommendations: string[] = [];
+    
+    if (findings.overdue.length > 5) {
+      recommendations.push(`${findings.overdue.length} tasks are overdue. Prioritize or reschedule them.`);
+    }
+    
+    if (bunchedDates.length > 0) {
+      recommendations.push(`${bunchedDates.length} dates have 5+ tasks due. Consider spreading deadlines more evenly.`);
+    }
+    
+    return recommendations.length > 0 ?
+      recommendations.join(' ') :
+      'Deadline distribution looks manageable.';
+  }
+
+  private async analyzeWaitingFor(tasks: SlimTask[]): Promise<PatternFinding> {
+    // Look for tasks that might be waiting (based on name patterns or tags)
+    const waitingPatterns = [
+      /waiting/i, /wait for/i, /blocked by/i, /depends on/i,
+      /after/i, /once .* complete/i, /pending/i
+    ];
+    
+    const waitingTasks: any[] = [];
+    
+    for (const task of tasks) {
+      if (task.completed) continue;
+      
+      // Check name for waiting patterns
+      const isWaiting = waitingPatterns.some(pattern => pattern.test(task.name));
+      
+      // Check for waiting tag
+      const hasWaitingTag = task.tags.some(tag => 
+        /wait/i.test(tag) || /pending/i.test(tag) || /blocked/i.test(tag)
+      );
+      
+      // Check if task is blocked (has incomplete children)
+      const isBlocked = task.status === 'blocked' || (task.children && task.children > 0);
+      
+      if (isWaiting || hasWaitingTag || isBlocked) {
+        const daysWaiting = task.createdDate ? 
+          Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000)) : 0;
+        
+        waitingTasks.push({
+          id: task.id,
+          name: task.name,
+          project: task.project,
+          reason: isWaiting ? 'name_pattern' : hasWaitingTag ? 'tag' : 'blocked',
+          days_waiting: daysWaiting
+        });
+      }
+    }
+    
+    // Sort by waiting duration
+    waitingTasks.sort((a, b) => b.days_waiting - a.days_waiting);
+    
+    const severity = waitingTasks.filter(t => t.days_waiting > 30).length > 5 ? 'warning' : 'info';
+    
+    return {
+      type: 'waiting_for',
+      severity,
+      count: waitingTasks.length,
+      items: waitingTasks.slice(0, 10),
+      recommendation: waitingTasks.length > 10 ?
+        `${waitingTasks.length} tasks appear to be waiting. Review blockers and follow up on dependencies.` :
+        'Waiting/blocked tasks are at reasonable levels.'
+    };
+  }
+
+  private async analyzeEstimationBias(tasks: SlimTask[]): Promise<PatternFinding> {
+    const estimatedTasks = tasks.filter(t => t.estimatedMinutes && t.completed && t.completionDate);
+    
+    if (estimatedTasks.length < 10) {
+      return {
+        type: 'estimation_bias',
+        severity: 'info',
+        count: 0,
+        recommendation: 'Not enough completed tasks with estimates to analyze bias.'
+      };
+    }
+    
+    // This would require actual completion time tracking, which OmniFocus doesn't provide
+    // Instead, we'll analyze the distribution of estimates
+    const estimates = tasks
+      .filter(t => t.estimatedMinutes)
+      .map(t => t.estimatedMinutes!);
+    
+    if (estimates.length === 0) {
+      return {
+        type: 'estimation_bias',
+        severity: 'info',
+        count: 0,
+        recommendation: 'No tasks have time estimates. Consider adding estimates for better planning.'
+      };
+    }
+    
+    const stats = {
+      count: estimates.length,
+      min: Math.min(...estimates),
+      max: Math.max(...estimates),
+      mean: estimates.reduce((a, b) => a + b, 0) / estimates.length,
+      median: estimates.sort((a, b) => a - b)[Math.floor(estimates.length / 2)]
+    };
+    
+    // Check for common estimation anti-patterns
+    const findings: any = {
+      stats,
+      patterns: []
+    };
+    
+    // Pattern: Everything is 30 or 60 minutes
+    const commonEstimates = estimates.filter(e => e === 30 || e === 60);
+    if (commonEstimates.length > estimates.length * 0.5) {
+      findings.patterns.push('Over-reliance on 30/60 minute estimates');
+    }
+    
+    // Pattern: No small tasks
+    if (stats.min >= 30) {
+      findings.patterns.push('No tasks under 30 minutes - consider breaking down work');
+    }
+    
+    // Pattern: Huge variance
+    if (stats.max > stats.mean * 10) {
+      findings.patterns.push('Very large tasks detected - consider decomposition');
+    }
+    
+    return {
+      type: 'estimation_bias',
+      severity: findings.patterns.length > 1 ? 'warning' : 'info',
+      count: estimates.length,
+      items: findings,
+      recommendation: findings.patterns.length > 0 ?
+        `Estimation patterns suggest: ${findings.patterns.join(', ')}` :
+        'Time estimation distribution looks reasonable.'
+    };
+  }
+
+  private async analyzeNextActions(tasks: SlimTask[]): Promise<PatternFinding> {
+    const issues: any[] = [];
+    
+    // Patterns that suggest unclear next actions
+    const vaguePatterns = [
+      /^think about/i, /^consider/i, /^look into/i, /^research/i,
+      /^plan/i, /^figure out/i, /^decide/i, /^work on/i
+    ];
+    
+    const projectTasks = tasks.filter(t => !t.completed && t.projectId);
+    
+    for (const task of projectTasks) {
+      const problems: string[] = [];
+      
+      // Check for vague action verbs
+      if (vaguePatterns.some(p => p.test(task.name))) {
+        problems.push('vague_action');
+      }
+      
+      // Check for tasks that are too long (might be projects)
+      if (task.name.length > 100) {
+        problems.push('too_long');
+      }
+      
+      // Check for multiple actions in one task (contains "and")
+      if (/\band\b/i.test(task.name) && !/".*and.*"/.test(task.name)) {
+        problems.push('multiple_actions');
+      }
+      
+      // Check for question marks (not actionable)
+      if (task.name.includes('?')) {
+        problems.push('question_not_action');
+      }
+      
+      if (problems.length > 0) {
+        issues.push({
+          id: task.id,
+          name: task.name.substring(0, 80),
+          project: task.project,
+          problems
+        });
+      }
+    }
+    
+    const severity = issues.length > 20 ? 'warning' : 'info';
+    
+    return {
+      type: 'next_actions',
+      severity,
+      count: issues.length,
+      items: issues.slice(0, 10),
+      recommendation: issues.length > 10 ?
+        `${issues.length} tasks may not be clear next actions. Review and clarify with specific, actionable verbs.` :
+        'Most tasks appear to be clear, actionable next actions.'
+    };
+  }
+
+  private async analyzeReviewGaps(projects: any[]): Promise<PatternFinding> {
+    const now = new Date();
+    const gaps: any[] = [];
+    
+    for (const project of projects) {
+      // Skip completed/dropped projects
+      if (project.status === 'done' || project.status === 'dropped') continue;
+      
+      // Check if project has never been reviewed
+      if (!project.lastReviewDate && !project.nextReviewDate) {
+        gaps.push({
+          id: project.id,
+          name: project.name,
+          issue: 'never_reviewed',
+          task_count: project.taskCount
+        });
+        continue;
+      }
+      
+      // Check if review is overdue
+      if (project.nextReviewDate) {
+        const nextReview = new Date(project.nextReviewDate);
+        const daysOverdue = Math.floor((now.getTime() - nextReview.getTime()) / (24 * 60 * 60 * 1000));
+        
+        if (daysOverdue > 0) {
+          gaps.push({
+            id: project.id,
+            name: project.name,
+            issue: 'overdue_review',
+            days_overdue: daysOverdue,
+            last_review: project.lastReviewDate
+          });
+        }
+      }
+    }
+    
+    // Sort by severity
+    gaps.sort((a, b) => {
+      if (a.issue === 'never_reviewed' && b.issue !== 'never_reviewed') return -1;
+      if (b.issue === 'never_reviewed' && a.issue !== 'never_reviewed') return 1;
+      return (b.days_overdue || 0) - (a.days_overdue || 0);
+    });
+    
+    const severity = gaps.filter(g => g.issue === 'never_reviewed').length > 5 ||
+                     gaps.filter(g => g.days_overdue > 30).length > 3 ? 'warning' : 'info';
+    
+    return {
+      type: 'review_gaps',
+      severity,
+      count: gaps.length,
+      items: gaps.slice(0, 10),
+      recommendation: gaps.length > 5 ?
+        `${gaps.length} projects need review attention. Schedule a weekly review to stay on top of them.` :
+        'Project review schedule is mostly up to date.'
+    };
+  }
+
+  private generateSummary(findings: Record<string, PatternFinding>, data: any): any {
+    const criticalCount = Object.values(findings).filter(f => f.severity === 'critical').length;
+    const warningCount = Object.values(findings).filter(f => f.severity === 'warning').length;
+    
+    const keyInsights: string[] = [];
+    
+    // Add most important findings
+    for (const [key, finding] of Object.entries(findings)) {
+      if (finding.severity === 'critical' || finding.severity === 'warning') {
+        keyInsights.push(finding.recommendation || `${key}: ${finding.count} issues found`);
+      }
+    }
+    
+    // Overall health score (simple heuristic)
+    const healthScore = Math.max(0, 100 - (criticalCount * 20) - (warningCount * 10));
+    
+    return {
+      health_score: healthScore,
+      health_rating: healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Fair' : 'Needs Attention',
+      total_tasks_analyzed: data.tasks.length,
+      total_projects_analyzed: data.projects.length,
+      patterns_analyzed: Object.keys(findings).length,
+      critical_findings: criticalCount,
+      warning_findings: warningCount,
+      key_insights: keyInsights.slice(0, 5)
+    };
+  }
+
+}

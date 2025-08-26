@@ -30,6 +30,9 @@ import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
 // Import tag tools (consolidated)
 import { TagsToolV2 } from './tags/TagsToolV2.js';
 
+// Import pattern analysis tool
+import { PatternAnalysisToolV2 } from './analytics/PatternAnalysisToolV2.js';
+
 // Import export tools
 import { ExportTasksTool } from './export/ExportTasksTool.js';
 import { ExportProjectsTool } from './export/ExportProjectsTool.js';
@@ -68,6 +71,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
+    new PatternAnalysisToolV2(cache),   // 'analyze_patterns' - Database-wide pattern detection
   ];
 
   // Legacy tools have been completely removed in v2.0.0 for better performance
