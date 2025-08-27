@@ -113,10 +113,12 @@ export const LIST_TAGS_SCRIPT = `
           if (childTags) {
             tagInfo.children = [];
             for (let j = 0; j < childTags.length; j++) {
-              tagInfo.children.push({
-                id: safeGet(() => childTags[j].id()),
-                name: safeGet(() => childTags[j].name())
-              });
+              const childId = safeGet(() => childTags[j].id());
+              const childName = safeGet(() => childTags[j].name());
+              const childObj = {};
+              childObj.id = childId;
+              childObj.name = childName;
+              tagInfo.children.push(childObj);
             }
           }
         } catch (e) {
