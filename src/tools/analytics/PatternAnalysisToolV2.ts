@@ -86,6 +86,11 @@ const PatternAnalysisSchema = z.object({
         z.string().transform(val => val === 'true')
       ]).optional(),
       
+      exclude_completed: z.union([  // Snake_case variant
+        z.boolean(),
+        z.string().transform(val => val === 'true')
+      ]).optional(),
+      
       includeCompleted: z.union([
         z.boolean(),
         z.string().transform(val => val === 'true')
@@ -103,6 +108,11 @@ const PatternAnalysisSchema = z.object({
       ]).optional(),
       
       duplicateSimilarityThreshold: z.union([
+        z.number(),
+        z.string().transform(val => parseFloat(val))
+      ]).optional(),
+      
+      similarity_threshold: z.union([  // Shorter variant Claude is using
         z.number(),
         z.string().transform(val => parseFloat(val))
       ]).optional(),
@@ -162,6 +172,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       const rawOptions = params.options || {};
       
       // Create normalized options object
+      // Handle all the various field name formats Claude Desktop might send
       const options = {
         dormant_threshold_days: 
           rawOptions.dormant_threshold_days ?? 
@@ -171,12 +182,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         duplicate_similarity_threshold: 
           rawOptions.duplicate_similarity_threshold ?? 
           rawOptions.duplicateSimilarityThreshold ?? 
+          rawOptions.similarity_threshold ?? // New variant Claude is using
           0.85,
         
         include_completed: 
           rawOptions.include_completed ?? 
           rawOptions.includeCompleted ?? 
-          (rawOptions.excludeCompleted !== undefined ? !rawOptions.excludeCompleted : false),
+          (rawOptions.excludeCompleted !== undefined ? !rawOptions.excludeCompleted : 
+           rawOptions.exclude_completed !== undefined ? !rawOptions.exclude_completed : false), // Handle both variants
         
         max_tasks: 
           rawOptions.max_tasks ?? 
