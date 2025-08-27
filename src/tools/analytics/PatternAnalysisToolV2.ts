@@ -263,7 +263,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         }
       }
       
-      JSON.stringify({ tasks, projects });
+      return JSON.stringify({ tasks, projects });
     `;
     
     const result = await this.omniAutomation.execute(taskScript);
