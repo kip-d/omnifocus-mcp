@@ -224,7 +224,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
             );
             break;
           case 'tag_audit':
-            findings.tag_audit = await this.auditTags(slimData.tasks);
+            findings.tag_audit = await this.auditTags(slimData.tasks, slimData.tags);
             break;
           case 'deadline_health':
             findings.deadline_health = await this.analyzeDeadlines(slimData.tasks);
@@ -269,7 +269,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     }
   }
 
-  private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[] }> {
+  private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[], tags: any[] }> {
     // Fetch tasks with minimal data for pattern analysis
     const taskScript = `(() => {
       // doc is already declared in the wrapper
@@ -361,7 +361,32 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         }
       }
       
-      return JSON.stringify({ tasks, projects });
+      // Fetch all tags from OmniFocus
+      const tags = [];
+      const allTags = doc.flattenedTags();
+      for (let i = 0; i < allTags.length; i++) {
+        const tag = allTags[i];
+        try {
+          const tagData = {
+            name: tag.name(),
+            id: tag.id()
+          };
+          
+          // Count tasks with this tag
+          let taskCount = 0;
+          try {
+            const taggedTasks = tag.tasks();
+            taskCount = taggedTasks ? taggedTasks.length : 0;
+          } catch(e) {}
+          
+          tagData.taskCount = taskCount;
+          tags.push(tagData);
+        } catch(e) {
+          // Skip problematic tags
+        }
+      }
+      
+      return JSON.stringify({ tasks, projects, tags });
     })()`;  // Execute the IIFE immediately
     
     try {
@@ -375,7 +400,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       if (typeof result === 'string') {
         return JSON.parse(result);
       }
-      return result as { tasks: SlimTask[], projects: any[] };
+      return result as { tasks: SlimTask[], projects: any[], tags: any[] };
     } catch (error) {
       throw error;
     }
@@ -538,14 +563,22 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async auditTags(tasks: SlimTask[]): Promise<PatternFinding> {
+  private async auditTags(tasks: SlimTask[], allTags: any[] = []): Promise<PatternFinding> {
     const tagStats = new Map<string, number>();
     const tagProjects = new Map<string, Set<string>>();
     
-    // Collect tag usage statistics
+    // First, populate all tags from the tags array (includes unused tags)
+    for (const tag of allTags) {
+      tagStats.set(tag.name, tag.taskCount || 0);
+    }
+    
+    // Then collect tag usage from tasks to get project distribution
     for (const task of tasks) {
       for (const tag of task.tags) {
-        tagStats.set(tag, (tagStats.get(tag) || 0) + 1);
+        // Update count if we're getting it from tasks (more accurate)
+        if (!tagStats.has(tag)) {
+          tagStats.set(tag, 0);
+        }
         
         if (task.projectId) {
           if (!tagProjects.has(tag)) {
@@ -565,9 +598,11 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       potential_synonyms: []
     };
     
-    // Find underused tags (used < 3 times)
+    // Find unused and underused tags
     for (const [tag, count] of tagStats) {
-      if (count < 3) {
+      if (count === 0) {
+        findings.unused_tags.push(tag);
+      } else if (count < 3) {
         findings.underused_tags.push({ tag, count });
       } else if (count > 100) {
         findings.overused_tags.push({ 
@@ -579,16 +614,16 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     }
     
     // Detect potential synonyms (tags with very similar names)
-    const tags = Array.from(tagStats.keys());
-    for (let i = 0; i < tags.length - 1; i++) {
-      for (let j = i + 1; j < tags.length; j++) {
-        const similarity = this.calculateSimilarity(tags[i], tags[j]);
+    const tagNames = Array.from(tagStats.keys());
+    for (let i = 0; i < tagNames.length - 1; i++) {
+      for (let j = i + 1; j < tagNames.length; j++) {
+        const similarity = this.calculateSimilarity(tagNames[i], tagNames[j]);
         if (similarity > 0.8 && similarity < 1.0) {
           findings.potential_synonyms.push({
-            tag1: tags[i],
-            tag2: tags[j],
+            tag1: tagNames[i],
+            tag2: tagNames[j],
             similarity,
-            combined_usage: (tagStats.get(tags[i]) || 0) + (tagStats.get(tags[j]) || 0)
+            combined_usage: (tagStats.get(tagNames[i]) || 0) + (tagStats.get(tagNames[j]) || 0)
           });
         }
       }
