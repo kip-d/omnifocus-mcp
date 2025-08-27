@@ -174,7 +174,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[] }> {
     // Fetch tasks with minimal data for pattern analysis
     const taskScript = `
-      const doc = app.defaultDocument;
+      // doc is already declared in the wrapper
       const tasks = [];
       const projects = [];
       
