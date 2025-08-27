@@ -8,14 +8,14 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
-  description = 'Update an existing task in OmniFocus. Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format (e.g., "2024-12-25 16:00" for 4pm on Dec 25).';
+  description = 'Update an existing task in OmniFocus. IMPORTANT: Set minimalResponse=true when updating 10+ tasks to conserve context (reduces response by ~95%). Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format. For bulk tag updates or reorganization, ALWAYS use minimalResponse=true.';
   schema = UpdateTaskSchema;
 
   async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {
     const timer = new OperationTimer();
 
     try {
-      const { taskId, ...updates } = args;
+      const { taskId, minimalResponse = false, ...updates } = args;
 
       // Debug logging: Log all received parameters
       this.logger.info('UpdateTaskTool received parameters:', {
@@ -123,6 +123,17 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
       this.cache.invalidate('tasks');
 
       this.logger.info(`Updated task: ${taskId}`);
+
+      // Handle minimal response mode for bulk operations
+      if (minimalResponse) {
+        // Return only essential information to conserve context
+        return {
+          success: true,
+          task_id: taskId,
+          fields_updated: Object.keys(safeUpdates),
+          operation: 'update_task',
+        } as any;
+      }
 
       // Return standardized response with proper typing
       return createTaskResponse(

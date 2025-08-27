@@ -241,6 +241,8 @@ Create a new task in OmniFocus with full support for projects, tags, dates, and 
 
 Update an existing task with support for moving between projects and parents.
 
+**⚠️ CONTEXT OPTIMIZATION**: When updating 10+ tasks (e.g., bulk tag reorganization), ALWAYS set `minimalResponse=true` to reduce response size by ~95% and conserve LLM context window.
+
 #### Parameters
 
 | Parameter | Type | Required | Description |
@@ -261,15 +263,57 @@ Update an existing task with support for moving between projects and parents.
 | `sequential` | boolean | No | Sequential/parallel for subtasks |
 | `repeatRule` | object | No | New repeat rule |
 | `clearRepeatRule` | boolean | No | Remove existing repeat rule |
+| **`minimalResponse`** | **boolean** | No | **⚡ Return only success/task_id/fields_updated. ESSENTIAL for bulk operations!** |
 
-#### Example Request
+#### Example Requests
 
+**Standard Update (single task)**:
 ```json
 {
   "taskId": "xyz789",
   "name": "Updated task name",
   "projectId": null,  // Move to inbox
   "tags": ["urgent", "work"]
+}
+```
+
+**Bulk Tag Reorganization (conserve context)**:
+```json
+{
+  "taskId": "abc123",
+  "tags": ["EVE", "PvP"],
+  "minimalResponse": true  // ← Critical for bulk operations!
+}
+```
+
+#### Response Size Comparison
+
+**Standard Response** (~400 tokens):
+```json
+{
+  "success": true,
+  "data": {
+    "task": {
+      "id": "xyz789",
+      "name": "Updated task name",
+      "note": "Full task details...",
+      // ... 20+ additional fields
+    }
+  },
+  "metadata": {
+    "query_time_ms": 234,
+    // ... performance metrics
+  }
+}
+```
+
+**Minimal Response** (~20 tokens - 95% reduction!):
+```json
+{
+  "success": true,
+  "task_id": "xyz789",
+  "fields_updated": ["tags"],
+  "operation": "update_task"
 }
 ```
 
