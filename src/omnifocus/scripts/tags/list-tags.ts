@@ -105,6 +105,42 @@ export const LIST_TAGS_SCRIPT = `
         tagInfo.parentName = safeGet(() => parent.name());
       }
       
+      // Add hierarchy information if not in fast mode
+      if (!options.fastMode) {
+        // Get children tags
+        try {
+          const childTags = safeGet(() => tag.tags());
+          if (childTags) {
+            tagInfo.children = [];
+            for (let j = 0; j < childTags.length; j++) {
+              tagInfo.children.push({
+                id: safeGet(() => childTags[j].id()),
+                name: safeGet(() => childTags[j].name())
+              });
+            }
+          }
+        } catch (e) {
+          // Skip children if access fails
+        }
+        
+        // Build full path
+        let path = tagInfo.name;
+        let currentParent = parent;
+        let depth = 0;
+        
+        while (currentParent && depth < 10) { // Limit depth to prevent infinite loops
+          const parentName = safeGet(() => currentParent.name());
+          if (parentName) {
+            path = parentName + "/" + path;
+          }
+          currentParent = safeGet(() => currentParent.parent());
+          depth++;
+        }
+        
+        tagInfo.path = path;
+        tagInfo.level = depth;
+      }
+      
       tags.push(tagInfo);
     }
     

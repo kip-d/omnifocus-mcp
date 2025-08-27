@@ -40,7 +40,7 @@ const TagsToolSchema = z.object({
     .describe('Ultra-fast mode: Return only tag names without IDs or hierarchy (list operation)'),
 
   // Manage operation parameters
-  action: z.enum(['create', 'rename', 'delete', 'merge'])
+  action: z.enum(['create', 'rename', 'delete', 'merge', 'nest', 'unparent', 'reparent'])
     .optional()
     .describe('The management action to perform (manage operation)'),
 
@@ -55,13 +55,21 @@ const TagsToolSchema = z.object({
   targetTag: TagNameSchema
     .optional()
     .describe('Target tag for merge action (manage operation)'),
+
+  parentTagName: TagNameSchema
+    .optional()
+    .describe('Parent tag name for creating nested tags or nest/reparent operations'),
+
+  parentTagId: z.string()
+    .optional()
+    .describe('Parent tag ID for creating nested tags or nest/reparent operations'),
 });
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
 
 export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
   name = 'tags';
-  description = 'Comprehensive tag management: list all tags, get active tags, or manage tags (create/rename/delete/merge). Use operation="list" for all tags, "active" for tags with incomplete tasks, "manage" for CRUD operations.';
+  description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
 
   async executeValidated(args: TagsToolInput): Promise<any> {
@@ -240,7 +248,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
     const timer = new OperationTimer();
 
     try {
-      const { action, tagName, newName, targetTag } = args;
+      const { action, tagName, newName, targetTag, parentTagName, parentTagId } = args;
 
       // Validate required parameters
       if (!action) {
@@ -290,6 +298,8 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         tagName,
         newName,
         targetTag,
+        parentTagName,
+        parentTagId,
       });
       const result = await this.omniAutomation.execute<any>(script);
 
