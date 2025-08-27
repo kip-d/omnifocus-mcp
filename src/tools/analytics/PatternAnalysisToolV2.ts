@@ -44,10 +44,16 @@ const PatternAnalysisSchema = z.object({
         z.string().transform(val => parseInt(val, 10))
       ]).pipe(z.number().min(100).max(10000)).default(3000).describe('Maximum tasks to analyze')
     }),
-    // Handle case where options is passed as a string (common mistake)
-    z.string().transform(() => {
-      console.warn('Pattern analysis options was passed as string, using defaults');
-      return {};
+    // Handle case where options is passed as a JSON string
+    z.string().transform((val) => {
+      try {
+        const parsed = JSON.parse(val);
+        console.log('Pattern analysis options was passed as JSON string, parsed:', parsed);
+        return parsed;
+      } catch (e) {
+        console.warn('Pattern analysis options was passed as invalid string, using defaults');
+        return {};
+      }
     })
   ]).default({}).describe('Options object with threshold settings')
 });
@@ -93,6 +99,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const startTime = Date.now();
     
     try {
+      this.logger.debug('Pattern analysis params received:', params);
+      
       // Ensure options has default values
       const options = {
         dormant_threshold_days: 90,
@@ -102,6 +110,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         ...params.options
       };
       
+      this.logger.debug('Pattern analysis options after defaults:', options);
+      
       // Expand 'all' to include all patterns
       const patterns = params.patterns.includes('all') ? 
         ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 
@@ -109,7 +119,23 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         params.patterns;
       
       // Fetch slimmed task data
+      this.logger.debug('Fetching slimmed data with options:', options);
       const slimData = await this.fetchSlimmedData(options);
+      
+      if (!slimData) {
+        this.logger.error('fetchSlimmedData returned null or undefined');
+        throw new Error('Failed to fetch data from OmniFocus - received null response');
+      }
+      
+      if (!slimData.tasks || !slimData.projects) {
+        this.logger.error('fetchSlimmedData returned incomplete data:', slimData);
+        throw new Error('Failed to fetch complete data from OmniFocus - missing tasks or projects');
+      }
+      
+      this.logger.debug('Fetched data summary:', {
+        taskCount: slimData.tasks.length,
+        projectCount: slimData.projects.length
+      });
       
       // Run requested pattern analyses
       const findings: Record<string, PatternFinding> = {};
@@ -173,6 +199,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
   private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[] }> {
     // Fetch tasks with minimal data for pattern analysis
+    this.logger.debug('fetchSlimmedData called with options:', options);
+    
     const taskScript = `
       // doc is already declared in the wrapper
       const tasks = [];
@@ -266,8 +294,22 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       return JSON.stringify({ tasks, projects });
     `;
     
-    const result = await this.omniAutomation.execute(taskScript);
-    return JSON.parse(result as string);
+    try {
+      const result = await this.omniAutomation.execute(taskScript);
+      this.logger.debug('OmniAutomation result type:', typeof result);
+      
+      if (!result) {
+        this.logger.error('OmniAutomation returned null/undefined');
+        throw new Error('OmniAutomation execution returned no result');
+      }
+      
+      const parsed = JSON.parse(result as string);
+      this.logger.debug('Parsed result keys:', Object.keys(parsed));
+      return parsed;
+    } catch (error) {
+      this.logger.error('Error in fetchSlimmedData:', error);
+      throw error;
+    }
   }
 
   private async detectDuplicates(tasks: SlimTask[], options: any): Promise<PatternFinding> {
