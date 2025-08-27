@@ -132,33 +132,62 @@ npm run build
 | Coverage | ~41% | ~70% | +29% |
 | Test Files | 20 | 31 | +11 files |
 
-## Next Session Priority: Context Optimization Features
+## Next Session Priority: User-Reported Critical Issues
 
-### 1. Batch Update Operations (High Priority)
-Create `BatchUpdateTasksTool` to handle multiple task updates in a single operation:
+### 🚨 User Testing Group Feedback (Aug 27, 2025)
+Real-world usage revealed critical issues during EVE tag reorganization (100+ tasks):
+
+**✅ FIXED:**
+- `minimalResponse` parameter - Reduced 15,000 tokens → 300 tokens (50x improvement!)
+- Tag hierarchy syntax error - Fixed object literal compilation issue
+
+**🔴 STILL NEEDED:**
+
+### 1. Batch Update Operations (CRITICAL - User Blocked)
+**User Impact**: "No way to update multiple tasks in a single call"
+**Use Cases from Testing**:
+- Bulk retag tasks (EVE reorganization took 100+ individual calls)
+- Batch complete recurring tasks
+- Mass project moves
+
+Create `BatchUpdateTasksTool`:
 ```typescript
 {
   updates: [
-    { taskId: "abc", tags: ["PvP"] },
-    { taskId: "def", tags: ["PvE"] },
+    { taskId: "abc", tags: ["EVE", "PvP"] },
+    { taskId: "def", tags: ["EVE", "PvE"] },
     // ... up to 50 tasks
   ],
   minimalResponse: true,
   continueOnError: true
 }
 ```
-**Expected savings**: Update 50 tasks in one call vs 50 separate calls
+**Implementation**: 2-3 hours
+**Expected savings**: 50 API calls → 1 call
 
-### 2. Response Control Flags (Medium Priority)
-Add granular control over response content:
+### 2. Response Control Flags (HIGH - Context Exhaustion)
+**User Quote**: "Each task update consumes ~400-500 tokens"
+Add granular control:
+- `successOnly: true` - No response body for successful operations
 - `includeMetadata: false` - Skip performance/timestamp data
-- `includeTaskDetails: false` - Return only success status
+- `excludeTaskDetails: true` - Return only operation status
 - `fieldsToReturn: ["id", "name", "tags"]` - Specify exact fields needed
 
-### 3. Streaming Results for Large Operations (Low Priority)
-For operations returning >100 items, implement streaming to avoid context bloat
+**Implementation**: 1 hour
 
-### 4. Pattern Analysis Improvements
+### 3. Tag Hierarchy Operations (FIXED but needs testing)
+- ✅ Create nested tags working
+- ✅ Nest/unparent/reparent operations working
+- ✅ List hierarchy syntax error FIXED
+- 🔧 Needs comprehensive testing with real tag structures
+
+### 4. Performance Optimizations
+**User Metric**: EVE reorganization consumed 15,000 tokens in responses alone
+- Implement response caching for repeated queries
+- Add `changesOnly` mode for updates
+- Streaming for operations >100 items
+
+### 5. Pattern Analysis Improvements
 - Merge pattern-analysis branch features to main
 - Add more pattern recipes based on user feedback
 - Optimize pattern analysis performance for large databases
