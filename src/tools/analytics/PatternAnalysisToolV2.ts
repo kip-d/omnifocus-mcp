@@ -40,13 +40,11 @@ const PatternAnalysisSchema = z.object({
         try {
           // Try to parse as JSON
           const parsed = JSON.parse(val);
-          console.log('Parsed options from JSON string:', parsed);
           
           // If parsed result is a string, try parsing again (double-encoded)
           if (typeof parsed === 'string') {
             try {
               const doubleParsed = JSON.parse(parsed);
-              console.log('Double-parsed options:', doubleParsed);
               return doubleParsed;
             } catch {
               // If double parsing fails, return the first parse result
@@ -56,7 +54,6 @@ const PatternAnalysisSchema = z.object({
           
           return parsed;
         } catch (e) {
-          console.warn('Failed to parse options string, using empty object:', val);
           return {};
         }
       }
@@ -166,8 +163,6 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const startTime = Date.now();
     
     try {
-      this.logger.debug('Pattern analysis params received:', params);
-      
       // The schema has already normalized the options, but we need to handle field mappings
       const rawOptions = params.options || {};
       
@@ -197,8 +192,6 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           3000
       };
       
-      this.logger.debug('Pattern analysis options after defaults:', options);
-      
       // Expand 'all' to include all patterns
       const patterns = params.patterns.includes('all') ? 
         ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 
@@ -206,23 +199,15 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         params.patterns;
       
       // Fetch slimmed task data
-      this.logger.debug('Fetching slimmed data with options:', options);
       const slimData = await this.fetchSlimmedData(options);
       
       if (!slimData) {
-        this.logger.error('fetchSlimmedData returned null or undefined');
         throw new Error('Failed to fetch data from OmniFocus - received null response');
       }
       
       if (!slimData.tasks || !slimData.projects) {
-        this.logger.error('fetchSlimmedData returned incomplete data:', slimData);
         throw new Error('Failed to fetch complete data from OmniFocus - missing tasks or projects');
       }
-      
-      this.logger.debug('Fetched data summary:', {
-        taskCount: slimData.tasks.length,
-        projectCount: slimData.projects.length
-      });
       
       // Run requested pattern analyses
       const findings: Record<string, PatternFinding> = {};
@@ -286,8 +271,6 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
   private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[] }> {
     // Fetch tasks with minimal data for pattern analysis
-    this.logger.debug('fetchSlimmedData called with options:', options);
-    
     const taskScript = `(() => {
       // doc is already declared in the wrapper
       const tasks = [];
@@ -383,18 +366,17 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     
     try {
       const result = await this.omniAutomation.execute(taskScript);
-      this.logger.debug('OmniAutomation result type:', typeof result);
       
       if (!result) {
-        this.logger.error('OmniAutomation returned null/undefined');
         throw new Error('OmniAutomation execution returned no result');
       }
       
-      const parsed = JSON.parse(result as string);
-      this.logger.debug('Parsed result keys:', Object.keys(parsed));
-      return parsed;
+      // OmniAutomation.execute may return already parsed object or string
+      if (typeof result === 'string') {
+        return JSON.parse(result);
+      }
+      return result as { tasks: SlimTask[], projects: any[] };
     } catch (error) {
-      this.logger.error('Error in fetchSlimmedData:', error);
       throw error;
     }
   }
