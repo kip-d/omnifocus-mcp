@@ -101,13 +101,43 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     try {
       this.logger.debug('Pattern analysis params received:', params);
       
+      // Handle both excludeCompleted and include_completed field names
+      const rawOptions = params.options || {};
+      
+      // Convert excludeCompleted to include_completed if present
+      if ('excludeCompleted' in rawOptions) {
+        rawOptions.include_completed = !rawOptions.excludeCompleted;
+        delete rawOptions.excludeCompleted;
+      }
+      
+      // Also handle camelCase variants that might come from Claude Desktop
+      if ('dormantThresholdDays' in rawOptions) {
+        rawOptions.dormant_threshold_days = rawOptions.dormantThresholdDays;
+        delete rawOptions.dormantThresholdDays;
+      }
+      
+      if ('duplicateSimilarityThreshold' in rawOptions) {
+        rawOptions.duplicate_similarity_threshold = rawOptions.duplicateSimilarityThreshold;
+        delete rawOptions.duplicateSimilarityThreshold;
+      }
+      
+      if ('includeCompleted' in rawOptions) {
+        rawOptions.include_completed = rawOptions.includeCompleted;
+        delete rawOptions.includeCompleted;
+      }
+      
+      if ('maxTasks' in rawOptions) {
+        rawOptions.max_tasks = rawOptions.maxTasks;
+        delete rawOptions.maxTasks;
+      }
+      
       // Ensure options has default values
       const options = {
         dormant_threshold_days: 90,
         duplicate_similarity_threshold: 0.85,
         include_completed: false,
         max_tasks: 3000,
-        ...params.options
+        ...rawOptions
       };
       
       this.logger.debug('Pattern analysis options after defaults:', options);
