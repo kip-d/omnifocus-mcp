@@ -22,40 +22,97 @@ const PatternAnalysisSchema = z.object({
     'all'
   ])).min(1).describe('Which patterns to analyze'),
   
-  options: z.union([
+  options: z.preprocess(
+    // First, handle any string inputs by parsing them
+    (val) => {
+      // If it's already an object, return it
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        return val;
+      }
+      
+      // If it's a string, try to parse it
+      if (typeof val === 'string') {
+        // Handle empty string
+        if (val === '' || val === '""') {
+          return {};
+        }
+        
+        try {
+          // Try to parse as JSON
+          const parsed = JSON.parse(val);
+          console.log('Parsed options from JSON string:', parsed);
+          
+          // If parsed result is a string, try parsing again (double-encoded)
+          if (typeof parsed === 'string') {
+            try {
+              const doubleParsed = JSON.parse(parsed);
+              console.log('Double-parsed options:', doubleParsed);
+              return doubleParsed;
+            } catch {
+              // If double parsing fails, return the first parse result
+              return parsed;
+            }
+          }
+          
+          return parsed;
+        } catch (e) {
+          console.warn('Failed to parse options string, using empty object:', val);
+          return {};
+        }
+      }
+      
+      // Default to empty object
+      return {};
+    },
+    // Then apply the schema
     z.object({
       dormant_threshold_days: z.union([
         z.number(),
         z.string().transform(val => parseInt(val, 10))
-      ]).pipe(z.number().min(7).max(365)).default(90).describe('Days without activity to consider dormant'),
+      ]).optional(),
       
       duplicate_similarity_threshold: z.union([
         z.number(),
         z.string().transform(val => parseFloat(val))
-      ]).pipe(z.number().min(0.5).max(1.0)).default(0.85).describe('Similarity threshold for duplicates (0.5-1.0)'),
+      ]).optional(),
       
       include_completed: z.union([
         z.boolean(),
         z.string().transform(val => val === 'true')
-      ]).pipe(z.boolean()).default(false).describe('Include completed tasks in analysis'),
+      ]).optional(),
+      
+      excludeCompleted: z.union([
+        z.boolean(),
+        z.string().transform(val => val === 'true')
+      ]).optional(),
+      
+      includeCompleted: z.union([
+        z.boolean(),
+        z.string().transform(val => val === 'true')
+      ]).optional(),
       
       max_tasks: z.union([
         z.number(),
         z.string().transform(val => parseInt(val, 10))
-      ]).pipe(z.number().min(100).max(10000)).default(3000).describe('Maximum tasks to analyze')
-    }),
-    // Handle case where options is passed as a JSON string
-    z.string().transform((val) => {
-      try {
-        const parsed = JSON.parse(val);
-        console.log('Pattern analysis options was passed as JSON string, parsed:', parsed);
-        return parsed;
-      } catch (e) {
-        console.warn('Pattern analysis options was passed as invalid string, using defaults');
-        return {};
-      }
-    })
-  ]).default({}).describe('Options object with threshold settings')
+      ]).optional(),
+      
+      // Also accept camelCase variants
+      dormantThresholdDays: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10))
+      ]).optional(),
+      
+      duplicateSimilarityThreshold: z.union([
+        z.number(),
+        z.string().transform(val => parseFloat(val))
+      ]).optional(),
+      
+      maxTasks: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10))
+      ]).optional()
+    }).passthrough() // Allow unknown fields
+  ).default({}).describe('Options object with threshold settings')
 });
 
 type PatternAnalysisParams = z.infer<typeof PatternAnalysisSchema>;
@@ -101,43 +158,30 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     try {
       this.logger.debug('Pattern analysis params received:', params);
       
-      // Handle both excludeCompleted and include_completed field names
+      // The schema has already normalized the options, but we need to handle field mappings
       const rawOptions = params.options || {};
       
-      // Convert excludeCompleted to include_completed if present
-      if ('excludeCompleted' in rawOptions) {
-        rawOptions.include_completed = !rawOptions.excludeCompleted;
-        delete rawOptions.excludeCompleted;
-      }
-      
-      // Also handle camelCase variants that might come from Claude Desktop
-      if ('dormantThresholdDays' in rawOptions) {
-        rawOptions.dormant_threshold_days = rawOptions.dormantThresholdDays;
-        delete rawOptions.dormantThresholdDays;
-      }
-      
-      if ('duplicateSimilarityThreshold' in rawOptions) {
-        rawOptions.duplicate_similarity_threshold = rawOptions.duplicateSimilarityThreshold;
-        delete rawOptions.duplicateSimilarityThreshold;
-      }
-      
-      if ('includeCompleted' in rawOptions) {
-        rawOptions.include_completed = rawOptions.includeCompleted;
-        delete rawOptions.includeCompleted;
-      }
-      
-      if ('maxTasks' in rawOptions) {
-        rawOptions.max_tasks = rawOptions.maxTasks;
-        delete rawOptions.maxTasks;
-      }
-      
-      // Ensure options has default values
+      // Create normalized options object
       const options = {
-        dormant_threshold_days: 90,
-        duplicate_similarity_threshold: 0.85,
-        include_completed: false,
-        max_tasks: 3000,
-        ...rawOptions
+        dormant_threshold_days: 
+          rawOptions.dormant_threshold_days ?? 
+          rawOptions.dormantThresholdDays ?? 
+          90,
+        
+        duplicate_similarity_threshold: 
+          rawOptions.duplicate_similarity_threshold ?? 
+          rawOptions.duplicateSimilarityThreshold ?? 
+          0.85,
+        
+        include_completed: 
+          rawOptions.include_completed ?? 
+          rawOptions.includeCompleted ?? 
+          (rawOptions.excludeCompleted !== undefined ? !rawOptions.excludeCompleted : false),
+        
+        max_tasks: 
+          rawOptions.max_tasks ?? 
+          rawOptions.maxTasks ?? 
+          3000
       };
       
       this.logger.debug('Pattern analysis options after defaults:', options);
