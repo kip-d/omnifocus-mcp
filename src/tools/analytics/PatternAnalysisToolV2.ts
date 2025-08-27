@@ -231,7 +231,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     // Fetch tasks with minimal data for pattern analysis
     this.logger.debug('fetchSlimmedData called with options:', options);
     
-    const taskScript = `
+    const taskScript = `(() => {
       // doc is already declared in the wrapper
       const tasks = [];
       const projects = [];
@@ -322,7 +322,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       }
       
       return JSON.stringify({ tasks, projects });
-    `;
+    })()`;  // Execute the IIFE immediately
     
     try {
       const result = await this.omniAutomation.execute(taskScript);
