@@ -169,6 +169,7 @@ npm run ci:local           # Run comprehensive local CI/CD pipeline
 - ✅ **Testing suite major improvements** - Resolved timeouts, added performance monitoring, created local CI/CD
 - ✅ **Performance monitoring added** - Cleanup operations now track timing and operation counts
 - ✅ **Local CI/CD pipeline** - Comprehensive testing solution that works with OmniFocus requirements
+- ✅ **Response structure fix** - Cleanup script now properly finds and deletes all test data
 
 ## Lessons Learned
 1. **Cucumber is overkill** for TypeScript MCP projects
@@ -185,6 +186,7 @@ npm run ci:local           # Run comprehensive local CI/CD pipeline
 - **Timeout Problems**: Fixed all test data management test timeouts
 - **Performance Monitoring**: Added cleanup operation timing and metrics
 - **Error Noise**: Created error filtering utilities for cleaner test output
+- **Response Structure Mismatch**: Fixed cleanup script not finding test data due to incorrect response path access
 
 ### 🚀 **New Features Added**
 - **Enhanced Vitest Config**: Increased timeouts, added coverage thresholds, environment-specific configs
@@ -198,6 +200,38 @@ npm run ci:local           # Run comprehensive local CI/CD pipeline
 - **Test Files**: 32/32 passing
 - **Test Data Management**: 6/6 tests passing ✅
 - **Performance**: Significantly improved with proper timeouts
+
+## Critical Discovery: MCP Response Structure
+
+### 🔍 **Response Structure Mismatch Issue**
+During debugging, we discovered a critical issue where the cleanup script was not finding test data even though it existed in OmniFocus.
+
+**Problem Identified:**
+- Cleanup script was looking for `tasks.tasks` 
+- Actual MCP response structure is `tasks.data.tasks`
+- This caused the script to report "0 tasks found" even when test data existed
+
+**Response Structure Pattern:**
+```json
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"success\": true,\n  \"data\": {\n    \"tasks\": [/* actual task data */]\n  }\n}"
+      }
+    ]
+  }
+}
+```
+
+**Fix Applied:**
+- Updated cleanup script to access `tasks.data.tasks` instead of `tasks.tasks`
+- Updated projects cleanup to access `projects.data.projects` instead of `projects.projects`
+- This ensures all test data is properly found and cleaned up
+
+### 🎯 **Key Takeaway for Developers**
+**Always verify the actual response structure** when working with MCP tools. The response is wrapped in a `content[0].text` JSON string that contains the actual data in a `data` property.
 
 ## Resources
 - [Testing Approach Documentation](../TESTING_APPROACH.md)

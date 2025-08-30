@@ -138,10 +138,10 @@ class TestDataCleanup {
         limit: 100
       });
       
-      console.log(`📋 Found ${tasks.tasks?.length || 0} test tasks to clean up`);
+      console.log(`📋 Found ${tasks.data?.tasks?.length || 0} test tasks to clean up`);
       
       // Delete each task
-      for (const task of tasks.tasks || []) {
+      for (const task of tasks.data?.tasks || []) {
         try {
           await this.callTool('delete_task', { taskId: task.id });
           console.log(`  ✅ Deleted task: "${task.name}"`);
@@ -152,7 +152,7 @@ class TestDataCleanup {
       
       // Find all projects with the testing tag in the name
       const projects = await this.callTool('projects', { operation: 'list', limit: 100 });
-      const testProjects = projects.projects?.filter(project => 
+      const testProjects = projects.data?.projects?.filter(project => 
         project.name.includes(TESTING_TAG)
       ) || [];
       
