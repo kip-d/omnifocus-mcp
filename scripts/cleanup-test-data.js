@@ -132,8 +132,10 @@ class TestDataCleanup {
     
     try {
       // Find all tasks with the testing tag
-      const tasks = await this.callTool('list_tasks', {
-        filter: { tags: [TESTING_TAG] }
+      const tasks = await this.callTool('tasks', {
+        mode: 'all',
+        tags: [TESTING_TAG],
+        limit: 100
       });
       
       console.log(`📋 Found ${tasks.tasks?.length || 0} test tasks to clean up`);
@@ -141,7 +143,7 @@ class TestDataCleanup {
       // Delete each task
       for (const task of tasks.tasks || []) {
         try {
-          await this.callTool('delete_task', { id: task.id });
+          await this.callTool('delete_task', { taskId: task.id });
           console.log(`  ✅ Deleted task: "${task.name}"`);
         } catch (e) {
           console.log(`  ❌ Failed to delete task "${task.name}": ${e.message}`);
@@ -149,7 +151,7 @@ class TestDataCleanup {
       }
       
       // Find all projects with the testing tag in the name
-      const projects = await this.callTool('list_projects', {});
+      const projects = await this.callTool('projects', { operation: 'list', limit: 100 });
       const testProjects = projects.projects?.filter(project => 
         project.name.includes(TESTING_TAG)
       ) || [];
@@ -159,7 +161,7 @@ class TestDataCleanup {
       // Delete each project
       for (const project of testProjects) {
         try {
-          await this.callTool('delete_project', { id: project.id });
+          await this.callTool('projects', { operation: 'delete', projectId: project.id });
           console.log(`  ✅ Deleted project: "${project.name}"`);
         } catch (e) {
           console.log(`  ❌ Failed to delete project "${project.name}": ${e.message}`);
@@ -195,6 +197,7 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+// ES module equivalent of require.main === module
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
