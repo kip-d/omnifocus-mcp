@@ -1,6 +1,6 @@
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { MCPWorld } from '../support/world.js';
+import { MCPWorld } from '../support/world.ts';
 
 interface DataTable {
   rawTable: string[][];

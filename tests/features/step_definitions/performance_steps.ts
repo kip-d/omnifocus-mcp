@@ -1,6 +1,6 @@
 import { When, Then } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { MCPWorld } from '../support/world.js';
+import { MCPWorld } from '../support/world.ts';
 
 // When steps - Performance and caching
 When('I note the response time', function(this: MCPWorld) {

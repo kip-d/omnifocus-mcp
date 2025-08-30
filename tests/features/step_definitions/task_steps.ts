@@ -1,6 +1,6 @@
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { MCPWorld } from '../support/world.js';
+import { MCPWorld } from '../support/world.ts';
 
 interface Task {
   id: string;
@@ -41,9 +41,7 @@ Given('I have tasks containing the word {string}', async function(this: MCPWorld
   const result = await this.callTool('list_tasks', { search: keyword, limit: 1 });
   if (result.count === 0) {
     // Create a task with the keyword for testing
-    await this.callTool('create_task', { 
-      name: `Test task with ${keyword} for testing`
-    });
+    await this.createTestTask(`Test task with ${keyword} for testing`);
   }
 });
 
@@ -94,9 +92,9 @@ When('I request today\'s agenda', async function(this: MCPWorld) {
 
 When('I create a task with:', async function(this: MCPWorld, dataTable: DataTable) {
   const taskData = this.parseDataTable(dataTable);
-  this.response = await this.callTool('create_task', taskData);
-  if (this.response.taskId) {
-    this.context.createdTaskId = this.response.taskId;
+  this.response = await this.createTestTask(taskData.name, taskData);
+  if (this.response.task?.id) {
+    this.context.createdTaskId = this.response.task.id;
   }
 });
 

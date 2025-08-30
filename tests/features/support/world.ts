@@ -28,6 +28,9 @@ interface Context {
   taskId?: string;
   project?: any;
   createdTaskId?: string;
+  createdTaskIds: string[];
+  createdProjectIds: string[];
+  createdTagIds: string[];
   [key: string]: any;
 }
 
@@ -45,7 +48,12 @@ class MCPWorld extends World {
   messageId: number = 0;
   pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
   response: any = null;
-  context: Context = {}; // Store data between steps
+  context: Context = {
+    createdTaskIds: [],
+    createdProjectIds: [],
+    createdTagIds: []
+  }; // Store data between steps
+  readonly TESTING_TAG = 'MCP testing 2357';
 
   async startServer(): Promise<void> {
     if (this.server) return; // Already started
@@ -205,6 +213,78 @@ class MCPWorld extends World {
     
     return result;
   }
+
+  // Test data management methods
+  async createTestTask(name: string, properties: any = {}): Promise<any> {
+    const taskParams = {
+      name: `${name} [${this.TESTING_TAG}]`,
+      ...properties,
+      tags: [...(properties.tags || []), this.TESTING_TAG]
+    };
+    
+    const result = await this.callTool('create_task', taskParams);
+    if (result.success && result.task?.id) {
+      this.context.createdTaskIds.push(result.task.id);
+    }
+    return result;
+  }
+
+  async createTestProject(name: string, properties: any = {}): Promise<any> {
+    const projectParams = {
+      name: `${name} [${this.TESTING_TAG}]`,
+      ...properties
+    };
+    
+    const result = await this.callTool('create_project', projectParams);
+    if (result.success && result.project?.id) {
+      this.context.createdProjectIds.push(result.project.id);
+    }
+    return result;
+  }
+
+  async cleanupTestData(): Promise<void> {
+    console.log(`🧹 Cleaning up test data with tag: ${this.TESTING_TAG}`);
+    
+    // Clean up created tasks
+    for (const taskId of this.context.createdTaskIds) {
+      try {
+        await this.callTool('delete_task', { id: taskId });
+      } catch (e) {
+        console.log(`  ⚠️  Could not delete task ${taskId}: ${e}`);
+      }
+    }
+    
+    // Clean up created projects
+    for (const projectId of this.context.createdProjectIds) {
+      try {
+        await this.callTool('delete_project', { id: projectId });
+      } catch (e) {
+        console.log(`  ⚠️  Could not delete project ${projectId}: ${e}`);
+      }
+    }
+    
+    // Clean up any remaining test data by tag
+    try {
+      const tasks = await this.callTool('list_tasks', { 
+        filter: { tags: [this.TESTING_TAG] }
+      });
+      
+      for (const task of tasks.tasks || []) {
+        try {
+          await this.callTool('delete_task', { id: task.id });
+        } catch (e) {
+          console.log(`  ⚠️  Could not delete task ${task.id}: ${e}`);
+        }
+      }
+    } catch (e) {
+      console.log(`  ⚠️  Could not clean up tasks by tag: ${e}`);
+    }
+    
+    // Reset tracking arrays
+    this.context.createdTaskIds = [];
+    this.context.createdProjectIds = [];
+    this.context.createdTagIds = [];
+  }
 }
 
 setWorldConstructor(MCPWorld);
@@ -212,12 +292,14 @@ setWorldConstructor(MCPWorld);
 // Before hook - start server once for all scenarios
 Before(async function(this: MCPWorld) {
   await this.startServer();
+  // Clean up any leftover test data from previous runs
+  await this.cleanupTestData();
 });
 
-// After hook - cleanup after all tests
+// After hook - cleanup after each scenario
 After(async function(this: MCPWorld) {
-  // Note: We keep the server running between scenarios for performance
-  // Only cleanup at the very end (handled by process exit)
+  // Clean up test data created during this scenario
+  await this.cleanupTestData();
 });
 
 // Global cleanup on process exit

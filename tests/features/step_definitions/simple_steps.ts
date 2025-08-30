@@ -1,6 +1,6 @@
 import { Given, When, Then } from '@cucumber/cucumber';
 import { expect } from 'chai';
-import { MCPWorld } from '../support/world.js';
+import { MCPWorld } from '../support/world.ts';
 
 // Simple step definitions that work with the MCP server
 
@@ -29,9 +29,7 @@ Then('I should see my agenda for today', function(this: MCPWorld) {
 
 When('I create a simple test task', async function(this: MCPWorld) {
   const taskName = `Cucumber Test - ${new Date().toISOString()}`;
-  this.response = await this.callTool('create_task', {
-    name: taskName
-  });
+  this.response = await this.createTestTask(taskName);
   this.context.createdTaskName = taskName;
 });
 

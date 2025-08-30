@@ -2,7 +2,7 @@ import { When, Then } from '@cucumber/cucumber';
 import { expect } from 'chai';
 import path from 'path';
 import { existsSync, readFileSync } from 'fs';
-import { MCPWorld } from '../support/world.js';
+import { MCPWorld } from '../support/world.ts';
 
 interface DataTable {
   rawTable: string[][];
