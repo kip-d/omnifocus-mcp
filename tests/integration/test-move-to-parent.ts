@@ -65,6 +65,7 @@ async function runTest() {
       arguments: {
         name: `Action Group ${Date.now()}`,
         sequential: true,
+        tags: ['mcp-test'],
       },
     });
 
@@ -79,6 +80,7 @@ async function runTest() {
       arguments: {
         name: `Standalone Task ${Date.now()}`,
         note: 'This will be moved to the parent',
+        tags: ['mcp-test'],
       },
     });
 

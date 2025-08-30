@@ -65,6 +65,7 @@ async function testRepeatRules() {
       name: 'Test Daily Repeat ' + Date.now(),
       flagged: 'true',
       sequential: 'false',
+      tags: ['mcp-test'],
       repeatRule: {
         unit: 'day',
         steps: '1',
@@ -98,6 +99,7 @@ async function testRepeatRules() {
       name: 'Test Due After Completion ' + Date.now(),
       flagged: 'false',
       sequential: 'false',
+      tags: ['mcp-test'],
       dueDate: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0],
       repeatRule: {
         unit: 'day',
@@ -127,6 +129,7 @@ async function testRepeatRules() {
       name: 'Test Monthly Repeat ' + Date.now(),
       flagged: 'false',
       sequential: 'false',
+      tags: ['mcp-test'],
       repeatRule: {
         unit: 'month',
         steps: '1',

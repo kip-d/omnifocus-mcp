@@ -2,13 +2,13 @@
 
 /**
  * Cleanup script for MCP testing data
- * Removes all tasks and projects tagged with "MCP testing 2357"
+ * Removes all tasks and projects tagged with "mcp-test"
  */
 
 import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 
-const TESTING_TAG = 'MCP testing 2357';
+const TESTING_TAG = 'mcp-test';
 
 class TestDataCleanup {
   constructor() {

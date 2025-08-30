@@ -83,7 +83,7 @@ async function runComprehensiveTests() {
       name: 'Test Task with Tags ' + Date.now(),
       flagged: 'true',
       sequential: 'false',
-      tags: ['test', 'v2', 'automated']
+      tags: ['test', 'v2', 'automated', 'mcp-test']
     });
     
     const content = JSON.parse(result.content[0].text);
@@ -172,6 +172,7 @@ async function runComprehensiveTests() {
     const result = callTool('mcp__omnifocus__create_task', {
       name: 'Daily Repeat Test ' + Date.now(),
       flagged: 'false',
+      tags: ['mcp-test']
       sequential: 'false',
       repeatRule: {
         unit: 'day',
@@ -265,7 +266,8 @@ async function runComprehensiveTests() {
       name: 'Task with due date ' + Date.now(),
       flagged: 'false',
       sequential: 'false',
-      dueDate: dueDate
+      dueDate: dueDate,
+      tags: ['mcp-test']
     });
     
     const content = JSON.parse(result.content[0].text);

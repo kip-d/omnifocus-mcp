@@ -66,6 +66,7 @@ async function runTest() {
         name: `Plan Party ${Date.now()}`,
         sequential: true,  // Subtasks must be done in order
         note: 'This is an action group with sequential subtasks',
+        tags: ['mcp-test'],
       },
     });
 
@@ -89,6 +90,7 @@ async function runTest() {
         name: 'Make guest list',
         parentTaskId: parentTaskId,
         note: 'Must be done first',
+        tags: ['mcp-test'],
       },
     });
     
@@ -106,6 +108,7 @@ async function runTest() {
         name: 'Send invitations',
         parentTaskId: parentTaskId,
         note: 'Can only be done after guest list is complete',
+        tags: ['mcp-test'],
       },
     });
     
@@ -123,6 +126,7 @@ async function runTest() {
         name: 'Buy decorations',
         parentTaskId: parentTaskId,
         note: 'Can be done anytime',
+        tags: ['mcp-test'],
       },
     });
     

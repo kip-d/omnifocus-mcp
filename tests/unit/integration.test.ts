@@ -163,7 +163,7 @@ describe('OmniFocus MCP Server Integration Tests', () => {
           name: 'Test task from integration test',
           note: 'This is a test task',
           flagged: true,
-          tags: ['test', 'integration'],
+          tags: ['test', 'integration', 'mcp-test'],
         },
       });
 
@@ -184,7 +184,10 @@ describe('OmniFocus MCP Server Integration Tests', () => {
         expect(response.data.task.taskId).toBeDefined();
         // Tags might be in the task object
         if (response.data.task.tags) {
-          expect(response.data.task.tags).toEqual(['test', 'integration']);
+          // Our tagging system automatically adds 'mcp-test' to all test data
+          expect(response.data.task.tags).toContain('test');
+          expect(response.data.task.tags).toContain('integration');
+          expect(response.data.task.tags).toContain('mcp-test');
         }
       }
     });

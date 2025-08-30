@@ -74,6 +74,7 @@ async function runTests() {
         note: 'This project has tasks that must be done in order',
         sequential: true,
         folder: 'Test Projects',
+        tags: ['mcp-test'],
       },
     });
 
@@ -108,6 +109,7 @@ async function runTests() {
         note: 'This project has tasks that can be done in any order',
         // sequential not specified, should default to false
         folder: 'Test Projects',
+        tags: ['mcp-test'],
       },
     });
 

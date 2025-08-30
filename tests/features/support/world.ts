@@ -53,7 +53,7 @@ class MCPWorld extends World {
     createdProjectIds: [],
     createdTagIds: []
   }; // Store data between steps
-  readonly TESTING_TAG = 'MCP testing 2357';
+  readonly TESTING_TAG = 'mcp-test';
 
   async startServer(): Promise<void> {
     if (this.server) return; // Already started

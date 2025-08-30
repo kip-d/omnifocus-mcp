@@ -65,6 +65,7 @@ async function runTest() {
       arguments: {
         name: `Sequential Test ${Date.now()}`,
         sequential: true,
+        tags: ['mcp-test'],
       },
     });
 
@@ -99,6 +100,7 @@ async function runTest() {
       arguments: {
         name: `Parallel Test ${Date.now()}`,
         // sequential not specified, should default to false
+        tags: ['mcp-test'],
       },
     });
 
