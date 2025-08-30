@@ -1,21 +1,21 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { 
+import {
   LIST_TASKS_SCRIPT,
-  TODAYS_AGENDA_ULTRA_FAST_SCRIPT 
+  TODAYS_AGENDA_ULTRA_FAST_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
 import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
-import { 
-  createTaskResponseV2, 
-  createErrorResponseV2, 
+import {
+  createTaskResponseV2,
+  createErrorResponseV2,
   OperationTimerV2,
   normalizeDateInput,
   normalizeBooleanInput,
-  normalizeStringInput
+  normalizeStringInput,
 } from '../../utils/response-format-v2.js';
 import { OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
@@ -36,31 +36,31 @@ const QueryTasksToolSchemaV2 = z.object({
     'smart_suggest', // AI-powered suggestions for "what should I work on?"
   ]).default('all')
     .describe('Query mode: "all" = all tasks with optional filters, "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
-  
+
   // Common filters (work with most modes)
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
   project: z.string().optional().describe('Filter by project name or ID'),
   tags: z.array(z.string()).optional().describe('Filter by tag names'),
   completed: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1')
+    z.string().transform(val => val === 'true' || val === '1'),
   ]).optional().describe('Include completed tasks (default: false)'),
-  
+
   // Date filters (natural language supported)
   dueBy: z.string().optional().describe('Show tasks due by this date (e.g., "tomorrow", "friday", "2025-03-15")'),
   daysAhead: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
+    z.string().transform(val => parseInt(val, 10)),
   ]).pipe(z.number().min(1).max(30)).optional().describe('For upcoming mode: number of days to look ahead (default: 7)'),
-  
+
   // Response control - with type coercion for MCP bridge compatibility
   limit: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
+    z.string().transform(val => parseInt(val, 10)),
   ]).pipe(z.number().min(1).max(200)).default(25).describe('Maximum tasks to return (default: 25)'),
   details: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1')
+    z.string().transform(val => val === 'true' || val === '1'),
   ]).default(false).describe('Include full task details (default: false for speed)'),
 });
 
@@ -73,11 +73,11 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {
     const timer = new OperationTimerV2();
-    
+
     try {
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
-      
+
       // Route to appropriate handler based on mode
       switch (normalizedArgs.mode) {
         case 'overdue':
@@ -102,7 +102,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // Provide helpful suggestions for common errors
       let suggestion = undefined;
       if (errorMessage.includes('timeout')) {
@@ -110,7 +110,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       } else if (errorMessage.includes('date')) {
         suggestion = 'Use natural language dates like "tomorrow" or "next week", or ISO format';
       }
-      
+
       return createErrorResponseV2(
         'tasks',
         'EXECUTION_ERROR',
@@ -124,7 +124,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
   private normalizeInputs(args: QueryTasksArgsV2): QueryTasksArgsV2 {
     const normalized = { ...args };
-    
+
     // Normalize date inputs
     if (normalized.dueBy) {
       const date = normalizeDateInput(normalized.dueBy);
@@ -132,7 +132,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         normalized.dueBy = date.toISOString();
       }
     }
-    
+
     // Normalize boolean that might come as string
     if (normalized.completed !== undefined) {
       const bool = normalizeBooleanInput(normalized.completed);
@@ -140,41 +140,41 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         normalized.completed = bool;
       }
     }
-    
+
     // Normalize search term
     if (normalized.search) {
       normalized.search = normalizeStringInput(normalized.search) || undefined;
     }
-    
+
     // Ensure search mode has search term
     if (normalized.mode === 'search' && !normalized.search) {
       throw new Error('Search mode requires a search term');
     }
-    
+
     return normalized;
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
     const cacheKey = `tasks_overdue_${args.limit}_${args.completed}`;
-    
+
     // Check cache for speed
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'overdue' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'overdue' },
       );
     }
-    
+
     // Execute optimized overdue script
     const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
       limit: args.limit,
       includeCompleted: args.completed || false,
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'tasks',
@@ -185,41 +185,41 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     // Parse and cache
     const tasks = this.parseTasks(result.tasks);
     this.cache.set('tasks', cacheKey, { tasks, summary: result.summary });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'overdue' }
+      { ...timer.toMetadata(), from_cache: false, mode: 'overdue' },
     );
   }
 
   private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
     const days = args.daysAhead || 7;
     const cacheKey = `tasks_upcoming_${days}_${args.limit}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days }
+        { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days },
       );
     }
-    
+
     // Execute optimized upcoming script
     const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
       days,
       includeToday: true,
       limit: args.limit,
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'tasks',
@@ -230,45 +230,45 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     // Parse and cache
     const tasks = this.parseTasks(result.tasks);
     this.cache.set('tasks', cacheKey, { tasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'upcoming', days_ahead: days }
+      { ...timer.toMetadata(), from_cache: false, mode: 'upcoming', days_ahead: days },
     );
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
     // Use the ultra-fast optimized script for today's agenda
     const cacheKey = `tasks_today_${args.limit}_${args.details}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'today' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'today' },
       );
     }
-    
+
     // Use the ultra-fast single-pass algorithm
     const options = {
       includeOverdue: true,
       includeFlagged: true,
       includeAvailable: true,
       includeDetails: args.details,
-      limit: args.limit
+      limit: args.limit,
     };
-    
+
     // Use the optimized today's agenda script
     const script = this.omniAutomation.buildScript(TODAYS_AGENDA_ULTRA_FAST_SCRIPT, { options });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -279,13 +279,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     // The ultra-fast script returns tasks directly
     const todayTasks = result.tasks || [];
-    
+
     // Cache the results
     this.cache.set('tasks', cacheKey, { tasks: todayTasks });
-    
+
     // Return with additional metadata from the ultra-fast script
     const metadata = {
       ...timer.toMetadata(),
@@ -294,13 +294,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       overdue_count: result.overdueCount || 0,
       due_today_count: result.dueTodayCount || 0,
       flagged_count: result.flaggedCount || 0,
-      optimization: result.optimizationUsed || 'ultra_fast'
+      optimization: result.optimizationUsed || 'ultra_fast',
     };
-    
+
     return createTaskResponseV2(
       'tasks',
       todayTasks,
-      metadata
+      metadata,
     );
   }
 
@@ -315,7 +315,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const filter = {
       search: args.search,
       completed: args.completed || false,
@@ -325,29 +325,29 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       tags: args.tags,
       skipAnalysis: !args.details, // Skip expensive analysis if not needed
     };
-    
+
     // Generate cache key for search
     const cacheKey = `tasks_search_${JSON.stringify(filter)}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { 
-          ...timer.toMetadata(), 
-          from_cache: true, 
+        {
+          ...timer.toMetadata(),
+          from_cache: true,
           mode: 'search',
-          search_term: args.search
-        }
+          search_term: args.search,
+        },
       );
     }
-    
+
     // Execute search
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -358,21 +358,21 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const tasks = this.parseTasks(result.tasks);
-    
+
     // Cache search results
     this.cache.set('tasks', cacheKey, { tasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { 
-        ...timer.toMetadata(), 
-        from_cache: false, 
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
         mode: 'search',
-        search_term: args.search
-      }
+        search_term: args.search,
+      },
     );
   }
 
@@ -386,23 +386,23 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       tags: args.tags,
       skipAnalysis: false, // Need analysis for accurate availability
     };
-    
+
     const cacheKey = `tasks_available_${args.limit}_${args.project || 'all'}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'available' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'available' },
       );
     }
-    
+
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -413,14 +413,14 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const tasks = this.parseTasks(result.tasks);
     this.cache.set('tasks', cacheKey, { tasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'available' }
+      { ...timer.toMetadata(), from_cache: false, mode: 'available' },
     );
   }
 
@@ -434,23 +434,23 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       tags: args.tags,
       skipAnalysis: false, // Need analysis for blocking detection
     };
-    
+
     const cacheKey = `tasks_blocked_${args.limit}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'blocked' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'blocked' },
       );
     }
-    
+
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -461,30 +461,30 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const tasks = this.parseTasks(result.tasks);
     this.cache.set('tasks', cacheKey, { tasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'blocked' }
+      { ...timer.toMetadata(), from_cache: false, mode: 'blocked' },
     );
   }
 
   private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
     const cacheKey = `tasks_flagged_${args.limit}_${args.completed}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'flagged' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'flagged' },
       );
     }
-    
+
     // Use perspective-based flagged script for best performance
     const script = this.omniAutomation.buildScript(FLAGGED_TASKS_PERSPECTIVE_SCRIPT, {
       limit: args.limit,
@@ -492,7 +492,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       includeDetails: args.details || false,
     });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -503,14 +503,14 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const tasks = this.parseTasks(result.tasks);
     this.cache.set('tasks', cacheKey, { tasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'flagged' }
+      { ...timer.toMetadata(), from_cache: false, mode: 'flagged' },
     );
   }
 
@@ -522,21 +522,21 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       project: args.project, // Pass as project name, not ID
       tags: args.tags,
     };
-    
+
     // Add date filter if provided
     if (args.dueBy) {
       filter.dueBefore = args.dueBy;
     }
-    
+
     // Clean undefined values
     Object.keys(filter).forEach(key => {
       if (filter[key] === undefined) delete filter[key];
     });
-    
+
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -547,46 +547,46 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const tasks = this.parseTasks(result.tasks);
-    
+
     return createTaskResponseV2(
       'tasks',
       tasks,
-      { 
-        ...timer.toMetadata(), 
-        from_cache: false, 
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
         mode: 'all',
-        filters_applied: filter
-      }
+        filters_applied: filter,
+      },
     );
   }
 
   private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
     // Smart suggest combines overdue, today, and flagged tasks to suggest what to work on
     const cacheKey = `tasks_smart_suggest_${args.limit}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
         cached.tasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' }
+        { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' },
       );
     }
-    
+
     // Gather data from multiple sources for intelligent suggestions
     const filter = {
       completed: false,
       limit: Math.min(args.limit * 2, 100), // Get more for analysis
       includeDetails: args.details,
     };
-    
+
     // Execute comprehensive query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
     const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
-    
+
     if (!result || 'error' in result) {
       return createErrorResponseV2(
         'tasks',
@@ -597,16 +597,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
-    
+
     const allTasks = this.parseTasks(result.tasks || []);
     const now = new Date();
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     // Smart prioritization algorithm
     const scoredTasks = allTasks.map(task => {
       let score = 0;
-      
+
       // Overdue tasks get highest priority
       if (task.dueDate) {
         const dueDate = new Date(task.dueDate);
@@ -617,39 +617,39 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
           score += 80; // Due today
         }
       }
-      
+
       // Flagged tasks get bonus
       if (task.flagged) score += 50;
-      
+
       // Available tasks get bonus (not blocked, not deferred)
       // TODO: Add proper status check when type is updated
       // if (task.status === 'available') score += 30;
-      
+
       // Tasks with short estimated duration get bonus (quick wins)
       if (task.estimatedMinutes && task.estimatedMinutes <= 15) score += 20;
-      
+
       return { ...task, _score: score };
     });
-    
+
     // Sort by score and take top items
     const suggestedTasks = scoredTasks
       .filter(t => t._score > 0) // Only tasks with positive score
       .sort((a, b) => b._score - a._score)
       .slice(0, args.limit)
       .map(({ _score, ...task }) => task); // Remove score from output
-    
+
     // Cache results
     this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
-    
+
     return createTaskResponseV2(
       'tasks',
       suggestedTasks,
-      { 
-        ...timer.toMetadata(), 
-        from_cache: false, 
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
         mode: 'smart_suggest',
-        algorithm: 'priority_score_v1'
-      }
+        algorithm: 'priority_score_v1',
+      },
     );
   }
 

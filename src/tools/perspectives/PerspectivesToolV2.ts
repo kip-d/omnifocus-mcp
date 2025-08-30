@@ -15,7 +15,7 @@ const PerspectivesToolSchema = z.object({
   includeFilterRules: coerceBoolean()
     .default(false)
     .describe('Include filter rules for custom perspectives (list operation)'),
-  
+
   sortBy: z.string()
     .default('name')
     .describe('Sort order for perspectives (list operation)'),
@@ -24,11 +24,11 @@ const PerspectivesToolSchema = z.object({
   perspectiveName: z.string()
     .optional()
     .describe('Name of the perspective to query (required for query operation)'),
-  
+
   limit: coerceNumber()
     .default(50)
     .describe('Maximum number of tasks to return (query operation)'),
-  
+
   includeDetails: coerceBoolean()
     .default(false)
     .describe('Include task details like notes and subtasks (query operation)'),
@@ -125,12 +125,12 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       }
 
       const perspectives = parsedResult.perspectives || [];
-      
+
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';
       if (sortBy === 'name') {
-        perspectives.sort((a: PerspectiveInfo, b: PerspectiveInfo) => 
-          a.name.localeCompare(b.name)
+        perspectives.sort((a: PerspectiveInfo, b: PerspectiveInfo) =>
+          a.name.localeCompare(b.name),
         );
       }
 
@@ -177,7 +177,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         );
       }
 
-      // Create cache key  
+      // Create cache key
       const cacheKey = `perspective:${perspectiveName}:${limit}:${includeDetails}`;
 
       // Check cache (30 second TTL for perspective queries)

@@ -103,7 +103,7 @@ export abstract class BaseTool<
     args: unknown,
     errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR',
     errorMessage: string,
-    validationErrors?: any
+    validationErrors?: any,
   ): void {
     try {
       // Create logs directory if it doesn't exist
@@ -127,10 +127,10 @@ export abstract class BaseTool<
       // Append to daily log file
       const today = new Date().toISOString().split('T')[0];
       const logFile = join(logsDir, `failures-${today}.jsonl`);
-      
+
       // Append as JSON Lines format for easy parsing
       writeFileSync(logFile, JSON.stringify(logEntry) + '\n', { flag: 'a' });
-      
+
       // Also log to debug for immediate visibility
       this.logger.debug(`Tool failure logged: ${this.name} - ${errorType}`);
     } catch (logError) {

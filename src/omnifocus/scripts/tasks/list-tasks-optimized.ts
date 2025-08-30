@@ -3,7 +3,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * OPTIMIZED Script to list tasks with advanced filtering in OmniFocus
- * 
+ *
  * v1.16.0 Optimizations:
  * - Inline safeGet for hot paths (20% performance gain)
  * - Batch try/catch for common properties

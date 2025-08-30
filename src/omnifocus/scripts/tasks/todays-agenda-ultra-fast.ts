@@ -2,7 +2,7 @@ import { getAllHelpers } from '../shared/helpers.js';
 
 /**
  * Ultra-fast optimized script for today's agenda
- * 
+ *
  * Single-pass algorithm for maximum performance
  */
 export const TODAYS_AGENDA_ULTRA_FAST_SCRIPT = `

@@ -63,7 +63,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     // v2.0.0 consolidated tools - STRONGLY RECOMMENDED
     new QueryTasksToolV2(cache),      // Single 'tasks' tool with modes
     new ProjectsToolV2(cache),         // Single 'projects' tool with operations
-    
+
     // v2 analytics tools - Summary-first format
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends

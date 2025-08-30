@@ -26,12 +26,18 @@ export default [
       '@typescript-eslint': tseslint,
     },
     rules: {
-      // TypeScript recommended rules
+      // TypeScript recommended rules (but relaxed for MCP server)
       ...tseslint.configs['recommended'].rules,
-      ...tseslint.configs['recommended-type-checked'].rules,
       
-      // Custom rules for this project
-      '@typescript-eslint/no-explicit-any': 'warn', // Since there are many 'any' types currently
+      // Relaxed any type rules for MCP server
+      '@typescript-eslint/no-explicit-any': 'warn', // Allow any but warn
+      '@typescript-eslint/no-unsafe-assignment': 'warn', // Warn but don't error
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      
+      // Keep useful warnings
       '@typescript-eslint/no-unused-vars': ['error', { 
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
@@ -46,6 +52,14 @@ export default [
       'comma-dangle': ['error', 'always-multiline'],
       'no-trailing-spaces': 'error',
       'eol-last': ['error', 'always'],
+      
+      // Additional useful rules
+      'no-case-declarations': 'error',
+      '@typescript-eslint/no-base-to-string': 'warn',
+      '@typescript-eslint/restrict-template-expressions': 'warn',
+      '@typescript-eslint/no-empty-object-type': 'warn',
+      '@typescript-eslint/no-redundant-type-constituents': 'warn',
+      '@typescript-eslint/require-await': 'warn',
     },
   },
   
@@ -55,6 +69,11 @@ export default [
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
   

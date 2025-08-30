@@ -56,20 +56,20 @@ export interface StandardMetadataV2 {
   // Operation info
   operation: string;
   timestamp: string;
-  
+
   // Performance/source info
   from_cache: boolean;
   query_time_ms?: number;
-  
+
   // Pagination/count info
   total_count?: number;
   returned_count?: number;
   has_more?: boolean;
-  
+
   // Query info
   query_type?: string;
   filters_applied?: Record<string, unknown>;
-  
+
   // Operation-specific metadata
   [key: string]: string | number | boolean | undefined | null | Record<string, unknown> | unknown[];
 }
@@ -77,16 +77,16 @@ export interface StandardMetadataV2 {
 export interface StandardResponseV2<T> {
   // Status
   success: boolean;
-  
+
   // Quick summary for LLM (always first for fastest processing)
   summary?: TaskSummary | ProjectSummary | AnalyticsSummary;
-  
+
   // Main payload (may be truncated/limited)
   data: T;
-  
+
   // Full metadata with performance metrics
   metadata: StandardMetadataV2;
-  
+
   // Error handling
   error?: {
     code: string;
@@ -105,7 +105,7 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
   todayEnd.setHours(23, 59, 59, 999);
   const tomorrowEnd = new Date(todayEnd);
   tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
-  
+
   const summary: TaskSummary = {
     total_count: tasks.length,
     returned_count: Math.min(tasks.length, limit),
@@ -121,21 +121,21 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
     key_insights: [],
     preview: [],
   };
-  
+
   let mostOverdueTask: any = null;
   let mostOverdueDays = 0;
-  
+
   for (const task of tasks) {
     // Count by status
     if (task.completed) summary.breakdown!.completed = (summary.breakdown!.completed || 0) + 1;
     if (task.flagged) summary.breakdown!.flagged = (summary.breakdown!.flagged || 0) + 1;
     if (task.status === 'available') summary.breakdown!.available = (summary.breakdown!.available || 0) + 1;
     if (task.status === 'blocked') summary.breakdown!.blocked = (summary.breakdown!.blocked || 0) + 1;
-    
+
     // Count by due date
     if (task.dueDate) {
       const dueDate = new Date(task.dueDate);
-      
+
       if (dueDate < now && !task.completed) {
         summary.breakdown!.overdue = (summary.breakdown!.overdue || 0) + 1;
         const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -150,10 +150,10 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
       }
     }
   }
-  
+
   // Generate key insights
   const insights: string[] = [];
-  
+
   // Overdue insight
   if (summary.breakdown!.overdue && summary.breakdown!.overdue > 0) {
     if (mostOverdueTask) {
@@ -162,7 +162,7 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
       insights.push(`${summary.breakdown!.overdue} task${summary.breakdown!.overdue > 1 ? 's' : ''} overdue`);
     }
   }
-  
+
   // Pattern detection for bottlenecks
   const projectCounts: Record<string, number> = {};
   for (const task of tasks) {
@@ -173,29 +173,29 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
       }
     }
   }
-  
+
   // Find project with most overdue tasks
   const projectBottlenecks = Object.entries(projectCounts)
     .filter(([_, count]) => count >= 3)
     .sort((a, b) => b[1] - a[1]);
-  
+
   if (projectBottlenecks.length > 0) {
     const [projectName, count] = projectBottlenecks[0];
     insights.push(`${projectName} has ${count} overdue tasks (potential bottleneck)`);
   }
-  
+
   // Today's priority
   if (summary.breakdown!.due_today && summary.breakdown!.due_today > 0) {
     insights.push(`${summary.breakdown!.due_today} task${summary.breakdown!.due_today > 1 ? 's' : ''} due today`);
   }
-  
+
   // Blocked tasks warning
   if (summary.breakdown!.blocked && summary.breakdown!.blocked > 5) {
     insights.push(`${summary.breakdown!.blocked} tasks blocked - review dependencies`);
   }
-  
+
   summary.key_insights = insights.slice(0, 3); // Limit to 3 insights
-  
+
   // Generate preview of most important tasks
   const previewTasks = tasks
     .filter(t => !t.completed)
@@ -203,7 +203,7 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
       // Sort by: overdue first, then due today, then flagged
       const aDate = a.dueDate ? new Date(a.dueDate) : null;
       const bDate = b.dueDate ? new Date(b.dueDate) : null;
-      
+
       if (aDate && bDate) {
         if (aDate < now && bDate >= now) return -1;
         if (bDate < now && aDate >= now) return 1;
@@ -223,11 +223,11 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
       project: t.project,
       flagged: t.flagged,
     }));
-  
+
   if (previewTasks.length > 0) {
     summary.preview = previewTasks;
   }
-  
+
   return summary;
 }
 
@@ -245,22 +245,22 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
     overdue_reviews: 0,
     bottlenecks: [],
   };
-  
+
   let mostOverdueReview: any = null;
   let mostOverdueDays = 0;
   const now = new Date();
-  
+
   for (const project of projects) {
     // Count by status
     switch (project.status) {
       case 'active': summary.active = (summary.active || 0) + 1; break;
-      case 'on-hold': 
+      case 'on-hold':
       case 'onHold': summary.on_hold = (summary.on_hold || 0) + 1; break;
-      case 'done': 
+      case 'done':
       case 'completed': summary.completed = (summary.completed || 0) + 1; break;
       case 'dropped': summary.dropped = (summary.dropped || 0) + 1; break;
     }
-    
+
     // Check for review
     if (project.nextReviewDate) {
       const reviewDate = new Date(project.nextReviewDate);
@@ -277,18 +277,18 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
       }
     }
   }
-  
+
   // Generate insights and detect bottlenecks
   const bottlenecks: string[] = [];
-  
+
   if (summary.overdue_reviews && summary.overdue_reviews > 0) {
     bottlenecks.push(`${summary.overdue_reviews} projects haven't been reviewed in 7+ days`);
   }
-  
+
   if (mostOverdueReview && mostOverdueDays > 30) {
     bottlenecks.push(`"${mostOverdueReview.name}" hasn't been reviewed in ${mostOverdueDays} days`);
   }
-  
+
   // Detect stalled projects (active but no recent activity)
   const stalledProjects = projects.filter(p => {
     if (p.status !== 'active') return false;
@@ -296,20 +296,20 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
     const daysSinceModified = Math.floor((now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24));
     return daysSinceModified > 14;
   });
-  
+
   if (stalledProjects.length > 0) {
     bottlenecks.push(`${stalledProjects.length} active projects with no activity in 14+ days`);
   }
-  
+
   summary.bottlenecks = bottlenecks.slice(0, 3);
-  
+
   // Generate key insight
   if (summary.needs_review && summary.needs_review > 0) {
     summary.key_insight = `${summary.needs_review} project${summary.needs_review > 1 ? 's' : ''} need review`;
   } else if (summary.active) {
     summary.key_insight = `${summary.active} active project${summary.active > 1 ? 's' : ''}`;
   }
-  
+
   return summary;
 }
 
@@ -351,7 +351,7 @@ export function createAnalyticsResponseV2<T>(
     total_items_analyzed: 0,
     key_findings: keyFindings,
   };
-  
+
   // Extract item count from data if available
   if (data && typeof data === 'object') {
     const dataObj = data as any;
@@ -363,7 +363,7 @@ export function createAnalyticsResponseV2<T>(
       summary.total_items_analyzed = dataObj.stats.totalTasks;
     }
   }
-  
+
   return createSuccessResponseV2(operation, data, summary, metadata);
 }
 
@@ -412,10 +412,10 @@ export function createListResponseV2<T>(
   } else if (itemType === 'projects') {
     summary = generateProjectSummary(items as any[]);
   }
-  
+
   // Create preview (first 5 items for quick processing)
   const preview = items.slice(0, 5);
-  
+
   return {
     success: true,
     summary,
@@ -443,7 +443,7 @@ export function createTaskResponseV2<T>(
   metadata: Partial<StandardMetadataV2> = {},
 ): StandardResponseV2<{ tasks: T[]; preview?: T[] }> {
   const summary = generateTaskSummary(tasks as any[]);
-  
+
   return {
     success: true,
     summary,
@@ -467,15 +467,15 @@ export function createTaskResponseV2<T>(
  */
 export class OperationTimerV2 {
   private startTime: number;
-  
+
   constructor() {
     this.startTime = Date.now();
   }
-  
+
   getElapsedMs(): number {
     return Date.now() - this.startTime;
   }
-  
+
   toMetadata(): { query_time_ms: number } {
     return { query_time_ms: this.getElapsedMs() };
   }
@@ -486,14 +486,14 @@ export class OperationTimerV2 {
  */
 export function normalizeDateInput(input: string | Date | null | undefined): Date | null {
   if (!input) return null;
-  
+
   // Handle Date objects
   if (input instanceof Date) return input;
-  
+
   // Handle common natural language inputs
   const lowerInput = String(input).toLowerCase().trim();
   const now = new Date();
-  
+
   switch (lowerInput) {
     case 'today':
       return new Date(now.setHours(17, 0, 0, 0)); // Default to 5pm
@@ -521,7 +521,7 @@ export function normalizeDateInput(input: string | Date | null | undefined): Dat
       friday.setHours(17, 0, 0, 0);
       return friday;
   }
-  
+
   // Try to parse as date string
   try {
     const parsed = new Date(input);
@@ -531,18 +531,18 @@ export function normalizeDateInput(input: string | Date | null | undefined): Dat
   } catch {
     // Fall through to null
   }
-  
+
   return null;
 }
 
 export function normalizeBooleanInput(input: string | boolean | null | undefined): boolean | null {
   if (input === null || input === undefined) return null;
   if (typeof input === 'boolean') return input;
-  
+
   const lowerInput = String(input).toLowerCase().trim();
   if (lowerInput === 'true' || lowerInput === 'yes' || lowerInput === '1') return true;
   if (lowerInput === 'false' || lowerInput === 'no' || lowerInput === '0') return false;
-  
+
   return null;
 }
 

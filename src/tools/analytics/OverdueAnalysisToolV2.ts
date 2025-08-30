@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { OVERDUE_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { 
-  createAnalyticsResponseV2, 
-  createErrorResponseV2, 
-  OperationTimerV2 
+import {
+  createAnalyticsResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
 } from '../../utils/response-format-v2.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisResponseV2 } from '../response-types-v2.js';
@@ -108,7 +108,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
 
   private extractKeyFindings(data: any): string[] {
     const findings: string[] = [];
-    
+
     // Add summary findings
     if (data.stats?.summary) {
       const { totalOverdue, averageDaysOverdue, overduePercentage } = data.stats.summary;
@@ -131,7 +131,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
       const groups = Object.entries(data.groupedAnalysis)
         .sort((a: any, b: any) => (b[1].count || 0) - (a[1].count || 0))
         .slice(0, 2);
-      
+
       groups.forEach(([name, info]: any) => {
         if (info.count > 0) {
           findings.push(`${name}: ${info.count} overdue tasks`);

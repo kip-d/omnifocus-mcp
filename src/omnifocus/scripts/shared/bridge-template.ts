@@ -10,32 +10,32 @@ export interface BridgeTemplateParams {
 /**
  * Formats a bridge script template with secure parameter substitution
  * All parameters are JSON.stringify'd to prevent injection attacks
- * 
+ *
  * @param template Script template with $PARAM_NAME$ placeholders
  * @param params Object containing parameter values
  * @returns Formatted script safe for evaluateJavascript()
- * 
+ *
  * @example
  * const template = `
  *   const task = Task.byIdentifier($TASK_ID$);
  *   task.name = $TASK_NAME$;
  * `;
- * const script = formatBridgeScript(template, { 
- *   TASK_ID: "abc123", 
- *   TASK_NAME: "Task with \"quotes\"" 
+ * const script = formatBridgeScript(template, {
+ *   TASK_ID: "abc123",
+ *   TASK_NAME: "Task with \"quotes\""
  * });
  * // Result: const task = Task.byIdentifier("abc123");
  * //         task.name = "Task with \"quotes\"";
  */
 export function formatBridgeScript(template: string, params: BridgeTemplateParams): string {
   let script = template;
-  
+
   for (const [key, value] of Object.entries(params)) {
     const placeholder = new RegExp(`\\$${key}\\$`, 'g');
-    
+
     // Special handling for different value types
     let replacement: string;
-    
+
     if (value === null || value === undefined) {
       replacement = 'null';
     } else if (typeof value === 'boolean') {
@@ -55,16 +55,16 @@ export function formatBridgeScript(template: string, params: BridgeTemplateParam
       // Fallback for any other type
       replacement = JSON.stringify(value);
     }
-    
+
     script = script.replace(placeholder, replacement);
   }
-  
+
   // Check for any remaining placeholders (indicates missing parameters)
   const remainingPlaceholders = script.match(/\$[A-Z_]+\$/g);
   if (remainingPlaceholders) {
     throw new Error(`Missing template parameters: ${remainingPlaceholders.join(', ')}`);
   }
-  
+
   return script;
 }
 
@@ -83,7 +83,7 @@ export const BridgeTemplates = {
       JSON.stringify({ success: false, error: "task_not_found" });
     }
   `,
-  
+
   /**
    * Assign tags to a task
    */
@@ -101,7 +101,7 @@ export const BridgeTemplates = {
       JSON.stringify({ success: false, error: "task_not_found" });
     }
   `,
-  
+
   /**
    * Set repeat rule on a task
    */
@@ -115,7 +115,7 @@ export const BridgeTemplates = {
       JSON.stringify({ success: false, error: "task_not_found" });
     }
   `,
-  
+
   /**
    * Move task to a new parent or project
    */
@@ -150,7 +150,7 @@ export const BridgeTemplates = {
         JSON.stringify({ success: false, error: "invalid_target_type" });
       }
     }
-  `
+  `,
 };
 
 /**
@@ -160,14 +160,14 @@ export const BridgeTemplates = {
 export function executeBridgeTemplate(
   app: any,
   template: string,
-  params: BridgeTemplateParams
+  params: BridgeTemplateParams,
 ): any {
   try {
     const script = formatBridgeScript(template, params);
     const resultStr = app.evaluateJavascript(script);
-    
+
     // Try to parse as JSON if it looks like JSON
-    if (resultStr && typeof resultStr === 'string' && 
+    if (resultStr && typeof resultStr === 'string' &&
         (resultStr.startsWith('{') || resultStr.startsWith('['))) {
       try {
         return JSON.parse(resultStr);
@@ -176,7 +176,7 @@ export function executeBridgeTemplate(
         return resultStr;
       }
     }
-    
+
     return resultStr;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

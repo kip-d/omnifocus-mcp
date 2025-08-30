@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { 
-  createAnalyticsResponseV2, 
-  createErrorResponseV2, 
-  OperationTimerV2 
+import {
+  createAnalyticsResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { TaskVelocityResponseV2 } from '../response-types-v2.js';
@@ -113,14 +113,14 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
 
   private extractKeyFindings(data: any): string[] {
     const findings: string[] = [];
-    
+
     // Add velocity summary
     if (data.velocity) {
       const { tasksCompleted, averagePerDay, trend, predictedCapacity } = data.velocity;
       if (tasksCompleted > 0) {
         findings.push(`Completed ${tasksCompleted} tasks (avg ${averagePerDay.toFixed(1)}/day)`);
       }
-      
+
       // Add trend insight
       if (trend === 'increasing') {
         findings.push('📈 Velocity trending upward');
@@ -129,7 +129,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
       } else {
         findings.push('➡️ Velocity stable');
       }
-      
+
       if (predictedCapacity > 0) {
         findings.push(`Predicted capacity: ${Math.round(predictedCapacity)} tasks/week`);
       }

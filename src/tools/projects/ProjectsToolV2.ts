@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { 
+import {
   LIST_PROJECTS_SCRIPT,
   CREATE_PROJECT_SCRIPT,
   UPDATE_PROJECT_SCRIPT,
@@ -14,7 +14,7 @@ import {
   OperationTimerV2,
   normalizeDateInput,
   normalizeBooleanInput,
-  normalizeStringInput
+  normalizeStringInput,
 } from '../../utils/response-format-v2.js';
 import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
 
@@ -30,16 +30,16 @@ const ProjectsToolSchemaV2 = z.object({
     'review',    // Get projects needing review
     'active',    // Get active projects only
   ]).describe('Operation to perform'),
-  
+
   // For list/query operations
   status: z.enum(['active', 'on-hold', 'done', 'dropped', 'all']).optional()
     .describe('Filter by project status (for list operation)'),
   folder: z.string().optional().describe('Filter by folder name'),
   needsReview: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1')
+    z.string().transform(val => val === 'true' || val === '1'),
   ]).optional().describe('Only show projects needing review'),
-  
+
   // For create/update operations
   projectId: z.string().optional().describe('Project ID (required for update/complete/delete)'),
   name: z.string().optional().describe('Project name'),
@@ -47,22 +47,22 @@ const ProjectsToolSchemaV2 = z.object({
   dueDate: z.string().optional().describe('Due date (natural language supported)'),
   reviewInterval: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
+    z.string().transform(val => parseInt(val, 10)),
   ]).optional().describe('Review interval in days'),
   tags: z.array(z.string()).optional().describe('Tags to assign'),
   flagged: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1')
+    z.string().transform(val => val === 'true' || val === '1'),
   ]).optional().describe('Mark as flagged/important'),
-  
+
   // Response control - with type coercion for MCP bridge compatibility
   limit: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
+    z.string().transform(val => parseInt(val, 10)),
   ]).pipe(z.number().min(1).max(200)).default(50).describe('Maximum projects to return'),
   details: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1')
+    z.string().transform(val => val === 'true' || val === '1'),
   ]).default(true).describe('Include full project details'),
 });
 
@@ -75,11 +75,11 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
   async executeValidated(args: ProjectsArgsV2): Promise<ProjectsResponseV2 | ProjectOperationResponseV2> {
     const timer = new OperationTimerV2();
-    
+
     try {
       // Normalize inputs
       const normalizedArgs = this.normalizeInputs(args);
-      
+
       // Route to appropriate handler
       switch (normalizedArgs.operation) {
         case 'list':
@@ -108,7 +108,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // Provide helpful suggestions
       let suggestion = undefined;
       if (errorMessage.includes('projectId')) {
@@ -116,7 +116,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       } else if (errorMessage.includes('timeout')) {
         suggestion = 'Try reducing the limit or using status filter';
       }
-      
+
       return createErrorResponseV2(
         'projects',
         'EXECUTION_ERROR',
@@ -130,7 +130,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
   private normalizeInputs(args: ProjectsArgsV2): ProjectsArgsV2 {
     const normalized = { ...args };
-    
+
     // Normalize dates
     if (normalized.dueDate) {
       const date = normalizeDateInput(normalized.dueDate);
@@ -138,7 +138,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         normalized.dueDate = date.toISOString();
       }
     }
-    
+
     // Normalize booleans
     if (normalized.flagged !== undefined) {
       const bool = normalizeBooleanInput(normalized.flagged);
@@ -148,7 +148,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       const bool = normalizeBooleanInput(normalized.needsReview);
       if (bool !== null) normalized.needsReview = bool;
     }
-    
+
     // Normalize strings
     if (normalized.name) {
       normalized.name = normalizeStringInput(normalized.name) || undefined;
@@ -156,7 +156,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     if (normalized.projectId) {
       normalized.projectId = normalizeStringInput(normalized.projectId) || undefined;
     }
-    
+
     // Validate required fields for operations
     if (['update', 'complete', 'delete'].includes(normalized.operation) && !normalized.projectId) {
       throw new Error(`Operation "${normalized.operation}" requires projectId parameter`);
@@ -164,7 +164,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     if (normalized.operation === 'create' && !normalized.name) {
       throw new Error('Create operation requires name parameter');
     }
-    
+
     return normalized;
   }
 
@@ -173,19 +173,19 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit,
       includeDropped: args.status === 'all' || args.status === 'dropped',
     };
-    
+
     // Add status filter
     if (args.status && args.status !== 'all') {
       filter.status = args.status;
     }
-    
+
     // Add folder filter
     if (args.folder) {
       filter.folder = args.folder;
     }
-    
+
     const cacheKey = `projects_list_${JSON.stringify(filter)}`;
-    
+
     // Check cache
     const cached = this.cache.get<any>('projects', cacheKey);
     if (cached) {
@@ -193,18 +193,18 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         'projects',
         cached.projects,
         'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'list' }
+        { ...timer.toMetadata(), from_cache: true, operation: 'list' },
       );
     }
-    
+
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
       limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true
+      includeStats: args.details !== undefined ? args.details : true,
     });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -215,16 +215,16 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Parse dates and cache
     const projects = this.parseProjects(result.projects || result);
     this.cache.set('projects', cacheKey, { projects });
-    
+
     return createListResponseV2(
       'projects',
       projects,
       'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'list' }
+      { ...timer.toMetadata(), from_cache: false, operation: 'list' },
     );
   }
 
@@ -239,7 +239,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     const projectData: any = {
       note: args.note,
       dueDate: args.dueDate,
@@ -247,23 +247,23 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       tags: args.tags,
       sequential: false, // Default to parallel
     };
-    
+
     // Convert reviewInterval from days (number) to object format expected by script
     if (args.reviewInterval) {
       projectData.reviewInterval = {
         unit: 'days',
         steps: args.reviewInterval,
-        fixed: true // Use fixed scheduling by default
+        fixed: true, // Use fixed scheduling by default
       };
     }
-    
+
     // Execute creation - CREATE_PROJECT_SCRIPT expects {name, options} structure
     const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
       name: args.name,
-      options: projectData
+      options: projectData,
     });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -274,10 +274,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Invalidate cache
     this.cache.invalidate('projects');
-    
+
     return createSuccessResponseV2(
       'projects',
       { project: result },
@@ -297,7 +297,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     const updates: any = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.note !== undefined) updates.note = args.note;
@@ -307,30 +307,30 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       updates.flagged = typeof args.flagged === 'boolean' ? args.flagged : args.flagged === 'true' || args.flagged === true;
     }
     if (args.tags !== undefined) updates.tags = args.tags;
-    
+
     // Convert reviewInterval to proper format if provided as a number (days)
     if (args.reviewInterval !== undefined) {
       if (typeof args.reviewInterval === 'number') {
         updates.reviewInterval = {
           unit: 'days',
           steps: args.reviewInterval,
-          fixed: true
+          fixed: true,
         };
       } else {
         updates.reviewInterval = args.reviewInterval;
       }
     }
-    
+
     if (args.status !== undefined) updates.status = args.status;
-    
+
     // Execute update
     const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, {
       projectId: args.projectId,
       updates,
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -341,10 +341,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Invalidate cache
     this.cache.invalidate('projects');
-    
+
     return createSuccessResponseV2(
       'projects',
       { project: result },
@@ -364,15 +364,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Execute completion
     const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, {
       projectId: args.projectId,
       completeAllTasks: false, // Default to not completing all tasks
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -383,11 +383,11 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Invalidate cache
     this.cache.invalidate('projects');
     this.cache.invalidate('tasks'); // Completing project affects tasks too
-    
+
     return createSuccessResponseV2(
       'projects',
       { project: result },
@@ -407,15 +407,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Execute deletion
     const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
       projectId: args.projectId,
       deleteTasks: false, // Don't delete tasks, move them to inbox
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -426,11 +426,11 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Invalidate cache
     this.cache.invalidate('projects');
     this.cache.invalidate('tasks');
-    
+
     return createSuccessResponseV2(
       'projects',
       { deleted: true },
@@ -445,9 +445,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       needsReview: true,
       limit: args.limit,
     };
-    
+
     const cacheKey = 'projects_review';
-    
+
     // Check cache
     const cached = this.cache.get<any>('projects', cacheKey);
     if (cached) {
@@ -455,18 +455,18 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         'projects',
         cached.projects,
         'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'review' }
+        { ...timer.toMetadata(), from_cache: true, operation: 'review' },
       );
     }
-    
+
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
       limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true
+      includeStats: args.details !== undefined ? args.details : true,
     });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -477,21 +477,21 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Filter for review and cache
     const projects = this.parseProjects(result.projects || result);
     const needingReview = projects.filter(p => {
       if (!p.nextReviewDate) return false;
       return new Date(p.nextReviewDate) < new Date();
     });
-    
+
     this.cache.set('projects', cacheKey, { projects: needingReview });
-    
+
     return createListResponseV2(
       'projects',
       needingReview,
       'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'review' }
+      { ...timer.toMetadata(), from_cache: false, operation: 'review' },
     );
   }
 
@@ -500,9 +500,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       status: 'active',
       limit: args.limit,
     };
-    
+
     const cacheKey = 'projects_active';
-    
+
     // Check cache
     const cached = this.cache.get<any>('projects', cacheKey);
     if (cached) {
@@ -510,18 +510,18 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         'projects',
         cached.projects,
         'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'active' }
+        { ...timer.toMetadata(), from_cache: true, operation: 'active' },
       );
     }
-    
+
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, { 
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
       limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true
+      includeStats: args.details !== undefined ? args.details : true,
     });
     const result = await this.omniAutomation.execute<any>(script);
-    
+
     if (!result || result.error) {
       return createErrorResponseV2(
         'projects',
@@ -532,22 +532,22 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       );
     }
-    
+
     // Parse and cache
     const projects = this.parseProjects(result.projects || result);
     this.cache.set('projects', cacheKey, { projects });
-    
+
     return createListResponseV2(
       'projects',
       projects,
       'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'active' }
+      { ...timer.toMetadata(), from_cache: false, operation: 'active' },
     );
   }
 
   private parseProjects(projects: any[]): any[] {
     if (!Array.isArray(projects)) return [];
-    
+
     return projects.map(project => ({
       ...project,
       dueDate: project.dueDate ? new Date(project.dueDate) : undefined,

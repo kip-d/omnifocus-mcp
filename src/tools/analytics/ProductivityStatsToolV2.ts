@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { 
-  createAnalyticsResponseV2, 
-  createErrorResponseV2, 
-  OperationTimerV2 
+import {
+  createAnalyticsResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { ProductivityStatsResponseV2 } from '../response-types-v2.js';
@@ -114,7 +114,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
 
   private extractKeyFindings(data: any): string[] {
     const findings: string[] = [];
-    
+
     // Add overview findings
     if (data.stats?.overview) {
       const { completedTasks, completionRate, activeProjects, overdueCount } = data.stats.overview;
@@ -136,7 +136,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       if (score >= 80) assessment = 'Excellent';
       else if (score >= 60) assessment = 'Good';
       else if (score >= 40) assessment = 'Fair';
-      
+
       findings.push(`GTD Health Score: ${score}/100 (${assessment})`);
     }
 

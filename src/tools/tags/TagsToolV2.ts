@@ -308,7 +308,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
           'tags',
           'SCRIPT_ERROR',
           result.message || result.error,
-          { 
+          {
             operation: 'manage',
             action,
             tagName,

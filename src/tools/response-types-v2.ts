@@ -3,8 +3,8 @@
  * These interfaces define the data structures returned by V2 tools
  */
 
-import type { 
-  StandardResponseV2
+import type {
+  StandardResponseV2,
 } from '../utils/response-format-v2.js';
 
 // Task-related types
