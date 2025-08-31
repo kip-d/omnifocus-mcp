@@ -202,6 +202,13 @@ export const SAFE_UTILITIES = `
         if (!parent || !parent.sequential || !parent.sequential()) {
           const project = task.containingProject();
           if (project && project.sequential) {
+            // CRITICAL FIX: Check project status before determining blocking
+            // Tasks in on-hold, dropped, or completed projects should not be considered blocked
+            const projectStatus = safeGetStatus(project);
+            if (projectStatus === 'onHold' || projectStatus === 'dropped' || projectStatus === 'done') {
+              return false; // Project is not active, so task cannot be blocked
+            }
+            
             const isSequential = project.sequential();
             if (isSequential) {
               const taskId = task.id(); // Cache our ID

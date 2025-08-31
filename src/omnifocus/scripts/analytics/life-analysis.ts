@@ -142,6 +142,14 @@ export const LIFE_ANALYSIS_SCRIPT = `
           const inInbox = safeGet(() => task.inInbox(), false);
           const deferDate = safeGetDate(() => task.deferDate());
           
+          // CRITICAL FIX: Skip project tasks (tasks that represent projects themselves)
+          // Project tasks have childCounts and should not be counted in task-level analysis
+          const hasChildren = safeGet(() => task.numberOfTasks(), 0) > 0;
+          if (hasChildren) {
+            // This is a project task, skip it for task-level analysis
+            continue;
+          }
+          
           // Update counters - focus on workflow health
           if (overdueDays > 0) {
             overdueTasks++;
@@ -204,6 +212,44 @@ export const LIFE_ANALYSIS_SCRIPT = `
             const projectName = project.name || 'No Project';
             const projectId = project.id || 'unknown';
             
+            // CRITICAL FIX: Skip project tasks (tasks that represent projects themselves)
+            // Project tasks have childCounts and should not be counted in task-level analysis
+            const hasChildren = safeGet(() => task.numberOfTasks(), 0) > 0;
+            if (hasChildren) {
+              // This is a project task, but we can use its childCounts for accurate project stats
+              if (!projectStats[projectName]) {
+                projectStats[projectName] = {
+                  total: 0,
+                  overdue: 0,
+                  flagged: 0,
+                  blocked: 0,
+                  available: 0,
+                  deferred: 0,
+                  strategicDeferred: 0,
+                  problematicDeferred: 0,
+                  estimatedTime: 0,
+                  avgAge: 0,
+                  totalAge: 0,
+                  // Use OmniFocus's own available count for accuracy
+                  omniFocusAvailable: 0,
+                  omniFocusTotal: 0
+                };
+              }
+              
+                          // Use OmniFocus's own counts for this project
+            const childCounts = safeGet(() => task.numberOfTasks(), 0);
+            const availableCount = safeGet(() => task.numberOfAvailableTasks(), 0);
+            
+            projectStats[projectName].omniFocusTotal = childCounts;
+            projectStats[projectName].omniFocusAvailable = availableCount;
+            
+            // Also update the total count to match OmniFocus's count
+            projectStats[projectName].total = childCounts;
+              
+              // Skip further processing for project tasks
+              continue;
+            }
+            
             if (!projectStats[projectName]) {
               projectStats[projectName] = {
                 total: 0,
@@ -216,7 +262,9 @@ export const LIFE_ANALYSIS_SCRIPT = `
                 problematicDeferred: 0,
                 estimatedTime: 0,
                 avgAge: 0,
-                totalAge: 0
+                totalAge: 0,
+                omniFocusAvailable: 0,
+                omniFocusTotal: 0
               };
             }
             
@@ -297,7 +345,15 @@ export const LIFE_ANALYSIS_SCRIPT = `
       Object.keys(projectStats).forEach(projectName => {
         const stats = projectStats[projectName];
         const avgAge = stats.total > 0 ? Math.round(stats.totalAge / stats.total) : 0;
-        const availableRate = stats.total > 0 ? (stats.available / stats.total * 100).toFixed(1) : 0;
+        // Use OmniFocus's own available count when available, otherwise fall back to our calculation
+        let availableRate;
+        if (stats.omniFocusAvailable > 0 && stats.omniFocusTotal > 0) {
+          // Use OmniFocus's accurate count
+          availableRate = (stats.omniFocusAvailable / stats.omniFocusTotal * 100).toFixed(1);
+        } else {
+          // Fall back to our manual calculation
+          availableRate = stats.total > 0 ? (stats.available / stats.total * 100).toFixed(1) : 0;
+        }
         const overdueRate = stats.total > 0 ? (stats.overdue / stats.total * 100).toFixed(1) : 0;
         
         projectStats[projectName].avgAge = avgAge;
