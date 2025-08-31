@@ -241,9 +241,9 @@ export const LIFE_ANALYSIS_SCRIPT = `
               const availableCount = safeGet(() => task.numberOfAvailableTasks(), 0);
               
               // DEBUG: Log what we're finding
-              console.log(`DEBUG: Project task found for "${projectName}":`);
-              console.log(`  - numberOfTasks: ${childCounts}`);
-              console.log(`  - numberOfAvailableTasks: ${availableCount}`);
+              console.log('DEBUG: Project task found for "' + projectName + '":');
+              console.log('  - numberOfTasks: ' + childCounts);
+              console.log('  - numberOfAvailableTasks: ' + availableCount);
               
               projectStats[projectName].omniFocusTotal = childCounts;
               projectStats[projectName].omniFocusAvailable = availableCount;
