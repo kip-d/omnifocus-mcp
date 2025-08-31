@@ -120,12 +120,14 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const scriptTemplate = useOptimized ? LIST_TAGS_OPTIMIZED_SCRIPT : LIST_TAGS_SCRIPT;
 
       const script = this.omniAutomation.buildScript(scriptTemplate, {
-        sortBy,
-        includeEmpty,
-        includeUsageStats,
-        includeTaskCounts,
-        fastMode,
-        namesOnly,
+        options: {
+          sortBy,
+          includeEmpty,
+          includeUsageStats,
+          includeTaskCounts,
+          fastMode,
+          namesOnly,
+        }
       });
 
       this.logger.debug(`Executing list tags script (optimized: ${useOptimized})`);

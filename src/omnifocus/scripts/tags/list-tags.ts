@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getTagHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all tags in OmniFocus with optional usage statistics
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Performance optimized with tag map for O(1) lookups
  */
 export const LIST_TAGS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getTagHelpers()}
   
   (() => {
     const options = {{options}};
@@ -115,10 +115,10 @@ export const LIST_TAGS_SCRIPT = `
             for (let j = 0; j < childTags.length; j++) {
               const childId = safeGet(() => childTags[j].id());
               const childName = safeGet(() => childTags[j].name());
-              const childObj = {};
-              childObj.id = childId;
-              childObj.name = childName;
-              tagInfo.children.push(childObj);
+              tagInfo.children.push({
+                id: childId,
+                name: childName
+              });
             }
           }
         } catch (e) {

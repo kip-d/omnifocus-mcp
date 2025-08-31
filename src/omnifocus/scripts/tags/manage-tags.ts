@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getTagHelpers } from '../shared/helpers.js';
 
 /**
  * Script to manage tags in OmniFocus (create, rename, delete, merge)
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Comprehensive error handling for each operation
  */
 export const MANAGE_TAGS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getTagHelpers()}
   
   (() => {
   const action = {{action}};

@@ -479,6 +479,73 @@ export function getAllHelpersWithBridge(): string {
 }
 
 /**
+ * Get minimal helpers for scripts that need smaller payloads
+ * Only includes the most essential utility functions
+ */
+export function getMinimalHelpers(): string {
+  // Extract only the essential functions from SAFE_UTILITIES
+  const essentialFunctions = `
+  // Safe utility functions for OmniFocus automation
+  function safeGet(getter, defaultValue = null) {
+    try {
+      const result = getter();
+      return result !== null && result !== undefined ? result : defaultValue;
+    } catch (e) {
+      return defaultValue;
+    }
+  }
+  
+  function safeGetTags(task) {
+    try {
+      const tags = task.tags();
+      if (!tags) return [];
+      const tagNames = [];
+      for (let i = 0; i < tags.length; i++) {
+        const tagName = safeGet(() => tags[i].name());
+        if (tagName) {
+          tagNames.push(tagName);
+        }
+      }
+      return tagNames;
+    } catch (e) {
+      return [];
+    }
+  }
+  
+  function safeIsCompleted(task) {
+    try {
+      return task.completed() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function formatError(error, context = '') {
+    const errorObj = {
+      error: true,
+      message: error.message || String(error),
+      context: context
+    };
+    
+    if (error.stack) {
+      errorObj.stack = error.stack;
+    }
+    
+    return JSON.stringify(errorObj);
+  }
+  `;
+  
+  return essentialFunctions;
+}
+
+/**
+ * Get helpers for tag operations
+ */
+export function getTagHelpers(): string {
+  return getMinimalHelpers();
+}
+
+/**
  * Legacy export for backward compatibility
  */
 export const SAFE_UTILITIES_SCRIPT = SAFE_UTILITIES;

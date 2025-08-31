@@ -73,6 +73,38 @@ for (let i = 0; i < allTasks.length; i++) {
 - **Early exit** on most common conditions (completed, no date)
 - Set `skipAnalysis: true` for 30% faster queries when recurring analysis not needed
 
+## 🚨 Critical: Script Size Limits
+**JXA scripts sent to OmniFocus have size limits that can cause syntax errors.**
+
+### Keep Scripts Small
+- **Use minimal helpers**: Import only essential helper functions
+- **Available helper functions**:
+  - `getMinimalHelpers()` - Only essential utilities (safeGet, safeGetTags, safeIsCompleted, formatError)
+  - `getTagHelpers()` - Minimal helpers for tag operations
+  - `getAllHelpers()` - Full helper suite (use sparingly, can exceed limits)
+
+### Implementation Pattern
+```typescript
+// ❌ WRONG - Can exceed script size limits
+import { getAllHelpers } from '../shared/helpers.js';
+export const MY_SCRIPT = `
+  ${getAllHelpers()}  // Too large!
+  // ... script code
+`;
+
+// ✅ CORRECT - Use minimal helpers
+import { getMinimalHelpers } from '../shared/helpers.js';
+export const MY_SCRIPT = `
+  ${getMinimalHelpers()}  // Only essentials
+  // ... script code
+`;
+```
+
+### When Scripts Fail with Syntax Errors
+- Check script size first - "Unexpected token" errors often indicate size limits
+- Create specialized minimal helper functions for your specific needs
+- Test with both direct execution AND Claude Desktop (which may have stricter limits)
+
 ## Quick Reference
 
 ### Commands

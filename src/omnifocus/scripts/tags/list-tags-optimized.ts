@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getTagHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized script to list tags in OmniFocus
@@ -10,7 +10,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Option to get just tag names (ultra-fast mode)
  */
 export const LIST_TAGS_OPTIMIZED_SCRIPT = `
-  ${getAllHelpers()}
+  ${getTagHelpers()}
   
   (() => {
     const options = {{options}};
@@ -202,7 +202,7 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
  * This is much faster than full tag listing
  */
 export const GET_ACTIVE_TAGS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getTagHelpers()}
   
   (() => {
     try {
