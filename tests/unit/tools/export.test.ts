@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ExportTasksTool } from '../../../src/tools/export/ExportTasksTool.js';
 import { ExportProjectsTool } from '../../../src/tools/export/ExportProjectsTool.js';
+import { BulkExportTool } from '../../../src/tools/export/BulkExportTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
@@ -721,6 +722,405 @@ describe('Export Tools', () => {
         expect(result.success).toBe(true);
         // OperationTimer should be used and provide metadata
         expect(result.metadata.query_time_ms).toBeDefined();
+      });
+    });
+  });
+
+  describe('BulkExportTool', () => {
+    let tool: BulkExportTool;
+
+    beforeEach(() => {
+      tool = new BulkExportTool(mockCache);
+    });
+
+    describe('basic functionality', () => {
+      it('should have correct name and description', () => {
+        expect(tool.name).toBe('bulk_export');
+        expect(tool.description).toContain('Export all OmniFocus data to files');
+        expect(tool.description).toContain('json|csv');
+      });
+
+      it('should use default parameters when not specified', async () => {
+        // Mock the individual export tools
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        // Mock the constructor calls
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks).toBeDefined();
+        expect(result.data.exports.projects).toBeDefined();
+        expect(result.data.exports.tags).toBeDefined();
+      });
+
+      it('should override default parameters when specified', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+          format: 'csv',
+          includeCompleted: false,
+          includeProjectStats: false,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks.format).toBe('csv');
+        expect(result.data.exports.projects.format).toBe('csv');
+        expect(result.data.exports.tags.format).toBe('json'); // Tags are always JSON
+      });
+    });
+
+    describe('file system operations', () => {
+      it('should create output directory if it does not exist', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        // Mock fs.mkdir to verify it's called
+        const mockFs = await import('fs/promises');
+        vi.spyOn(mockFs, 'mkdir').mockResolvedValue(undefined);
+
+        await tool.execute({
+          outputDirectory: '/tmp/new-directory',
+        });
+
+        expect(mockFs.mkdir).toHaveBeenCalledWith('/tmp/new-directory', { recursive: true });
+      });
+    });
+
+    describe('export operations', () => {
+      it('should export tasks successfully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[{"id":"1","name":"Test Task"}]', count: 1 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+          format: 'json',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks.exported).toBe(true);
+        expect(result.data.exports.tasks.task_count).toBe(1);
+        expect(result.data.total_exported).toBe(1);
+      });
+
+      it('should export projects successfully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[{"id":"1","name":"Test Project"}]', count: 1 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+          format: 'csv',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.projects.exported).toBe(true);
+        expect(result.data.exports.projects.project_count).toBe(1);
+        expect(result.data.total_exported).toBe(1);
+      });
+
+      it('should export tags successfully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [{ id: '1', name: 'Test Tag' }] },
+            metadata: { total_count: 1 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tags.exported).toBe(true);
+        expect(result.data.exports.tags.tag_count).toBe(1);
+        expect(result.data.total_exported).toBe(1);
+      });
+    });
+
+    describe('error handling', () => {
+      it('should handle task export failures gracefully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: false,
+            error: 'Task export failed',
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks.exported).toBe(false);
+        expect(result.data.exports.projects.exported).toBe(true);
+        expect(result.data.total_exported).toBe(0);
+      });
+
+      it('should handle project export failures gracefully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: false,
+            error: 'Project export failed',
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { items: [] },
+            metadata: { total_count: 0 },
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks.exported).toBe(true);
+        expect(result.data.exports.projects.exported).toBe(false);
+        expect(result.data.total_exported).toBe(0);
+      });
+
+      it('should handle tag export failures gracefully', async () => {
+        const mockExportTasksTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockExportProjectsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: true,
+            data: { data: '[]', count: 0 },
+          }),
+        };
+        const mockTagsTool = {
+          execute: vi.fn().mockResolvedValue({
+            success: false,
+            error: 'Tag export failed',
+          }),
+        };
+
+        vi.doMock('../../../src/tools/export/ExportTasksTool.js', () => ({
+          ExportTasksTool: vi.fn(() => mockExportTasksTool),
+        }));
+        vi.doMock('../../../src/tools/export/ExportProjectsTool.js', () => ({
+          ExportProjectsTool: vi.fn(() => mockExportProjectsTool),
+        }));
+        vi.doMock('../../../src/tools/tags/TagsToolV2.js', () => ({
+          TagsToolV2: vi.fn(() => mockTagsTool),
+        }));
+
+        const result = await tool.execute({
+          outputDirectory: '/tmp/test',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports.tasks.exported).toBe(true);
+        expect(result.data.exports.projects.exported).toBe(true);
+        expect(result.data.exports.tags.exported).toBe(false);
+        expect(result.data.total_exported).toBe(0);
       });
     });
   });

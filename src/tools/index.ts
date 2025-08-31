@@ -26,6 +26,7 @@ import { QueryFoldersTool } from './folders/QueryFoldersTool.js';
 import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
+import { LifeAnalysisTool } from './analytics/LifeAnalysisTool.js';
 
 // Import tag tools (consolidated)
 import { TagsToolV2 } from './tags/TagsToolV2.js';
@@ -68,6 +69,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
+    new LifeAnalysisTool(cache),        // 'life_analysis' - Deep dataset analysis
   ];
 
   // Legacy tools have been completely removed in v2.0.0 for better performance

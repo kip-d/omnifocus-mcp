@@ -9,3 +9,4 @@
 export { PRODUCTIVITY_STATS_SCRIPT } from './analytics/productivity-stats.js';
 export { TASK_VELOCITY_SCRIPT } from './analytics/task-velocity.js';
 export { OVERDUE_ANALYSIS_SCRIPT } from './analytics/overdue-analysis.js';
+export { LIFE_ANALYSIS_SCRIPT } from './analytics/life-analysis.js';
