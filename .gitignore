@@ -14,3 +14,4 @@ coverage/
 
 # Archive directory for old files
 archive/
+.archive/

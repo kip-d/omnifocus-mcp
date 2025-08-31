@@ -2,6 +2,10 @@
 
 This file provides critical guidance to Claude Code (claude.ai/code) when working with this OmniFocus MCP server.
 
+## 📚 CRITICAL: Read LESSONS_LEARNED.md First!
+**Before making ANY architectural changes or optimizations, consult `/docs/LESSONS_LEARNED.md`**
+This document contains hard-won insights that will save you from repeating costly mistakes.
+
 ## Critical: V2 Architecture
 - **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
 - V1 tools removed in v2.0.0 for 30% context reduction
