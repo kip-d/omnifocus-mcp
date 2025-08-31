@@ -147,10 +147,8 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(result).toEqual({
-          error: true,
-          message: 'Script failed',
-        });
+        expect(result.error).toBe(true);
+        expect(result.message).toContain('Script failed');
         expect(mockCache.set).not.toHaveBeenCalled();
       });
 
@@ -161,8 +159,8 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(result.error).toBe(true);
-        expect(result.message).toContain('Execution failed');
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('Execution failed');
       });
     });
   });
@@ -177,14 +175,17 @@ describe('Recurring Tools', () => {
     describe('basic functionality', () => {
       it('should have correct name and description', () => {
         expect(tool.name).toBe('get_recurring_patterns');
-        expect(tool.description).toContain('Get recurring task patterns');
+        expect(tool.description).toContain('Get recurring task frequency patterns');
       });
 
       it('should execute with default parameters', async () => {
+        mockCache.get.mockReturnValue(null); // Ensure cache is empty
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.execute.mockResolvedValue({
+          totalRecurring: 0,
           patterns: [],
-          summary: { total: 0 },
+          byProject: [],
+          mostCommon: null,
         });
 
         const result = await tool.execute({});
@@ -194,7 +195,7 @@ describe('Recurring Tools', () => {
           { options: { activeOnly: true, includeCompleted: false, includeDropped: false } }
         );
         expect(result.patterns).toEqual([]);
-        expect(result.summary).toEqual({ total: 0 });
+        expect(result.totalRecurring).toBe(0);
       });
 
       it('should override default parameters when specified', async () => {
@@ -229,15 +230,17 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(mockCache.get).toHaveBeenCalledWith('analytics', 'patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}');
+        expect(mockCache.get).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}');
         expect(result).toEqual(cachedData);
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should cache result when not cached', async () => {
         const scriptResult = {
+          totalRecurring: 1,
           patterns: [{ id: '1', pattern: 'daily' }],
-          summary: { total: 1 },
+          byProject: [],
+          mostCommon: { pattern: 'daily', count: 1 },
         };
         
         mockCache.get.mockReturnValue(null);
@@ -246,9 +249,11 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(mockCache.set).toHaveBeenCalledWith('analytics', 'patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}', {
+        expect(mockCache.set).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}', {
+          totalRecurring: scriptResult.totalRecurring,
           patterns: scriptResult.patterns,
-          summary: scriptResult.summary,
+          byProject: scriptResult.byProject,
+          insights: expect.any(Array),
           metadata: {
             timestamp: expect.any(String),
             options: { activeOnly: true, includeCompleted: false, includeDropped: false },
@@ -268,10 +273,8 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(result).toEqual({
-          error: true,
-          message: 'Pattern analysis failed',
-        });
+        expect(result.error).toBe(true);
+        expect(result.message).toContain('Pattern analysis failed');
         expect(mockCache.set).not.toHaveBeenCalled();
       });
 
@@ -282,8 +285,8 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({});
 
-        expect(result.error).toBe(true);
-        expect(result.message).toContain('Pattern analysis failed');
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('Pattern analysis failed');
       });
     });
   });

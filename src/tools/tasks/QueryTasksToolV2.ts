@@ -47,7 +47,7 @@ const QueryTasksToolSchemaV2 = z.object({
   ]).optional().describe('Include completed tasks (default: false)'),
 
   // Date filters (natural language supported)
-  dueBy: z.string().optional().describe('Show tasks due by this date (e.g., "tomorrow", "friday", "2025-03-15")'),
+  dueBy: z.string().optional().describe('Show tasks due by this date. Use YYYY-MM-DD format (e.g., "2025-03-15"). Basic terms like "today" or "tomorrow" also work.'),
   daysAhead: z.union([
     z.number(),
     z.string().transform(val => parseInt(val, 10)),
@@ -127,7 +127,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Normalize date inputs
     if (normalized.dueBy) {
-      const date = normalizeDateInput(normalized.dueBy);
+      const date = normalizeDateInput(normalized.dueBy, 'due');
       if (date) {
         normalized.dueBy = date.toISOString();
       }

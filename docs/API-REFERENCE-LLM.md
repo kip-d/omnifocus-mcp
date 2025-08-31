@@ -16,7 +16,7 @@
 
 **create_task** `name*` `flagged*:"false"` `sequential*:"false"` `note?` `projectId?` `parentTaskId?` `dueDate?` `deferDate?` `estimatedMinutes?` `tags[]?` `repeatRule?`
 - repeatRule: {unit*,steps*,method*,weekdays[]?,weekPosition?,weekday?,deferAnother?}
-- Dates: "YYYY-MM-DD HH:mm" or natural language
+- Dates: "YYYY-MM-DD HH:mm" or "YYYY-MM-DD" (due→5pm, defer→8am)
 
 **update_task** `taskId*` +all create_task params as optional
 - projectId:null→inbox, clearDueDate:true→remove
@@ -78,7 +78,7 @@ Simplified versions (same params but easier):
 2. **Required marked with \***, defaults shown after :
 3. **Summary first**: All tools return summary→data structure  
 4. **Inbox**: projectId:null|""|"null" all work
-5. **Dates**: Local time "2025-03-15 14:30" or "tomorrow"
+5. **Dates**: "YYYY-MM-DD HH:mm" or "YYYY-MM-DD" (due→5pm, defer→8am default)
 6. **Performance**: details:"false" for speed
 
 ## Common Flows

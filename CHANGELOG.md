@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Context-Aware Date Defaults**: Smart time defaults based on task type
+  - Due dates with YYYY-MM-DD format default to 5:00 PM local time
+  - Defer dates with YYYY-MM-DD format default to 8:00 AM local time
+  - Completion dates default to 12:00 PM (noon) local time
+  - Explicit times (YYYY-MM-DD HH:mm) use provided time
+  - All date handling functions now accept context parameter
 - **Tag Hierarchy Support**: Comprehensive nested tag management with parent/child relationships
   - Create nested tags with parentTagName or parentTagId
   - Nest/unparent/reparent operations for existing tags
@@ -24,9 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added useful warnings for code quality without being overly strict
 
 ### Changed
+- **Date Format Documentation**: Emphasized YYYY-MM-DD format usage
+  - Updated all tool descriptions to recommend YYYY-MM-DD or YYYY-MM-DD HH:mm
+  - Documented smart defaults for date-only inputs
+  - Added warnings about ISO-8601 with Z suffix causing timezone confusion
 - **Performance Optimization**: Token usage reduced from 40,000 → 2,000 for 100 tasks
 - **User Testing Integration**: Real-world production feedback incorporated
 - **Development Workflow**: Cleaned up git tags and documentation organization
+
+### Fixed
+- **Test Suite**: Resolved all test failures and eliminated skipped tests
+  - Replaced 13 skipped natural language date tests with proper validation tests
+  - Fixed mock injection timing issues in Vitest
+  - Updated test expectations to match actual implementation behavior
+  - Achieved 624 passing tests with 0 failures and 0 skipped
 
 ## [2.0.0-dev] - 2025-08-27
 

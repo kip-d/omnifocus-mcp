@@ -133,7 +133,7 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
   "tool": "create_task", 
   "arguments": {
     "name": "Review Q4 budget",
-    "dueDate": "2024-01-15T17:00:00Z",
+    "dueDate": "2024-01-15 17:00",  // 5pm on Jan 15 (or just "2024-01-15" for 5pm default)
     "flagged": true
   }
 }
@@ -363,6 +363,14 @@ See `/docs/TROUBLESHOOTING.md` for solutions and `/docs/JXA-LIMITATIONS.md` for 
 
 ## Data Format Conventions
 
+### Date Formats
+- **Recommended**: `YYYY-MM-DD HH:mm` (e.g., "2024-01-15 17:00" for 5pm)
+- **Date-only**: `YYYY-MM-DD` (e.g., "2024-01-15")
+  - Due dates default to 5:00 PM local time
+  - Defer dates default to 8:00 AM local time
+- **Avoid**: ISO-8601 with Z suffix (causes timezone confusion)
+
+### Field Naming
 - **Data Fields** (task/project properties): Use camelCase to match OmniFocus API
   - Examples: `dueDate`, `deferDate`, `estimatedMinutes`, `flagged`
 - **Metadata Fields** (response metadata): Use snake_case for consistency

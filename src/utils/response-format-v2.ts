@@ -484,7 +484,10 @@ export class OperationTimerV2 {
 /**
  * Input normalization helpers
  */
-export function normalizeDateInput(input: string | Date | null | undefined): Date | null {
+export function normalizeDateInput(
+  input: string | Date | null | undefined,
+  context: 'due' | 'defer' | 'completion' | 'generic' = 'generic'
+): Date | null {
   if (!input) return null;
 
   // Handle Date objects
@@ -494,35 +497,56 @@ export function normalizeDateInput(input: string | Date | null | undefined): Dat
   const lowerInput = String(input).toLowerCase().trim();
   const now = new Date();
 
+  // Determine default time based on context
+  const getDefaultTime = (baseDate: Date, ctx: typeof context = context) => {
+    if (ctx === 'defer') {
+      baseDate.setHours(8, 0, 0, 0); // 8am for deferrals
+    } else if (ctx === 'due') {
+      baseDate.setHours(17, 0, 0, 0); // 5pm for due dates
+    } else {
+      baseDate.setHours(12, 0, 0, 0); // Noon for generic/completion
+    }
+    return baseDate;
+  };
+
   switch (lowerInput) {
     case 'today':
-      return new Date(now.setHours(17, 0, 0, 0)); // Default to 5pm
+      return getDefaultTime(new Date(now));
     case 'tomorrow':
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(17, 0, 0, 0);
-      return tomorrow;
+      return getDefaultTime(tomorrow);
     case 'next week':
       const nextWeek = new Date(now);
       nextWeek.setDate(nextWeek.getDate() + 7);
-      nextWeek.setHours(17, 0, 0, 0);
-      return nextWeek;
+      return getDefaultTime(nextWeek);
     case 'next monday':
       const nextMonday = new Date(now);
       const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
       nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
-      nextMonday.setHours(9, 0, 0, 0);
+      nextMonday.setHours(9, 0, 0, 0); // Keep 9am for Monday
       return nextMonday;
     case 'end of week':
     case 'friday':
       const friday = new Date(now);
       const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
       friday.setDate(friday.getDate() + daysUntilFriday);
-      friday.setHours(17, 0, 0, 0);
+      friday.setHours(17, 0, 0, 0); // Keep 5pm for Friday
       return friday;
   }
 
-  // Try to parse as date string
+  // Check if it's a plain YYYY-MM-DD date (no time specified)
+  const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateOnlyPattern.test(String(input).trim())) {
+    // Parse with context-appropriate default time
+    const defaultTime = context === 'defer' ? '08:00' : context === 'due' ? '17:00' : '12:00';
+    const parsed = new Date(input + ' ' + defaultTime);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  // Try to parse as date string (including YYYY-MM-DD HH:mm format)
   try {
     const parsed = new Date(input);
     if (!isNaN(parsed.getTime())) {

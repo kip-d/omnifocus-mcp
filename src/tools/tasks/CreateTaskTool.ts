@@ -16,7 +16,7 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   name = 'create_task';
-  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format (e.g., "2024-12-25" or "2024-12-25 16:00" for 4pm).';
+  description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am (e.g., dueDate "2024-12-25" becomes 5pm, deferDate "2024-12-25" becomes 8am). Avoid ISO-8601 with Z suffix.';
   schema = CreateTaskSchema;
 
   async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
@@ -28,8 +28,8 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       try {
         convertedTaskData = {
           ...args,
-          dueDate: args.dueDate ? localToUTC(args.dueDate) : undefined,
-          deferDate: args.deferDate ? localToUTC(args.deferDate) : undefined,
+          dueDate: args.dueDate ? localToUTC(args.dueDate, 'due') : undefined,
+          deferDate: args.deferDate ? localToUTC(args.deferDate, 'defer') : undefined,
         };
       } catch (dateError) {
         const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : 'dueDate';

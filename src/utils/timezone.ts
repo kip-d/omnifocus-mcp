@@ -90,15 +90,20 @@ export function getCurrentTimezoneOffset(): number {
  * @param timezone Optional timezone override (defaults to system timezone)
  * @returns UTC ISO string for use with OmniFocus API
  */
-export function localToUTC(localDateStr: string, _timezone?: string): string {
+export function localToUTC(
+  localDateStr: string, 
+  context: 'due' | 'defer' | 'completion' | 'generic' = 'generic',
+  _timezone?: string
+): string {
   // Parse the input to determine format
   const hasTime = localDateStr.includes(' ') || localDateStr.includes('T');
 
   let dateStr: string;
 
   if (!hasTime) {
-    // Date only - assume start of day in local time
-    dateStr = `${localDateStr}T00:00:00`;
+    // Date only - use context-appropriate default time
+    const defaultTime = context === 'defer' ? '08:00:00' : context === 'due' ? '17:00:00' : '12:00:00';
+    dateStr = `${localDateStr}T${defaultTime}`;
   } else {
     // Has time - ensure proper format
     dateStr = localDateStr.replace(' ', 'T');

@@ -26,20 +26,40 @@ describe('Date Handling and Timezone Utilities', () => {
   });
 
   describe('localToUTC', () => {
-    it('should convert date-only strings to local midnight then UTC', () => {
+    it('should convert date-only strings to local noon by default (generic context)', () => {
       const input = '2024-01-15';
       const result = localToUTC(input);
       
       // Result should be a valid ISO string
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       
-      // The converted date should represent midnight in local time
+      // The converted date should represent noon in local time (12:00 PM) for generic context
       const converted = new Date(result);
       const local = new Date(converted.toLocaleString());
-      expect(local.getHours()).toBe(0);
+      expect(local.getHours()).toBe(12);
       expect(local.getMinutes()).toBe(0);
       expect(local.getDate()).toBe(15);
       expect(local.getMonth()).toBe(0); // January = 0
+    });
+
+    it('should use 8am for defer context with date-only', () => {
+      const input = '2024-01-15';
+      const result = localToUTC(input, 'defer');
+      
+      const converted = new Date(result);
+      const local = new Date(converted.toLocaleString());
+      expect(local.getHours()).toBe(8);
+      expect(local.getMinutes()).toBe(0);
+    });
+
+    it('should use 5pm for due context with date-only', () => {
+      const input = '2024-01-15';
+      const result = localToUTC(input, 'due');
+      
+      const converted = new Date(result);
+      const local = new Date(converted.toLocaleString());
+      expect(local.getHours()).toBe(17);
+      expect(local.getMinutes()).toBe(0);
     });
 
     it('should convert date-time strings to UTC', () => {

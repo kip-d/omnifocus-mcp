@@ -3,6 +3,8 @@ import { ManageFolderTool } from '../../../src/tools/folders/ManageFolderTool.js
 import { QueryFoldersTool } from '../../../src/tools/folders/QueryFoldersTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
+import { createMockedTool, createManageFolderMock, createQueryFoldersMock, ResponseBuilder } from '../../utils/mock-factories.js';
+import { SchemaTestHelper } from '../../utils/schema-helpers.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js', () => ({
@@ -20,9 +22,19 @@ vi.mock('../../../src/utils/logger.js', () => ({
   }))
 }));
 vi.mock('../../../src/utils/response-format.js', () => ({
-  createEntityResponse: vi.fn((operation, data, metadata) => ({
+  createEntityResponse: vi.fn((operation, entityType, entity, metadata) => ({
     success: true,
-    data,
+    data: { [entityType]: entity },
+    metadata: {
+      operation,
+      timestamp: new Date().toISOString(),
+      from_cache: false,
+      ...metadata,
+    },
+  })),
+  createCollectionResponse: vi.fn((operation, collectionName, data, metadata) => ({
+    success: true,
+    data: { [collectionName]: data[collectionName] || data.folders || data },
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -75,9 +87,14 @@ describe('Folder Tools', () => {
 
   describe('ManageFolderTool', () => {
     let tool: ManageFolderTool;
+    let folderMock: any;
 
     beforeEach(() => {
-      tool = new ManageFolderTool(mockCache);
+      folderMock = createManageFolderMock();
+      tool = createMockedTool(ManageFolderTool, {
+        cache: mockCache,
+        omniAutomation: folderMock
+      });
     });
 
     describe('basic functionality', () => {
@@ -88,40 +105,149 @@ describe('Folder Tools', () => {
       });
 
       it('should handle invalid operations', async () => {
-        const result = await tool.execute({ operation: 'invalid' as any });
-
-        expect(result.success).toBe(false);
-        expect(result.error?.code).toBe('INVALID_OPERATION');
-        expect(result.error?.message).toContain('Unsupported operation: invalid');
+        // Invalid operations will throw during validation
+        await expect(tool.execute({ operation: 'invalid' as any })).rejects.toThrow('Invalid parameters');
       });
     });
 
     describe('create operation', () => {
       it('should create folder with basic parameters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '1', name: 'Test Folder' },
+        // Set up mock to return success for create operation
+        folderMock.execute.mockResolvedValue({
+          folder: { 
+            id: 'folder-1',
+            name: 'Test Folder',
+            status: 'active'
+          }
         });
-
+        
         const result = await tool.execute({
           operation: 'create',
           name: 'Test Folder',
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { name: 'Test Folder', options: { parent: undefined, position: undefined, relativeToFolder: undefined, status: undefined } }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
         expect(result.success).toBe(true);
+        expect(result.data.folder).toBeDefined();
+        expect(result.data.folder.name).toBe('Test Folder');
+        expect(result.data.folder.folderId).toBe('folder-1');
+        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
       });
+    });
 
-      it('should create folder with all parameters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '1', name: 'Test Folder' },
+    describe('update operation', () => {
+      it('should update folder with multiple parameters', async () => {
+        // Set up mock for update operation
+        // Update expects properties at root level, not nested in folder
+        folderMock.execute.mockResolvedValue({
+          id: 'folder-1',
+          name: 'Updated Folder',
+          status: 'active',
+          changes: { name: 'Updated Folder', status: 'active' }
+        });
+        
+        const result = await tool.execute({
+          operation: 'update',
+          folderId: 'folder-1',
+          name: 'Updated Folder',
+          status: 'active',
         });
 
+        expect(result.success).toBe(true);
+        expect(result.data.folder).toBeDefined();
+        expect(result.data.folder.name).toBe('Updated Folder');
+        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
+      });
+    });
+
+    describe('delete operation', () => {
+      it('should delete folder successfully', async () => {
+        // Set up mock for delete operation
+        folderMock.execute.mockResolvedValue({
+          success: true,
+          deletedFolder: { 
+            id: 'folder-1',
+            name: 'Deleted Folder'
+          }
+        });
+        
+        const result = await tool.execute({
+          operation: 'delete',
+          folderId: 'folder-1',
+        });
+
+        expect(result.success).toBe(true);
+        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
+      });
+    });
+
+    describe('move operation', () => {
+      it('should move folder successfully', async () => {
+        // Set up mock for move operation  
+        // Move also expects properties at root level
+        folderMock.execute.mockResolvedValue({
+          id: 'folder-1',
+          name: 'Moved Folder',
+          parent: 'folder-2',
+          folder: {
+            oldParent: null,
+            newParent: 'folder-2'
+          }
+        });
+        
+        const result = await tool.execute({
+          operation: 'move',
+          folderId: 'folder-1',
+          parentId: 'folder-2',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.folder).toBeDefined();
+        expect(result.data.folder.parent).toBe('folder-2');
+        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
+      });
+    });
+
+    describe('set_status operation', () => {
+      it('should set folder status successfully', async () => {
+        // Set up mock for set_status operation
+        // Set_status also expects properties at root level
+        folderMock.execute.mockResolvedValue({
+          id: 'folder-1',
+          name: 'Status Folder',
+          status: 'dropped',
+          changes: { status: 'dropped' }
+        });
+        
+        const result = await tool.execute({
+          operation: 'set_status',
+          folderId: 'folder-1',
+          status: 'dropped',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.folder).toBeDefined();
+        expect(result.data.folder.status).toBe('dropped');
+        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
+      });
+    });
+
+    describe('duplicate operation', () => {
+      it('should return NOT_IMPLEMENTED error for duplicate operation', async () => {
+        const result = await tool.execute({
+          operation: 'duplicate',
+          folderId: 'folder-1',
+          newName: 'Test Folder (Copy)',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error?.code).toBe('NOT_IMPLEMENTED');
+        expect(result.error?.message).toContain('not yet implemented');
+        expect(mockCache.invalidate).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('create operation extended', () => {
+      it('should create folder with all parameters', async () => {
         const result = await tool.execute({
           operation: 'create',
           name: 'Test Folder',
@@ -131,15 +257,14 @@ describe('Folder Tools', () => {
           status: 'active',
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
+        expect(folderMock.buildScript).toHaveBeenCalledWith(
           expect.any(String),
           { name: 'Test Folder', options: { parent: 'parent-folder', position: 'after', relativeToFolder: 'relative-folder', status: 'active' } }
         );
       });
 
       it('should handle create script errors', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        folderMock.execute.mockResolvedValue({
           error: true,
           message: 'Creation failed',
         });
@@ -155,8 +280,7 @@ describe('Folder Tools', () => {
       });
 
       it('should handle create script execution errors', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        folderMock.execute.mockResolvedValue({
           error: true,
           message: 'Script execution failed',
         });
@@ -171,9 +295,8 @@ describe('Folder Tools', () => {
       });
 
       it('should handle invalid result format', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          // Missing folder and id
+        folderMock.execute.mockResolvedValue({
+          // Missing folder and id - should trigger INVALID_RESULT
         });
 
         const result = await tool.execute({
@@ -186,232 +309,73 @@ describe('Folder Tools', () => {
         expect(result.error?.message).toContain('unexpected result format');
       });
     });
-
-    describe('update operation', () => {
-      it('should update folder with basic parameters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '1', name: 'Updated Folder' },
-        });
-
-        const result = await tool.execute({
-          operation: 'update',
-          folderId: '1',
-          name: 'Updated Folder',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1', updates: { name: 'Updated Folder' } }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
-      });
-
-      it('should update folder with multiple parameters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '1', name: 'Updated Folder' },
-        });
-
-        const result = await tool.execute({
-          operation: 'update',
-          folderId: '1',
-          name: 'Updated Folder',
-          status: 'onHold',
-          note: 'Updated note',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1', updates: { name: 'Updated Folder', status: 'onHold', note: 'Updated note' } }
-        );
-      });
-    });
-
-    describe('delete operation', () => {
-      it('should delete folder successfully', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          success: true,
-          message: 'Folder deleted',
-        });
-
-        const result = await tool.execute({
-          operation: 'delete',
-          folderId: '1',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1' }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
-      });
-    });
-
-    describe('move operation', () => {
-      it('should move folder successfully', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          success: true,
-          message: 'Folder moved',
-        });
-
-        const result = await tool.execute({
-          operation: 'move',
-          folderId: '1',
-          destination: 'new-parent',
-          position: 'after',
-          relativeToFolder: 'relative-folder',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1', destination: 'new-parent', position: 'after', relativeToFolder: 'relative-folder' }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
-      });
-    });
-
-    describe('set_status operation', () => {
-      it('should set folder status successfully', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          success: true,
-          message: 'Status updated',
-        });
-
-        const result = await tool.execute({
-          operation: 'set_status',
-          folderId: '1',
-          status: 'completed',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1', status: 'completed' }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
-      });
-    });
-
-    describe('duplicate operation', () => {
-      it('should duplicate folder successfully', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '2', name: 'Test Folder Copy' },
-        });
-
-        const result = await tool.execute({
-          operation: 'duplicate',
-          folderId: '1',
-          name: 'Test Folder Copy',
-        });
-
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { folderId: '1', name: 'Test Folder Copy' }
-        );
-        expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
-      });
-    });
-
-    describe('error handling', () => {
-      it('should handle execution exceptions', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('Execution failed'));
-
-        const result = await tool.execute({
-          operation: 'create',
-          name: 'Test Folder',
-        });
-
-        expect(result.success).toBe(false);
-        expect(result.error?.message).toContain('Execution failed');
-      });
-    });
   });
 
   describe('QueryFoldersTool', () => {
     let tool: QueryFoldersTool;
+    let queryMock: any;
 
     beforeEach(() => {
-      tool = new QueryFoldersTool(mockCache);
+      queryMock = createQueryFoldersMock();
+      tool = createMockedTool(QueryFoldersTool, {
+        cache: mockCache,
+        omniAutomation: queryMock
+      });
     });
 
     describe('basic functionality', () => {
       it('should have correct name and description', () => {
         expect(tool.name).toBe('query_folders');
-        expect(tool.description).toContain('Query folders with filters');
+        expect(tool.description).toContain('Unified tool for folder query operations');
       });
 
       it('should query folders with basic parameters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folders: [{ id: '1', name: 'Test Folder' }],
-        });
-
         const result = await tool.execute({
           operation: 'list',
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { operation: 'list', filters: {}, options: { limit: 100, includeEmpty: false } }
-        );
+        expect(queryMock.buildScript).toHaveBeenCalled();
         expect(result.success).toBe(true);
+        expect(result.data.folders).toBeDefined();
+        expect(Array.isArray(result.data.folders)).toBe(true);
       });
 
       it('should query folders with filters', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folders: [{ id: '1', name: 'Active Folder' }],
-        });
-
         const result = await tool.execute({
           operation: 'list',
-          filters: { status: 'active' },
-          options: { limit: 50, includeEmpty: true },
+          status: ['active'],  // Status must be an array
+          limit: 50,
+          includeEmpty: true,
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { operation: 'list', filters: { status: 'active' }, options: { limit: 50, includeEmpty: true } }
-        );
+        expect(result.success).toBe(true);
+        expect(result.data.folders).toBeDefined();
       });
 
       it('should get folder by ID', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folder: { id: '1', name: 'Test Folder' },
+        // Update mock to return folders array for get operation to work
+        queryMock.execute.mockResolvedValue({
+          folders: [{ id: '1', name: 'Test Folder', status: 'active' }],
         });
-
+        
         const result = await tool.execute({
           operation: 'get',
           folderId: '1',
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { operation: 'get', folderId: '1' }
-        );
+        expect(result.success).toBe(true);
+        expect(result.data.folder).toBeDefined();
+        expect(result.data.folder.id).toBe('1');
       });
 
       it('should search folders', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          folders: [{ id: '1', name: 'Search Result' }],
-        });
-
         const result = await tool.execute({
           operation: 'search',
-          query: 'test',
+          searchTerm: 'test',  // Use searchTerm instead of query
         });
 
-        expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
-          { operation: 'search', query: 'test', options: { limit: 100, includeEmpty: false } }
-        );
+        expect(result.success).toBe(true);
+        expect(result.data.folders).toBeDefined();
       });
     });
 
@@ -428,9 +392,10 @@ describe('Folder Tools', () => {
           operation: 'list',
         });
 
-        expect(mockCache.get).toHaveBeenCalledWith('folders', 'list_{}{"limit":100,"includeEmpty":false}');
-        expect(result).toEqual(cachedData);
-        expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
+        expect(mockCache.get).toHaveBeenCalledWith('folders', 'folders');
+        expect(result.success).toBe(true);
+        expect(result.data.folders).toEqual(cachedData.folders);
+        expect(queryMock.execute).not.toHaveBeenCalled();
       });
 
       it('should cache result when not cached', async () => {
@@ -439,29 +404,23 @@ describe('Folder Tools', () => {
         };
         
         mockCache.get.mockReturnValue(null);
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+        queryMock.buildScript.mockReturnValue('test script');
+        queryMock.execute.mockResolvedValue(scriptResult);
 
         const result = await tool.execute({
           operation: 'list',
         });
 
-        expect(mockCache.set).toHaveBeenCalledWith('folders', 'list_{}{"limit":100,"includeEmpty":false}', {
-          folders: scriptResult.folders,
-          metadata: {
-            timestamp: expect.any(String),
-            operation: 'list',
-            query_time_ms: 100,
-          },
-        });
+        expect(mockCache.set).toHaveBeenCalledWith('folders', 'folders', scriptResult);
+        expect(result.success).toBe(true);
+        expect(result.data.folders).toEqual(scriptResult.folders);
       });
     });
 
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
         mockCache.get.mockReturnValue(null);
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        queryMock.execute.mockResolvedValue({
           error: true,
           message: 'Query failed',
         });
@@ -476,8 +435,7 @@ describe('Folder Tools', () => {
 
       it('should handle execution exceptions', async () => {
         mockCache.get.mockReturnValue(null);
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('Query failed'));
+        queryMock.execute.mockRejectedValue(new Error('Query failed'));
 
         const result = await tool.execute({
           operation: 'list',

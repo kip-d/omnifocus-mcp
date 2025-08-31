@@ -30,9 +30,18 @@ limit: z.union([
 Always test with BOTH: Direct Node.js calls AND Claude Desktop (stringified params)
 
 ## Date Formats
-- **Use**: `YYYY-MM-DD HH:mm` (local time, e.g., "2025-03-31 17:00")
-- **Avoid**: ISO-8601 with Z suffix (causes timezone issues)
-- LLM parses natural language dates, not MCP tools
+- **Preferred**: `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` (local time, e.g., "2025-03-15" or "2025-03-15 14:30")
+- **Smart defaults for date-only (YYYY-MM-DD)**:
+  - **Due dates**: Default to 5:00 PM local time (e.g., "2025-03-15" becomes 5pm)
+  - **Defer dates**: Default to 8:00 AM local time (e.g., "2025-03-15" becomes 8am)
+  - **Completion dates**: Default to 12:00 PM (noon) local time
+- **Avoid**: ISO-8601 with Z suffix (causes timezone confusion - will set wrong time)
+- **Basic natural language works**: 
+  - "today"/"tomorrow" → 5pm for due dates, 8am for defer dates
+  - "next week" → same smart defaults
+  - "next monday" → always 9am
+  - "friday"/"end of week" → always 5pm
+- **Complex natural language should be converted**: LLM should convert "the 3rd Thursday after next week" to YYYY-MM-DD format
 
 ## Task Management
 - **Move to inbox**: Set `projectId` to `null`, `""`, or `"null"`

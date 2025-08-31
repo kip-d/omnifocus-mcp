@@ -46,7 +46,7 @@ const ProjectsToolSchemaV2 = z.object({
   projectId: z.string().optional().describe('Project ID (required for update/complete/delete)'),
   name: z.string().optional().describe('Project name'),
   note: z.string().optional().describe('Project note/description'),
-  dueDate: z.string().optional().describe('Due date (natural language supported)'),
+  dueDate: z.string().optional().describe('Due date in YYYY-MM-DD or "YYYY-MM-DD HH:mm" format'),
   reviewInterval: z.union([
     z.number(),
     z.string().transform(val => parseInt(val, 10)),
@@ -137,7 +137,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     // Normalize dates
     if (normalized.dueDate) {
-      const date = normalizeDateInput(normalized.dueDate);
+      const date = normalizeDateInput(normalized.dueDate, 'due');
       if (date) {
         normalized.dueDate = date.toISOString();
       }

@@ -728,7 +728,7 @@ Common error codes:
 1. **Always check the summary first** - It provides immediate insights without parsing all data
 2. **Use preview data** for quick responses when full details aren't needed
 3. **Parameters are strings** - Claude Desktop converts all parameters to strings
-4. **Dates use local time** - Format: "YYYY-MM-DD HH:mm" or natural language
+4. **Dates use local time** - Format: "YYYY-MM-DD HH:mm" or "YYYY-MM-DD" (due dates default to 5pm, defer dates to 8am)
 5. **Moving to inbox** - Set projectId to null, "", or "null"
 6. **Tags during creation** - Supported in v2.0.0-beta.1+
 7. **Repeat rules** - Full support for complex patterns

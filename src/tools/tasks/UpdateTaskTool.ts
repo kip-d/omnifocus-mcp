@@ -8,7 +8,7 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
-  description = 'Update an existing task in OmniFocus. IMPORTANT: Set minimalResponse=true when updating 10+ tasks to conserve context (reduces response by ~95%). Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. Dates must use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format. For bulk tag updates or reorganization, ALWAYS use minimalResponse=true.';
+  description = 'Update an existing task in OmniFocus. IMPORTANT: Set minimalResponse=true when updating 10+ tasks to conserve context (reduces response by ~95%). Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am. Avoid ISO-8601 with Z suffix. For bulk tag updates or reorganization, ALWAYS use minimalResponse=true.';
   schema = UpdateTaskSchema;
 
   async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {
@@ -205,7 +205,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
       if (typeof updates.dueDate === 'string') {
         try {
           // Convert local time to UTC for OmniFocus
-          const utcDate = localToUTC(updates.dueDate);
+          const utcDate = localToUTC(updates.dueDate, 'due');
           this.logger.info('Date converted to UTC:', {
             original: updates.dueDate,
             converted: utcDate,
@@ -234,7 +234,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
       if (typeof updates.deferDate === 'string') {
         try {
           // Convert local time to UTC for OmniFocus
-          const utcDate = localToUTC(updates.deferDate);
+          const utcDate = localToUTC(updates.deferDate, 'defer');
           this.logger.info('DeferDate converted to UTC:', {
             original: updates.deferDate,
             converted: utcDate,

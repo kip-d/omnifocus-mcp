@@ -37,5 +37,5 @@
 - All params→strings via MCP
 - Summary returned first  
 - null/""/​"null"→inbox
-- Dates:"YYYY-MM-DD HH:mm"|natural
+- Dates:"YYYY-MM-DD HH:mm"|"YYYY-MM-DD"(due→5pm,defer→8am)
 - RepeatRule:{unit,steps,method,weekdays[]?,positions?}
