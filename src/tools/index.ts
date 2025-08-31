@@ -3,117 +3,72 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import { CacheManager } from '../cache/CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 
-// Import task CRUD tools (still in active use)
-import { CreateTaskTool } from './tasks/CreateTaskTool.js';
-import { UpdateTaskTool } from './tasks/UpdateTaskTool.js';
-import { CompleteTaskTool } from './tasks/CompleteTaskTool.js';
-import { DeleteTaskTool } from './tasks/DeleteTaskTool.js';
+// Import v2.0.0 CONSOLIDATED tools (reduced from 22 to 14 tools)
 
-// V1 legacy tools have been removed in v2.0.0
-
-// Import v2.0.0 consolidated tools (alpha)
+// Task operations - Consolidated
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
+import { ManageTaskTool } from './tasks/ManageTaskTool.js';
+
+// Project operations - Already consolidated
 import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
 
+// Folder operations - Consolidated
+import { FoldersTool } from './folders/FoldersTool.js';
 
+// Tag operations - Already consolidated
+import { TagsToolV2 } from './tags/TagsToolV2.js';
 
-// Import new consolidated folder tools
-import { ManageFolderTool } from './folders/ManageFolderTool.js';
-import { QueryFoldersTool } from './folders/QueryFoldersTool.js';
+// Export operations - Consolidated
+import { ExportTool } from './export/ExportTool.js';
 
+// Recurring task operations - Consolidated
+import { RecurringTasksTool } from './recurring/RecurringTasksTool.js';
 
-// Import v2 analytics tools
+// Analytics tools - Keep separate for clarity
 import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
 import { LifeAnalysisTool } from './analytics/LifeAnalysisTool.js';
 
-// Import tag tools (consolidated)
-import { TagsToolV2 } from './tags/TagsToolV2.js';
-
-// Import export tools
-import { ExportTasksTool } from './export/ExportTasksTool.js';
-import { ExportProjectsTool } from './export/ExportProjectsTool.js';
-import { BulkExportTool } from './export/BulkExportTool.js';
-
-// Import recurring task tools
-import { AnalyzeRecurringTasksTool } from './recurring/AnalyzeRecurringTasksTool.js';
-import { GetRecurringPatternsTool } from './recurring/GetRecurringPatternsTool.js';
-
-
-// Import system tools (consolidated)
-import { SystemToolV2 } from './system/SystemToolV2.js';
-
-// LEGACY V1 REVIEW TOOLS - FROZEN
-// V1 review tools removed - use ManageReviewsTool instead
-
-// Import new consolidated tools
+// Review operations - Already consolidated
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
 
-// Import perspective tools (consolidated)
+// Perspective operations - Already consolidated
 import { PerspectivesToolV2 } from './perspectives/PerspectivesToolV2.js';
+
+// System operations - Already consolidated
+import { SystemToolV2 } from './system/SystemToolV2.js';
 
 const logger = createLogger('tools');
 
 export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
-  // Check if legacy tools should be enabled
-  logger.info('OmniFocus MCP v2.0.0 - Optimized tool set for reduced context usage');
+  logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (14 tools, reduced from 22)');
 
-  // Initialize tool arrays
-  const v2Tools = [
-    // v2.0.0 consolidated tools - STRONGLY RECOMMENDED
-    new QueryTasksToolV2(cache),      // Single 'tasks' tool with modes
-    new ProjectsToolV2(cache),         // Single 'projects' tool with operations
+  // All tools are now consolidated for optimal LLM usage
+  const tools = [
+    // Task operations (2 tools)
+    new QueryTasksToolV2(cache),        // 'tasks' - Query/search tasks
+    new ManageTaskTool(cache),          // 'manage_task' - Create/update/complete/delete tasks
 
-    // v2 analytics tools - Summary-first format
+    // Project operations (1 tool)
+    new ProjectsToolV2(cache),           // 'projects' - All project operations
+
+    // Organization (3 tools)
+    new FoldersTool(cache),             // 'folders' - All folder operations
+    new TagsToolV2(cache),              // 'tags' - All tag operations
+    new ManageReviewsTool(cache),       // 'manage_reviews' - Project review operations
+
+    // Analytics (4 tools - kept separate for clarity)
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
     new LifeAnalysisTool(cache),        // 'life_analysis' - Deep dataset analysis
-  ];
 
-  // Legacy tools have been completely removed in v2.0.0 for better performance
-  // and reduced context window usage. All functionality is available through
-  // the optimized V2 tool set.
-
-  // Essential tools that are always included
-  const essentialTools = [
-    // Task write operations (no v2 consolidation yet)
-    new CreateTaskTool(cache),
-    new UpdateTaskTool(cache),
-    new CompleteTaskTool(cache),
-    new DeleteTaskTool(cache),
-
-    // Consolidated tools (always included)
-    new ManageFolderTool(cache),
-    new QueryFoldersTool(cache),
-    new ManageReviewsTool(cache),
-
-    // Analytics tools are in v2Tools, not needed here
-
-    // Tag tools (consolidated)
-    new TagsToolV2(cache),
-
-    // Export tools
-    new ExportTasksTool(cache),
-    new ExportProjectsTool(cache),
-    new BulkExportTool(cache),
-
-    // Recurring task tools
-    new AnalyzeRecurringTasksTool(cache),
-    new GetRecurringPatternsTool(cache),
-
-    // System tools (consolidated)
-    new SystemToolV2(cache),
-
-    // Perspective tools (consolidated)
-    new PerspectivesToolV2(cache),
-  ];
-
-  // Combine tools - legacy tools removed for better performance
-  const tools = [
-    ...v2Tools,
-    ...essentialTools,
+    // Utility operations (4 tools)
+    new ExportTool(cache),              // 'export' - All export operations
+    new RecurringTasksTool(cache),      // 'recurring_tasks' - Recurring task analysis
+    new PerspectivesToolV2(cache),      // 'perspectives' - Perspective operations
+    new SystemToolV2(cache),            // 'system' - Version & diagnostics
   ];
 
   // Register handlers
