@@ -236,15 +236,20 @@ export const LIFE_ANALYSIS_SCRIPT = `
                 };
               }
               
-                          // Use OmniFocus's own counts for this project
-            const childCounts = safeGet(() => task.numberOfTasks(), 0);
-            const availableCount = safeGet(() => task.numberOfAvailableTasks(), 0);
-            
-            projectStats[projectName].omniFocusTotal = childCounts;
-            projectStats[projectName].omniFocusAvailable = availableCount;
-            
-            // Also update the total count to match OmniFocus's count
-            projectStats[projectName].total = childCounts;
+              // Use OmniFocus's own counts for this project
+              const childCounts = safeGet(() => task.numberOfTasks(), 0);
+              const availableCount = safeGet(() => task.numberOfAvailableTasks(), 0);
+              
+              // DEBUG: Log what we're finding
+              console.log(`DEBUG: Project task found for "${projectName}":`);
+              console.log(`  - numberOfTasks: ${childCounts}`);
+              console.log(`  - numberOfAvailableTasks: ${availableCount}`);
+              
+              projectStats[projectName].omniFocusTotal = childCounts;
+              projectStats[projectName].omniFocusAvailable = availableCount;
+              
+              // Also update the total count to match OmniFocus's count
+              projectStats[projectName].total = childCounts;
               
               // Skip further processing for project tasks
               continue;
@@ -345,15 +350,17 @@ export const LIFE_ANALYSIS_SCRIPT = `
       Object.keys(projectStats).forEach(projectName => {
         const stats = projectStats[projectName];
         const avgAge = stats.total > 0 ? Math.round(stats.totalAge / stats.total) : 0;
-        // Use OmniFocus's own available count when available, otherwise fall back to our calculation
+        
+        // CRITICAL FIX: Use OmniFocus's own available count when available
         let availableRate;
         if (stats.omniFocusAvailable > 0 && stats.omniFocusTotal > 0) {
-          // Use OmniFocus's accurate count
+          // Use OmniFocus's accurate count - this fixes the "Pending Purchase Orders" issue
           availableRate = (stats.omniFocusAvailable / stats.omniFocusTotal * 100).toFixed(1);
         } else {
-          // Fall back to our manual calculation
+          // Fall back to our manual calculation for projects without OmniFocus counts
           availableRate = stats.total > 0 ? (stats.available / stats.total * 100).toFixed(1) : 0;
         }
+        
         const overdueRate = stats.total > 0 ? (stats.overdue / stats.total * 100).toFixed(1) : 0;
         
         projectStats[projectName].avgAge = avgAge;
