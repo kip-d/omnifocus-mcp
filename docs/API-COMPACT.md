@@ -1,37 +1,30 @@
-# OmniFocus MCP Tools (Ultra-Compact)
+# OmniFocus MCP v2.0.0 (14 Tools - Ultra-Compact)
 
 ## Syntax: tool(req*,opt?:"default") []=array
 
-### Query
+### Tasks (2)
 - tasks(mode*,limit*:25,details*:false,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
-- projects(operation*,limit*,details*,...) ops:list|create|update|complete|delete|review|active
-- query_perspective(perspectiveName*,limit*,includeDetails*)
+- manage_task(operation*:create|update|complete|delete,taskId?,name?,...all_task_fields)
 
-### CRUD  
-- create_task(name*,flagged*:false,sequential*:false,note?,projectId?,parentTaskId?,dueDate?,deferDate?,estimatedMinutes?,tags[]?,repeatRule?)
-- update_task(taskId*,+any_create_params) projectId:null=inbox
-- complete_task(taskId*,completionDate?)
-- delete_task(taskId*)
+### Projects (1)
+- projects(operation*:list|create|update|complete|delete|review|active|stats,limit*,details*,...)
 
-### Analytics
-- productivity_stats/task_velocity/analyze_overdue(period*,various_grouping_params*)
-- get_productivity_stats/get_task_velocity/analyze_overdue_tasks (simplified versions)
+### Organization (3)
+- folders(operation*:list|get|search|projects|create|update|delete|move|duplicate|set_status,...)
+- tags(operation*:list|active|manage,action?,tagName?,...)
+- manage_reviews(operation*:list|mark_reviewed|set_schedule|clear_schedule,projectId?,...)
 
-### Tags
-- list_tags(6params*) namesOnly=fastest
-- get_active_tags() no-params,fast
-- manage_tags(action*,tagName*,conditionals?)
+### Analytics (4)
+- productivity_stats(period*,includeProjectStats*,includeTagStats*)
+- task_velocity(days*,groupBy*,includeWeekends*)
+- analyze_overdue(includeRecentlyCompleted*,groupBy*,limit*)
+- life_analysis(analysisDepth*,focusAreas*,includeRawData*,maxInsights*)
 
-### Mgmt
-- manage_folder/query_folders/manage_reviews/batch_task_operations
-
-### Export
-- export_tasks/export_projects(format*:json|csv|markdown,filters?)
-- bulk_export(outputDirectory*,format*,includes*)
-
-### Util
-- analyze_recurring_tasks/get_recurring_patterns(activeOnly*:true,includes*)
-- list_perspectives/get_version_info/run_diagnostics
+### Utilities (4)
+- export(type*:tasks|projects|all,format*:json,filter?,fields?,outputDirectory?)
+- recurring_tasks(operation*:analyze|patterns,activeOnly*:true,includeCompleted*:false)
+- perspectives(operation*:list|query,perspectiveName?,...)
+- system(operation*:version|diagnostics,testScript?)
 
 ## Notes
 - All params→strings via MCP

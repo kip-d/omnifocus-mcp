@@ -114,24 +114,26 @@ These prompts provide guided conversations with pre-configured questions and res
 
 ## Basic Usage
 
-### Query Tasks (List)
-The `list_tasks` tool is deprecated and retained only for backward compatibility. Use `query_tasks` with `queryType: "list"` instead:
+### Query Tasks
+Use the `tasks` tool with different modes:
 ```javascript
 {
-  "tool": "query_tasks",
+  "tool": "tasks",
   "arguments": {
-    "queryType": "list",
-    "completed": false,
+    "mode": "today",  // or: all, search, overdue, upcoming, available, blocked, flagged
+    "details": true,
     "limit": 50
   }
 }
 ```
 
 ### Create Task
+Use the `manage_task` tool with operation='create':
 ```javascript
 {
-  "tool": "create_task", 
+  "tool": "manage_task", 
   "arguments": {
+    "operation": "create",
     "name": "Review Q4 budget",
     "dueDate": "2024-01-15 17:00",  // 5pm on Jan 15 (or just "2024-01-15" for 5pm default)
     "flagged": true
@@ -142,8 +144,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Create Sequential Project
 ```javascript
 {
-  "tool": "create_project",
+  "tool": "projects",
   "arguments": {
+    "operation": "create",
     "name": "Website Redesign",
     "sequential": true,  // Tasks must be done in order
     "folder": "Work"
@@ -218,44 +221,40 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 }
 ```
 
-## Available Tools (46 Total)
+## Available Tools (14 Consolidated Tools - v2.0.0)
 
-### Consolidated Tools (Recommended for AI Agents)
+> **Note for v1 users:** Tools have been consolidated for better LLM performance. Your AI assistant will automatically use the new tools - no action required from you!
 
-**Task Queries**: `query_tasks` - Unified interface for all task querying (replaces 7 individual tools)  
-**Folder Management**: `manage_folder` - Complete folder operations with operation parameter  
-**Review Management**: `manage_reviews` - GTD review workflow management  
-**Batch Operations**: `batch_task_operations` - Efficient multi-task operations
+### 🚀 Fully Consolidated Architecture (36% reduction from v1)
 
-### Standard Tools
+#### Task Operations (2 tools)
+- **`tasks`** - Query/search tasks with multiple modes (today, overdue, search, etc.)
+- **`manage_task`** - All task CRUD operations (create, update, complete, delete)
 
-**Task CRUD**: `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
+#### Project & Organization (4 tools)
+- **`projects`** - All project operations (list, create, update, complete, delete, stats)
+- **`folders`** - All folder operations (list, search, create, update, delete, move)
+- **`tags`** - All tag operations (list, active, create, rename, delete, merge)
+- **`manage_reviews`** - GTD review workflow management
 
-**Projects**: `list_projects`, `create_project`, `update_project`, `complete_project`, `delete_project`
+#### Analytics (4 tools)
+- **`productivity_stats`** - GTD health metrics and insights
+- **`task_velocity`** - Completion trends and predictions
+- **`analyze_overdue`** - Bottleneck analysis and patterns
+- **`life_analysis`** - Deep workflow health analysis
 
-**Perspectives**: `list_perspectives`, `query_perspective` - Access user's custom perspectives and their contents
-
-**Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`
-
-**Tags**: `list_tags`, `get_active_tags`, `manage_tags`
-
-**Export**: `export_tasks`, `export_projects`, `bulk_export`
-
-### Legacy Tools (Deprecated but Functional)
-
-**Individual Task Queries**: `list_tasks`, `next_actions`, `blocked_tasks`, `available_tasks`, `overdue_tasks`, `upcoming_tasks` *(use `query_tasks` instead)*
-
-**Individual Folder Tools**: `create_folder`, `update_folder`, `delete_folder`, `move_folder` *(use `manage_folder` instead)*
-
-**Individual Review Tools**: `projects_for_review`, `mark_project_reviewed`, `set_review_schedule` *(use `manage_reviews` instead)*
+#### Utilities (4 tools)
+- **`export`** - All export operations (tasks, projects, or complete backup)
+- **`recurring_tasks`** - Recurring task analysis and patterns
+- **`perspectives`** - List and query custom perspectives
+- **`system`** - Version info and diagnostics
 
 ### Documentation
 
-- `/docs/API-REFERENCE.md` - Complete API documentation (~4,800 tokens)
+- **NEW** `/docs/API-REFERENCE-V2.md` - v2.0.0 Consolidated API reference
 - `/docs/API-REFERENCE-LLM.md` - LLM-optimized reference (~900 tokens) 
 - `/docs/API-COMPACT.md` - Ultra-compact reference (~400 tokens)
-- `/docs/TOOLS.md` - Detailed tool documentation
-- `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
+- `/docs/user/MIGRATION_GUIDE_V2.md` - Migration from v1 to v2
 - `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
 
 ## Recurrence Examples
