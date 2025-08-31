@@ -6,6 +6,7 @@ import {
   UPDATE_PROJECT_SCRIPT,
   COMPLETE_PROJECT_SCRIPT,
   DELETE_PROJECT_SCRIPT,
+  GET_PROJECT_STATS_SCRIPT,
 } from '../../omnifocus/scripts/projects.js';
 import {
   createSuccessResponseV2,
@@ -29,6 +30,7 @@ const ProjectsToolSchemaV2 = z.object({
     'delete',    // Delete project
     'review',    // Get projects needing review
     'active',    // Get active projects only
+    'stats',     // Get accurate project statistics with available rates
   ]).describe('Operation to perform'),
 
   // For list/query operations
@@ -96,12 +98,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
           return this.handleReviewProjects(normalizedArgs, timer);
         case 'active':
           return this.handleActiveProjects(normalizedArgs, timer);
+        case 'stats':
+          return this.handleProjectStats(normalizedArgs, timer);
         default:
           return createErrorResponseV2(
             'projects',
             'INVALID_OPERATION',
             `Invalid operation: ${normalizedArgs.operation}`,
-            'Use one of: list, create, update, complete, delete, review, active',
+            'Use one of: list, create, update, complete, delete, review, active, stats',
             { provided: normalizedArgs.operation },
             timer.toMetadata(),
           ) as ProjectsResponseV2;
@@ -542,6 +546,52 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       projects,
       'projects',
       { ...timer.toMetadata(), from_cache: false, operation: 'active' },
+    );
+  }
+
+  private async handleProjectStats(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+    const cacheKey = `projects_stats_${args.projectId || 'all'}`;
+
+    // Check cache
+    const cached = this.cache.get<any>('projects', cacheKey);
+    if (cached) {
+      return createSuccessResponseV2(
+        'projects',
+        cached,
+        undefined, // No summary for stats operation
+        { ...timer.toMetadata(), from_cache: true, operation: 'stats' },
+      );
+    }
+
+    // Execute the stats script
+    const script = this.omniAutomation.buildScript(GET_PROJECT_STATS_SCRIPT, {
+      options: {
+        projectId: args.projectId,
+        limit: args.limit || 200,
+      }
+    });
+    
+    const result = await this.omniAutomation.execute<any>(script);
+
+    if (!result || result.error) {
+      return createErrorResponseV2(
+        'projects',
+        'SCRIPT_ERROR',
+        result?.message || 'Failed to get project statistics',
+        'Check if OmniFocus is running',
+        result?.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Cache the result
+    this.cache.set('projects', cacheKey, result);
+
+    return createSuccessResponseV2(
+      'projects',
+      result,
+      undefined, // No summary for stats operation
+      { ...timer.toMetadata(), from_cache: false, operation: 'stats' },
     );
   }
 

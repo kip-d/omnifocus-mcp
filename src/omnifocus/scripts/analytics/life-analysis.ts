@@ -128,6 +128,37 @@ export const LIFE_ANALYSIS_SCRIPT = `
       // Process tasks for analysis
       const maxTasksToProcess = options.analysisDepth === 'deep' ? allTasks.length : Math.min(1000, allTasks.length);
       
+      // CRITICAL FIX: First, get accurate project statistics using OmniFocus's own counts
+      // This ensures we have accurate available rates for all projects
+      const projectAccurateStats = {};
+      
+      for (let i = 0; i < allProjects.length; i++) {
+        const project = allProjects[i];
+        try {
+          const projectName = safeGet(() => project.name(), 'Unnamed Project');
+          const rootTask = safeGet(() => project.rootTask());
+          
+          if (rootTask) {
+            // Use OmniFocus's own accurate counts - this fixes the "Pending Purchase Orders" issue
+            const totalTasks = safeGet(() => rootTask.numberOfTasks(), 0);
+            const availableTasks = safeGet(() => rootTask.numberOfAvailableTasks(), 0);
+            const completedTasks = safeGet(() => rootTask.numberOfCompletedTasks(), 0);
+            
+            if (totalTasks > 0) {
+              projectAccurateStats[projectName] = {
+                total: totalTasks,
+                available: availableTasks,
+                completed: completedTasks,
+                availableRate: (availableTasks / totalTasks * 100).toFixed(1)
+              };
+            }
+          }
+        } catch (e) {
+          // Skip projects that cause errors
+          continue;
+        }
+      }
+      
       for (let i = 0; i < maxTasksToProcess; i++) {
         const task = allTasks[i];
         
@@ -212,49 +243,6 @@ export const LIFE_ANALYSIS_SCRIPT = `
             const projectName = project.name || 'No Project';
             const projectId = project.id || 'unknown';
             
-            // CRITICAL FIX: Skip project tasks (tasks that represent projects themselves)
-            // Project tasks have childCounts and should not be counted in task-level analysis
-            const hasChildren = safeGet(() => task.numberOfTasks(), 0) > 0;
-            if (hasChildren) {
-              // This is a project task, but we can use its childCounts for accurate project stats
-              if (!projectStats[projectName]) {
-                projectStats[projectName] = {
-                  total: 0,
-                  overdue: 0,
-                  flagged: 0,
-                  blocked: 0,
-                  available: 0,
-                  deferred: 0,
-                  strategicDeferred: 0,
-                  problematicDeferred: 0,
-                  estimatedTime: 0,
-                  avgAge: 0,
-                  totalAge: 0,
-                  // Use OmniFocus's own available count for accuracy
-                  omniFocusAvailable: 0,
-                  omniFocusTotal: 0
-                };
-              }
-              
-              // Use OmniFocus's own counts for this project
-              const childCounts = safeGet(() => task.numberOfTasks(), 0);
-              const availableCount = safeGet(() => task.numberOfAvailableTasks(), 0);
-              
-              // DEBUG: Log what we're finding
-              console.log('DEBUG: Project task found for "' + projectName + '":');
-              console.log('  - numberOfTasks: ' + childCounts);
-              console.log('  - numberOfAvailableTasks: ' + availableCount);
-              
-              projectStats[projectName].omniFocusTotal = childCounts;
-              projectStats[projectName].omniFocusAvailable = availableCount;
-              
-              // Also update the total count to match OmniFocus's count
-              projectStats[projectName].total = childCounts;
-              
-              // Skip further processing for project tasks
-              continue;
-            }
-            
             if (!projectStats[projectName]) {
               projectStats[projectName] = {
                 total: 0,
@@ -268,6 +256,7 @@ export const LIFE_ANALYSIS_SCRIPT = `
                 estimatedTime: 0,
                 avgAge: 0,
                 totalAge: 0,
+                // Use OmniFocus's own available count for accuracy
                 omniFocusAvailable: 0,
                 omniFocusTotal: 0
               };
@@ -345,6 +334,37 @@ export const LIFE_ANALYSIS_SCRIPT = `
           continue;
         }
       }
+      
+      // CRITICAL FIX: Now merge the accurate OmniFocus counts with our task-level stats
+      Object.keys(projectAccurateStats).forEach(projectName => {
+        if (!projectStats[projectName]) {
+          projectStats[projectName] = {
+            total: 0,
+            overdue: 0,
+            flagged: 0,
+            blocked: 0,
+            available: 0,
+            deferred: 0,
+            strategicDeferred: 0,
+            problematicDeferred: 0,
+            estimatedTime: 0,
+            avgAge: 0,
+            totalAge: 0,
+            omniFocusAvailable: 0,
+            omniFocusTotal: 0
+          };
+        }
+        
+        // Use OmniFocus's accurate counts
+        const accurate = projectAccurateStats[projectName];
+        projectStats[projectName].omniFocusTotal = accurate.total;
+        projectStats[projectName].omniFocusAvailable = accurate.available;
+        
+        // Update total to match OmniFocus's count if we have it
+        if (accurate.total > 0) {
+          projectStats[projectName].total = accurate.total;
+        }
+      });
       
       // Calculate project momentum and workflow health scores
       Object.keys(projectStats).forEach(projectName => {

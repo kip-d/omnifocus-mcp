@@ -45,6 +45,9 @@ Writing via `evaluateJavascript()` but reading via direct JXA causes invisible c
 ### 4. Parameter Sanitization
 Parameters can be silently filtered out by sanitization functions. Always verify that parameters are whitelisted in sanitization logic.
 
+### 5. Tool Consistency
+Multiple tools should use the same calculation methods to avoid user confusion. Inconsistencies between tools (like different available rate calculations) create misleading insights and reduce user confidence.
+
 ## Timeline
 
 - **v1.0-1.12**: Initial implementation, basic functionality
