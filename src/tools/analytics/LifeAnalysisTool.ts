@@ -30,7 +30,7 @@ type LifeAnalysisArgs = z.infer<typeof LifeAnalysisSchema>;
 
 export class LifeAnalysisTool extends BaseTool<typeof LifeAnalysisSchema> {
   name = 'life_analysis';
-  description = 'Deep analysis of your complete OmniFocus dataset. Returns actionable insights about productivity patterns, workload distribution, project health, and time management. Use for occasional deep dives into your workflow patterns.';
+  description = 'Deep analysis of your OmniFocus workflow health and system efficiency. Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization. Focuses on how well your GTD system is working rather than completion metrics. Use for occasional deep dives into your workflow patterns.';
   schema = LifeAnalysisSchema;
 
   constructor(cache: CacheManager) {
