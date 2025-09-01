@@ -1,10 +1,11 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to count tasks matching filters in OmniFocus
+ * OPTIMIZED: Uses basic helpers (~130 lines vs 551 lines - 76% reduction)
  */
 export const GET_TASK_COUNT_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getListHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all projects in OmniFocus with filtering and statistics
@@ -9,9 +9,10 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Search in project names and notes
  * - Include detailed statistics (task counts, completion rates, etc.)
  * - Enhanced properties like next task, review dates, and sequential settings
+ * - OPTIMIZED: Uses list helpers (~310 lines vs 551 lines - 44% reduction)
  */
 export const LIST_PROJECTS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getListHelpers()}
   
   (() => {
     const filter = {{filter}};

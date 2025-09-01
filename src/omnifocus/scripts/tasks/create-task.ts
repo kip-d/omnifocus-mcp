@@ -1,12 +1,11 @@
-import { getAllHelpers } from '../shared/helpers.js';
-import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
+import { getRecurrenceHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new task in OmniFocus
+ * OPTIMIZED: Uses recurrence helpers (~330 lines vs 551+200 lines - 56% reduction)
  */
 export const CREATE_TASK_SCRIPT = `
-  ${getAllHelpers()}
-  ${REPEAT_HELPERS}
+  ${getRecurrenceHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
