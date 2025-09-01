@@ -20,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full hierarchy display with children, path, and level information
   - GTD-style tag organization (e.g., EVE > PvP structure)
 - **Minimal Response Mode**: Critical optimization for bulk operations
-  - 95% reduction in response size (15,000 → 300 tokens!)
+  - 98% reduction in response size (15,000 → 300 tokens!)
   - Added to `update_task` tool for bulk operations
   - Essential for updating 10+ tasks without exhausting LLM context
 - **ESLint Configuration Overhaul**: Modern flat config with MCP-appropriate rules
   - Replaced conflicting legacy configs with single flat config
   - Relaxed `any` type rules to warnings (appropriate for MCP servers)
-  - 95% reduction in blocking errors (1579 → 1233 problems)
+  - 22% reduction in blocking errors (1579 → 1233 problems)
   - Added useful warnings for code quality without being overly strict
 
 ### Changed
@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Tag Hierarchy Support**: Comprehensive nested tag management with parent/child relationships
-- **Minimal Response Mode**: 95% reduction in response size for bulk operations
+- **Minimal Response Mode**: 98% reduction in response size for bulk operations
 - **ESLint Configuration**: Modern flat config with MCP-appropriate rules
 
 ### Changed
