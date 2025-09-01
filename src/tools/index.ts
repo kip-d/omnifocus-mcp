@@ -29,6 +29,7 @@ import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js'
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
 import { LifeAnalysisTool } from './analytics/LifeAnalysisTool.js';
+import { PatternAnalysisTool } from './analytics/PatternAnalysisTool.js';
 
 // Review operations - Already consolidated
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
@@ -58,11 +59,12 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new TagsToolV2(cache),              // 'tags' - All tag operations
     new ManageReviewsTool(cache),       // 'manage_reviews' - Project review operations
 
-    // Analytics (4 tools - kept separate for clarity)
+    // Analytics (5 tools - kept separate for clarity)
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
     new LifeAnalysisTool(cache),        // 'life_analysis' - Deep dataset analysis
+    new PatternAnalysisTool(cache),     // 'pattern_analysis' - Database-wide pattern detection
 
     // Utility operations (4 tools)
     new ExportTool(cache),              // 'export' - All export operations

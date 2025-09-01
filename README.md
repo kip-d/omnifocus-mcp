@@ -223,7 +223,19 @@ Use the `manage_task` tool with operation='create':
 }
 ```
 
-## Available Tools (14 Consolidated Tools - v2.0.0)
+### Analyze Database Patterns
+```javascript
+// Find duplicates, dormant projects, and tag issues
+{
+  "tool": "pattern_analysis",
+  "arguments": {
+    "patterns": ["duplicates", "dormant_projects", "tag_audit"],
+    "dormantThresholdDays": "60"
+  }
+}
+```
+
+## Available Tools (15 Consolidated Tools - v2.0.0)
 
 > **Note for v1 users:** Tools have been consolidated for better LLM performance. Your AI assistant will automatically use the new tools - no action required from you!
 
@@ -239,11 +251,12 @@ Use the `manage_task` tool with operation='create':
 - **`tags`** - All tag operations (list, active, create, rename, delete, merge)
 - **`manage_reviews`** - GTD review workflow management
 
-#### Analytics (4 tools)
+#### Analytics (5 tools)
 - **`productivity_stats`** - GTD health metrics and insights
 - **`task_velocity`** - Completion trends and predictions
 - **`analyze_overdue`** - Bottleneck analysis and patterns
 - **`life_analysis`** - Deep workflow health analysis
+- **`pattern_analysis`** - Database-wide pattern detection (duplicates, dormant projects, tag audit)
 
 #### Utilities (4 tools)
 - **`export`** - All export operations (tasks, projects, or complete backup)
