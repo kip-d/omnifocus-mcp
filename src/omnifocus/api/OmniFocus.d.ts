@@ -1135,6 +1135,11 @@ declare class Project extends DatabaseObject {
     readonly task: Task;
     readonly taskStatus: Task.Status;
     readonly tasks: TaskArray;
+    // Undocumented methods from OmniFocus Scripting Dictionary
+    readonly nextTask: Task | null;  // Next actionable child task
+    readonly effectiveStatus: Project.Status;  // Effective status considering parents
+    readonly singletonActionHolder: boolean;  // Contains singleton actions?
+    readonly defaultSingletonActionHolder: boolean;  // Is default singleton holder?
 }
 
 // Project.ReviewInterval
@@ -1450,6 +1455,9 @@ declare class Tag extends ActiveObject {
     status: Tag.Status;
     readonly tags: TagArray;
     readonly tasks: TaskArray;
+    // Undocumented methods from OmniFocus Scripting Dictionary
+    readonly availableTaskCount: number;  // Unblocked/incomplete tasks for tag + descendants
+    readonly remainingTaskCount: number;  // Incomplete tasks for tag + descendants
 }
 
 // Tag.ChildInsertionLocation
@@ -1532,6 +1540,15 @@ declare class Task extends ActiveObject {
     readonly beginning: Task.ChildInsertionLocation;
     readonly beginningOfTags: Task.TagInsertionLocation;
     readonly children: TaskArray;
+    // Undocumented methods from OmniFocus Scripting Dictionary
+    readonly numberOfTasks: number;  // Number of direct children
+    readonly numberOfAvailableTasks: number;  // Number of available direct children
+    readonly numberOfCompletedTasks: number;  // Number of completed direct children
+    readonly next: boolean;  // Is this the next task of its containing project?
+    readonly blocked: boolean;  // Has blocking dependencies?
+    readonly inInbox: boolean;  // In inbox or contained by inbox task?
+    readonly effectivelyCompleted: boolean;  // Task or container completed?
+    readonly effectivelyDropped: boolean;  // Task or container dropped?
     readonly completed: boolean;
     completedByChildren: boolean;
     readonly completionDate: Date | null;

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats-optimized.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
@@ -44,9 +44,14 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
         );
       }
 
-      // Execute script
-      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, {
-        options: { period, includeProjectStats, includeTagStats },
+      // Execute optimized script using direct API methods
+      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT, {
+        options: { 
+          period, 
+          includeProjectStats, 
+          includeTagStats,
+          includeInactive: false  // Only active projects by default for performance
+        },
       });
       const result = await this.omniAutomation.execute<any>(script);
 

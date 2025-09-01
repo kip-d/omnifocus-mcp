@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { OVERDUE_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { ANALYZE_OVERDUE_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/analytics/analyze-overdue-optimized.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
@@ -43,8 +43,8 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
         );
       }
 
-      // Execute script
-      const script = this.omniAutomation.buildScript(OVERDUE_ANALYSIS_SCRIPT, {
+      // Execute optimized script using blocked() API method
+      const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_OPTIMIZED_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
       const result = await this.omniAutomation.execute<any>(script);
