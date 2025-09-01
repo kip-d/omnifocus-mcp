@@ -17,6 +17,17 @@ This document contains hard-won insights that will save you from repeating costl
 - **Always run integration tests** before considering features complete
 - Build before running: `npm run build`
 
+## Documentation Management
+**NEVER delete documentation outright unless there's a clear reason (e.g., contains incorrect/dangerous information).**
+
+Instead, preserve historical documentation:
+1. Create/use `.archive/` directory (ignored by git in main repo)
+2. Move obsolete docs there with context about why they're obsolete
+3. Push to archive repository: https://github.com/kip-d/omnifocus-mcp-archive
+4. This preserves development history and lessons learned for future developers
+
+Active documentation stays in `docs/`, historical context goes to archive repo.
+
 ## 🚨 Critical: MCP Bridge Type Coercion
 **Claude Desktop converts ALL parameters to strings during transport.**
 
