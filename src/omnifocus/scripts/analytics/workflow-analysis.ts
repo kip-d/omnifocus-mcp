@@ -1,7 +1,7 @@
 import { getAllHelpers } from '../shared/helpers.js';
 
 /**
- * Script for deep life analysis across the complete OmniFocus dataset
+ * Script for deep workflow analysis across the complete OmniFocus dataset
  * 
  * Features:
  * - Cross-project pattern analysis
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Productivity insights
  * - Project health assessment
  */
-export const LIFE_ANALYSIS_SCRIPT = `
+export const WORKFLOW_ANALYSIS_SCRIPT = `
   ${getAllHelpers()}
   
   (() => {
@@ -731,7 +731,7 @@ export const LIFE_ANALYSIS_SCRIPT = `
       });
       
     } catch (error) {
-      return formatError(error, 'life_analysis');
+      return formatError(error, 'workflow_analysis');
     }
   })();
 `;

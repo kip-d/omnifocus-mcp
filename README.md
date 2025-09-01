@@ -255,7 +255,7 @@ Use the `manage_task` tool with operation='create':
 - **`productivity_stats`** - GTD health metrics and insights
 - **`task_velocity`** - Completion trends and predictions
 - **`analyze_overdue`** - Bottleneck analysis and patterns
-- **`life_analysis`** - Deep workflow health analysis
+- **`workflow_analysis`** - Deep workflow health analysis
 - **`pattern_analysis`** - Database-wide pattern detection (duplicates, dormant projects, tag audit)
 
 #### Utilities (4 tools)

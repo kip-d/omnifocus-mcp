@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added useful warnings for code quality without being overly strict
 
 ### Changed
+- **Renamed `life_analysis` to `workflow_analysis`**: More professional and GTD-aligned naming
+  - Avoids confusion with GTD "review" terminology
+  - Better describes the tool's actual function of analyzing workflow patterns
+  - Updated all references throughout codebase
 - **Date Format Documentation**: Emphasized YYYY-MM-DD format usage
   - Updated all tool descriptions to recommend YYYY-MM-DD or YYYY-MM-DD HH:mm
   - Documented smart defaults for date-only inputs

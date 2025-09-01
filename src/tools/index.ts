@@ -28,7 +28,7 @@ import { RecurringTasksTool } from './recurring/RecurringTasksTool.js';
 import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js';
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
-import { LifeAnalysisTool } from './analytics/LifeAnalysisTool.js';
+import { WorkflowAnalysisTool } from './analytics/WorkflowAnalysisTool.js';
 import { PatternAnalysisTool } from './analytics/PatternAnalysisTool.js';
 
 // Review operations - Already consolidated
@@ -63,7 +63,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new ProductivityStatsToolV2(cache), // 'productivity_stats' - GTD health metrics
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
-    new LifeAnalysisTool(cache),        // 'life_analysis' - Deep dataset analysis
+    new WorkflowAnalysisTool(cache),    // 'workflow_analysis' - Deep workflow analysis
     new PatternAnalysisTool(cache),     // 'pattern_analysis' - Database-wide pattern detection
 
     // Utility operations (4 tools)
