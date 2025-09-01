@@ -4,11 +4,10 @@ This directory contains proposals for potential future enhancements to the OmniF
 
 ## Status of Ideas
 
-### 🚧 In Progress
-- **Pattern Analysis System** - Working implementation on `pattern-analysis` branch
-  - Implemented patterns: duplicates, dormant projects, tag audits, deadline health, waiting-for analysis
-  - See branch: `git checkout origin/pattern-analysis`
-  - Note: The original blueprint proposed advanced features (embeddings, sharding, hierarchical summaries) not yet implemented
+### ✅ Recently Completed
+- **Pattern Analysis System** - Basic implementation merged to main (v2.0.0)
+  - Implemented 5 patterns: duplicates, dormant projects, tag audits, deadline health, waiting-for analysis
+  - Additional enhancement ideas documented in `pattern-analysis-enhancements.md`
 
 ### 💡 Available for Implementation
 
