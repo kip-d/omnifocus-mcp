@@ -2,15 +2,13 @@
 
 This document provides comprehensive documentation for all available tools in the OmniFocus MCP Server.
 
-## 📢 Important: Tool Consolidation
+## 📢 Important: v2.0.0 Consolidated Architecture
 
-**For AI agents and new integrations, use the [Consolidated Tools](#consolidated-tools-recommended) first.** These tools reduce decision complexity and provide better error handling.
-
-Legacy tools remain available for backward compatibility but are deprecated. See [`TOOL_CONSOLIDATION.md`](/docs/TOOL_CONSOLIDATION.md) for migration guidance.
+**This documentation reflects the v2.0.0 consolidated tool architecture.** Tools have been consolidated from 22 to 14 for better LLM comprehension and reduced decision complexity.
 
 ---
 
-## Consolidated Tools (Recommended)
+## Available Tools (v2.0.0)
 
 ### query_tasks
 **Unified task querying interface.** Replaces 7 individual task query tools with a single, consistent interface.
