@@ -5,10 +5,10 @@ This directory contains proposals for potential future enhancements to the OmniF
 ## Status of Ideas
 
 ### 🚧 In Progress
-- **Pattern Analysis System** - Active development on `pattern-analysis` branch
-  - Comprehensive whole-database pattern analysis
-  - See branch: `git checkout pattern-analysis`
-  - Original blueprint removed as implementation is underway
+- **Pattern Analysis System** - Working implementation on `pattern-analysis` branch
+  - Implemented patterns: duplicates, dormant projects, tag audits, deadline health, waiting-for analysis
+  - See branch: `git checkout origin/pattern-analysis`
+  - Note: The original blueprint proposed advanced features (embeddings, sharding, hierarchical summaries) not yet implemented
 
 ### 💡 Available for Implementation
 
