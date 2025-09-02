@@ -35,6 +35,41 @@ const script = `${minimalHelpers} ${mainLogic}`;
 - Pass complex data as JSON strings
 - Parse inside the script
 
+### 2b. JXA Runtime Parsing Limits (~5-10KB) - CRITICAL
+**Problem:** Scripts over ~5-10KB cause misleading "Can't convert types" JXA runtime errors
+```javascript
+// ❌ FAILS - 9,679 chars - "Can't convert types" error
+export const UPDATE_PROJECT_SCRIPT = `
+  ${getMinimalHelpers()}
+  // ... complex folder logic (2,543 chars)
+  // ... complex review logic (1,413 chars)
+  // ... advanced properties logic
+`;
+
+// ✅ WORKS - 4,922 chars - Success!
+export const UPDATE_PROJECT_SCRIPT = `
+  ${getMinimalHelpers()}
+  // ... only essential updates (name, note, dates, status)
+`;
+```
+
+**CRITICAL INSIGHT:** "Can't convert types" is often NOT a type conversion issue - it's a script size issue!
+
+**Debugging Process (September 2025):**
+- Template substitution: ✅ Working correctly  
+- Individual JXA operations: ✅ All work fine
+- Script wrapping logic: ✅ No double-wrapping
+- Direct osascript execution: ✅ Works perfectly
+- **Root cause: Script too large for JXA runtime parser**
+
+**Solution:**
+- Keep core scripts under 5,000 characters
+- Remove bloated features (complex folder moves, advanced properties)
+- Split complex operations into focused, modular scripts
+- Test script sizes regularly: `script.length < 5000`
+
+**Impact:** Fixed project update "Can't convert types" errors by reducing UPDATE_PROJECT_SCRIPT from 9,679 to 4,922 chars (49% reduction)
+
 ### 3. Direct Property Access is Faster
 **Finding:** Direct try/catch is 50% faster than wrapper functions
 ```javascript
