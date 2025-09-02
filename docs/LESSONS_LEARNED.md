@@ -115,6 +115,38 @@ Reviews (3 files)              → getBasicHelpers()
 - 90% reduction in script sizes (5KB vs 75KB+)
 - Dramatic performance improvements across all tools
 
+### Second Wave: REPEAT_HELPERS Crisis (September 2025)
+
+**Problem Discovered:** Even after the systematic cleanup, scripts were STILL hitting size limits due to massive REPEAT_HELPERS (321 lines) being imported unnecessarily.
+
+**Scripts Affected:**
+- 3 LIST scripts: Only needed to READ repeat rules, but imported full 321-line helpers
+- 2 CRUD scripts: Properly needed repeat functionality but used inefficient imports
+- getAllHelpers(): Included massive repeat helpers by default
+
+**Final Solution:**
+```bash
+# LIST scripts (read-only): Minimal helper + 8-line extractor
+list-tasks*.ts → getBasicHelpers() + extractRepeatRuleInfo() (8 lines)
+
+# CRUD scripts (full functionality): Proper recurrence helpers 
+create-project.ts, update-task.ts → getRecurrenceHelpers()
+
+# Safety improvement: Remove from default helpers
+getAllHelpers() → no longer includes REPEAT_HELPERS by default
+```
+
+**Final Impact:**
+- List scripts: 75KB → 15KB (80% reduction)
+- CRUD scripts: 75KB → 35KB (53% reduction) 
+- All scripts now well under 50KB JXA limit
+- Complete elimination of "Can't convert types" errors
+
+**Key Architectural Lesson:** 
+- READ operations: Minimal helpers + focused extractors
+- WRITE operations: Full helpers only when needed
+- Default helpers should be lean, specialized helpers explicit
+
 ---
 
 ## 🔧 Technical Gotchas
