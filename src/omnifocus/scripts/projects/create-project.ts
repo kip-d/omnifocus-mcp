@@ -1,5 +1,4 @@
-import { getBasicHelpers } from '../shared/helpers.js';
-import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
+import { getRecurrenceHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new project in OmniFocus
@@ -13,8 +12,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Proper error handling and validation
  */
 export const CREATE_PROJECT_SCRIPT = `
-  ${getBasicHelpers()}
-  ${REPEAT_HELPERS}
+  ${getRecurrenceHelpers()}
   
   (() => {
     const name = {{name}};

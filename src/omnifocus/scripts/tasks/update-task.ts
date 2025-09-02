@@ -1,5 +1,4 @@
-import { getBasicHelpers } from '../shared/helpers.js';
-import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
+import { getRecurrenceHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
@@ -11,8 +10,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Claude Desktop numeric ID bug detection
  */
 export const UPDATE_TASK_SCRIPT = `
-  ${getBasicHelpers()}
-  ${REPEAT_HELPERS}
+  ${getRecurrenceHelpers()}
   
   (() => {
     const taskId = {{taskId}};

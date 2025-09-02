@@ -1,5 +1,4 @@
 import { getBasicHelpers } from '../shared/helpers.js';
-import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to list tasks with advanced filtering in OmniFocus
@@ -13,7 +12,20 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  */
 export const LIST_TASKS_SCRIPT = `
   ${getBasicHelpers()}
-  ${REPEAT_HELPERS}
+  
+  // Minimal repeat rule extractor (to avoid massive 321-line REPEAT_HELPERS)
+  function extractRepeatRuleInfo(repetitionRule) {
+    if (!repetitionRule) return null;
+    try {
+      return {
+        method: safeGet(() => repetitionRule.method()?.toString(), 'unknown'),
+        ruleString: safeGet(() => repetitionRule.ruleString()?.toString(), ''),
+        _source: 'minimal'
+      };
+    } catch (e) {
+      return { _source: 'error', _error: e.toString() };
+    }
+  }
   
   (() => {
     const filter = {{filter}};
