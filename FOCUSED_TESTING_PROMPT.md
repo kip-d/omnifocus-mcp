@@ -15,7 +15,12 @@ First, confirm MCP connection and create test resources:
    Use the system tool with operation "version" to confirm OmniFocus MCP is working
    ```
 
-2. **Create Test Resources**:
+2. **Run Diagnostics** (if any tests fail):
+   ```
+   Use the system tool with operation "diagnostics" to check OmniFocus connectivity
+   ```
+
+3. **Create Test Resources**:
    ```
    Create a test folder called "Fix Verification Test Folder"
    Create a test project called "Fix Verification Test Project" in that folder
@@ -49,6 +54,11 @@ First, confirm MCP connection and create test resources:
 **Expected Result**: ✅ Success response with project updated
 **Previous Error**: ❌ "Can't convert types" error
 
+**If Test Fails**: Include the complete raw request and response data:
+- Full MCP request parameters sent
+- Complete error response received
+- Any console logs or additional error details
+
 ---
 
 ## 🧪 Test 2: Folder Deletion Fix Verification  
@@ -72,6 +82,11 @@ First, confirm MCP connection and create test resources:
 
 **Expected Result**: ✅ Success response with folder deleted (project moves to root/inbox)
 **Previous Error**: ❌ "Can't convert types" error with DELETE_FAILED code
+
+**If Test Fails**: Include the complete raw request and response data:
+- Full MCP request parameters sent
+- Complete error response received 
+- Any console logs or additional error details
 
 ---
 
