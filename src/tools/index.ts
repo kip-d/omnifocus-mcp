@@ -29,7 +29,7 @@ import { ProductivityStatsToolV2 } from './analytics/ProductivityStatsToolV2.js'
 import { TaskVelocityToolV2 } from './analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from './analytics/OverdueAnalysisToolV2.js';
 import { WorkflowAnalysisTool } from './analytics/WorkflowAnalysisTool.js';
-import { PatternAnalysisTool } from './analytics/PatternAnalysisTool.js';
+import { PatternAnalysisToolV2 } from './analytics/PatternAnalysisToolV2.js';
 
 // Review operations - Already consolidated
 import { ManageReviewsTool } from './reviews/ManageReviewsTool.js';
@@ -64,7 +64,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     new TaskVelocityToolV2(cache),      // 'task_velocity' - Completion trends
     new OverdueAnalysisToolV2(cache),   // 'analyze_overdue' - Bottleneck analysis
     new WorkflowAnalysisTool(cache),    // 'workflow_analysis' - Deep workflow analysis
-    new PatternAnalysisTool(cache),     // 'pattern_analysis' - Database-wide pattern detection
+    new PatternAnalysisToolV2(cache),   // 'analyze_patterns' - Database-wide pattern detection
 
     // Utility operations (4 tools)
     new ExportTool(cache),              // 'export' - All export operations

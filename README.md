@@ -4,8 +4,6 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
 ## 🎉 v2.0.0 Production Release!
 
-> **Development History**: For the complete development journey including failed experiments and lessons learned, see [omnifocus-mcp-archive](https://github.com/kip-d/omnifocus-mcp-archive).
-
 **Complete architecture overhaul with all JXA limitations fixed:**
 - ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
 - 🔒 **Security hardened** - Fixed injection vulnerabilities in bridge operations
@@ -116,28 +114,26 @@ These prompts provide guided conversations with pre-configured questions and res
 
 ## Basic Usage
 
-### Query Tasks
-Use the `tasks` tool with different modes:
+### Query Tasks (List)
+The `list_tasks` tool is deprecated and retained only for backward compatibility. Use `query_tasks` with `queryType: "list"` instead:
 ```javascript
 {
-  "tool": "tasks",
+  "tool": "query_tasks",
   "arguments": {
-    "mode": "today",  // or: all, search, overdue, upcoming, available, blocked, flagged
-    "details": true,
+    "queryType": "list",
+    "completed": false,
     "limit": 50
   }
 }
 ```
 
 ### Create Task
-Use the `manage_task` tool with operation='create':
 ```javascript
 {
-  "tool": "manage_task", 
+  "tool": "create_task", 
   "arguments": {
-    "operation": "create",
     "name": "Review Q4 budget",
-    "dueDate": "2024-01-15 17:00",  // 5pm on Jan 15 (or just "2024-01-15" for 5pm default)
+    "dueDate": "2024-01-15T17:00:00Z",
     "flagged": true
   }
 }
@@ -146,9 +142,8 @@ Use the `manage_task` tool with operation='create':
 ### Create Sequential Project
 ```javascript
 {
-  "tool": "projects",
+  "tool": "create_project",
   "arguments": {
-    "operation": "create",
     "name": "Website Redesign",
     "sequential": true,  // Tasks must be done in order
     "folder": "Work"
@@ -223,53 +218,58 @@ Use the `manage_task` tool with operation='create':
 }
 ```
 
-### Analyze Database Patterns
+### Analyze Database Patterns (NEW)
 ```javascript
 // Find duplicates, dormant projects, and tag issues
 {
-  "tool": "pattern_analysis",
+  "tool": "analyze_patterns",
   "arguments": {
     "patterns": ["duplicates", "dormant_projects", "tag_audit"],
-    "dormantThresholdDays": "60"
+    "options": {
+      "dormant_threshold_days": "60"
+    }
   }
 }
 ```
 
-## Available Tools (15 Consolidated Tools - v2.0.0)
+## Available Tools (46 Total)
 
-> **Note for v1 users:** Tools have been consolidated for better LLM performance. Your AI assistant will automatically use the new tools - no action required from you!
+### Consolidated Tools (Recommended for AI Agents)
 
-### 🚀 Fully Consolidated Architecture (36% reduction from v1)
+**Task Queries**: `query_tasks` - Unified interface for all task querying (replaces 7 individual tools)  
+**Folder Management**: `manage_folder` - Complete folder operations with operation parameter  
+**Review Management**: `manage_reviews` - GTD review workflow management  
+**Batch Operations**: `batch_task_operations` - Efficient multi-task operations
 
-#### Task Operations (2 tools)
-- **`tasks`** - Query/search tasks with multiple modes (today, overdue, search, etc.)
-- **`manage_task`** - All task CRUD operations (create, update, complete, delete)
+### Standard Tools
 
-#### Project & Organization (4 tools)
-- **`projects`** - All project operations (list, create, update, complete, delete, stats)
-- **`folders`** - All folder operations (list, search, create, update, delete, move)
-- **`tags`** - All tag operations (list, active, create, rename, delete, merge)
-- **`manage_reviews`** - GTD review workflow management
+**Task CRUD**: `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
 
-#### Analytics (5 tools)
-- **`productivity_stats`** - GTD health metrics and insights
-- **`task_velocity`** - Completion trends and predictions
-- **`analyze_overdue`** - Bottleneck analysis and patterns
-- **`workflow_analysis`** - Deep workflow health analysis
-- **`pattern_analysis`** - Database-wide pattern detection (duplicates, dormant projects, tag audit)
+**Projects**: `list_projects`, `create_project`, `update_project`, `complete_project`, `delete_project`
 
-#### Utilities (4 tools)
-- **`export`** - All export operations (tasks, projects, or complete backup)
-- **`recurring_tasks`** - Recurring task analysis and patterns
-- **`perspectives`** - List and query custom perspectives
-- **`system`** - Version info and diagnostics
+**Perspectives**: `list_perspectives`, `query_perspective` - Access user's custom perspectives and their contents
+
+**Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`, `analyze_patterns` (NEW - database-wide pattern detection)
+
+**Tags**: `list_tags`, `get_active_tags`, `manage_tags`
+
+**Export**: `export_tasks`, `export_projects`, `bulk_export`
+
+### Legacy Tools (Deprecated but Functional)
+
+**Individual Task Queries**: `list_tasks`, `next_actions`, `blocked_tasks`, `available_tasks`, `overdue_tasks`, `upcoming_tasks` *(use `query_tasks` instead)*
+
+**Individual Folder Tools**: `create_folder`, `update_folder`, `delete_folder`, `move_folder` *(use `manage_folder` instead)*
+
+**Individual Review Tools**: `projects_for_review`, `mark_project_reviewed`, `set_review_schedule` *(use `manage_reviews` instead)*
 
 ### Documentation
 
-- **NEW** `/docs/API-REFERENCE-V2.md` - v2.0.0 Consolidated API reference
+- `/docs/API-REFERENCE.md` - Complete API documentation (~4,800 tokens)
 - `/docs/API-REFERENCE-LLM.md` - LLM-optimized reference (~900 tokens) 
 - `/docs/API-COMPACT.md` - Ultra-compact reference (~400 tokens)
-- `/docs/user/MIGRATION_GUIDE_V2.md` - Migration from v1 to v2
+- `/docs/TOOLS.md` - Detailed tool documentation
+- `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
 - `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
 
 ## Recurrence Examples
@@ -377,14 +377,6 @@ See `/docs/TROUBLESHOOTING.md` for solutions and `/docs/JXA-LIMITATIONS.md` for 
 
 ## Data Format Conventions
 
-### Date Formats
-- **Recommended**: `YYYY-MM-DD HH:mm` (e.g., "2024-01-15 17:00" for 5pm)
-- **Date-only**: `YYYY-MM-DD` (e.g., "2024-01-15")
-  - Due dates default to 5:00 PM local time
-  - Defer dates default to 8:00 AM local time
-- **Avoid**: ISO-8601 with Z suffix (causes timezone confusion)
-
-### Field Naming
 - **Data Fields** (task/project properties): Use camelCase to match OmniFocus API
   - Examples: `dueDate`, `deferDate`, `estimatedMinutes`, `flagged`
 - **Metadata Fields** (response metadata): Use snake_case for consistency
