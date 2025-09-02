@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a folder in OmniFocus
@@ -10,7 +10,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Force deletion with content preservation
  */
 export const DELETE_FOLDER_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   
   (() => {
     const folderId = {{folderId}};

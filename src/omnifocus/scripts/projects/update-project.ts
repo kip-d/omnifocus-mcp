@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
@@ -14,7 +14,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Detailed change tracking
  */
 export const UPDATE_PROJECT_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   ${REPEAT_HELPERS}
   
   (() => {
