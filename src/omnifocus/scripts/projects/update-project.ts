@@ -1,5 +1,4 @@
 import { getMinimalHelpers } from '../shared/helpers.js';
-import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to update an existing project in OmniFocus
@@ -15,7 +14,6 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  */
 export const UPDATE_PROJECT_SCRIPT = `
   ${getMinimalHelpers()}
-  ${REPEAT_HELPERS}
   
   (() => {
   const projectId = {{projectId}};
@@ -180,29 +178,9 @@ export const UPDATE_PROJECT_SCRIPT = `
       changes.push(updates.singleton ? "Converted to single action list" : "Converted to project with sequential/parallel tasks");
     }
     
-    // Update repeat rule if provided
-    if (updates.clearRepeatRule) {
-      try {
-        targetProject.repetitionRule = null;
-        changes.push("Repeat rule cleared");
-      } catch (error) {
-        changes.push("Warning: Failed to clear repeat rule: " + error.message);
-      }
-    } else if (updates.repeatRule) {
-      try {
-        const ruleData = prepareRepetitionRuleData(updates.repeatRule);
-        if (ruleData && ruleData.needsBridge) {
-          // Apply repetition rule via evaluateJavascript bridge
-          const success = applyRepetitionRuleViaBridge(targetProject.id(), ruleData);
-          if (success) {
-            changes.push("Repeat rule updated via bridge");
-          } else {
-            changes.push("Warning: Could not update repeat rule via bridge");
-          }
-        }
-      } catch (error) {
-        changes.push("Warning: Failed to update repeat rule: " + error.message);
-      }
+    // Repeat rules not supported in this script to keep size minimal
+    if (updates.clearRepeatRule || updates.repeatRule) {
+      changes.push("Note: Repeat rule changes require manual update in OmniFocus");
     }
     
     if (updates.folder !== undefined) {
