@@ -46,6 +46,35 @@ let name;
 try { name = task.name(); } catch { name = null; }
 ```
 
+## 🐛 OmniFocus UI Issues & Inconsistencies
+
+### Task Count Discrepancy (September 2025)
+**Issue:** OmniFocus UI count line doesn't match displayed content in "Everything" view
+
+**Details:**
+- **OmniFocus UI Bug**: Projects view set to "Everything" shows completed tasks but doesn't count them in status line
+- **Example**: Shows 1,449 tasks in count but displays 1,828 total tasks (including 379 completed)
+- **UI displays**: "122 inbox items, 1,327 actions, 394 projects" 
+- **Reality**: ~1,828 total tasks (our MCP server count is correct)
+
+**Root Cause:** OmniFocus UI inconsistency - "Everything" view should either:
+1. Count completed items in status line totals, OR
+2. Not display completed items if they won't be counted
+
+**Impact:** 
+- Users may report "discrepancies" between MCP server counts and UI counts
+- **Our MCP server is correct** - `doc.flattenedTasks()` returns complete dataset
+- This is a **UI presentation bug**, not a data accuracy issue
+
+**Status:** Bug identified but not yet reported to OmniGroup (as of Sept 2025)
+
+**For Developers:**
+- Expect user reports about count "mismatches" 
+- Explain that MCP gives complete/accurate totals
+- OmniFocus UI filtering is inconsistent in "Everything" view
+
+---
+
 ## 🔧 Technical Gotchas
 
 ### 4. Bridge Context Consistency

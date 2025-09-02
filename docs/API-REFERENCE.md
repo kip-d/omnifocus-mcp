@@ -1,49 +1,33 @@
 # OmniFocus MCP API Reference v2.0.0
 
-This document provides comprehensive documentation for all available tools in the OmniFocus MCP server v2.0.0.
+This document provides comprehensive documentation for all 15 tools in the OmniFocus MCP server v2.0.0.
 
 ## Table of Contents
 
-1. [Query Tools](#query-tools)
+1. [Task Operations](#task-operations)
    - [tasks](#tasks) - Query tasks with various modes
+   - [manage_task](#manage_task) - Unified task CRUD operations
+2. [Project Management](#project-management)
    - [projects](#projects) - Manage and query projects
-   - [query_perspective](#query_perspective) - Query perspective views
-2. [CRUD Operations](#crud-operations)
-   - [create_task](#create_task) - Create new tasks
-   - [update_task](#update_task) - Update existing tasks
-   - [complete_task](#complete_task) - Mark tasks as completed
-   - [delete_task](#delete_task) - Delete tasks
-3. [Analytics Tools](#analytics-tools)
+3. [Organization Tools](#organization-tools)
+   - [folders](#folders) - Folder management and hierarchy
+   - [tags](#tags) - Comprehensive tag management with hierarchy
+   - [manage_reviews](#manage_reviews) - Project review management
+4. [Analytics & Insights](#analytics--insights)
    - [productivity_stats](#productivity_stats) - Comprehensive productivity metrics
    - [task_velocity](#task_velocity) - Task completion velocity analysis
    - [analyze_overdue](#analyze_overdue) - Overdue task patterns
-   - [get_productivity_stats](#get_productivity_stats) - Simplified stats interface
-   - [get_task_velocity](#get_task_velocity) - Simplified velocity interface
-   - [analyze_overdue_tasks](#analyze_overdue_tasks) - Simplified overdue analysis
-4. [Tag Management](#tag-management)
-   - [list_tags](#list_tags) - List all tags/contexts
-   - [get_active_tags](#get_active_tags) - Get only actionable tags
-   - [manage_tags](#manage_tags) - Create, rename, delete tags
-5. [Folder & Review Management](#folder--review-management)
-   - [query_folders](#query_folders) - Query folder structure
-   - [manage_folder](#manage_folder) - Folder operations
-   - [manage_reviews](#manage_reviews) - Project review management
-6. [Batch Operations](#batch-operations)
-   - [batch_task_operations](#batch_task_operations) - Bulk task operations
-7. [Export & Utility](#export--utility)
-   - [export_tasks](#export_tasks) - Export tasks to various formats
-   - [export_projects](#export_projects) - Export projects
-   - [bulk_export](#bulk_export) - Export all data
-   - [list_perspectives](#list_perspectives) - List available perspectives
-   - [get_version_info](#get_version_info) - Server version information
-   - [run_diagnostics](#run_diagnostics) - Diagnostic tools
-8. [Recurring Task Analysis](#recurring-task-analysis)
-   - [analyze_recurring_tasks](#analyze_recurring_tasks) - Analyze recurring patterns
-   - [get_recurring_patterns](#get_recurring_patterns) - Get frequency statistics
+   - [workflow_analysis](#workflow_analysis) - Deep workflow health analysis
+   - [analyze_patterns](#analyze_patterns) - System pattern detection
+5. [Utilities](#utilities)
+   - [export](#export) - Unified export functionality
+   - [recurring_tasks](#recurring_tasks) - Recurring task analysis
+   - [perspectives](#perspectives) - Perspective management
+   - [system](#system) - System information and diagnostics
 
 ---
 
-## Query Tools
+## Task Operations
 
 ### tasks
 
@@ -84,31 +68,95 @@ Query OmniFocus tasks with various modes and filters. Returns a summary first fo
 }
 ```
 
-#### Example Response
+---
+
+### manage_task
+
+Unified task management tool for all CRUD operations (Create, Read, Update, Delete).
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `operation` | string | **Yes** | Operation: create/update/complete/delete |
+| `taskId` | string | No* | Task ID (*required for update/complete/delete) |
+| `name` | string | No* | Task name (*required for create) |
+| `projectId` | string | **Yes** | Project ID (null/"" for inbox) |
+| `dueDate` | string | **Yes** | Due date ("" if none) |
+| `deferDate` | string | **Yes** | Defer date ("" if none) |
+| `note` | string | No | Task description |
+| `parentTaskId` | string | No | Parent task ID for subtasks |
+| `flagged` | string | No | Flagged status ("true"/"false") |
+| `sequential` | string | No | Sequential subtasks ("true"/"false") |
+| `estimatedMinutes` | string | No | Time estimate in minutes |
+| `tags` | string[] | No | Tags to assign |
+| `repeatRule` | object | No | Recurrence rule (see below) |
+| `completionDate` | string | No | Completion date (complete operation) |
+| `minimalResponse` | string | No | Return minimal response for bulk ops |
+| `clearDueDate` | boolean | No | Clear existing due date |
+| `clearDeferDate` | boolean | No | Clear existing defer date |
+| `clearEstimatedMinutes` | boolean | No | Clear existing estimate |
+| `clearRepeatRule` | boolean | No | Remove existing repeat rule |
+
+#### Operations
+
+- **`create`** - Create new task (requires: name, projectId, dueDate, deferDate)
+- **`update`** - Update existing task (requires: taskId, projectId, dueDate, deferDate)
+- **`complete`** - Mark task completed (requires: taskId, projectId, dueDate, deferDate)
+- **`delete`** - Delete task (requires: taskId, projectId, dueDate, deferDate)
+
+#### Repeat Rule Structure
 
 ```json
 {
-  "success": true,
-  "summary": {
-    "total_count": 5,
-    "returned_count": 5,
-    "breakdown": {
-      "overdue": 5,
-      "flagged": 3
-    },
-    "key_insights": [
-      "5 tasks overdue, oldest: 'Review Q4 goals' (10 days)",
-      "Project X has 3 overdue tasks (potential bottleneck)"
-    ]
-  },
-  "data": {
-    "tasks": [...],
-    "preview": [...]
+  "unit": "week",           // minute/hour/day/week/month/year
+  "steps": "1",             // Interval (every X units)
+  "method": "fixed",        // fixed/start-after-completion/due-after-completion
+  "weekdays": ["monday", "wednesday", "friday"],  // For weekly repeats
+  "weekPosition": "1",      // For monthly (1st, 2nd, 3rd, 4th, "last")
+  "weekday": "tuesday",     // For monthly positional (e.g., "1st Tuesday")
+  "deferAnother": {         // Optional defer before due
+    "unit": "day",
+    "steps": 3
   }
 }
 ```
 
+#### Example Requests
+
+**Create Task**:
+```json
+{
+  "operation": "create",
+  "name": "Weekly team meeting",
+  "projectId": "abc123",
+  "dueDate": "2025-03-15 14:00",
+  "deferDate": "",
+  "tags": ["meetings", "team"],
+  "repeatRule": {
+    "unit": "week",
+    "steps": "1",
+    "method": "fixed"
+  }
+}
+```
+
+**Update Task**:
+```json
+{
+  "operation": "update",
+  "taskId": "xyz789",
+  "projectId": "",  // Move to inbox
+  "dueDate": "2025-03-16",
+  "deferDate": "",
+  "tags": ["urgent", "work"],
+  "minimalResponse": "true"  // For bulk operations
+}
+```
+
 ---
+
+## Project Management
 
 ### projects
 
@@ -141,210 +189,111 @@ Manage OmniFocus projects with various operations. Returns summary with key insi
 - **`delete`** - Delete project
 - **`review`** - List projects needing review
 - **`active`** - List only active projects
-
-#### Example Request
-
-```json
-{
-  "operation": "active",
-  "limit": "10",
-  "details": "false"
-}
-```
+- **`stats`** - Get project statistics
 
 ---
 
-### query_perspective
+## Organization Tools
 
-Query tasks from a specific OmniFocus perspective without changing the user's window.
+### folders
+
+Query and manage OmniFocus folders with full hierarchy support.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `perspectiveName` | string | **Yes** | Name of the perspective (e.g., "Inbox", "Flagged") |
-| `limit` | string | **Yes** | Maximum tasks to return |
-| `includeDetails` | string | **Yes** | Include task details like notes and subtasks |
+| `operation` | string | **Yes** | Operation to perform |
+| `folderId` | string | No* | Folder ID (*required for specific operations) |
+| `folderName` | string | No | Folder name (alternative to folderId) |
+| `name` | string | No | New folder name (for create/update) |
+| `parentFolderId` | string | No | Parent folder ID (for create/move) |
+| `searchQuery` | string | No | Search query (for search operation) |
+| `includeProjects` | boolean | No | Include projects in folders |
+| `includeSubfolders` | boolean | No | Include subfolders |
+| `status` | string | No | New status (for set_status operation) |
+| `includeContents` | boolean | No | Apply to contents (for set_status) |
+| `duplicateName` | string | No | Name for duplicated folder |
 
-#### Example Request
+#### Operations
 
-```json
-{
-  "perspectiveName": "Inbox",
-  "limit": "10",
-  "includeDetails": "false"
-}
-```
+- **`list`** - List all folders
+- **`get`** - Get specific folder details
+- **`search`** - Search folders by name
+- **`projects`** - Get projects in folder
+- **`create`** - Create new folder
+- **`update`** - Update folder name
+- **`delete`** - Delete folder
+- **`move`** - Move folder to new parent
+- **`duplicate`** - Duplicate folder
+- **`set_status`** - Change folder status
 
 ---
 
-## CRUD Operations
+### tags
 
-### create_task
-
-Create a new task in OmniFocus with full support for projects, tags, dates, and recurrence.
+Comprehensive tag management with hierarchy support.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | **Yes** | Task name |
-| `flagged` | string | **Yes** | Whether the task is flagged ("true"/"false") |
-| `sequential` | string | **Yes** | Subtasks sequential ("true") or parallel ("false") |
-| `note` | string | No | Task description |
-| `projectId` | string | No | Project ID to assign the task to |
-| `parentTaskId` | string | No | Parent task ID for creating subtasks |
-| `dueDate` | string | No | Due date (e.g., "2025-03-15" or "2025-03-15 14:30") |
-| `deferDate` | string | No | Defer date |
-| `estimatedMinutes` | number | No | Estimated duration in minutes |
-| `tags` | string[] | No | Tags to assign (v2.0.0-beta.1+) |
-| `repeatRule` | object | No | Recurrence rule (see below) |
+| `operation` | string | **Yes** | Operation: list/active/manage |
+| `sortBy` | string | **Yes** | Sort order (name/count/usage) |
+| `includeEmpty` | string | **Yes** | Include tags with no tasks |
+| `includeUsageStats` | string | **Yes** | Calculate usage statistics |
+| `includeTaskCounts` | string | **Yes** | Include task counts |
+| `fastMode` | string | **Yes** | Skip hierarchy (faster) |
+| `namesOnly` | string | **Yes** | Return only names (fastest) |
+| `action` | string | No* | Management action (*required for manage) |
+| `tagName` | string | No* | Tag name (*required for manage) |
+| `newName` | string | No | New name (for rename) |
+| `targetTag` | string | No | Target tag (for merge) |
+| `parentTagName` | string | No | Parent tag name |
+| `parentTagId` | string | No | Parent tag ID |
 
-#### Repeat Rule Structure
+#### Operations
 
-```json
-{
-  "unit": "week",           // minute/hour/day/week/month/year
-  "steps": "1",             // Interval (every X units)
-  "method": "fixed",        // fixed/start-after-completion/due-after-completion
-  "weekdays": ["monday", "wednesday", "friday"],  // For weekly repeats
-  "weekPosition": "1",      // For monthly (1st, 2nd, 3rd, 4th, "last")
-  "weekday": "tuesday",     // For monthly positional (e.g., "1st Tuesday")
-  "deferAnother": {         // Optional defer before due
-    "unit": "day",
-    "steps": 3
-  }
-}
-```
+- **`list`** - List all tags with optional hierarchy
+- **`active`** - Get only tags with incomplete tasks
+- **`manage`** - Tag management operations
 
-#### Example Request
+#### Management Actions
 
-```json
-{
-  "name": "Weekly team meeting",
-  "flagged": "false",
-  "sequential": "false",
-  "projectId": "abc123",
-  "dueDate": "2025-03-15 14:00",
-  "tags": ["meetings", "team"],
-  "repeatRule": {
-    "unit": "week",
-    "steps": "1",
-    "method": "fixed"
-  }
-}
-```
+- **`create`** - Create new tag
+- **`rename`** - Rename existing tag
+- **`delete`** - Delete tag
+- **`merge`** - Merge tags together
+- **`nest`** - Make tag a child of another
+- **`unparent`** - Remove tag from parent
+- **`reparent`** - Change tag's parent
+
+#### Performance Modes
+
+- **`namesOnly="true"`** - Fastest (~130ms), returns only tag names
+- **`fastMode="true"`** - Fast (~270ms), no hierarchy
+- **Default** - Full details (~700ms), includes hierarchy
 
 ---
 
-### update_task
+### manage_reviews
 
-Update an existing task with support for moving between projects and parents.
-
-**⚠️ CONTEXT OPTIMIZATION**: When updating 10+ tasks (e.g., bulk tag reorganization), ALWAYS set `minimalResponse=true` to reduce response size by ~95% and conserve LLM context window.
+Consolidated tool for all project review operations. Essential for GTD weekly reviews.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `taskId` | string | **Yes** | ID of the task to update |
-| `name` | string | No | New task name |
-| `note` | string | No | New task note |
-| `projectId` | string | No | New project ID (null/"" to move to inbox) |
-| `parentTaskId` | string | No | Parent task ID (null for top-level) |
-| `flagged` | boolean | No | New flagged status |
-| `dueDate` | string | No | New due date |
-| `clearDueDate` | boolean | No | Clear existing due date |
-| `deferDate` | string | No | New defer date |
-| `clearDeferDate` | boolean | No | Clear existing defer date |
-| `estimatedMinutes` | number | No | New estimated duration |
-| `clearEstimatedMinutes` | boolean | No | Clear existing estimate |
-| `tags` | string[] | No | New tags (replaces all) |
-| `sequential` | boolean | No | Sequential/parallel for subtasks |
-| `repeatRule` | object | No | New repeat rule |
-| `clearRepeatRule` | boolean | No | Remove existing repeat rule |
-| **`minimalResponse`** | **boolean** | No | **⚡ Return only success/task_id/fields_updated. ESSENTIAL for bulk operations!** |
+All parameters are optional as the tool handles different review operations internally.
 
-#### Example Requests
+#### Operations
 
-**Standard Update (single task)**:
-```json
-{
-  "taskId": "xyz789",
-  "name": "Updated task name",
-  "projectId": null,  // Move to inbox
-  "tags": ["urgent", "work"]
-}
-```
-
-**Bulk Tag Reorganization (conserve context)**:
-```json
-{
-  "taskId": "abc123",
-  "tags": ["EVE", "PvP"],
-  "minimalResponse": true  // ← Critical for bulk operations!
-}
-```
-
-#### Response Size Comparison
-
-**Standard Response** (~400 tokens):
-```json
-{
-  "success": true,
-  "data": {
-    "task": {
-      "id": "xyz789",
-      "name": "Updated task name",
-      "note": "Full task details...",
-      // ... 20+ additional fields
-    }
-  },
-  "metadata": {
-    "query_time_ms": 234,
-    // ... performance metrics
-  }
-}
-```
-
-**Minimal Response** (~20 tokens - 95% reduction!):
-```json
-{
-  "success": true,
-  "task_id": "xyz789",
-  "fields_updated": ["tags"],
-  "operation": "update_task"
-}
-```
+- List projects needing review
+- Mark projects as reviewed
+- Set/clear review schedules
+- Update review intervals
 
 ---
 
-### complete_task
-
-Mark a task as completed.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `taskId` | string | **Yes** | ID of the task to complete |
-| `completionDate` | string | No | Completion date (defaults to now) |
-
----
-
-### delete_task
-
-Permanently delete a task.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `taskId` | string | **Yes** | ID of the task to delete |
-
----
-
-## Analytics Tools
+## Analytics & Insights
 
 ### productivity_stats
 
@@ -358,6 +307,8 @@ Generate comprehensive productivity statistics and GTD health metrics.
 | `includeProjectStats` | string | **Yes** | Include project-level statistics |
 | `includeTagStats` | string | **Yes** | Include tag-level statistics |
 
+Returns summary insights first, then detailed statistics.
+
 ---
 
 ### task_velocity
@@ -369,8 +320,10 @@ Analyze task completion velocity and predict workload capacity.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `days` | string | **Yes** | Number of days to analyze |
-| `groupBy` | string | **Yes** | How to group data (project/tag/none) |
+| `groupBy` | string | **Yes** | How to group data (day/week/project/tag) |
 | `includeWeekends` | string | **Yes** | Include weekend days |
+
+Returns key velocity metrics first, then detailed trends.
 
 ---
 
@@ -383,217 +336,147 @@ Analyze overdue tasks for patterns and bottlenecks.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `includeRecentlyCompleted` | string | **Yes** | Include tasks completed after due date |
-| `groupBy` | string | **Yes** | How to group (project/tag/duration) |
+| `groupBy` | string | **Yes** | How to group (project/age/priority) |
 | `limit` | string | **Yes** | Maximum tasks to analyze |
 
+Returns summary with key findings first, then detailed analysis.
+
 ---
 
-## Tag Management
+### workflow_analysis
 
-### list_tags
-
-List all tags/contexts with various performance modes.
+Deep analysis of OmniFocus workflow health and system efficiency.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `sortBy` | string | **Yes** | Sort order (name/count/usage) |
-| `includeEmpty` | string | **Yes** | Include tags with no tasks |
-| `includeUsageStats` | string | **Yes** | Calculate usage statistics |
-| `includeTaskCounts` | string | **Yes** | Include task counts |
-| `fastMode` | string | **Yes** | Skip hierarchy (faster) |
-| `namesOnly` | string | **Yes** | Return only names (fastest) |
+| `analysisDepth` | string | **Yes** | Analysis depth (quick/standard/deep) |
+| `focusAreas` | string | **Yes** | Specific areas to focus analysis on |
+| `includeRawData` | string | **Yes** | Include raw data for LLM exploration |
+| `maxInsights` | string | **Yes** | Maximum number of insights to generate |
 
-#### Performance Modes
-
-- **`namesOnly=true`** - Fastest (~130ms), returns only tag names
-- **`fastMode=true`** - Fast (~270ms), no hierarchy
-- **Default** - Full details (~700ms), includes hierarchy
+Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization.
 
 ---
 
-### get_active_tags
+### analyze_patterns
 
-Get only tags with incomplete tasks. Much faster than list_tags for GTD workflows.
-
-#### Parameters
-
-None required.
-
-#### Returns
-
-Simple array of tag names that have actionable tasks.
-
----
-
-### manage_tags
-
-Create, rename, delete, or merge tags.
+Analyze patterns across entire OmniFocus database for insights and improvements.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `action` | string | **Yes** | Action (create/rename/delete/merge) |
-| `tagName` | string | **Yes** | Tag name to operate on |
-| `newName` | string | No* | New name (*required for rename) |
-| `targetTag` | string | No* | Target tag (*required for merge) |
+| `patterns` | string[] | **Yes** | Which patterns to analyze (see below) |
+| `options` | string | **Yes** | Options object with threshold settings |
+
+#### Available Patterns
+
+- **`duplicates`** - Find duplicate task names
+- **`dormant_projects`** - Identify inactive projects
+- **`tag_audit`** - Audit tag usage patterns
+- **`deadline_health`** - Check realistic due dates
+- **`waiting_for`** - Find "waiting for" patterns
+- **`estimation_bias`** - Detect estimation accuracy
+- **`next_actions`** - Audit next actions
+- **`review_gaps`** - Find review gaps
+- **`all`** - Run all pattern analyses
 
 ---
 
-## Folder & Review Management
+## Utilities
 
-### query_folders
+### export
 
-Query folder structure and contents.
-
-Various operations for querying folders - consult tool schema for details.
-
-### manage_folder
-
-Folder management operations (create, update, delete, move, etc.).
-
-Various operations for managing folders - consult tool schema for details.
-
-### manage_reviews
-
-Project review operations for GTD weekly reviews.
-
-Supports listing projects for review, marking as reviewed, and managing review schedules.
-
----
-
-## Batch Operations
-
-### batch_task_operations
-
-Perform bulk operations on multiple tasks.
-
-Supports batch update, complete, and delete operations. Uses individual OmniFocus operations for reliability.
-
----
-
-## Export & Utility
-
-### export_tasks
-
-Export tasks to JSON, CSV, or Markdown format.
+Unified export functionality for all OmniFocus data types.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
+| `type` | string | **Yes** | What to export (tasks/projects/all) |
 | `format` | string | **Yes** | Export format (json/csv/markdown) |
-| `filter` | object | No | Filter criteria (same as tasks tool) |
-| `fields` | string[] | No | Fields to include in export |
+| `filter` | object | No | Filter criteria (for tasks) |
+| `fields` | string[] | No | Fields to include (for tasks) |
+| `includeCompleted` | boolean | No | Include completed items |
+| `includeStats` | boolean | No | Include statistics (for projects) |
+| `includeProjectStats` | boolean | No | Include project statistics (for all) |
+| `outputDirectory` | string | No* | Directory to save files (*required for type="all") |
 
-#### Available Fields
+#### Export Types
+
+- **`tasks`** - Export filtered tasks
+- **`projects`** - Export all projects
+- **`all`** - Complete database backup to directory
+
+#### Available Fields (for tasks)
 
 - `id`, `name`, `note`, `project`, `tags`
 - `deferDate`, `dueDate`, `completed`, `completionDate`
-- `flagged`, `estimated`, `created`, `modified`
+- `flagged`, `estimated`, `created`, `createdDate`, `modified`, `modifiedDate`
 
 ---
 
-### export_projects
+### recurring_tasks
 
-Export all projects to JSON or CSV.
+Analyze recurring tasks and patterns.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `format` | string | **Yes** | Export format (json/csv) |
-| `includeStats` | string | **Yes** | Include task statistics |
-
----
-
-### bulk_export
-
-Export all OmniFocus data to files.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `outputDirectory` | string | **Yes** | Directory to save files |
-| `format` | string | **Yes** | Export format (json/csv) |
-| `includeCompleted` | string | **Yes** | Include completed tasks |
-| `includeProjectStats` | string | **Yes** | Include project statistics |
-
-Creates three files: tasks, projects, and tags exports.
-
----
-
-### list_perspectives
-
-List all available OmniFocus perspectives (built-in and custom).
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `includeFilterRules` | string | **Yes** | Include filter rules |
-| `sortBy` | string | **Yes** | Sort order |
-
----
-
-### get_version_info
-
-Get MCP server version information.
-
-#### Parameters
-
-None required.
-
-#### Returns
-
-Version number, git commit hash, build timestamp, and environment details.
-
----
-
-### run_diagnostics
-
-Run diagnostics to identify OmniFocus connection issues.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `testScript` | string | **Yes** | Optional custom script to test |
-
----
-
-## Recurring Task Analysis
-
-### analyze_recurring_tasks
-
-Analyze recurring tasks for patterns.
-
-#### Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
+| `operation` | string | **Yes** | Operation (analyze/patterns) |
 | `activeOnly` | string | **Yes** | Only active tasks (default: "true") |
-| `includeCompleted` | string | **Yes** | Include completed |
-| `includeDropped` | string | **Yes** | Include dropped |
-| `includeHistory` | string | **Yes** | Include completion history |
-| `sortBy` | string | **Yes** | Sort order (nextDue/frequency/name) |
+| `includeCompleted` | string | **Yes** | Include completed tasks |
+| `includeDropped` | string | **Yes** | Include dropped tasks |
+| `includeHistory` | boolean | No | Include completion history (analyze) |
+| `sortBy` | string | No | Sort order (nextDue/frequency/name) |
+
+#### Operations
+
+- **`analyze`** - Detailed task-by-task analysis with next due dates
+- **`patterns`** - Frequency statistics and common recurrence patterns
 
 ---
 
-### get_recurring_patterns
+### perspectives
 
-Get recurring task frequency patterns and statistics.
+Manage OmniFocus perspectives and query their contents.
 
 #### Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `activeOnly` | string | **Yes** | Only active tasks |
-| `includeCompleted` | string | **Yes** | Include completed |
-| `includeDropped` | string | **Yes** | Include dropped |
+| `operation` | string | **Yes** | Operation (list/query) |
+| `perspectiveName` | string | No* | Perspective name (*required for query) |
+| `limit` | string | **Yes** | Maximum tasks to return (query) |
+| `includeDetails` | string | **Yes** | Include task details (query) |
+| `includeFilterRules` | string | **Yes** | Include filter rules (list) |
+| `sortBy` | string | **Yes** | Sort order (list) |
+
+#### Operations
+
+- **`list`** - List all available perspectives
+- **`query`** - Get tasks from specific perspective
+
+---
+
+### system
+
+System utilities for version information and diagnostics.
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `operation` | string | **Yes** | Operation (version/diagnostics) |
+| `testScript` | string | **Yes** | Optional custom script for diagnostics |
+
+#### Operations
+
+- **`version`** - Get MCP server version information
+- **`diagnostics`** - Test OmniFocus connection and performance
 
 ---
 
@@ -641,15 +524,15 @@ Get recurring task frequency patterns and statistics.
 
 ```json
 {
-  "tool": "create_task",
+  "tool": "manage_task",
   "arguments": {
+    "operation": "create",
     "name": "Prepare quarterly report",
-    "flagged": "true",
-    "sequential": "true",
     "projectId": "abc123",
     "dueDate": "2025-03-31 17:00",
     "deferDate": "2025-03-25 09:00",
-    "estimatedMinutes": 120,
+    "flagged": "true",
+    "estimatedMinutes": "120",
     "tags": ["reports", "q1"],
     "note": "Include revenue, costs, and projections",
     "repeatRule": {
@@ -665,10 +548,13 @@ Get recurring task frequency patterns and statistics.
 
 ```json
 {
-  "tool": "update_task",
+  "tool": "manage_task",
   "arguments": {
+    "operation": "update",
     "taskId": "xyz789",
-    "projectId": null  // or "" or "null" - all work
+    "projectId": "",  // Empty string moves to inbox
+    "dueDate": "",
+    "deferDate": ""
   }
 }
 ```
@@ -677,8 +563,9 @@ Get recurring task frequency patterns and statistics.
 
 ```json
 {
-  "tool": "export_tasks",
+  "tool": "export",
   "arguments": {
+    "type": "tasks",
     "format": "csv",
     "filter": {
       "completed": "false",
@@ -694,10 +581,11 @@ Get recurring task frequency patterns and statistics.
 ## Performance Tips
 
 1. **Use `details: "false"`** for faster queries when full details aren't needed
-2. **Use `get_active_tags`** instead of `list_tags` for GTD workflows
+2. **Use `tags` operation="active"** instead of operation="list" for GTD workflows
 3. **Set reasonable limits** - default is 25, which is fast
-4. **Use `namesOnly: "true"`** for list_tags when you just need tag names
-5. **Cache results** - many tools have built-in caching (30s-1hr TTL)
+4. **Use `namesOnly: "true"`** for tags when you just need tag names
+5. **Use `minimalResponse: "true"`** for bulk task operations
+6. **Cache results** - many tools have built-in caching (30s-1hr TTL)
 
 ## Error Handling
 
@@ -729,12 +617,13 @@ Common error codes:
 2. **Use preview data** for quick responses when full details aren't needed
 3. **Parameters are strings** - Claude Desktop converts all parameters to strings
 4. **Dates use local time** - Format: "YYYY-MM-DD HH:mm" or "YYYY-MM-DD" (due dates default to 5pm, defer dates to 8am)
-5. **Moving to inbox** - Set projectId to null, "", or "null"
-6. **Tags during creation** - Supported in v2.0.0-beta.1+
+5. **Moving to inbox** - Set projectId to empty string "" or null
+6. **Tags during creation** - Fully supported in v2.0.0
 7. **Repeat rules** - Full support for complex patterns
 8. **Performance modes** - Choose based on need (fast vs detailed)
+9. **Unified operations** - All CRUD operations consolidated into single tools
 
 ---
 
-*Generated for OmniFocus MCP v2.0.0-beta.4*
-*Last updated: 2025-08-18*
+*Generated for OmniFocus MCP v2.0.0*
+*Last updated: 2025-09-02*

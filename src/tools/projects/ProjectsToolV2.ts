@@ -13,7 +13,6 @@ import {
   createErrorResponseV2,
   createListResponseV2,
   OperationTimerV2,
-  normalizeDateInput,
   normalizeBooleanInput,
   normalizeStringInput,
 } from '../../utils/response-format-v2.js';
@@ -135,13 +134,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
   private normalizeInputs(args: ProjectsArgsV2): ProjectsArgsV2 {
     const normalized = { ...args };
 
-    // Normalize dates
-    if (normalized.dueDate) {
-      const date = normalizeDateInput(normalized.dueDate, 'due');
-      if (date) {
-        normalized.dueDate = date.toISOString();
-      }
-    }
+    // Don't normalize dates - pass them through as strings to the script
+    // The OmniFocus script handles date parsing with new Date(dateString)
+    // Converting to ISO string causes "Can't convert types" errors
 
     // Normalize booleans
     if (normalized.flagged !== undefined) {
