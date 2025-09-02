@@ -8,14 +8,14 @@ import { localToUTC } from '../../utils/timezone.js';
 
 export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   name = 'update_task';
-  description = 'Update an existing task in OmniFocus. IMPORTANT: Set minimalResponse=true when updating 10+ tasks to conserve context (reduces response by ~95%). Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am. Avoid ISO-8601 with Z suffix. For bulk tag updates or reorganization, ALWAYS use minimalResponse=true.';
+  description = 'Update an existing task in OmniFocus. Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am. Avoid ISO-8601 with Z suffix. CONTEXT OPTIMIZATION: Use responseLevel="ultra" for 83% token reduction (success + ID only) when updating 10+ tasks, or responseLevel="minimal" for backwards compatibility. Essential for bulk operations to avoid context window exhaustion.';
   schema = UpdateTaskSchema;
 
   async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {
     const timer = new OperationTimer();
 
     try {
-      const { taskId, minimalResponse = false, ...updates } = args;
+      const { taskId, minimalResponse = false, responseLevel = 'standard', ...updates } = args;
 
       // Debug logging: Log all received parameters
       this.logger.info('UpdateTaskTool received parameters:', {
@@ -124,14 +124,24 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       this.logger.info(`Updated task: ${taskId}`);
 
-      // Handle minimal response mode for bulk operations
-      if (minimalResponse) {
-        // Return only essential information to conserve context
-        return {
+      // Handle response levels for context optimization
+      if (minimalResponse || responseLevel === 'minimal' || responseLevel === 'ultra') {
+        const baseResponse = {
           success: true,
-          task_id: taskId,
-          fields_updated: Object.keys(safeUpdates),
+          id: taskId,
           operation: 'update_task',
+        };
+
+        // Level 2 Ultra-minimal: Just success + ID (83% token reduction)
+        if (responseLevel === 'ultra') {
+          return baseResponse as any;
+        }
+        
+        // Minimal: success + ID + key changes (for backwards compatibility)
+        return {
+          ...baseResponse,
+          task_id: taskId, // Keep for backwards compatibility
+          fields_updated: Object.keys(safeUpdates),
         } as any;
       }
 

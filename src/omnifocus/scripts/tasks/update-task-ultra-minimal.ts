@@ -80,6 +80,36 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
         }
       }
       
+      // Parent task assignment (action group support) via bridge
+      if (updates.parentTaskId !== undefined) {
+        if (updates.parentTaskId === null || updates.parentTaskId === "") {
+          // Remove from parent - move to project root
+          const moveResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); if (!t) return "not_found"; const proj = t.containingProject; if (proj) { moveTasks([t], proj); return "moved"; } return "no_project"; })()');
+          if (moveResult === "not_found") {
+            return JSON.stringify({
+              error: true,
+              message: "Task not found when removing from parent: " + taskId
+            });
+          }
+        } else {
+          // Move to new parent task
+          const parentExists = app.evaluateJavascript('Task.byIdentifier("' + updates.parentTaskId + '") ? "yes" : "no"');
+          if (parentExists === "no") {
+            return JSON.stringify({
+              error: true,
+              message: "Parent task not found: " + updates.parentTaskId
+            });
+          }
+          const moveResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); const p = Task.byIdentifier("' + updates.parentTaskId + '"); if (!t || !p) return "not_found"; moveTasks([t], p); return "moved"; })()');
+          if (moveResult === "not_found") {
+            return JSON.stringify({
+              error: true,
+              message: "Failed to move task to parent - task or parent not found"
+            });
+          }
+        }
+      }
+      
       // Repeat rule via bridge
       if (updates.repeatRule) {
         const rule = updates.repeatRule;
@@ -110,10 +140,12 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
         }
       }
       
-      // Get final state via bridge for consistency
-      const finalDataJson = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); return JSON.stringify({ id: t.id.primaryKey, name: t.name, flagged: t.flagged, completed: t.completed, tags: t.tags.map(tag => tag.name), inInbox: t.inInbox, hasRepeatRule: t.repetitionRule !== null, project: t.containingProject ? t.containingProject.name : null }); })()');
-      
-      return finalDataJson;
+      // Return ultra-minimal response for maximum context savings
+      // Level 2: success + ID only (83% token reduction vs full state)
+      return JSON.stringify({
+        success: true,
+        id: taskId
+      });
       
     } catch (error) {
       return JSON.stringify({

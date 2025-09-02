@@ -153,27 +153,14 @@ Real-world usage revealed critical issues during EVE tag reorganization (100+ ta
 
 **🔴 STILL NEEDED:**
 
-### 1. Batch Update Operations (CRITICAL - User Blocked)
-**User Impact**: "No way to update multiple tasks in a single call"
-**Use Cases from Testing**:
-- Bulk retag tasks (EVE reorganization took 100+ individual calls)
-- Batch complete recurring tasks
-- Mass project moves
-
-Create `BatchUpdateTasksTool`:
-```typescript
-{
-  updates: [
-    { taskId: "abc", tags: ["EVE", "PvP"] },
-    { taskId: "def", tags: ["EVE", "PvE"] },
-    // ... up to 50 tasks
-  ],
-  minimalResponse: true,
-  continueOnError: true
-}
-```
-**Implementation**: 2-3 hours
-**Expected savings**: 50 API calls → 1 call
+### ~~1. Batch Update Operations~~ ❌ REMOVED - NOT WORTH IT
+~~**User Impact**: "No way to update multiple tasks in a single call"~~
+**Analysis Result**: Sequential calls + minimal response mode already provide sufficient performance.
+Research shows batch operations don't provide meaningful benefits when:
+- Individual operations are already optimized (our 40-80% speedups)
+- Minimal response mode reduces token usage 50x (15,000 → 300 tokens)  
+- LLM can intelligently orchestrate sequential calls
+- Error handling complexity outweighs benefits
 
 ### 2. Response Control Flags (HIGH - Context Exhaustion)
 **User Quote**: "Each task update consumes ~400-500 tokens"

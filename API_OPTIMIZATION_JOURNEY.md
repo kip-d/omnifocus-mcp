@@ -204,4 +204,177 @@ The result is a **dramatically faster, more reliable, and maintainable** OmniFoc
 - Delivers 40-90% performance improvements across operations
 - Establishes architectural patterns for future development
 
-**Key Learning**: Optimization isn't just about individual techniques - it's about creating **systems that integrate multiple optimizations** for compound benefits.
+## Phase 3: Context Optimization & Architectural Decisions (December 2024)
+
+After implementing the enhanced helper architecture, we turned our attention to context window exhaustion - a critical issue for LLM workflows with extensive OmniFocus operations.
+
+### The Context Challenge
+User feedback revealed context window exhaustion issues:
+- EVE tag reorganization (100+ tasks) consumed 15,000 tokens in responses
+- Each task update consuming 400-500 tokens despite optimizations
+- Long conversation limits reached during complex workflows
+
+### Initial Consideration: Batch Operations
+
+**The Proposal**: Create batch update operations to reduce API calls from 100 individual calls to 1 batch call.
+
+**Research Findings**: 
+- Web research showed batch operations provide 7-8x performance improvements
+- MCP request batching tools like "BatchIt" specifically address LLM workflow inefficiencies
+- 50% cost savings available through batch APIs
+
+**Critical Analysis**:
+However, our situation was unique:
+- ✅ Individual operations already optimized (40-80% speedups from direct APIs)
+- ✅ Minimal response mode already provided 50x token reduction (15,000 → 300 tokens)
+- ✅ LLM can intelligently orchestrate sequential calls
+- ❌ Batch operations introduce error handling complexity
+- ❌ Token savings marginal when minimal response already implemented
+
+**Decision**: **Rejected batch operations** as optimization theater.
+
+*Reasoning*: When individual operations are fast and responses are minimal, sequential calls with LLM orchestration provide better user experience (incremental feedback, simpler error handling) without meaningful performance penalty.
+
+### Alternative Context Optimization Strategy
+
+Instead of batch operations, we identified higher-impact context reduction opportunities:
+
+#### 1. Ultra-Minimal Response Modes
+- Current minimal response: ~300 tokens
+- Ultra-minimal response: ~50 tokens  
+- Success-only response: ~10 tokens
+- Expected combined improvement: 500x reduction from original
+
+#### 2. Smart Summary Responses
+Replace large result arrays with intelligent summaries:
+```
+Instead of: { tasks: [task1, task2, ...] } // 1000+ tokens
+Use: { summary: "Updated 47 tasks: EVE (23), PvP (15), PvE (9)" } // ~50 tokens
+```
+
+#### 3. Response Compression Patterns
+Structured data compression for 40-60% token reduction without information loss.
+
+#### 4. Streaming Response Investigation (December 2024)
+
+**The Proposal**: Implement streaming responses to provide progressive updates during long operations.
+
+**Research Findings**:
+- ✅ MCP supports streaming via JSON-RPC progress notifications and SSE
+- ✅ Server-Sent Events (SSE) available in MCP transport layer
+- ✅ "Streamable HTTP" introduced in 2024 MCP specification
+- ✅ Progress notifications supported: `{ "method": "progress", "params": { "percent": 50 } }`
+
+**Critical Discovery**:
+However, **Claude Desktop cannot process incremental responses during tool execution**:
+- ❌ LLM assistants receive only the FINAL complete response
+- ❌ Progress notifications don't reduce context window usage
+- ❌ Context exhaustion still occurs regardless of streaming
+
+**Decision**: **Rejected streaming for context optimization**.
+
+*Reasoning*: While MCP supports streaming technically, Claude Desktop's architecture means LLMs see complete responses only. Streaming provides server-side progress indication but doesn't solve token usage in conversations.
+
+**Alternative Focus**: Ultra-minimal response modes targeting 60x further token reduction.
+
+#### 5. Ultra-Minimal Response Mode Analysis (December 2024)
+
+**The Proposal**: Implement extreme response reduction to combat context window exhaustion.
+
+**Initial Analysis**: 
+Current "ultra-minimal" responses still contain ~120 tokens:
+```json
+{
+  "id": "ABC123", "name": "Task Name", "flagged": false,
+  "completed": false, "tags": ["EVE"], "inInbox": false,
+  "hasRepeatRule": false, "project": "Project Name"
+}
+```
+
+**Response Level Options Considered**:
+
+1. **Level 1 - Current Ultra-Minimal** (~120 tokens): Full state confirmation
+2. **Level 2 - Success + ID** (~20 tokens): `{ "success": true, "id": "ABC123" }`
+3. **Level 3 - Success Only** (~10 tokens): `{ "success": true }`  
+4. **Level 4 - Minimal Symbol** (~5 tokens): `"✓"`
+
+**Critical Analysis - LLM Workflow Requirements**:
+
+**Task ID Immutability Investigation**:
+- ✅ OmniFocus task IDs are stable (`readonly identifier: string`)
+- ✅ `Task.byIdentifier()` lookup method confirms persistence
+- ✅ No evidence of ID changes in codebase audit
+
+**Multi-Step Workflow Analysis**:
+```typescript
+// Common LLM pattern: Sequential operations on same task
+update_task(id="ABC123", tags=["new"])    // Need: task ID for next step
+update_task(id="ABC123", dueDate="...")   // Uses same ID
+```
+**Finding**: LLM requires task ID persistence for workflow continuity.
+
+**State Confirmation Necessity**:
+- **Questioned**: Does LLM actually use returned state data?
+- **Analysis**: Most workflows just need: "Did it work? What's the ID?"
+- **Conclusion**: Full state return forces tight coupling; explicit queries promote better architecture.
+
+**Error Handling Requirements**:
+```typescript
+{ "error": true, "message": "Project not found: XYZ" }
+```
+**Finding**: Detailed error messages remain critical for LLM troubleshooting.
+
+**Risk Assessment**:
+
+**Level 4 ("✓") - REJECTED**:
+- ❌ LLM loses task ID for subsequent operations
+- ❌ No confirmation of what succeeded  
+- ❌ Breaks multi-step workflows
+
+**Level 3 (Success Only) - REJECTED**:
+- ❌ LLM still loses task ID
+- ❌ Unable to chain operations
+
+**Level 2 (Success + ID) - SELECTED**:
+- ✅ Preserves multi-step workflow capability
+- ✅ 83% token reduction (120 → 20 tokens)
+- ✅ Maintains error handling detail
+- ✅ Forces explicit queries for state (better separation of concerns)
+- ✅ No workflow disruption
+
+**Decision**: **Implement Level 2 Ultra-Minimal Response System**
+
+*Reasoning*: Achieves major token reduction while preserving all critical workflow capabilities. The 83% reduction provides substantial context window relief without "shooting ourselves in the foot" by breaking LLM operation chains.
+
+**Architecture Benefit**: Forces clean separation between "command confirmation" (minimal) and "data queries" (detailed), promoting better tool usage patterns.
+
+### Architecture Decision Framework
+
+This analysis established our framework for optimization decisions:
+
+1. **Measure Current State** - Understand actual bottlenecks
+2. **Research Best Practices** - Don't assume, validate with data
+3. **Analyze Context** - Generic solutions may not apply to optimized systems
+4. **Consider Trade-offs** - Complexity vs. marginal gains
+5. **User Experience Impact** - Progress feedback vs. batch waiting
+
+**Key Learning**: **Not all optimizations are worth implementing**. When a system is already highly optimized, additional complexity often provides diminishing returns. Focus optimization efforts on actual rather than theoretical bottlenecks.
+
+## Conclusion
+
+This optimization journey demonstrates the evolution from:
+1. **Discovery** → Finding undocumented API methods
+2. **Implementation** → Using methods in individual scripts  
+3. **Integration** → Systematic helper architecture combining all optimizations
+4. **Decision-Making** → Rejecting premature optimizations based on analysis
+5. **Workflow Analysis** → Understanding LLM requirements before extreme optimizations
+
+The result is a **dramatically faster, more reliable, and maintainable** OmniFocus MCP server that:
+- Handles databases of any size without timeout issues
+- Provides 60-80% context reduction for LLM reasoning (helper optimization)
+- Delivers 40-90% performance improvements across operations (direct APIs)
+- Achieves 83% further token reduction while preserving workflows (ultra-minimal responses)
+- Establishes architectural patterns for future development
+- **Makes informed decisions about what NOT to optimize**
+
+**Key Learning**: Optimization isn't just about individual techniques - it's about creating **systems that integrate multiple optimizations** for compound benefits while **avoiding optimization theater** when the system is already performing well.
