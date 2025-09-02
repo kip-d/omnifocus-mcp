@@ -54,10 +54,13 @@ First, confirm MCP connection and create test resources:
 **Expected Result**: ✅ Success response with project updated
 **Previous Error**: ❌ "Can't convert types" error
 
-**If Test Fails**: Include the complete raw request and response data:
-- Full MCP request parameters sent
-- Complete error response received
-- Any console logs or additional error details
+**CRITICAL - If Test Fails**: Include the COMPLETE RAW JSON DATA:
+- **Full Request**: Copy/paste the complete JSON request sent to the MCP server
+- **Full Response**: Copy/paste the complete JSON response received (not paraphrased!)
+- **OmniFocus Check**: Go to OmniFocus and verify - was the project actually updated or not?
+  - Check if the note changed to "Updated project with due date for testing"
+  - Check if the due date changed to September 30, 2025 at 5:00 PM
+  - Report what you actually see in OmniFocus vs what the MCP response said
 
 ---
 
@@ -83,26 +86,49 @@ First, confirm MCP connection and create test resources:
 **Expected Result**: ✅ Success response with folder deleted (project moves to root/inbox)
 **Previous Error**: ❌ "Can't convert types" error with DELETE_FAILED code
 
-**If Test Fails**: Include the complete raw request and response data:
-- Full MCP request parameters sent
-- Complete error response received 
-- Any console logs or additional error details
+**CRITICAL - If Test Fails**: Include the COMPLETE RAW JSON DATA:
+- **Full Request**: Copy/paste the complete JSON request sent to the MCP server  
+- **Full Response**: Copy/paste the complete JSON response received (not paraphrased!)
+- **OmniFocus Check**: Go to OmniFocus and verify - was the folder actually deleted or not?
+  - Check if "Fix Verification Test Folder" still exists in your folder list
+  - Check if "Fix Verification Test Project" moved to a different location
+  - Report what you actually see in OmniFocus vs what the MCP response said
 
 ---
 
 ## 📊 Test Results Template
 
-Please report your results in this format:
+**IMPORTANT**: Include COMPLETE RAW DATA, not summaries or paraphrases!
 
 ### ✅ Test 1 Results: Project Update
 - **Status**: [SUCCESS/FAILED]
-- **Response**: [Brief description of what happened]
-- **Error Details**: [If failed, include error code and message]
+- **Raw Request JSON**: 
+  ```json
+  [Paste the complete request JSON here]
+  ```
+- **Raw Response JSON**: 
+  ```json
+  [Paste the complete response JSON here]
+  ```
+- **OmniFocus Verification**: 
+  - Project note actually changed to "Updated project with due date for testing"? [YES/NO]
+  - Project due date actually set to Sept 30, 2025 5:00 PM? [YES/NO]
+  - What the MCP response claimed vs what actually happened: [Describe any discrepancies]
 
 ### ✅ Test 2 Results: Folder Deletion  
 - **Status**: [SUCCESS/FAILED] 
-- **Response**: [Brief description of what happened]
-- **Error Details**: [If failed, include error code and message]
+- **Raw Request JSON**: 
+  ```json
+  [Paste the complete request JSON here]
+  ```
+- **Raw Response JSON**: 
+  ```json
+  [Paste the complete response JSON here]
+  ```
+- **OmniFocus Verification**: 
+  - "Fix Verification Test Folder" actually deleted from OmniFocus? [YES/NO]
+  - "Fix Verification Test Project" moved to root/inbox? [YES/NO]
+  - What the MCP response claimed vs what actually happened: [Describe any discrepancies]
 
 ---
 
@@ -111,10 +137,28 @@ Please report your results in this format:
 **PASS**: Both tests complete successfully with no "Can't convert types" errors
 **FAIL**: Either test returns "Can't convert types" or similar conversion errors
 
+### Key Diagnostic Questions:
+
+1. **Are the MCP requests reaching the server?** (Check if you see "Executing tool: projects" in logs)
+2. **Are the operations actually working in OmniFocus despite error messages?** (Check the database directly)
+3. **What are the complete JSON responses?** (Raw data helps identify if it's response format vs actual failure)
+
 ### Expected Behavior Changes:
 
 1. **Project Update**: Should successfully update project with due date and notes
 2. **Folder Deletion**: Should successfully delete folder and move contained projects appropriately
+
+---
+
+## 🚨 Critical Debug Information Needed
+
+If tests fail, we need to distinguish between:
+
+- **False negative**: Operation succeeds in OmniFocus but MCP reports error
+- **True failure**: Operation fails and MCP correctly reports error  
+- **Response formatting issue**: Operation succeeds but response format is wrong
+
+**The raw JSON responses will tell us exactly what's happening!**
 
 ---
 
