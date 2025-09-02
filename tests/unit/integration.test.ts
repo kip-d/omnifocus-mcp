@@ -101,11 +101,8 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(toolNames).toContain('tasks');           // QueryTasksToolV2 - consolidated task queries
       expect(toolNames).toContain('projects');        // ProjectsToolV2 - all project operations
       
-      // Task CRUD operations (still separate)
-      expect(toolNames).toContain('create_task');
-      expect(toolNames).toContain('update_task');
-      expect(toolNames).toContain('complete_task');
-      expect(toolNames).toContain('delete_task');
+      // Task CRUD operations (consolidated into manage_task)
+      expect(toolNames).toContain('manage_task');
       
       // Analytics tools
       expect(toolNames).toContain('productivity_stats');
@@ -117,10 +114,8 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       expect(toolNames).toContain('system');          // SystemToolV2
       expect(toolNames).toContain('perspectives');    // PerspectivesToolV2
       
-      // Export tools
-      expect(toolNames).toContain('export_tasks');
-      expect(toolNames).toContain('export_projects');
-      expect(toolNames).toContain('bulk_export');
+      // Export tools (consolidated)
+      expect(toolNames).toContain('export');
     });
   });
 
@@ -158,11 +153,12 @@ describe('OmniFocus MCP Server Integration Tests', () => {
     it('should handle task creation with validation', { timeout: 20000 }, async () => {
       // Server should already be initialized from previous tests
       const result = await sendRequest('tools/call', {
-        name: 'create_task',
+        name: 'manage_task',
         arguments: {
+          operation: 'create',
           name: 'Test task from integration test',
           note: 'This is a test task',
-          flagged: true,
+          flagged: 'true',
           tags: ['test', 'integration', 'mcp-test'],
         },
       });
@@ -243,19 +239,24 @@ describe('OmniFocus MCP Server Integration Tests', () => {
     });
 
     it('should handle missing required parameters', async () => {
-      try {
-        await sendRequest('tools/call', {
-          name: 'update_task',
-          arguments: {
-            // Missing required taskId
-            name: 'Updated name',
-          },
-        });
-        expect.fail('Should have thrown an error');
-      } catch (error: any) {
-        expect(error.message).toContain('Invalid parameters');
-        expect(error.message).toContain('taskId');
-      }
+      const result = await sendRequest('tools/call', {
+        name: 'manage_task',
+        arguments: {
+          operation: 'update',
+          // Missing required taskId
+          name: 'Updated name',
+        },
+      });
+
+      // ManageTaskTool should return an error response for missing required parameters
+      expect(result).toBeDefined();
+      expect(result.content).toBeInstanceOf(Array);
+      expect(result.content[0].type).toBe('text');
+      
+      const response = JSON.parse(result.content[0].text);
+      expect(response.success).toBe(false);
+      expect(response.error.message).toContain('taskId is required');
+      expect(response.error.code).toBe('MISSING_PARAMETER');
     });
   });
 });

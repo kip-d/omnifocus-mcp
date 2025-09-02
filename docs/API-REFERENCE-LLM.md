@@ -28,7 +28,7 @@
 **manage_reviews** `operation*` `projectId?` `reviewDate?` `reviewInterval?` `nextReviewDate?`
 - Ops: list|mark_reviewed(projectId*)|set_schedule(projectId*,reviewInterval*)|clear_schedule(projectId*)
 
-## Analytics (4 tools - all return summary first)
+## Analytics (5 tools - all return summary first)
 
 **productivity_stats** `period*` `includeProjectStats*` `includeTagStats*`
 - Period: today|week|month|quarter|year
@@ -39,8 +39,11 @@
 **analyze_overdue** `includeRecentlyCompleted*` `groupBy*` `limit*`
 - GroupBy: project|age|priority
 
-**life_analysis** `analysisDepth*` `focusAreas*` `includeRawData*` `maxInsights*`
+**workflow_analysis** `analysisDepth*` `focusAreas*` `includeRawData*` `maxInsights*`
 - Depth: quick|standard|deep
+
+**analyze_patterns** `patterns*` `options*`
+- Patterns: duplicates|dormant_projects|tag_audit|deadline_health|waiting_for|estimation_bias|next_actions|review_gaps|all
 
 ## Utilities (4 tools)
 

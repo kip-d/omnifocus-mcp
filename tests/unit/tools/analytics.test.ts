@@ -102,12 +102,13 @@ describe('Analytics Tools', () => {
         await tool.executeValidated({});
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-          expect.any(String),
+          expect.stringContaining('safeGet'),
           {
             options: {
               period: 'week',
               includeProjectStats: true,
               includeTagStats: true,
+              includeInactive: false,
             }
           }
         );

@@ -232,36 +232,34 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 }
 ```
 
-## Available Tools (46 Total)
+## Available Tools (15 Consolidated)
 
-### Consolidated Tools (Recommended for AI Agents)
+### V2.0.0 Consolidated Architecture
 
-**Task Queries**: `query_tasks` - Unified interface for all task querying (replaces 7 individual tools)  
-**Folder Management**: `manage_folder` - Complete folder operations with operation parameter  
-**Review Management**: `manage_reviews` - GTD review workflow management  
-**Batch Operations**: `batch_task_operations` - Efficient multi-task operations
+**Task Operations (2 tools)**:
+- `tasks` - Unified task querying with modes (search, overdue, today, upcoming, available, blocked, flagged)
+- `manage_task` - All task CRUD operations (create, update, complete, delete)
 
-### Standard Tools
+**Project Operations (1 tool)**:
+- `projects` - All project operations (list, create, update, complete, delete, review, stats)
 
-**Task CRUD**: `create_task`, `update_task`, `complete_task`, `delete_task`, `get_task_count`, `todays_agenda`
+**Organization (3 tools)**:
+- `folders` - Complete folder operations (list, get, search, create, update, delete, move)
+- `tags` - Tag management (list, active, create, rename, delete, merge, hierarchy)
+- `manage_reviews` - GTD review workflow management
 
-**Projects**: `list_projects`, `create_project`, `update_project`, `complete_project`, `delete_project`
+**Analytics (5 tools)**:
+- `productivity_stats` - GTD health metrics and completion statistics
+- `task_velocity` - Completion trends and velocity analysis  
+- `analyze_overdue` - Bottleneck analysis for overdue items
+- `workflow_analysis` - Deep workflow pattern analysis
+- `analyze_patterns` - Database-wide pattern detection (duplicates, dormant projects, etc.)
 
-**Perspectives**: `list_perspectives`, `query_perspective` - Access user's custom perspectives and their contents
-
-**Analytics**: `productivity_stats`, `task_velocity`, `overdue_analysis`, `analyze_patterns` (NEW - database-wide pattern detection)
-
-**Tags**: `list_tags`, `get_active_tags`, `manage_tags`
-
-**Export**: `export_tasks`, `export_projects`, `bulk_export`
-
-### Legacy Tools (Deprecated but Functional)
-
-**Individual Task Queries**: `list_tasks`, `next_actions`, `blocked_tasks`, `available_tasks`, `overdue_tasks`, `upcoming_tasks` *(use `query_tasks` instead)*
-
-**Individual Folder Tools**: `create_folder`, `update_folder`, `delete_folder`, `move_folder` *(use `manage_folder` instead)*
-
-**Individual Review Tools**: `projects_for_review`, `mark_project_reviewed`, `set_review_schedule` *(use `manage_reviews` instead)*
+**Utilities (4 tools)**:
+- `export` - Data export in JSON/CSV/Markdown formats
+- `recurring_tasks` - Recurring task analysis and patterns
+- `perspectives` - Access to OmniFocus perspectives
+- `system` - Version info and diagnostics
 
 ### Documentation
 

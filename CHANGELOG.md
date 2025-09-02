@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pattern Analysis Integration**: Merged pattern-analysis branch with comprehensive database analysis
+  - Added PatternAnalysisToolV2 with 8 analysis patterns (duplicates, dormant projects, tag audit, deadline health, waiting tasks, estimation bias, next actions, review gaps)
+  - Maintains 15 consolidated tools architecture for optimal LLM usage
+  - All integration tests updated for consolidated tool structure
+
+### Fixed  
+- **Documentation Corrections**: Removed non-standard MCP shutdown method documentation
+  - MCP specification does not define shutdown methods - servers terminate via stdio transport
+  - Updated CLAUDE.md with correct testing patterns using timeout
+  - Corrected tool counts throughout documentation (confirmed 15 tools)
+- **MCP Specification Reference**: Added comprehensive reference section to CLAUDE.md
+  - Direct links to official MCP specification (2025-06-18 version)
+  - Key sections: Lifecycle, Transports, Tools, Prompts
+  - SDK version management and common patterns reference
+  - Critical implementation details for future development
+- **MCP-Compliant Server Shutdown**: Fixed 6+ month specification violation
+  - **CRITICAL DISCOVERY**: Git history analysis revealed we NEVER had stdin handling
+  - Server now exits gracefully when stdin closes (per MCP lifecycle specification)
+  - Added stdin 'end' and 'close' event handlers for proper cleanup
+  - Eliminates timeout requirements for testing - server exits cleanly
+  - Follows MCP specification: stdin close → server exit → SIGTERM → SIGKILL cascade
+  - **Impact**: Fixed fundamental developer experience issue affecting every test since project inception
+
+### Performance
 - **Direct OmniFocus API Optimizations**: Discovered and implemented undocumented API methods
   - Found official methods in OmniFocus Scripting Dictionary not in TypeScript definitions
   - `numberOfTasks()`, `numberOfAvailableTasks()`, `numberOfCompletedTasks()` for direct counts

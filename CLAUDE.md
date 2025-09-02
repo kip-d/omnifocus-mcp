@@ -17,6 +17,19 @@ This document contains hard-won insights that will save you from repeating costl
 - **Always run integration tests** before considering features complete
 - Build before running: `npm run build`
 
+## 🚨 CRITICAL LESSON: MCP stdin Handling
+
+**We spent 6+ months with broken MCP lifecycle compliance!** 
+
+Every MCP server MUST handle stdin closure for specification compliance:
+```typescript
+// ✅ REQUIRED - Add to every MCP server
+process.stdin.on('end', () => process.exit(0));
+process.stdin.on('close', () => process.exit(0));
+```
+
+Without this, servers hang forever and violate MCP specification. See `docs/LESSONS_LEARNED.md` for full embarrassing details.
+
 ## Documentation Management
 **NEVER delete documentation outright unless there's a clear reason (e.g., contains incorrect/dangerous information).**
 
@@ -135,13 +148,58 @@ npx @modelcontextprotocol/inspector dist/index.js  # Interactive testing
 ```
 
 ### Testing Pattern
-Always send quit command after MCP tests to avoid timeouts:
-```typescript
-// Send your test request, then immediately send quit
-const request = { jsonrpc: '2.0', method: 'tools/call', ... };
-const exitRequest = { jsonrpc: '2.0', method: 'quit' };
-input: JSON.stringify(request) + '\n' + JSON.stringify(exitRequest) + '\n'
+**MCP-compliant server termination for testing:**
+```bash
+# ✅ BEST - Proper MCP shutdown by closing stdin
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
+
+# ✅ Quick tool count with proper shutdown  
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js | jq -r '.result.tools | length'
+
+# ✅ Test any MCP method with graceful termination
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
+
+# ⚠️ FALLBACK - Use timeout only if server doesn't exit gracefully
+timeout 10s node dist/index.js <<< '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+**MCP Specification Compliance**: 
+- **stdio transport**: Client closes stdin → Server exits gracefully ✅ IMPLEMENTED
+- **No protocol shutdown**: MCP uses transport-level termination, not JSON-RPC methods
+- **Graceful cascade**: stdin close → server exit → SIGTERM → SIGKILL (if needed)
+- **Our Implementation**: Added stdin 'end'/'close' handlers → process.exit(0) for clean termination
+
+## 📖 MCP Specification Reference
+
+**Official MCP Specification**: https://modelcontextprotocol.io/specification/2025-06-18/
+
+### Key Specification Sections
+- **[Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle)** - Server startup, initialization, and shutdown
+- **[Transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)** - stdio, HTTP/SSE transport mechanisms
+- **[Tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)** - Tool definition, parameter schemas, execution
+- **[Prompts](https://modelcontextprotocol.io/specification/2025-06-18/server/prompts)** - Prompt registration and argument handling
+
+### Critical Implementation Details
+- **Version**: Current protocol version is "2025-06-18"  
+- **Transport**: We use stdio transport (stdin/stdout communication)
+- **Shutdown**: No protocol-level shutdown - servers exit when stdin closes
+- **Error Handling**: Use McpError with proper error codes from specification
+- **Type Safety**: Parameter schemas must handle Claude Desktop's string conversion
+
+### SDK Version Management
+- **Current**: @modelcontextprotocol/sdk@1.17.4 (matches latest available)
+- **Update Check**: `npm view @modelcontextprotocol/sdk version`
+- **GitHub Repo**: https://github.com/modelcontextprotocol/typescript-sdk
+
+### Common MCP Patterns & Requirements
+- **Tool Schemas**: Use Zod schemas, handle string coercion for Claude Desktop
+- **Response Format**: `{ content: [{ type: 'text', text: JSON.stringify(result) }] }`
+- **Error Codes**: INVALID_REQUEST (-32600), METHOD_NOT_FOUND (-32601), INVALID_PARAMS (-32602), INTERNAL_ERROR (-32603)
+- **Capabilities**: Declare tool and prompt capabilities during initialization
+- **Transport**: stdio uses stdin/stdout, HTTP uses Server-Sent Events
+
+### When In Doubt
+Always reference the official specification rather than making assumptions about MCP behavior.
 
 ### Project Structure
 - `src/omnifocus/`: OmniAutomation integration via JXA

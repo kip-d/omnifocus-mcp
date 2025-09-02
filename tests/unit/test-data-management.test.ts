@@ -154,7 +154,7 @@ class TestDataManager {
       tags: tags
     };
     
-    const result = await this.callTool('create_task', taskParams);
+    const result = await this.callTool('manage_task', { operation: 'create', ...taskParams });
     if (result.success && result.data?.task?.taskId) {
       this.createdTaskIds.push(result.data.task.taskId);
     }
@@ -189,7 +189,7 @@ class TestDataManager {
     // Clean up created tasks
     for (const taskId of this.createdTaskIds) {
       try {
-        await this.callTool('delete_task', { taskId: taskId });
+        await this.callTool('manage_task', { operation: 'delete', taskId: taskId });
         this.cleanupMetrics.operations++;
       } catch (e) {
         console.log(`  ⚠️  Could not delete task ${taskId}: ${e}`);
@@ -216,7 +216,7 @@ class TestDataManager {
       
       for (const task of tasks.data.tasks || []) {
         try {
-          await this.callTool('delete_task', { taskId: task.id });
+          await this.callTool('manage_task', { operation: 'delete', taskId: task.id });
           this.cleanupMetrics.operations++;
         } catch (e) {
           console.log(`  ⚠️  Could not delete task ${task.id}: ${e}`);

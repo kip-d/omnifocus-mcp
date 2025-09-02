@@ -92,10 +92,11 @@ describe('TagsToolV2', () => {
 
       expect(result.success).toBe(true);
       expect(result.metadata.mode).toBe('optimized');
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ namesOnly: true })
-      );
+      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      // Verify the script contains helper functions (our new architecture)
+      const [scriptCall, paramsCall] = mockOmniAutomation.buildScript.mock.calls[0];
+      expect(scriptCall).toContain('safeGet');
+      expect(paramsCall.options).toHaveProperty('namesOnly', true);
     });
 
     it('should handle script execution errors', async () => {

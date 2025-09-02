@@ -59,6 +59,18 @@ async function runServer() {
   registerPrompts(server);
 
   const transport = new StdioServerTransport();
+  
+  // Handle stdin closure for proper MCP lifecycle compliance
+  process.stdin.on('end', () => {
+    logger.info('stdin closed, exiting gracefully per MCP specification');
+    process.exit(0);
+  });
+
+  process.stdin.on('close', () => {
+    logger.info('stdin stream closed, exiting gracefully per MCP specification');
+    process.exit(0);
+  });
+
   await server.connect(transport);
 }
 

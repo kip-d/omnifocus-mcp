@@ -217,4 +217,76 @@ return {
 
 ---
 
+## 🚨 CRITICAL: MCP Server Lifecycle Compliance
+
+### **The Great stdin Discovery (September 2025)**
+
+**THE EMBARRASSING TRUTH:** For **6+ months and 50+ commits**, our MCP server violated the core MCP specification by never handling stdin closure properly.
+
+#### What We Did Wrong
+```typescript
+// ❌ WRONG - Hangs forever, violates MCP spec
+const transport = new StdioServerTransport();
+await server.connect(transport); // Never exits when client closes stdin
+```
+
+#### The Hidden Cost
+- **Every test required timeout**: `timeout 5s node dist/index.js`
+- **2-minute waits for hanging processes**
+- **Manual process killing** in development
+- **Poor developer experience** for months
+- **MCP specification violation** from day one
+
+#### The Git History Investigation
+- **Search result**: ZERO instances of `process.stdin.on` in entire git history
+- **Original commit**: Missing stdin handling
+- **Every commit since**: Never fixed the fundamental issue
+- **Root cause**: MCP SDK examples don't show this pattern
+
+#### The Correct Implementation
+```typescript
+// ✅ CORRECT - MCP specification compliant
+const transport = new StdioServerTransport();
+
+// Handle stdin closure for proper MCP lifecycle compliance
+process.stdin.on('end', () => {
+  logger.info('stdin closed, exiting gracefully per MCP specification');
+  process.exit(0);
+});
+
+process.stdin.on('close', () => {
+  logger.info('stdin stream closed, exiting gracefully per MCP specification');
+  process.exit(0);
+});
+
+await server.connect(transport);
+```
+
+#### MCP Specification Requirements
+**From https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle:**
+- **stdio transport**: Client closes stdin → Server should exit gracefully
+- **No protocol shutdown**: MCP uses transport-level termination
+- **Graceful cascade**: stdin close → server exit → SIGTERM → SIGKILL
+
+#### Testing Impact
+```bash
+# 🚫 BEFORE: Required timeout workaround
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 5s node dist/index.js
+
+# ✅ AFTER: Clean MCP-compliant shutdown  
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
+# Exits immediately when stdin closes!
+```
+
+#### Key Lesson
+**ALWAYS implement stdin handling in MCP servers.** The MCP SDK examples don't show this critical requirement, leading to widespread non-compliance.
+
+**Developer Impact:** This single fix eliminated:
+- All timeout requirements in testing
+- 2-minute waits for hanging processes  
+- Manual process killing
+- MCP specification violations
+
+---
+
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.
