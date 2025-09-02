@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to mark a project as reviewed
@@ -10,7 +10,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Proper error handling for missing projects
  */
 export const MARK_PROJECT_REVIEWED_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const projectId = {{projectId}};

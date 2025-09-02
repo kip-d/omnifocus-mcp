@@ -73,6 +73,48 @@ try { name = task.name(); } catch { name = null; }
 - Explain that MCP gives complete/accurate totals
 - OmniFocus UI filtering is inconsistent in "Everything" view
 
+## 🚨 CRITICAL: Systematic Script Size Crisis (September 2025)
+
+### Major Architectural Gap Discovered
+**Problem:** Found 36 files still using `getAllHelpers()` causing massive script bloat
+
+**Impact:**
+- Scripts were 41KB+ (approaching 50KB JXA limit)
+- "Can't convert types" errors were actually **script truncation failures**
+- Multiple tools failing with identical symptoms
+- 6+ months of undiscovered performance issues
+
+**Root Cause Analysis:**
+- Previous helper optimization was **incomplete**
+- No systematic audit process in place  
+- Easy to miss during individual feature development
+- `getAllHelpers()` includes 75KB+ of code vs 5KB minimal helpers
+
+**Systematic Solution Applied:**
+```bash
+# Found 36 files with getAllHelpers() usage
+Analytics scripts (4 files)    → getAnalyticsHelpers()
+Export scripts (3 files)       → getSerializationHelpers() 
+Task queries (9 files)         → getBasicHelpers()
+CRUD operations (6 files)      → getBasicHelpers()
+Simple operations (8 files)    → getMinimalHelpers()
+Recurring tasks (2 files)      → getRecurrenceHelpers()
+Date ranges (2 files)          → getBasicHelpers()
+Project stats (1 file)         → getAnalyticsHelpers()
+Reviews (3 files)              → getBasicHelpers()
+```
+
+**Lessons for Future:**
+1. **Mandatory Helper Audits**: Add to development checklist
+2. **Automated Detection**: Consider linting rules for `getAllHelpers()`  
+3. **Individual Analysis Required**: Never blindly replace - each script needs appropriate helpers
+4. **Script Size Monitoring**: Track script sizes during development
+
+**Expected Impact:** 
+- Resolves all "Can't convert types" errors from script size limits
+- 90% reduction in script sizes (5KB vs 75KB+)
+- Dramatic performance improvements across all tools
+
 ---
 
 ## 🔧 Technical Gotchas

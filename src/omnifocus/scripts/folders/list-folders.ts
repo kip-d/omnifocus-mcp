@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list folders in OmniFocus with hierarchy information
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Sort by name, depth, or modification date
  */
 export const LIST_FOLDERS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   
   // Folder serialization helper
   function serializeFolder(folder, includeHierarchy = true, includeProjects = false, depth = 0) {

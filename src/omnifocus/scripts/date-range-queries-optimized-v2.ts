@@ -3,13 +3,13 @@
  * Manual filtering is 7x faster than whose() with large databases
  */
 
-import { getAllHelpers } from './shared/helpers.js';
+import { getBasicHelpers } from './shared/helpers.js';
 
 /**
  * Get upcoming tasks - OPTIMIZED without whose()
  */
 export const GET_UPCOMING_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
@@ -100,7 +100,7 @@ export const GET_UPCOMING_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT = `
  * Get overdue tasks - OPTIMIZED without whose()
  */
 export const GET_OVERDUE_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
@@ -178,7 +178,7 @@ export const GET_OVERDUE_TASKS_OPTIMIZED_NO_WHOSE_SCRIPT = `
  * Get tasks in date range - OPTIMIZED without whose()
  */
 export const GET_TASKS_IN_DATE_RANGE_OPTIMIZED_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

@@ -1,10 +1,10 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to complete a task in OmniFocus using JXA
  */
 export const COMPLETE_TASK_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

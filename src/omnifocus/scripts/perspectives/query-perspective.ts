@@ -1,11 +1,11 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to query tasks from a specific perspective
  * Uses evaluateJavascript bridge to apply perspective filters
  */
 export const QUERY_PERSPECTIVE_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

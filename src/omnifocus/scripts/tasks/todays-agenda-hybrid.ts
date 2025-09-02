@@ -3,13 +3,13 @@
  * Massive performance improvement for daily task views
  */
 
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Get today's agenda using Omni Automation API for better performance
  */
 export const TODAYS_AGENDA_HYBRID_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const includeFlagged = {{includeFlagged}};

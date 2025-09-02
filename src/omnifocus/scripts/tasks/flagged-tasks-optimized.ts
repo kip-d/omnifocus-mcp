@@ -3,10 +3,10 @@
  * Uses direct JXA iteration with early exits for performance
  */
 
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 export const FLAGGED_TASKS_OPTIMIZED_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

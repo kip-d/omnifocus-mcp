@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze overdue tasks in OmniFocus
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Recently completed overdue task tracking
  */
 export const OVERDUE_ANALYSIS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getAnalyticsHelpers()}
   
   (() => {
     const options = {{options}};

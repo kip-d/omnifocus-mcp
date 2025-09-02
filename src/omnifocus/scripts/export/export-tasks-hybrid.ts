@@ -3,13 +3,13 @@
  * Massive performance improvement for large exports
  */
 
-import { getAllHelpers } from '../shared/helpers.js';
+import { getSerializationHelpers } from '../shared/helpers.js';
 
 /**
  * Export tasks using Omni Automation API for better performance
  */
 export const EXPORT_TASKS_HYBRID_SCRIPT = `
-  ${getAllHelpers()}
+  ${getSerializationHelpers()}
   
   (() => {
     const filter = {{filter}};

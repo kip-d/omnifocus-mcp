@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to get today's agenda from OmniFocus
@@ -14,7 +14,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Limited default results
  */
 export const TODAYS_AGENDA_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const options = {{options}};

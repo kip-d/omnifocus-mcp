@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getRecurrenceHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze and summarize recurring task patterns in OmniFocus
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Most common pattern identification
  */
 export const GET_RECURRING_PATTERNS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getRecurrenceHelpers()}
   
   (() => {
   const options = {{options}};

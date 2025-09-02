@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getSerializationHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export tasks from OmniFocus in various formats
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Proper CSV escaping for complex data
  */
 export const EXPORT_TASKS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getSerializationHelpers()}
   
   (() => {
     const filter = {{filter}};

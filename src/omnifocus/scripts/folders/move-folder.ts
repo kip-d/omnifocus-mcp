@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to move a folder within the OmniFocus hierarchy
@@ -10,7 +10,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Prevent circular hierarchy
  */
 export const MOVE_FOLDER_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   
   // Check if moving would create circular hierarchy
   function wouldCreateCycle(folder, newParent) {

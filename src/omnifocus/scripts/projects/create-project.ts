@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
@@ -13,7 +13,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Proper error handling and validation
  */
 export const CREATE_PROJECT_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   ${REPEAT_HELPERS}
   
   (() => {

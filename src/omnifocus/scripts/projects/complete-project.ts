@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to complete a project in OmniFocus
@@ -10,7 +10,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Handles different OmniFocus versions gracefully
  */
 export const COMPLETE_PROJECT_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
   // Parameter declarations

@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
@@ -11,7 +11,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Claude Desktop numeric ID bug detection
  */
 export const UPDATE_TASK_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   ${REPEAT_HELPERS}
   
   (() => {

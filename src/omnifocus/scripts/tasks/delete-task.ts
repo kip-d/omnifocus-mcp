@@ -1,10 +1,10 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a task in OmniFocus using JXA
  */
 export const DELETE_TASK_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

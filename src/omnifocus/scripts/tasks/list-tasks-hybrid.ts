@@ -3,7 +3,7 @@
  * Leverages Omni Automation API for massive performance improvements
  */
 
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
@@ -11,7 +11,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * This hybrid approach is 10-20x faster than pure JXA for large databases
  */
 export const LIST_TASKS_HYBRID_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   ${REPEAT_HELPERS}
   
   (() => {

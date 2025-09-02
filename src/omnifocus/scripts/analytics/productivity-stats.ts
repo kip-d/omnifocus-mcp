@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Script to calculate productivity statistics in OmniFocus
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Grouping by project, tag, or day
  */
 export const PRODUCTIVITY_STATS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getAnalyticsHelpers()}
   
   (() => {
     const options = {{options}};

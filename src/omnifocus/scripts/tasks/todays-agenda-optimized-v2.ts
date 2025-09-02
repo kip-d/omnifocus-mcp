@@ -3,10 +3,10 @@
  * Manual filtering is 7x faster than whose() with large databases
  */
 
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 export const TODAYS_AGENDA_OPTIMIZED_NO_WHOSE_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

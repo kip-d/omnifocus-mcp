@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 
 /**
  * Script to find projects that are due for review
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Essential for GTD weekly reviews
  */
 export const PROJECTS_FOR_REVIEW_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   
   (() => {
     const filter = {{filter}};

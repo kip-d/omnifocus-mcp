@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getRecurrenceHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze recurring tasks in OmniFocus
@@ -11,7 +11,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Frequency summarization
  */
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getRecurrenceHelpers()}
   
   (() => {
   const options = {{options}};

@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getBasicHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
@@ -12,7 +12,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
  * - Performance metrics
  */
 export const LIST_TASKS_SCRIPT = `
-  ${getAllHelpers()}
+  ${getBasicHelpers()}
   ${REPEAT_HELPERS}
   
   (() => {

@@ -1,4 +1,4 @@
-import { getAllHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update folder properties in OmniFocus
@@ -9,7 +9,7 @@ import { getAllHelpers } from '../shared/helpers.js';
  * - Duplicate name checking
  */
 export const UPDATE_FOLDER_SCRIPT = `
-  ${getAllHelpers()}
+  ${getMinimalHelpers()}
   
   (() => {
     const folderId = {{folderId}};
