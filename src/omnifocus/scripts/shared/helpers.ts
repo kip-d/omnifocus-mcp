@@ -460,7 +460,7 @@ export function getAllHelpers(): string {
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
     ERROR_HANDLING,
-    REPEAT_HELPERS,
+    // REPEAT_HELPERS removed to prevent script size bloat - use getRecurrenceHelpers() when needed
   ].join('\n');
 }
 
@@ -473,7 +473,7 @@ export function getAllHelpersWithBridge(): string {
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
     ERROR_HANDLING,
-    REPEAT_HELPERS,
+    // REPEAT_HELPERS removed to prevent script size bloat - use getRecurrenceHelpers() when needed
     // Bridge helpers should be imported separately when needed
   ].join('\n');
 }
