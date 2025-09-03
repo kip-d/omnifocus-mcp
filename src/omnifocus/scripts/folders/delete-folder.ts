@@ -1,20 +1,22 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getCoreHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a folder in OmniFocus
- *
- * Features:
- * - Delete folder with safety checks
- * - Move contents to another folder or root
- * - Proper error handling and validation
- * - Force deletion with content preservation
+ * 
+ * SMART DELETION APPROACH:
+ * - Empty folders: Direct deletion (fast, minimal script)
+ * - Folders with contents: Helpful error with best practices
+ * 
+ * This approach follows OmniFocus user patterns where:
+ * 1. Most folder deletions are for empty/cleanup folders  
+ * 2. Complex deletions are rare (users prefer "drop" to preserve history)
+ * 3. When contents exist, users typically reorganize rather than delete
  */
 export const DELETE_FOLDER_SCRIPT = `
-  ${getMinimalHelpers()}
+  ${getCoreHelpers()}
   
   (() => {
     const folderId = {{folderId}};
-    const options = {{options}};
     
     try {
       const app = Application('OmniFocus');
@@ -22,24 +24,19 @@ export const DELETE_FOLDER_SCRIPT = `
       
       // Find the folder to delete
       let targetFolder = null;
+      const allFolders = doc.flattenedFolders();
       
-      // Use direct iteration - whose() causes "Can't convert types" errors
-      {
-        const allFolders = doc.flattenedFolders();
-        
-        if (!allFolders) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-            details: "doc.flattenedFolders() returned null or undefined"
-          });
-        }
-        
-        for (let i = 0; i < allFolders.length; i++) {
-          if (allFolders[i].id() === folderId) {
-            targetFolder = allFolders[i];
-            break;
-          }
+      if (!allFolders) {
+        return JSON.stringify({
+          error: true,
+          message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly."
+        });
+      }
+      
+      for (let i = 0; i < allFolders.length; i++) {
+        if (allFolders[i].id() === folderId) {
+          targetFolder = allFolders[i];
+          break;
         }
       }
       
@@ -58,87 +55,34 @@ export const DELETE_FOLDER_SCRIPT = `
         });
       }
       
-      const folderName = safeGet(() => targetFolder.name());
+      const folderName = safeGet(() => targetFolder.name()) || 'Unknown Folder';
       
-      // Check for contents
+      // Check for contents - this is the key safety check
       const childFolders = safeGet(() => targetFolder.folders()) || [];
       const projects = safeGet(() => targetFolder.projects()) || [];
+      const hasContents = childFolders.length > 0 || projects.length > 0;
       
-      // Safety check - don't delete if has contents unless forced
-      if ((childFolders.length > 0 || projects.length > 0) && !options.force) {
+      if (hasContents) {
+        // Provide helpful guidance for non-empty folders
         return JSON.stringify({
           error: true,
-          message: "Folder '" + folderName + "' contains " + 
-                   childFolders.length + " folders and " + 
-                   projects.length + " projects. Use force: true to delete anyway.",
+          message: "Cannot delete folder '" + folderName + "' because it contains " + 
+                   childFolders.length + " folders and " + projects.length + " projects.",
+          suggestion: "For folders with contents, consider these OmniFocus best practices:\\n" +
+                     "1. Move projects to other folders first, then delete the empty folder\\n" +
+                     "2. Set projects to 'dropped' status instead of deleting to preserve completed task history\\n" +
+                     "3. Use OmniFocus's built-in archiving features (File > Archive) for old data\\n" +
+                     "\\nEmpty the folder first, then try deleting again.",
           details: {
             childFolders: childFolders.length,
-            projects: projects.length
+            projects: projects.length,
+            canDelete: false,
+            isEmpty: false
           }
         });
       }
       
-      // Find destination folder if specified
-      let destinationFolder = null;
-      if (options.moveContentsTo) {
-        const allFolders = doc.flattenedFolders();
-        
-        for (let i = 0; i < allFolders.length; i++) {
-          if (allFolders[i].name() === options.moveContentsTo && 
-              allFolders[i].id() !== targetFolder.id()) {
-            destinationFolder = allFolders[i];
-            break;
-          }
-        }
-        
-        if (!destinationFolder) {
-          return JSON.stringify({
-            error: true,
-            message: "Destination folder '" + options.moveContentsTo + "' not found"
-          });
-        }
-      }
-      
-      const moveInfo = {
-        movedFolders: 0,
-        movedProjects: 0
-      };
-      
-      // Move child folders
-      if (childFolders.length > 0) {
-        for (let i = childFolders.length - 1; i >= 0; i--) {
-          const childFolder = childFolders[i];
-          try {
-            if (destinationFolder) {
-              destinationFolder.folders.push(childFolder);
-            } else {
-              doc.folders.push(childFolder);
-            }
-            moveInfo.movedFolders++;
-          } catch (e) {
-            // Continue with other folders if one fails
-          }
-        }
-      }
-      
-      // Move projects
-      if (projects.length > 0) {
-        for (let i = projects.length - 1; i >= 0; i--) {
-          const project = projects[i];
-          try {
-            if (destinationFolder) {
-              destinationFolder.projects.push(project);
-            } else {
-              doc.projects.push(project);
-            }
-            moveInfo.movedProjects++;
-          } catch (e) {
-            // Continue with other projects if one fails
-          }
-        }
-      }
-      
-      // Delete the folder
+      // Folder is empty - safe to delete
       targetFolder.markForDeletion();
       
       return JSON.stringify({
@@ -147,14 +91,10 @@ export const DELETE_FOLDER_SCRIPT = `
           id: folderId,
           name: folderName
         },
-        movedTo: options.moveContentsTo || 'root',
-        moved: moveInfo,
         deletedAt: new Date().toISOString(),
-        message: "Folder '" + folderName + "' deleted successfully. " +
-                 "Moved " + moveInfo.movedFolders + " folders and " + 
-                 moveInfo.movedProjects + " projects to " + 
-                 (options.moveContentsTo || 'root') + "."
+        message: "Empty folder '" + folderName + "' deleted successfully."
       });
+      
     } catch (error) {
       return formatError(error, 'delete_folder');
     }
