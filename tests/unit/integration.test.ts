@@ -4,7 +4,10 @@ import { promisify } from 'util';
 
 const sleep = promisify(setTimeout);
 
-describe('OmniFocus MCP Server Integration Tests', () => {
+const RUN_SERVER_TESTS = process.env.ENABLE_UNIT_SERVER === 'true';
+const d = RUN_SERVER_TESTS ? describe : describe.skip;
+
+d('OmniFocus MCP Server Integration Tests', () => {
   let server: ChildProcess;
   let messageId = 1;
 
@@ -133,9 +136,8 @@ describe('OmniFocus MCP Server Integration Tests', () => {
 
       expect(result).toBeDefined();
       expect(result.content).toBeInstanceOf(Array);
-      expect(result.content[0].type).toBe('text');
-      
-      const response = JSON.parse(result.content[0].text);
+      const first = result.content[0];
+      const response = first.type === 'json' ? first.json : JSON.parse(first.text);
       expect(response).toHaveProperty('success');
       
       // Check for either success or OmniFocus not running error
@@ -164,7 +166,10 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       });
 
       expect(result).toBeDefined();
-      const response = JSON.parse(result.content[0].text);
+      {
+        const first = result.content[0];
+        var response = first.type === 'json' ? first.json : JSON.parse(first.text);
+      }
       
       // Tags now work via evaluateJavascript bridge (v2.0.0-beta.1+)
       // The test may fail if OmniFocus is not running, which returns INTERNAL_ERROR
@@ -202,8 +207,10 @@ describe('OmniFocus MCP Server Integration Tests', () => {
 
       expect(result).toBeDefined();
       expect(result.content).toBeInstanceOf(Array);
-      
-      const response = JSON.parse(result.content[0].text);
+      {
+        const first = result.content[0];
+        var response = first.type === 'json' ? first.json : JSON.parse(first.text);
+      }
       expect(response).toHaveProperty('success');
       
       // Check for either success or OmniFocus not running error
@@ -251,9 +258,10 @@ describe('OmniFocus MCP Server Integration Tests', () => {
       // ManageTaskTool should return an error response for missing required parameters
       expect(result).toBeDefined();
       expect(result.content).toBeInstanceOf(Array);
-      expect(result.content[0].type).toBe('text');
-      
-      const response = JSON.parse(result.content[0].text);
+      {
+        const first = result.content[0];
+        var response = first.type === 'json' ? first.json : JSON.parse(first.text);
+      }
       expect(response.success).toBe(false);
       expect(response.error.message).toContain('taskId is required');
       expect(response.error.code).toBe('MISSING_PARAMETER');

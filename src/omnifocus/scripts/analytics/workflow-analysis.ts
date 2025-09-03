@@ -2,7 +2,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Script for deep workflow analysis across the complete OmniFocus dataset
- * 
+ *
  * Features:
  * - Cross-project pattern analysis
  * - Workload distribution analysis

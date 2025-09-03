@@ -270,7 +270,7 @@ export const UpdateTaskSchema = z.object({
     .optional()
     .default(false)
     .describe('Return minimal response (only success, task_id, fields_updated) instead of full task details. Reduces response size by ~95% for bulk operations. Essential for updating 10+ tasks to conserve LLM context window. Use when: updating many tasks, reorganizing tags, batch operations, or when updated task details are not needed.'),
-  
+
   responseLevel: z.enum(['full', 'standard', 'minimal', 'ultra'])
     .optional()
     .default('standard')

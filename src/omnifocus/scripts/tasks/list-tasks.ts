@@ -561,7 +561,14 @@ export const LIST_TASKS_SCRIPT = `
       const startTime = Date.now();
       
       try {
-        const tag = doc.flattenedTags.whose({name: tagName})[0];
+        // Avoid whose(); scan tags and match by name
+        const allTags = doc.flattenedTags();
+        let tag = null;
+        for (let i = 0; i < allTags.length; i++) {
+          try {
+            if (allTags[i].name() === tagName) { tag = allTags[i]; break; }
+          } catch (e) { /* ignore bad tag entries */ }
+        }
         if (tag) {
           // Use pre-filtered tag collection based on completion status
           let tagTasks;

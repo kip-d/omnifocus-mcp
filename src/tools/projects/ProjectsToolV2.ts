@@ -563,9 +563,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       options: {
         projectId: args.projectId,
         limit: args.limit || 200,
-      }
+      },
     });
-    
+
     const result = await this.omniAutomation.execute<any>(script);
 
     if (!result || result.error) {

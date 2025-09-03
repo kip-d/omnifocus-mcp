@@ -83,6 +83,8 @@ export default [
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      // Generated or vendor TypeScript definitions and API shims
+      'src/omnifocus/api/**',
       '*.js', // Since this is a TypeScript project
       '*.mjs',
       '*.cjs',

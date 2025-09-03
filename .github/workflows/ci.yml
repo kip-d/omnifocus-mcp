@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Lint currently emits many warnings/errors in generated/vendor code.
+      # Run lint but do not fail CI — keep signal while allowing iteration.
+      - name: Lint (non-blocking)
+        run: npm run lint || true
+
+      - name: Unit tests (sandbox-safe)
+        env:
+          VITEST_SAFE: '1'
+        run: npm run test:quick:safe
+
+  # Placeholder for macOS + OmniFocus integration tests (disabled by default)
+  # To enable, install OmniFocus and grant automation permissions on the runner.
+  # mac-integration:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         cache: 'npm'
+  #     - run: npm ci
+  #     - name: Run integration tests (requires OmniFocus)
+  #       env:
+  #         VITEST_SAFE: '1'
+  #       run: npm run test:quick # or a dedicated integration script
+

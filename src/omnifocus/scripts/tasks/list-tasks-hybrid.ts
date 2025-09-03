@@ -255,7 +255,14 @@ export const LIST_TASKS_HYBRID_SCRIPT = `
           if (taskData.hasRepetitionRule) {
             try {
               // Find the actual task by ID for recurring analysis
-              const jxaTask = doc.flattenedTasks.whose({id: taskData.id})[0];
+              // Avoid whose(); scan tasks and match by id
+              const allTasks = doc.flattenedTasks();
+              let jxaTask = null;
+              for (let i = 0; i < allTasks.length; i++) {
+                try {
+                  if (safeGet(() => allTasks[i].id(), null) === taskData.id) { jxaTask = allTasks[i]; break; }
+                } catch (e) { /* ignore */ }
+              }
               if (jxaTask) {
                 const repetitionRule = safeGet(() => jxaTask.repetitionRule());
                 if (repetitionRule) {

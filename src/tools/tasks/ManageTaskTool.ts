@@ -10,83 +10,83 @@ import { createErrorResponse, OperationTimer } from '../../utils/response-format
 const ManageTaskSchema = z.object({
   operation: z.enum(['create', 'update', 'complete', 'delete'])
     .describe('The operation to perform on the task'),
-  
+
   // Task identification (for update/complete/delete)
   taskId: z.string()
     .optional()
     .describe('ID of the task (required for update/complete/delete operations)'),
-  
+
   // Create/Update parameters
   name: z.string()
     .optional()
     .describe('Task name (required for create, optional for update)'),
-  
+
   note: z.string()
     .optional()
     .describe('Task note/description'),
-  
+
   projectId: z.string()
     .optional()
     .nullable()
     .describe('Project ID to assign the task to (null/empty to move to inbox)'),
-  
+
   parentTaskId: z.string()
     .optional()
     .describe('Parent task ID to create this as a subtask'),
-  
+
   dueDate: z.string()
     .optional()
     .nullable()
     .describe('Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
-  
+
   deferDate: z.string()
     .optional()
     .nullable()
     .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
-  
+
   flagged: z.union([z.boolean(), z.string()])
     .optional()
     .describe('Whether the task is flagged'),
-  
+
   estimatedMinutes: z.union([z.number(), z.string()])
     .optional()
     .describe('Estimated duration in minutes'),
-  
+
   tags: z.array(z.string())
     .optional()
     .describe('Tags to assign to the task'),
-  
+
   sequential: z.union([z.boolean(), z.string()])
     .optional()
     .describe('Whether subtasks must be completed in order'),
-  
+
   // Clear field options (for update)
   clearDueDate: z.boolean()
     .optional()
     .describe('Clear the existing due date'),
-  
+
   clearDeferDate: z.boolean()
     .optional()
     .describe('Clear the existing defer date'),
-  
+
   clearEstimatedMinutes: z.boolean()
     .optional()
     .describe('Clear the existing time estimate'),
-  
+
   clearRepeatRule: z.boolean()
     .optional()
     .describe('Remove the existing repeat rule'),
-  
+
   // Completion date (for complete operation)
   completionDate: z.string()
     .optional()
     .describe('Completion date (defaults to now)'),
-  
+
   // Minimal response option (for update)
   minimalResponse: z.union([z.boolean(), z.string()])
     .optional()
     .describe('Return minimal response for bulk operations'),
-  
+
   // Repeat rule
   repeatRule: z.object({
     unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
@@ -100,10 +100,10 @@ const ManageTaskSchema = z.object({
       .optional(),
     deferAnother: z.object({
       unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
-      steps: z.number()
-    }).optional()
+      steps: z.number(),
+    }).optional(),
   }).optional()
-    .describe('Repeat/recurrence rule for the task')
+    .describe('Repeat/recurrence rule for the task'),
 });
 
 type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
@@ -144,7 +144,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           'MISSING_PARAMETER',
           `taskId is required for ${operation} operation`,
           { operation },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
 
@@ -154,7 +154,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           'MISSING_PARAMETER',
           'name is required for create operation',
           { operation },
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
 
@@ -173,7 +173,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             estimatedMinutes: params.estimatedMinutes,
             tags: params.tags,
             sequential: params.sequential,
-            repeatRule: params.repeatRule
+            repeatRule: params.repeatRule,
           });
 
         case 'update':
@@ -195,20 +195,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             clearEstimatedMinutes: params.clearEstimatedMinutes,
             clearRepeatRule: params.clearRepeatRule,
             minimalResponse: params.minimalResponse,
-            repeatRule: params.repeatRule
+            repeatRule: params.repeatRule,
           });
 
         case 'complete':
           // Execute complete operation
           return await this.completeTool.execute({
             taskId: taskId!,
-            completionDate: params.completionDate
+            completionDate: params.completionDate,
           });
 
         case 'delete':
           // Execute delete operation
           return await this.deleteTool.execute({
-            taskId: taskId!
+            taskId: taskId!,
           });
 
         default:
@@ -217,7 +217,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
             { operation },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
       }
     } catch (error) {

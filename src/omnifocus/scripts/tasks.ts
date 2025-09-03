@@ -19,4 +19,4 @@ export { LIST_TASKS_HYBRID_SCRIPT } from './tasks/list-tasks-hybrid.js';
 export { LIST_TASKS_OPTIMIZED_SCRIPT } from './tasks/list-tasks-optimized.js';
 
 // Legacy helper export
-export { SAFE_UTILITIES_SCRIPT } from './shared/helpers.js';
+// Note: legacy SAFE_UTILITIES_SCRIPT re-export removed. Import directly from './shared/helpers.js' if needed.

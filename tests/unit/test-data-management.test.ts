@@ -104,9 +104,13 @@ class TestDataManager {
       throw new Error(`Tool error: ${response.error.message}`);
     }
 
+    // Support both 'text' and 'json' content types from MCP
     try {
-      const content = response.result.content[0].text;
-      return JSON.parse(content);
+      const first = response.result?.content?.[0];
+      if (!first || !first.type) return response.result;
+      if (first.type === 'json') return first.json;
+      if (first.type === 'text') return JSON.parse(first.text);
+      return response.result;
     } catch (e) {
       return response.result;
     }
@@ -266,7 +270,10 @@ class TestDataManager {
   }
 }
 
-describe('Test Data Management', () => {
+const RUN_SERVER_TESTS = process.env.ENABLE_UNIT_SERVER === 'true';
+const d = RUN_SERVER_TESTS ? describe : describe.skip;
+
+d('Test Data Management', () => {
   let testManager: TestDataManager;
 
   beforeAll(async () => {

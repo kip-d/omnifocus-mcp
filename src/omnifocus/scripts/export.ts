@@ -9,7 +9,4 @@
 export { EXPORT_TASKS_SCRIPT } from './export/export-tasks.js';
 export { EXPORT_PROJECTS_SCRIPT } from './export/export-projects.js';
 
-// For backward compatibility - maintain any direct exports that might be used
-// Import shared utilities first
-import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
-export { SAFE_UTILITIES_SCRIPT };
+// Note: SAFE_UTILITIES_SCRIPT is available from './shared/helpers.js' if needed.

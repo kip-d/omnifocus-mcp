@@ -10,11 +10,11 @@ import { coerceBoolean } from '../schemas/coercion-helpers.js';
 const ExportSchema = z.object({
   type: z.enum(['tasks', 'projects', 'all'])
     .describe('What to export: tasks only, projects only, or all data'),
-  
+
   format: z.enum(['json', 'csv', 'markdown'])
     .default('json')
     .describe('Export format'),
-  
+
   // Task export filters (when type is 'tasks' or 'all')
   filter: z.object({
     search: z.string().optional(),
@@ -24,35 +24,35 @@ const ExportSchema = z.object({
     flagged: z.boolean().optional(),
     completed: z.boolean().optional(),
     available: z.boolean().optional(),
-    limit: z.number().optional()
+    limit: z.number().optional(),
   }).optional()
     .describe('Filter criteria for task export'),
-  
+
   fields: z.array(z.enum([
-    'id', 'name', 'note', 'project', 'tags', 
+    'id', 'name', 'note', 'project', 'tags',
     'deferDate', 'dueDate', 'completed', 'completionDate',
     'flagged', 'estimated', 'created', 'createdDate',
-    'modified', 'modifiedDate'
+    'modified', 'modifiedDate',
   ])).optional()
     .describe('Fields to include in task export'),
-  
+
   // Project export options
   includeStats: coerceBoolean()
     .optional()
     .describe('Include task statistics for each project'),
-  
+
   // Bulk export options (when type is 'all')
   outputDirectory: z.string()
     .optional()
     .describe('Directory to save export files (required for type="all")'),
-  
+
   includeCompleted: coerceBoolean()
     .optional()
     .describe('Include completed tasks in export'),
-  
+
   includeProjectStats: coerceBoolean()
     .optional()
-    .describe('Include statistics in project export')
+    .describe('Include statistics in project export'),
 });
 
 type ExportInput = z.infer<typeof ExportSchema>;
@@ -89,14 +89,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           return await this.exportTasksTool.execute({
             format,
             filter: params.filter,
-            fields: params.fields
+            fields: params.fields,
           });
 
         case 'projects':
           // Export projects only
           return await this.exportProjectsTool.execute({
             format,
-            includeStats: params.includeStats
+            includeStats: params.includeStats,
           });
 
         case 'all':
@@ -107,7 +107,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
               'MISSING_PARAMETER',
               'outputDirectory is required for type="all"',
               { type },
-              timer.toMetadata()
+              timer.toMetadata(),
             );
           }
 
@@ -115,7 +115,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
             outputDirectory: params.outputDirectory,
             format,
             includeCompleted: params.includeCompleted,
-            includeProjectStats: params.includeProjectStats
+            includeProjectStats: params.includeProjectStats,
           });
 
         default:
@@ -124,7 +124,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
             'INVALID_TYPE',
             `Invalid export type: ${type}`,
             { type },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
       }
     } catch (error) {

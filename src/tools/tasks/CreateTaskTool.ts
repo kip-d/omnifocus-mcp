@@ -105,8 +105,11 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         );
       }
 
-      // Invalidate cache after successful task creation
+      // Invalidate caches after successful task creation
       this.cache.invalidate('tasks');
+      this.cache.invalidate('analytics');
+      if (args.projectId !== undefined) this.cache.invalidate('projects');
+      if (Array.isArray(args.tags) && args.tags.length > 0) this.cache.invalidate('tags');
 
       // Return standardized response
       return createSuccessResponse(

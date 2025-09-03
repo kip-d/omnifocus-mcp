@@ -46,11 +46,11 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
 
       // Execute optimized script using direct API methods
       const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT, {
-        options: { 
-          period, 
-          includeProjectStats, 
+        options: {
+          period,
+          includeProjectStats,
           includeTagStats,
-          includeInactive: false  // Only active projects by default for performance
+          includeInactive: false,  // Only active projects by default for performance
         },
       });
       const result = await this.omniAutomation.execute<any>(script);

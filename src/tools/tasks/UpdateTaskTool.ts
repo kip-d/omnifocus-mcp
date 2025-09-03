@@ -119,8 +119,15 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         );
       }
 
-      // Invalidate cache after successful update
+      // Invalidate caches after successful update
       this.cache.invalidate('tasks');
+      // Invalidate analytics when dates/flags may affect summaries
+      if (safeUpdates.dueDate !== undefined || safeUpdates.deferDate !== undefined || safeUpdates.clearDueDate || safeUpdates.clearDeferDate || safeUpdates.flagged !== undefined) {
+        this.cache.invalidate('analytics');
+      }
+      // Invalidate related collections when relationships changed
+      if (safeUpdates.projectId !== undefined) this.cache.invalidate('projects');
+      if (safeUpdates.tags !== undefined) this.cache.invalidate('tags');
 
       this.logger.info(`Updated task: ${taskId}`);
 
@@ -136,7 +143,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         if (responseLevel === 'ultra') {
           return baseResponse as any;
         }
-        
+
         // Minimal: success + ID + key changes (for backwards compatibility)
         return {
           ...baseResponse,

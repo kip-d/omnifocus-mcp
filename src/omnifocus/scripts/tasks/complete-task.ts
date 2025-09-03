@@ -13,18 +13,19 @@ export const COMPLETE_TASK_SCRIPT = `
     const completionDate = {{completionDate}} ? new Date({{completionDate}}) : new Date();
     
     try {
-      // Find task - use whose() for single ID lookup (this is fast)
-      // whose() is only slow for filtering many tasks, not for ID lookups
-      const tasks = doc.flattenedTasks.whose({id: taskId})();
+      // Find task without whose() per performance guidance
+      const allTasks = doc.flattenedTasks();
+      let task = null;
+      for (let i = 0; i < allTasks.length; i++) {
+        try { if (safeGet(() => allTasks[i].id()) === taskId) { task = allTasks[i]; break; } } catch (e) {}
+      }
       
-      if (tasks.length === 0) {
+      if (!task) {
         return JSON.stringify({
           error: true,
           message: 'Task not found: ' + taskId
         });
       }
-      
-      const task = tasks[0];
       
       // Mark as completed using the proper method
       // markComplete() expects either no args or an object with date property

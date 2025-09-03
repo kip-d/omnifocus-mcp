@@ -127,7 +127,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
           includeTaskCounts,
           fastMode,
           namesOnly,
-        }
+        },
       });
 
       this.logger.debug(`Executing list tags script (optimized: ${useOptimized})`);

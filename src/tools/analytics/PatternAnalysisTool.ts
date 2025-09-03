@@ -14,35 +14,35 @@ const PatternAnalysisSchema = z.object({
   patterns: z.union([
     z.array(z.enum([
       'duplicates',
-      'dormant_projects', 
+      'dormant_projects',
       'tag_audit',
       'deadline_health',
       'waiting_for',
-      'all'
+      'all',
     ])),
     z.enum(['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 'waiting_for', 'all'])
-      .transform(val => [val])
+      .transform(val => [val]),
   ]).default(['all']).describe('Patterns to analyze'),
-  
+
   dormantThresholdDays: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
+    z.string().transform(val => parseInt(val, 10)),
   ]).pipe(z.number().min(1).max(365)).default(60),
-  
+
   duplicateSimilarityThreshold: z.union([
     z.number(),
-    z.string().transform(val => parseFloat(val))
+    z.string().transform(val => parseFloat(val)),
   ]).pipe(z.number().min(0.5).max(1.0)).default(0.85),
-  
+
   includeCompleted: z.union([
     z.boolean(),
-    z.string().transform(val => val === 'true')
+    z.string().transform(val => val === 'true'),
   ]).default(false),
-  
+
   maxTasks: z.union([
     z.number(),
-    z.string().transform(val => parseInt(val, 10))
-  ]).pipe(z.number().min(100).max(10000)).default(3000)
+    z.string().transform(val => parseInt(val, 10)),
+  ]).pipe(z.number().min(100).max(10000)).default(3000),
 });
 
 type PatternAnalysisParams = z.infer<typeof PatternAnalysisSchema>;
@@ -51,31 +51,31 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
   name = 'pattern_analysis';
   description = 'Analyze patterns across OmniFocus database (duplicates, dormant projects, tag issues, etc.)';
   schema = PatternAnalysisSchema;
-  
+
   protected logger = createLogger('PatternAnalysisTool');
 
   protected async executeValidated(params: PatternAnalysisParams): Promise<any> {
     const timer = new OperationTimerV2();
-    
+
     try {
       const { patterns, dormantThresholdDays, duplicateSimilarityThreshold, includeCompleted, maxTasks } = params;
-      
+
       // Expand 'all' pattern
-      const patternsToAnalyze = patterns.includes('all') 
+      const patternsToAnalyze = patterns.includes('all')
         ? ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 'waiting_for']
         : patterns;
-      
+
       // Build and execute the analysis script
       const script = this.buildAnalysisScript({
         patterns: patternsToAnalyze,
         dormantThresholdDays,
         duplicateSimilarityThreshold,
         includeCompleted,
-        maxTasks
+        maxTasks,
       });
-      
+
       const result = await this.omniAutomation.execute<any>(script);
-      
+
       if (result?.error) {
         return createErrorResponseV2(
           'pattern_analysis',
@@ -83,13 +83,13 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
           result.message || 'Pattern analysis failed',
           'Check OmniFocus is running and has data to analyze',
           result.details,
-          timer.toMetadata()
+          timer.toMetadata(),
         );
       }
-      
+
       // Extract key findings
       const keyFindings = this.extractKeyFindings(result);
-      
+
       return createAnalyticsResponseV2(
         'pattern_analysis',
         result,
@@ -99,10 +99,10 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
           patterns_analyzed: patternsToAnalyze,
           tasks_analyzed: result.metadata?.tasksAnalyzed || 0,
           projects_analyzed: result.metadata?.projectsAnalyzed || 0,
-          ...timer.toMetadata()
-        }
+          ...timer.toMetadata(),
+        },
       );
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return createErrorResponseV2(
@@ -111,14 +111,14 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         errorMessage,
         'Ensure OmniFocus is running and accessible',
         undefined,
-        timer.toMetadata()
+        timer.toMetadata(),
       );
     }
   }
-  
+
   private buildAnalysisScript(options: any): string {
     const helpers = getMinimalHelpers();
-    
+
     return `(() => {
       ${helpers}
       
@@ -345,18 +345,18 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
       });
     })()`;
   }
-  
+
   private extractKeyFindings(result: any): string[] {
     const findings: string[] = [];
-    
+
     if (result?.findings?.duplicates?.count > 0) {
       findings.push(`Found ${result.findings.duplicates.count} potential duplicate tasks`);
     }
-    
+
     if (result?.findings?.dormant_projects?.count > 0) {
       findings.push(`${result.findings.dormant_projects.count} projects dormant for ${result.findings.dormant_projects.threshold_days}+ days`);
     }
-    
+
     if (result?.findings?.tag_audit) {
       const audit = result.findings.tag_audit;
       if (audit.unused_tags?.length > 0) {
@@ -366,7 +366,7 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         findings.push(`${audit.rarely_used.length} tags rarely used (≤2 tasks)`);
       }
     }
-    
+
     if (result?.findings?.deadline_health) {
       const health = result.findings.deadline_health;
       if (health.overdue_count > 0) {
@@ -376,14 +376,14 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         findings.push(`${health.due_soon_count} tasks due in next 2 days`);
       }
     }
-    
+
     if (result?.findings?.waiting_for?.count > 0) {
       const longWaiting = result.findings.waiting_for.items?.filter((t: any) => t.daysWaiting > 30);
       if (longWaiting?.length > 0) {
         findings.push(`${longWaiting.length} tasks waiting 30+ days`);
       }
     }
-    
+
     return findings.length > 0 ? findings : ['Analysis complete - no significant patterns detected'];
   }
 }

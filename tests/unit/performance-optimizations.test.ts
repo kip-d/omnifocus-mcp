@@ -58,11 +58,11 @@ describe('Performance Optimization Tests', () => {
   });
 
   describe('Task lookup optimizations', () => {
-    it('should use whose() for O(1) lookups with fallback', async () => {
+    it('should avoid whose() and iterate safely', async () => {
       const { UPDATE_TASK_SCRIPT } = await import('../../src/omnifocus/scripts/tasks.js');
-      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
-      // Should have fallback to iteration
-      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks()');
+      expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
+      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks(');
+      expect(UPDATE_TASK_SCRIPT).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
     });
 
     it('should use Project.byIdentifier for O(1) lookups', async () => {
@@ -195,11 +195,12 @@ describe('Error Handling Tests', () => {
     expect(LIST_PROJECTS_SCRIPT).toContain('projectObj.statsError');
   });
 
-  it('should use whose() for fast task lookup', () => {
-    // Scripts should use whose() for O(1) task lookup
-    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks.whose({id: taskId})');
+  it('should perform safe and efficient task lookup', () => {
+    // Either use whose() or safe iteration; both are acceptable
+    const usesWhose = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks.whose({id: taskId})');
+    const usesIteration = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks(')
+      && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(UPDATE_TASK_SCRIPT);
+    expect(usesWhose || usesIteration).toBe(true);
     expect(UPDATE_TASK_SCRIPT).toContain('if (!task)');
-    // Should have fallback to iteration
-    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks()');
   });
 });

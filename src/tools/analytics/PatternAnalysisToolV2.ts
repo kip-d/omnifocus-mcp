@@ -19,9 +19,9 @@ const PatternAnalysisSchema = z.object({
     'estimation_bias',
     'next_actions',
     'review_gaps',
-    'all'
+    'all',
   ])).min(1).describe('Which patterns to analyze'),
-  
+
   options: z.preprocess(
     // First, handle any string inputs by parsing them
     (val) => {
@@ -29,18 +29,18 @@ const PatternAnalysisSchema = z.object({
       if (val && typeof val === 'object' && !Array.isArray(val)) {
         return val;
       }
-      
+
       // If it's a string, try to parse it
       if (typeof val === 'string') {
         // Handle empty string
         if (val === '' || val === '""') {
           return {};
         }
-        
+
         try {
           // Try to parse as JSON
           const parsed = JSON.parse(val);
-          
+
           // If parsed result is a string, try parsing again (double-encoded)
           if (typeof parsed === 'string') {
             try {
@@ -51,13 +51,13 @@ const PatternAnalysisSchema = z.object({
               return parsed;
             }
           }
-          
+
           return parsed;
         } catch (e) {
           return {};
         }
       }
-      
+
       // Default to empty object
       return {};
     },
@@ -65,61 +65,61 @@ const PatternAnalysisSchema = z.object({
     z.object({
       dormant_threshold_days: z.union([
         z.number(),
-        z.string().transform(val => parseInt(val, 10))
+        z.string().transform(val => parseInt(val, 10)),
       ]).optional(),
-      
+
       duplicate_similarity_threshold: z.union([
         z.number(),
-        z.string().transform(val => parseFloat(val))
+        z.string().transform(val => parseFloat(val)),
       ]).optional(),
-      
+
       include_completed: z.union([
         z.boolean(),
-        z.string().transform(val => val === 'true')
+        z.string().transform(val => val === 'true'),
       ]).optional(),
-      
+
       excludeCompleted: z.union([
         z.boolean(),
-        z.string().transform(val => val === 'true')
+        z.string().transform(val => val === 'true'),
       ]).optional(),
-      
+
       exclude_completed: z.union([  // Snake_case variant
         z.boolean(),
-        z.string().transform(val => val === 'true')
+        z.string().transform(val => val === 'true'),
       ]).optional(),
-      
+
       includeCompleted: z.union([
         z.boolean(),
-        z.string().transform(val => val === 'true')
+        z.string().transform(val => val === 'true'),
       ]).optional(),
-      
+
       max_tasks: z.union([
         z.number(),
-        z.string().transform(val => parseInt(val, 10))
+        z.string().transform(val => parseInt(val, 10)),
       ]).optional(),
-      
+
       // Also accept camelCase variants
       dormantThresholdDays: z.union([
         z.number(),
-        z.string().transform(val => parseInt(val, 10))
+        z.string().transform(val => parseInt(val, 10)),
       ]).optional(),
-      
+
       duplicateSimilarityThreshold: z.union([
         z.number(),
-        z.string().transform(val => parseFloat(val))
+        z.string().transform(val => parseFloat(val)),
       ]).optional(),
-      
+
       similarity_threshold: z.union([  // Shorter variant Claude is using
         z.number(),
-        z.string().transform(val => parseFloat(val))
+        z.string().transform(val => parseFloat(val)),
       ]).optional(),
-      
+
       maxTasks: z.union([
         z.number(),
-        z.string().transform(val => parseInt(val, 10))
-      ]).optional()
-    }).passthrough() // Allow unknown fields
-  ).default({}).describe('Options object with threshold settings')
+        z.string().transform(val => parseInt(val, 10)),
+      ]).optional(),
+    }).passthrough(), // Allow unknown fields
+  ).default({}).describe('Options object with threshold settings'),
 });
 
 type PatternAnalysisParams = z.infer<typeof PatternAnalysisSchema>;
@@ -156,62 +156,62 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   name = 'analyze_patterns';
   description = 'Analyze patterns across entire OmniFocus database for insights and improvements';
   schema = PatternAnalysisSchema;
-  
+
   protected logger = createLogger('PatternAnalysisToolV2');
 
   protected async executeValidated(params: PatternAnalysisParams): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // The schema has already normalized the options, but we need to handle field mappings
       const rawOptions = params.options || {};
-      
+
       // Create normalized options object
       // Handle all the various field name formats Claude Desktop might send
       const options = {
-        dormant_threshold_days: 
-          rawOptions.dormant_threshold_days ?? 
-          rawOptions.dormantThresholdDays ?? 
+        dormant_threshold_days:
+          rawOptions.dormant_threshold_days ??
+          rawOptions.dormantThresholdDays ??
           90,
-        
-        duplicate_similarity_threshold: 
-          rawOptions.duplicate_similarity_threshold ?? 
-          rawOptions.duplicateSimilarityThreshold ?? 
+
+        duplicate_similarity_threshold:
+          rawOptions.duplicate_similarity_threshold ??
+          rawOptions.duplicateSimilarityThreshold ??
           rawOptions.similarity_threshold ?? // New variant Claude is using
           0.85,
-        
-        include_completed: 
-          rawOptions.include_completed ?? 
-          rawOptions.includeCompleted ?? 
-          (rawOptions.excludeCompleted !== undefined ? !rawOptions.excludeCompleted : 
+
+        include_completed:
+          rawOptions.include_completed ??
+          rawOptions.includeCompleted ??
+          (rawOptions.excludeCompleted !== undefined ? !rawOptions.excludeCompleted :
            rawOptions.exclude_completed !== undefined ? !rawOptions.exclude_completed : false), // Handle both variants
-        
-        max_tasks: 
-          rawOptions.max_tasks ?? 
-          rawOptions.maxTasks ?? 
-          3000
+
+        max_tasks:
+          rawOptions.max_tasks ??
+          rawOptions.maxTasks ??
+          3000,
       };
-      
+
       // Expand 'all' to include all patterns
-      const patterns = params.patterns.includes('all') ? 
-        ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health', 
+      const patterns = params.patterns.includes('all') ?
+        ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health',
          'waiting_for', 'estimation_bias', 'next_actions', 'review_gaps'] :
         params.patterns;
-      
+
       // Fetch slimmed task data
       const slimData = await this.fetchSlimmedData(options);
-      
+
       if (!slimData) {
         throw new Error('Failed to fetch data from OmniFocus - received null response');
       }
-      
+
       if (!slimData.tasks || !slimData.projects) {
         throw new Error('Failed to fetch complete data from OmniFocus - missing tasks or projects');
       }
-      
+
       // Run requested pattern analyses
       const findings: Record<string, PatternFinding> = {};
-      
+
       for (const pattern of patterns) {
         switch (pattern) {
           case 'duplicates':
@@ -219,8 +219,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
             break;
           case 'dormant_projects':
             findings.dormant_projects = await this.detectDormantProjects(
-              slimData.projects, 
-              options.dormant_threshold_days
+              slimData.projects,
+              options.dormant_threshold_days,
             );
             break;
           case 'tag_audit':
@@ -243,12 +243,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
             break;
         }
       }
-      
+
       // Generate summary insights
       const summary = this.generateSummary(findings, slimData);
-      
+
       const duration = Date.now() - startTime;
-      
+
       return createAnalyticsResponseV2(
         'analyze_patterns',
         findings,
@@ -259,10 +259,10 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           projects_analyzed: slimData.projects.length,
           patterns_checked: patterns,
           query_time_ms: duration,
-          from_cache: false
-        }
+          from_cache: false,
+        },
       );
-      
+
     } catch (error) {
       this.logger.error('Analysis failed', { error });
       throw error;
@@ -388,14 +388,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       
       return JSON.stringify({ tasks, projects, tags });
     })()`;  // Execute the IIFE immediately
-    
+
     try {
       const result = await this.omniAutomation.execute(taskScript);
-      
+
       if (!result) {
         throw new Error('OmniAutomation execution returned no result');
       }
-      
+
       // OmniAutomation.execute may return already parsed object or string
       if (typeof result === 'string') {
         return JSON.parse(result);
@@ -409,36 +409,36 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   private async detectDuplicates(tasks: SlimTask[], options: any): Promise<PatternFinding> {
     const duplicates: Array<{ task1: SlimTask, task2: SlimTask, similarity: number }> = [];
     const threshold = options.duplicate_similarity_threshold;
-    
+
     // Simple duplicate detection based on name similarity
     for (let i = 0; i < tasks.length - 1; i++) {
       for (let j = i + 1; j < tasks.length; j++) {
         const similarity = this.calculateSimilarity(tasks[i].name, tasks[j].name);
-        
+
         if (similarity >= threshold) {
           // Check they're not in the same project (subtasks with similar names are OK)
           if (tasks[i].projectId !== tasks[j].projectId || !tasks[i].projectId) {
             duplicates.push({
               task1: tasks[i],
               task2: tasks[j],
-              similarity
+              similarity,
             });
           }
         }
       }
     }
-    
+
     // Group duplicate clusters
     const clusters = this.clusterDuplicates(duplicates);
-    
+
     return {
       type: 'duplicates',
       severity: clusters.length > 10 ? 'warning' : 'info',
       count: clusters.length,
       items: clusters.slice(0, 10), // Top 10 clusters
-      recommendation: clusters.length > 0 ? 
+      recommendation: clusters.length > 0 ?
         `Found ${clusters.length} potential duplicate task clusters. Review and merge or clarify distinctions.` :
-        'No significant duplicates detected.'
+        'No significant duplicates detected.',
     };
   }
 
@@ -446,14 +446,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     // Normalize strings
     const s1 = str1.toLowerCase().trim();
     const s2 = str2.toLowerCase().trim();
-    
+
     // Exact match
     if (s1 === s2) return 1.0;
-    
+
     // Calculate Levenshtein distance ratio
     const maxLen = Math.max(s1.length, s2.length);
     if (maxLen === 0) return 1.0;
-    
+
     const distance = this.levenshteinDistance(s1, s2);
     return 1 - (distance / maxLen);
   }
@@ -462,10 +462,10 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const m = str1.length;
     const n = str2.length;
     const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
+
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;
-    
+
     for (let i = 1; i <= m; i++) {
       for (let j = 1; j <= n; j++) {
         if (str1[i - 1] === str2[j - 1]) {
@@ -474,23 +474,23 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           dp[i][j] = Math.min(
             dp[i - 1][j] + 1,    // deletion
             dp[i][j - 1] + 1,    // insertion
-            dp[i - 1][j - 1] + 1 // substitution
+            dp[i - 1][j - 1] + 1, // substitution
           );
         }
       }
     }
-    
+
     return dp[m][n];
   }
 
   private clusterDuplicates(duplicates: any[]): any[] {
     // Group duplicates into clusters
     const clusters: Map<string, Set<string>> = new Map();
-    
+
     for (const dup of duplicates) {
       const id1 = dup.task1.id;
       const id2 = dup.task2.id;
-      
+
       let foundCluster = false;
       for (const [, members] of clusters) {
         if (members.has(id1) || members.has(id2)) {
@@ -500,12 +500,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           break;
         }
       }
-      
+
       if (!foundCluster) {
         clusters.set(id1, new Set([id1, id2]));
       }
     }
-    
+
     // Convert to array format with task details
     return Array.from(clusters.values()).map(cluster => {
       const taskIds = Array.from(cluster);
@@ -513,10 +513,10 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         .filter(d => taskIds.includes(d.task1.id) || taskIds.includes(d.task2.id))
         .flatMap(d => [d.task1, d.task2])
         .filter((task, index, self) => self.findIndex(t => t.id === task.id) === index);
-      
+
       return {
         cluster_size: cluster.size,
-        tasks: tasks.map(t => ({ id: t.id, name: t.name, project: t.project }))
+        tasks: tasks.map(t => ({ id: t.id, name: t.name, project: t.project })),
       };
     });
   }
@@ -525,17 +525,17 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const now = new Date();
     const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
     const dormant: any[] = [];
-    
+
     for (const project of projects) {
       // Skip completed/dropped projects
       if (project.status === 'done' || project.status === 'dropped') continue;
-      
+
       // Check last modification date
       const lastModified = project.modificationDate ? new Date(project.modificationDate) : null;
-      
+
       if (lastModified) {
         const dormantTime = now.getTime() - lastModified.getTime();
-        
+
         if (dormantTime > thresholdMs) {
           dormant.push({
             id: project.id,
@@ -543,15 +543,15 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
             days_dormant: Math.floor(dormantTime / (24 * 60 * 60 * 1000)),
             last_modified: project.modificationDate,
             task_count: project.taskCount,
-            available_tasks: project.availableTaskCount
+            available_tasks: project.availableTaskCount,
           });
         }
       }
     }
-    
+
     // Sort by dormancy duration
     dormant.sort((a, b) => b.days_dormant - a.days_dormant);
-    
+
     return {
       type: 'dormant_projects',
       severity: dormant.length > 5 ? 'warning' : 'info',
@@ -559,19 +559,19 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       items: dormant.slice(0, 10),
       recommendation: dormant.length > 0 ?
         `${dormant.length} projects haven't been modified in over ${thresholdDays} days. Consider reviewing, completing, or dropping them.` :
-        'All projects show recent activity.'
+        'All projects show recent activity.',
     };
   }
 
   private async auditTags(tasks: SlimTask[], allTags: any[] = []): Promise<PatternFinding> {
     const tagStats = new Map<string, number>();
     const tagProjects = new Map<string, Set<string>>();
-    
+
     // First, populate all tags from the tags array (includes unused tags)
     for (const tag of allTags) {
       tagStats.set(tag.name, tag.taskCount || 0);
     }
-    
+
     // Then collect tag usage from tasks to get project distribution
     for (const task of tasks) {
       for (const tag of task.tags) {
@@ -579,7 +579,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         if (!tagStats.has(tag)) {
           tagStats.set(tag, 0);
         }
-        
+
         if (task.projectId) {
           if (!tagProjects.has(tag)) {
             tagProjects.set(tag, new Set());
@@ -588,16 +588,16 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         }
       }
     }
-    
+
     // Analyze tag patterns
     const findings: any = {
       total_tags: tagStats.size,
       unused_tags: [],
       underused_tags: [],
       overused_tags: [],
-      potential_synonyms: []
+      potential_synonyms: [],
     };
-    
+
     // Find unused and underused tags
     for (const [tag, count] of tagStats) {
       if (count === 0) {
@@ -605,14 +605,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       } else if (count < 3) {
         findings.underused_tags.push({ tag, count });
       } else if (count > 100) {
-        findings.overused_tags.push({ 
-          tag, 
+        findings.overused_tags.push({
+          tag,
           count,
-          project_spread: tagProjects.get(tag)?.size || 0
+          project_spread: tagProjects.get(tag)?.size || 0,
         });
       }
     }
-    
+
     // Detect potential synonyms (tags with very similar names)
     const tagNames = Array.from(tagStats.keys());
     for (let i = 0; i < tagNames.length - 1; i++) {
@@ -623,12 +623,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
             tag1: tagNames[i],
             tag2: tagNames[j],
             similarity,
-            combined_usage: (tagStats.get(tagNames[i]) || 0) + (tagStats.get(tagNames[j]) || 0)
+            combined_usage: (tagStats.get(tagNames[i]) || 0) + (tagStats.get(tagNames[j]) || 0),
           });
         }
       }
     }
-    
+
     // Calculate tag entropy (diversity measure)
     const totalTagUsage = Array.from(tagStats.values()).reduce((a, b) => a + b, 0);
     let entropy = 0;
@@ -638,10 +638,10 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         entropy -= p * Math.log2(p);
       }
     }
-    
-    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 
+
+    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ?
       'warning' : 'info';
-    
+
     return {
       type: 'tag_audit',
       severity,
@@ -651,28 +651,28 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
         entropy: entropy.toFixed(2),
         entropy_interpretation: entropy < 2 ? 'Low diversity - consider more tags' :
                                 entropy > 5 ? 'High diversity - consider consolidation' :
-                                'Moderate diversity'
+                                'Moderate diversity',
       },
-      recommendation: this.generateTagRecommendation(findings)
+      recommendation: this.generateTagRecommendation(findings),
     };
   }
 
   private generateTagRecommendation(findings: any): string {
     const recommendations: string[] = [];
-    
+
     if (findings.underused_tags.length > 5) {
       recommendations.push(`${findings.underused_tags.length} tags are rarely used. Consider removing or merging them.`);
     }
-    
+
     if (findings.potential_synonyms.length > 0) {
       recommendations.push(`Found ${findings.potential_synonyms.length} potential tag synonyms that could be merged.`);
     }
-    
+
     if (findings.overused_tags.length > 0) {
       recommendations.push(`${findings.overused_tags.length} tags are heavily used. Consider creating more specific sub-tags.`);
     }
-    
-    return recommendations.length > 0 ? 
+
+    return recommendations.length > 0 ?
       recommendations.join(' ') :
       'Tag usage appears well-balanced.';
   }
@@ -683,71 +683,71 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       overdue: [],
       due_today: [],
       due_this_week: [],
-      deadline_bunching: new Map<string, number>()
+      deadline_bunching: new Map<string, number>(),
     };
-    
+
     for (const task of tasks) {
       if (task.completed) continue;
       if (!task.dueDate) continue;
-      
+
       const dueDate = new Date(task.dueDate);
       const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-      
+
       if (daysUntilDue < 0) {
         findings.overdue.push({
           id: task.id,
           name: task.name,
           project: task.project,
-          days_overdue: Math.abs(daysUntilDue)
+          days_overdue: Math.abs(daysUntilDue),
         });
       } else if (daysUntilDue === 0) {
         findings.due_today.push({ id: task.id, name: task.name });
       } else if (daysUntilDue <= 7) {
         findings.due_this_week.push({ id: task.id, name: task.name, days_until: daysUntilDue });
       }
-      
+
       // Track deadline bunching by date
       const dateKey = dueDate.toISOString().split('T')[0];
       findings.deadline_bunching.set(dateKey, (findings.deadline_bunching.get(dateKey) || 0) + 1);
     }
-    
+
     // Find days with too many deadlines
     const bunchedEntries: Array<[string, number]> = Array.from(findings.deadline_bunching.entries());
     const bunchedDates = bunchedEntries
       .filter(([_, count]) => count > 5)
       .sort((a, b) => b[1] - a[1]);
-    
+
     const severity = findings.overdue.length > 10 ? 'critical' :
                      findings.overdue.length > 5 ? 'warning' : 'info';
-    
+
     const deadlineInfo = {
       overdue_count: findings.overdue.length,
       overdue_samples: findings.overdue.slice(0, 5),
       due_today_count: findings.due_today.length,
       due_this_week_count: findings.due_this_week.length,
-      bunched_dates: bunchedDates.slice(0, 5).map(([date, count]) => ({ date, task_count: count }))
+      bunched_dates: bunchedDates.slice(0, 5).map(([date, count]) => ({ date, task_count: count })),
     };
-    
+
     return {
       type: 'deadline_health',
       severity,
       count: findings.overdue.length,
       items: deadlineInfo as any,
-      recommendation: this.generateDeadlineRecommendation(findings, bunchedDates)
+      recommendation: this.generateDeadlineRecommendation(findings, bunchedDates),
     };
   }
 
   private generateDeadlineRecommendation(findings: any, bunchedDates: any[]): string {
     const recommendations: string[] = [];
-    
+
     if (findings.overdue.length > 5) {
       recommendations.push(`${findings.overdue.length} tasks are overdue. Prioritize or reschedule them.`);
     }
-    
+
     if (bunchedDates.length > 0) {
       recommendations.push(`${bunchedDates.length} dates have 5+ tasks due. Consider spreading deadlines more evenly.`);
     }
-    
+
     return recommendations.length > 0 ?
       recommendations.join(' ') :
       'Deadline distribution looks manageable.';
@@ -757,44 +757,44 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     // Look for tasks that might be waiting (based on name patterns or tags)
     const waitingPatterns = [
       /waiting/i, /wait for/i, /blocked by/i, /depends on/i,
-      /after/i, /once .* complete/i, /pending/i
+      /after/i, /once .* complete/i, /pending/i,
     ];
-    
+
     const waitingTasks: any[] = [];
-    
+
     for (const task of tasks) {
       if (task.completed) continue;
-      
+
       // Check name for waiting patterns
       const isWaiting = waitingPatterns.some(pattern => pattern.test(task.name));
-      
+
       // Check for waiting tag
-      const hasWaitingTag = task.tags.some(tag => 
-        /wait/i.test(tag) || /pending/i.test(tag) || /blocked/i.test(tag)
+      const hasWaitingTag = task.tags.some(tag =>
+        /wait/i.test(tag) || /pending/i.test(tag) || /blocked/i.test(tag),
       );
-      
+
       // Check if task is blocked (has incomplete children)
       const isBlocked = task.status === 'blocked' || (task.children && task.children > 0);
-      
+
       if (isWaiting || hasWaitingTag || isBlocked) {
-        const daysWaiting = task.createdDate ? 
+        const daysWaiting = task.createdDate ?
           Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000)) : 0;
-        
+
         waitingTasks.push({
           id: task.id,
           name: task.name,
           project: task.project,
           reason: isWaiting ? 'name_pattern' : hasWaitingTag ? 'tag' : 'blocked',
-          days_waiting: daysWaiting
+          days_waiting: daysWaiting,
         });
       }
     }
-    
+
     // Sort by waiting duration
     waitingTasks.sort((a, b) => b.days_waiting - a.days_waiting);
-    
+
     const severity = waitingTasks.filter(t => t.days_waiting > 30).length > 5 ? 'warning' : 'info';
-    
+
     return {
       type: 'waiting_for',
       severity,
@@ -802,67 +802,67 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       items: waitingTasks.slice(0, 10),
       recommendation: waitingTasks.length > 10 ?
         `${waitingTasks.length} tasks appear to be waiting. Review blockers and follow up on dependencies.` :
-        'Waiting/blocked tasks are at reasonable levels.'
+        'Waiting/blocked tasks are at reasonable levels.',
     };
   }
 
   private async analyzeEstimationBias(tasks: SlimTask[]): Promise<PatternFinding> {
     const estimatedTasks = tasks.filter(t => t.estimatedMinutes && t.completed && t.completionDate);
-    
+
     if (estimatedTasks.length < 10) {
       return {
         type: 'estimation_bias',
         severity: 'info',
         count: 0,
-        recommendation: 'Not enough completed tasks with estimates to analyze bias.'
+        recommendation: 'Not enough completed tasks with estimates to analyze bias.',
       };
     }
-    
+
     // This would require actual completion time tracking, which OmniFocus doesn't provide
     // Instead, we'll analyze the distribution of estimates
     const estimates = tasks
       .filter(t => t.estimatedMinutes)
       .map(t => t.estimatedMinutes!);
-    
+
     if (estimates.length === 0) {
       return {
         type: 'estimation_bias',
         severity: 'info',
         count: 0,
-        recommendation: 'No tasks have time estimates. Consider adding estimates for better planning.'
+        recommendation: 'No tasks have time estimates. Consider adding estimates for better planning.',
       };
     }
-    
+
     const stats = {
       count: estimates.length,
       min: Math.min(...estimates),
       max: Math.max(...estimates),
       mean: estimates.reduce((a, b) => a + b, 0) / estimates.length,
-      median: estimates.sort((a, b) => a - b)[Math.floor(estimates.length / 2)]
+      median: estimates.sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
     };
-    
+
     // Check for common estimation anti-patterns
     const findings: any = {
       stats,
-      patterns: []
+      patterns: [],
     };
-    
+
     // Pattern: Everything is 30 or 60 minutes
     const commonEstimates = estimates.filter(e => e === 30 || e === 60);
     if (commonEstimates.length > estimates.length * 0.5) {
       findings.patterns.push('Over-reliance on 30/60 minute estimates');
     }
-    
+
     // Pattern: No small tasks
     if (stats.min >= 30) {
       findings.patterns.push('No tasks under 30 minutes - consider breaking down work');
     }
-    
+
     // Pattern: Huge variance
     if (stats.max > stats.mean * 10) {
       findings.patterns.push('Very large tasks detected - consider decomposition');
     }
-    
+
     return {
       type: 'estimation_bias',
       severity: findings.patterns.length > 1 ? 'warning' : 'info',
@@ -870,56 +870,56 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       items: findings,
       recommendation: findings.patterns.length > 0 ?
         `Estimation patterns suggest: ${findings.patterns.join(', ')}` :
-        'Time estimation distribution looks reasonable.'
+        'Time estimation distribution looks reasonable.',
     };
   }
 
   private async analyzeNextActions(tasks: SlimTask[]): Promise<PatternFinding> {
     const issues: any[] = [];
-    
+
     // Patterns that suggest unclear next actions
     const vaguePatterns = [
       /^think about/i, /^consider/i, /^look into/i, /^research/i,
-      /^plan/i, /^figure out/i, /^decide/i, /^work on/i
+      /^plan/i, /^figure out/i, /^decide/i, /^work on/i,
     ];
-    
+
     const projectTasks = tasks.filter(t => !t.completed && t.projectId);
-    
+
     for (const task of projectTasks) {
       const problems: string[] = [];
-      
+
       // Check for vague action verbs
       if (vaguePatterns.some(p => p.test(task.name))) {
         problems.push('vague_action');
       }
-      
+
       // Check for tasks that are too long (might be projects)
       if (task.name.length > 100) {
         problems.push('too_long');
       }
-      
+
       // Check for multiple actions in one task (contains "and")
       if (/\band\b/i.test(task.name) && !/".*and.*"/.test(task.name)) {
         problems.push('multiple_actions');
       }
-      
+
       // Check for question marks (not actionable)
       if (task.name.includes('?')) {
         problems.push('question_not_action');
       }
-      
+
       if (problems.length > 0) {
         issues.push({
           id: task.id,
           name: task.name.substring(0, 80),
           project: task.project,
-          problems
+          problems,
         });
       }
     }
-    
+
     const severity = issues.length > 20 ? 'warning' : 'info';
-    
+
     return {
       type: 'next_actions',
       severity,
@@ -927,56 +927,56 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       items: issues.slice(0, 10),
       recommendation: issues.length > 10 ?
         `${issues.length} tasks may not be clear next actions. Review and clarify with specific, actionable verbs.` :
-        'Most tasks appear to be clear, actionable next actions.'
+        'Most tasks appear to be clear, actionable next actions.',
     };
   }
 
   private async analyzeReviewGaps(projects: any[]): Promise<PatternFinding> {
     const now = new Date();
     const gaps: any[] = [];
-    
+
     for (const project of projects) {
       // Skip completed/dropped projects
       if (project.status === 'done' || project.status === 'dropped') continue;
-      
+
       // Check if project has never been reviewed
       if (!project.lastReviewDate && !project.nextReviewDate) {
         gaps.push({
           id: project.id,
           name: project.name,
           issue: 'never_reviewed',
-          task_count: project.taskCount
+          task_count: project.taskCount,
         });
         continue;
       }
-      
+
       // Check if review is overdue
       if (project.nextReviewDate) {
         const nextReview = new Date(project.nextReviewDate);
         const daysOverdue = Math.floor((now.getTime() - nextReview.getTime()) / (24 * 60 * 60 * 1000));
-        
+
         if (daysOverdue > 0) {
           gaps.push({
             id: project.id,
             name: project.name,
             issue: 'overdue_review',
             days_overdue: daysOverdue,
-            last_review: project.lastReviewDate
+            last_review: project.lastReviewDate,
           });
         }
       }
     }
-    
+
     // Sort by severity
     gaps.sort((a, b) => {
       if (a.issue === 'never_reviewed' && b.issue !== 'never_reviewed') return -1;
       if (b.issue === 'never_reviewed' && a.issue !== 'never_reviewed') return 1;
       return (b.days_overdue || 0) - (a.days_overdue || 0);
     });
-    
+
     const severity = gaps.filter(g => g.issue === 'never_reviewed').length > 5 ||
                      gaps.filter(g => g.days_overdue > 30).length > 3 ? 'warning' : 'info';
-    
+
     return {
       type: 'review_gaps',
       severity,
@@ -984,26 +984,26 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       items: gaps.slice(0, 10),
       recommendation: gaps.length > 5 ?
         `${gaps.length} projects need review attention. Schedule a weekly review to stay on top of them.` :
-        'Project review schedule is mostly up to date.'
+        'Project review schedule is mostly up to date.',
     };
   }
 
   private generateSummary(findings: Record<string, PatternFinding>, data: any): any {
     const criticalCount = Object.values(findings).filter(f => f.severity === 'critical').length;
     const warningCount = Object.values(findings).filter(f => f.severity === 'warning').length;
-    
+
     const keyInsights: string[] = [];
-    
+
     // Add most important findings
     for (const [key, finding] of Object.entries(findings)) {
       if (finding.severity === 'critical' || finding.severity === 'warning') {
         keyInsights.push(finding.recommendation || `${key}: ${finding.count} issues found`);
       }
     }
-    
+
     // Overall health score (simple heuristic)
     const healthScore = Math.max(0, 100 - (criticalCount * 20) - (warningCount * 10));
-    
+
     return {
       health_score: healthScore,
       health_rating: healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Fair' : 'Needs Attention',
@@ -1012,7 +1012,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       patterns_analyzed: Object.keys(findings).length,
       critical_findings: criticalCount,
       warning_findings: warningCount,
-      key_insights: keyInsights.slice(0, 5)
+      key_insights: keyInsights.slice(0, 5),
     };
   }
 

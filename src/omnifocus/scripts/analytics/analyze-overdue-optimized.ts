@@ -2,12 +2,12 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized overdue analysis script using direct OmniFocus API methods
- * 
+ *
  * Uses undocumented but officially supported API methods:
  * - task.blocked() to identify blocking dependencies
  * - task.effectivelyCompleted() to check completion status
  * - task.next() to identify next actions
- * 
+ *
  * Performance improvements:
  * - Direct property checks instead of complex logic
  * - Faster bottleneck detection

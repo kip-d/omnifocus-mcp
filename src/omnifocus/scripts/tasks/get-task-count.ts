@@ -14,30 +14,10 @@ export const GET_TASK_COUNT_SCRIPT = `
     
     try {
       let count = 0;
-      let baseCollection;
-      
-      // Start with the most restrictive collection based on filters
-      if (filter.inInbox === true) {
-        baseCollection = doc.inboxTasks();
-      } else if (filter.completed === false && filter.flagged === true) {
-        // Optimize for incomplete + flagged tasks
-        baseCollection = doc.flattenedTasks.whose({completed: false, flagged: true})();
-      } else if (filter.completed === true && filter.flagged === true) {
-        // Optimize for completed + flagged tasks
-        baseCollection = doc.flattenedTasks.whose({completed: true, flagged: true})();
-      } else if (filter.flagged === true && filter.completed === undefined) {
-        // Just flagged tasks
-        baseCollection = doc.flattenedTasks.whose({flagged: true})();
-      } else if (filter.completed === false && filter.effectivelyCompleted !== true) {
-        // Start with incomplete tasks for better performance
-        baseCollection = doc.flattenedTasks.whose({completed: false})();
-      } else if (filter.completed === true) {
-        // Start with completed tasks
-        baseCollection = doc.flattenedTasks.whose({completed: true})();
-      } else {
-        // No optimization possible, use all tasks
-        baseCollection = doc.flattenedTasks();
-      }
+      // Avoid JXA whose() — use plain collections then filter in JS (per LESSONS_LEARNED)
+      const baseCollection = (filter.inInbox === true)
+        ? doc.inboxTasks()
+        : doc.flattenedTasks();
       
       // Helper function to check if task matches all filters
       function matchesFilters(task) {
@@ -46,10 +26,8 @@ export const GET_TASK_COUNT_SCRIPT = `
           return false;
         }
         
-        // Flagged filter (skip if already filtered in base collection)
-        const alreadyFilteredByFlagged = (filter.completed !== undefined && filter.flagged === true) || 
-                                        (filter.flagged === true && filter.completed === undefined);
-        if (!alreadyFilteredByFlagged && filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {
+        // Flagged filter
+        if (filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {
           return false;
         }
         

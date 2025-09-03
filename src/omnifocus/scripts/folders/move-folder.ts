@@ -35,18 +35,8 @@ export const MOVE_FOLDER_SCRIPT = `
       // Find the folder to move
       let targetFolder = null;
       
-      // Try whose() first for performance
-      try {
-        const folders = doc.flattenedFolders.whose({id: folderId})();
-        if (folders && folders.length > 0) {
-          targetFolder = folders[0];
-        }
-      } catch (e) {
-        // whose() failed, fall back to iteration
-      }
-      
-      // Fall back to iteration if whose() didn't work
-      if (!targetFolder) {
+      // Find by iteration (avoid whose())
+      {
         const allFolders = doc.flattenedFolders();
         
         if (!allFolders) {

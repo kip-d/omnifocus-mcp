@@ -2,13 +2,13 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized productivity statistics script using direct OmniFocus API methods
- * 
+ *
  * Uses undocumented but officially supported API methods for better performance:
  * - Project.task.numberOfTasks() for direct counts
  * - Project.task.numberOfCompletedTasks() for completion counts
  * - Tag.availableTaskCount() for tag statistics
  * - OPTIMIZED: Uses analytics helpers (~130 lines vs 551 lines - 76% reduction)
- * 
+ *
  * Performance improvements:
  * - 50-80% faster than manual iteration
  * - No timeout issues with large databases
