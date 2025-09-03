@@ -1,4 +1,4 @@
-import { getBasicHelpers } from '../shared/helpers.js';
+import { getFullStatusHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list tasks with advanced filtering in OmniFocus
@@ -11,7 +11,7 @@ import { getBasicHelpers } from '../shared/helpers.js';
  * - Performance metrics
  */
 export const LIST_TASKS_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getFullStatusHelpers()}
   
   // Minimal repeat rule extractor (to avoid massive 321-line REPEAT_HELPERS)
   function extractRepeatRuleInfo(repetitionRule) {

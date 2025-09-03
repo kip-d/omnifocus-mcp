@@ -216,6 +216,33 @@ Always reference the official specification rather than making assumptions about
 - **Script timeouts?** Check OmniFocus not blocked by dialogs
 - **ID issues?** See src/omnifocus/scripts/tasks.ts for extraction patterns
 
+## 🚨 CRITICAL: MCP Testing Pattern Recognition
+
+**NEVER confuse graceful server exit with failure!**
+
+### ✅ SUCCESS Pattern:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
+[INFO] [tools] Executing tool: tasks [...]
+# JSON response appears here (if any)
+[INFO] [server] stdin closed, exiting gracefully per MCP specification
+```
+**This is SUCCESSFUL execution!** The server exits gracefully as required by MCP spec.
+
+### ❌ FAILURE Pattern:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
+[INFO] [tools] Executing tool: tasks [...]
+{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"SCRIPT_ERROR",...}}
+[INFO] [server] stdin closed, exiting gracefully per MCP specification
+```
+**This shows actual failure** - JSON error response before graceful exit.
+
+### Key Indicators:
+- **Success**: Tool execution log + graceful exit (JSON response may not be visible in bash output)
+- **Failure**: Tool execution log + JSON error response + graceful exit
+- **The graceful exit itself is NEVER an error** - it's required MCP compliance!
+
 ## Known Limitations & Workarounds
 
 ### JXA whose() Limitations
