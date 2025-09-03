@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
-import { 
-  ScriptResult, 
+import {
+  ScriptResult,
   createScriptSuccess,
-  createScriptError 
+  createScriptError,
 } from './script-result-types.js';
 
 // For TypeScript type information about OmniFocus objects, see:
@@ -44,13 +44,13 @@ export class OmniAutomation {
   public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     try {
       const result = await this.execute<any>(script);
-      
+
       // Handle raw script errors (when script returns error object)
       if (result && typeof result === 'object' && result.error === true) {
         return createScriptError(
           result.message || 'Script execution failed',
           result.details || 'No additional context',
-          result
+          result,
         );
       }
 
@@ -61,7 +61,7 @@ export class OmniAutomation {
           return createScriptError(
             'Script result validation failed',
             `Schema validation errors: ${validation.error.issues.map(i => i.message).join(', ')}`,
-            { result, errors: validation.error.issues }
+            { result, errors: validation.error.issues },
           );
         }
         return createScriptSuccess(validation.data);
@@ -73,14 +73,14 @@ export class OmniAutomation {
         return createScriptError(
           error.message,
           'OmniAutomation execution error',
-          { script: error.script, stderr: error.stderr }
+          { script: error.script, stderr: error.stderr },
         );
       }
-      
+
       return createScriptError(
         error instanceof Error ? error.message : 'Unknown execution error',
         'Unexpected error during script execution',
-        error
+        error,
       );
     }
   }

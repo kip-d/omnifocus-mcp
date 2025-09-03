@@ -2,7 +2,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * LIGHTWEIGHT Script to update core project properties in OmniFocus
- * 
+ *
  * CRITICAL: This script was reduced from 9679 to ~3000 chars to fix "Can't convert types" errors
  * caused by JXA script size limits. Complex features like folder moves and review intervals
  * have been simplified or removed to ensure reliability.

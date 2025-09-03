@@ -4,6 +4,7 @@ import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scr
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { StandardResponse } from '../../utils/response-format.js';
 import { DeleteTaskSchema } from '../schemas/task-schemas.js';
+import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
   name = 'delete_task';

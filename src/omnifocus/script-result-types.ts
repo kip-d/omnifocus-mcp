@@ -1,6 +1,6 @@
 /**
  * Type-safe script result handling for OmniAutomation v2.1.0
- * 
+ *
  * This module defines discriminated unions and type guards to eliminate
  * scattered error checking and improve type safety across the codebase.
  */
@@ -102,6 +102,56 @@ export const ProjectUpdateResultSchema = z.object({
   project: ProjectResultSchema.optional(),
 });
 
+// Specific schema for task update operations
+export const TaskUpdateResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  changes: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  task: TaskResultSchema.optional(),
+});
+
+// Schema for task/project list results
+export const ListResultSchema = z.object({
+  items: z.array(z.unknown()), // Will be tasks or projects
+  summary: z.object({
+    total: z.number(),
+    insights: z.array(z.string()).optional(),
+  }).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+// Schema for folder operations
+export const FolderResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  parent: z.string().optional(),
+  status: z.string().optional(),
+});
+
+// Schema for folder operations results
+export const FolderOperationResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  folder: FolderResultSchema.optional(),
+  changes: z.array(z.string()).optional(),
+});
+
+// Schema for analytics results
+export const AnalyticsResultSchema = z.object({
+  summary: z.record(z.unknown()),
+  data: z.record(z.unknown()).optional(),
+  insights: z.array(z.string()).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+// Schema for simple success/error operations
+export const SimpleOperationResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  data: z.unknown().optional(),
+});
+
 /**
  * Helpers to create ScriptResult instances
  */
@@ -110,10 +160,10 @@ export function createScriptSuccess<T>(data: T): ScriptSuccess<T> {
 }
 
 export function createScriptError(
-  error: string, 
-  context?: string, 
+  error: string,
+  context?: string,
   details?: unknown,
-  stack?: string
+  stack?: string,
 ): ScriptError {
   return { success: false, error, context, details, stack };
 }
@@ -126,7 +176,7 @@ export function unwrapScriptResult<T>(result: ScriptResult<T>): T {
   if (isScriptSuccess(result)) {
     return result.data;
   }
-  
+
   const error = new Error(`Script execution failed: ${result.error}`);
   error.name = 'ScriptExecutionError';
   if (result.context) {

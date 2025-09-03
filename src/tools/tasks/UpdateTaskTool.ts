@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { UPDATE_TASK_ULTRA_MINIMAL_SCRIPT } from '../../omnifocus/scripts/tasks/update-task-ultra-minimal.js';
+import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
+import { isScriptSuccess, TaskUpdateResultSchema } from '../../omnifocus/script-result-types.js';
 import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { UpdateTaskResponse } from '../response-types.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
@@ -72,52 +73,24 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         safeUpdatesKeys: Object.keys(safeUpdates),
       });
 
-      // Use ultra-minimal script with JSON string to avoid parameter expansion
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_ULTRA_MINIMAL_SCRIPT, {
-        taskId: taskId, // Don't stringify - buildScript will handle it
-        updatesJson: JSON.stringify(safeUpdates), // Single stringify - buildScript will quote it
-      });
+      // Use new function argument architecture for template substitution safety
+      const script = createUpdateTaskScript(taskId, safeUpdates);
+      const result = await this.omniAutomation.executeJson(script, TaskUpdateResultSchema);
 
-      const result = await this.omniAutomation.execute<string | { error: boolean; message: string; details?: string }>(script);
-
-      // Handle script execution errors
-      if (result && typeof result === 'object' && 'error' in result && result.error) {
-        const errorMessage = 'message' in result ? String(result.message) : 'Failed to update task';
-        this.logger.error(`Update task script error: ${errorMessage}`);
+      // Handle script execution errors using discriminated unions
+      if (!isScriptSuccess(result)) {
+        this.logger.error(`Update task script error: ${result.error}`);
         return createErrorResponse(
           'update_task',
           'SCRIPT_ERROR',
-          errorMessage,
-          'details' in result ? result.details : undefined,
+          result.error,
+          result.details,
           timer.toMetadata(),
         );
       }
 
-      // Parse the JSON result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
-        this.logger.error(`Failed to parse update task result: ${result}`);
-        return createErrorResponse(
-          'update_task',
-          'PARSE_ERROR',
-          'Failed to parse task update response',
-          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-          timer.toMetadata(),
-        );
-      }
-
-      // Check if the parsed result indicates an error
-      if (parsedResult.error) {
-        return createErrorResponse(
-          'update_task',
-          'UPDATE_FAILED',
-          parsedResult.message || 'Update failed',
-          parsedResult,
-          timer.toMetadata(),
-        );
-      }
+      // Extract validated data from successful result
+      const parsedResult = result.data;
 
       // Invalidate caches after successful update
       this.cache.invalidate('tasks');
@@ -152,10 +125,22 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         } as any;
       }
 
+      // Transform new schema-validated result to expected format
+      const taskData = parsedResult.task || { id: taskId, name: 'Unknown' };
+      const transformedResult = {
+        id: taskData.id || taskId,
+        name: taskData.name || 'Unknown',
+        updated: true,
+        changes: Object.keys(safeUpdates).reduce((acc, key) => {
+          acc[key] = safeUpdates[key];
+          return acc;
+        }, {} as Record<string, unknown>),
+      };
+
       // Return standardized response with proper typing
       return createTaskResponse(
         'update_task',
-        parsedResult,
+        transformedResult,
         {
           ...timer.toMetadata(),
           updated_id: taskId,
