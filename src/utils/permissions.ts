@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFile } from 'child_process';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('PermissionChecker');
@@ -12,6 +12,8 @@ export interface PermissionStatus {
 export class PermissionChecker {
   private static instance: PermissionChecker;
   private permissionStatus: PermissionStatus | null = null;
+  private lastCheckedAt: number | null = null;
+  private ttlMs: number = 15_000; // short TTL to avoid frequent prompts
 
   static getInstance(): PermissionChecker {
     if (!PermissionChecker.instance) {
@@ -23,51 +25,70 @@ export class PermissionChecker {
   /**
    * Check if we have permission to access OmniFocus
    */
-  checkPermissions(): PermissionStatus {
-    // Return cached result if we've already checked
-    if (this.permissionStatus !== null) {
+  async checkPermissions(): Promise<PermissionStatus> {
+    // Return cached result if within TTL
+    const now = Date.now();
+    if (
+      this.permissionStatus !== null &&
+      this.lastCheckedAt !== null &&
+      now - this.lastCheckedAt < this.ttlMs
+    ) {
       return this.permissionStatus;
     }
 
-    try {
-      // Simple test to see if we can access OmniFocus
-      execSync(
-        'osascript -e \'tell application "OmniFocus" to return name of default document\'',
-        { encoding: 'utf8', stdio: 'pipe' },
-      );
+    const cmd = 'osascript';
+    const args = ['-e', 'tell application "OmniFocus" to return name of default document'];
 
+    const status = await new Promise<PermissionStatus>((resolve) => {
+      const child = execFile(cmd, args, { timeout: 3_000 }, (error) => {
+        if (!error) {
+          resolve({ hasPermission: true });
+          return;
+        }
+
+        const msg = error instanceof Error ? error.message : String(error);
+
+        if (msg.includes('-1743') || msg.includes('not allowed')) {
+          resolve({
+            hasPermission: false,
+            error: 'Not authorized to send Apple events to OmniFocus',
+            instructions: this.getPermissionInstructions(),
+          });
+        } else if (msg.includes('-600') || msg.includes("isn't running")) {
+          resolve({
+            hasPermission: false,
+            error: 'OmniFocus is not running',
+            instructions: 'Please start OmniFocus and try again.',
+          });
+        } else if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+          resolve({
+            hasPermission: false,
+            error: 'Timed out checking OmniFocus permissions',
+            instructions: 'Ensure OmniFocus is responsive and try again.',
+          });
+        } else {
+          resolve({
+            hasPermission: false,
+            error: 'Failed to check OmniFocus permissions',
+            instructions: 'Please ensure OmniFocus is installed and try again.',
+          });
+        }
+      });
+
+      // Safety: kill process on hard timeout to avoid hangs
+      child.on('error', () => {/* handled in callback */});
+    });
+
+    // Log concise status
+    if (status.hasPermission) {
       logger.info('OmniFocus permissions verified');
-      this.permissionStatus = { hasPermission: true };
-      return this.permissionStatus;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Check for specific permission error codes
-      if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
-        logger.error('OmniFocus permission denied');
-        this.permissionStatus = {
-          hasPermission: false,
-          error: 'Not authorized to send Apple events to OmniFocus',
-          instructions: this.getPermissionInstructions(),
-        };
-      } else if (errorMessage.includes('-600') || errorMessage.includes("isn't running")) {
-        logger.error('OmniFocus is not running');
-        this.permissionStatus = {
-          hasPermission: false,
-          error: 'OmniFocus is not running',
-          instructions: 'Please start OmniFocus and try again.',
-        };
-      } else {
-        logger.error('Unknown error checking permissions:', errorMessage);
-        this.permissionStatus = {
-          hasPermission: false,
-          error: 'Failed to check OmniFocus permissions',
-          instructions: 'Please ensure OmniFocus is installed and try again.',
-        };
-      }
-
-      return this.permissionStatus;
+    } else {
+      logger.warn('OmniFocus permissions not granted or unavailable');
     }
+
+    this.permissionStatus = status;
+    this.lastCheckedAt = Date.now();
+    return status;
   }
 
   /**
@@ -75,6 +96,7 @@ export class PermissionChecker {
    */
   resetCache(): void {
     this.permissionStatus = null;
+    this.lastCheckedAt = null;
   }
 
   private getPermissionInstructions(): string {

@@ -1,5 +1,5 @@
 // Import shared safe utilities
-import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
+import { SAFE_UTILITIES_SCRIPT } from './shared/helpers.js';
 
 export const PRODUCTIVITY_STATS_SCRIPT = `
   const options = {{options}};

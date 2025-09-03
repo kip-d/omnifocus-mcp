@@ -1,4 +1,5 @@
 import { getRecurrenceHelpers } from '../shared/helpers.js';
+import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
@@ -11,6 +12,7 @@ import { getRecurrenceHelpers } from '../shared/helpers.js';
  */
 export const UPDATE_TASK_SCRIPT = `
   ${getRecurrenceHelpers()}
+  ${BRIDGE_HELPERS}
   
   (() => {
     const taskId = {{taskId}};
@@ -20,24 +22,12 @@ export const UPDATE_TASK_SCRIPT = `
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     
-    // Find task by ID
-    // Use whose() for O(1) lookup - much faster than iteration
+    // Find task by ID without using 'whose' per performance guidance
     let task = null;
-    try {
-      const matches = doc.flattenedTasks.whose({id: taskId});
-      if (matches && matches.length > 0) {
-        task = matches[0];
-      }
-    } catch (e) {
-      // whose() failed, fall back to iteration
-      const tasks = doc.flattenedTasks();
-      if (tasks) {
-        for (let i = 0; i < tasks.length; i++) {
-          if (safeGet(() => tasks[i].id()) === taskId) {
-            task = tasks[i];
-            break;
-          }
-        }
+    const tasks = doc.flattenedTasks();
+    if (tasks) {
+      for (let i = 0; i < tasks.length; i++) {
+        if (safeGet(() => tasks[i].id()) === taskId) { task = tasks[i]; break; }
       }
     }
     
@@ -149,36 +139,7 @@ export const UPDATE_TASK_SCRIPT = `
           const escapedTaskId = JSON.stringify(currentTaskId);
           const escapedProjectId = JSON.stringify(updates.projectId);
           
-          const moveScript = [
-            '(() => {',
-            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
-            '  const targetProject = Project.byIdentifier(' + escapedProjectId + ');',
-            '  ',
-            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
-            '  if (!targetProject) return JSON.stringify({success: false, error: "Project not found"});',
-            '  ',
-            '  try {',
-            '    // Use global moveTasks to move task to new project',
-            '    // This preserves the task ID and all properties',
-            '    moveTasks([task], targetProject.beginning);',
-            '    ',
-            '    return JSON.stringify({',
-            '      success: true,',
-            '      message: "Moved to project",',
-            '      projectName: targetProject.name,',
-            '      taskId: task.id.primaryKey',
-            '    });',
-            '  } catch (error) {',
-            '    return JSON.stringify({',
-            '      success: false,',
-            '      error: "Failed to move task: " + (error.message || error.toString())',
-            '    });',
-            '  }',
-            '})()'  
-          ].join('');
-          
-          const moveResult = app.evaluateJavascript(moveScript);
-          const parsed = JSON.parse(moveResult);
+          const parsed = moveTaskViaBridge(currentTaskId, 'project', updates.projectId, app);
           
           if (!parsed.success) {
             // Fall back to direct assignment if bridge fails
@@ -204,43 +165,13 @@ export const UPDATE_TASK_SCRIPT = `
         
         if (updates.parentTaskId === null || updates.parentTaskId === "") {
           // Move to project root or inbox (remove parent)
-          const reparentScript = [
-            '(() => {',
-            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
-            '  ',
-            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
-            '  ',
-            '  try {',
-            '    // Remove from parent by moving to project or inbox',
-            '    const currentProject = task.containingProject;',
-            '    ',
-            '    if (currentProject) {',
-            '      // Move to project root using global moveTasks',
-            '      moveTasks([task], currentProject);',
-            '      return JSON.stringify({',
-            '        success: true,',
-            '        message: "Moved to project root",',
-            '        projectName: currentProject.name',
-            '      });',
-            '    } else {',
-            '      // Move to inbox using global moveTasks',
-            '      moveTasks([task], inbox);',
-            '      return JSON.stringify({',
-            '        success: true,',
-            '        message: "Moved to inbox"',
-            '      });',
-            '    }',
-            '  } catch (error) {',
-            '    return JSON.stringify({',
-            '      success: false,',
-            '      error: "Failed to remove parent: " + (error.message || error.toString())',
-            '    });',
-            '  }',
-            '})()'  
-          ].join('');
-          
-          const result = app.evaluateJavascript(reparentScript);
-          reparentResult = JSON.parse(result);
+          // Remove parent: move to project root if available, else inbox
+          const currentProject = safeGetProject(task);
+          if (currentProject && currentProject.id) {
+            reparentResult = moveTaskViaBridge(currentTaskId, 'project', currentProject.id, app);
+          } else {
+            reparentResult = moveTaskViaBridge(currentTaskId, 'inbox', null, app);
+          }
           
           if (reparentResult.success) {
             console.log('Successfully removed parent from task via bridge');
@@ -274,35 +205,7 @@ export const UPDATE_TASK_SCRIPT = `
           // Use the global moveTasks() function available in OmniJS
           const escapedParentTaskId = JSON.stringify(updates.parentTaskId);
           
-          const reparentScript = [
-            '(() => {',
-            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
-            '  const newParent = Task.byIdentifier(' + escapedParentTaskId + ');',
-            '  ',
-            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
-            '  if (!newParent) return JSON.stringify({success: false, error: "Parent task not found"});',
-            '  ',
-            '  try {',
-            '    // Use the global moveTasks function to move the task',
-            '    moveTasks([task], newParent);',
-            '    ',
-            '    return JSON.stringify({',
-            '      success: true,',
-            '      message: "Task moved to parent",',
-            '      parentName: newParent.name,',
-            '      parentId: newParent.id.primaryKey',
-            '    });',
-            '  } catch (error) {',
-            '    return JSON.stringify({',
-            '      success: false,',
-            '      error: "Failed to move task: " + (error.message || error.toString())',
-            '    });',
-            '  }',
-            '})()'  
-          ].join('');
-          
-          const result = app.evaluateJavascript(reparentScript);
-          reparentResult = JSON.parse(result);
+          reparentResult = moveTaskViaBridge(currentTaskId, 'parent', updates.parentTaskId, app);
           
           if (reparentResult.success) {
             console.log('Successfully moved task to parent "' + reparentResult.parentName + '" via bridge');

@@ -142,43 +142,42 @@ export const REPEAT_HELPERS = `
     try {
       const app = Application('OmniFocus');
       
-      // Map method to Omni Automation constant
-      let methodConstant = 'Task.RepetitionMethod.Fixed';
-      switch (ruleData.method) {
-        case 'DeferUntilDate':
-          methodConstant = 'Task.RepetitionMethod.DeferUntilDate';
-          break;
-        case 'DueDate':
-          methodConstant = 'Task.RepetitionMethod.DueDate';
-          break;
+      // Prefer consolidated bridge helper if available
+      if (typeof setRepeatRuleViaBridge === 'function') {
+        const methodName = ruleData.method || 'Fixed';
+        const res = setRepeatRuleViaBridge(taskId, ruleData.ruleString, methodName, app);
+        if (res && res.success) {
+          console.log('Applied repetition rule via consolidated bridge');
+          return true;
+        }
+        console.log('Consolidated bridge failed, falling back to inline script:', res && res.error);
       }
-      
-      // Use evaluateJavascript to apply the repetition rule
-      // Properly escape parameters to prevent injection
-      const escapedTaskId = JSON.stringify(taskId);
-      const escapedRuleString = JSON.stringify(ruleData.ruleString);
-      
-      const script = [
-        'const task = Task.byIdentifier(' + escapedTaskId + ');',
-        'if (task) {',
-        '  const rule = new Task.RepetitionRule(',
-        '    ' + escapedRuleString + ',',
-        '    ' + methodConstant,
-        '  );',
-        '  task.repetitionRule = rule;',
-        '  "success";',
-        '} else {',
-        '  "task_not_found";',
-        '}'
-      ].join('');
-      
-      const result = app.evaluateJavascript(script);
-      
-      if (result === 'success') {
-        console.log('Applied repetition rule via evaluateJavascript bridge');
-        return true;
-      } else {
-        console.log('Failed to apply repetition rule:', result);
+
+      // Fallback inline script (legacy)
+      try {
+        let methodConstant = 'Task.RepetitionMethod.Fixed';
+        switch (ruleData.method) {
+          case 'DeferUntilDate': methodConstant = 'Task.RepetitionMethod.DeferUntilDate'; break;
+          case 'DueDate': methodConstant = 'Task.RepetitionMethod.DueDate'; break;
+        }
+        const escapedTaskId = JSON.stringify(taskId);
+        const escapedRuleString = JSON.stringify(ruleData.ruleString);
+        const script = [
+          'const task = Task.byIdentifier(' + escapedTaskId + ');',
+          'if (task) {',
+          '  const rule = new Task.RepetitionRule(' + escapedRuleString + ', ' + methodConstant + ');',
+          '  task.repetitionRule = rule;',
+          '  "success";',
+          '} else {',
+          '  "task_not_found";',
+          '}'
+        ].join('');
+        const result = app.evaluateJavascript(script);
+        if (result === 'success') return true;
+        console.log('Failed to apply repetition rule (legacy):', result);
+        return false;
+      } catch (e) {
+        console.log('Error in legacy repetition rule apply:', e.message);
         return false;
       }
       

@@ -330,26 +330,11 @@ export const PROJECT_VALIDATION = `
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
     
-    // Try whose() first for performance
+    // Find by iteration (avoid whose())
     let foundProject = null;
-    try {
-      const projects = doc.flattenedProjects.whose({id: projectId})();
-      if (projects && projects.length > 0) {
-        foundProject = projects[0];
-      }
-    } catch (e) {
-      // whose() failed, fall back to iteration
-    }
-    
-    // Fall back to iteration if whose() didn't work
-    if (!foundProject) {
-      const projects = doc.flattenedProjects();
-      for (let i = 0; i < projects.length; i++) {
-        if (projects[i].id() === projectId) {
-          foundProject = projects[i];
-          break;
-        }
-      }
+    const projects = doc.flattenedProjects();
+    for (let i = 0; i < projects.length; i++) {
+      try { if (projects[i].id() === projectId) { foundProject = projects[i]; break; } } catch (e) {}
     }
     
     if (!foundProject) {
@@ -536,7 +521,7 @@ export function getDateHelpers(): string {
 }
 
 /**
- * TASK HELPERS: Basic task property access with bridge optimization (~80 lines) 
+ * TASK HELPERS: Basic task property access with bridge optimization (~80 lines)
  * Includes JXA bridge optimization for tag operations
  */
 export function getTaskHelpers(): string {
@@ -868,7 +853,7 @@ export function getValidationHelpers(): string {
 }
 
 /**
- * SERIALIZATION HELPERS: Task serialization with full details (~100 lines)  
+ * SERIALIZATION HELPERS: Task serialization with full details (~100 lines)
  */
 export function getSerializationHelpers(): string {
   return TASK_SERIALIZATION;
@@ -886,8 +871,8 @@ export function getSerializationHelpers(): string {
 export function getBasicHelpers(): string {
   return [
     getCoreHelpers(),
-    getDateHelpers(), 
-    getTaskHelpers()
+    getDateHelpers(),
+    getTaskHelpers(),
   ].join('\n');
 }
 
@@ -902,20 +887,20 @@ export function getAnalyticsHelpers(): string {
 /**
  * List helpers: Basic + project helpers + serialization (~310 lines)
  * For list/query scripts that need full task details
- */  
+ */
 export function getListHelpers(): string {
   return [
     getCoreHelpers(),
     getDateHelpers(),
     getTaskHelpers(),
     getProjectHelpers(),
-    getSerializationHelpers()
+    getSerializationHelpers(),
   ].join('\n');
 }
 
 /**
  * OPTIMIZED Full status helpers: Basic + all status logic + validation (~280 lines vs 380 lines)
- * For scripts that need complex task status analysis (blocked/available/next)  
+ * For scripts that need complex task status analysis (blocked/available/next)
  * Uses direct API methods for 40-80% performance improvement in status checks
  */
 export function getFullStatusHelpers(): string {
@@ -925,7 +910,7 @@ export function getFullStatusHelpers(): string {
     getTaskHelpers(),
     getProjectHelpers(),
     getTaskStatusHelpers(),
-    getValidationHelpers()
+    getValidationHelpers(),
   ].join('\n');
 }
 
@@ -936,10 +921,94 @@ export function getFullStatusHelpers(): string {
 export function getRecurrenceHelpers(): string {
   return [
     getCoreHelpers(),
-    getDateHelpers(), 
+    getDateHelpers(),
     getTaskHelpers(),
-    REPEAT_HELPERS
+    REPEAT_HELPERS,
   ].join('\n');
+}
+
+/**
+ * Minimal recurrence helpers for creation/update only (~150 lines)
+ * Includes: convertToRRULE, convertToOmniMethod, prepareRepetitionRuleData,
+ *           applyRepetitionRuleViaBridge, applyDeferAnother
+ * Excludes heavy repeat rule extraction/analysis to keep scripts small.
+ */
+export function getRecurrenceApplyHelpers(): string {
+  return `
+  function convertToRRULE(rule) {
+    if (!rule || !rule.unit || !rule.steps) return '';
+    const u = rule.unit;
+    const s = rule.steps;
+    const F = u === 'minute' ? 'MINUTELY' : u === 'hour' ? 'HOURLY' : u === 'day' ? 'DAILY' : u === 'week' ? 'WEEKLY' : u === 'month' ? 'MONTHLY' : u === 'year' ? 'YEARLY' : '';
+    if (!F) return '';
+    let r = 'FREQ=' + F;
+    if (s > 1) r += ';INTERVAL=' + s;
+    if (Array.isArray(rule.weekdays) && rule.weekdays.length) {
+      const M = {sunday:'SU',monday:'MO',tuesday:'TU',wednesday:'WE',thursday:'TH',friday:'FR',saturday:'SA'};
+      const days = rule.weekdays.map(d => M[d] || '').filter(Boolean).join(',');
+      if (days) r += ';BYDAY=' + days;
+    }
+    if (rule.weekPosition && rule.weekday) {
+      const M = {sunday:'SU',monday:'MO',tuesday:'TU',wednesday:'WE',thursday:'TH',friday:'FR',saturday:'SA'};
+      const w = M[rule.weekday];
+      if (w) {
+        if (Array.isArray(rule.weekPosition)) {
+          const pos = rule.weekPosition.map(p => p === 'last' ? ('-1' + w) : (p + w)).join(',');
+          r += ';BYDAY=' + pos;
+        } else {
+          const p = rule.weekPosition === 'last' ? '-1' : String(rule.weekPosition);
+          r += ';BYDAY=' + p + w;
+        }
+      }
+    }
+    return r;
+  }
+  function convertToOmniMethod(method) {
+    return method === 'start-after-completion' ? 'DeferUntilDate' : method === 'due-after-completion' ? 'DueDate' : method === 'fixed' ? 'Fixed' : 'None';
+  }
+  function prepareRepetitionRuleData(rule) {
+    if (!rule || !rule.unit || !rule.steps) return null;
+    try {
+      const ruleString = convertToRRULE(rule);
+      const method = convertToOmniMethod(rule.method || 'fixed');
+      if (!ruleString) return null;
+      return { ruleString, method, needsBridge: true };
+    } catch (e) { return null }
+  }
+  function applyRepetitionRuleViaBridge(taskId, ruleData) {
+    if (!ruleData || !ruleData.ruleString || !taskId) return false;
+    try {
+      const app = Application('OmniFocus');
+      if (typeof setRepeatRuleViaBridge === 'function') {
+        const res = setRepeatRuleViaBridge(taskId, ruleData.ruleString, ruleData.method || 'Fixed', app);
+        return !!(res && res.success);
+      }
+      try {
+        const escapedTaskId = JSON.stringify(taskId);
+        const escapedRule = JSON.stringify(ruleData.ruleString);
+        const method = ruleData.method === 'DeferUntilDate' ? 'Task.RepetitionMethod.DeferUntilDate' : ruleData.method === 'DueDate' ? 'Task.RepetitionMethod.DueDate' : 'Task.RepetitionMethod.Fixed';
+        const script = [
+          'const task = Task.byIdentifier(' + escapedTaskId + ');',
+          'if (task) {',
+          '  const rule = new Task.RepetitionRule(' + escapedRule + ', ' + method + ');',
+          '  task.repetitionRule = rule;',
+          '  "success";',
+          '} else {',
+          '  "task_not_found";',
+          '}'
+        ].join('');
+        return app.evaluateJavascript(script) === 'success';
+      } catch (e2) { return false }
+    } catch (e) { return false }
+  }
+  function applyDeferAnother(task, rule) {
+    if (!rule || !rule.deferAnother || !task.dueDate()) return;
+    const u = rule.deferAnother.unit, n = rule.deferAnother.steps;
+    let ms = 0;
+    if (u === 'minute') ms = n * 60 * 1000; else if (u === 'hour') ms = n * 3600000; else if (u === 'day') ms = n * 86400000; else if (u === 'week') ms = n * 604800000; else if (u === 'month') ms = n * 2592000000; else if (u === 'year') ms = n * 31536000000;
+    if (ms > 0) task.deferDate = new Date(task.dueDate().getTime() - ms);
+  }
+  `;
 }
 
 /**
@@ -995,7 +1064,7 @@ export function getTagHelpers(): string {
       };
     }
   }
-    `
+    `,
   ].join('\n');
 }
 
@@ -1004,108 +1073,7 @@ export function getTagHelpers(): string {
  * For scripts that modify tasks/projects and need reliable operations
  * Essential for create/update operations that use evaluateJavaScript
  */
-export function getBridgeHelpers(): string {
-  return [
-    getCoreHelpers(),
-    getTaskHelpers(),
-    `
-  // BRIDGE: Set tags via evaluateJavaScript - ensures tags are properly created and assigned
-  function setTagsViaBridge(taskId, tagNames, app) {
-    try {
-      const script = [
-        '(() => {',
-        '  const task = Task.byIdentifier("' + taskId + '");',
-        '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
-        '  ',
-        '  task.clearTags();',
-        '  const added = [];',
-        '  ',
-        '  for (const name of ' + JSON.stringify(tagNames) + ') {',
-        '    let tag = flattenedTags.byName(name);',
-        '    if (!tag) tag = new Tag(name);',
-        '    task.addTag(tag);',
-        '    added.push(name);',
-        '  }',
-        '  ',
-        '  return JSON.stringify({success: true, tags: added});',
-        '})()'
-      ].join('');
-      
-      const result = app.evaluateJavascript(script);
-      return JSON.parse(result);
-    } catch (e) {
-      return {success: false, error: e.message};
-    }
-  }
-  
-  // BRIDGE: Move task via evaluateJavaScript - handles project/parent/inbox moves
-  function moveTaskViaBridge(taskId, targetType, targetId, app) {
-    try {
-      let moveScript = '';
-      
-      if (targetType === 'inbox') {
-        moveScript = [
-          '(() => {',
-          '  const task = Task.byIdentifier("' + taskId + '");',
-          '  if (!task) return "not_found";',
-          '  moveTasks([task], inbox.beginning);',
-          '  return "moved";',
-          '})()'
-        ].join('');
-      } else if (targetType === 'project') {
-        moveScript = [
-          '(() => {',
-          '  const task = Task.byIdentifier("' + taskId + '");',
-          '  const project = Project.byIdentifier("' + targetId + '");',
-          '  if (!task || !project) return "not_found";',
-          '  moveTasks([task], project.beginning);',
-          '  return "moved";',
-          '})()'
-        ].join('');
-      } else if (targetType === 'parent') {
-        moveScript = [
-          '(() => {',
-          '  const task = Task.byIdentifier("' + taskId + '");',
-          '  const parent = Task.byIdentifier("' + targetId + '");',
-          '  if (!task || !parent) return "not_found";',
-          '  moveTasks([task], parent);',
-          '  return "moved";',
-          '})()'
-        ].join('');
-      }
-      
-      const result = app.evaluateJavascript(moveScript);
-      return result === "moved";
-    } catch (e) {
-      return false;
-    }
-  }
-  
-  // BRIDGE: Get repeat rule via evaluateJavaScript
-  function getRepeatRuleViaBridge(taskId, app) {
-    try {
-      const script = [
-        '(() => {',
-        '  const task = Task.byIdentifier("' + taskId + '");',
-        '  if (!task || !task.repetitionRule) return "null";',
-        '  ',
-        '  const rule = task.repetitionRule;',
-        '  return JSON.stringify({',
-        '    ruleString: rule.ruleString,',
-        '    method: rule.method.name',
-        '  });',
-        '})()'
-      ].join('');
-      
-      const result = app.evaluateJavascript(script);
-      return result === "null" ? null : JSON.parse(result);
-    } catch (e) {
-      return null;
-    }
-  }
-    `
-  ].join('\n');
-}
+// Note: legacy getBridgeHelpers() removed; use BRIDGE_HELPERS from bridge-helpers.ts
 
 /**
  * Legacy export for backward compatibility

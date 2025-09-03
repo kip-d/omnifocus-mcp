@@ -389,6 +389,10 @@ This distinction ensures compatibility with OmniFocus while maintaining consiste
 - `/docs/PERFORMANCE.md` - Performance optimization
 - `/docs/PERMISSIONS.md` - macOS permissions setup
 
+### Bridge Safety (Developers)
+- Use `src/omnifocus/scripts/shared/bridge-helpers.ts` (`BRIDGE_HELPERS`) for all bridge writes (tags, task moves, repetition rules). Do not hand‑roll `evaluateJavascript` strings.
+- The legacy `getBridgeHelpers()` bundle has been removed. If you see references in older branches, replace them with BRIDGE_HELPERS templates/helpers.
+
 ## License
 
 MIT License - see LICENSE file

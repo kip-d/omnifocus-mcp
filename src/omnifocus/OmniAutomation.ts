@@ -21,7 +21,7 @@ export class OmniAutomation {
   constructor(maxScriptSize?: number, timeout?: number) {
     // Allow configuration via environment variables or constructor parameters
     this.maxScriptSize = maxScriptSize ||
-      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10) : 100000); // Default 100KB
+      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10) : 300000); // Default 300KB to accommodate helper-heavy scripts
     this.timeout = timeout ||
       (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
   }

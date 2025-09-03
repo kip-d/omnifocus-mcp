@@ -12,17 +12,20 @@ export const DELETE_TASK_SCRIPT = `
     const taskId = {{taskId}};
     
     try {
-      // Find task using whose clause
-      const tasks = doc.flattenedTasks.whose({id: taskId})();
+      // Find task without whose()
+      const allTasks = doc.flattenedTasks();
+      let task = null;
+      for (let i = 0; i < allTasks.length; i++) {
+        try { if (safeGet(() => allTasks[i].id()) === taskId) { task = allTasks[i]; break; } } catch (e) {}
+      }
       
-      if (tasks.length === 0) {
+      if (!task) {
         return JSON.stringify({
           error: true,
           message: 'Task not found: ' + taskId
         });
       }
       
-      const task = tasks[0];
       const taskName = task.name();
       
       // Delete the task

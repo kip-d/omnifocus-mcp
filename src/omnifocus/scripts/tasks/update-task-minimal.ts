@@ -1,3 +1,5 @@
+import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
+
 /**
  * Minimal update task script to avoid script size limits
  * Only includes essential helpers to keep script under size limits
@@ -57,6 +59,7 @@ const MINIMAL_HELPERS = `
 
 export const UPDATE_TASK_MINIMAL_SCRIPT = `
   ${MINIMAL_HELPERS}
+  ${BRIDGE_HELPERS}
   
   (() => {
     const taskId = {{taskId}};
@@ -116,10 +119,9 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
       
       // Handle repeat rule updates
       if (updates.clearRepeatRule) {
-        // Clear via bridge for consistency
-        const clearScript = '(() => { const t = Task.byIdentifier("' + taskId + '"); if (t) { t.repetitionRule = null; return "cleared"; } return "not_found"; })()';
-        const clearResult = app.evaluateJavascript(clearScript);
-        if (clearResult === "not_found") {
+        // Clear via consolidated bridge helper
+        const clr = clearRepeatRuleViaBridge(taskId, app);
+        if (!(clr && clr.success)) {
           return JSON.stringify({
             error: true,
             message: "Task not found when clearing repeat rule"
@@ -195,6 +197,16 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
           
           const result = app.evaluateJavascript(ruleScript.join('\n'));
           const parsed = JSON.parse(result);
+
+          // Also apply via consolidated helper when possible
+          try {
+            const rrule = parsed && parsed.ruleString ? parsed.ruleString : (ruleScript && '').toString();
+            const methodName = parsed && parsed.method ? parsed.method : 'Fixed';
+            const applyRes = setRepeatRuleViaBridge(taskId, rrule, methodName, app);
+            if (!(applyRes && applyRes.success)) {
+              // keep JXA-applied rule if present; no throw
+            }
+          } catch (_) {}
           
           if (parsed.error) {
             return JSON.stringify({
@@ -212,15 +224,13 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
         }
       }
       
-      // Project move using evaluateJavascript bridge
+      // Project move using safe bridge helper
       if (updates.projectId !== undefined) {
         try {
           // Handle inbox move - check for null, empty string, or "null" string
           if (updates.projectId === null || updates.projectId === "" || updates.projectId === "null") {
-            // Use moveTasks to move to inbox (more reliable than assignedContainer)
-            const moveScript = 'var t=Task.byIdentifier("' + taskId + '");if(t){moveTasks([t],inbox.beginning);"moved"}else{"err"}';
-            const result = app.evaluateJavascript(moveScript);
-            if (result === "err") {
+            const parsed = moveTaskViaBridge(taskId, 'inbox', null, app);
+            if (!(parsed && parsed.success)) {
               // Fallback to JXA method
               try {
                 doc.moveTasks([task], {to: doc.inboxTasks.beginning});
@@ -242,11 +252,9 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
               });
             }
             
-            // Project exists, proceed with move
-            const moveScript = 'var t=Task.byIdentifier("' + taskId + '");var p=Project.byIdentifier("' + updates.projectId + '");moveTasks([t],p.beginning);"ok"';
-            const result = app.evaluateJavascript(moveScript);
-            
-            if (result !== "ok") {
+            // Project exists, proceed with move via helper
+            const res2 = moveTaskViaBridge(taskId, 'project', updates.projectId, app);
+            if (!(res2 && res2.success)) {
               // Move failed even though project exists
               return JSON.stringify({
                 error: true,
@@ -264,34 +272,11 @@ export const UPDATE_TASK_MINIMAL_SCRIPT = `
         }
       }
       
-      // Tag updates using evaluateJavascript
+      // Tag updates via safe bridge helper
       if (updates.tags !== undefined && Array.isArray(updates.tags)) {
         try {
-          // Use the same approach as create-task which we know works
-          const tagScript = [
-            '(() => {',
-            '  const task = Task.byIdentifier("' + taskId + '");',
-            '  if (!task) return "err";',
-            '  ',
-            '  // Clear existing tags',
-            '  task.clearTags();',
-            '  ',
-            '  // Add new tags',
-            '  for (const name of ' + JSON.stringify(updates.tags) + ') {',
-            '    if (typeof name !== "string" || name.trim() === "") continue;',
-            '    let tag = flattenedTags.byName(name);',
-            '    if (!tag) {',
-            '      tag = new Tag(name);',
-            '    }',
-            '    task.addTag(tag);',
-            '  }',
-            '  return "ok";',
-            '})()'
-          ].join('');
-          
-          const result = app.evaluateJavascript(tagScript);
-          
-          if (result === "err") {
+          const tagRes = setTagsViaBridge(taskId, updates.tags, app);
+          if (!(tagRes && tagRes.success)) {
             // Fallback: Try JXA method
             const allTags = doc.tags();
             const tagObjects = [];

@@ -486,7 +486,7 @@ export class OperationTimerV2 {
  */
 export function normalizeDateInput(
   input: string | Date | null | undefined,
-  context: 'due' | 'defer' | 'completion' | 'generic' = 'generic'
+  context: 'due' | 'defer' | 'completion' | 'generic' = 'generic',
 ): Date | null {
   if (!input) return null;
 

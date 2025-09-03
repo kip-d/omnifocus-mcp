@@ -330,7 +330,14 @@ export const LIST_TASKS_OPTIMIZED_SCRIPT = `
     taskCollection = [];
     for (let tagName of filter.tags) {
       try {
-        const tag = doc.flattenedTags.whose({name: tagName})[0];
+        // Avoid whose(); scan tags and match by name
+        const allTags = doc.flattenedTags();
+        let tag = null;
+        for (let i = 0; i < allTags.length; i++) {
+          try {
+            if (allTags[i].name() === tagName) { tag = allTags[i]; break; }
+          } catch (e) { /* ignore */ }
+        }
         if (tag) {
           const tagTasks = sg(() => tag.tasks(), []);
           taskCollection = taskCollection.concat(tagTasks);

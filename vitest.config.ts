@@ -6,6 +6,10 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30000,        // 30s for most tests
     hookTimeout: 60000,        // 60s for setup/teardown hooks
+    // Sandbox-friendly mode: when VITEST_SAFE=1, use single threaded pool
+    ...(process.env.VITEST_SAFE === '1'
+      ? { pool: 'threads' as const, maxThreads: 1, minThreads: 1 }
+      : {}),
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],

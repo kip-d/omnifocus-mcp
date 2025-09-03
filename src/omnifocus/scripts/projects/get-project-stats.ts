@@ -2,11 +2,11 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
 
 /**
  * Script to get accurate project statistics including available rates
- * 
+ *
  * This script focuses on using OmniFocus's own accurate counts rather than
  * manual task-level analysis, which fixes issues like "Pending Purchase Orders"
  * showing incorrect available rates.
- * 
+ *
  * Features:
  * - Uses OmniFocus's numberOfAvailableTasks() for accurate available counts
  * - Uses OmniFocus's numberOfTasks() for accurate total counts

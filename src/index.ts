@@ -41,7 +41,7 @@ async function runServer() {
   // Perform initial permission check (non-blocking)
   const permissionChecker = PermissionChecker.getInstance();
   try {
-    const result = permissionChecker.checkPermissions();
+    const result = await permissionChecker.checkPermissions();
     if (!result.hasPermission) {
       logger.warn('OmniFocus permissions not granted. Tools will provide instructions when used.');
       if (result.instructions) {
@@ -59,7 +59,7 @@ async function runServer() {
   registerPrompts(server);
 
   const transport = new StdioServerTransport();
-  
+
   // Handle stdin closure for proper MCP lifecycle compliance
   process.stdin.on('end', () => {
     logger.info('stdin closed, exiting gracefully per MCP specification');

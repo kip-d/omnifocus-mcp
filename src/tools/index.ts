@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
-import { createLogger } from '../utils/logger.js';
+import { createLogger, redactArgs } from '../utils/logger.js';
 
 // Import v2.0.0 CONSOLIDATED tools (reduced from 22 to 14 tools)
 
@@ -92,33 +92,34 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
 
-    // Enhanced logging to debug parameter issues
-    logger.info(`Executing tool: ${name}`, {
-      rawArgs: args,
+    // Keep info logs minimal; dump details at debug and redacted
+    logger.info(`Executing tool: ${name}`);
+    logger.debug(`Args for ${name}:`, redactArgs({
       argsType: typeof args,
-      argsKeys: args ? Object.keys(args) : [],
-      serializedArgs: JSON.stringify(args, null, 2),
-    });
+      argsKeys: args ? Object.keys(args as any) : [],
+      args,
+    }));
 
     // Special logging for update_task to debug date parameter issues
     if (name === 'update_task' && args) {
-      logger.info('UpdateTask specific debug:', {
-        taskId: args.taskId,
+      const a: any = args;
+      logger.debug('UpdateTask param snapshot:', redactArgs({
+        taskId: a.taskId,
         dueDate: {
-          provided: 'dueDate' in args,
-          value: args.dueDate,
-          type: typeof args.dueDate,
-          isNull: args.dueDate === null,
-          isUndefined: args.dueDate === undefined,
+          provided: Object.prototype.hasOwnProperty.call(a, 'dueDate'),
+          value: a.dueDate,
+          type: typeof a.dueDate,
+          isNull: a.dueDate === null,
+          isUndefined: a.dueDate === undefined,
         },
-        allParams: Object.entries(args).map(([key, value]) => ({
+        allParams: Object.entries(a).map(([key, value]) => ({
           key,
           value,
           type: typeof value,
           isNull: value === null,
           isUndefined: value === undefined,
         })),
-      });
+      }));
     }
 
     const result = await (tool as any).execute(args || {});
@@ -126,8 +127,8 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
     return {
       content: [
         {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
+          type: 'json',
+          json: result,
         },
       ],
     };

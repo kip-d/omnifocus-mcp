@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
-import { createLogger, Logger } from '../utils/logger.js';
+import { createLogger, Logger, redactArgs } from '../utils/logger.js';
+import { zodToJsonSchema as toJsonSchema } from 'zod-to-json-schema';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
 import {
@@ -43,10 +44,52 @@ export abstract class BaseTool<
    * Get JSON Schema from Zod schema for MCP compatibility
    */
   get inputSchema(): any {
-    // Convert Zod schema to JSON Schema format
-    // For now, we'll use a simplified conversion
-    // In production, consider using a library like zod-to-json-schema
-    return this.zodToJsonSchema(this.schema);
+    // Use proper converter for accurate JSON Schema output
+    // Avoid $ref for smaller, self-contained schemas (MCP-friendly)
+    // Generate a flat JSON Schema object (no $ref/definitions) for MCP
+    const schema: any = toJsonSchema(this.schema as any, {
+      target: 'jsonSchema7',
+      $refStrategy: 'none',
+      effectStrategy: 'input',
+    });
+
+    // Post-process to improve MCP compatibility:
+    // 1) Collapse union types that include null (e.g., ["string","null"]) to just the base type
+    // 2) Treat defaulted fields as required so clients know they are accepted at the top level
+    const normalize = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return;
+
+      if (Array.isArray(obj.type) && obj.type.includes('null')) {
+        // Prefer the first non-null primitive if available
+        const nonNull = obj.type.find((t: any) => t !== 'null');
+        if (nonNull) obj.type = nonNull;
+      }
+
+      // Recurse into nested schemas
+      if (obj.properties) {
+        for (const key of Object.keys(obj.properties)) {
+          normalize(obj.properties[key]);
+        }
+      }
+      if (obj.items) normalize(obj.items);
+      if (obj.anyOf) obj.anyOf.forEach((n: any) => normalize(n));
+      if (obj.oneOf) obj.oneOf.forEach((n: any) => normalize(n));
+      if (obj.allOf) obj.allOf.forEach((n: any) => normalize(n));
+    };
+
+    normalize(schema);
+
+    // Ensure defaulted top-level properties are marked as required
+    if (schema && schema.type === 'object' && schema.properties) {
+      schema.required = schema.required || [];
+      for (const [prop, def] of Object.entries<any>(schema.properties)) {
+        if (def && Object.prototype.hasOwnProperty.call(def, 'default')) {
+          if (!schema.required.includes(prop)) schema.required.push(prop);
+        }
+      }
+    }
+
+    return schema;
   }
 
   /**
@@ -119,7 +162,7 @@ export abstract class BaseTool<
         errorType,
         errorMessage,
         validationErrors,
-        inputArgs: args,
+        inputArgs: redactArgs(args),
         // Add schema information to help understand what was expected
         schemaDescription: this.description,
       };
@@ -282,127 +325,4 @@ export abstract class BaseTool<
     );
   }
 
-  /**
-   * Simple Zod to JSON Schema converter
-   * In production, use a proper library like zod-to-json-schema
-   */
-  private zodToJsonSchema(schema: z.ZodType): any {
-    // This is a simplified implementation
-    // For full compatibility, use a library like zod-to-json-schema
-
-    // Handle refinements (e.g., z.object().refine())
-    if (schema instanceof z.ZodEffects) {
-      // Extract the inner schema from refinement
-      return this.zodToJsonSchema(schema._def.schema);
-    }
-
-    if (schema instanceof z.ZodObject) {
-      const shape = schema.shape;
-      const properties: Record<string, any> = {};
-      const required: string[] = [];
-
-      for (const [key, value] of Object.entries(shape)) {
-        properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
-
-        // Check if field is required
-        if (!(value instanceof z.ZodOptional)) {
-          required.push(key);
-        }
-      }
-
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined,
-      };
-    }
-
-    return { type: 'object', properties: {} };
-  }
-
-  /**
-   * Convert individual Zod types to JSON Schema
-   */
-  private zodTypeToJsonSchema(schema: z.ZodType): any {
-    if (schema instanceof z.ZodString) {
-      return { type: 'string', description: schema.description };
-    }
-    if (schema instanceof z.ZodNumber) {
-      return { type: 'number', description: schema.description };
-    }
-    if (schema instanceof z.ZodBoolean) {
-      return { type: 'boolean', description: schema.description };
-    }
-    if (schema instanceof z.ZodArray) {
-      return {
-        type: 'array',
-        items: this.zodTypeToJsonSchema(schema._def.type),
-        description: schema.description,
-      };
-    }
-    if (schema instanceof z.ZodOptional) {
-      const result = this.zodTypeToJsonSchema(schema._def.innerType);
-      // Preserve the optional's description if it has one
-      if (schema.description) {
-        result.description = schema.description;
-      }
-      return result;
-    }
-    if (schema instanceof z.ZodUnion) {
-      const options = schema._def.options;
-      if (options.length === 2 && options.some((o: any) => o instanceof z.ZodNull)) {
-        // Handle nullable fields
-        const nonNull = options.find((o: any) => !(o instanceof z.ZodNull));
-        const result = this.zodTypeToJsonSchema(nonNull);
-        // Preserve the union's description if it has one
-        if (schema.description) {
-          result.description = schema.description;
-        }
-        return result;
-      }
-    }
-    if (schema instanceof z.ZodEnum) {
-      return {
-        type: 'string',
-        enum: schema._def.values,
-        description: schema.description,
-      };
-    }
-    if (schema instanceof z.ZodLiteral) {
-      return {
-        type: typeof schema._def.value,
-        const: schema._def.value,
-        description: schema.description,
-      };
-    }
-    if (schema instanceof z.ZodEffects) {
-      // Handle refinements
-      return this.zodTypeToJsonSchema(schema._def.schema);
-    }
-    if (schema instanceof z.ZodObject) {
-      // Handle nested objects properly
-      const shape = schema.shape;
-      const properties: Record<string, any> = {};
-      const required: string[] = [];
-
-      for (const [key, value] of Object.entries(shape)) {
-        properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
-
-        // Check if field is required in nested object
-        if (!(value instanceof z.ZodOptional)) {
-          required.push(key);
-        }
-      }
-
-      return {
-        type: 'object',
-        properties,
-        required: required.length > 0 ? required : undefined,
-        description: schema.description,
-      };
-    }
-
-    // Default fallback
-    return { type: 'string', description: schema.description };
-  }
 }

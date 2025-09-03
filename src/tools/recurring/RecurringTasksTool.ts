@@ -9,28 +9,28 @@ import { coerceBoolean } from '../schemas/coercion-helpers.js';
 const RecurringTasksSchema = z.object({
   operation: z.enum(['analyze', 'patterns'])
     .describe('Operation to perform: analyze (detailed task analysis) or patterns (frequency statistics)'),
-  
+
   // Common parameters
   activeOnly: coerceBoolean()
     .default(true)
     .describe('Only include active (non-completed, non-dropped) recurring tasks'),
-  
+
   includeCompleted: coerceBoolean()
     .default(false)
     .describe('Include completed recurring tasks'),
-  
+
   includeDropped: coerceBoolean()
     .default(false)
     .describe('Include dropped recurring tasks'),
-  
+
   // Analyze-specific parameters
   includeHistory: coerceBoolean()
     .optional()
     .describe('Include completion history information (analyze operation)'),
-  
+
   sortBy: z.enum(['nextDue', 'frequency', 'name'])
     .optional()
-    .describe('Sort order for results (analyze operation)')
+    .describe('Sort order for results (analyze operation)'),
 });
 
 type RecurringTasksInput = z.infer<typeof RecurringTasksSchema>;
@@ -67,7 +67,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
             includeCompleted: params.includeCompleted,
             includeDropped: params.includeDropped,
             includeHistory: params.includeHistory,
-            sortBy: params.sortBy
+            sortBy: params.sortBy,
           });
 
         case 'patterns':
@@ -75,7 +75,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           return await this.patternsTool.execute({
             activeOnly: params.activeOnly,
             includeCompleted: params.includeCompleted,
-            includeDropped: params.includeDropped
+            includeDropped: params.includeDropped,
           });
 
         default:
@@ -84,7 +84,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
             { operation },
-            timer.toMetadata()
+            timer.toMetadata(),
           );
       }
     } catch (error) {

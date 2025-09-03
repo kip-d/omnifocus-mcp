@@ -1,12 +1,14 @@
-import { getRecurrenceHelpers, getValidationHelpers } from '../shared/helpers.js';
+import { getRecurrenceApplyHelpers, getValidationHelpers } from '../shared/helpers.js';
+import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
 
 /**
  * Script to create a new task in OmniFocus
- * OPTIMIZED: Uses recurrence + validation helpers (~380 lines vs 551+200 lines - 49% reduction)
+ * OPTIMIZED: Uses minimal recurrence apply helpers (+ validation + bridge) to keep script size small.
  */
 export const CREATE_TASK_SCRIPT = `
-  ${getRecurrenceHelpers()}
+  ${getRecurrenceApplyHelpers()}
   ${getValidationHelpers()}
+  ${BRIDGE_HELPERS}
   
   (() => {
     const app = Application('OmniFocus');
@@ -116,46 +118,17 @@ export const CREATE_TASK_SCRIPT = `
       // Get the created task ID
       const taskId = task.id();
       
-      // Apply tags via evaluateJavascript bridge if provided
+      // Apply tags via consolidated bridge helper if provided
       let tagResult = null;
       if (taskData.tags && taskData.tags.length > 0) {
         try {
-          // Use evaluateJavascript to add tags with proper escaping
-          const escapedTaskId = JSON.stringify(taskId);
-          const escapedTags = JSON.stringify(taskData.tags);
-          
-          const tagScript = [
-            '(() => {',
-            '  const task = Task.byIdentifier(' + escapedTaskId + ');',
-            '  if (!task) return JSON.stringify({success: false, error: "Task not found"});',
-            '  ',
-            '  const tagNames = ' + escapedTags + ';',
-            '  const addedTags = [];',
-            '  const createdTags = [];',
-            '  ',
-            '  for (const name of tagNames) {',
-            '    if (typeof name !== "string" || name.trim() === "") continue;',
-            '    ',
-            '    let tag = flattenedTags.byName(name);',
-            '    if (!tag) {',
-            '      tag = new Tag(name);',
-            '      createdTags.push(name);',
-            '    }',
-            '    task.addTag(tag);',
-            '    addedTags.push(name);',
-            '  }',
-            '  ',
-            '  return JSON.stringify({',
-            '    success: true,',
-            '    tagsAdded: addedTags,',
-            '    tagsCreated: createdTags,',
-            '    totalTags: task.tags.length',
-            '  });',
-            '})()'
-          ].join('');
-          
-          const tagResultStr = app.evaluateJavascript(tagScript);
-          tagResult = JSON.parse(tagResultStr);
+          const res = setTagsViaBridge(taskId, taskData.tags, app);
+          // Normalize to prior shape for downstream response
+          if (res && res.success) {
+            tagResult = { success: true, tagsAdded: res.tags || taskData.tags, tagsCreated: [], totalTags: (res.tags || taskData.tags).length };
+          } else {
+            tagResult = { success: false, error: res && res.error ? res.error : 'bridge_failed' };
+          }
           
           if (tagResult.success) {
             console.log('Successfully added ' + tagResult.tagsAdded.length + ' tags to task');
@@ -177,9 +150,11 @@ export const CREATE_TASK_SCRIPT = `
       // This is CRITICAL - we must read via bridge after writing via bridge
       let finalTaskData = null;
       try {
+        // Safely embed the identifier to avoid quoting issues
+        const escapedTaskId = JSON.stringify(taskId);
         const getTaskScript = [
           '(() => {',
-          '  const task = Task.byIdentifier("' + taskId + '");',
+          '  const task = Task.byIdentifier(' + escapedTaskId + ');',
           '  if (!task) return JSON.stringify({error: "Task not found after creation"});',
           '  ',
           '  return JSON.stringify({',

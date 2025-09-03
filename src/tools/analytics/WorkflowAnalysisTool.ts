@@ -10,15 +10,15 @@ const WorkflowAnalysisSchema = z.object({
   analysisDepth: z.enum(['quick', 'standard', 'deep'])
     .default('standard')
     .describe('Analysis depth: quick (insights only), standard (insights + key data), deep (insights + full dataset)'),
-  
+
   focusAreas: z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities']))
     .default(['productivity', 'workload', 'bottlenecks'])
     .describe('Specific areas to focus analysis on'),
-  
+
   includeRawData: z.boolean()
     .default(false)
     .describe('Include raw task/project data for LLM exploration (increases token usage)'),
-  
+
   maxInsights: z.number()
     .min(5)
     .max(50)
@@ -141,22 +141,22 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
 
   private extractKeyFindings(data: any): string[] {
     const findings: string[] = [];
-    
+
     if (data.insights && Array.isArray(data.insights)) {
       findings.push(...data.insights.slice(0, 3).map((i: any) => i.insight || i.message || String(i)));
     }
-    
+
     if (data.recommendations && Array.isArray(data.recommendations)) {
       findings.push(...data.recommendations.slice(0, 2).map((r: any) => r.recommendation || r.message || String(r)));
     }
-    
+
     if (data.patterns) {
       const patternKeys = Object.keys(data.patterns);
       if (patternKeys.length > 0) {
         findings.push(`Found ${patternKeys.length} key patterns in your workflow`);
       }
     }
-    
+
     return findings.length > 0 ? findings : ['Analysis completed successfully'];
   }
 }

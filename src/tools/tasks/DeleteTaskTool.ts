@@ -57,8 +57,11 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
           );
         }
 
-        // Invalidate cache after successful deletion
+        // Invalidate caches after successful deletion
         this.cache.invalidate('tasks');
+        this.cache.invalidate('analytics');
+        this.cache.invalidate('projects');
+        this.cache.invalidate('tags');
 
         this.logger.info(`Deleted task via JXA: ${parsedResult.name} (${args.taskId})`);
         return createEntityResponse(
@@ -92,8 +95,11 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
     const omniScript = this.omniAutomation.buildScript(DELETE_TASK_OMNI_SCRIPT, args);
     await this.omniAutomation.executeViaUrlScheme(omniScript);
 
-    // Invalidate cache after successful URL scheme execution
+    // Invalidate caches after successful URL scheme execution
     this.cache.invalidate('tasks');
+    this.cache.invalidate('analytics');
+    this.cache.invalidate('projects');
+    this.cache.invalidate('tags');
 
     this.logger.info(`Deleted task via URL scheme: ${args.taskId}`);
 

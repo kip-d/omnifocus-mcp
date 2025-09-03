@@ -1,7 +1,10 @@
 /**
  * Ultra-minimal update task script using JSON.parse to avoid parameter expansion
  */
+import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
+
 export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
+  ${BRIDGE_HELPERS}
   (() => {
     // Parse parameters from JSON strings to avoid expansion issues
     const taskId = {{taskId}};
@@ -50,33 +53,25 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
       
       // Clear operations via bridge
       if (updates.clearRepeatRule) {
-        app.evaluateJavascript('Task.byIdentifier("' + taskId + '").repetitionRule = null; "ok"');
+        const clr = clearRepeatRuleViaBridge(taskId, app);
+        if (!(clr && clr.success)) {/* ignore */}
       }
       
       // Tag updates via bridge (critical for consistency)
       if (updates.tags !== undefined && Array.isArray(updates.tags)) {
-        const tagScript = '(() => { const t = Task.byIdentifier("' + taskId + '"); if (!t) return "err"; t.clearTags(); ' +
-          'for (const name of ' + JSON.stringify(updates.tags) + ') { ' +
-          'let tag = flattenedTags.byName(name) || new Tag(name); t.addTag(tag); } ' +
-          'return "ok"; })()';
-        app.evaluateJavascript(tagScript);
+        setTagsViaBridge(taskId, updates.tags, app);
       }
       
       // Project move via bridge
       if (updates.projectId !== undefined) {
         if (updates.projectId === null || updates.projectId === "" || updates.projectId === "null") {
-          // Move to inbox
-          app.evaluateJavascript('moveTasks([Task.byIdentifier("' + taskId + '")], inbox.beginning); "ok"');
+          moveTaskViaBridge(taskId, 'inbox', null, app);
         } else {
-          // Validate and move to project
           const exists = app.evaluateJavascript('Project.byIdentifier("' + updates.projectId + '") ? "yes" : "no"');
           if (exists === "no") {
-            return JSON.stringify({
-              error: true,
-              message: "Project not found: " + updates.projectId
-            });
+            return JSON.stringify({ error: true, message: "Project not found: " + updates.projectId });
           }
-          app.evaluateJavascript('moveTasks([Task.byIdentifier("' + taskId + '")], Project.byIdentifier("' + updates.projectId + '").beginning); "ok"');
+          moveTaskViaBridge(taskId, 'project', updates.projectId, app);
         }
       }
       
@@ -84,13 +79,14 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
       if (updates.parentTaskId !== undefined) {
         if (updates.parentTaskId === null || updates.parentTaskId === "") {
           // Remove from parent - move to project root
-          const moveResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); if (!t) return "not_found"; const proj = t.containingProject; if (proj) { moveTasks([t], proj); return "moved"; } return "no_project"; })()');
-          if (moveResult === "not_found") {
+          const currProj = app.evaluateJavascript('(() => { const t=Task.byIdentifier("' + taskId + '"); return t && t.containingProject ? t.containingProject.id.primaryKey : null; })()');
+          if (!currProj) {
             return JSON.stringify({
               error: true,
               message: "Task not found when removing from parent: " + taskId
             });
           }
+          moveTaskViaBridge(taskId, 'project', currProj, app);
         } else {
           // Move to new parent task
           const parentExists = app.evaluateJavascript('Task.byIdentifier("' + updates.parentTaskId + '") ? "yes" : "no"');
@@ -100,12 +96,9 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
               message: "Parent task not found: " + updates.parentTaskId
             });
           }
-          const moveResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); const p = Task.byIdentifier("' + updates.parentTaskId + '"); if (!t || !p) return "not_found"; moveTasks([t], p); return "moved"; })()');
-          if (moveResult === "not_found") {
-            return JSON.stringify({
-              error: true,
-              message: "Failed to move task to parent - task or parent not found"
-            });
+          const mv = moveTaskViaBridge(taskId, 'parent', updates.parentTaskId, app);
+          if (!(mv && mv.success)) {
+            return JSON.stringify({ error: true, message: "Failed to move task to parent" });
           }
         }
       }
@@ -124,18 +117,11 @@ export const UPDATE_TASK_ULTRA_MINIMAL_SCRIPT = `
           rrule = 'FREQ=' + (freqMap[rule.unit] || 'DAILY') + ';INTERVAL=' + (rule.steps || 1);
         }
         
-        let method = 'Task.RepetitionMethod.Fixed';
-        if (rule.method === 'start-after-completion') method = 'Task.RepetitionMethod.DeferUntilDate';
-        else if (rule.method === 'due-after-completion') method = 'Task.RepetitionMethod.DueDate';
-        
-        // Set the repeat rule with the calculated method
-        
-        const ruleResult = app.evaluateJavascript('(() => { const t = Task.byIdentifier("' + taskId + '"); if (!t) return "not_found"; t.repetitionRule = new Task.RepetitionRule("' + rrule + '", ' + method + '); return t.repetitionRule ? "set" : "failed"; })()');
-        
-        if (ruleResult === "not_found") {
-          return JSON.stringify({ error: true, message: "Task not found when setting repeat rule" });
-        }
-        if (ruleResult === "failed") {
+        const methodName = rule.method === 'start-after-completion' ? 'DeferUntilDate'
+          : rule.method === 'due-after-completion' ? 'DueDate'
+          : 'Fixed';
+        const setRes = setRepeatRuleViaBridge(taskId, rrule, methodName, app);
+        if (!(setRes && setRes.success)) {
           return JSON.stringify({ error: true, message: "Failed to set repeat rule" });
         }
       }

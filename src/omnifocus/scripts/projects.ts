@@ -13,7 +13,4 @@ export { COMPLETE_PROJECT_SCRIPT } from './projects/complete-project.js';
 export { DELETE_PROJECT_SCRIPT } from './projects/delete-project.js';
 export { GET_PROJECT_STATS_SCRIPT } from './projects/get-project-stats.js';
 
-// For backward compatibility - maintain any direct exports that might be used
-// Import shared utilities first
-import { SAFE_UTILITIES_SCRIPT } from './tasks.js';
-export { SAFE_UTILITIES_SCRIPT };
+// Note: SAFE_UTILITIES_SCRIPT is available from './shared/helpers.js' if needed.
