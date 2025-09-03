@@ -86,7 +86,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         return createErrorResponse(
           'perspectives',
           'INVALID_OPERATION',
-          `Invalid operation: ${operation}`,
+          `Invalid operation: ${String(operation)}`,
           { operation },
           { executionTime: 0 },
         );
@@ -114,7 +114,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
+      } catch {
         return createErrorResponse(
           'perspectives',
           'PARSE_ERROR',
@@ -211,7 +211,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
+      } catch {
         return createErrorResponse(
           'perspectives',
           'PARSE_ERROR',

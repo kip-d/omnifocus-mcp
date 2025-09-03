@@ -83,14 +83,16 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       case 'manage':
         return this.manageTags(args);
       default:
-        const timer = new OperationTimer();
-        return createErrorResponse(
-          'tags',
-          'INVALID_OPERATION',
-          `Invalid operation: ${operation}`,
-          { operation },
-          timer.toMetadata(),
-        );
+        {
+          const timer = new OperationTimer();
+          return createErrorResponse(
+            'tags',
+            'INVALID_OPERATION',
+            `Invalid operation: ${operation}`,
+            { operation },
+            timer.toMetadata(),
+          );
+        }
     }
   }
 
@@ -147,7 +149,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
+      } catch {
         return createErrorResponse(
           'tags',
           'PARSE_ERROR',
@@ -216,7 +218,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
+      } catch {
         return createErrorResponse(
           'tags',
           'PARSE_ERROR',
@@ -324,7 +326,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
+      } catch {
         parsedResult = result;
       }
 

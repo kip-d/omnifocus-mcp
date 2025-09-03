@@ -513,26 +513,34 @@ export function normalizeDateInput(
     case 'today':
       return getDefaultTime(new Date(now));
     case 'tomorrow':
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return getDefaultTime(tomorrow);
+      {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return getDefaultTime(tomorrow);
+      }
     case 'next week':
-      const nextWeek = new Date(now);
-      nextWeek.setDate(nextWeek.getDate() + 7);
-      return getDefaultTime(nextWeek);
+      {
+        const nextWeek = new Date(now);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        return getDefaultTime(nextWeek);
+      }
     case 'next monday':
-      const nextMonday = new Date(now);
-      const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
-      nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
-      nextMonday.setHours(9, 0, 0, 0); // Keep 9am for Monday
-      return nextMonday;
+      {
+        const nextMonday = new Date(now);
+        const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
+        nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+        nextMonday.setHours(9, 0, 0, 0); // Keep 9am for Monday
+        return nextMonday;
+      }
     case 'end of week':
     case 'friday':
-      const friday = new Date(now);
-      const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
-      friday.setDate(friday.getDate() + daysUntilFriday);
-      friday.setHours(17, 0, 0, 0); // Keep 5pm for Friday
-      return friday;
+      {
+        const friday = new Date(now);
+        const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
+        friday.setDate(friday.getDate() + daysUntilFriday);
+        friday.setHours(17, 0, 0, 0); // Keep 5pm for Friday
+        return friday;
+      }
   }
 
   // Check if it's a plain YYYY-MM-DD date (no time specified)

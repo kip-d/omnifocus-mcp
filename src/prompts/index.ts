@@ -43,7 +43,7 @@ export function registerPrompts(server: Server): void {
   });
 
   // Handle list prompts request
-  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  server.setRequestHandler(ListPromptsRequestSchema, () => {
     logger.info('Listing available prompts');
 
     const promptList = Array.from(prompts.values()).map(prompt => prompt.toPrompt());
@@ -54,7 +54,7 @@ export function registerPrompts(server: Server): void {
   });
 
   // Handle get prompt request
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  server.setRequestHandler(GetPromptRequestSchema, (request) => {
     const { name, arguments: args = {} } = request.params;
 
     logger.info(`Getting prompt: ${name}`, { args });

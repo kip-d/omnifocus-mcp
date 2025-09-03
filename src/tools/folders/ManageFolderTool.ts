@@ -42,7 +42,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
           return createErrorResponse(
             'manage_folder',
             'INVALID_OPERATION',
-            `Unsupported operation: ${operation}`,
+            `Unsupported operation: ${String(operation)}`,
             { operation },
             timer.toMetadata(),
           );
@@ -77,7 +77,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse create folder result: ${result}`);
       parsedResult = result;
     }
@@ -150,7 +150,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse update folder result: ${result}`);
       parsedResult = result;
     }
@@ -194,7 +194,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse delete folder result: ${result}`);
       parsedResult = result;
     }
@@ -238,7 +238,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse move folder result: ${result}`);
       parsedResult = result;
     }
@@ -284,7 +284,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse set status result: ${result}`);
       parsedResult = result;
     }

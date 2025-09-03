@@ -103,7 +103,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
           return createErrorResponseV2(
             'projects',
             'INVALID_OPERATION',
-            `Invalid operation: ${normalizedArgs.operation}`,
+            `Invalid operation: ${String(normalizedArgs.operation)}`,
             'Use one of: list, create, update, complete, delete, review, active, stats',
             { provided: normalizedArgs.operation },
             timer.toMetadata(),

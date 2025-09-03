@@ -33,7 +33,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
           return createErrorResponse(
             'query_folders',
             'INVALID_OPERATION',
-            `Unsupported operation: ${operation}`,
+            `Unsupported operation: ${String(operation)}`,
             { operation },
             timer.toMetadata(),
           );
@@ -100,7 +100,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse list folders result: ${result}`);
       parsedResult = { folders: [], count: 0 };
     }
@@ -150,7 +150,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+  } catch {
       this.logger.error(`Failed to parse get folder result: ${result}`);
       return createErrorResponse(
         'query_folders',
@@ -211,7 +211,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse search folders result: ${result}`);
       parsedResult = { folders: [], count: 0 };
     }
@@ -255,7 +255,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse folder projects result: ${result}`);
       return createErrorResponse(
         'query_folders',

@@ -55,11 +55,11 @@ export class OmniAutomation {
         timeout: this.timeout,
       });
 
-      let stdout = '';
+      let _stdout = '';
       let stderr = '';
 
       proc.stdout.on('data', (data) => {
-        stdout += data.toString();
+        _stdout += data.toString();
       });
 
       proc.stderr.on('data', (data) => {
@@ -84,7 +84,7 @@ export class OmniAutomation {
           logger.warn('Script execution warning:', stderr);
         }
 
-        const trimmedOutput = stdout.trim();
+        const trimmedOutput = _stdout.trim();
 
         if (!trimmedOutput) {
           logger.warn('Script returned empty output, treating as null result');
@@ -266,11 +266,11 @@ export class OmniAutomation {
         timeout: this.timeout,
       });
 
-      let stdout = '';
+      let _stdout = '';
       let stderr = '';
 
       proc.stdout.on('data', (data) => {
-        stdout += data.toString();
+        _stdout += data.toString();
       });
 
       proc.stderr.on('data', (data) => {
