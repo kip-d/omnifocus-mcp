@@ -3,11 +3,12 @@ import { BaseTool } from '../base.js';
 import {
   LIST_PROJECTS_SCRIPT,
   CREATE_PROJECT_SCRIPT,
-  UPDATE_PROJECT_SCRIPT,
   COMPLETE_PROJECT_SCRIPT,
   DELETE_PROJECT_SCRIPT,
   GET_PROJECT_STATS_SCRIPT,
 } from '../../omnifocus/scripts/projects.js';
+import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
+import { isScriptSuccess, ProjectUpdateResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -322,21 +323,17 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     if (args.status !== undefined) updates.status = args.status;
 
-    // Execute update
-    const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, {
-      projectId: args.projectId,
-      updates,
-    });
+    // Execute update using new function argument approach with schema validation
+    const script = createUpdateProjectScript(args.projectId!, updates);
+    const result = await this.omniAutomation.executeJson(script, ProjectUpdateResultSchema);
 
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'projects',
         'UPDATE_FAILED',
-        result?.message || 'Failed to update project',
+        result.error || 'Failed to update project',
         'Check the project ID and try again',
-        result?.details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -346,8 +343,11 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { project: result },
-      undefined, // No summary for update operation
+      { 
+        operation: result.data,
+        project: result.data.project // Extract project details for response
+      },
+      undefined,
       { ...timer.toMetadata(), operation: 'update' },
     );
   }
