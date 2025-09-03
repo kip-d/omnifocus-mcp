@@ -222,7 +222,7 @@ export const GET_PROJECT_STATS_SCRIPT = `
         metadata: {
           generated_at: new Date().toISOString(),
           method: 'omniFocus_accurate_counts',
-          note: 'Available rates calculated using OmniFocus\'s own task counts for accuracy'
+          note: "Available rates calculated using OmniFocus's own task counts for accuracy"
         }
       });
       

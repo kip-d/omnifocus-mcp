@@ -13,6 +13,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
+      // Measure coverage only for source files
+      include: [
+        'src/**',
+      ],
       thresholds: {
         global: {
           branches: 75,
@@ -24,10 +28,17 @@ export default defineConfig({
       exclude: [
         'node_modules/**',
         'dist/**',
-        'tests/**',
+        'tests/**',            // never include tests in coverage
+        'archive/**',          // exclude archived experimental content
+        'scripts/**',          // local maintenance scripts
+        'docs/**',             // documentation helpers
+        'eslint-rules/**',
         '*.config.ts',
         '*.config.js',
         'src/omnifocus/scripts/**', // These are template strings, not executable code
+        'src/prompts/**',                               // prompt content (non-executable)
+        'src/tools/analytics/PatternAnalysisTool.ts',  // legacy v1 tool superseded by V2
+        'src/omnifocus/plugins/PluginRegistry.ts',     // registry shell, no runtime logic to test
       ],
     },
     // Environment-specific configurations

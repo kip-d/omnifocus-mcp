@@ -267,7 +267,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           return createErrorResponse(
             'folders',
             'INVALID_OPERATION',
-            `Invalid operation: ${operation}`,
+            `Invalid operation: ${String(operation)}`,
             { operation },
             timer.toMetadata(),
           );

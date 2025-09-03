@@ -205,7 +205,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse mark project reviewed result: ${result}`);
       parsedResult = result;
     }
@@ -261,7 +261,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse set review schedule result: ${result}`);
       parsedResult = result;
     }
@@ -317,7 +317,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     let parsedResult;
     try {
       parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch (parseError) {
+    } catch {
       this.logger.error(`Failed to parse clear review schedule result: ${result}`);
       parsedResult = result;
     }
@@ -345,7 +345,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     if (typeof normalized.projectIds === 'string') {
       try {
         normalized.projectIds = JSON.parse(normalized.projectIds);
-      } catch (e) {
+      } catch {
         this.logger.warn('Failed to parse projectIds string, keeping as-is');
       }
     }
@@ -354,7 +354,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     if (typeof normalized.reviewInterval === 'string') {
       try {
         normalized.reviewInterval = JSON.parse(normalized.reviewInterval);
-      } catch (e) {
+      } catch {
         this.logger.warn('Failed to parse reviewInterval string, keeping as-is');
       }
     }
@@ -363,7 +363,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     if (typeof normalized.tags === 'string') {
       try {
         normalized.tags = JSON.parse(normalized.tags);
-      } catch (e) {
+      } catch {
         this.logger.warn('Failed to parse tags string, keeping as-is');
       }
     }

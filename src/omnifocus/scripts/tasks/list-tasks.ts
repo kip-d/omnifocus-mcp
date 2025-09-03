@@ -243,7 +243,8 @@ export const LIST_TASKS_SCRIPT = `
           }
           
           // Parse INTERVAL
-          const intervalMatch = parsed.ruleString.match(/INTERVAL=(\d+)/);
+          // eslint-disable-next-line no-useless-escape
+          const intervalMatch = parsed.ruleString.match(/INTERVAL=([0-9]+)/);
           if (intervalMatch) {
             ruleData.steps = parseInt(intervalMatch[1]);
           }
@@ -746,3 +747,4 @@ export const LIST_TASKS_SCRIPT = `
   }
   })();
 `;
+/* eslint-disable no-useless-escape */

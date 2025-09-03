@@ -53,7 +53,7 @@ const PatternAnalysisSchema = z.object({
           }
 
           return parsed;
-        } catch (e) {
+        } catch {
           return {};
         }
       }
@@ -389,21 +389,17 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       return JSON.stringify({ tasks, projects, tags });
     })()`;  // Execute the IIFE immediately
 
-    try {
-      const result = await this.omniAutomation.execute(taskScript);
+    const result = await this.omniAutomation.execute(taskScript);
 
-      if (!result) {
-        throw new Error('OmniAutomation execution returned no result');
-      }
-
-      // OmniAutomation.execute may return already parsed object or string
-      if (typeof result === 'string') {
-        return JSON.parse(result);
-      }
-      return result as { tasks: SlimTask[], projects: any[], tags: any[] };
-    } catch (error) {
-      throw error;
+    if (!result) {
+      throw new Error('OmniAutomation execution returned no result');
     }
+
+    // OmniAutomation.execute may return already parsed object or string
+    if (typeof result === 'string') {
+      return JSON.parse(result);
+    }
+    return result as { tasks: SlimTask[], projects: any[], tags: any[] };
   }
 
   private async detectDuplicates(tasks: SlimTask[], options: any): Promise<PatternFinding> {

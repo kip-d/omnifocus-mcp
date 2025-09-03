@@ -42,7 +42,7 @@ import { SystemToolV2 } from './system/SystemToolV2.js';
 
 const logger = createLogger('tools');
 
-export async function registerTools(server: Server, cache: CacheManager): Promise<void> {
+export function registerTools(server: Server, cache: CacheManager): void {
   logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (15 tools, reduced from 22)');
 
   // All tools are now consolidated for optimal LLM usage
@@ -74,7 +74,7 @@ export async function registerTools(server: Server, cache: CacheManager): Promis
   ];
 
   // Register handlers
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
+  server.setRequestHandler(ListToolsRequestSchema, () => {
     return {
       tools: tools.map(t => ({
         name: t.name,
