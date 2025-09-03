@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-09-03
+
+🎉 **Production Release - Complete v2.0.0 Architecture with Critical Bug Fixes**
+
+### 🚨 Critical Fixes
+- **Fixed "Can't convert types" JXA errors**: Resolved script size limit issues affecting project updates and folder deletion
+  - Project update script reduced from 9,679 to 4,922 characters (49% reduction)
+  - Folder deletion script reduced from 5,490 to 3,819 characters (30% reduction)
+  - Implemented smart folder deletion approach based on user research
+- **Fixed missing function error**: Resolved `isTaskEffectivelyCompleted` function missing from task search operations
+- **Comprehensive user testing**: Validated with Claude 4.1 Opus - all core functionality working perfectly
+
 ### Added
 - **Pattern Analysis Integration**: Merged pattern-analysis branch with comprehensive database analysis
   - Added PatternAnalysisToolV2 with 8 analysis patterns (duplicates, dormant projects, tag audit, deadline health, waiting tasks, estimation bias, next actions, review gaps)
