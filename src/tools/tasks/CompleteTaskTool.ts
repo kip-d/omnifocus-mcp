@@ -5,6 +5,7 @@ import { createEntityResponse, createErrorResponse, OperationTimer } from '../..
 import { StandardResponse } from '../../utils/response-format.js';
 import { CompleteTaskSchema } from '../schemas/task-schemas.js';
 import { localToUTC } from '../../utils/timezone.js';
+import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
   name = 'complete_task';
@@ -24,33 +25,20 @@ export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
       // Try JXA first, fall back to URL scheme if access denied
       try {
         const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, processedArgs as unknown as Record<string, unknown>);
-        const result = await this.omniAutomation.execute<any>(script);
+        const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-        if (result && typeof result === 'object' && 'error' in result && result.error) {
+        if (!isScriptSuccess(result)) {
           // If error contains "access not allowed", use URL scheme
-          if ('message' in result && typeof result.message === 'string' && result.message.toLowerCase().includes('access not allowed')) {
+          if (result.error && typeof result.error === 'string' && result.error.toLowerCase().includes('access not allowed')) {
             this.logger.info('JXA access denied, falling back to URL scheme for task completion');
             return await this.executeViaUrlScheme(args);
           }
-          return result;
+          return createErrorResponse('complete_task', 'SCRIPT_ERROR', result.error, result.details, timer.toMetadata());
         }
 
         this.logger.info(`Completed task via JXA: ${args.taskId}`);
 
-        // Parse the JSON result since the script returns a JSON string
-        let parsedResult;
-        try {
-          parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-        } catch (parseError) {
-          this.logger.error(`Failed to parse complete task result: ${result}`);
-          return createErrorResponse(
-            'complete_task',
-            'PARSE_ERROR',
-            'Failed to parse task completion response',
-            { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-            timer.toMetadata(),
-          );
-        }
+        const parsedResult = result.data;
 
         // Invalidate cache after successful completion
         this.cache.invalidate('tasks');

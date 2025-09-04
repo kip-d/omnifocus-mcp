@@ -300,7 +300,7 @@ export class OmniAutomation {
   }
 
   // Execute OmniFocus automation via URL scheme (for operations requiring higher permissions)
-  public async executeViaUrlScheme<T = any>(script: string): Promise<T> {
+  public async executeViaUrlScheme<T = unknown>(script: string): Promise<T> {
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
@@ -352,7 +352,7 @@ export class OmniAutomation {
     });
   }
 
-  public async executeBatch<T = any>(scripts: string[]): Promise<T[]> {
+  public async executeBatch<T = unknown>(scripts: string[]): Promise<T[]> {
     logger.info(`Executing batch of ${scripts.length} scripts`);
 
     const results: T[] = [];

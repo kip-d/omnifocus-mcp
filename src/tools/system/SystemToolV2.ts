@@ -3,6 +3,7 @@ import { BaseTool } from '../base.js';
 import { getVersionInfo } from '../../utils/version.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
+import { isScriptSuccess, SimpleOperationResultSchema, ListResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all system operations
 const SystemToolSchema = z.object({
@@ -129,10 +130,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(basicScript);
+        const result = await this.diagnosticOmni.executeJson(basicScript, SimpleOperationResultSchema);
         results.tests.basic_connection = {
           success: true,
-          result: result,
+          result: isScriptSuccess(result) ? result.data : result,
         };
       } catch (error: any) {
         results.tests.basic_connection = {
@@ -190,10 +191,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(collectionScript);
+        const result = await this.diagnosticOmni.executeJson(collectionScript, SimpleOperationResultSchema);
         results.tests.collection_access = {
           success: true,
-          result: result,
+          result: isScriptSuccess(result) ? result.data : result,
         };
       } catch (error: any) {
         results.tests.collection_access = {
@@ -251,10 +252,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(propertyScript);
+        const result = await this.diagnosticOmni.executeJson(propertyScript, SimpleOperationResultSchema);
         results.tests.property_access = {
           success: true,
-          result: result,
+          result: isScriptSuccess(result) ? result.data : result,
         };
       } catch (error: any) {
         results.tests.property_access = {
@@ -273,10 +274,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         });
 
         try {
-          const result = await this.diagnosticOmni.execute<any>(script);
+          const result = await this.diagnosticOmni.executeJson(script, ListResultSchema);
           results.tests.list_tasks_script = {
             success: true,
-            result: result,
+            result: isScriptSuccess(result) ? result.data : result,
           };
         } catch (error: any) {
           results.tests.list_tasks_script = {

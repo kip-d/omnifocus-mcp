@@ -8,6 +8,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { ProductivityStatsResponseV2 } from '../response-types-v2.js';
+import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2, ProductivityStatsResponseV2> {
   name = 'productivity_stats';
@@ -53,13 +54,13 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           includeInactive: false,  // Only active projects by default for performance
         },
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-      if (result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
           'productivity_stats',
           'STATS_FAILED',
-          result.message || 'Failed to generate productivity stats',
+          result.error,
           'Check that OmniFocus has sufficient data for the requested period',
           result.details,
           timer.toMetadata(),
@@ -69,20 +70,20 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       const responseData = {
         period,
         stats: {
-          overview: result.overview || {
+          overview: (result.data as any).overview || {
             totalTasks: 0,
             completedTasks: 0,
             completionRate: 0,
             activeProjects: 0,
             overdueCount: 0,
           },
-          daily: result.dailyStats || [],
-          weekly: result.weeklyStats || {},
-          projectStats: includeProjectStats ? (result.projectStats || []) : [],
-          tagStats: includeTagStats ? (result.tagStats || []) : [],
+          daily: (result.data as any).dailyStats || [],
+          weekly: (result.data as any).weeklyStats || {},
+          projectStats: includeProjectStats ? ((result.data as any).projectStats || []) : [],
+          tagStats: includeTagStats ? ((result.data as any).tagStats || []) : [],
         },
-        insights: result.insights || {},
-        healthScore: result.healthScore || 0,
+        insights: (result.data as any).insights || {},
+        healthScore: (result.data as any).healthScore || 0,
       };
 
       // Cache for 1 hour

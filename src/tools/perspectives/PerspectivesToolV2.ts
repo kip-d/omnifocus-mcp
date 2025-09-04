@@ -4,6 +4,7 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
 import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives/query-perspective.js';
 import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
 import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
+import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all perspective operations
 const PerspectivesToolSchema = z.object({
@@ -98,33 +99,22 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
     try {
       const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result && typeof result === 'object' && 'error' in result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponse(
           'perspectives',
           'SCRIPT_ERROR',
-          result.message || 'Failed to list perspectives',
-          { rawResult: result },
+          result.error,
+          { rawResult: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse the result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'perspectives',
-          'PARSE_ERROR',
-          'Failed to parse perspective list',
-          { rawResult: result },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
-      const perspectives = parsedResult.perspectives || [];
+      const perspectives = (parsedResult as any).perspectives || [];
 
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';
@@ -195,37 +185,26 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       });
 
       this.logger.debug(`Querying perspective: ${perspectiveName}`);
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result && typeof result === 'object' && 'error' in result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponse(
           'perspectives',
           'SCRIPT_ERROR',
-          result.message || result.error || 'Failed to query perspective',
-          { rawResult: result },
+          result.error,
+          { rawResult: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse the result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'perspectives',
-          'PARSE_ERROR',
-          'Failed to parse perspective query result',
-          { rawResult: result },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
-      if (!parsedResult.success) {
+      if (!(parsedResult as any).success) {
         return createErrorResponse(
           'perspectives',
           'PERSPECTIVE_NOT_FOUND',
-          parsedResult.error || `Perspective "${perspectiveName}" not found`,
+          (parsedResult as any).error || `Perspective "${perspectiveName}" not found`,
           { perspectiveName },
           timer.toMetadata(),
         );
@@ -234,17 +213,17 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       const response = createSuccessResponse(
         'perspectives',
         {
-          perspectiveName: parsedResult.perspectiveName,
-          perspectiveType: parsedResult.perspectiveType,
-          tasks: parsedResult.tasks || [],
-          filterRules: parsedResult.filterRules,
-          aggregation: parsedResult.aggregation,
+          perspectiveName: (parsedResult as any).perspectiveName,
+          perspectiveType: (parsedResult as any).perspectiveType,
+          tasks: (parsedResult as any).tasks || [],
+          filterRules: (parsedResult as any).filterRules,
+          aggregation: (parsedResult as any).aggregation,
         },
         {
           ...timer.toMetadata(),
           operation: 'query',
-          total_count: parsedResult.count || 0,
-          filter_rules_applied: !!parsedResult.filterRules,
+          total_count: (parsedResult as any).count || 0,
+          filter_rules_applied: !!(parsedResult as any).filterRules,
         },
       );
 

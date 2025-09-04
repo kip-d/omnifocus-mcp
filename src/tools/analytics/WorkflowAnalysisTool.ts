@@ -4,6 +4,7 @@ import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Schema for the workflow analysis tool
 const WorkflowAnalysisSchema = z.object({
@@ -75,13 +76,13 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         },
       });
 
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-      if (result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
           'workflow_analysis',
           'ANALYSIS_FAILED',
-          result.message || 'Failed to perform workflow analysis',
+          result.error,
           'Check that OmniFocus has sufficient data for analysis',
           result.details,
           timer.toMetadata(),
@@ -95,15 +96,15 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
           focusAreas: args.focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: result.insights || [],
-        patterns: result.patterns || {},
-        recommendations: result.recommendations || [],
-        data: args.includeRawData ? (result.data || {}) : undefined,
+        insights: (result.data as any).insights || [],
+        patterns: (result.data as any).patterns || {},
+        recommendations: (result.data as any).recommendations || [],
+        data: args.includeRawData ? ((result.data as any).data || {}) : undefined,
         metadata: {
-          totalTasks: result.totalTasks || 0,
-          totalProjects: result.totalProjects || 0,
-          analysisTime: result.analysisTime || 0,
-          dataPoints: result.dataPoints || 0,
+          totalTasks: (result.data as any).totalTasks || 0,
+          totalProjects: (result.data as any).totalProjects || 0,
+          analysisTime: (result.data as any).analysisTime || 0,
+          dataPoints: (result.data as any).dataPoints || 0,
         },
       };
 

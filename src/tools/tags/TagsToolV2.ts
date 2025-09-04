@@ -7,6 +7,7 @@ import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { createListResponse, createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
+import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
@@ -133,38 +134,27 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       });
 
       this.logger.debug(`Executing list tags script (optimized: ${useOptimized})`);
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponse(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
-          { operation: 'list' },
+          result.error,
+          { operation: 'list', details: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'tags',
-          'PARSE_ERROR',
-          'Failed to parse tag list',
-          { rawResult: result, operation: 'list' },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
       const response = createListResponse(
         'tags',
-        parsedResult.tags || [],
+        (parsedResult as any).tags || [],
         {
           ...timer.toMetadata(),
-          total: parsedResult.count || parsedResult.tags?.length || 0,
+          total: (parsedResult as any).count || (parsedResult as any).tags?.length || 0,
           operation: 'list',
           mode: useOptimized ? 'optimized' : 'full',
           options: {
@@ -202,38 +192,27 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       // Execute script
       const script = this.omniAutomation.buildScript(GET_ACTIVE_TAGS_SCRIPT, {});
       this.logger.debug('Executing get active tags script');
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponse(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
-          { operation: 'active' },
+          result.error,
+          { operation: 'active', details: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'tags',
-          'PARSE_ERROR',
-          'Failed to parse active tags',
-          { rawResult: result, operation: 'active' },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
       const response = createListResponse(
         'tags',
-        parsedResult.tags || [],
+        (parsedResult as any).tags || [],
         {
           ...timer.toMetadata(),
-          count: parsedResult.count || parsedResult.tags?.length || 0,
+          count: (parsedResult as any).count || (parsedResult as any).tags?.length || 0,
           operation: 'active',
           description: 'Tags with incomplete tasks',
         },
@@ -305,13 +284,13 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         parentTagName,
         parentTagId,
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-      if (result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponse(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
+          result.error,
           {
             operation: 'manage',
             action,
@@ -323,12 +302,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        parsedResult = result;
-      }
+      const parsedResult = result.data;
 
       // Invalidate tag cache after modification
       this.cache.invalidate('tags');

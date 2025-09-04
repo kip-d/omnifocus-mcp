@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_FOLDERS_SCRIPT } from '../../omnifocus/scripts/folders/list-folders.js';
 import { createCollectionResponse, createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   QueryFoldersSchema,
   ListFoldersOperationSchema,
@@ -85,25 +86,19 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
       options: scriptOptions,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'query_folders',
         'LIST_FAILED',
-        result.message || 'Failed to list folders',
+        result.error,
         { details: result.details, operation: 'list' },
         timer.toMetadata(),
       );
     }
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse list folders result: ${result}`);
-      parsedResult = { folders: [], count: 0 };
-    }
+    const parsedResult = result.data;
 
     // Cache the results for 5 minutes (folders change less frequently)
     if (!includeProjects) { // Only cache if projects aren't included
@@ -118,7 +113,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         ...timer.toMetadata(),
         operation: 'list',
         from_cache: false,
-        total_folders: parsedResult.totalFolders || parsedResult.count,
+        total_folders: parsedResult.summary?.total || parsedResult.items?.length || 0,
         filters: { status },
       },
     );
@@ -135,34 +130,22 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit: 1000, // Set high limit to ensure we get all folders for filtering
       },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'query_folders',
         'GET_FAILED',
-        result.message || 'Failed to get folder',
+        result.error,
         { details: result.details, operation: 'get', folderId },
         timer.toMetadata(),
       );
     }
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-  } catch {
-      this.logger.error(`Failed to parse get folder result: ${result}`);
-      return createErrorResponse(
-        'query_folders',
-        'PARSE_ERROR',
-        'Failed to parse folder data',
-        { operation: 'get', folderId },
-        timer.toMetadata(),
-      );
-    }
+    const parsedResult = result.data;
 
     // Find the specific folder by ID
-    const folder = parsedResult.folders?.find((f: any) => f.id === folderId);
+    const folder = parsedResult.items?.find((f: any) => f.id === folderId);
     if (!folder) {
       return createErrorResponse(
         'query_folders',
@@ -196,25 +179,19 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit,
       },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'query_folders',
         'SEARCH_FAILED',
-        result.message || 'Failed to search folders',
+        result.error,
         { details: result.details, operation: 'search', searchTerm },
         timer.toMetadata(),
       );
     }
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse search folders result: ${result}`);
-      parsedResult = { folders: [], count: 0 };
-    }
+    const parsedResult = result.data;
 
     return createCollectionResponse(
       'query_folders',
@@ -224,7 +201,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         ...timer.toMetadata(),
         operation: 'search',
         search_term: searchTerm,
-        total_matches: parsedResult.count || parsedResult.folders?.length || 0,
+        total_matches: parsedResult.summary?.total || parsedResult.items?.length || 0,
       },
     );
   }
@@ -240,34 +217,22 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit: 1000,
       },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'query_folders',
         'GET_PROJECTS_FAILED',
-        result.message || 'Failed to get folder projects',
+        result.error,
         { details: result.details, operation: 'get_projects', folderId },
         timer.toMetadata(),
       );
     }
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse folder projects result: ${result}`);
-      return createErrorResponse(
-        'query_folders',
-        'PARSE_ERROR',
-        'Failed to parse folder projects data',
-        { operation: 'get_projects', folderId },
-        timer.toMetadata(),
-      );
-    }
+    const parsedResult = result.data;
 
     // Find the specific folder by ID and return its projects
-    const folder = parsedResult.folders?.find((f: any) => f.id === folderId);
+    const folder = parsedResult.items?.find((f: any) => f.id === folderId);
     if (!folder) {
       return createErrorResponse(
         'query_folders',
@@ -278,7 +243,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       );
     }
 
-    const projects = folder.projects || [];
+    const projects = (folder as any)?.projects || [];
 
     return createCollectionResponse(
       'query_folders',

@@ -6,6 +6,7 @@ import {
 } from '../../omnifocus/scripts/reviews.js';
 import { createListResponse, createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
+import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   name = 'manage_reviews';
@@ -72,32 +73,20 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     const script = this.omniAutomation.buildScript(PROJECTS_FOR_REVIEW_SCRIPT, {
       filter: args,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    // Check if result is null/undefined
-    if (!result) {
-      return createErrorResponse(
-        'manage_reviews',
-        'NULL_RESULT',
-        'OmniFocus script returned no result',
-        { rawResult: result },
-        timer.toMetadata(),
-      );
-    }
-
-    // Check if script returned an error
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_reviews',
         'SCRIPT_ERROR',
-        result.message || result.error || 'Failed to get projects for review',
-        { details: result.details, rawResult: result },
+        result.error,
+        { details: result.details },
         timer.toMetadata(),
       );
     }
 
     // Ensure projects array exists
-    if (!result.projects || !Array.isArray(result.projects)) {
+    if (!(result.data as any).projects || !Array.isArray((result.data as any).projects)) {
       return createErrorResponse(
         'manage_reviews',
         'INVALID_RESPONSE',
@@ -109,7 +98,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
     // Parse dates and calculate review status
     const now = new Date();
-    const parsedProjects = result.projects.map((project: any) => {
+    const parsedProjects = (result.data as any).projects.map((project: any) => {
       const nextReviewDate = project.nextReviewDate ? new Date(project.nextReviewDate) : null;
       const lastReviewDate = project.lastReviewDate ? new Date(project.lastReviewDate) : null;
 
@@ -160,7 +149,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
           due_soon: parsedProjects.filter((p: any) => p.reviewStatus === 'due_soon').length,
           no_schedule: parsedProjects.filter((p: any) => p.reviewStatus === 'no_schedule').length,
         },
-        ...result.metadata,
+        ...(result.data as any).metadata,
       },
     );
 
@@ -185,13 +174,13 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewDate: actualReviewDate,
       updateNextReviewDate,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_reviews',
         'SCRIPT_ERROR',
-        result.message || 'Failed to mark project as reviewed',
+        result.error,
         { details: result.details },
         timer.toMetadata(),
       );
@@ -201,14 +190,8 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result if it's a string
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse mark project reviewed result: ${result}`);
-      parsedResult = result;
-    }
+    // Parse the result
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_reviews',
@@ -241,13 +224,13 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewInterval,
       nextReviewDate,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_reviews',
         'SCRIPT_ERROR',
-        result.message || 'Failed to set review schedule',
+        result.error,
         { details: result.details },
         timer.toMetadata(),
       );
@@ -257,14 +240,8 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result if it's a string
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse set review schedule result: ${result}`);
-      parsedResult = result;
-    }
+    // Parse the result
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_reviews',
@@ -297,13 +274,13 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewInterval: null,
       nextReviewDate: null,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_reviews',
         'SCRIPT_ERROR',
-        result.message || 'Failed to clear review schedule',
+        result.error,
         { details: result.details },
         timer.toMetadata(),
       );
@@ -313,14 +290,8 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result if it's a string
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse clear review schedule result: ${result}`);
-      parsedResult = result;
-    }
+    // Parse the result
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_reviews',

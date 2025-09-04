@@ -18,45 +18,20 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
       // Try JXA first, fall back to URL scheme if access denied
       try {
         const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, args as unknown as Record<string, unknown>);
-        const result = await this.omniAutomation.execute<any>(script);
+        const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-        if (result && typeof result === 'object' && 'error' in result && result.error) {
+        if (!isScriptSuccess(result)) {
           // If error contains "parameter is missing" or "access not allowed", use URL scheme
-          if ('message' in result && typeof result.message === 'string' &&
-              (result.message.toLowerCase().includes('parameter is missing') ||
-               result.message.toLowerCase().includes('access not allowed'))) {
+          if (result.error && typeof result.error === 'string' &&
+              (result.error.toLowerCase().includes('parameter is missing') ||
+               result.error.toLowerCase().includes('access not allowed'))) {
             this.logger.info('JXA failed, falling back to URL scheme for task deletion');
             return await this.executeViaUrlScheme(args);
           }
-          return result;
+          return createErrorResponse('delete_task', 'SCRIPT_ERROR', result.error, result.details, timer.toMetadata());
         }
 
-        // Handle the result from DELETE_TASK_SCRIPT
-        let parsedResult;
-        try {
-          parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-        } catch (parseError) {
-          this.logger.error('Failed to parse delete task result:', { result, error: parseError });
-          return createErrorResponse(
-            'delete_task',
-            'PARSE_ERROR',
-            'Failed to parse task deletion response',
-            { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-            timer.toMetadata(),
-          );
-        }
-
-        // Check if the script returned an error
-        if (parsedResult.error) {
-          this.logger.error(`Delete task script error: ${parsedResult.message}`);
-          return createErrorResponse(
-            'delete_task',
-            'SCRIPT_ERROR',
-            parsedResult.message || 'Failed to delete task',
-            parsedResult,
-            timer.toMetadata(),
-          );
-        }
+        const parsedResult = result.data;
 
         // Invalidate caches after successful deletion
         this.cache.invalidate('tasks');
@@ -64,7 +39,7 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
         this.cache.invalidate('projects');
         this.cache.invalidate('tags');
 
-        this.logger.info(`Deleted task via JXA: ${parsedResult.name} (${args.taskId})`);
+        this.logger.info(`Deleted task via JXA: ${args.taskId}`);
         return createEntityResponse(
           'delete_task',
           'task',

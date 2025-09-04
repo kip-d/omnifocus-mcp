@@ -17,7 +17,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
     return this.diagnosticLog;
   }
 
-  async execute<T = any>(script: string): Promise<T> {
+  async execute<T = unknown>(script: string): Promise<T> {
     this.log('Starting script execution', { scriptLength: script.length });
 
     // Access maxScriptSize through parent class method or hardcode it
@@ -30,7 +30,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
     return this.executeDiagnostic<T>(script);
   }
 
-  private async executeDiagnostic<T = any>(script: string): Promise<T> {
+  private async executeDiagnostic<T = unknown>(script: string): Promise<T> {
     const wrappedScript = this.wrapScriptWithDiagnostics(script);
 
     this.log('Wrapped script created', { wrappedLength: wrappedScript.length });

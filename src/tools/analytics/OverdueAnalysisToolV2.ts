@@ -8,6 +8,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisResponseV2 } from '../response-types-v2.js';
+import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchemaV2, OverdueAnalysisResponseV2> {
   name = 'analyze_overdue';
@@ -47,13 +48,13 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_OPTIMIZED_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-      if (result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
           'analyze_overdue',
           'ANALYSIS_FAILED',
-          result.message || 'Failed to analyze overdue tasks',
+          result.error,
           'Check that OmniFocus has overdue tasks to analyze',
           result.details,
           timer.toMetadata(),
@@ -62,17 +63,17 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
 
       const responseData = {
         stats: {
-          summary: result.summary || {
+          summary: (result.data as any).summary || {
             totalOverdue: 0,
             overduePercentage: 0,
             averageDaysOverdue: 0,
             oldestOverdueDate: new Date().toISOString(),
           },
-          overdueTasks: result.overdueTasks || [],
-          patterns: result.patterns || [],
-          insights: result.recommendations || {},
+          overdueTasks: (result.data as any).overdueTasks || [],
+          patterns: (result.data as any).patterns || [],
+          insights: (result.data as any).recommendations || {},
         },
-        groupedAnalysis: result.groupedAnalysis || {},
+        groupedAnalysis: (result.data as any).groupedAnalysis || {},
       };
 
       // Cache for 30 minutes

@@ -8,6 +8,7 @@ import { BaseTool } from '../base.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { createLogger } from '../../utils/logger.js';
 import { getMinimalHelpers } from '../../omnifocus/scripts/shared/helpers.js';
+import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Schema using v2.0.0 patterns - handle MCP bridge string coercion
 const PatternAnalysisSchema = z.object({
@@ -74,13 +75,13 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         maxTasks,
       });
 
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-      if (result?.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
           'pattern_analysis',
           'ANALYSIS_FAILED',
-          result.message || 'Pattern analysis failed',
+          result.error,
           'Check OmniFocus is running and has data to analyze',
           result.details,
           timer.toMetadata(),
@@ -88,17 +89,17 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
       }
 
       // Extract key findings
-      const keyFindings = this.extractKeyFindings(result);
+      const keyFindings = this.extractKeyFindings(result.data);
 
       return createAnalyticsResponseV2(
         'pattern_analysis',
-        result,
+        result.data,
         'Pattern Analysis Complete',
         keyFindings,
         {
           patterns_analyzed: patternsToAnalyze,
-          tasks_analyzed: result.metadata?.tasksAnalyzed || 0,
-          projects_analyzed: result.metadata?.projectsAnalyzed || 0,
+          tasks_analyzed: (result.data as any).metadata?.tasksAnalyzed || 0,
+          projects_analyzed: (result.data as any).metadata?.projectsAnalyzed || 0,
           ...timer.toMetadata(),
         },
       );

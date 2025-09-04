@@ -5,6 +5,7 @@ import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-fol
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
 import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { isScriptSuccess, FolderOperationResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   CreateFolderOperationSchema,
   UpdateFolderOperationSchema,
@@ -59,14 +60,14 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       name,
       options: { parent, position, relativeToFolder, status },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_folder',
         'CREATE_FAILED',
-        result.message || result.error || 'Failed to create folder',
-        { details: result.details, rawResult: result, operation: 'create' },
+        result.error,
+        { details: result.details, operation: 'create' },
         timer.toMetadata(),
       );
     }
@@ -74,25 +75,9 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     // Invalidate cache after successful creation
     this.cache.invalidate('folders');
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse create folder result: ${result}`);
-      parsedResult = result;
-    }
+    const parsedResult = result.data;
 
-    if (parsedResult.error) {
-      return createErrorResponse(
-        'manage_folder',
-        'CREATE_FAILED',
-        parsedResult.message || parsedResult.error || 'Failed to create folder',
-        { details: parsedResult.details, rawResult: parsedResult, operation: 'create' },
-        timer.toMetadata(),
-      );
-    }
-
-    if (!parsedResult.folder && !parsedResult.id) {
+    if (!parsedResult.folder) {
       return createErrorResponse(
         'manage_folder',
         'INVALID_RESULT',
@@ -106,16 +91,16 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       'manage_folder',
       'folder',
       {
-        folderId: parsedResult.folder?.id || parsedResult.id,
-        name: parsedResult.folder?.name || name,
-        parent: parsedResult.folder?.parent || parent,
-        status: parsedResult.folder?.status || status || 'active',
+        folderId: parsedResult.folder.id,
+        name: parsedResult.folder.name,
+        parent: parsedResult.folder.parent,
+        status: parsedResult.folder.status || status || 'active',
         operation: 'create',
       },
       {
         ...timer.toMetadata(),
         operation: 'create',
-        created_id: parsedResult.folder?.id || parsedResult.id,
+        created_id: parsedResult.folder.id,
       },
     );
   }
@@ -131,13 +116,13 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       updates,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_folder',
         'UPDATE_FAILED',
-        result.message || 'Failed to update folder',
+        result.error,
         { details: result.details, operation: 'update' },
         timer.toMetadata(),
       );
@@ -147,13 +132,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse update folder result: ${result}`);
-      parsedResult = result;
-    }
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_folder',
@@ -175,13 +154,13 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       options: { moveContentsTo, force },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_folder',
         'DELETE_FAILED',
-        result.message || 'Failed to delete folder',
+        result.error,
         { details: result.details, operation: 'delete' },
         timer.toMetadata(),
       );
@@ -191,13 +170,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse delete folder result: ${result}`);
-      parsedResult = result;
-    }
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_folder',
@@ -207,8 +180,8 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
         ...timer.toMetadata(),
         operation: 'delete',
         deleted_id: folderId,
-        moved_to: parsedResult.movedTo,
-        moved_contents: parsedResult.moved,
+        moved_to: parsedResult.folder?.parent,
+        moved_contents: parsedResult.changes,
       },
     );
   }
@@ -220,13 +193,13 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       options: { newParent: parentId, position, relativeToFolder },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_folder',
         'MOVE_FAILED',
-        result.message || 'Failed to move folder',
+        result.error,
         { details: result.details, operation: 'move' },
         timer.toMetadata(),
       );
@@ -235,13 +208,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     // Invalidate cache after successful move
     this.cache.invalidate('folders');
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse move folder result: ${result}`);
-      parsedResult = result;
-    }
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_folder',
@@ -251,8 +218,8 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
         ...timer.toMetadata(),
         operation: 'move',
         moved_id: folderId,
-        old_parent: parsedResult.folder?.oldParent,
-        new_parent: parsedResult.folder?.newParent,
+        old_parent: parsedResult.folder?.parent,
+        new_parent: parentId,
       },
     );
   }
@@ -265,13 +232,13 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       updates: { status },
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
 
-    if (result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponse(
         'manage_folder',
         'SET_STATUS_FAILED',
-        result.message || 'Failed to set folder status',
+        result.error,
         { details: result.details, operation: 'set_status' },
         timer.toMetadata(),
       );
@@ -281,13 +248,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    let parsedResult;
-    try {
-      parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-    } catch {
-      this.logger.error(`Failed to parse set status result: ${result}`);
-      parsedResult = result;
-    }
+    const parsedResult = result.data;
 
     return createEntityResponse(
       'manage_folder',

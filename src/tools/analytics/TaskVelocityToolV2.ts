@@ -8,6 +8,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { TaskVelocityResponseV2 } from '../response-types-v2.js';
+import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, TaskVelocityResponseV2> {
   name = 'task_velocity';
@@ -48,13 +49,13 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
       const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
         options: { days, groupBy, includeWeekends },
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-      if (result && result.error) {
+      if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
           'task_velocity',
           'VELOCITY_FAILED',
-          result.message || 'Failed to calculate task velocity',
+          result.error,
           'Check that OmniFocus has completion data for the requested period',
           result.details,
           timer.toMetadata(),
@@ -64,19 +65,19 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
       const responseData = {
         velocity: {
           period: `${days} days`,
-          tasksCompleted: result.totalCompleted || 0,
-          averagePerDay: result.averagePerDay || 0,
-          peakDay: result.peakDay || { date: null, count: 0 },
-          trend: result.trend || 'stable',
-          predictedCapacity: result.predictedCapacity || 0,
+          tasksCompleted: (result.data as any).totalCompleted || 0,
+          averagePerDay: (result.data as any).averagePerDay || 0,
+          peakDay: (result.data as any).peakDay || { date: null, count: 0 },
+          trend: (result.data as any).trend || 'stable',
+          predictedCapacity: (result.data as any).predictedCapacity || 0,
         },
-        daily: result.dailyData || [],
+        daily: (result.data as any).dailyData || [],
         patterns: {
-          byDayOfWeek: result.dayOfWeekPatterns || {},
-          byTimeOfDay: result.timeOfDayPatterns || {},
-          byProject: result.projectVelocity || [],
+          byDayOfWeek: (result.data as any).dayOfWeekPatterns || {},
+          byTimeOfDay: (result.data as any).timeOfDayPatterns || {},
+          byProject: (result.data as any).projectVelocity || [],
         },
-        insights: result.insights || [],
+        insights: (result.data as any).insights || [],
       };
 
       // Cache for 1 hour
