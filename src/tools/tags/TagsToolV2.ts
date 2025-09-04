@@ -151,7 +151,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
 
       const response = createListResponse(
         'tags',
-        (parsedResult as any).tags || [],
+        (parsedResult as any).tags || (parsedResult as any).items || [],
         {
           ...timer.toMetadata(),
           total: (parsedResult as any).count || (parsedResult as any).tags?.length || 0,
@@ -209,7 +209,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
 
       const response = createListResponse(
         'tags',
-        (parsedResult as any).tags || [],
+        (parsedResult as any).tags || (parsedResult as any).items || [],
         {
           ...timer.toMetadata(),
           count: (parsedResult as any).count || (parsedResult as any).tags?.length || 0,

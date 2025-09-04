@@ -8,7 +8,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { ProductivityStatsResponseV2 } from '../response-types-v2.js';
-import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { z as zod } from 'zod';
 
 export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2, ProductivityStatsResponseV2> {
   name = 'productivity_stats';
@@ -54,36 +54,72 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           includeInactive: false,  // Only active projects by default for performance
         },
       });
-      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
+      // Define schema for optimized productivity payload
+      const ProjectStatsEntry = zod.object({
+        total: zod.number(),
+        completed: zod.number(),
+        available: zod.number(),
+        completionRate: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+        status: zod.string().optional(),
+        hadRecentActivity: zod.boolean().optional(),
+      });
+      const TagStatsEntry = zod.object({
+        available: zod.number(),
+        remaining: zod.number(),
+        completionRate: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+      });
+      const ProductivityOptimizedSchema = zod.object({
+        summary: zod.object({
+          period: zod.string(),
+          totalProjects: zod.number(),
+          activeProjects: zod.number(),
+          totalTasks: zod.number(),
+          completedTasks: zod.number(),
+          availableTasks: zod.number(),
+          completionRate: zod.number(), // percent 0-100
+          dailyAverage: zod.number(),
+          daysInPeriod: zod.number(),
+        }),
+        projectStats: zod.record(ProjectStatsEntry),
+        tagStats: zod.record(TagStatsEntry),
+        insights: zod.array(zod.string()),
+        metadata: zod.object({ generated_at: zod.string(), method: zod.string(), note: zod.string().optional() }).passthrough(),
+      });
 
-      if (!isScriptSuccess(result)) {
-        return createErrorResponseV2(
-          'productivity_stats',
-          'STATS_FAILED',
-          result.error,
-          'Check that OmniFocus has sufficient data for the requested period',
-          result.details,
-          timer.toMetadata(),
-        );
-      }
+      const data = await this.omniAutomation.executeTyped(script, ProductivityOptimizedSchema);
+
+      const overview = {
+        totalTasks: data.summary.totalTasks,
+        completedTasks: data.summary.completedTasks,
+        completionRate: data.summary.completionRate / 100,
+        activeProjects: data.summary.activeProjects,
+        overdueCount: 0,
+      };
+
+      const projectStatsArray = includeProjectStats
+        ? Object.entries(data.projectStats).map(([name, s]) => ({
+            name,
+            completedCount: s.completed,
+            totalCount: s.total,
+            completionRate: typeof s.completionRate === 'number' ? s.completionRate / 100 : Number(s.completionRate) / 100,
+          }))
+        : [];
+
+      const tagStatsArray = includeTagStats
+        ? Object.entries(data.tagStats).map(([name, s]) => ({ name, count: s.available + s.remaining }))
+        : [];
 
       const responseData = {
         period,
         stats: {
-          overview: (result.data as any).overview || {
-            totalTasks: 0,
-            completedTasks: 0,
-            completionRate: 0,
-            activeProjects: 0,
-            overdueCount: 0,
-          },
-          daily: (result.data as any).dailyStats || [],
-          weekly: (result.data as any).weeklyStats || {},
-          projectStats: includeProjectStats ? ((result.data as any).projectStats || []) : [],
-          tagStats: includeTagStats ? ((result.data as any).tagStats || []) : [],
+          overview,
+          daily: [],
+          weekly: {},
+          projectStats: projectStatsArray,
+          tagStats: tagStatsArray,
         },
-        insights: (result.data as any).insights || {},
-        healthScore: (result.data as any).healthScore || 0,
+        insights: { recommendations: data.insights },
+        healthScore: Math.max(0, Math.min(100, data.summary.completionRate)),
       };
 
       // Cache for 1 hour

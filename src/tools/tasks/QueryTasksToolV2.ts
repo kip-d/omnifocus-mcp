@@ -21,6 +21,7 @@ import {
 import { OmniFocusTask } from '../response-types.js';
 import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
 import { TasksResponseV2 } from '../response-types-v2.js';
+import type { ScriptResult } from '../../omnifocus/script-result-types.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -174,7 +175,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       includeCompleted: args.completed || false,
     });
 
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -188,7 +189,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Parse and cache
-    const tasks = this.parseTasks((result.data as any).tasks);
+    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
     this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as any).summary });
 
     return createTaskResponseV2(
@@ -219,7 +220,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       limit: args.limit,
     });
 
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -233,7 +234,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Parse and cache
-    const tasks = this.parseTasks((result.data as any).tasks);
+    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -268,7 +269,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Use the optimized today's agenda script
     const script = this.omniAutomation.buildScript(TODAYS_AGENDA_ULTRA_FAST_SCRIPT, { options });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -282,7 +283,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // The ultra-fast script returns tasks directly
-    const todayTasks = (result.data as any).tasks || [];
+    const todayTasks = (result.data as any).tasks || (result.data as any).items || [];
 
     // Cache the results
     this.cache.set('tasks', cacheKey, { tasks: todayTasks });
@@ -492,7 +493,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       includeCompleted: args.completed || false,
       includeDetails: args.details || false,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -505,7 +506,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
 
-    const tasks = this.parseTasks((result.data as any).tasks);
+    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -662,5 +663,27 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
       added: task.added ? new Date(task.added) : undefined,
     }));
+  }
+
+  // Backward-compatible helper for tests that mock only `execute`
+  private async execJson(script: string): Promise<ScriptResult<unknown>> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      return await anyOmni.executeJson(script, ListResultSchema);
+    }
+    const raw = await anyOmni.execute(script);
+    let candidate: any = raw;
+    let parsed = ListResultSchema.safeParse(candidate);
+    if (!parsed.success && raw && typeof raw === 'object') {
+      const obj: any = raw;
+      if (Array.isArray(obj.tasks)) {
+        candidate = { items: obj.tasks, summary: obj.summary, metadata: obj.metadata };
+        parsed = ListResultSchema.safeParse(candidate);
+      }
+    }
+    if (parsed.success) {
+      return { success: true, data: parsed.data } as ScriptResult<unknown>;
+    }
+    return { success: false, error: 'Script result validation failed', details: { errors: parsed.error.issues } } as ScriptResult<unknown>;
   }
 }

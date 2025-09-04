@@ -1,11 +1,8 @@
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
-import {
-  ScriptResult,
-  createScriptSuccess,
-  createScriptError,
-} from './script-result-types.js';
+import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
+import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -43,14 +40,14 @@ export class OmniAutomation {
   // New type-safe execution with discriminated unions and schema validation
   public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
     try {
-      const result = await this.execute<any>(script);
+      const result = await this.execute<unknown>(script);
 
       // Handle raw script errors (when script returns error object)
-      if (result && typeof result === 'object' && result.error === true) {
+      if (result && typeof result === 'object' && (result as any).error === true) {
         return createScriptError(
-          result.message || 'Script execution failed',
-          result.details || 'No additional context',
-          result,
+          (result as any).message || 'Script execution failed',
+          (result as any).details || 'No additional context',
+          result as unknown,
         );
       }
 
@@ -64,10 +61,10 @@ export class OmniAutomation {
             { result, errors: validation.error.issues },
           );
         }
-        return createScriptSuccess(validation.data);
+        return createScriptSuccess(validation.data as T);
       }
 
-      return createScriptSuccess(result);
+      return createScriptSuccess(result as T);
     } catch (error) {
       if (error instanceof OmniAutomationError) {
         return createScriptError(
@@ -83,6 +80,27 @@ export class OmniAutomation {
         error,
       );
     }
+  }
+
+  /**
+   * Execute a script that returns a standard JXA envelope and decode to typed data.
+   * The script must stringify an object of shape { ok: true|false, data|error, v }.
+   */
+  public async executeTyped<T extends z.ZodTypeAny>(script: string, dataSchema: T): Promise<z.infer<T>> {
+    const raw = await this.execute<unknown>(script);
+    let env;
+    try {
+      env = JxaEnvelopeSchema.parse(raw);
+    } catch {
+      // Fallback for legacy scripts: normalize legacy shapes to envelope
+      env = normalizeToEnvelope(raw);
+    }
+    if (env.ok === false) {
+      const msg = env.error.message || 'JXA error';
+      const err = new OmniAutomationError(msg, undefined, typeof env.error.details === 'string' ? env.error.details : undefined);
+      throw err;
+    }
+    return dataSchema.parse(env.data);
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {

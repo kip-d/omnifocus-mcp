@@ -217,7 +217,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
 
     // Parse dates and cache
-    const projects = this.parseProjects((result.data as any).projects || result.data);
+    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(

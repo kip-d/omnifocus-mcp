@@ -76,9 +76,10 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
     if (!isScriptSuccess(result)) {
+      const code = result.error === 'NULL_RESULT' ? 'NULL_RESULT' : 'SCRIPT_ERROR';
       return createErrorResponse(
         'manage_reviews',
-        'SCRIPT_ERROR',
+        code,
         result.error,
         { details: result.details },
         timer.toMetadata(),
@@ -86,19 +87,20 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     }
 
     // Ensure projects array exists
-    if (!(result.data as any).projects || !Array.isArray((result.data as any).projects)) {
+    if (!((result.data as any).projects || (result.data as any).items)) {
       return createErrorResponse(
         'manage_reviews',
         'INVALID_RESPONSE',
         'Invalid response from OmniFocus: projects array not found',
-        { received: result, expected: 'object with projects array' },
+        { received: result, expected: 'object with projects/items array' },
         timer.toMetadata(),
       );
     }
 
     // Parse dates and calculate review status
     const now = new Date();
-    const parsedProjects = (result.data as any).projects.map((project: any) => {
+    const sourceProjects = (result.data as any).projects || (result.data as any).items;
+    const parsedProjects = sourceProjects.map((project: any) => {
       const nextReviewDate = project.nextReviewDate ? new Date(project.nextReviewDate) : null;
       const lastReviewDate = project.lastReviewDate ? new Date(project.lastReviewDate) : null;
 
