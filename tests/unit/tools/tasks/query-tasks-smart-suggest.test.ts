@@ -19,7 +19,7 @@ describe('QueryTasksToolV2 smart_suggest', () => {
     mockCache = { get: vi.fn().mockReturnValue(null), set: vi.fn(), invalidate: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
     tool = new QueryTasksToolV2(mockCache);
-    mockOmni = { execute: vi.fn(), buildScript: vi.fn() };
+    mockOmni = { executeJson: vi.fn(), buildScript: vi.fn() };
     (tool as any).omniAutomation = mockOmni;
   });
 
@@ -28,7 +28,7 @@ describe('QueryTasksToolV2 smart_suggest', () => {
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
     const laterToday = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
 
-    mockOmni.execute.mockResolvedValue({
+    mockOmni.executeJson.mockResolvedValue({
       tasks: [
         { id: 't1', name: 'Overdue', dueDate: yesterday },
         { id: 't2', name: 'Due Today', dueDate: laterToday },
@@ -55,11 +55,11 @@ describe('QueryTasksToolV2 smart_suggest', () => {
     const res: any = await tool.execute({ mode: 'smart_suggest', limit: 5 });
     expect(res.success).toBe(true);
     expect(res.metadata.from_cache).toBe(true);
-    expect(mockOmni.execute).not.toHaveBeenCalled();
+    expect(mockOmni.executeJson).not.toHaveBeenCalled();
   });
 
   it('returns SCRIPT_ERROR when underlying query fails', async () => {
-    mockOmni.execute.mockResolvedValue({ error: true, message: 'boom' });
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'boom' , details: 'Test error' });
     const res: any = await tool.execute({ mode: 'smart_suggest', limit: 5 });
     expect(res.success).toBe(false);
     expect(res.error.code).toBe('SCRIPT_ERROR');

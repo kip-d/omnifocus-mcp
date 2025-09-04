@@ -32,7 +32,7 @@ describe('PerspectivesToolV2', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn((script, params) => `built script with params: ${JSON.stringify(params)}`),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -53,7 +53,7 @@ describe('PerspectivesToolV2', () => {
         metadata: { count: 3 }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.execute({ operation: 'list' });
 
@@ -78,7 +78,7 @@ describe('PerspectivesToolV2', () => {
         metadata: { count: 1 }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ 
         operation: 'list',
@@ -91,7 +91,7 @@ describe('PerspectivesToolV2', () => {
     });
 
     it('should handle script execution errors', async () => {
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Script failed'));
 
       const result = await tool.executeValidated({ operation: 'list' });
 
@@ -114,7 +114,7 @@ describe('PerspectivesToolV2', () => {
         count: 2
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ 
         operation: 'query',
@@ -165,7 +165,7 @@ describe('PerspectivesToolV2', () => {
         error: 'Perspective "NonExistent" not found'
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ 
         operation: 'query',

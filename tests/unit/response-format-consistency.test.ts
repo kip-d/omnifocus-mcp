@@ -32,7 +32,7 @@ describe('Response Format Consistency Tests', () => {
     // Mock OmniAutomation
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     } as any;
 
     // Replace implementations
@@ -69,7 +69,7 @@ describe('Response Format Consistency Tests', () => {
       
       // Mock successful execution
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 },
       });
@@ -91,7 +91,7 @@ describe('Response Format Consistency Tests', () => {
       
       // Mock error execution
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Test error'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Test error'));
 
       const result = await tool.executeValidated({ title: 'Test task' });
 
@@ -111,7 +111,7 @@ describe('Response Format Consistency Tests', () => {
       const tool = new ProductivityStatsToolV2(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         stats: {
           today: { completed: 5, created: 3, netProgress: 2 },
           week: { completed: 20, created: 15, avgPerDay: 3 },
@@ -160,7 +160,7 @@ describe('Response Format Consistency Tests', () => {
       
       mockCache.get = vi.fn(() => null); // No cache
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         summary: { 
           totalOverdue: 5,
           overduePercentage: 0.1,
@@ -186,7 +186,7 @@ describe('Response Format Consistency Tests', () => {
       const tool = new ExportTasksTool(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         format: 'json',
         data: [],
         count: 0,
@@ -210,7 +210,7 @@ describe('Response Format Consistency Tests', () => {
       (tool as any).omniAutomation = mockOmniAutomation;
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         overview: { totalTasks: 100, completedTasks: 20 },
         dailyStats: [],
         weeklyStats: {},
@@ -242,7 +242,7 @@ describe('Response Format Consistency Tests', () => {
 
       for (const tool of tools) {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('Test error'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('Test error'));
 
         (tool as any).omniAutomation = mockOmniAutomation;
         
@@ -267,7 +267,7 @@ describe('Response Format Consistency Tests', () => {
       const tool = new CreateTaskTool(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
       const result = await tool.executeValidated({ title: 'Test task' });
 

@@ -19,7 +19,7 @@ describe('QueryTasksToolV2 upcoming mode', () => {
     mockCache = { get: vi.fn().mockReturnValue(null), set: vi.fn(), invalidate: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
     tool = new QueryTasksToolV2(mockCache);
-    mockOmni = { execute: vi.fn(), buildScript: vi.fn() };
+    mockOmni = { executeJson: vi.fn(), buildScript: vi.fn() };
     (tool as any).omniAutomation = mockOmni;
   });
 
@@ -33,7 +33,7 @@ describe('QueryTasksToolV2 upcoming mode', () => {
   });
 
   it('propagates SCRIPT_ERROR with suggestion on failure', async () => {
-    mockOmni.execute.mockResolvedValue({ error: true, message: 'boom' });
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'boom', details: 'Script failed' });
     const res: any = await tool.execute({ mode: 'upcoming', limit: 5, daysAhead: 10 });
     expect(res.success).toBe(false);
     expect(res.error.code).toBe('SCRIPT_ERROR');
@@ -41,7 +41,7 @@ describe('QueryTasksToolV2 upcoming mode', () => {
   });
 
   it('returns success and sets metadata on normal execution', async () => {
-    mockOmni.execute.mockResolvedValue({ tasks: [{ id: 'u1', name: 'Soon' }] });
+    mockOmni.executeJson.mockResolvedValue({ success: true, data: { tasks: [{ id: 'u1', name: 'Soon' }] } });
     const res: any = await tool.execute({ mode: 'upcoming', limit: 3, daysAhead: 3 });
     expect(res.success).toBe(true);
     expect(res.metadata.from_cache).toBe(false);
