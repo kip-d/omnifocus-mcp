@@ -8,7 +8,7 @@ import { BaseTool } from '../base.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { createLogger } from '../../utils/logger.js';
 import { getMinimalHelpers } from '../../omnifocus/scripts/shared/helpers.js';
-import { isScriptSuccess, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { z as zod } from 'zod';
 
 // Schema using v2.0.0 patterns - handle MCP bridge string coercion
 const PatternAnalysisSchema = z.object({
@@ -75,31 +75,57 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         maxTasks,
       });
 
-      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
+      // Define a typed schema for the analysis payload
+      const DuplicateTask = zod.object({
+        id: zod.string().optional(),
+        name: zod.string(),
+        project: zod.string().optional(),
+      });
+      const PatternPayloadSchema = zod.object({
+        findings: zod.object({
+          duplicates: zod.object({
+            count: zod.number(),
+            items: zod.array(zod.object({ task1: DuplicateTask, task2: DuplicateTask, similarity: zod.number() })),
+          }).optional(),
+          dormant_projects: zod.object({
+            count: zod.number(),
+            threshold_days: zod.number(),
+            items: zod.array(zod.object({ name: zod.string(), lastModified: zod.string(), daysDormant: zod.number(), taskCount: zod.number().optional() })),
+          }).optional(),
+          tag_audit: zod.object({
+            total_tags: zod.number(),
+            unused_tags: zod.array(zod.string()),
+            rarely_used: zod.array(zod.object({ name: zod.string(), count: zod.number() })),
+            most_used: zod.array(zod.object({ name: zod.string(), count: zod.number() })),
+          }).optional(),
+          deadline_health: zod.object({
+            overdue_count: zod.number(),
+            due_soon_count: zod.number(),
+            due_this_week_count: zod.number(),
+          }).optional(),
+          waiting_for: zod.object({
+            count: zod.number(),
+            items: zod.array(zod.object({ name: zod.string(), project: zod.string().optional(), daysWaiting: zod.number() })),
+          }).optional(),
+        }),
+        metadata: zod.object({ tasksAnalyzed: zod.number().optional(), projectsAnalyzed: zod.number().optional() }).passthrough().optional(),
+        timestamp: zod.string().optional(),
+      });
 
-      if (!isScriptSuccess(result)) {
-        return createErrorResponseV2(
-          'pattern_analysis',
-          'ANALYSIS_FAILED',
-          result.error,
-          'Check OmniFocus is running and has data to analyze',
-          result.details,
-          timer.toMetadata(),
-        );
-      }
+      const data = await this.omniAutomation.executeTyped(script, PatternPayloadSchema);
 
       // Extract key findings
-      const keyFindings = this.extractKeyFindings(result.data);
+      const keyFindings = this.extractKeyFindings(data);
 
       return createAnalyticsResponseV2(
         'pattern_analysis',
-        result.data,
+        data,
         'Pattern Analysis Complete',
         keyFindings,
         {
           patterns_analyzed: patternsToAnalyze,
-          tasks_analyzed: (result.data as any).metadata?.tasksAnalyzed || 0,
-          projects_analyzed: (result.data as any).metadata?.projectsAnalyzed || 0,
+          tasks_analyzed: data.metadata?.tasksAnalyzed || 0,
+          projects_analyzed: data.metadata?.projectsAnalyzed || 0,
           ...timer.toMetadata(),
         },
       );
@@ -125,6 +151,8 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
       
       const app = Application('OmniFocus');
       const doc = app.defaultDocument();
+      
+      try {
       
       const patterns = ${JSON.stringify(options.patterns)};
       const dormantDays = ${options.dormantThresholdDays};
@@ -339,27 +367,32 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
         };
       }
       
-      return JSON.stringify({
+      return JSON.stringify({ ok: true, v: '1', data: {
         findings: findings,
         metadata: metadata,
         timestamp: new Date().toISOString()
-      });
+      }});
+      
+      } catch (error) {
+        return JSON.stringify({ ok: false, v: '1', error: { message: 'Pattern analysis failed: ' + (error && error.toString ? error.toString() : 'Unknown error'), details: error && error.message ? error.message : undefined } });
+      }
     })()`;
   }
 
-  private extractKeyFindings(result: any): string[] {
+  private extractKeyFindings(result: unknown): string[] {
+    const data = result as any;
     const findings: string[] = [];
 
-    if (result?.findings?.duplicates?.count > 0) {
-      findings.push(`Found ${result.findings.duplicates.count} potential duplicate tasks`);
+    if (data?.findings?.duplicates?.count > 0) {
+      findings.push(`Found ${data.findings.duplicates.count} potential duplicate tasks`);
     }
 
-    if (result?.findings?.dormant_projects?.count > 0) {
-      findings.push(`${result.findings.dormant_projects.count} projects dormant for ${result.findings.dormant_projects.threshold_days}+ days`);
+    if (data?.findings?.dormant_projects?.count > 0) {
+      findings.push(`${data.findings.dormant_projects.count} projects dormant for ${data.findings.dormant_projects.threshold_days}+ days`);
     }
 
-    if (result?.findings?.tag_audit) {
-      const audit = result.findings.tag_audit;
+    if (data?.findings?.tag_audit) {
+      const audit = data.findings.tag_audit;
       if (audit.unused_tags?.length > 0) {
         findings.push(`${audit.unused_tags.length} unused tags found`);
       }
@@ -368,8 +401,8 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
       }
     }
 
-    if (result?.findings?.deadline_health) {
-      const health = result.findings.deadline_health;
+    if (data?.findings?.deadline_health) {
+      const health = data.findings.deadline_health;
       if (health.overdue_count > 0) {
         findings.push(`⚠️ ${health.overdue_count} tasks overdue`);
       }
@@ -378,8 +411,8 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema> 
       }
     }
 
-    if (result?.findings?.waiting_for?.count > 0) {
-      const longWaiting = result.findings.waiting_for.items?.filter((t: any) => t.daysWaiting > 30);
+    if (data?.findings?.waiting_for?.count > 0) {
+      const longWaiting = data.findings.waiting_for.items?.filter((t: any) => t.daysWaiting > 30);
       if (longWaiting?.length > 0) {
         findings.push(`${longWaiting.length} tasks waiting 30+ days`);
       }

@@ -26,6 +26,35 @@ export const JxaEnvelopeSchema = z.discriminatedUnion('ok', [
   }),
 ]);
 
+export function isEnvelope(value: unknown): value is JxaEnvelope {
+  const res = JxaEnvelopeSchema.safeParse(value);
+  return res.success;
+}
+
+export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {
+  // Already an envelope
+  const parsed = JxaEnvelopeSchema.safeParse(value);
+  if (parsed.success) return parsed.data as JxaEnvelope<JsonValue>;
+
+  // Legacy error shape: { error: true, message, details? }
+  if (value && typeof value === 'object' && (value as any).error === true) {
+    const v = 'legacy-1';
+    const obj = value as Record<string, unknown>;
+    const message = typeof obj.message === 'string' ? obj.message : 'JXA error';
+    const rawDetails = 'details' in obj ? (obj.details as unknown) : undefined;
+    let details: JsonValue | undefined;
+    try {
+      details = rawDetails === undefined ? undefined : (JSON.parse(JSON.stringify(rawDetails)) as JsonValue);
+    } catch {
+      details = undefined;
+    }
+    return { ok: false, error: { message, details }, v };
+  }
+
+  // Legacy success: arbitrary JSON payload
+  return { ok: true, data: (value ?? null) as JsonValue, v: 'legacy-1' };
+}
+
 export function toError(e: unknown): Error {
   if (e instanceof Error) return e;
   return new Error(typeof e === 'string' ? e : safeStringify(e));
@@ -46,4 +75,3 @@ export function safeLog(message: string, data?: unknown, logger: { info: (...arg
   }
   logger.info(message, safeStringify(data));
 }
-

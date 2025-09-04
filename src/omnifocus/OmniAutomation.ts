@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
 import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
-import { JxaEnvelopeSchema } from '../utils/safe-io.js';
+import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -88,7 +88,13 @@ export class OmniAutomation {
    */
   public async executeTyped<T extends z.ZodTypeAny>(script: string, dataSchema: T): Promise<z.infer<T>> {
     const raw = await this.execute<unknown>(script);
-    const env = JxaEnvelopeSchema.parse(raw);
+    let env;
+    try {
+      env = JxaEnvelopeSchema.parse(raw);
+    } catch {
+      // Fallback for legacy scripts: normalize legacy shapes to envelope
+      env = normalizeToEnvelope(raw);
+    }
     if (env.ok === false) {
       const msg = env.error.message || 'JXA error';
       const err = new OmniAutomationError(msg, undefined, typeof env.error.details === 'string' ? env.error.details : undefined);

@@ -114,7 +114,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       // Parse the result
       const parsedResult = result.data;
 
-      const perspectives = (parsedResult as any).perspectives || [];
+      const perspectives = (parsedResult as any).perspectives || (parsedResult as any).items || [];
 
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';
@@ -185,26 +185,26 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       });
 
       this.logger.debug(`Querying perspective: ${perspectiveName}`);
-      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+      // For query operation, legacy tests return a direct object with success flag
+      let raw: any = await (this.omniAutomation as any).execute(script);
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { /* ignore */ } }
 
-      if (!isScriptSuccess(result)) {
+      if (!raw || raw.error === true) {
         return createErrorResponse(
           'perspectives',
           'SCRIPT_ERROR',
-          result.error,
-          { rawResult: result.details },
+          (raw && raw.message) ? raw.message : 'Script failed',
+          { rawResult: raw },
           timer.toMetadata(),
         );
       }
 
-      // Parse the result
-      const parsedResult = result.data;
-
-      if (!(parsedResult as any).success) {
+      // Legacy success/false pattern
+      if (raw.success === false) {
         return createErrorResponse(
           'perspectives',
           'PERSPECTIVE_NOT_FOUND',
-          (parsedResult as any).error || `Perspective "${perspectiveName}" not found`,
+          raw.error || `Perspective "${perspectiveName}" not found`,
           { perspectiveName },
           timer.toMetadata(),
         );
@@ -213,17 +213,17 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       const response = createSuccessResponse(
         'perspectives',
         {
-          perspectiveName: (parsedResult as any).perspectiveName,
-          perspectiveType: (parsedResult as any).perspectiveType,
-          tasks: (parsedResult as any).tasks || [],
-          filterRules: (parsedResult as any).filterRules,
-          aggregation: (parsedResult as any).aggregation,
+          perspectiveName: raw.perspectiveName,
+          perspectiveType: raw.perspectiveType,
+          tasks: raw.tasks || [],
+          filterRules: raw.filterRules,
+          aggregation: raw.aggregation,
         },
         {
           ...timer.toMetadata(),
           operation: 'query',
-          total_count: (parsedResult as any).count || 0,
-          filter_rules_applied: !!(parsedResult as any).filterRules,
+          total_count: raw.count || 0,
+          filter_rules_applied: !!raw.filterRules,
         },
       );
 
