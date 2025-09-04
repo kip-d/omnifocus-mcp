@@ -61,10 +61,10 @@ export class OmniAutomation {
             { result, errors: validation.error.issues },
           );
         }
-        return createScriptSuccess(validation.data);
+        return createScriptSuccess(validation.data as T);
       }
 
-      return createScriptSuccess(result);
+      return createScriptSuccess(result as T);
     } catch (error) {
       if (error instanceof OmniAutomationError) {
         return createScriptError(

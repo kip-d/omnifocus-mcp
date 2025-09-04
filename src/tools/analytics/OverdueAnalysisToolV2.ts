@@ -94,26 +94,29 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
 
       const data = await this.omniAutomation.executeTyped(script, OverdueOptimizedDataSchema);
 
+      const total = data.summary.totalOverdue || 0;
       const responseData = {
         stats: {
           summary: {
             totalOverdue: data.summary.totalOverdue,
-            overduePercentage: Number(data.summary.blockedPercentage) + Number(data.summary.unblockedCount) * 0, // keep field in compatible shape
+            overduePercentage: 0, // denominator (active tasks) not available in this optimized payload
             averageDaysOverdue: Number(data.summary.avgDaysOverdue),
-            oldestOverdueDate: data.blockedTasks[0]?.dueDate ?? new Date().toISOString(),
+            oldestOverdueDate: data.summary.mostOverdue?.dueDate ?? new Date().toISOString(),
           },
           overdueTasks: data.blockedTasks.concat(
             data.groupedByUrgency.high.slice(0, Math.max(0, 10 - data.blockedTasks.length)),
           ),
-          patterns: data.projectBottlenecks.map((p) => ({ category: p.name, count: p.overdueCount })),
+          patterns: data.projectBottlenecks.map((p) => ({
+            category: p.name,
+            count: p.overdueCount,
+            percentage: total > 0 ? (p.overdueCount / total) * 100 : 0,
+          })),
           insights: { topRecommendations: data.insights.slice(0, 3) },
         },
-        groupedAnalysis: {
-          project: Object.fromEntries(
-            data.projectBottlenecks.map((p) => [p.name, { count: p.overdueCount, blocked: p.blockedCount }]),
-          ),
-        },
-      } as const;
+        groupedAnalysis: Object.fromEntries(
+          data.projectBottlenecks.map((p) => [p.name, { count: p.overdueCount, blocked: p.blockedCount }]),
+        ),
+      };
 
       // Cache for 30 minutes
       this.cache.set('analytics', cacheKey, responseData);
