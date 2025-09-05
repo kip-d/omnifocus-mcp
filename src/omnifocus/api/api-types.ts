@@ -36,7 +36,7 @@ export interface TaskWithAnalysis extends Task {
 }
 
 // Type for script execution results
-export interface ScriptResult<T = any> {
+export interface ScriptResult<T = unknown> {
   success: boolean;
   result?: T;
   error?: {

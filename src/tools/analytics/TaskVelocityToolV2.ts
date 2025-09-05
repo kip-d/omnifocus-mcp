@@ -8,6 +8,7 @@ import {
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { TaskVelocityResponseV2 } from '../response-types-v2.js';
+import { z as zod } from 'zod';
 
 export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, TaskVelocityResponseV2> {
   name = 'task_velocity';
@@ -46,37 +47,65 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
 
       // Execute script
       const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
-        options: { days, groupBy, includeWeekends },
+        options: { period: groupBy, days, includeWeekends },
       });
-      const result = await this.omniAutomation.execute<any>(script);
 
-      if (result && result.error) {
-        return createErrorResponseV2(
-          'task_velocity',
-          'VELOCITY_FAILED',
-          result.message || 'Failed to calculate task velocity',
-          'Check that OmniFocus has completion data for the requested period',
-          result.details,
-          timer.toMetadata(),
-        );
-      }
+      // Schema matching the optimized velocity payload
+      const IntervalSchema = zod.object({
+        start: zod.any(),
+        end: zod.any(),
+        created: zod.number(),
+        completed: zod.number(),
+        label: zod.string(),
+      });
+      const VelocityPayloadSchema = zod.object({
+        velocity: zod.object({
+          period: zod.string(),
+          averageCompleted: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          averageCreated: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          dailyVelocity: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          backlogGrowthRate: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+        }),
+        throughput: zod.object({
+          intervals: zod.array(IntervalSchema),
+          totalCompleted: zod.number(),
+          totalCreated: zod.number(),
+        }),
+        breakdown: zod.object({
+          medianCompletionHours: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          tasksAnalyzed: zod.number(),
+        }),
+        projections: zod.object({
+          tasksPerDay: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          tasksPerWeek: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+          tasksPerMonth: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
+        }),
+      });
+
+      const data = await this.omniAutomation.executeTyped(script, VelocityPayloadSchema);
+
+      const daily = data.throughput.intervals.map((i: any) => ({ date: i.label, completed: i.completed }));
+      const peak = daily.reduce((acc: any, d: any) => d.completed > acc.count ? { date: d.date, count: d.completed } : acc, { date: null, count: 0 });
+
+      // Simple trend heuristic: last 3 intervals vs previous 3
+      const last3 = daily.slice(-3).reduce((s: any, d: any) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length));
+      const prev3 = daily.slice(-6, -3).reduce((s: any, d: any) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length - 3));
+      const trend: 'increasing' | 'stable' | 'decreasing' = last3 > prev3 + 0.5 ? 'increasing' : (last3 + 0.5 < prev3 ? 'decreasing' : 'stable');
 
       const responseData = {
         velocity: {
-          period: `${days} days`,
-          tasksCompleted: result.totalCompleted || 0,
-          averagePerDay: result.averagePerDay || 0,
-          peakDay: result.peakDay || { date: null, count: 0 },
-          trend: result.trend || 'stable',
-          predictedCapacity: result.predictedCapacity || 0,
+          period: groupBy,
+          tasksCompleted: data.throughput.totalCompleted,
+          averagePerDay: typeof data.projections.tasksPerDay === 'number' ? data.projections.tasksPerDay : parseFloat(String(data.projections.tasksPerDay)),
+          peakDay: peak,
+          trend,
+          predictedCapacity: typeof data.projections.tasksPerWeek === 'number' ? data.projections.tasksPerWeek : parseFloat(String(data.projections.tasksPerWeek)),
         },
-        daily: result.dailyData || [],
-        patterns: {
-          byDayOfWeek: result.dayOfWeekPatterns || {},
-          byTimeOfDay: result.timeOfDayPatterns || {},
-          byProject: result.projectVelocity || [],
-        },
-        insights: result.insights || [],
+        daily,
+        patterns: { byDayOfWeek: {}, byTimeOfDay: {}, byProject: [] },
+        insights: [
+          `Avg ${Number(data.velocity.dailyVelocity).toFixed(2)}/day; backlog ${Number(data.velocity.backlogGrowthRate) >= 0 ? '+' : ''}${Number(data.velocity.backlogGrowthRate).toFixed(1)}/period`,
+        ],
       };
 
       // Cache for 1 hour

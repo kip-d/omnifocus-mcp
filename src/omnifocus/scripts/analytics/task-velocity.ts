@@ -49,11 +49,7 @@ export const TASK_VELOCITY_SCRIPT = `
     
     // Check if allTasks is null or undefined
     if (!allTasks) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTasks() returned null or undefined"
-      });
+      return JSON.stringify({ ok: false, error: { message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.", details: "doc.flattenedTasks() returned null or undefined" }, v: '1' });
     }
     let totalCompleted = 0;
     let totalCreated = 0;
@@ -156,30 +152,34 @@ export const TASK_VELOCITY_SCRIPT = `
     const backlogGrowth = avgCreated - avgCompleted;
     
     return JSON.stringify({
-      velocity: {
-        period: options.period,
-        averageCompleted: avgCompleted.toFixed(1),
-        averageCreated: avgCreated.toFixed(1),
-        dailyVelocity: velocity.toFixed(2),
-        backlogGrowthRate: backlogGrowth.toFixed(1)
-      },
-      throughput: {
-        intervals: intervals.reverse(), // Show chronologically
-        totalCompleted: totalCompleted,
-        totalCreated: totalCreated
-      },
-      breakdown: {
-        medianCompletionHours: medianCompletionTime.toFixed(1),
-        tasksAnalyzed: allTasks.length
-      },
-      projections: {
-        tasksPerDay: velocity.toFixed(2),
-        tasksPerWeek: (velocity * 7).toFixed(1),
-        tasksPerMonth: (velocity * 30).toFixed(1)
+      ok: true,
+      v: '1',
+      data: {
+        velocity: {
+          period: options.period,
+          averageCompleted: avgCompleted.toFixed(1),
+          averageCreated: avgCreated.toFixed(1),
+          dailyVelocity: velocity.toFixed(2),
+          backlogGrowthRate: backlogGrowth.toFixed(1)
+        },
+        throughput: {
+          intervals: intervals.reverse(), // Show chronologically
+          totalCompleted: totalCompleted,
+          totalCreated: totalCreated
+        },
+        breakdown: {
+          medianCompletionHours: medianCompletionTime.toFixed(1),
+          tasksAnalyzed: allTasks.length
+        },
+        projections: {
+          tasksPerDay: velocity.toFixed(2),
+          tasksPerWeek: (velocity * 7).toFixed(1),
+          tasksPerMonth: (velocity * 30).toFixed(1)
+        }
       }
     });
   } catch (error) {
-    return formatError(error, 'task_velocity');
+    return JSON.stringify({ ok: false, error: { message: 'Failed to calculate task velocity: ' + (error && error.toString ? error.toString() : 'Unknown error'), details: error && error.message ? error.message : undefined }, v: '1' });
   }
   })();
 `;

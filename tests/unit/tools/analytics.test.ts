@@ -37,7 +37,7 @@ describe('Analytics Tools', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -61,7 +61,7 @@ describe('Analytics Tools', () => {
       it('should validate schema correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           stats: { completed: 10, created: 15 },
           summary: { completionRate: 0.67 },
           trends: {},
@@ -93,7 +93,7 @@ describe('Analytics Tools', () => {
       it('should use default values correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           stats: {},
           summary: {},
           trends: {},
@@ -137,7 +137,7 @@ describe('Analytics Tools', () => {
       it('should generate correct cache keys', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           stats: {}, summary: {}, trends: {}
         });
 
@@ -161,7 +161,7 @@ describe('Analytics Tools', () => {
       it('should cache results correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           stats: { completed: 25, created: 30 },
           summary: { completionRate: 0.83 },
           trends: { direction: 'up' },
@@ -182,7 +182,7 @@ describe('Analytics Tools', () => {
       it('should handle empty data correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           stats: {},
           summary: { completionRate: 0, totalCompleted: 0, totalCreated: 0 },
           trends: {},
@@ -199,10 +199,7 @@ describe('Analytics Tools', () => {
       it('should handle script errors gracefully', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Script execution failed',
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed', details: 'Test error' });
 
         tool = new ProductivityStatsTool(mockCache);
         (tool as any).omniAutomation = mockOmniAutomation;
@@ -216,7 +213,7 @@ describe('Analytics Tools', () => {
       it('should handle all period options', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           overview: {}, dailyStats: [], weeklyStats: {}, projectStats: [], tagStats: []
         });
 
@@ -252,7 +249,7 @@ describe('Analytics Tools', () => {
       it('should handle filtering options correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           velocity: { current: 10, average: 8 },
           throughput: { weekly: 40 },
           breakdown: {},
@@ -280,7 +277,7 @@ describe('Analytics Tools', () => {
       it('should generate cache keys with all parameters', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
           completionRates: { overall: 0, byProject: {}, byTag: {} },
           velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' }
@@ -303,7 +300,7 @@ describe('Analytics Tools', () => {
       it('should handle cache keys without optional parameters', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           averageTimeToComplete: { overall: 0, byProject: {}, byTag: {} },
           completionRates: { overall: 0, byProject: {}, byTag: {} },
           velocity: { tasksPerDay: 0, tasksPerWeek: 0, trend: 'stable' }
@@ -320,7 +317,7 @@ describe('Analytics Tools', () => {
       it('should cache for 1 hour as per implementation', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           velocity: { current: 15 },
           throughput: { daily: 5 },
           breakdown: {},
@@ -342,7 +339,7 @@ describe('Analytics Tools', () => {
       it('should preserve all velocity calculation results', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           totalCompleted: 84,
           averagePerDay: 12,
           peakDay: { date: '2024-01-15', count: 18 },
@@ -368,7 +365,7 @@ describe('Analytics Tools', () => {
       it('should handle empty velocity data', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           totalCompleted: 0,
           averagePerDay: 0,
           peakDay: { date: null, count: 0 },
@@ -407,7 +404,7 @@ describe('Analytics Tools', () => {
       it('should validate limit parameter correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: { totalOverdue: 5 },
           overdueTasks: [],
           patterns: {},
@@ -434,7 +431,7 @@ describe('Analytics Tools', () => {
       it('should handle all groupBy options', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: {}, overdueTasks: [], patterns: {}, 
           recommendations: [], groupedAnalysis: {}
         });
@@ -457,7 +454,7 @@ describe('Analytics Tools', () => {
       it('should generate correct cache keys', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: {}, overdueTasks: [], patterns: {},
           recommendations: [], groupedAnalysis: {}
         });
@@ -477,7 +474,7 @@ describe('Analytics Tools', () => {
       it('should cache for 30 minutes as per implementation', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: { totalOverdue: 12, overduePercentage: 0.24, averageDaysOverdue: 8, oldestOverdueDate: '2024-12-01' },
           overdueTasks: [],
           patterns: [{ type: 'project', value: 'Work', count: 8, percentage: 66.7 }],
@@ -527,7 +524,7 @@ describe('Analytics Tools', () => {
       it('should handle no overdue tasks', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: {
             totalOverdue: 0,
             overduePercentage: 0,
@@ -550,7 +547,7 @@ describe('Analytics Tools', () => {
       it('should preserve all analysis data correctly', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: {
             totalOverdue: 15,
             overduePercentage: 0.3,
@@ -597,7 +594,7 @@ describe('Analytics Tools', () => {
       it('should handle boolean coercion for includeRecentlyCompleted', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           summary: {}, overdueTasks: [], patterns: {},
           recommendations: [], groupedAnalysis: {}
         });
@@ -627,7 +624,7 @@ describe('Analytics Tools', () => {
       const tool = new ProductivityStatsTool(mockCache);
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Network error'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Network error'));
 
       const result = await tool.executeValidated({ period: 'week' });
 
@@ -641,7 +638,7 @@ describe('Analytics Tools', () => {
       const tool = new TaskVelocityTool(mockCache);
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Script timeout'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Script timeout'));
 
       const result = await tool.executeValidated({ days: 30 });
 
@@ -654,7 +651,7 @@ describe('Analytics Tools', () => {
       const tool = new OverdueAnalysisTool(mockCache);
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Permission denied'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Permission denied'));
 
       const result = await tool.executeValidated({ limit: 50 });
 

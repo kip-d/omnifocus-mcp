@@ -38,7 +38,7 @@ describe('Task CRUD Operations', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
       executeViaUrlScheme: vi.fn(),
     };
 
@@ -64,7 +64,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(taskData);
 
@@ -100,7 +100,7 @@ describe('Task CRUD Operations', () => {
           created: true
         };
 
-        mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+        mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
         const result = await tool.execute(taskData);
 
@@ -119,7 +119,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(expectedResult);
+        mockOmniAutomation.executeJson.mockResolvedValue(expectedResult);
 
         const result = await tool.execute(taskData);
 
@@ -161,10 +161,8 @@ describe('Task CRUD Operations', () => {
         const taskData = { name: 'Test task' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Script execution failed'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed'
+        , details: 'Test error' });
 
         const result = await tool.execute(taskData);
 
@@ -178,7 +176,7 @@ describe('Task CRUD Operations', () => {
         const taskData = { name: 'Test task' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
         const result = await tool.execute(taskData);
 
@@ -210,7 +208,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(updateData);
 
@@ -249,7 +247,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(updateData);
 
@@ -269,7 +267,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(updateData);
 
@@ -316,10 +314,8 @@ describe('Task CRUD Operations', () => {
         const updateData = { taskId: 'task-123', name: 'New name' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Task not found'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
+        , details: 'Test error' });
 
         const result = await tool.execute(updateData);
 
@@ -348,7 +344,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(completeData);
 
@@ -374,7 +370,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(completeData);
 
@@ -386,10 +382,8 @@ describe('Task CRUD Operations', () => {
         const completeData = { taskId: 'task-123' };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'access not allowed'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'access not allowed'
+        , details: 'Test error' });
 
         const result = await tool.execute(completeData);
 
@@ -421,10 +415,8 @@ describe('Task CRUD Operations', () => {
         const completeData = { taskId: 'task-123' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Task not found'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
+        , details: 'Test error' });
 
         const result = await tool.execute(completeData);
 
@@ -437,7 +429,7 @@ describe('Task CRUD Operations', () => {
         const completeData = { taskId: 'task-123' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
         const result = await tool.execute(completeData);
 
@@ -465,7 +457,7 @@ describe('Task CRUD Operations', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(expectedResult));
+        mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
         const result = await tool.execute(deleteData);
 
@@ -482,10 +474,8 @@ describe('Task CRUD Operations', () => {
         const deleteData = { taskId: 'task-123' };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'parameter is missing'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'parameter is missing'
+        , details: 'Test error' });
 
         const result = await tool.execute(deleteData);
 
@@ -499,7 +489,7 @@ describe('Task CRUD Operations', () => {
         const deleteData = { taskId: 'task-123' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('access not allowed'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
         const result = await tool.execute(deleteData);
 
@@ -526,10 +516,8 @@ describe('Task CRUD Operations', () => {
         const deleteData = { taskId: 'task-123' };
         
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Task not found'
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
+        , details: 'Test error' });
 
         const result = await tool.execute(deleteData);
 

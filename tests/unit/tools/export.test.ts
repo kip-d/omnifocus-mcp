@@ -73,7 +73,7 @@ describe('Export Tools', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -96,7 +96,7 @@ describe('Export Tools', () => {
 
       it('should use default format when not specified', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: '[]',
           count: 0,
@@ -118,7 +118,7 @@ describe('Export Tools', () => {
 
       it('should validate export format correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'csv',
           data: 'id,name\n1,Task 1',
           count: 1,
@@ -140,7 +140,7 @@ describe('Export Tools', () => {
     describe('filtering and field selection', () => {
       it('should handle all filter options correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: '[]',
           count: 0,
@@ -181,7 +181,7 @@ describe('Export Tools', () => {
 
       it('should handle field selection correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'csv',
           data: 'id,name,project,tags\n1,"Task 1","Work","urgent"',
           count: 1,
@@ -212,7 +212,7 @@ describe('Export Tools', () => {
         ];
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 
@@ -229,7 +229,7 @@ describe('Export Tools', () => {
 
       it('should handle complex filter combinations', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify([
             { id: '1', name: 'Urgent Work Task', project: 'Work', tags: ['urgent', 'work'] }
@@ -262,7 +262,7 @@ describe('Export Tools', () => {
           { id: '1', name: 'Task 1', completed: false },
           { id: '2', name: 'Task 2', completed: true }
         ];
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify(mockTasks),
           count: 2,
@@ -283,7 +283,7 @@ describe('Export Tools', () => {
       it('should handle CSV format correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         const csvData = 'id,name,completed\n1,"Task 1",false\n2,"Task 2",true';
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'csv',
           data: csvData,
           count: 2,
@@ -303,7 +303,7 @@ describe('Export Tools', () => {
       it('should handle Markdown format correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         const markdownData = '# Tasks Export\n\n- [ ] Task 1\n- [x] Task 2';
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'markdown',
           data: markdownData,
           count: 2,
@@ -331,7 +331,7 @@ describe('Export Tools', () => {
         };
 
         // Test JSON
-        mockOmniAutomation.execute.mockResolvedValueOnce({
+        mockOmniAutomation.executeJson.mockResolvedValueOnce({
           format: 'json',
           data: JSON.stringify([taskData]),
           count: 1,
@@ -344,7 +344,7 @@ describe('Export Tools', () => {
 
         // Test CSV 
         const csvData = 'id,name,note,project,tags,completed\nabc123,"Complex Task with ""Quotes"" and, Commas","Multi\nline\nnote","Project with Spaces","tag1,tag-with-dash,tag_with_underscore",false';
-        mockOmniAutomation.execute.mockResolvedValueOnce({
+        mockOmniAutomation.executeJson.mockResolvedValueOnce({
           format: 'csv',
           data: csvData,
           count: 1,
@@ -358,7 +358,7 @@ describe('Export Tools', () => {
 
       it('should handle empty results correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: '[]',
           count: 0,
@@ -378,10 +378,8 @@ describe('Export Tools', () => {
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Script execution failed',
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed',
+        , details: 'Test error' });
 
         const result = await tool.execute({ format: 'json' });
 
@@ -391,7 +389,7 @@ describe('Export Tools', () => {
 
       it('should handle automation errors gracefully', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('OmniFocus not available'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('OmniFocus not available'));
 
         const result = await tool.execute({ format: 'csv' });
 
@@ -404,7 +402,7 @@ describe('Export Tools', () => {
       it('should validate projectId format', async () => {
         // This test ensures we handle the projectId correctly as per the schema description
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 
@@ -439,7 +437,7 @@ describe('Export Tools', () => {
 
       it('should use default values correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: '[]',
           count: 0,
@@ -458,7 +456,7 @@ describe('Export Tools', () => {
 
       it('should handle includeStats parameter correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify([
             {
@@ -496,7 +494,7 @@ describe('Export Tools', () => {
 
       it('should handle boolean coercion for includeStats', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 
@@ -522,7 +520,7 @@ describe('Export Tools', () => {
           { id: '1', name: 'Project 1', status: 'active' },
           { id: '2', name: 'Project 2', status: 'onHold' }
         ];
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify(mockProjects),
           count: 2,
@@ -542,7 +540,7 @@ describe('Export Tools', () => {
       it('should handle CSV format correctly', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         const csvData = 'id,name,status\n1,"Project 1",active\n2,"Project 2",onHold';
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'csv',
           data: csvData,
           count: 2,
@@ -571,7 +569,7 @@ describe('Export Tools', () => {
             overdueTasks: 2,
           }
         };
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify([projectWithStats]),
           count: 1,
@@ -601,7 +599,7 @@ describe('Export Tools', () => {
         };
 
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: JSON.stringify([complexProject]),
           count: 1,
@@ -615,7 +613,7 @@ describe('Export Tools', () => {
 
       it('should handle empty project list', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json',
           data: '[]',
           count: 0,
@@ -632,7 +630,7 @@ describe('Export Tools', () => {
     describe('performance considerations', () => {
       it('should indicate when stats are included (slower operation)', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 
@@ -646,7 +644,7 @@ describe('Export Tools', () => {
 
       it('should optimize when stats are not requested', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 
@@ -665,10 +663,8 @@ describe('Export Tools', () => {
     describe('error handling', () => {
       it('should handle script execution errors with structured response', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
-          error: true,
-          message: 'Failed to access projects',
-        });
+        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Failed to access projects',
+        , details: 'Test error' });
 
         const result = await tool.execute({ format: 'json' });
 
@@ -679,7 +675,7 @@ describe('Export Tools', () => {
 
       it('should handle automation errors gracefully', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockRejectedValue(new Error('Permission denied'));
+        mockOmniAutomation.executeJson.mockRejectedValue(new Error('Permission denied'));
 
         const result = await tool.execute({ format: 'csv' });
 
@@ -698,7 +694,7 @@ describe('Export Tools', () => {
     describe('metadata and response structure', () => {
       it('should include complete metadata in successful response', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'csv',
           data: 'id,name\n1,"Test Project"',
           count: 1,
@@ -719,7 +715,7 @@ describe('Export Tools', () => {
 
       it('should use correct operation timer', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.execute.mockResolvedValue({
+        mockOmniAutomation.executeJson.mockResolvedValue({
           format: 'json', data: '[]', count: 0
         });
 

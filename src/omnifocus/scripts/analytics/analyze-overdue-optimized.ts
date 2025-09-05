@@ -25,11 +25,7 @@ export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
       const doc = app.defaultDocument();
       
       if (!doc) {
-        return JSON.stringify({
-          error: true,
-          message: "OmniFocus document is not available",
-          details: "No default document found"
-        });
+        return JSON.stringify({ ok: false, error: { message: "OmniFocus document is not available", details: "No default document found" }, v: '1' });
       }
       
       const now = new Date();
@@ -42,11 +38,7 @@ export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
       const allTasks = doc.flattenedTasks();
       
       if (!allTasks) {
-        return JSON.stringify({
-          error: true,
-          message: "Failed to retrieve tasks",
-          details: "flattenedTasks() returned null"
-        });
+        return JSON.stringify({ ok: false, error: { message: "Failed to retrieve tasks", details: "flattenedTasks() returned null" }, v: '1' });
       }
       
       // Limit for performance
@@ -235,32 +227,32 @@ export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
       }
       
       return JSON.stringify({
-        summary: {
-          totalOverdue: totalOverdue,
-          blockedCount: blockedCount,
-          unblockedCount: unblockedCount,
-          blockedPercentage: parseFloat(blockedPercentage),
-          avgDaysOverdue: parseFloat(avgDaysOverdue),
-          mostOverdue: overdueTasks[0] || null
-        },
-        insights: insights,
-        groupedByUrgency: groupedByUrgency,
-        projectBottlenecks: projectList.slice(0, 5),
-        blockedTasks: blockedOverdue.slice(0, 10),
-        metadata: {
-          generated_at: new Date().toISOString(),
-          method: 'optimized_blocked_api',
-          tasksAnalyzed: maxTasks,
-          note: 'Using task.blocked() and task.effectivelyCompleted() for accurate analysis'
+        ok: true,
+        v: '1',
+        data: {
+          summary: {
+            totalOverdue: totalOverdue,
+            blockedCount: blockedCount,
+            unblockedCount: unblockedCount,
+            blockedPercentage: parseFloat(blockedPercentage),
+            avgDaysOverdue: parseFloat(avgDaysOverdue),
+            mostOverdue: overdueTasks[0] || null
+          },
+          insights: insights,
+          groupedByUrgency: groupedByUrgency,
+          projectBottlenecks: projectList.slice(0, 5),
+          blockedTasks: blockedOverdue.slice(0, 10),
+          metadata: {
+            generated_at: new Date().toISOString(),
+            method: 'optimized_blocked_api',
+            tasksAnalyzed: maxTasks,
+            note: 'Using task.blocked() and task.effectivelyCompleted() for accurate analysis'
+          }
         }
       });
       
     } catch (error) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to analyze overdue tasks: " + error.toString(),
-        details: error.message
-      });
+      return JSON.stringify({ ok: false, error: { message: "Failed to analyze overdue tasks: " + (error && error.toString ? error.toString() : 'Unknown error'), details: error && error.message ? error.message : undefined }, v: '1' });
     }
   })();
 `;

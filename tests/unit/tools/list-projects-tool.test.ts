@@ -37,7 +37,7 @@ describe('ProjectsToolV2', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
     
     mockLogger = {
@@ -57,7 +57,7 @@ describe('ProjectsToolV2', () => {
     it('should pass details as includeStats to script builder', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {
           total_available: 50,
@@ -89,7 +89,7 @@ describe('ProjectsToolV2', () => {
     it('should default details to true', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
       });
@@ -113,7 +113,7 @@ describe('ProjectsToolV2', () => {
     it('should include stats in project response when details enabled', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
           name: 'Test Project',
@@ -153,7 +153,7 @@ describe('ProjectsToolV2', () => {
     it('should not include stats when disabled', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
           name: 'Test Project',
@@ -175,7 +175,7 @@ describe('ProjectsToolV2', () => {
     it('should handle empty project stats gracefully', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
           name: 'Empty Project',
@@ -208,7 +208,7 @@ describe('ProjectsToolV2', () => {
     it('should handle stats collection failure', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
           name: 'Project with Error',
@@ -231,7 +231,7 @@ describe('ProjectsToolV2', () => {
     it('should include filter in cache key', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
       });
@@ -248,7 +248,7 @@ describe('ProjectsToolV2', () => {
     it('should differentiate cache between different filters', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
       });
@@ -269,13 +269,13 @@ describe('ProjectsToolV2', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       
       // Simulate faster response without stats
-      mockOmniAutomation.execute.mockResolvedValueOnce({
+      mockOmniAutomation.executeJson.mockResolvedValueOnce({
         projects: [{ id: 'p1', name: 'Project 1', numberOfTasks: 5 }],
         metadata: { query_time_ms: 500 }
       });
 
       // Simulate slower response with stats
-      mockOmniAutomation.execute.mockResolvedValueOnce({
+      mockOmniAutomation.executeJson.mockResolvedValueOnce({
         projects: [{ 
           id: 'p1', 
           name: 'Project 1', 

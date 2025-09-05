@@ -2,13 +2,13 @@ import { getCoreHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a folder in OmniFocus
- * 
+ *
  * SMART DELETION APPROACH:
  * - Empty folders: Direct deletion (fast, minimal script)
  * - Folders with contents: Helpful error with best practices
- * 
+ *
  * This approach follows OmniFocus user patterns where:
- * 1. Most folder deletions are for empty/cleanup folders  
+ * 1. Most folder deletions are for empty/cleanup folders
  * 2. Complex deletions are rare (users prefer "drop" to preserve history)
  * 3. When contents exist, users typically reorganize rather than delete
  */

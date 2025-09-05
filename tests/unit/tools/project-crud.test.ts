@@ -32,7 +32,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
       executeViaUrlScheme: vi.fn(),
     };
 
@@ -53,7 +53,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         count: 2
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(mockResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(mockResult);
 
       const result = await tool.executeValidated({ 
         operation: 'list',
@@ -91,7 +91,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       };
 
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'create',
@@ -134,7 +134,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         reviewInterval: { unit: 'week', steps: 2, fixed: true }
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated(projectData);
 
@@ -163,7 +163,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         status: 'active'
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'update',
@@ -201,7 +201,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         tasksCompleted: 5
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'complete',
@@ -223,7 +223,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         tasksCompleted: 10
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'complete',
@@ -245,7 +245,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
         message: 'Project deleted successfully'
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(scriptResult);
+      mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
       const result = await tool.executeValidated({
         operation: 'delete',
@@ -259,7 +259,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
     });
 
     it('should handle permission denied and use URL scheme fallback', async () => {
-      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Not authorized' });
+      mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Not authorized' , details: 'Test error' });
 
       const result = await tool.executeValidated({
         operation: 'delete',
@@ -273,7 +273,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
 
   describe('error handling', () => {
     it('should handle script execution errors', async () => {
-      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Script failed' });
+      mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed' , details: 'Test error' });
 
       const result = await tool.executeValidated({
         operation: 'create',

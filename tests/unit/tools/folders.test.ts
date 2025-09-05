@@ -78,7 +78,7 @@ describe('Folder Tools', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -264,10 +264,8 @@ describe('Folder Tools', () => {
       });
 
       it('should handle create script errors', async () => {
-        folderMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Creation failed',
-        });
+        folderMock.execute.mockResolvedValue({ success: false, error: 'Creation failed',
+        , details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'create',
@@ -280,10 +278,8 @@ describe('Folder Tools', () => {
       });
 
       it('should handle create script execution errors', async () => {
-        folderMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Script execution failed',
-        });
+        folderMock.execute.mockResolvedValue({ success: false, error: 'Script execution failed',
+        , details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'create',
@@ -420,10 +416,8 @@ describe('Folder Tools', () => {
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
         mockCache.get.mockReturnValue(null);
-        queryMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Query failed',
-        });
+        queryMock.execute.mockResolvedValue({ success: false, error: 'Query failed',
+        , details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'list',

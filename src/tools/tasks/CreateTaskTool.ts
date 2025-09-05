@@ -48,7 +48,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       }
 
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
-      const result = await this.omniAutomation.execute<CreateTaskScriptResponse>(script);
+      const result = await this.omniAutomation.execute(script) as CreateTaskScriptResponse;
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         // Enhanced error response with recovery suggestions

@@ -77,6 +77,19 @@ export default [
     },
   },
   
+  // JXA bridge and embedded script wrappers - boundary layer
+  {
+    files: ['src/omnifocus/OmniAutomation.ts', 'src/omnifocus/DiagnosticOmniAutomation.ts', 'src/omnifocus/scripts/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+    },
+  },
+  
   // Ignore patterns
   {
     ignores: [

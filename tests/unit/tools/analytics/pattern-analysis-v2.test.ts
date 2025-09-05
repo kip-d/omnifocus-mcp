@@ -32,7 +32,7 @@ describe('PatternAnalysisToolV2', () => {
       invalidate: vi.fn(),
     };
     mockOmni = {
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
@@ -75,7 +75,7 @@ describe('PatternAnalysisToolV2', () => {
   }
 
   it('analyzes selected patterns and returns analytics response', async () => {
-    mockOmni.execute.mockResolvedValue(sampleData());
+    mockOmni.executeJson.mockResolvedValue(sampleData());
 
     const result: any = await tool.executeValidated({
       patterns: ['duplicates', 'tag_audit', 'deadline_health', 'waiting_for', 'review_gaps', 'next_actions'],
@@ -104,7 +104,7 @@ describe('PatternAnalysisToolV2', () => {
   it('expands patterns=all and parses stringified options (including double-encoded JSON)', async () => {
     const data = sampleData();
     // Return a JSON string to exercise string parsing branch in fetchSlimmedData
-    mockOmni.execute.mockResolvedValue(JSON.stringify(data));
+    mockOmni.executeJson.mockResolvedValue(JSON.stringify(data));
 
     const stringified = JSON.stringify({ similarity_threshold: '0.75', include_completed: 'true', max_tasks: '2000' });
     const doubleEncoded = JSON.stringify(stringified);
@@ -124,7 +124,7 @@ describe('PatternAnalysisToolV2', () => {
   });
 
   it('throws on missing data from OmniAutomation (handled upstream by BaseTool)', async () => {
-    mockOmni.execute.mockResolvedValue(null);
+    mockOmni.executeJson.mockResolvedValue(null);
 
     await expect(tool.executeValidated({
       patterns: ['duplicates'],

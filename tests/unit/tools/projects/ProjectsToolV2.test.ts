@@ -24,7 +24,7 @@ describe('ProjectsToolV2', () => {
     
     // Mock the OmniAutomation instance
     mockOmni = {
-      execute: vi.fn(),
+      executeJson: vi.fn(),
       buildScript: vi.fn((template, params) => `script with ${JSON.stringify(params)}`),
     };
     (tool as any).omniAutomation = mockOmni;
@@ -53,7 +53,7 @@ describe('ProjectsToolV2', () => {
         { id: 'p2', name: 'Project 2', status: 'on-hold' },
       ];
 
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: {
           total_projects: 2,
           active: 1,
@@ -78,7 +78,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should filter projects by status', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 1, active: 1 },
         projects: [{ id: 'p1', name: 'Active Project', status: 'active' }],
       });
@@ -98,13 +98,13 @@ describe('ProjectsToolV2', () => {
           })
         })
       );
-      expect(mockOmni.execute).toHaveBeenCalledWith(expect.any(String));
+      expect(mockOmni.executeJson).toHaveBeenCalledWith(expect.any(String));
       expect(result.success).toBe(true);
       expect(result.data.items).toHaveLength(1);
     });
 
     it('should handle needsReview filter', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 1, needs_review: 1 },
         projects: [{ id: 'p1', name: 'Review Project', needsReview: true }],
       });
@@ -147,7 +147,7 @@ describe('ProjectsToolV2', () => {
       };
       
       mockCache.get.mockReturnValue(null);
-      mockOmni.execute.mockResolvedValue(projectData);
+      mockOmni.executeJson.mockResolvedValue(projectData);
 
       await tool.execute({
         operation: 'list',
@@ -174,7 +174,7 @@ describe('ProjectsToolV2', () => {
         note: 'Project description',
       };
 
-      mockOmni.execute.mockResolvedValue(newProject);
+      mockOmni.executeJson.mockResolvedValue(newProject);
 
       const result = await tool.execute({
         operation: 'create',
@@ -191,7 +191,7 @@ describe('ProjectsToolV2', () => {
 
     it('should validate required name for create', async () => {
       // Mock should not be called, but set it up to prevent errors
-      mockOmni.execute.mockResolvedValue(null);
+      mockOmni.executeJson.mockResolvedValue(null);
       
       const result = await tool.execute({
         operation: 'create',
@@ -208,7 +208,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should handle tags during creation', async () => {
-      mockOmni.execute.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({ 
         id: 'p1', 
         name: 'Tagged Project', 
         tags: ['work', 'important'] 
@@ -229,7 +229,7 @@ describe('ProjectsToolV2', () => {
 
   describe('update operation', () => {
     it('should update an existing project', async () => {
-      mockOmni.execute.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({ 
         id: 'p1', 
         name: 'Updated Name', 
         status: 'active' 
@@ -249,7 +249,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should validate required projectId for update', async () => {
-      mockOmni.execute.mockResolvedValue(null);
+      mockOmni.executeJson.mockResolvedValue(null);
       
       const result = await tool.execute({
         operation: 'update',
@@ -266,7 +266,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should update project due date', async () => {
-      mockOmni.execute.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({ 
         id: 'p1', 
         name: 'Project', 
         dueDate: '2025-03-31' 
@@ -287,7 +287,7 @@ describe('ProjectsToolV2', () => {
 
   describe('complete operation', () => {
     it('should complete a project', async () => {
-      mockOmni.execute.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({ 
         id: 'p1', 
         name: 'Completed Project', 
         status: 'done' 
@@ -306,7 +306,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should validate required projectId for complete', async () => {
-      mockOmni.execute.mockResolvedValue(null);
+      mockOmni.executeJson.mockResolvedValue(null);
       
       const result = await tool.execute({
         operation: 'complete',
@@ -324,7 +324,7 @@ describe('ProjectsToolV2', () => {
 
   describe('delete operation', () => {
     it('should delete a project', async () => {
-      mockOmni.execute.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({ 
         id: 'p1', 
         deleted: true 
       });
@@ -342,7 +342,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should validate required projectId for delete', async () => {
-      mockOmni.execute.mockResolvedValue(null);
+      mockOmni.executeJson.mockResolvedValue(null);
       
       const result = await tool.execute({
         operation: 'delete',
@@ -363,7 +363,7 @@ describe('ProjectsToolV2', () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 10); // 10 days ago
       
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 2, needs_review: 2 },
         projects: [
           { id: 'p1', name: 'Review 1', status: 'active', nextReviewDate: pastDate.toISOString() },
@@ -387,7 +387,7 @@ describe('ProjectsToolV2', () => {
 
   describe('active operation', () => {
     it('should list only active projects', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 3, active: 3 },
         projects: [
           { id: 'p1', name: 'Active 1', status: 'active' },
@@ -410,7 +410,7 @@ describe('ProjectsToolV2', () => {
 
   describe('parameter coercion', () => {
     it('should coerce string parameters to correct types', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 0 },
         projects: [],
       });
@@ -431,7 +431,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should handle numeric strings for reviewInterval', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         project: { id: 'p1', reviewInterval: 7 },
       });
@@ -461,7 +461,7 @@ describe('ProjectsToolV2', () => {
         })
       );
       // execute is called with just the built script  
-      expect(mockOmni.execute).toHaveBeenCalledWith(expect.stringContaining('script'));
+      expect(mockOmni.executeJson).toHaveBeenCalledWith(expect.stringContaining('script'));
     });
 
     it('should validate limit bounds', async () => {
@@ -482,7 +482,7 @@ describe('ProjectsToolV2', () => {
   describe('error handling', () => {
     it('should handle script execution errors', async () => {
       // When execute throws, it gets caught in executeValidated catch block
-      mockOmni.execute.mockRejectedValue(new Error('OmniFocus not running'));
+      mockOmni.executeJson.mockRejectedValue(new Error('OmniFocus not running'));
 
       const result = await tool.execute({
         operation: 'list',
@@ -499,7 +499,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should handle permission errors', async () => {
-      mockOmni.execute.mockRejectedValue(new Error('Error: -1743 - Not allowed'));
+      mockOmni.executeJson.mockRejectedValue(new Error('Error: -1743 - Not allowed'));
 
       const result = await tool.execute({
         operation: 'create',
@@ -524,7 +524,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should handle project not found errors', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         success: false,
         error: 'Project not found',
       });
@@ -547,7 +547,7 @@ describe('ProjectsToolV2', () => {
 
   describe('metadata', () => {
     it('should include metadata in all responses', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         summary: { total_projects: 0 },
         projects: [],
       });
@@ -582,7 +582,7 @@ describe('ProjectsToolV2', () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 10);
       
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         projects: [
           { id: 'p1', name: 'Active 1', status: 'active' },
           { id: 'p2', name: 'Active 2', status: 'active' },
@@ -613,7 +613,7 @@ describe('ProjectsToolV2', () => {
     });
 
     it('should include operation-specific summary for create', async () => {
-      mockOmni.execute.mockResolvedValue({
+      mockOmni.executeJson.mockResolvedValue({
         id: 'p1', 
         name: 'New Project',
         status: 'active',
