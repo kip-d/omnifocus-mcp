@@ -98,7 +98,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       );
     }
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     // Cache the results for 5 minutes (folders change less frequently)
     if (!includeProjects) { // Only cache if projects aren't included
@@ -142,7 +142,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       );
     }
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     // Find the specific folder by ID
     const folder = parsedResult.items?.find((f: any) => f.id === folderId);
@@ -191,7 +191,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       );
     }
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     return createCollectionResponse(
       'query_folders',
@@ -229,7 +229,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       );
     }
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     // Find the specific folder by ID and return its projects
     const folder = parsedResult.items?.find((f: any) => f.id === folderId);

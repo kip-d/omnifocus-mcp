@@ -84,12 +84,12 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
 
       const data = await this.omniAutomation.executeTyped(script, VelocityPayloadSchema);
 
-      const daily = data.throughput.intervals.map(i => ({ date: i.label, completed: i.completed }));
-      const peak = daily.reduce<{ date: string | null; count: number }>((acc, d) => d.completed > acc.count ? { date: d.date, count: d.completed } : acc, { date: null, count: 0 });
+      const daily = data.throughput.intervals.map((i: any) => ({ date: i.label, completed: i.completed }));
+      const peak = daily.reduce((acc: any, d: any) => d.completed > acc.count ? { date: d.date, count: d.completed } : acc, { date: null, count: 0 });
 
       // Simple trend heuristic: last 3 intervals vs previous 3
-      const last3 = daily.slice(-3).reduce((s, d) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length));
-      const prev3 = daily.slice(-6, -3).reduce((s, d) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length - 3));
+      const last3 = daily.slice(-3).reduce((s: any, d: any) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length));
+      const prev3 = daily.slice(-6, -3).reduce((s: any, d: any) => s + d.completed, 0) / Math.max(1, Math.min(3, daily.length - 3));
       const trend: 'increasing' | 'stable' | 'decreasing' = last3 > prev3 + 0.5 ? 'increasing' : (last3 + 0.5 < prev3 ? 'decreasing' : 'stable');
 
       const responseData = {

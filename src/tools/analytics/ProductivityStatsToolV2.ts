@@ -97,7 +97,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       };
 
       const projectStatsArray = includeProjectStats
-        ? Object.entries(data.projectStats).map(([name, s]) => ({
+        ? Object.entries(data.projectStats).map(([name, s]: [string, any]) => ({
             name,
             completedCount: s.completed,
             totalCount: s.total,
@@ -106,7 +106,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
         : [];
 
       const tagStatsArray = includeTagStats
-        ? Object.entries(data.tagStats).map(([name, s]) => ({ name, count: s.available + s.remaining }))
+        ? Object.entries(data.tagStats).map(([name, s]: [string, any]) => ({ name, count: s.available + s.remaining }))
         : [];
 
       const responseData = {

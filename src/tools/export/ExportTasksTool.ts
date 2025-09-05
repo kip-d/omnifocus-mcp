@@ -22,13 +22,13 @@ export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {
         filter,
         fields,
       });
-      const result = await this.omniAutomation.execute<{
+      const result = await this.omniAutomation.execute(script) as {
         format: string;
         data: any;
         count: number;
         error?: boolean;
         message?: string;
-      }>(script);
+      };
 
       if (result.error) {
         return this.handleError(new Error(result.message || 'Failed to export tasks')) as any;

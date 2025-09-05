@@ -29,12 +29,12 @@ export class AnalyzeRecurringTasksTool extends BaseTool<typeof AnalyzeRecurringT
       const script = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, {
         options,
       });
-      const result = await this.omniAutomation.execute<{
+      const result = await this.omniAutomation.execute(script) as {
         tasks: any[];
         summary: any;
         error?: boolean;
         message?: string;
-      }>(script);
+      };
 
       if (result.error) {
         return {

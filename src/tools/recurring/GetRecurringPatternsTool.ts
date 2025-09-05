@@ -25,14 +25,14 @@ export class GetRecurringPatternsTool extends BaseTool<typeof GetRecurringPatter
 
       // Execute pattern analysis script
       const script = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, { options });
-      const result = await this.omniAutomation.execute<{
+      const result = await this.omniAutomation.execute(script) as {
         totalRecurring: number;
         patterns: any[];
         byProject: any[];
         mostCommon: any;
         error?: boolean;
         message?: string;
-      }>(script);
+      };
 
       if (result.error) {
         return {
@@ -56,13 +56,13 @@ export class GetRecurringPatternsTool extends BaseTool<typeof GetRecurringPatter
         }
 
         // Check for daily tasks
-        const dailyPattern = result.patterns.find(p => p.unit === 'days' && p.steps === 1);
+        const dailyPattern = result.patterns.find((p: any) => p.unit === 'days' && p.steps === 1);
         if (dailyPattern) {
           insights.push(`You have ${dailyPattern.count} daily recurring tasks`);
         }
 
         // Check for weekly tasks
-        const weeklyPattern = result.patterns.find(p => p.unit === 'weeks' && p.steps === 1);
+        const weeklyPattern = result.patterns.find((p: any) => p.unit === 'weeks' && p.steps === 1);
         if (weeklyPattern) {
           insights.push(`You have ${weeklyPattern.count} weekly recurring tasks`);
         }

@@ -106,7 +106,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
           overdueTasks: data.blockedTasks.concat(
             data.groupedByUrgency.high.slice(0, Math.max(0, 10 - data.blockedTasks.length)),
           ),
-          patterns: data.projectBottlenecks.map((p) => ({
+          patterns: data.projectBottlenecks.map((p: any) => ({
             category: p.name,
             count: p.overdueCount,
             percentage: total > 0 ? (p.overdueCount / total) * 100 : 0,
@@ -114,7 +114,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
           insights: { topRecommendations: data.insights.slice(0, 3) },
         },
         groupedAnalysis: Object.fromEntries(
-          data.projectBottlenecks.map((p) => [p.name, { count: p.overdueCount, blocked: p.blockedCount }]),
+          data.projectBottlenecks.map((p: any) => [p.name, { count: p.overdueCount, blocked: p.blockedCount }]),
         ),
       };
 

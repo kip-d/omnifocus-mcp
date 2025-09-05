@@ -75,7 +75,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     // Invalidate cache after successful creation
     this.cache.invalidate('folders');
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     if (!parsedResult.folder) {
       return createErrorResponse(
@@ -132,7 +132,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     return createEntityResponse(
       'manage_folder',
@@ -170,7 +170,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     return createEntityResponse(
       'manage_folder',
@@ -208,7 +208,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     // Invalidate cache after successful move
     this.cache.invalidate('folders');
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     return createEntityResponse(
       'manage_folder',
@@ -248,7 +248,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     this.cache.invalidate('folders');
     this.cache.invalidate('projects');
 
-    const parsedResult = result.data;
+    const parsedResult = result.data as any;
 
     return createEntityResponse(
       'manage_folder',

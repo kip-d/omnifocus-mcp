@@ -345,7 +345,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       'projects',
       {
         operation: result.data,
-        project: result.data.project, // Extract project details for response
+        project: (result.data as any).project, // Extract project details for response
       },
       undefined,
       { ...timer.toMetadata(), operation: 'update' },

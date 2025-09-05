@@ -348,7 +348,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute search
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
 
     if (!result || 'error' in result) {
       return createErrorResponseV2(
@@ -403,7 +403,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
 
     if (!result || 'error' in result) {
       return createErrorResponseV2(
@@ -451,7 +451,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
 
     if (!result || 'error' in result) {
       return createErrorResponseV2(
@@ -537,7 +537,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
 
     if (!result || 'error' in result) {
       return createErrorResponseV2(
@@ -587,7 +587,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute comprehensive query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute<ListTasksScriptResult>(script);
+    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
 
     if (!result || 'error' in result) {
       return createErrorResponseV2(

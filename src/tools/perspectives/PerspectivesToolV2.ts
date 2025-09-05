@@ -136,7 +136,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         { perspectives },
         {
           ...timer.toMetadata(),
-          ...parsedResult.metadata,
+          ...(parsedResult as any).metadata,
           operation: 'list',
         },
       );
