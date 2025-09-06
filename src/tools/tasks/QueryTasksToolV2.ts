@@ -267,23 +267,32 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       limit: args.limit,
     };
 
-    // Use the optimized today's agenda script
+    // Use the optimized today's agenda script (now returns typed envelope)
     const script = this.omniAutomation.buildScript(TODAYS_AGENDA_ULTRA_FAST_SCRIPT, { options });
-    const result = await this.execJson(script);
+    const TodayPayloadSchema = z.object({
+      tasks: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        reason: z.string().optional(),
+        daysOverdue: z.number().optional(),
+        dueDate: z.string().optional(),
+        flagged: z.boolean().optional(),
+        note: z.string().optional(),
+        project: z.string().optional(),
+        projectId: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      })),
+      overdueCount: z.number(),
+      dueTodayCount: z.number(),
+      flaggedCount: z.number(),
+      processedCount: z.number().optional(),
+      totalTasks: z.number().optional(),
+      optimizationUsed: z.string().optional(),
+    });
 
-    if (!isScriptSuccess(result)) {
-      return createErrorResponseV2(
-        'tasks',
-        'SCRIPT_ERROR',
-        result.error,
-        'Try using overdue or upcoming mode instead',
-        result.details,
-        timer.toMetadata(),
-      );
-    }
+    const data = await this.omniAutomation.executeTyped(script, TodayPayloadSchema);
 
-    // The ultra-fast script returns tasks directly
-    const todayTasks = (result.data as any).tasks || (result.data as any).items || [];
+    const todayTasks = this.parseTasks(data.tasks);
 
     // Cache the results
     this.cache.set('tasks', cacheKey, { tasks: todayTasks });
@@ -293,17 +302,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'today',
-      overdue_count: (result.data as any).overdueCount || 0,
-      due_today_count: (result.data as any).dueTodayCount || 0,
-      flagged_count: (result.data as any).flaggedCount || 0,
-      optimization: (result.data as any).optimizationUsed || 'ultra_fast',
+      overdue_count: data.overdueCount || 0,
+      due_today_count: data.dueTodayCount || 0,
+      flagged_count: data.flaggedCount || 0,
+      optimization: data.optimizationUsed || 'ultra_fast',
     };
 
-    return createTaskResponseV2(
-      'tasks',
-      todayTasks,
-      metadata,
-    );
+    return createTaskResponseV2('tasks', todayTasks, metadata);
   }
 
   private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
