@@ -42,13 +42,14 @@ export class OmniAutomation {
     try {
       const result = await this.execute<unknown>(script);
 
-      // Handle raw script errors (when script returns error object)
-      if (result && typeof result === 'object' && (result as any).error === true) {
-        return createScriptError(
-          (result as any).message || 'Script execution failed',
-          (result as any).details || 'No additional context',
-          result as unknown,
-        );
+      // Handle raw script errors (legacy shape)
+      const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+      if (isObj(result) && 'error' in result && (result as Record<string, unknown>).error === true) {
+        const obj = result as Record<string, unknown>;
+        const msgVal = obj.message;
+        const message: string = typeof msgVal === 'string' ? msgVal : 'Script execution failed';
+        const details = obj.details ?? 'No additional context';
+        return createScriptError(message, 'Legacy script error', details);
       }
 
       // Validate result against schema if provided
@@ -162,13 +163,18 @@ export class OmniAutomation {
         }
 
         try {
-          const result = JSON.parse(trimmedOutput);
+          const result: unknown = JSON.parse(trimmedOutput);
+          const hasError = ((): boolean => {
+            if (!result || typeof result !== 'object') return false;
+            const obj = result as Record<string, unknown>;
+            return Object.prototype.hasOwnProperty.call(obj, 'error');
+          })();
           logger.debug('Script execution successful', {
             outputLength: trimmedOutput.length,
             resultType: typeof result,
-            hasError: result && result.error ? true : false,
+            hasError,
           });
-          resolve(result);
+          resolve(result as T);
         } catch (parseError) {
           logger.error('Failed to parse script output:', {
             output: trimmedOutput.substring(0, 500),

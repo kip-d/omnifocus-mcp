@@ -1,16 +1,22 @@
 import { spawn } from 'node:child_process';
 import { OmniAutomation, OmniAutomationError } from './OmniAutomation.js';
 import { createLogger } from '../utils/logger.js';
+import { safeStringify } from '../utils/safe-io.js';
 
 const logger = createLogger('diagnostic-omniautomation');
 
 export class DiagnosticOmniAutomation extends OmniAutomation {
   private diagnosticLog: string[] = [];
 
-  private log(message: string, data?: any) {
-    const logEntry = `[${new Date().toISOString()}] ${message}${data ? ': ' + JSON.stringify(data) : ''}`;
+  private log(message: string, data?: unknown) {
+    const serialized = data === undefined ? '' : ': ' + safeStringify(data);
+    const logEntry = `[${new Date().toISOString()}] ${message}${serialized}`;
     this.diagnosticLog.push(logEntry);
-    logger.info(message, data || {});
+    if (data === undefined) {
+      logger.info(message);
+    } else {
+      logger.info(message, safeStringify(data));
+    }
   }
 
   getDiagnosticLog(): string[] {
@@ -85,22 +91,23 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
         this.log('Attempting to parse output', { outputLength: trimmedOutput.length });
 
         try {
-          const result = JSON.parse(trimmedOutput);
+          const result: unknown = JSON.parse(trimmedOutput);
           this.log('Successfully parsed output', {
             resultType: typeof result,
-            hasError: result && result.error ? true : false,
-            errorMessage: result && result.error ? result.message : undefined,
+            hasError: ((): boolean => {
+              return !!result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result as Record<string, unknown>, 'error');
+            })(),
           });
 
           // Log diagnostic info from the script if available
-          if (result && result.diagnostics) {
-            this.log('Script diagnostics received', result.diagnostics);
+          if (result && typeof result === 'object' && 'diagnostics' in (result as Record<string, unknown>)) {
+            this.log('Script diagnostics received', (result as Record<string, unknown>).diagnostics);
           }
 
-          resolve(result);
-        } catch (parseError: any) {
+          resolve(result as T);
+        } catch (parseError: unknown) {
           this.log('Failed to parse JSON output', {
-            parseError: parseError.message,
+            parseError: parseError instanceof Error ? parseError.message : String(parseError),
             outputSample: trimmedOutput.substring(0, 200),
           });
 
