@@ -8,7 +8,6 @@ import {
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { ProductivityStatsResponseV2 } from '../response-types-v2.js';
-import { z as zod } from 'zod';
 
 export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2, ProductivityStatsResponseV2> {
   name = 'productivity_stats';

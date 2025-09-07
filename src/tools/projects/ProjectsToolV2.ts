@@ -8,7 +8,7 @@ import {
   GET_PROJECT_STATS_SCRIPT,
 } from '../../omnifocus/scripts/projects.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
-import { isScriptSuccess, ProjectUpdateResultSchema, ListResultSchema, SimpleOperationResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,

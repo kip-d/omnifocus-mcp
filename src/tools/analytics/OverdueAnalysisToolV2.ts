@@ -8,7 +8,6 @@ import {
 } from '../../utils/response-format-v2.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisResponseV2 } from '../response-types-v2.js';
-import { z as zod } from 'zod';
 
 export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchemaV2, OverdueAnalysisResponseV2> {
   name = 'analyze_overdue';

@@ -4,7 +4,6 @@ import { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from '../../omnifocus
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { CompleteTaskSchema } from '../schemas/task-schemas.js';
 import { localToUTC } from '../../utils/timezone.js';
-import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
   name = 'complete_task';

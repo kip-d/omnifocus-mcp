@@ -5,7 +5,7 @@ import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-fol
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { isScriptSuccess, FolderOperationResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
   CreateFolderOperationSchema,
   UpdateFolderOperationSchema,
@@ -215,7 +215,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     return createSuccessResponseV2('manage_folder', { folder: { ...parsedResult, operation: 'set_status' } }, undefined, { ...timer.toMetadata(), operation: 'set_status', updated_id: folderId, new_status: status });
   }
 
-  private async handleDuplicate(args: z.infer<typeof DuplicateFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleDuplicate(args: z.infer<typeof DuplicateFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, newName } = args;
 
     // For duplication, we need to first get the folder details, then create a new one

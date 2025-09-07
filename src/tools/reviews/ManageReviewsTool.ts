@@ -6,7 +6,7 @@ import {
 } from '../../omnifocus/scripts/reviews.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
-import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   name = 'manage_reviews';

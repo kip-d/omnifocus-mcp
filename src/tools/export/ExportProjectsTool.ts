@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export.js';
 import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { ExportProjectsResponse } from '../response-types.js';
 import { ExportProjectsSchema } from '../schemas/export-schemas.js';
 
 export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {

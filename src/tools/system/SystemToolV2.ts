@@ -3,7 +3,6 @@ import { BaseTool } from '../base.js';
 import { getVersionInfo } from '../../utils/version.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
-import { isScriptSuccess, SimpleOperationResultSchema, ListResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all system operations
 const SystemToolSchema = z.object({

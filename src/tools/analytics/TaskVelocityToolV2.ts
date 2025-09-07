@@ -8,7 +8,6 @@ import {
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { TaskVelocityResponseV2 } from '../response-types-v2.js';
-import { z as zod } from 'zod';
 
 export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, TaskVelocityResponseV2> {
   name = 'task_velocity';
@@ -51,36 +50,6 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
       });
 
       // Schema matching the optimized velocity payload
-      const IntervalSchema = zod.object({
-        start: zod.any(),
-        end: zod.any(),
-        created: zod.number(),
-        completed: zod.number(),
-        label: zod.string(),
-      });
-      const VelocityPayloadSchema = zod.object({
-        velocity: zod.object({
-          period: zod.string(),
-          averageCompleted: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          averageCreated: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          dailyVelocity: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          backlogGrowthRate: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-        }),
-        throughput: zod.object({
-          intervals: zod.array(IntervalSchema),
-          totalCompleted: zod.number(),
-          totalCreated: zod.number(),
-        }),
-        breakdown: zod.object({
-          medianCompletionHours: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          tasksAnalyzed: zod.number(),
-        }),
-        projections: zod.object({
-          tasksPerDay: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          tasksPerWeek: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-          tasksPerMonth: zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]),
-        }),
-      });
 
       const raw = await this.execJson(script);
 

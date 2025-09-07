@@ -19,7 +19,6 @@ import {
   normalizeStringInput,
 } from '../../utils/response-format-v2.js';
 import { OmniFocusTask } from '../response-types.js';
-import { ListTasksScriptResult } from '../../omnifocus/jxa-types.js';
 import { TasksResponseV2 } from '../response-types-v2.js';
 import type { ScriptResult } from '../../omnifocus/script-result-types.js';
 

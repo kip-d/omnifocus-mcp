@@ -3,7 +3,6 @@ import { BaseTool } from '../base.js';
 // REVERTED: Using original JXA script - hybrid approach had critical performance issues
 import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
 import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { ExportTasksResponse } from '../response-types.js';
 import { ExportTasksSchema } from '../schemas/export-schemas.js';
 
 export class ExportTasksTool extends BaseTool<typeof ExportTasksSchema> {

@@ -3,7 +3,6 @@ import { BaseTool } from '../base.js';
 import { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { DeleteTaskSchema } from '../schemas/task-schemas.js';
-import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
   name = 'delete_task';

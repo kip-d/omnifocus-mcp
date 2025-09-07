@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
-import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { UpdateTaskResponse } from '../response-types.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
 import { localToUTC } from '../../utils/timezone.js';
 
