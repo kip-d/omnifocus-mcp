@@ -600,6 +600,36 @@ if (isScriptSuccess(result)) {
 
 **The Big Picture:** Template substitution was the hidden root cause behind most "Can't convert types" errors. The v2.1.0 architecture completely eliminates this category of failures while providing better type safety and error handling.
 
+## 🔍 Unsolved Mystery: The `type: 'json'` Breaking Change
+
+### The Issue
+In commit `fe3b2a0bc65df87a1e4e715f9ed1bd6ee9e646b8` (2025-09-02), we inadvertently changed the MCP tool response format from `type: 'text'` to `type: 'json'`. This broke Claude Desktop v0.12.129 compatibility completely - tools wouldn't appear in the UI.
+
+### What We Know
+- **First bad commit**: `fe3b2a0` - "feat: script size reduction + quoting hardening"  
+- **The change**: In `src/tools/index.ts`, response format changed from:
+  ```typescript
+  { type: 'text', text: JSON.stringify(result, null, 2) }
+  ```
+  to:
+  ```typescript
+  { type: 'json', json: result }
+  ```
+- **Impact**: MCP server would start but Claude Desktop immediately disconnected with EPIPE error
+- **Fix**: Reverted to `type: 'text'` in commits `9a9e0af`, `a2f4b79`, and `20a259c`
+
+### The Mystery
+**We don't know WHY this change was made.** The commit message doesn't mention it, and `type: 'json'` doesn't exist in the MCP specification (only 'text' and 'image' are valid). 
+
+### Future Investigation Needed
+If you're reading this and wondering why we made this change:
+1. Check if newer MCP specifications added `type: 'json'` support
+2. Look for any discussions about structured responses in MCP evolution  
+3. Consider if it was just a well-intentioned mistake thinking JSON data should use `type: 'json'`
+
+### Lesson
+Always verify changes against the official MCP specification, even when they "seem logical". The MCP `type` field describes media format (text/image), not data structure.
+
 ---
 
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.
