@@ -55,12 +55,39 @@ export abstract class BaseTool<
       effectStrategy: 'input',
     });
 
-    // Post-process to improve MCP compatibility:
-    // 1) Collapse union types that include null (e.g., ["string","null"]) to just the base type
-    // 2) Treat defaulted fields as required so clients know they are accepted at the top level
-    const normalize = (obj: any) => {
-      if (!obj || typeof obj !== 'object') return;
+    // Post-process to improve MCP compatibility and fix malformed patterns:
+    // 1) Fix nested anyOf patterns that include {"not": {}} 
+    // 2) Simplify overly complex union types
+    // 3) Collapse union types that include null
+    const normalize = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') return obj;
 
+      // Fix malformed "not": {} patterns - replace with proper nullable type
+      if (obj.anyOf && Array.isArray(obj.anyOf)) {
+        obj.anyOf = obj.anyOf.map((item: any) => {
+          if (item.anyOf && Array.isArray(item.anyOf)) {
+            // Handle nested anyOf with {"not": {}} patterns
+            const validTypes = item.anyOf.filter((subItem: any) => 
+              !(subItem.not && Object.keys(subItem.not).length === 0)
+            );
+            if (validTypes.length === 1 && validTypes[0].type) {
+              return validTypes[0]; // Flatten single valid type
+            }
+          }
+          return normalize(item);
+        });
+        
+        // Simplify anyOf with null - make it optional instead
+        if (obj.anyOf.length === 2) {
+          const nonNullType = obj.anyOf.find((t: any) => t.type !== 'null' && t.type);
+          const hasNull = obj.anyOf.some((t: any) => t.type === 'null');
+          if (nonNullType && hasNull) {
+            return { ...nonNullType, description: obj.description };
+          }
+        }
+      }
+
+      // Handle array types
       if (Array.isArray(obj.type) && obj.type.includes('null')) {
         // Prefer the first non-null primitive if available
         const nonNull = obj.type.find((t: any) => t !== 'null');
@@ -70,28 +97,30 @@ export abstract class BaseTool<
       // Recurse into nested schemas
       if (obj.properties) {
         for (const key of Object.keys(obj.properties)) {
-          normalize(obj.properties[key]);
+          obj.properties[key] = normalize(obj.properties[key]);
         }
       }
-      if (obj.items) normalize(obj.items);
-      if (obj.anyOf) obj.anyOf.forEach((n: any) => normalize(n));
-      if (obj.oneOf) obj.oneOf.forEach((n: any) => normalize(n));
-      if (obj.allOf) obj.allOf.forEach((n: any) => normalize(n));
+      if (obj.items) obj.items = normalize(obj.items);
+      if (obj.anyOf) obj.anyOf = obj.anyOf.map((n: any) => normalize(n));
+      if (obj.oneOf) obj.oneOf = obj.oneOf.map((n: any) => normalize(n));
+      if (obj.allOf) obj.allOf = obj.allOf.map((n: any) => normalize(n));
+      
+      return obj;
     };
 
-    normalize(schema);
+    const normalizedSchema = normalize(schema);
 
     // Ensure defaulted top-level properties are marked as required
-    if (schema && schema.type === 'object' && schema.properties) {
-      schema.required = schema.required || [];
-      for (const [prop, def] of Object.entries<any>(schema.properties)) {
+    if (normalizedSchema && normalizedSchema.type === 'object' && normalizedSchema.properties) {
+      normalizedSchema.required = normalizedSchema.required || [];
+      for (const [prop, def] of Object.entries<any>(normalizedSchema.properties)) {
         if (def && Object.prototype.hasOwnProperty.call(def, 'default')) {
-          if (!schema.required.includes(prop)) schema.required.push(prop);
+          if (!normalizedSchema.required.includes(prop)) normalizedSchema.required.push(prop);
         }
       }
     }
 
-    return schema;
+    return normalizedSchema;
   }
 
   /**
