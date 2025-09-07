@@ -38,6 +38,7 @@ describe('QueryTasksToolV2', () => {
     mockOmniAutomation = {
       buildScript: vi.fn(),
       executeJson: vi.fn(),
+      execute: vi.fn(),
     };
     
     mockLogger = {

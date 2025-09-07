@@ -41,14 +41,14 @@ vi.mock('../../../../src/tools/export/BulkExportTool.js', () => ({
     }))
   })),
 }));
-vi.mock('../../../../src/utils/response-format.js', () => ({
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+vi.mock('../../../../src/utils/response-format-v2.js', () => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: { operation, timestamp: new Date().toISOString(), from_cache: false, ...metadata },
-    error: { code, message, details },
+    error: { code, message, suggestion, details },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({ toMetadata: vi.fn(() => ({ query_time_ms: 5 })) })),
+  OperationTimerV2: vi.fn().mockImplementation(() => ({ toMetadata: vi.fn(() => ({ query_time_ms: 5 })) })),
 }));
 
 describe('ExportTool (consolidated)', () => {
@@ -96,4 +96,3 @@ describe('ExportTool (consolidated)', () => {
     expect(res.error.code).toBe('INVALID_TYPE');
   });
 });
-

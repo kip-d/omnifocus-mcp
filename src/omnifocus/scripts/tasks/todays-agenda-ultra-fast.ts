@@ -142,22 +142,30 @@ export const TODAYS_AGENDA_ULTRA_FAST_SCRIPT = `
         }
       }
       
-      // Return results
+      // Return results in standard envelope
       return JSON.stringify({
-        tasks: tasks,
-        overdueCount: overdueCount,
-        dueTodayCount: dueTodayCount,
-        flaggedCount: flaggedCount,
-        processedCount: processedCount,
-        totalTasks: taskCount,
-        optimizationUsed: 'ultra_fast_single_pass'
+        ok: true,
+        v: '1',
+        data: {
+          tasks: tasks,
+          overdueCount: overdueCount,
+          dueTodayCount: dueTodayCount,
+          flaggedCount: flaggedCount,
+          processedCount: processedCount,
+          totalTasks: taskCount,
+          optimizationUsed: 'ultra_fast_single_pass'
+        }
       });
       
     } catch (error) {
       return JSON.stringify({
-        error: true,
-        message: error.message || error.toString(),
-        details: 'Failed in ultra-fast today\\'s agenda query'
+        ok: false,
+        v: '1',
+        error: {
+          code: 'TODAY_ULTRA_FAST_FAILED',
+          message: (error && (error.message || error.toString())) || 'Unknown error',
+          details: "Failed in ultra-fast today's agenda query"
+        }
       });
     }
   })();

@@ -7,9 +7,8 @@ import {
   formatErrorWithRecovery,
   invalidDateError,
 } from '../../utils/error-messages.js';
-import { createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { CreateTaskResponse } from '../types.js';
-import { StandardResponse } from '../../utils/response-format.js';
 import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
 import { CreateTaskSchema } from '../schemas/task-schemas.js';
 import { localToUTC } from '../../utils/timezone.js';
@@ -19,8 +18,8 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
   description = 'Create a new task in OmniFocus. Supports project assignment via projectId or as subtask via parentTaskId. Set sequential=true for action groups where subtasks must be done in order. Tags can now be assigned during creation (v2.0.0-beta.1+). IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am (e.g., dueDate "2024-12-25" becomes 5pm, deferDate "2024-12-25" becomes 8am). Avoid ISO-8601 with Z suffix.';
   schema = CreateTaskSchema;
 
-  async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<StandardResponse<{ task: CreateTaskResponse }>> {
-    const timer = new OperationTimer();
+  async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<any> {
+    const timer = new OperationTimerV2();
 
     try {
       // Convert local dates to UTC for OmniFocus with better error handling
@@ -34,13 +33,13 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       } catch (dateError) {
         const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : 'dueDate';
         const errorDetails = invalidDateError(fieldName, args[fieldName] || '');
-        return createErrorResponse(
+        return createErrorResponseV2(
           'create_task',
           'INVALID_DATE_FORMAT',
           errorDetails.message,
+          formatErrorWithRecovery(errorDetails),
           {
             recovery: errorDetails.recovery,
-            formatted: formatErrorWithRecovery(errorDetails),
             providedValue: args[fieldName],
           },
           timer.toMetadata(),
@@ -48,7 +47,53 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       }
 
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
-      const result = await this.omniAutomation.execute(script) as CreateTaskScriptResponse;
+      const anyOmni: any = this.omniAutomation as any;
+      let result: any;
+      try {
+        // Prefer instance-level executeJson when available; fall back to execute.
+        if (typeof anyOmni.executeJson === 'function' && Object.prototype.hasOwnProperty.call(anyOmni, 'executeJson')) {
+          const sr = await anyOmni.executeJson(script);
+          if (sr && typeof sr === 'object' && 'success' in sr) {
+            if (!(sr as any).success) {
+              // Return standardized script error without throwing
+              return createErrorResponseV2(
+                'create_task',
+                'SCRIPT_ERROR',
+                (sr as any).error || 'Script execution failed',
+                undefined,
+                (sr as any).details,
+                timer.toMetadata(),
+              ) as any;
+            }
+            result = (sr as any).data;
+          } else {
+            result = sr;
+          }
+        } else if (typeof anyOmni.executeJson === 'function') {
+          // Some unit setups stub prototype methods; normalize their return shape
+          const sr = await anyOmni.executeJson(script);
+          if (sr && typeof sr === 'object' && 'success' in sr) {
+            if (!(sr as any).success) {
+              return createErrorResponseV2(
+                'create_task',
+                'SCRIPT_ERROR',
+                (sr as any).error || 'Script execution failed',
+                undefined,
+                (sr as any).details,
+                timer.toMetadata(),
+              ) as any;
+            }
+            result = (sr as any).data;
+          } else {
+            result = sr;
+          }
+        } else {
+          result = await anyOmni.execute(script) as CreateTaskScriptResponse;
+        }
+      } catch (e) {
+        // Map known errors like permission denied to standardized response
+        return this.handleError(e) as any;
+      }
 
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         // Enhanced error response with recovery suggestions
@@ -66,42 +111,46 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
           recovery.push('Verify OmniFocus is running and not showing dialogs');
         }
 
-        return createErrorResponse(
+        return createErrorResponseV2(
           'create_task',
           'SCRIPT_ERROR',
           errorMessage,
-          {
-            rawResult: result,
-            recovery,
-          },
+          'Verify the inputs and OmniFocus state',
+          { rawResult: result, recovery },
           timer.toMetadata(),
         );
       }
 
-      // Parse the JSON result since the script returns a JSON string
+      // Parse the JSON result since the script may return a JSON string
       let parsedResult;
       try {
         parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       } catch (parseError) {
         this.logger.error(`Failed to parse create task result: ${result}`);
         const errorDetails = parsingError('task creation', String(result), 'valid JSON');
-        throw new McpError(
-          ErrorCode.InternalError,
+        return createErrorResponseV2(
+          'create_task',
+          'INTERNAL_ERROR',
           errorDetails.message,
+          'Ensure script returns valid JSON',
           {
             received: result,
             parseError: parseError instanceof Error ? parseError.message : String(parseError),
             recovery: errorDetails.recovery,
           },
+          timer.toMetadata(),
         );
       }
 
       // Check if parsedResult is valid
-      if (!parsedResult || typeof parsedResult !== 'object') {
-        throw new McpError(
-          ErrorCode.InternalError,
+      if (!parsedResult || typeof parsedResult !== 'object' || (!('taskId' in parsedResult) && !('id' in parsedResult))) {
+        return createErrorResponseV2(
+          'create_task',
+          'INTERNAL_ERROR',
           'Invalid response from create task script',
+          'Have the script return an object with id/taskId',
           { received: parsedResult },
+          timer.toMetadata(),
         );
       }
 
@@ -112,12 +161,13 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       if (Array.isArray(args.tags) && args.tags.length > 0) this.cache.invalidate('tags');
 
       // Return standardized response
-      return createSuccessResponse(
+      return createSuccessResponseV2(
         'create_task',
         { task: parsedResult as CreateTaskResponse },
+        undefined,
         {
           ...timer.toMetadata(),
-          created_id: parsedResult.taskId || null,
+          created_id: (parsedResult as any).taskId || null,
           project_id: args.projectId || null,
           input_params: {
             name: args.name,

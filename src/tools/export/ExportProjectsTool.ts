@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export.js';
-import { createSuccessResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { ExportProjectsResponse } from '../response-types.js';
 import { ExportProjectsSchema } from '../schemas/export-schemas.js';
 
@@ -10,8 +10,8 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
   description = 'Export all projects to JSON/CSV. Format: json|csv (default json). Set includeStats=true for task metrics per project (slower). Returns file content for saving.';
   schema = ExportProjectsSchema;
 
-  async executeValidated(args: z.infer<typeof ExportProjectsSchema>): Promise<ExportProjectsResponse> {
-    const timer = new OperationTimer();
+  async executeValidated(args: z.infer<typeof ExportProjectsSchema>): Promise<any> {
+    const timer = new OperationTimerV2();
 
     try {
       const { format = 'json', includeStats = false } = args;
@@ -33,18 +33,7 @@ export class ExportProjectsTool extends BaseTool<typeof ExportProjectsSchema> {
         return this.handleError(new Error(result.message || 'Failed to export projects')) as any;
       }
 
-      return createSuccessResponse(
-        'export_projects',
-        {
-          format: result.format as 'json' | 'csv' | 'markdown',
-          data: result.data,
-          count: result.count,
-          includeStats,
-        },
-        {
-          ...timer.toMetadata(),
-        },
-      );
+      return createSuccessResponseV2('export_projects', { format: result.format as 'json' | 'csv' | 'markdown', data: result.data, count: result.count, includeStats }, undefined, { ...timer.toMetadata() });
     } catch (error) {
       return this.handleError(error) as any;
     }

@@ -9,6 +9,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  * - Duplicate name checking
  */
 export const UPDATE_FOLDER_SCRIPT = `
+  // UPDATE_FOLDER
   ${getMinimalHelpers()}
   
   (() => {

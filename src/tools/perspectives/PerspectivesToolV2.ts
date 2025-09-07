@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
 import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives/query-perspective.js';
-import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
 
@@ -68,7 +68,7 @@ interface QueryPerspectiveData {
   aggregation: string;
 }
 
-type PerspectivesResponse = StandardResponse<{ perspectives: PerspectiveInfo[] } | QueryPerspectiveData>;
+type PerspectivesResponse = StandardResponseV2<{ perspectives: PerspectiveInfo[] } | QueryPerspectiveData>;
 
 export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> {
   name = 'perspectives';
@@ -84,28 +84,30 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       case 'query':
         return this.queryPerspective(args);
       default:
-        return createErrorResponse(
+        return createErrorResponseV2(
           'perspectives',
           'INVALID_OPERATION',
           `Invalid operation: ${String(operation)}`,
+          undefined,
           { operation },
           { executionTime: 0 },
         );
     }
   }
 
-  private async listPerspectives(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponse<{ perspectives: PerspectiveInfo[] }>> {
-    const timer = new OperationTimer();
+  private async listPerspectives(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponseV2<{ perspectives: PerspectiveInfo[] }>> {
+    const timer = new OperationTimerV2();
 
     try {
       const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
       const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
       if (!isScriptSuccess(result)) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'perspectives',
           'SCRIPT_ERROR',
           result.error,
+          undefined,
           { rawResult: result.details },
           timer.toMetadata(),
         );
@@ -131,37 +133,36 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         });
       }
 
-      return createSuccessResponse(
+      return createSuccessResponseV2(
         'perspectives',
         { perspectives },
-        {
-          ...timer.toMetadata(),
-          ...(parsedResult as any).metadata,
-          operation: 'list',
-        },
+        undefined,
+        { ...timer.toMetadata(), ...(parsedResult as any).metadata, operation: 'list' },
       );
     } catch (error) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'perspectives',
         'UNKNOWN_ERROR',
         error instanceof Error ? error.message : 'Unknown error',
+        undefined,
         { operation: 'list' },
         timer.toMetadata(),
       );
     }
   }
 
-  private async queryPerspective(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponse<QueryPerspectiveData>> {
-    const timer = new OperationTimer();
+  private async queryPerspective(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponseV2<QueryPerspectiveData>> {
+    const timer = new OperationTimerV2();
 
     try {
       const { perspectiveName, limit, includeDetails } = args;
 
       if (!perspectiveName) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'perspectives',
           'MISSING_PARAMETER',
           'perspectiveName is required for query operation',
+          undefined,
           { operation: 'query' },
           timer.toMetadata(),
         );
@@ -171,7 +172,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       const cacheKey = `perspective:${perspectiveName}:${limit}:${includeDetails}`;
 
       // Check cache (30 second TTL for perspective queries)
-      const cached = this.cache.get<StandardResponse<QueryPerspectiveData>>('tasks', cacheKey);
+      const cached = this.cache.get<StandardResponseV2<QueryPerspectiveData>>('tasks', cacheKey);
       if (cached) {
         this.logger.debug(`Returning cached tasks for perspective: ${perspectiveName}`);
         return cached;
@@ -190,10 +191,11 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { /* ignore */ } }
 
       if (!raw || raw.error === true) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'perspectives',
           'SCRIPT_ERROR',
           (raw && raw.message) ? raw.message : 'Script failed',
+          undefined,
           { rawResult: raw },
           timer.toMetadata(),
         );
@@ -201,30 +203,21 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
       // Legacy success/false pattern
       if (raw.success === false) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'perspectives',
           'PERSPECTIVE_NOT_FOUND',
           raw.error || `Perspective "${perspectiveName}" not found`,
+          undefined,
           { perspectiveName },
           timer.toMetadata(),
         );
       }
 
-      const response = createSuccessResponse(
+      const response = createSuccessResponseV2(
         'perspectives',
-        {
-          perspectiveName: raw.perspectiveName,
-          perspectiveType: raw.perspectiveType,
-          tasks: raw.tasks || [],
-          filterRules: raw.filterRules,
-          aggregation: raw.aggregation,
-        },
-        {
-          ...timer.toMetadata(),
-          operation: 'query',
-          total_count: raw.count || 0,
-          filter_rules_applied: !!raw.filterRules,
-        },
+        { perspectiveName: raw.perspectiveName, perspectiveType: raw.perspectiveType, tasks: raw.tasks || [], filterRules: raw.filterRules, aggregation: raw.aggregation },
+        undefined,
+        { ...timer.toMetadata(), operation: 'query', total_count: raw.count || 0, filter_rules_applied: !!raw.filterRules },
       );
 
       // Cache the result
@@ -233,10 +226,11 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       return response;
 
     } catch (error) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'perspectives',
         'UNKNOWN_ERROR',
         error instanceof Error ? error.message : 'Unknown error',
+        undefined,
         { operation: 'query' },
         timer.toMetadata(),
       );

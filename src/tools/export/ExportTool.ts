@@ -3,7 +3,7 @@ import { BaseTool } from '../base.js';
 import { ExportTasksTool } from './ExportTasksTool.js';
 import { ExportProjectsTool } from './ExportProjectsTool.js';
 import { BulkExportTool } from './BulkExportTool.js';
-import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
 // Consolidated export schema
@@ -79,7 +79,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   }
 
   async executeValidated(args: ExportInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { type, format = 'json', ...params } = args;
 
     try {
@@ -102,10 +102,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         case 'all':
           // Bulk export everything
           if (!params.outputDirectory) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'export',
               'MISSING_PARAMETER',
               'outputDirectory is required for type="all"',
+              undefined,
               { type },
               timer.toMetadata(),
             );
@@ -119,10 +120,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           });
 
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'export',
             'INVALID_TYPE',
             `Invalid export type: ${type}`,
+            undefined,
             { type },
             timer.toMetadata(),
           );

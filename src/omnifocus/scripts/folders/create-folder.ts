@@ -10,6 +10,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  * - Proper error handling and validation
  */
 export const CREATE_FOLDER_SCRIPT = `
+  // CREATE_FOLDER
   ${getMinimalHelpers()}
   
   (() => {

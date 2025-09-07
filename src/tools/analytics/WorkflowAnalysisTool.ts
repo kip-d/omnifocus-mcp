@@ -76,15 +76,15 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         },
       });
 
-      const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
-
-      if (!isScriptSuccess(result)) {
+      const raw = await this.execJsonFlexible(script);
+      const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw } as any;
+      if (!(result as any).success) {
         return createErrorResponseV2(
           'workflow_analysis',
           'ANALYSIS_FAILED',
-          result.error,
+          (result as any).error || 'Script execution failed',
           'Check that OmniFocus has sufficient data for analysis',
-          result.details,
+          (result as any).details,
           timer.toMetadata(),
         );
       }
@@ -96,15 +96,15 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
           focusAreas: args.focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: (result.data as any).insights || [],
-        patterns: (result.data as any).patterns || {},
-        recommendations: (result.data as any).recommendations || [],
-        data: args.includeRawData ? ((result.data as any).data || {}) : undefined,
+        insights: (result.data as any)?.insights || [],
+        patterns: (result.data as any)?.patterns || {},
+        recommendations: (result.data as any)?.recommendations || [],
+        data: args.includeRawData ? ((result.data as any)?.data || {}) : undefined,
         metadata: {
-          totalTasks: (result.data as any).totalTasks || 0,
-          totalProjects: (result.data as any).totalProjects || 0,
-          analysisTime: (result.data as any).analysisTime || 0,
-          dataPoints: (result.data as any).dataPoints || 0,
+          totalTasks: (result.data as any)?.totalTasks || 0,
+          totalProjects: (result.data as any)?.totalProjects || 0,
+          analysisTime: (result.data as any)?.analysisTime || 0,
+          dataPoints: (result.data as any)?.dataPoints || 0,
         },
       };
 
@@ -159,5 +159,18 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
     }
 
     return findings.length > 0 ? findings : ['Analysis completed successfully'];
+  }
+
+  // Flexible unwrapping similar to other V2 tools
+  private async execJsonFlexible(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      const res = await anyOmni.executeJson(script);
+      if (res && typeof res === 'object' && 'success' in res) {
+        return (res as any).success ? (res as any).data : res;
+      }
+      return res;
+    }
+    return await anyOmni.execute(script);
   }
 }

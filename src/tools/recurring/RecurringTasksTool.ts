@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { AnalyzeRecurringTasksTool } from './AnalyzeRecurringTasksTool.js';
 import { GetRecurringPatternsTool } from './GetRecurringPatternsTool.js';
-import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
 // Consolidated recurring tasks schema
@@ -55,7 +55,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
   }
 
   async executeValidated(args: RecurringTasksInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { operation, ...params } = args;
 
     try {
@@ -79,10 +79,11 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           });
 
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'recurring_tasks',
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
+            undefined,
             { operation },
             timer.toMetadata(),
           );

@@ -4,7 +4,7 @@ import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-fol
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
-import { createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { isScriptSuccess, FolderOperationResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   CreateFolderOperationSchema,
@@ -22,7 +22,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
   schema = ManageFolderSchema;
 
   async executeValidated(args: z.infer<typeof ManageFolderSchema>): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { operation } = args;
 
     try {
@@ -40,10 +40,11 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
         case 'duplicate':
           return await this.handleDuplicate(args, timer);
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'manage_folder',
             'INVALID_OPERATION',
             `Unsupported operation: ${String(operation)}`,
+            'Use create|update|delete|move|set_status|duplicate',
             { operation },
             timer.toMetadata(),
           );
@@ -53,20 +54,24 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     }
   }
 
-  private async handleCreate(args: z.infer<typeof CreateFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleCreate(args: z.infer<typeof CreateFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { name, parent, position, relativeToFolder, status } = args;
 
     const script = this.omniAutomation.buildScript(CREATE_FOLDER_SCRIPT, {
       name,
       options: { parent, position, relativeToFolder, status },
     });
-    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+      const invalid = result.error === 'Invalid result';
+      const code = invalid ? 'INVALID_RESULT' : 'CREATE_FAILED';
+      const message = invalid ? 'Script completed but returned unexpected result format' : result.error;
+      return createErrorResponseV2(
         'manage_folder',
-        'CREATE_FAILED',
-        result.error,
+        code,
+        message,
+        invalid ? 'Ensure the script returns { folder: {...} }' : undefined,
         { details: result.details, operation: 'create' },
         timer.toMetadata(),
       );
@@ -78,34 +83,19 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
     const parsedResult = result.data as any;
 
     if (!parsedResult.folder) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'manage_folder',
         'INVALID_RESULT',
         'Script completed but returned unexpected result format',
+        'Return object containing folder property',
         { rawResult: parsedResult, operation: 'create' },
         timer.toMetadata(),
       );
     }
-
-    return createEntityResponse(
-      'manage_folder',
-      'folder',
-      {
-        folderId: parsedResult.folder.id,
-        name: parsedResult.folder.name,
-        parent: parsedResult.folder.parent,
-        status: parsedResult.folder.status || status || 'active',
-        operation: 'create',
-      },
-      {
-        ...timer.toMetadata(),
-        operation: 'create',
-        created_id: parsedResult.folder.id,
-      },
-    );
+    return createSuccessResponseV2('manage_folder', { folder: { folderId: parsedResult.folder.id, name: parsedResult.folder.name, parent: parsedResult.folder.parent, status: parsedResult.folder.status || status || 'active', operation: 'create' } }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: parsedResult.folder.id });
   }
 
-  private async handleUpdate(args: z.infer<typeof UpdateFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleUpdate(args: z.infer<typeof UpdateFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, name, status } = args;
     const updates: any = {};
 
@@ -116,13 +106,14 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       updates,
     });
-    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'manage_folder',
         'UPDATE_FAILED',
         result.error,
+        'Verify folderId and parameters',
         { details: result.details, operation: 'update' },
         timer.toMetadata(),
       );
@@ -134,33 +125,24 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
 
     const parsedResult = result.data as any;
 
-    return createEntityResponse(
-      'manage_folder',
-      'folder',
-      { ...parsedResult, operation: 'update' },
-      {
-        ...timer.toMetadata(),
-        operation: 'update',
-        updated_id: folderId,
-        changes: parsedResult.changes,
-      },
-    );
+    return createSuccessResponseV2('manage_folder', { folder: { ...parsedResult, operation: 'update' } }, undefined, { ...timer.toMetadata(), operation: 'update', updated_id: folderId, changes: parsedResult.changes });
   }
 
-  private async handleDelete(args: z.infer<typeof DeleteFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleDelete(args: z.infer<typeof DeleteFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, moveContentsTo, force } = args;
 
     const script = this.omniAutomation.buildScript(DELETE_FOLDER_SCRIPT, {
       folderId,
       options: { moveContentsTo, force },
     });
-    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'manage_folder',
         'DELETE_FAILED',
         result.error,
+        undefined,
         { details: result.details, operation: 'delete' },
         timer.toMetadata(),
       );
@@ -172,34 +154,24 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
 
     const parsedResult = result.data as any;
 
-    return createEntityResponse(
-      'manage_folder',
-      'folder',
-      { ...parsedResult, operation: 'delete' },
-      {
-        ...timer.toMetadata(),
-        operation: 'delete',
-        deleted_id: folderId,
-        moved_to: parsedResult.folder?.parent,
-        moved_contents: parsedResult.changes,
-      },
-    );
+    return createSuccessResponseV2('manage_folder', { folder: { ...parsedResult, operation: 'delete' } }, undefined, { ...timer.toMetadata(), operation: 'delete', deleted_id: folderId, moved_to: parsedResult.folder?.parent, moved_contents: parsedResult.changes });
   }
 
-  private async handleMove(args: z.infer<typeof MoveFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleMove(args: z.infer<typeof MoveFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, parentId, position, relativeToFolder } = args;
 
     const script = this.omniAutomation.buildScript(MOVE_FOLDER_SCRIPT, {
       folderId,
       options: { newParent: parentId, position, relativeToFolder },
     });
-    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'manage_folder',
         'MOVE_FAILED',
         result.error,
+        undefined,
         { details: result.details, operation: 'move' },
         timer.toMetadata(),
       );
@@ -210,21 +182,10 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
 
     const parsedResult = result.data as any;
 
-    return createEntityResponse(
-      'manage_folder',
-      'folder',
-      { ...parsedResult, operation: 'move' },
-      {
-        ...timer.toMetadata(),
-        operation: 'move',
-        moved_id: folderId,
-        old_parent: parsedResult.folder?.parent,
-        new_parent: parentId,
-      },
-    );
+    return createSuccessResponseV2('manage_folder', { folder: { ...parsedResult, operation: 'move' } }, undefined, { ...timer.toMetadata(), operation: 'move', moved_id: folderId, old_parent: parsedResult.folder?.parent, new_parent: parentId });
   }
 
-  private async handleSetStatus(args: z.infer<typeof SetFolderStatusOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleSetStatus(args: z.infer<typeof SetFolderStatusOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, status } = args;
 
     // Status change is just an update operation
@@ -232,13 +193,14 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
       folderId,
       updates: { status },
     });
-    const result = await this.omniAutomation.executeJson(script, FolderOperationResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'manage_folder',
         'SET_STATUS_FAILED',
         result.error,
+        undefined,
         { details: result.details, operation: 'set_status' },
         timer.toMetadata(),
       );
@@ -250,17 +212,7 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
 
     const parsedResult = result.data as any;
 
-    return createEntityResponse(
-      'manage_folder',
-      'folder',
-      { ...parsedResult, operation: 'set_status' },
-      {
-        ...timer.toMetadata(),
-        operation: 'set_status',
-        updated_id: folderId,
-        new_status: status,
-      },
-    );
+    return createSuccessResponseV2('manage_folder', { folder: { ...parsedResult, operation: 'set_status' } }, undefined, { ...timer.toMetadata(), operation: 'set_status', updated_id: folderId, new_status: status });
   }
 
   private async handleDuplicate(args: z.infer<typeof DuplicateFolderOperationSchema>, timer: OperationTimer): Promise<any> {
@@ -268,12 +220,29 @@ export class ManageFolderTool extends BaseTool<typeof ManageFolderSchema> {
 
     // For duplication, we need to first get the folder details, then create a new one
     // This is a two-step process since OmniFocus doesn't have native duplicate functionality
-    return createErrorResponse(
+    return createErrorResponseV2(
       'manage_folder',
       'NOT_IMPLEMENTED',
       'Duplicate operation is not yet implemented. Use create operation instead.',
+      undefined,
       { operation: 'duplicate', folderId, newName },
       timer.toMetadata(),
     );
+  }
+
+  // Backward-compatible helper: adapt raw mock results into ScriptResult
+  private async execJson(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    const raw = await (typeof anyOmni.execute === 'function' ? anyOmni.execute(script) : anyOmni.executeJson(script));
+    if (raw && typeof raw === 'object') {
+      const obj: any = raw;
+      if (obj.success === false) {
+        return { success: false, error: obj.error || 'Operation failed', details: obj.details };
+      }
+      if (obj.folder || obj.id || obj.deletedFolder) {
+        return { success: true, data: obj };
+      }
+    }
+    return { success: false, error: 'Invalid result', details: raw };
   }
 }

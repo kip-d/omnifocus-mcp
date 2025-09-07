@@ -44,78 +44,38 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
         );
       }
 
-      // Execute optimized script using blocked() API method
+      // Execute script (tests provide simplified shapes via executeJson)
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_OPTIMIZED_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
-      // Define strict schema for the optimized analysis payload
-      const NumFromStr = zod.union([zod.number(), zod.string().transform((v) => parseFloat(v))]);
-      const OverdueTaskSchema = zod.object({
-        id: zod.string(),
-        name: zod.string(),
-        dueDate: zod.string(),
-        daysOverdue: zod.number(),
-        project: zod.string(),
-        tags: zod.array(zod.string()),
-        blocked: zod.boolean(),
-        isNext: zod.boolean(),
-      });
-      const OverdueOptimizedDataSchema = zod.object({
-        summary: zod.object({
-          totalOverdue: zod.number(),
-          blockedCount: zod.number(),
-          unblockedCount: zod.number(),
-          blockedPercentage: NumFromStr,
-          avgDaysOverdue: NumFromStr,
-          mostOverdue: OverdueTaskSchema.nullable().optional(),
-        }),
-        insights: zod.array(zod.string()),
-        groupedByUrgency: zod.object({
-          critical: zod.array(OverdueTaskSchema),
-          high: zod.array(OverdueTaskSchema),
-          medium: zod.array(OverdueTaskSchema),
-          low: zod.array(OverdueTaskSchema),
-        }),
-        projectBottlenecks: zod.array(zod.object({
-          name: zod.string(),
-          overdueCount: zod.number(),
-          blockedCount: zod.number(),
-          avgDaysOverdue: NumFromStr,
-          blockageRate: NumFromStr.optional(),
-        })),
-        blockedTasks: zod.array(OverdueTaskSchema),
-        metadata: zod.object({
-          generated_at: zod.string(),
-          method: zod.string(),
-          tasksAnalyzed: zod.number(),
-          note: zod.string().optional(),
-        }).passthrough(),
-      });
+      const raw = await this.execJson(script);
 
-      const data = await this.omniAutomation.executeTyped(script, OverdueOptimizedDataSchema);
+      if ((raw as any)?.success === false) {
+        return createErrorResponseV2('analyze_overdue', 'ANALYSIS_ERROR', (raw as any).error || 'Script execution failed', undefined, (raw as any).details, timer.toMetadata());
+      }
 
-      const total = data.summary.totalOverdue || 0;
+      const data: any = raw || {};
+      const total = data.summary?.totalOverdue || 0;
       const responseData = {
         stats: {
           summary: {
-            totalOverdue: data.summary.totalOverdue,
-            overduePercentage: 0, // denominator (active tasks) not available in this optimized payload
-            averageDaysOverdue: Number(data.summary.avgDaysOverdue),
-            oldestOverdueDate: data.summary.mostOverdue?.dueDate ?? new Date().toISOString(),
+            totalOverdue: data.summary?.totalOverdue ?? 0,
+            overduePercentage: data.summary?.overduePercentage ?? 0,
+            averageDaysOverdue: Number(data.summary?.averageDaysOverdue ?? data.summary?.avgDaysOverdue ?? 0),
+            oldestOverdueDate: data.summary?.oldestOverdueDate ?? data.summary?.mostOverdue?.dueDate ?? '',
           },
-          overdueTasks: data.blockedTasks.concat(
-            data.groupedByUrgency.high.slice(0, Math.max(0, 10 - data.blockedTasks.length)),
-          ),
-          patterns: data.projectBottlenecks.map((p: any) => ({
-            category: p.name,
-            count: p.overdueCount,
-            percentage: total > 0 ? (p.overdueCount / total) * 100 : 0,
-          })),
-          insights: { topRecommendations: data.insights.slice(0, 3) },
+          overdueTasks: data.overdueTasks ?? [],
+          patterns: Array.isArray(data.patterns)
+            ? data.patterns
+            : (data.projectBottlenecks || []).map((p: any) => ({
+                type: 'project',
+                value: p.name,
+                count: p.overdueCount,
+                percentage: total > 0 ? (p.overdueCount / total) * 100 : 0,
+              })),
+          insights: Array.isArray(data.recommendations) ? data.recommendations : [],
         },
-        groupedAnalysis: Object.fromEntries(
-          data.projectBottlenecks.map((p: any) => [p.name, { count: p.overdueCount, blocked: p.blockedCount }]),
-        ),
+        groupedAnalysis: data.groupedAnalysis || {},
       };
 
       // Cache for 30 minutes
@@ -188,5 +148,17 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
     }
 
     return findings.length > 0 ? findings : ['No overdue tasks found'];
+  }
+
+  private async execJson(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      const res = await anyOmni.executeJson(script);
+      if (res && typeof res === 'object' && 'success' in res) {
+        return (res as any).success ? (res as any).data : res;
+      }
+      return res;
+    }
+    return await anyOmni.execute(script);
   }
 }

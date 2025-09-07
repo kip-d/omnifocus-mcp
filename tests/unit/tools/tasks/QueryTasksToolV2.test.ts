@@ -26,6 +26,9 @@ describe('QueryTasksToolV2', () => {
     // Mock OmniAutomation
     mockOmni = {
       executeJson: vi.fn(),
+      executeTyped: vi.fn(async (_s: string, schema: any) => schema.parse({
+        tasks: [], overdueCount: 0, dueTodayCount: 0, flaggedCount: 0,
+      })),
       buildScript: vi.fn((template, params) => `script with ${JSON.stringify(params)}`),
     };
     (tool as any).omniAutomation = mockOmni;

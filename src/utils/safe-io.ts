@@ -31,17 +31,23 @@ export function isEnvelope(value: unknown): value is JxaEnvelope {
   return res.success;
 }
 
+type LegacyErrorShape = { error: true; message?: unknown; details?: unknown };
+
+function isLegacyErrorShape(val: unknown): val is LegacyErrorShape {
+  return !!val && typeof val === 'object' && (val as Record<string, unknown>).hasOwnProperty('error') && (val as Record<string, unknown>).error === true;
+}
+
 export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {
   // Already an envelope
   const parsed = JxaEnvelopeSchema.safeParse(value);
   if (parsed.success) return parsed.data as JxaEnvelope<JsonValue>;
 
   // Legacy error shape: { error: true, message, details? }
-  if (value && typeof value === 'object' && (value as any).error === true) {
+  if (isLegacyErrorShape(value)) {
     const v = 'legacy-1';
     const obj = value as Record<string, unknown>;
     const message = typeof obj.message === 'string' ? obj.message : 'JXA error';
-    const rawDetails = 'details' in obj ? (obj.details as unknown) : undefined;
+    const rawDetails = Object.prototype.hasOwnProperty.call(obj, 'details') ? (obj.details as unknown) : undefined;
     let details: JsonValue | undefined;
     try {
       details = rawDetails === undefined ? undefined : (JSON.parse(JSON.stringify(rawDetails)) as JsonValue);
@@ -68,7 +74,9 @@ export function safeStringify(value: unknown): string {
   }
 }
 
-export function safeLog(message: string, data?: unknown, logger: { info: (...args: any[]) => void } = console) {
+type MinimalLogger = { info: (...args: unknown[]) => void };
+
+export function safeLog(message: string, data?: unknown, logger: MinimalLogger = console) {
   if (data === undefined) {
     logger.info(message);
     return;
