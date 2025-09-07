@@ -127,8 +127,8 @@ export function registerTools(server: Server, cache: CacheManager): void {
     return {
       content: [
         {
-          type: 'json',
-          json: result,
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
