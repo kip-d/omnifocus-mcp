@@ -140,8 +140,7 @@ describe('Recurring Tools', () => {
       it('should handle script execution errors', async () => {
         mockCache.get.mockReturnValue(null);
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed',
-        , details: 'Test error' });
+         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed', details: 'Test error' });
 
         const result = await tool.execute({});
 
@@ -263,9 +262,8 @@ describe('Recurring Tools', () => {
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
         mockCache.get.mockReturnValue(null);
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Pattern analysis failed',
-        , details: 'Test error' });
+         mockOmniAutomation.buildScript.mockReturnValue('test script');
+         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Pattern analysis failed', details: 'Test error' });
 
         const result = await tool.execute({});
 

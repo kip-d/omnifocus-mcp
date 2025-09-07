@@ -20,8 +20,8 @@ vi.mock('../../../src/utils/logger.js', () => ({
     warn: vi.fn(),
   }))
 }));
-vi.mock('../../../src/utils/response-format.js', () => ({
-  createSuccessResponse: vi.fn((operation, data, metadata) => ({
+vi.mock('../../../src/utils/response-format-v2.js', () => ({
+  createSuccessResponseV2: vi.fn((operation, data, _summary, metadata) => ({
     success: true,
     data,
     metadata: {
@@ -31,9 +31,9 @@ vi.mock('../../../src/utils/response-format.js', () => ({
       ...metadata,
     },
   })),
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -43,10 +43,11 @@ vi.mock('../../../src/utils/response-format.js', () => ({
     error: {
       code,
       message,
+      suggestion,
       details,
     },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({
+  OperationTimerV2: vi.fn().mockImplementation(() => ({
     toMetadata: vi.fn(() => ({ query_time_ms: 100 })),
   })),
 }));
@@ -378,8 +379,7 @@ describe('Export Tools', () => {
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed',
-        , details: 'Test error' });
+         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed', details: 'Test error' });
 
         const result = await tool.execute({ format: 'json' });
 
@@ -662,9 +662,8 @@ describe('Export Tools', () => {
 
     describe('error handling', () => {
       it('should handle script execution errors with structured response', async () => {
-        mockOmniAutomation.buildScript.mockReturnValue('test script');
-        mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Failed to access projects',
-        , details: 'Test error' });
+         mockOmniAutomation.buildScript.mockReturnValue('test script');
+         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Failed to access projects', details: 'Test error' });
 
         const result = await tool.execute({ format: 'json' });
 
@@ -728,4 +727,3 @@ describe('Export Tools', () => {
     });
   });
 });
-

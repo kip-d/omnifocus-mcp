@@ -33,6 +33,7 @@ describe('Response Format Consistency Tests', () => {
     mockOmniAutomation = {
       buildScript: vi.fn(),
       executeJson: vi.fn(),
+      execute: vi.fn(),
     } as any;
 
     // Replace implementations
@@ -268,6 +269,11 @@ describe('Response Format Consistency Tests', () => {
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
+
+      // Ensure the tool uses our per-test mocked OmniAutomation instance.
+      // The global unit setup mocks prototype.executeJson to always succeed,
+      // so we must inject the instance-level mock here to exercise the error path.
+      (tool as any).omniAutomation = mockOmniAutomation;
 
       const result = await tool.executeValidated({ title: 'Test task' });
 

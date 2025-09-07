@@ -353,20 +353,20 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute search
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
+    const result = await this.execJson(script);
 
-    if (!result || 'error' in result) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
         'Search failed',
         'Try a simpler search term or check if OmniFocus is running',
-        result,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(result.tasks);
+    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
 
     // Cache search results
     this.cache.set('tasks', cacheKey, { tasks });
@@ -408,20 +408,20 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
+    const result = await this.execJson(script);
 
-    if (!result || 'error' in result) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
         'Failed to get available tasks',
         'Try using all mode with fewer filters',
-        result,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(result.tasks);
+    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -456,20 +456,20 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
+    const result = await this.execJson(script);
 
-    if (!result || 'error' in result) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
         'Failed to get blocked tasks',
         'Try using all mode instead',
-        result,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(result.tasks);
+    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -542,20 +542,20 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
+    const result = await this.execJson(script);
 
-    if (!result || 'error' in result) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
         'Failed to get tasks',
         'Try a more specific mode like overdue or today',
-        result,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(result.tasks);
+    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
 
     return createTaskResponseV2(
       'tasks',
@@ -592,20 +592,20 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     // Execute comprehensive query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
-    const result = await this.omniAutomation.execute(script) as ListTasksScriptResult;
+    const result = await this.execJson(script);
 
-    if (!result || 'error' in result) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
         'Failed to get task suggestions',
         'Try using mode: "today" or "overdue" instead',
-        result,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
-    const allTasks = this.parseTasks(result.tasks || []);
+    const allTasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
     const now = new Date();
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
@@ -617,10 +617,11 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       // Overdue tasks get highest priority
       if (task.dueDate) {
         const dueDate = new Date(task.dueDate);
+        const isDueToday = dueDate.toDateString() === now.toDateString();
         if (dueDate < now) {
           const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
           score += 100 + Math.min(daysOverdue * 10, 200); // Cap at 300 for very overdue
-        } else if (dueDate <= todayEnd) {
+        } else if (isDueToday || dueDate <= todayEnd) {
           score += 80; // Due today
         }
       }
@@ -639,11 +640,24 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     });
 
     // Sort by score and take top items
-    const suggestedTasks = scoredTasks
+    let suggestedTasks = scoredTasks
       .filter(t => t._score > 0) // Only tasks with positive score
       .sort((a, b) => b._score - a._score)
       .slice(0, args.limit)
       .map(({ _score, ...task }) => task); // Remove score from output
+
+    // Ensure at least one due-today task is surfaced if available
+    const dueTodayCandidate = allTasks.find(t => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString());
+    if (dueTodayCandidate) {
+      const alreadyIncluded = suggestedTasks.some(t => t.id === dueTodayCandidate.id);
+      if (!alreadyIncluded) {
+        if (suggestedTasks.length < args.limit) {
+          suggestedTasks.push(dueTodayCandidate);
+        } else if (suggestedTasks.length > 0) {
+          suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate;
+        }
+      }
+    }
 
     // Cache results
     this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
@@ -674,13 +688,42 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   private async execJson(script: string): Promise<ScriptResult<unknown>> {
     const anyOmni: any = this.omniAutomation as any;
     if (typeof anyOmni.executeJson === 'function') {
-      return await anyOmni.executeJson(script, ListResultSchema);
+      const maybe = await anyOmni.executeJson(script);
+      if (maybe && typeof maybe === 'object' && (maybe as any).error === true) {
+        const m: any = maybe;
+        return { success: false, error: m.message || 'Script execution failed', details: m.details } as ScriptResult<unknown>;
+      }
+      if (maybe && typeof maybe === 'object' && 'success' in maybe) {
+        const sr: any = maybe;
+        if (sr.success && sr.data && typeof sr.data === 'object' && (sr.data as any).error === true) {
+          const m: any = sr.data;
+          return { success: false, error: m.message || 'Script execution failed', details: m.details } as ScriptResult<unknown>;
+        }
+        return sr as ScriptResult<unknown>;
+      }
+      // Try to coerce raw shapes into ListResultSchema
+      let candidate: any = maybe;
+      let parsed = ListResultSchema.safeParse(candidate);
+      if (!parsed.success && maybe && typeof maybe === 'object') {
+        const obj: any = maybe;
+        if (Array.isArray(obj.tasks)) {
+          candidate = { items: obj.tasks, summary: obj.summary, metadata: obj.metadata };
+          parsed = ListResultSchema.safeParse(candidate);
+        }
+      }
+      if (parsed.success) {
+        return { success: true, data: parsed.data } as ScriptResult<unknown>;
+      }
+      return { success: false, error: 'Script result validation failed', details: { errors: parsed.error.issues } } as ScriptResult<unknown>;
     }
     const raw = await anyOmni.execute(script);
     let candidate: any = raw;
     let parsed = ListResultSchema.safeParse(candidate);
     if (!parsed.success && raw && typeof raw === 'object') {
       const obj: any = raw;
+      if (obj && obj.error === true) {
+        return { success: false, error: obj.message || 'Script execution failed', details: obj.details } as ScriptResult<unknown>;
+      }
       if (Array.isArray(obj.tasks)) {
         candidate = { items: obj.tasks, summary: obj.summary, metadata: obj.metadata };
         parsed = ListResultSchema.safeParse(candidate);

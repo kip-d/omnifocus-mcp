@@ -1,0 +1,4 @@
+
+ RUN  v3.2.4 /Users/kip/codex/omnifocus-mcp
+
+ ✓ tests/unit/omnifocus/OmniAutomation.test.ts (24 tests) 12ms

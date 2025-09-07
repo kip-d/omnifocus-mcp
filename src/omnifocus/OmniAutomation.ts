@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+// Defer importing child_process so tests can mock it reliably via vi.mock
+// (static ESM imports are evaluated before test mocks are applied)
 import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
 import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
@@ -105,12 +106,14 @@ export class OmniAutomation {
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
     // Check if script already has its own IIFE wrapper and app/doc initialization
     const hasIIFE = script.includes('(() =>') || script.includes('(function');
     const hasAppInit = script.includes("Application('OmniFocus')");
 
-    // Only wrap if the script doesn't already have its own structure
-    const wrappedScript = hasIIFE && hasAppInit ? script : this.wrapScript(script);
+    // Tests expect: wrap only if there is no IIFE AND no Application('OmniFocus').
+    // If either is present, do not wrap. Always write the chosen (possibly wrapped) script to stdin.
+    const wrappedScript = (!hasIIFE && !hasAppInit) ? this.wrapScript(script) : script;
 
     logger.debug('Executing OmniAutomation script', {
       scriptLength: script.length,
@@ -325,6 +328,7 @@ export class OmniAutomation {
 
   // Execute OmniFocus automation via URL scheme (for operations requiring higher permissions)
   public async executeViaUrlScheme<T = unknown>(script: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }

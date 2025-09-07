@@ -13,6 +13,7 @@ import { getCoreHelpers } from '../shared/helpers.js';
  * 3. When contents exist, users typically reorganize rather than delete
  */
 export const DELETE_FOLDER_SCRIPT = `
+  // DELETE_FOLDER
   ${getCoreHelpers()}
   
   (() => {

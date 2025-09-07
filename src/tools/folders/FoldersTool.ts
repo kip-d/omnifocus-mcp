@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { ManageFolderTool } from './ManageFolderTool.js';
 import { QueryFoldersTool } from './QueryFoldersTool.js';
-import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
 // Consolidated folders schema
@@ -78,7 +78,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
   }
 
   async executeValidated(args: FoldersInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { operation, ...params } = args;
 
     try {
@@ -94,10 +94,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'get':
           if (!params.folderId && !params.folderName) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId or folderName is required for get operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -110,10 +111,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'search':
           if (!params.searchQuery) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'searchQuery is required for search operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -125,10 +127,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'projects':
           if (!params.folderId && !params.folderName) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId or folderName is required for projects operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -142,10 +145,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
         // Management operations
         case 'create':
           if (!params.name) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'name is required for create operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -158,19 +162,21 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'update':
           if (!params.folderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId is required for update operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
           }
           if (!params.name) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'name is required for update operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -183,10 +189,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'delete':
           if (!params.folderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId is required for delete operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -198,19 +205,21 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'move':
           if (!params.folderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId is required for move operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
           }
           if (!params.parentFolderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'parentFolderId is required for move operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -223,10 +232,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'duplicate':
           if (!params.folderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId is required for duplicate operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -239,19 +249,21 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
         case 'set_status':
           if (!params.folderId) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'folderId is required for set_status operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
           }
           if (!params.status) {
-            return createErrorResponse(
+            return createErrorResponseV2(
               'folders',
               'MISSING_PARAMETER',
               'status is required for set_status operation',
+              undefined,
               { operation },
               timer.toMetadata(),
             );
@@ -264,10 +276,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           });
 
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'folders',
             'INVALID_OPERATION',
             `Invalid operation: ${String(operation)}`,
+            undefined,
             { operation },
             timer.toMetadata(),
           );

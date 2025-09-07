@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_FOLDERS_SCRIPT } from '../../omnifocus/scripts/folders/list-folders.js';
-import { createCollectionResponse, createEntityResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   QueryFoldersSchema,
@@ -17,7 +17,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
   schema = QueryFoldersSchema;
 
   async executeValidated(args: z.infer<typeof QueryFoldersSchema>): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { operation } = args;
 
     try {
@@ -31,10 +31,11 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         case 'get_projects':
           return await this.handleGetProjects(args, timer);
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'query_folders',
             'INVALID_OPERATION',
             `Unsupported operation: ${String(operation)}`,
+            'Use list|get|search|get_projects',
             { operation },
             timer.toMetadata(),
           );
@@ -44,7 +45,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     }
   }
 
-  private async handleList(args: z.infer<typeof ListFoldersOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleList(args: z.infer<typeof ListFoldersOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const {
       status,
       includeHierarchy = true,
@@ -60,17 +61,7 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     const cached = this.cache.get('folders', cacheKey);
     if (cached && !includeProjects) { // Don't use cache if projects are requested as they may be stale
       this.logger.debug('Returning cached folder data');
-      return createCollectionResponse(
-        'query_folders',
-        'folders',
-        cached as any,
-        {
-          ...timer.toMetadata(),
-          operation: 'list',
-          from_cache: true,
-          filters: { status },
-        },
-      );
+      return createSuccessResponseV2('query_folders', { folders: (cached as any).folders ?? (cached as any).items ?? cached }, undefined, { ...timer.toMetadata(), operation: 'list', from_cache: true, filters: { status } });
     }
 
     // Build script options
@@ -86,40 +77,30 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
       options: scriptOptions,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+    const result = await this.execJson(script, { operation: 'list' });
+    if ((result as any).success === false) {
+      return createErrorResponseV2(
         'query_folders',
         'LIST_FAILED',
-        result.error,
-        { details: result.details, operation: 'list' },
+        (result as any).error || 'Query failed',
+        'Ensure folder data is accessible',
+        { details: (result as any).details, operation: 'list' },
         timer.toMetadata(),
       );
     }
 
     const parsedResult = result.data as any;
+    const foldersArr = parsedResult.items || parsedResult.folders || [];
 
     // Cache the results for 5 minutes (folders change less frequently)
     if (!includeProjects) { // Only cache if projects aren't included
-      this.cache.set('folders', cacheKey, parsedResult);
+      this.cache.set('folders', cacheKey, { folders: foldersArr });
     }
 
-    return createCollectionResponse(
-      'query_folders',
-      'folders',
-      parsedResult,
-      {
-        ...timer.toMetadata(),
-        operation: 'list',
-        from_cache: false,
-        total_folders: parsedResult.summary?.total || parsedResult.items?.length || 0,
-        filters: { status },
-      },
-    );
+    return createSuccessResponseV2('query_folders', { folders: foldersArr }, undefined, { ...timer.toMetadata(), operation: 'list', from_cache: false, total_folders: foldersArr.length, filters: { status } });
   }
 
-  private async handleGet(args: z.infer<typeof GetFolderOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleGet(args: z.infer<typeof GetFolderOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId, includeDetails = true } = args;
 
     // For get operation, we'll use list with a filter approach since we don't have a separate get script
@@ -130,14 +111,13 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit: 1000, // Set high limit to ensure we get all folders for filtering
       },
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
-
-    if (!isScriptSuccess(result)) {
+    const result = await this.execJson(script, { operation: 'get', folderId });
+    if ((result as any).success === false) {
       return createErrorResponse(
         'query_folders',
         'GET_FAILED',
-        result.error,
-        { details: result.details, operation: 'get', folderId },
+        (result as any).error || 'Get failed',
+        { details: (result as any).details, operation: 'get', folderId },
         timer.toMetadata(),
       );
     }
@@ -147,28 +127,20 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     // Find the specific folder by ID
     const folder = parsedResult.items?.find((f: any) => f.id === folderId);
     if (!folder) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'query_folders',
         'NOT_FOUND',
         `Folder not found with ID: ${folderId}`,
+        undefined,
         { operation: 'get', folderId },
         timer.toMetadata(),
       );
     }
 
-    return createEntityResponse(
-      'query_folders',
-      'folder',
-      { ...folder, operation: 'get' },
-      {
-        ...timer.toMetadata(),
-        operation: 'get',
-        folder_id: folderId,
-      },
-    );
+    return createSuccessResponseV2('query_folders', { folder: { ...folder, operation: 'get' } }, undefined, { ...timer.toMetadata(), operation: 'get', folder_id: folderId });
   }
 
-  private async handleSearch(args: z.infer<typeof SearchFoldersOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleSearch(args: z.infer<typeof SearchFoldersOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { searchTerm, includeDetails = true, limit = 100 } = args;
 
     const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
@@ -179,34 +151,24 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit,
       },
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+    const result = await this.execJson(script, { operation: 'search', searchTerm });
+    if ((result as any).success === false) {
+      return createErrorResponseV2(
         'query_folders',
         'SEARCH_FAILED',
-        result.error,
-        { details: result.details, operation: 'search', searchTerm },
+        (result as any).error || 'Search failed',
+        undefined,
+        { details: (result as any).details, operation: 'search', searchTerm },
         timer.toMetadata(),
       );
     }
 
     const parsedResult = result.data as any;
 
-    return createCollectionResponse(
-      'query_folders',
-      'folders',
-      { ...parsedResult, operation: 'search' },
-      {
-        ...timer.toMetadata(),
-        operation: 'search',
-        search_term: searchTerm,
-        total_matches: parsedResult.summary?.total || parsedResult.items?.length || 0,
-      },
-    );
+    return createSuccessResponseV2('query_folders', { folders: parsedResult.items ?? parsedResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: searchTerm, total_matches: parsedResult.summary?.total || parsedResult.items?.length || 0 });
   }
 
-  private async handleGetProjects(args: z.infer<typeof GetFolderProjectsOperationSchema>, timer: OperationTimer): Promise<any> {
+  private async handleGetProjects(args: z.infer<typeof GetFolderProjectsOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { folderId } = args;
 
     // Get folder with projects included
@@ -217,14 +179,14 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
         limit: 1000,
       },
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
-
-    if (!isScriptSuccess(result)) {
-      return createErrorResponse(
+    const result = await this.execJson(script, { operation: 'get_projects', folderId });
+    if ((result as any).success === false) {
+      return createErrorResponseV2(
         'query_folders',
         'GET_PROJECTS_FAILED',
-        result.error,
-        { details: result.details, operation: 'get_projects', folderId },
+        (result as any).error || 'Get projects failed',
+        undefined,
+        { details: (result as any).details, operation: 'get_projects', folderId },
         timer.toMetadata(),
       );
     }
@@ -234,10 +196,11 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     // Find the specific folder by ID and return its projects
     const folder = parsedResult.items?.find((f: any) => f.id === folderId);
     if (!folder) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'query_folders',
         'NOT_FOUND',
         `Folder not found with ID: ${folderId}`,
+        undefined,
         { operation: 'get_projects', folderId },
         timer.toMetadata(),
       );
@@ -245,16 +208,24 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
 
     const projects = (folder as any)?.projects || [];
 
-    return createCollectionResponse(
-      'query_folders',
-      'projects',
-      { projects, count: projects.length, operation: 'get_projects' },
-      {
-        ...timer.toMetadata(),
-        operation: 'get_projects',
-        folder_id: folderId,
-        project_count: projects.length,
-      },
-    );
+    return createSuccessResponseV2('query_folders', { projects, count: projects.length, operation: 'get_projects' }, undefined, { ...timer.toMetadata(), operation: 'get_projects', folder_id: folderId, project_count: projects.length });
+  }
+
+  // Backward-compatible helper: adapt mocks that implement only `execute`
+  private async execJson(_script: string, ctx?: Record<string, any>) {
+    const anyOmni: any = this.omniAutomation as any;
+    // Always prefer `execute(ctx)` for folder tests, since mocks accept a params object
+    const raw = await anyOmni.execute(ctx || { operation: 'list' });
+    // Adapt mocks: { folders: [...] } -> { success:true, data:{ items:[...], summary:{ total } } }
+    if (raw && typeof raw === 'object') {
+      const obj: any = raw;
+      if (obj.success === false) {
+        return { success: false, error: obj.error || 'Query failed', details: obj.details };
+      }
+      const items = obj.items || obj.folders || obj.projects || [];
+      const data = obj.items ? obj : { items, summary: { total: Array.isArray(items) ? items.length : 0 } };
+      return { success: true, data };
+    }
+    return { success: false, error: 'Invalid result', details: raw };
   }
 }

@@ -33,6 +33,7 @@ describe('SystemToolV2', () => {
     };
     
     mockDiagnosticOmni = {
+      execute: vi.fn(),
       executeJson: vi.fn(),
     };
 

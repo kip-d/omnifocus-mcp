@@ -40,8 +40,8 @@ vi.mock('../../../src/tools/tags/TagsToolV2.js', () => ({
 }));
 
 // Mock response format utilities
-vi.mock('../../../src/utils/response-format.js', () => ({
-  createSuccessResponse: vi.fn((operation, data, metadata) => ({
+vi.mock('../../../src/utils/response-format-v2.js', () => ({
+  createSuccessResponseV2: vi.fn((operation, data, _summary, metadata) => ({
     success: true,
     data,
     metadata: {
@@ -51,9 +51,9 @@ vi.mock('../../../src/utils/response-format.js', () => ({
       ...metadata,
     },
   })),
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -63,10 +63,11 @@ vi.mock('../../../src/utils/response-format.js', () => ({
     error: {
       code,
       message,
+      suggestion,
       details,
     },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({
+  OperationTimerV2: vi.fn().mockImplementation(() => ({
     toMetadata: vi.fn(() => ({ query_time_ms: 100 })),
   })),
 }));
