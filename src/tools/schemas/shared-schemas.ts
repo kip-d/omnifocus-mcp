@@ -18,6 +18,15 @@ export const LocalDateTimeSchema = z.string()
 // Optional datetime that can also be null
 export const OptionalDateTimeSchema = z.union([DateTimeSchema, z.null()]).optional();
 
+// Optional local date that handles MCP bridge string conversion of null values
+export const OptionalLocalDateSchema = z.preprocess((val) => {
+  // Handle MCP bridge conversions
+  if (val === null || val === undefined || val === 'null' || val === 'undefined' || val === '') {
+    return undefined;
+  }
+  return val;
+}, z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm').optional());
+
 // Project status enum
 export const ProjectStatusSchema = z.enum(['active', 'onHold', 'done', 'dropped'])
   .describe('Project status (active, onHold, done, dropped)');

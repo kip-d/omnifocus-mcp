@@ -5,6 +5,8 @@ import { UpdateTaskTool } from './UpdateTaskTool.js';
 import { CompleteTaskTool } from './CompleteTaskTool.js';
 import { DeleteTaskTool } from './DeleteTaskTool.js';
 import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { OptionalLocalDateSchema } from '../schemas/shared-schemas.js';
+import { coerceNumber, coerceBoolean } from '../schemas/coercion-helpers.js';
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
@@ -34,21 +36,17 @@ const ManageTaskSchema = z.object({
     .optional()
     .describe('Parent task ID to create this as a subtask'),
 
-  dueDate: z.string()
-    .optional()
-    .nullable()
+  dueDate: OptionalLocalDateSchema
     .describe('Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
-  deferDate: z.string()
-    .optional()
-    .nullable()
+  deferDate: OptionalLocalDateSchema
     .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
-  flagged: z.union([z.boolean(), z.string()])
+  flagged: coerceBoolean()
     .optional()
     .describe('Whether the task is flagged'),
 
-  estimatedMinutes: z.union([z.number(), z.string()])
+  estimatedMinutes: coerceNumber()
     .optional()
     .describe('Estimated duration in minutes'),
 
@@ -56,34 +54,33 @@ const ManageTaskSchema = z.object({
     .optional()
     .describe('Tags to assign to the task'),
 
-  sequential: z.union([z.boolean(), z.string()])
+  sequential: coerceBoolean()
     .optional()
     .describe('Whether subtasks must be completed in order'),
 
   // Clear field options (for update)
-  clearDueDate: z.boolean()
+  clearDueDate: coerceBoolean()
     .optional()
     .describe('Clear the existing due date'),
 
-  clearDeferDate: z.boolean()
+  clearDeferDate: coerceBoolean()
     .optional()
     .describe('Clear the existing defer date'),
 
-  clearEstimatedMinutes: z.boolean()
+  clearEstimatedMinutes: coerceBoolean()
     .optional()
     .describe('Clear the existing time estimate'),
 
-  clearRepeatRule: z.boolean()
+  clearRepeatRule: coerceBoolean()
     .optional()
     .describe('Remove the existing repeat rule'),
 
   // Completion date (for complete operation)
-  completionDate: z.string()
-    .optional()
+  completionDate: OptionalLocalDateSchema
     .describe('Completion date (defaults to now)'),
 
   // Minimal response option (for update)
-  minimalResponse: z.union([z.boolean(), z.string()])
+  minimalResponse: coerceBoolean()
     .optional()
     .describe('Return minimal response for bulk operations'),
 

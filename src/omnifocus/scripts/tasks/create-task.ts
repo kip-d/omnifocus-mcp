@@ -1,14 +1,15 @@
-import { getRecurrenceApplyHelpers, getValidationHelpers } from '../shared/helpers.js';
+import { getRecurrenceApplyHelpers, getValidationHelpers, ERROR_HANDLING } from '../shared/helpers.js';
 import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
 
 /**
  * Script to create a new task in OmniFocus
- * OPTIMIZED: Uses minimal recurrence apply helpers (+ validation + bridge) to keep script size small.
+ * OPTIMIZED: Uses minimal recurrence apply helpers (+ validation + bridge + error handling) to keep script size small.
  */
 export const CREATE_TASK_SCRIPT = `
   ${getRecurrenceApplyHelpers()}
   ${getValidationHelpers()}
   ${BRIDGE_HELPERS}
+  ${ERROR_HANDLING}
   
   (() => {
     const app = Application('OmniFocus');
