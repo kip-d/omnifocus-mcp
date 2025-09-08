@@ -153,6 +153,34 @@ export const MY_SCRIPT = `
 - Create specialized minimal helper functions for your specific needs
 - Test with both direct execution AND Claude Desktop (which may have stricter limits)
 
+## 🚨 CRITICAL: Async Operation Lifecycle (September 2025)
+
+**THE PROBLEM:** MCP server exits immediately when stdin closes, killing osascript child processes before they return results.
+
+**THE SOLUTION:** Implement pending operations tracking:
+```typescript
+// ✅ REQUIRED: Track async operations to prevent premature exit
+const pendingOperations = new Set<Promise<any>>();
+setPendingOperationsTracker(pendingOperations);
+
+const gracefulExit = async (reason: string) => {
+  logger.info(`${reason}, waiting for pending operations to complete...`);
+  if (pendingOperations.size > 0) {
+    await Promise.allSettled([...pendingOperations]);
+  }
+  process.exit(0);
+};
+
+process.stdin.on('end', () => gracefulExit('stdin closed'));
+```
+
+**SYMPTOMS of missing async tracking:**
+- Tools execute but return no response
+- osascript processes get killed mid-execution  
+- "Silent failures" where tools appear to work but produce no output
+
+**See `docs/LESSONS_LEARNED.md` for complete implementation details.**
+
 ## Quick Reference
 
 ### Commands

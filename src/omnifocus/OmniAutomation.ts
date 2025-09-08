@@ -18,6 +18,13 @@ export class OmniAutomationError extends Error {
   }
 }
 
+// Global set to track pending operations - will be set by the server
+export let globalPendingOperations: Set<Promise<any>> | null = null;
+
+export function setPendingOperationsTracker(tracker: Set<Promise<any>>) {
+  globalPendingOperations = tracker;
+}
+
 export class OmniAutomation {
   private readonly maxScriptSize: number;
   private readonly timeout: number;
@@ -31,17 +38,24 @@ export class OmniAutomation {
   }
 
   public async execute<T = unknown>(script: string): Promise<T> {
+    console.error(`[OMNI_AUTOMATION_DEBUG] execute called with script length: ${script.length}, max: ${this.maxScriptSize}`);
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
 
-    return this.executeInternal<T>(script);
+    console.error(`[OMNI_AUTOMATION_DEBUG] Script size OK, delegating to executeInternal...`);
+    const result = await this.executeInternal<T>(script);
+    console.error(`[OMNI_AUTOMATION_DEBUG] executeInternal returned:`, JSON.stringify(result, null, 2));
+    return result;
   }
 
   // New type-safe execution with discriminated unions and schema validation
   public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+    console.error(`[OMNI_AUTOMATION_DEBUG] executeJson called with script length: ${script.length}`);
     try {
+      console.error(`[OMNI_AUTOMATION_DEBUG] About to call execute method...`);
       const result = await this.execute<unknown>(script);
+      console.error(`[OMNI_AUTOMATION_DEBUG] execute method returned:`, JSON.stringify(result, null, 2));
 
       // Handle raw script errors (legacy shape)
       const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
@@ -66,8 +80,10 @@ export class OmniAutomation {
         return createScriptSuccess(validation.data as T);
       }
 
+      console.error(`[OMNI_AUTOMATION_DEBUG] Returning success result:`, JSON.stringify(result, null, 2));
       return createScriptSuccess(result as T);
     } catch (error) {
+      console.error(`[OMNI_AUTOMATION_DEBUG] executeJson caught error:`, error);
       if (error instanceof OmniAutomationError) {
         return createScriptError(
           error.message,
@@ -106,50 +122,68 @@ export class OmniAutomation {
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
-    const { spawn } = await import('node:child_process');
+    console.error(`[OMNI_AUTOMATION_DEBUG] executeInternal called with script length: ${script.length}`);
+    
     // Check if script already has its own IIFE wrapper and app/doc initialization
     const hasIIFE = script.includes('(() =>') || script.includes('(function');
     const hasAppInit = script.includes("Application('OmniFocus')");
+    console.error(`[OMNI_AUTOMATION_DEBUG] Script analysis: hasIIFE=${hasIIFE}, hasAppInit=${hasAppInit}`);
 
     // Tests expect: wrap only if there is no IIFE AND no Application('OmniFocus').
     // If either is present, do not wrap. Always write the chosen (possibly wrapped) script to stdin.
     const wrappedScript = (!hasIIFE && !hasAppInit) ? this.wrapScript(script) : script;
+    console.error(`[OMNI_AUTOMATION_DEBUG] Script ${(!hasIIFE && !hasAppInit) ? 'wrapped' : 'not wrapped'}, final length: ${wrappedScript.length}`);
 
+    // Create promise and track it to prevent premature server exit
+    const executionPromise = await this.createTrackedExecutionPromise<T>(wrappedScript);
+    return executionPromise;
+  }
+
+  private async createTrackedExecutionPromise<T>(wrappedScript: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
+    
     logger.debug('Executing OmniAutomation script', {
-      scriptLength: script.length,
-      hasIIFE,
-      hasAppInit,
-      wrapped: wrappedScript !== script,
+      scriptLength: wrappedScript.length,
     });
     logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
-    return new Promise((resolve, reject) => {
+    console.error(`[OMNI_AUTOMATION_DEBUG] Creating Promise with timeout: ${this.timeout}ms`);
+    
+    // Create the execution promise
+    const promise = new Promise<T>((resolve, reject) => {
+      console.error(`[OMNI_AUTOMATION_DEBUG] Spawning osascript process...`);
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
         timeout: this.timeout,
       });
+      
+      console.error(`[OMNI_AUTOMATION_DEBUG] Process spawned, PID:`, proc.pid);
 
       let _stdout = '';
       let stderr = '';
 
       proc.stdout.on('data', (data) => {
+        console.error(`[OMNI_AUTOMATION_DEBUG] stdout data received:`, data.toString());
         _stdout += data.toString();
       });
 
       proc.stderr.on('data', (data) => {
+        console.error(`[OMNI_AUTOMATION_DEBUG] stderr data received:`, data.toString());
         stderr += data.toString();
       });
 
       proc.on('error', (error) => {
+        console.error(`[OMNI_AUTOMATION_DEBUG] Process error:`, error);
         logger.error('Script execution failed:', error);
-        reject(new OmniAutomationError('Failed to execute script', script, error.message));
+        reject(new OmniAutomationError('Failed to execute script', wrappedScript, error.message));
       });
 
       proc.on('close', (code) => {
+        console.error(`[OMNI_AUTOMATION_DEBUG] Process closed with code:`, code);
         if (code !== 0) {
           logger.error('Script execution failed with code:', code);
 
 
-          reject(new OmniAutomationError(`Script execution failed with code ${code}`, script, stderr));
+          reject(new OmniAutomationError(`Script execution failed with code ${code}`, wrappedScript, stderr));
           return;
         }
 
@@ -188,7 +222,7 @@ export class OmniAutomation {
           // Try to return the raw output if it might be useful
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
             // Looks like malformed JSON, treat as error
-            reject(new OmniAutomationError('Invalid JSON response from script', script, trimmedOutput));
+            reject(new OmniAutomationError('Invalid JSON response from script', wrappedScript, trimmedOutput));
           } else {
             // Might be a simple string result, wrap it
             resolve(trimmedOutput as T);
@@ -197,9 +231,41 @@ export class OmniAutomation {
       });
 
       // Write script to stdin
+      console.error(`[OMNI_AUTOMATION_DEBUG] Writing script to stdin (${wrappedScript.length} chars)...`);
+      
+      // Debug: write the actual script being executed to a file  
+      try {
+        import('fs').then(fs => {
+          fs.writeFileSync('/tmp/mcp-debug-script.js', wrappedScript);
+          console.error(`[OMNI_AUTOMATION_DEBUG] Debug script saved to /tmp/mcp-debug-script.js`);
+        });
+      } catch (e) {
+        console.error(`[OMNI_AUTOMATION_DEBUG] Could not save debug script:`, e instanceof Error ? e.message : String(e));
+      }
+      
       proc.stdin.write(wrappedScript);
+      console.error(`[OMNI_AUTOMATION_DEBUG] Script written, closing stdin...`);
       proc.stdin.end();
+      console.error(`[OMNI_AUTOMATION_DEBUG] stdin closed, waiting for process to complete...`);
     });
+
+    // Track this promise to prevent premature server exit
+    if (globalPendingOperations) {
+      console.error(`[OMNI_AUTOMATION_DEBUG] Adding operation to pending set (current size: ${globalPendingOperations.size})`);
+      globalPendingOperations.add(promise);
+      
+      // Remove from set when completed (success or failure)
+      promise.finally(() => {
+        if (globalPendingOperations) {
+          globalPendingOperations.delete(promise);
+          console.error(`[OMNI_AUTOMATION_DEBUG] Removed operation from pending set (remaining: ${globalPendingOperations.size})`);
+        }
+      });
+    } else {
+      console.error(`[OMNI_AUTOMATION_DEBUG] Warning: No global pending operations tracker available`);
+    }
+
+    return promise;
   }
 
   private wrapScript(script: string): string {

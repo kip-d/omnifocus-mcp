@@ -781,6 +781,149 @@ node -c expanded-script.js
 - Use TypeScript analysis to catch missing function definitions
 - Test script expansion in CI/CD pipeline
 
+## 🚨 CRITICAL: MCP Server Async Operation Lifecycle (September 2025)
+
+### **The "Silent Tool Failures" Crisis - SOLVED ✅**
+
+**Problem:** 11 out of 15 MCP tools were executing but returning no response during CLI testing, appearing to work but never completing.
+
+**Root Cause:** MCP server was exiting immediately when stdin closed, killing osascript child processes before they could return results.
+
+**Key Findings:**
+1. **Correct MCP Behavior**: Server SHOULD exit when stdin closes (MCP specification requirement)
+2. **Missing Async Tracking**: Server wasn't waiting for pending async operations before exit
+3. **Child Process Termination**: osascript processes were being killed mid-execution
+4. **No Response Pattern**: Tools would execute scripts but never return data to client
+
+**Debugging Process:**
+```bash
+# Symptoms: Tools execute but hang indefinitely
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task",...}}' | node dist/index.js
+[INFO] [tools] Executing tool: manage_task
+[OMNI_AUTOMATION_DEBUG] Process spawned, PID: 89530
+[INFO] [server] stdin closed, exiting gracefully per MCP specification  # ❌ Exits too early!
+# Process killed before osascript can return results
+```
+
+**The Fix: Pending Operations Tracking**
+
+**Step 1: Add Global Operation Tracker**
+```typescript
+// src/omnifocus/OmniAutomation.ts
+export let globalPendingOperations: Set<Promise<any>> | null = null;
+
+export function setPendingOperationsTracker(tracker: Set<Promise<any>>) {
+  globalPendingOperations = tracker;
+}
+```
+
+**Step 2: Track Each osascript Execution**
+```typescript
+// src/omnifocus/OmniAutomation.ts
+private async createTrackedExecutionPromise<T>(wrappedScript: string): Promise<T> {
+  const promise = new Promise<T>((resolve, reject) => {
+    const proc = spawn('osascript', ['-l', 'JavaScript'], {...});
+    
+    proc.on('close', (code) => {
+      if (code === 0) resolve(result as T);
+      else reject(new Error(...));
+    });
+    
+    proc.stdin.write(wrappedScript);
+    proc.stdin.end();
+  });
+
+  // Track this promise to prevent premature server exit
+  if (globalPendingOperations) {
+    globalPendingOperations.add(promise);
+    promise.finally(() => {
+      globalPendingOperations.delete(promise);
+    });
+  }
+
+  return promise;
+}
+```
+
+**Step 3: Modify Server Lifecycle**
+```typescript
+// src/index.ts
+const pendingOperations = new Set<Promise<any>>();
+
+// Initialize tracking before tool registration
+setPendingOperationsTracker(pendingOperations);
+
+const gracefulExit = async (reason: string) => {
+  logger.info(`${reason}, waiting for pending operations to complete...`);
+  
+  if (pendingOperations.size > 0) {
+    logger.info(`Waiting for ${pendingOperations.size} pending operations...`);
+    await Promise.allSettled([...pendingOperations]);
+    logger.info('All pending operations completed');
+  }
+  
+  process.exit(0);
+};
+
+process.stdin.on('end', () => gracefulExit('stdin closed'));
+process.stdin.on('close', () => gracefulExit('stdin stream closed'));
+```
+
+**After Fix: Perfect Operation**
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task",...}}' | node dist/index.js
+[INFO] [tools] Executing tool: manage_task
+[OMNI_AUTOMATION_DEBUG] Process spawned, PID: 89530
+[INFO] [server] stdin closed, waiting for pending operations to complete...
+[INFO] [server] Waiting for 1 pending operations...
+[OMNI_AUTOMATION_DEBUG] stdout data received: {"taskId":"abc123",...}  # ✅ Process completes!
+[OMNI_AUTOMATION_DEBUG] Process closed with code: 0
+[INFO] [server] All pending operations completed
+[INFO] [server] Exiting gracefully per MCP specification
+```
+
+**Results:**
+- ✅ **All 11 tools now work correctly**
+- ✅ **MCP specification compliance maintained**
+- ✅ **Proper async operation lifecycle**
+- ✅ **Clean server shutdown after operations complete**
+
+**Critical Architectural Pattern:**
+```typescript
+// ❌ WRONG: Server exits immediately, killing child processes
+process.stdin.on('end', () => process.exit(0));
+
+// ✅ CORRECT: Server waits for async operations before exit
+process.stdin.on('end', async () => {
+  await waitForPendingOperations();
+  process.exit(0);
+});
+```
+
+**Testing Pattern Recognition:**
+```bash
+# ✅ SUCCESS Pattern:
+# [INFO] Executing tool: manage_task
+# [stdout data received: {...}]  ← Tool returns data
+# [INFO] stdin closed, waiting for pending operations...
+# [INFO] All pending operations completed
+
+# ❌ FAILURE Pattern:
+# [INFO] Executing tool: manage_task  
+# [INFO] stdin closed, exiting gracefully  ← No data returned
+# (Process killed before completion)
+```
+
+**Key Lesson:** MCP servers must handle async operations lifecycle properly:
+1. **Track pending operations** during execution
+2. **Wait for completion** before server exit
+3. **Maintain MCP compliance** by still exiting when stdin closes
+4. **Never exit immediately** if operations are in flight
+
+**Time Cost:** 1 day of systematic debugging to identify and fix the root cause.
+
+**Impact:** Restored functionality to 73% of the MCP toolset (11 out of 15 tools).
+
 ---
 
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.

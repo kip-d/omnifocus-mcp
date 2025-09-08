@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_FOLDERS_SCRIPT } from '../../omnifocus/scripts/folders/list-folders.js';
+import { createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import {
   QueryFoldersSchema,
@@ -73,10 +73,10 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
       limit,
     };
 
-    const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
-      options: scriptOptions,
-    });
-    const result = await this.execJson(script, { operation: 'list' });
+    const script = createListFoldersScript(scriptOptions);
+    console.error(`[FOLDERS_DEBUG] Generated script length: ${script?.length}, type: ${typeof script}`);
+    console.error(`[FOLDERS_DEBUG] Script preview: ${script?.substring(0, 100)}...`);
+    const result = await this.execJson(script);
     if ((result as any).success === false) {
       return createErrorResponseV2(
         'query_folders',
@@ -103,14 +103,12 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     const { folderId, includeDetails = true } = args;
 
     // For get operation, we'll use list with a filter approach since we don't have a separate get script
-    const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
-      options: {
-        includeHierarchy: true,
-        includeProjects: includeDetails,
-        limit: 1000, // Set high limit to ensure we get all folders for filtering
-      },
+    const script = createListFoldersScript({
+      includeHierarchy: true,
+      includeProjects: includeDetails,
+      limit: 1000, // Set high limit to ensure we get all folders for filtering
     });
-    const result = await this.execJson(script, { operation: 'get', folderId });
+    const result = await this.execJson(script);
     if ((result as any).success === false) {
       return createErrorResponseV2(
         'query_folders',
@@ -143,15 +141,13 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
   private async handleSearch(args: z.infer<typeof SearchFoldersOperationSchema>, timer: OperationTimerV2): Promise<any> {
     const { searchTerm, includeDetails = true, limit = 100 } = args;
 
-    const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
-      options: {
-        search: searchTerm,
-        includeHierarchy: true,
-        includeProjects: includeDetails,
-        limit,
-      },
+    const script = createListFoldersScript({
+      search: searchTerm,
+      includeHierarchy: true,
+      includeProjects: includeDetails,
+      limit,
     });
-    const result = await this.execJson(script, { operation: 'search', searchTerm });
+    const result = await this.execJson(script);
     if ((result as any).success === false) {
       return createErrorResponseV2(
         'query_folders',
@@ -172,14 +168,12 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     const { folderId } = args;
 
     // Get folder with projects included
-    const script = this.omniAutomation.buildScript(LIST_FOLDERS_SCRIPT, {
-      options: {
-        includeHierarchy: false,
-        includeProjects: true,
-        limit: 1000,
-      },
+    const script = createListFoldersScript({
+      includeHierarchy: false,
+      includeProjects: true,
+      limit: 1000,
     });
-    const result = await this.execJson(script, { operation: 'get_projects', folderId });
+    const result = await this.execJson(script);
     if ((result as any).success === false) {
       return createErrorResponseV2(
         'query_folders',
@@ -211,11 +205,11 @@ export class QueryFoldersTool extends BaseTool<typeof QueryFoldersSchema> {
     return createSuccessResponseV2('query_folders', { projects, count: projects.length, operation: 'get_projects' }, undefined, { ...timer.toMetadata(), operation: 'get_projects', folder_id: folderId, project_count: projects.length });
   }
 
-  // Backward-compatible helper: adapt mocks that implement only `execute`
-  private async execJson(_script: string, ctx?: Record<string, any>) {
+  // Execute the script and adapt the response format
+  private async execJson(script: string) {
     const anyOmni: any = this.omniAutomation as any;
-    // Always prefer `execute(ctx)` for folder tests, since mocks accept a params object
-    const raw = await anyOmni.execute(ctx || { operation: 'list' });
+    // Execute the actual script
+    const raw = await anyOmni.execute(script);
     // Adapt mocks: { folders: [...] } -> { success:true, data:{ items:[...], summary:{ total } } }
     if (raw && typeof raw === 'object') {
       const obj: any = raw;

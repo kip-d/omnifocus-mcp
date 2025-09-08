@@ -19,6 +19,8 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
 
   async executeValidated(args: z.infer<typeof CreateTaskSchema>): Promise<any> {
     const timer = new OperationTimerV2();
+    
+    console.error(`[CREATE_TASK_DEBUG] Starting executeValidated with args:`, JSON.stringify(args, null, 2));
 
     try {
       // Convert local dates to UTC for OmniFocus with better error handling
@@ -45,13 +47,23 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         );
       }
 
+      console.error(`[CREATE_TASK_DEBUG] Converted task data:`, JSON.stringify(convertedTaskData, null, 2));
+      
       const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
+      console.error(`[CREATE_TASK_DEBUG] Built script length:`, script.length);
+      console.error(`[CREATE_TASK_DEBUG] Script first 200 chars:`, script.substring(0, 200));
+      
       const anyOmni: any = this.omniAutomation as any;
       let result: any;
+      console.error(`[CREATE_TASK_DEBUG] About to execute script...`);
+      
       try {
         // Prefer instance-level executeJson when available; fall back to execute.
         if (typeof anyOmni.executeJson === 'function' && Object.prototype.hasOwnProperty.call(anyOmni, 'executeJson')) {
+          console.error(`[CREATE_TASK_DEBUG] Using executeJson method`);
           const sr = await anyOmni.executeJson(script);
+          console.error(`[CREATE_TASK_DEBUG] executeJson returned:`, JSON.stringify(sr, null, 2));
+          
           if (sr && typeof sr === 'object' && 'success' in sr) {
             if (!(sr as any).success) {
               // Return standardized script error without throwing
@@ -87,13 +99,18 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
             result = sr;
           }
         } else {
+          console.error(`[CREATE_TASK_DEBUG] Using fallback execute method`);
           result = await anyOmni.execute(script) as CreateTaskScriptResponse;
+          console.error(`[CREATE_TASK_DEBUG] execute returned:`, JSON.stringify(result, null, 2));
         }
       } catch (e) {
+        console.error(`[CREATE_TASK_DEBUG] Script execution threw error:`, e);
         // Map known errors like permission denied to standardized response
         return this.handleError(e) as any;
       }
 
+      console.error(`[CREATE_TASK_DEBUG] Processing result:`, JSON.stringify(result, null, 2));
+      
       if (result && typeof result === 'object' && 'error' in result && result.error) {
         // Enhanced error response with recovery suggestions
         const errorMessage = result.message || 'Failed to create task';
@@ -160,7 +177,9 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       if (Array.isArray(args.tags) && args.tags.length > 0) this.cache.invalidate('tags');
 
       // Return standardized response
-      return createSuccessResponseV2(
+      console.error(`[CREATE_TASK_DEBUG] About to return success response with parsedResult:`, JSON.stringify(parsedResult, null, 2));
+      
+      const successResponse = createSuccessResponseV2(
         'create_task',
         { task: parsedResult as CreateTaskResponse },
         undefined,
@@ -176,7 +195,12 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
           },
         },
       );
+      
+      console.error(`[CREATE_TASK_DEBUG] Final success response:`, JSON.stringify(successResponse, null, 2));
+      return successResponse;
+      
     } catch (error) {
+      console.error(`[CREATE_TASK_DEBUG] Outer catch block error:`, error);
       return this.handleError(error) as any;
     }
   }

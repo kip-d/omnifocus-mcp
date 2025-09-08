@@ -25,23 +25,35 @@ const ManageTaskSchema = z.object({
     .optional()
     .describe('Task note/description'),
 
-  projectId: z.string()
+  projectId: z.union([z.string().min(1), z.literal(''), z.null()])
     .optional()
     .nullable()
+    .transform(val => val === '' ? null : val)
     .describe('Project ID to assign the task to (null/empty to move to inbox)'),
 
-  parentTaskId: z.string()
+  parentTaskId: z.union([z.string().min(1), z.literal(''), z.null()])
     .optional()
+    .transform(val => val === '' ? undefined : val)
     .describe('Parent task ID to create this as a subtask'),
 
-  dueDate: z.string()
+  dueDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
+    z.literal(''),
+    z.null()
+  ])
     .optional()
     .nullable()
+    .transform(val => val === '' ? null : val)
     .describe('Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
-  deferDate: z.string()
+  deferDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
+    z.literal(''),
+    z.null()
+  ])
     .optional()
     .nullable()
+    .transform(val => val === '' ? null : val)
     .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
   flagged: z.union([z.boolean(), z.string()])
@@ -78,8 +90,14 @@ const ManageTaskSchema = z.object({
     .describe('Remove the existing repeat rule'),
 
   // Completion date (for complete operation)
-  completionDate: z.string()
+  completionDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
+    z.literal(''),
+    z.null()
+  ])
     .optional()
+    .nullable()
+    .transform(val => val === '' ? null : val)
     .describe('Completion date (defaults to now)'),
 
   // Minimal response option (for update)
@@ -136,6 +154,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     const timer = new OperationTimerV2();
     const { operation, taskId, ...params } = args;
 
+    console.error(`[MANAGE_TASK_DEBUG] Starting ${operation} operation with args:`, JSON.stringify(args, null, 2));
+
     try {
       // Validate required parameters based on operation
       if (operation !== 'create' && !taskId) {
@@ -164,10 +184,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
       // Route to appropriate tool based on operation
       let result: any;
+      console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);
+      
       switch (operation) {
         case 'create':
           // Execute create operation
-          result = await this.createTool.execute({
+          console.error(`[MANAGE_TASK_DEBUG] Calling createTool.execute with params:`, JSON.stringify({
             name: params.name!,
             note: params.note,
             projectId: params.projectId,
@@ -179,7 +201,24 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             tags: params.tags,
             sequential: params.sequential,
             repeatRule: params.repeatRule,
-          });
+          }, null, 2));
+          
+          // Filter out null/undefined values for CreateTaskTool
+          const createParams: any = { name: params.name! };
+          if (params.note) createParams.note = params.note;
+          if (params.projectId) createParams.projectId = params.projectId;
+          if (params.parentTaskId) createParams.parentTaskId = params.parentTaskId;
+          if (params.dueDate) createParams.dueDate = params.dueDate;
+          if (params.deferDate) createParams.deferDate = params.deferDate;
+          if (params.flagged !== undefined) createParams.flagged = params.flagged;
+          if (params.estimatedMinutes !== undefined) createParams.estimatedMinutes = params.estimatedMinutes;
+          if (params.tags) createParams.tags = params.tags;
+          if (params.sequential !== undefined) createParams.sequential = params.sequential;
+          if (params.repeatRule) createParams.repeatRule = params.repeatRule;
+          
+          result = await this.createTool.execute(createParams);
+          
+          console.error(`[MANAGE_TASK_DEBUG] CreateTool returned result:`, JSON.stringify(result, null, 2));
           break;
 
         case 'update':
@@ -233,10 +272,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       }
 
       // Format result for CLI testing if needed
-      return this.formatForCLI(result, operation, 'success');
+      console.error(`[MANAGE_TASK_DEBUG] Final result before formatForCLI:`, JSON.stringify(result, null, 2));
+      const finalResult = this.formatForCLI(result, operation, 'success');
+      console.error(`[MANAGE_TASK_DEBUG] Final result after formatForCLI:`, JSON.stringify(finalResult, null, 2));
+      return finalResult;
 
     } catch (error) {
+      console.error(`[MANAGE_TASK_DEBUG] ERROR caught in executeValidated:`, error);
       const errorResult = this.handleError(error);
+      console.error(`[MANAGE_TASK_DEBUG] Error result:`, JSON.stringify(errorResult, null, 2));
       return this.formatForCLI(errorResult, operation, 'error');
     }
   }
