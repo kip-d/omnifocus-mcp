@@ -116,6 +116,26 @@ This server provides five optimized prompts for GTD workflows and essential refe
 
 These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows. The two inbox processing methods serve complementary purposes: Eisenhower Matrix for initial overwhelm/priority learning, GTD Process for daily maintenance.
 
+## Testing the Server
+
+For comprehensive testing of all v2.1.0 features:
+
+### **Claude Desktop Users**
+Copy the entire prompt from [`CLAUDE_DESKTOP_TEST_PROMPT.md`](CLAUDE_DESKTOP_TEST_PROMPT.md) into Claude Desktop for guided testing of all 15 tools, 5 prompts, and key workflows.
+
+### **Developers** 
+See [`COMPREHENSIVE_TEST_GUIDE.md`](COMPREHENSIVE_TEST_GUIDE.md) for detailed technical testing procedures.
+
+### **Quick Health Check**
+```bash
+# Test server is running
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js | jq -r '.result.tools | length'
+# Should return: 15
+
+# Test a simple operation  
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
+```
+
 ## Basic Usage
 
 ### Query Tasks (List)
