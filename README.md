@@ -101,24 +101,20 @@ For ultra-minimal setups, use [`docs/API-COMPACT.md`](docs/API-COMPACT.md) (~400
 
 ## Using MCP Prompts in Claude Desktop
 
-This server provides nine pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
+This server provides five optimized prompts for GTD workflows and essential reference. To access them in Claude Desktop (v0.12.55+):
 
 1. Click the **"+"** button (bottom-left of the input box)
 2. Select **"Add from omnifocus"** from the menu
 3. Choose from available prompts:
    - **GTD Workflows:**
-     - `gtd_process_inbox` - Process inbox with 2-minute rule
-     - `eisenhower_matrix_inbox` - Process inbox items using the Eisenhower Matrix (Urgent/Important quadrants)
+     - `gtd_process_inbox` - Process inbox using pure GTD methodology (2-minute rule, actionable decision tree)
+     - `eisenhower_matrix_inbox` - Process inbox using Urgent/Important quadrants (complementary to GTD)
      - `gtd_weekly_review` - Complete weekly review with stale project detection
      - `gtd_principles` - Core GTD methodology guide
-   - **Reference Guides:**
+   - **Essential Reference:**
      - `quick_reference` - Essential tips and emergency commands
-     - `tool_discovery_guide` - All tools with performance characteristics
-     - `common_patterns_guide` - Best practices and workflows
-     - `troubleshooting_guide` - Common errors and solutions
-     - `tag_performance_guide` - Optimize tag queries
 
-These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows.
+These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows. The two inbox processing methods serve complementary purposes: Eisenhower Matrix for initial overwhelm/priority learning, GTD Process for daily maintenance.
 
 ## Basic Usage
 

@@ -10,10 +10,6 @@ import { WeeklyReviewPrompt } from './gtd/WeeklyReviewPrompt.js';
 import { InboxProcessingPrompt } from './gtd/InboxProcessingPrompt.js';
 import { GTDPrinciplesPrompt } from './gtd/GTDPrinciplesPrompt.js';
 import { EisenhowerMatrixPrompt } from './gtd/eisenhower-matrix.js';
-import { TagPerformancePrompt } from './reference/TagPerformancePrompt.js';
-import { ToolDiscoveryPrompt } from './reference/ToolDiscoveryPrompt.js';
-import { CommonPatternsPrompt } from './reference/CommonPatternsPrompt.js';
-import { TroubleshootingPrompt } from './reference/TroubleshootingPrompt.js';
 import { QuickReferencePrompt } from './reference/QuickReferencePrompt.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -30,11 +26,7 @@ export function registerPrompts(server: Server): void {
     new InboxProcessingPrompt(),
     new EisenhowerMatrixPrompt(),
 
-    // Reference/Documentation Prompts
-    new TagPerformancePrompt(),
-    new ToolDiscoveryPrompt(),
-    new CommonPatternsPrompt(),
-    new TroubleshootingPrompt(),
+    // Essential Reference
     new QuickReferencePrompt(),
   ];
 
