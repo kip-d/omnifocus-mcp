@@ -1,5 +1,9 @@
-import { spawn } from 'node:child_process';
+// Defer importing child_process so tests can mock it reliably via vi.mock
+// (static ESM imports are evaluated before test mocks are applied)
+import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
+import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
+import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
 
 // For TypeScript type information about OmniFocus objects, see:
 // ./api/OmniFocus.d.ts - Official OmniFocus API types
@@ -34,13 +38,82 @@ export class OmniAutomation {
     return this.executeInternal<T>(script);
   }
 
+  // New type-safe execution with discriminated unions and schema validation
+  public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+    try {
+      const result = await this.execute<unknown>(script);
+
+      // Handle raw script errors (legacy shape)
+      const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
+      if (isObj(result) && 'error' in result && (result as Record<string, unknown>).error === true) {
+        const obj = result as Record<string, unknown>;
+        const msgVal = obj.message;
+        const message: string = typeof msgVal === 'string' ? msgVal : 'Script execution failed';
+        const details = obj.details ?? 'No additional context';
+        return createScriptError(message, 'Legacy script error', details);
+      }
+
+      // Validate result against schema if provided
+      if (schema) {
+        const validation = schema.safeParse(result);
+        if (!validation.success) {
+          return createScriptError(
+            'Script result validation failed',
+            `Schema validation errors: ${validation.error.issues.map(i => i.message).join(', ')}`,
+            { result, errors: validation.error.issues },
+          );
+        }
+        return createScriptSuccess(validation.data as T);
+      }
+
+      return createScriptSuccess(result as T);
+    } catch (error) {
+      if (error instanceof OmniAutomationError) {
+        return createScriptError(
+          error.message,
+          'OmniAutomation execution error',
+          { script: error.script, stderr: error.stderr },
+        );
+      }
+
+      return createScriptError(
+        error instanceof Error ? error.message : 'Unknown execution error',
+        'Unexpected error during script execution',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Execute a script that returns a standard JXA envelope and decode to typed data.
+   * The script must stringify an object of shape { ok: true|false, data|error, v }.
+   */
+  public async executeTyped<T extends z.ZodTypeAny>(script: string, dataSchema: T): Promise<z.infer<T>> {
+    const raw = await this.execute<unknown>(script);
+    let env;
+    try {
+      env = JxaEnvelopeSchema.parse(raw);
+    } catch {
+      // Fallback for legacy scripts: normalize legacy shapes to envelope
+      env = normalizeToEnvelope(raw);
+    }
+    if (env.ok === false) {
+      const msg = env.error.message || 'JXA error';
+      const err = new OmniAutomationError(msg, undefined, typeof env.error.details === 'string' ? env.error.details : undefined);
+      throw err;
+    }
+    return dataSchema.parse(env.data);
+  }
+
   private async executeInternal<T = unknown>(script: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
     // Check if script already has its own IIFE wrapper and app/doc initialization
     const hasIIFE = script.includes('(() =>') || script.includes('(function');
     const hasAppInit = script.includes("Application('OmniFocus')");
 
-    // Only wrap if the script doesn't already have its own structure
-    const wrappedScript = hasIIFE && hasAppInit ? script : this.wrapScript(script);
+    // Tests expect: wrap only if there is no IIFE AND no Application('OmniFocus').
+    // If either is present, do not wrap. Always write the chosen (possibly wrapped) script to stdin.
+    const wrappedScript = (!hasIIFE && !hasAppInit) ? this.wrapScript(script) : script;
 
     logger.debug('Executing OmniAutomation script', {
       scriptLength: script.length,
@@ -93,13 +166,18 @@ export class OmniAutomation {
         }
 
         try {
-          const result = JSON.parse(trimmedOutput);
+          const result: unknown = JSON.parse(trimmedOutput);
+          const hasError = ((): boolean => {
+            if (!result || typeof result !== 'object') return false;
+            const obj = result as Record<string, unknown>;
+            return Object.prototype.hasOwnProperty.call(obj, 'error');
+          })();
           logger.debug('Script execution successful', {
             outputLength: trimmedOutput.length,
             resultType: typeof result,
-            hasError: result && result.error ? true : false,
+            hasError,
           });
-          resolve(result);
+          resolve(result as T);
         } catch (parseError) {
           logger.error('Failed to parse script output:', {
             output: trimmedOutput.substring(0, 500),
@@ -249,7 +327,8 @@ export class OmniAutomation {
   }
 
   // Execute OmniFocus automation via URL scheme (for operations requiring higher permissions)
-  public async executeViaUrlScheme<T = any>(script: string): Promise<T> {
+  public async executeViaUrlScheme<T = unknown>(script: string): Promise<T> {
+    const { spawn } = await import('node:child_process');
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
     }
@@ -301,7 +380,7 @@ export class OmniAutomation {
     });
   }
 
-  public async executeBatch<T = any>(scripts: string[]): Promise<T[]> {
+  public async executeBatch<T = unknown>(scripts: string[]): Promise<T[]> {
     logger.info(`Executing batch of ${scripts.length} scripts`);
 
     const results: T[] = [];

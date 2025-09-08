@@ -10,6 +10,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  * - Prevent circular hierarchy
  */
 export const MOVE_FOLDER_SCRIPT = `
+  // MOVE_FOLDER
   ${getMinimalHelpers()}
   
   // Check if moving would create circular hierarchy

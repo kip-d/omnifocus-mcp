@@ -37,6 +37,7 @@ describe('QueryTasksToolV2', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
+      executeJson: vi.fn(),
       execute: vi.fn(),
     };
     
@@ -57,7 +58,7 @@ describe('QueryTasksToolV2', () => {
     it('should query tasks with mode all', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 }
       });
@@ -76,7 +77,7 @@ describe('QueryTasksToolV2', () => {
     it('should handle search mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 }
       });
@@ -94,7 +95,7 @@ describe('QueryTasksToolV2', () => {
     it('should handle overdue mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 }
       });
@@ -130,7 +131,7 @@ describe('QueryTasksToolV2', () => {
     it('should set cache after fetching for overdue mode', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({
+      mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 }
       });
@@ -148,7 +149,7 @@ describe('QueryTasksToolV2', () => {
     it('should handle script execution errors', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.execute.mockResolvedValue({ error: true, message: 'Script failed' });
+      mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed' , details: 'Test error' });
 
       const result = await tool.executeValidated({ 
         mode: 'all',

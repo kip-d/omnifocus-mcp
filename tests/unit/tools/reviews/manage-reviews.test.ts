@@ -33,7 +33,7 @@ describe('ManageReviewsTool', () => {
     };
     mockOmni = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
@@ -57,7 +57,7 @@ describe('ManageReviewsTool', () => {
   it('lists projects for review with summary buckets', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ projects: makeProjects() });
+    mockOmni.executeJson.mockResolvedValue({ projects: makeProjects() });
 
     const res: any = await tool.executeValidated({ operation: 'list_for_review', overdue: false, daysAhead: 7 } as any);
 
@@ -80,13 +80,13 @@ describe('ManageReviewsTool', () => {
     const res: any = await tool.executeValidated({ operation: 'list_for_review', overdue: false, daysAhead: 7 } as any);
     expect(res.success).toBe(true);
     expect(res.metadata.from_cache).toBe(true);
-    expect(mockOmni.execute).not.toHaveBeenCalled();
+    expect(mockOmni.executeJson).not.toHaveBeenCalled();
   });
 
   it('handles null result from script', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue(null);
+    mockOmni.executeJson.mockResolvedValue(null);
 
     const res: any = await tool.executeValidated({ operation: 'list_for_review', overdue: false, daysAhead: 7 } as any);
     expect(res.success).toBe(false);
@@ -95,7 +95,7 @@ describe('ManageReviewsTool', () => {
 
   it('marks project as reviewed and invalidates caches', async () => {
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ ok: true, id: 'p1' });
+    mockOmni.executeJson.mockResolvedValue({ ok: true, id: 'p1' });
 
     const res: any = await tool.executeValidated({ operation: 'mark_reviewed', projectId: 'p1', updateNextReviewDate: true } as any);
     expect(res.success).toBe(true);
@@ -107,7 +107,7 @@ describe('ManageReviewsTool', () => {
 
   it('set_schedule updates multiple projects and invalidates caches', async () => {
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ updated: 2 });
+    mockOmni.executeJson.mockResolvedValue({ updated: 2 });
 
     const res: any = await tool.executeValidated({
       operation: 'set_schedule',
@@ -125,7 +125,7 @@ describe('ManageReviewsTool', () => {
 
   it('clear_schedule clears schedules and invalidates caches', async () => {
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ ok: true });
+    mockOmni.executeJson.mockResolvedValue({ ok: true });
 
     const res: any = await tool.executeValidated({
       operation: 'clear_schedule',

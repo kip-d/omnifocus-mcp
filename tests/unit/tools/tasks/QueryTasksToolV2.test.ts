@@ -25,7 +25,10 @@ describe('QueryTasksToolV2', () => {
     
     // Mock OmniAutomation
     mockOmni = {
-      execute: vi.fn(),
+      executeJson: vi.fn(),
+      executeTyped: vi.fn(async (_s: string, schema: any) => schema.parse({
+        tasks: [], overdueCount: 0, dueTodayCount: 0, flaggedCount: 0,
+      })),
       buildScript: vi.fn((template, params) => `script with ${JSON.stringify(params)}`),
     };
     (tool as any).omniAutomation = mockOmni;
@@ -45,7 +48,7 @@ describe('QueryTasksToolV2', () => {
       const modes = ['all', 'overdue', 'today', 'upcoming', 'available', 'blocked', 'flagged', 'smart_suggest'];
       
       for (const mode of modes) {
-        mockOmni.execute.mockResolvedValueOnce({
+        mockOmni.executeJson.mockResolvedValueOnce({
           tasks: [],
           summary: { total_tasks: 0, completed: 0, incomplete: 0 },
         });
@@ -55,7 +58,7 @@ describe('QueryTasksToolV2', () => {
       }
       
       // Search mode requires search parameter
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -69,7 +72,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should accept search parameters', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -83,7 +86,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should accept project filter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -97,7 +100,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should accept tags filter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -111,7 +114,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle boolean completed parameter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -125,7 +128,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should coerce string boolean values', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -139,7 +142,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle dueBy parameter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -153,7 +156,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle daysAhead parameter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -167,7 +170,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should coerce string daysAhead to number', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -193,7 +196,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle limit parameter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -207,7 +210,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should coerce string limit to number', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -233,7 +236,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle details parameter', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -247,7 +250,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should coerce string details to boolean', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -261,7 +264,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should use default values', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -290,7 +293,7 @@ describe('QueryTasksToolV2', () => {
         },
       ];
       
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: mockTasks,
         summary: {
           total_tasks: 2,
@@ -311,7 +314,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle empty results', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -324,7 +327,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should include metadata in response', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -340,7 +343,7 @@ describe('QueryTasksToolV2', () => {
 
   describe('mode-specific behavior', () => {
     it('should handle search mode', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [{ id: 'task1', name: 'Meeting notes', completed: false }],
         summary: { total_tasks: 1, completed: 0, incomplete: 1 },
       });
@@ -352,11 +355,11 @@ describe('QueryTasksToolV2', () => {
       
       expect(result.success).toBe(true);
       expect(mockOmni.buildScript).toHaveBeenCalled();
-      expect(mockOmni.execute).toHaveBeenCalled();
+      expect(mockOmni.executeJson).toHaveBeenCalled();
     });
 
     it('should handle today mode', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { 
           total_tasks: 3,
@@ -374,7 +377,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle overdue mode', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { 
           total_tasks: 5,
@@ -390,7 +393,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle upcoming mode with daysAhead', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 10, completed: 0, incomplete: 10 },
       });
@@ -410,7 +413,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle flagged mode', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { 
           total_tasks: 7,
@@ -429,7 +432,7 @@ describe('QueryTasksToolV2', () => {
 
   describe('error handling', () => {
     it('should handle script execution errors', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         error: true,
         message: 'Script failed',
         details: { code: -1743 },
@@ -444,7 +447,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle null results', async () => {
-      mockOmni.execute.mockResolvedValueOnce(null);
+      mockOmni.executeJson.mockResolvedValueOnce(null);
       
       const result = await tool.execute({ mode: 'all' });
       
@@ -453,7 +456,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle missing summary in response', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         // summary missing - createTaskResponseV2 will generate it
       });
@@ -465,7 +468,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle permission errors', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         error: true,
         message: 'Error: -1743 - Not allowed to send Apple events',
         details: { code: -1743 },
@@ -480,7 +483,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle timeout errors', async () => {
-      mockOmni.execute.mockRejectedValueOnce(new Error('Script execution timed out'));
+      mockOmni.executeJson.mockRejectedValueOnce(new Error('Script execution timed out'));
       
       const result = await tool.execute({ mode: 'all' });
       
@@ -515,7 +518,7 @@ describe('QueryTasksToolV2', () => {
         summary: { total_tasks: 1, completed: 0, incomplete: 1 },
       };
       
-      mockOmni.execute.mockResolvedValueOnce(responseData);
+      mockOmni.executeJson.mockResolvedValueOnce(responseData);
       
       // Use a mode that actually caches (not 'all')
       const result = await tool.execute({ mode: 'overdue' });
@@ -533,7 +536,7 @@ describe('QueryTasksToolV2', () => {
 
   describe('input normalization', () => {
     it('should normalize boolean strings', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -548,7 +551,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should normalize numeric strings', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
@@ -563,7 +566,7 @@ describe('QueryTasksToolV2', () => {
     });
 
     it('should handle null and undefined values', async () => {
-      mockOmni.execute.mockResolvedValueOnce({
+      mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });

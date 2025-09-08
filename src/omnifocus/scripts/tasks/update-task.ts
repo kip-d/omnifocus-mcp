@@ -438,3 +438,162 @@ export const UPDATE_TASK_SCRIPT = `
   }
   })();
 `;
+
+/**
+ * NEW ARCHITECTURE: Function argument-based script generation for v2.1.0
+ * Eliminates template substitution risks by passing parameters as function arguments
+ */
+export function createUpdateTaskScript(taskId: string, updates: any): string {
+  return `
+  ${getRecurrenceHelpers()}
+  ${BRIDGE_HELPERS}
+  
+  function updateTask(taskId, updates) {
+    try {
+      const app = Application('OmniFocus');
+      const doc = app.defaultDocument();
+      
+      // Find task by ID without using 'whose' per performance guidance
+      let task = null;
+      const tasks = doc.flattenedTasks();
+      if (tasks) {
+        for (let i = 0; i < tasks.length; i++) {
+          if (safeGet(() => tasks[i].id()) === taskId) { 
+            task = tasks[i]; 
+            break; 
+          }
+        }
+      }
+      
+      if (!task) {
+        return JSON.stringify({
+          success: false,
+          error: "Task with ID '" + taskId + "' not found."
+        });
+      }
+      
+      const changes = [];
+      
+      // Update basic properties
+      if (updates.name && updates.name !== task.name()) {
+        task.name = updates.name;
+        changes.push("Name updated");
+      }
+      
+      if (updates.note !== undefined) {
+        const noteValue = updates.note === null ? '' : String(updates.note);
+        task.note = noteValue;
+        changes.push("Note updated");
+      }
+      
+      if (updates.flagged !== undefined) {
+        task.flagged = updates.flagged;
+        changes.push(updates.flagged ? "Flagged" : "Unflagged");
+      }
+      
+      if (updates.completed !== undefined) {
+        task.completed = updates.completed;
+        if (updates.completed) {
+          task.completionDate = new Date();
+          changes.push("Marked completed");
+        } else {
+          task.completionDate = null;
+          changes.push("Marked incomplete");
+        }
+      }
+      
+      // Date updates
+      if (updates.dueDate !== undefined) {
+        if (updates.dueDate === null) {
+          task.dueDate = null;
+          changes.push("Due date cleared");
+        } else {
+          task.dueDate = new Date(updates.dueDate);
+          changes.push("Due date set");
+        }
+      }
+      
+      if (updates.deferDate !== undefined) {
+        if (updates.deferDate === null) {
+          task.deferDate = null;
+          changes.push("Defer date cleared");
+        } else {
+          task.deferDate = new Date(updates.deferDate);
+          changes.push("Defer date set");
+        }
+      }
+      
+      // Project assignment (simplified)
+      if (updates.projectId !== undefined) {
+        if (updates.projectId === null || updates.projectId === "" || updates.projectId === "null") {
+          task.assignedContainer = doc.inboxTasks;
+          changes.push("Moved to inbox");
+        } else {
+          const projects = doc.flattenedProjects();
+          let targetProject = null;
+          for (let i = 0; i < projects.length; i++) {
+            if (projects[i].id() === updates.projectId) {
+              targetProject = projects[i];
+              break;
+            }
+          }
+          
+          if (targetProject) {
+            task.assignedContainer = targetProject;
+            changes.push("Moved to project: " + targetProject.name());
+          } else {
+            changes.push("Warning: Project not found");
+          }
+        }
+      }
+      
+      // Tag updates (simplified using bridge helpers)
+      if (updates.tags !== undefined && Array.isArray(updates.tags)) {
+        try {
+          const tagResult = updateTaskTags(task, updates.tags);
+          if (tagResult.success) {
+            changes.push("Tags updated");
+          } else {
+            changes.push("Warning: " + tagResult.message);
+          }
+        } catch (tagError) {
+          changes.push("Warning: Tag update failed");
+        }
+      }
+      
+      if (changes.length === 0) {
+        return JSON.stringify({
+          success: true,
+          data: { 
+            success: true,
+            message: "No changes made" 
+          }
+        });
+      }
+      
+      return JSON.stringify({
+        success: true,
+        data: {
+          success: true,
+          message: "Task updated successfully",
+          changes: changes,
+          task: {
+            id: task.id(),
+            name: task.name(),
+            note: task.note(),
+            completed: task.completed(),
+            dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
+            deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
+            flagged: task.flagged()
+          }
+        }
+      });
+    } catch (error) {
+      return formatError(error, 'update_task');
+    }
+  }
+  
+  // Execute with safe parameter passing
+  return updateTask(${JSON.stringify(taskId)}, ${JSON.stringify(updates)});
+  `;
+}

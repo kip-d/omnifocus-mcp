@@ -25,11 +25,7 @@ export const PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT = `
       const doc = app.defaultDocument();
       
       if (!doc) {
-        return JSON.stringify({
-          error: true,
-          message: "OmniFocus document is not available",
-          details: "No default document found"
-        });
+        return JSON.stringify({ ok: false, error: { message: "OmniFocus document is not available", details: "No default document found" }, v: '1' });
       }
       
       const now = new Date();
@@ -183,33 +179,33 @@ export const PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT = `
       }
       
       return JSON.stringify({
-        summary: {
-          period: options.period,
-          totalProjects: totalProjects,
-          activeProjects: activeProjects,
-          totalTasks: totalTasks,
-          completedTasks: totalCompleted,
-          availableTasks: totalAvailable,
-          completionRate: parseFloat(completionRate),
-          dailyAverage: parseFloat(dailyAverage),
-          daysInPeriod: daysInPeriod
-        },
-        projectStats: projectStats,
-        tagStats: tagStats,
-        insights: insights,
-        metadata: {
-          generated_at: new Date().toISOString(),
-          method: 'optimized_direct_api',
-          note: 'Using numberOfTasks(), numberOfCompletedTasks(), and availableTaskCount() for performance'
+        ok: true,
+        v: '1',
+        data: {
+          summary: {
+            period: options.period,
+            totalProjects: totalProjects,
+            activeProjects: activeProjects,
+            totalTasks: totalTasks,
+            completedTasks: totalCompleted,
+            availableTasks: totalAvailable,
+            completionRate: parseFloat(completionRate),
+            dailyAverage: parseFloat(dailyAverage),
+            daysInPeriod: daysInPeriod
+          },
+          projectStats: projectStats,
+          tagStats: tagStats,
+          insights: insights,
+          metadata: {
+            generated_at: new Date().toISOString(),
+            method: 'optimized_direct_api',
+            note: 'Using numberOfTasks(), numberOfCompletedTasks(), and availableTaskCount() for performance'
+          }
         }
       });
       
     } catch (error) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to get productivity statistics: " + error.toString(),
-        details: error.message
-      });
+      return JSON.stringify({ ok: false, error: { message: "Failed to get productivity statistics: " + (error && error.toString ? error.toString() : 'Unknown error'), details: error && error.message ? error.message : undefined }, v: '1' });
     }
   })();
 `;

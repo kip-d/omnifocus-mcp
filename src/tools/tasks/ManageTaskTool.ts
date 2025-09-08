@@ -4,7 +4,7 @@ import { CreateTaskTool } from './CreateTaskTool.js';
 import { UpdateTaskTool } from './UpdateTaskTool.js';
 import { CompleteTaskTool } from './CompleteTaskTool.js';
 import { DeleteTaskTool } from './DeleteTaskTool.js';
-import { createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
@@ -133,26 +133,28 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
   }
 
   async executeValidated(args: ManageTaskInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
     const { operation, taskId, ...params } = args;
 
     try {
       // Validate required parameters based on operation
       if (operation !== 'create' && !taskId) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
           `taskId is required for ${operation} operation`,
+          undefined,
           { operation },
           timer.toMetadata(),
         );
       }
 
       if (operation === 'create' && !params.name) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
           'name is required for create operation',
+          undefined,
           { operation },
           timer.toMetadata(),
         );
@@ -212,10 +214,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           });
 
         default:
-          return createErrorResponse(
+          return createErrorResponseV2(
             'manage_task',
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
+            undefined,
             { operation },
             timer.toMetadata(),
           );

@@ -3,11 +3,12 @@ import { BaseTool } from '../base.js';
 import {
   LIST_PROJECTS_SCRIPT,
   CREATE_PROJECT_SCRIPT,
-  UPDATE_PROJECT_SCRIPT,
   COMPLETE_PROJECT_SCRIPT,
   DELETE_PROJECT_SCRIPT,
   GET_PROJECT_STATS_SCRIPT,
 } from '../../omnifocus/scripts/projects.js';
+import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
+import { isScriptSuccess, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -202,21 +203,21 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    const raw = await this.execJsonFlexible(script);
+    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
+    if (!(result as any).success) {
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
-        result?.message || 'Failed to list projects',
+        (result as any).error || 'Script execution failed',
         'Check if OmniFocus is running',
-        result?.details,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
 
     // Parse dates and cache
-    const projects = this.parseProjects(result.projects || result);
+    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(
@@ -261,15 +262,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       name: args.name,
       options: projectData,
     });
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    const raw = await this.execJsonFlexible(script);
+    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
+    if (!(result as any).success) {
       return createErrorResponseV2(
         'projects',
         'CREATE_FAILED',
-        result?.message || 'Failed to create project',
+        (result as any).error || 'Script execution failed',
         'Check the project name and try again',
-        result?.details,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
@@ -279,7 +280,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { project: result },
+      { project: result.data },
       undefined, // No summary for create operation
       { ...timer.toMetadata(), operation: 'create' },
     );
@@ -322,21 +323,17 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     if (args.status !== undefined) updates.status = args.status;
 
-    // Execute update
-    const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, {
-      projectId: args.projectId,
-      updates,
-    });
-
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    // Execute update using new function argument approach with schema validation
+    const script = createUpdateProjectScript(args.projectId!, updates);
+    const raw = await this.execJsonFlexible(script);
+    const isErrorLike = raw && typeof raw === 'object' && 'success' in (raw as any) && (raw as any).success === false;
+    if (isErrorLike) {
       return createErrorResponseV2(
         'projects',
         'UPDATE_FAILED',
-        result?.message || 'Failed to update project',
+        (raw as any).error || 'Failed to update project',
         'Check the project ID and try again',
-        result?.details,
+        (raw as any).details,
         timer.toMetadata(),
       );
     }
@@ -344,10 +341,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     // Invalidate cache
     this.cache.invalidate('projects');
 
+    const updated = raw;
     return createSuccessResponseV2(
       'projects',
-      { project: result },
-      undefined, // No summary for update operation
+      {
+        operation: updated,
+        project: (updated && (updated as any).project) ? (updated as any).project : updated,
+      },
+      undefined,
       { ...timer.toMetadata(), operation: 'update' },
     );
   }
@@ -370,15 +371,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       completeAllTasks: false, // Default to not completing all tasks
     });
 
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    const raw = await this.execJsonFlexible(script);
+    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
+    if (!(result as any).success) {
       return createErrorResponseV2(
         'projects',
         'COMPLETE_FAILED',
-        result?.message || 'Failed to complete project',
+        (result as any).error || 'Script execution failed',
         'Check the project ID and ensure it\'s not already completed',
-        result?.details,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
@@ -389,7 +390,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { project: result },
+      { project: result.data },
       undefined, // No summary for complete operation
       { ...timer.toMetadata(), operation: 'complete' },
     );
@@ -413,15 +414,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       deleteTasks: false, // Don't delete tasks, move them to inbox
     });
 
-    const result = await this.omniAutomation.execute<any>(script);
-
-    if (!result || result.error) {
+    const raw = await this.execJsonFlexible(script);
+    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
+    if (!(result as any).success) {
       return createErrorResponseV2(
         'projects',
         'DELETE_FAILED',
-        result?.message || 'Failed to delete project',
+        (result as any).error || 'Script execution failed',
         'Check the project ID and permissions',
-        result?.details,
+        (result as any).details,
         timer.toMetadata(),
       );
     }
@@ -436,6 +437,19 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       undefined, // No summary for delete operation
       { ...timer.toMetadata(), operation: 'delete' },
     );
+  }
+
+  // Flexible execJson: unwrap ScriptResult when present, otherwise return raw
+  private async execJsonFlexible(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      const res = await anyOmni.executeJson(script);
+      if (res && typeof res === 'object' && 'success' in res) {
+        return (res as any).success ? (res as any).data : res;
+      }
+      return res;
+    }
+    return await anyOmni.execute(script);
   }
 
   private async handleReviewProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
@@ -464,21 +478,21 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (!result || result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
-        result?.message || 'Failed to get projects for review',
+        result.error,
         undefined,
-        result?.details,
+        result.details,
         timer.toMetadata(),
       );
     }
 
     // Filter for review and cache
-    const projects = this.parseProjects(result.projects || result);
+    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
     const needingReview = projects.filter(p => {
       if (!p.nextReviewDate) return false;
       return new Date(p.nextReviewDate) < new Date();
@@ -519,21 +533,21 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-    if (!result || result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
-        result?.message || 'Failed to get active projects',
+        result.error,
         undefined,
-        result?.details,
+        result.details,
         timer.toMetadata(),
       );
     }
 
     // Parse and cache
-    const projects = this.parseProjects(result.projects || result);
+    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(
@@ -566,25 +580,25 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       },
     });
 
-    const result = await this.omniAutomation.execute<any>(script);
+    const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
 
-    if (!result || result.error) {
+    if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
-        result?.message || 'Failed to get project statistics',
+        result.error,
         'Check if OmniFocus is running',
-        result?.details,
+        result.details,
         timer.toMetadata(),
       );
     }
 
     // Cache the result
-    this.cache.set('projects', cacheKey, result);
+    this.cache.set('projects', cacheKey, result.data);
 
     return createSuccessResponseV2(
       'projects',
-      result,
+      result.data,
       undefined, // No summary for stats operation
       { ...timer.toMetadata(), from_cache: false, operation: 'stats' },
     );

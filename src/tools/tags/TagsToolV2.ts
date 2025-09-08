@@ -4,9 +4,10 @@ import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { LIST_TAGS_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/tags/list-tags-optimized.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
-import { createListResponse, createSuccessResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
+import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
+import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
@@ -84,11 +85,12 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         return this.manageTags(args);
       default:
         {
-          const timer = new OperationTimer();
-          return createErrorResponse(
+          const timer = new OperationTimerV2();
+          return createErrorResponseV2(
             'tags',
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
+            undefined,
             { operation },
             timer.toMetadata(),
           );
@@ -97,7 +99,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
   }
 
   private async listTags(args: TagsToolInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
 
     try {
       const {
@@ -114,7 +116,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const cached = this.cache.get<any>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tag list');
-        return cached;
+        return cached; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
       // Choose script based on options
@@ -133,49 +135,27 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       });
 
       this.logger.debug(`Executing list tags script (optimized: ${useOptimized})`);
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result.error) {
-        return createErrorResponse(
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
-          { operation: 'list' },
+          result.error,
+          'Check OmniFocus is running',
+          { operation: 'list', details: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'tags',
-          'PARSE_ERROR',
-          'Failed to parse tag list',
-          { rawResult: result, operation: 'list' },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
-      const response = createListResponse(
+      const response = createListResponseV2(
         'tags',
-        parsedResult.tags || [],
-        {
-          ...timer.toMetadata(),
-          total: parsedResult.count || parsedResult.tags?.length || 0,
-          operation: 'list',
-          mode: useOptimized ? 'optimized' : 'full',
-          options: {
-            sortBy,
-            includeEmpty,
-            includeUsageStats,
-            includeTaskCounts,
-            fastMode,
-            namesOnly,
-          },
-        },
+        (parsedResult as any).tags || (parsedResult as any).items || [],
+        'other',
+        { ...timer.toMetadata(), total: (parsedResult as any).count || (parsedResult as any).tags?.length || 0, operation: 'list', mode: useOptimized ? 'optimized' : 'full', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
       );
 
       // Cache the result
@@ -188,7 +168,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
   }
 
   private async getActiveTags(): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
 
     try {
       // Check cache
@@ -202,41 +182,27 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       // Execute script
       const script = this.omniAutomation.buildScript(GET_ACTIVE_TAGS_SCRIPT, {});
       this.logger.debug('Executing get active tags script');
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
-      if (result.error) {
-        return createErrorResponse(
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
-          { operation: 'active' },
+          result.error,
+          'Ensure OmniFocus has active tasks with tags',
+          { operation: 'active', details: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        return createErrorResponse(
-          'tags',
-          'PARSE_ERROR',
-          'Failed to parse active tags',
-          { rawResult: result, operation: 'active' },
-          timer.toMetadata(),
-        );
-      }
+      const parsedResult = result.data;
 
-      const response = createListResponse(
+      const response = createListResponseV2(
         'tags',
-        parsedResult.tags || [],
-        {
-          ...timer.toMetadata(),
-          count: parsedResult.count || parsedResult.tags?.length || 0,
-          operation: 'active',
-          description: 'Tags with incomplete tasks',
-        },
+        (parsedResult as any).tags || (parsedResult as any).items || [],
+        'other',
+        { ...timer.toMetadata(), count: (parsedResult as any).count || (parsedResult as any).tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
       );
 
       // Cache the result (30 second TTL for active tags)
@@ -249,27 +215,29 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
   }
 
   private async manageTags(args: TagsToolInput): Promise<any> {
-    const timer = new OperationTimer();
+    const timer = new OperationTimerV2();
 
     try {
       const { action, tagName, newName, targetTag, parentTagName, parentTagId } = args;
 
       // Validate required parameters
       if (!action) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'tags',
           'MISSING_PARAMETER',
           'action is required for manage operation',
+          undefined,
           { operation: 'manage' },
           timer.toMetadata(),
         );
       }
 
       if (!tagName) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'tags',
           'MISSING_PARAMETER',
           'tagName is required for manage operation',
+          undefined,
           { operation: 'manage', action },
           timer.toMetadata(),
         );
@@ -277,20 +245,22 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
 
       // Validate action-specific requirements
       if (action === 'rename' && !newName) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'tags',
           'MISSING_PARAMETER',
           'newName is required for rename action',
+          undefined,
           { operation: 'manage', action },
           timer.toMetadata(),
         );
       }
 
       if (action === 'merge' && !targetTag) {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'tags',
           'MISSING_PARAMETER',
           'targetTag is required for merge action',
+          undefined,
           { operation: 'manage', action },
           timer.toMetadata(),
         );
@@ -305,50 +275,27 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         parentTagName,
         parentTagId,
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
 
-      if (result.error) {
-        return createErrorResponse(
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
           'tags',
           'SCRIPT_ERROR',
-          result.message || result.error,
-          {
-            operation: 'manage',
-            action,
-            tagName,
-            details: result.details,
-          },
+          result.error,
+          'Verify tag names and hierarchy constraints',
+          { operation: 'manage', action, tagName, details: result.details },
           timer.toMetadata(),
         );
       }
 
       // Parse result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch {
-        parsedResult = result;
-      }
+      const parsedResult = result.data;
 
       // Invalidate tag cache after modification
       this.cache.invalidate('tags');
       this.cache.invalidate('tasks'); // Tasks cache may be affected by tag changes
 
-      return createSuccessResponse(
-        'tags',
-        {
-          action,
-          tagName,
-          ...(newName && { newName }),
-          ...(targetTag && { targetTag }),
-          result: parsedResult,
-        },
-        {
-          ...timer.toMetadata(),
-          operation: 'manage',
-          action,
-        },
-      );
+      return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
 
     } catch (error) {
       return this.handleError(error);

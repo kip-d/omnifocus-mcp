@@ -17,7 +17,7 @@ describe('WorkflowAnalysisTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCache = { get: vi.fn(), set: vi.fn() };
-    mockOmni = { buildScript: vi.fn(), execute: vi.fn() };
+    mockOmni = { buildScript: vi.fn(), executeJson: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
     tool = new WorkflowAnalysisTool(mockCache as any);
@@ -36,7 +36,7 @@ describe('WorkflowAnalysisTool', () => {
   it('handles script error result with structured error', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ error: true, message: 'Failed' });
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'Failed' , details: 'Test error' });
 
     const res: any = await tool.execute({} as any);
     expect(res.success).toBe(false);
@@ -46,7 +46,7 @@ describe('WorkflowAnalysisTool', () => {
   it('returns analytics response with key findings and optional raw data', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({
+    mockOmni.executeJson.mockResolvedValue({
       insights: [{ insight: 'Focus on review cadence' }, { message: 'Reduce WIP' }],
       patterns: { bottlenecks: 3, projects: 2 },
       recommendations: [{ recommendation: 'Batch similar tasks' }],
@@ -67,7 +67,7 @@ describe('WorkflowAnalysisTool', () => {
   it('extractKeyFindings falls back to default message', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue({ insights: [], patterns: {}, recommendations: [] });
+    mockOmni.executeJson.mockResolvedValue({ insights: [], patterns: {}, recommendations: [] });
 
     const res: any = await tool.execute({} as any);
     expect(res.success).toBe(true);

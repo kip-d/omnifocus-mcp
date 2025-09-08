@@ -32,7 +32,7 @@ describe('TagsToolV2', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn((script, params) => `built script with params: ${JSON.stringify(params)}`),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -53,7 +53,7 @@ describe('TagsToolV2', () => {
         count: 3
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ operation: 'list' });
 
@@ -83,7 +83,7 @@ describe('TagsToolV2', () => {
         count: 3
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ 
         operation: 'list',
@@ -100,7 +100,7 @@ describe('TagsToolV2', () => {
     });
 
     it('should handle script execution errors', async () => {
-      mockOmniAutomation.execute.mockRejectedValue(new Error('Script failed'));
+      mockOmniAutomation.executeJson.mockRejectedValue(new Error('Script failed'));
 
       const result = await tool.executeValidated({ operation: 'list' });
 
@@ -116,7 +116,7 @@ describe('TagsToolV2', () => {
         count: 3
       };
 
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({ operation: 'active' });
 
@@ -128,7 +128,7 @@ describe('TagsToolV2', () => {
 
     it('should cache active tags results', async () => {
       const mockResult = { tags: ['Active1'], count: 1 };
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       await tool.executeValidated({ operation: 'active' });
 
@@ -143,7 +143,7 @@ describe('TagsToolV2', () => {
   describe('manage operation', () => {
     it('should create a new tag', async () => {
       const mockResult = { success: true, tag: { name: 'NewTag', id: 'tag123' } };
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({
         operation: 'manage',
@@ -160,7 +160,7 @@ describe('TagsToolV2', () => {
 
     it('should rename a tag', async () => {
       const mockResult = { success: true };
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({
         operation: 'manage',
@@ -176,7 +176,7 @@ describe('TagsToolV2', () => {
 
     it('should delete a tag', async () => {
       const mockResult = { success: true };
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({
         operation: 'manage',
@@ -191,7 +191,7 @@ describe('TagsToolV2', () => {
 
     it('should merge tags', async () => {
       const mockResult = { success: true, mergedCount: 5 };
-      mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
+      mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(mockResult));
 
       const result = await tool.executeValidated({
         operation: 'manage',

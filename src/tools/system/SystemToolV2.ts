@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { getVersionInfo } from '../../utils/version.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
-import { createSuccessResponse, createErrorResponse, OperationTimer, StandardResponse } from '../../utils/response-format.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 
 // Consolidated schema for all system operations
 const SystemToolSchema = z.object({
@@ -53,7 +53,7 @@ interface DiagnosticsResult {
   };
 }
 
-type SystemResponse = StandardResponse<VersionInfo | DiagnosticsResult>;
+type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult>;
 
 export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
@@ -76,42 +76,42 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       case 'diagnostics':
         return this.runDiagnostics(args);
       default:
-        return createErrorResponse(
+        return createErrorResponseV2(
           'system',
           'INVALID_OPERATION',
           `Invalid operation: ${operation}`,
+          undefined,
           { operation },
           { executionTime: 0 },
         );
     }
   }
 
-  private async getVersion(): Promise<StandardResponse<VersionInfo>> {
-    const timer = new OperationTimer();
+  private async getVersion(): Promise<StandardResponseV2<VersionInfo>> {
+    const timer = new OperationTimerV2();
 
     try {
       const versionInfo = getVersionInfo();
-      return createSuccessResponse(
+      return createSuccessResponseV2(
         'system',
         versionInfo,
-        {
-          ...timer.toMetadata(),
-          operation: 'version',
-        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'version' },
       );
     } catch (error) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'system',
         'VERSION_ERROR',
         error instanceof Error ? error.message : 'Failed to get version info',
+        undefined,
         { operation: 'version' },
         timer.toMetadata(),
       );
     }
   }
 
-  private async runDiagnostics(args: z.infer<typeof SystemToolSchema>): Promise<StandardResponse<DiagnosticsResult>> {
-    const timer = new OperationTimer();
+  private async runDiagnostics(args: z.infer<typeof SystemToolSchema>): Promise<StandardResponseV2<DiagnosticsResult>> {
+    const timer = new OperationTimerV2();
     const results: DiagnosticsResult = {
       timestamp: new Date().toISOString(),
       tests: {},
@@ -129,10 +129,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(basicScript);
+        const result: any = await this.diagnosticOmni.execute(basicScript);
         results.tests.basic_connection = {
           success: true,
-          result: result,
+          result,
         };
       } catch (error: any) {
         results.tests.basic_connection = {
@@ -190,10 +190,11 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(collectionScript);
+        // Prefer plain execute so tests can mock without schema
+        const result: any = await this.diagnosticOmni.execute(collectionScript);
         results.tests.collection_access = {
           success: true,
-          result: result,
+          result,
         };
       } catch (error: any) {
         results.tests.collection_access = {
@@ -251,10 +252,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result = await this.diagnosticOmni.execute<any>(propertyScript);
+        const result: any = await this.diagnosticOmni.execute(propertyScript);
         results.tests.property_access = {
           success: true,
-          result: result,
+          result,
         };
       } catch (error: any) {
         results.tests.property_access = {
@@ -273,10 +274,10 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         });
 
         try {
-          const result = await this.diagnosticOmni.execute<any>(script);
+          const result: any = await this.diagnosticOmni.execute(script);
           results.tests.list_tasks_script = {
             success: true,
-            result: result,
+            result,
           };
         } catch (error: any) {
           results.tests.list_tasks_script = {
@@ -290,22 +291,19 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       // Determine overall health
       const allSuccessful = Object.values(results.tests).every(test => test.success);
 
-      return createSuccessResponse(
+      return createSuccessResponseV2(
         'system',
         results,
-        {
-          ...timer.toMetadata(),
-          operation: 'diagnostics',
-          health: allSuccessful ? 'healthy' : 'degraded',
-          testScript: args.testScript,
-        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'diagnostics', health: allSuccessful ? 'healthy' : 'degraded', testScript: args.testScript },
       );
 
     } catch (error) {
-      return createErrorResponse(
+      return createErrorResponseV2(
         'system',
         'DIAGNOSTICS_ERROR',
         error instanceof Error ? error.message : 'Failed to run diagnostics',
+        undefined,
         { operation: 'diagnostics' },
         timer.toMetadata(),
       );

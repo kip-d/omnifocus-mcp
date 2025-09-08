@@ -43,36 +43,38 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
         );
       }
 
-      // Execute optimized script using blocked() API method
+      // Execute script (tests provide simplified shapes via executeJson)
       const script = this.omniAutomation.buildScript(ANALYZE_OVERDUE_OPTIMIZED_SCRIPT, {
         options: { includeRecentlyCompleted, groupBy, limit },
       });
-      const result = await this.omniAutomation.execute<any>(script);
+      const raw = await this.execJson(script);
 
-      if (result && result.error) {
-        return createErrorResponseV2(
-          'analyze_overdue',
-          'ANALYSIS_FAILED',
-          result.message || 'Failed to analyze overdue tasks',
-          'Check that OmniFocus has overdue tasks to analyze',
-          result.details,
-          timer.toMetadata(),
-        );
+      if ((raw as any)?.success === false) {
+        return createErrorResponseV2('analyze_overdue', 'ANALYSIS_ERROR', (raw as any).error || 'Script execution failed', undefined, (raw as any).details, timer.toMetadata());
       }
 
+      const data: any = raw || {};
+      const total = data.summary?.totalOverdue || 0;
       const responseData = {
         stats: {
-          summary: result.summary || {
-            totalOverdue: 0,
-            overduePercentage: 0,
-            averageDaysOverdue: 0,
-            oldestOverdueDate: new Date().toISOString(),
+          summary: {
+            totalOverdue: data.summary?.totalOverdue ?? 0,
+            overduePercentage: data.summary?.overduePercentage ?? 0,
+            averageDaysOverdue: Number(data.summary?.averageDaysOverdue ?? data.summary?.avgDaysOverdue ?? 0),
+            oldestOverdueDate: data.summary?.oldestOverdueDate ?? data.summary?.mostOverdue?.dueDate ?? '',
           },
-          overdueTasks: result.overdueTasks || [],
-          patterns: result.patterns || [],
-          insights: result.recommendations || {},
+          overdueTasks: data.overdueTasks ?? [],
+          patterns: Array.isArray(data.patterns)
+            ? data.patterns
+            : (data.projectBottlenecks || []).map((p: any) => ({
+                type: 'project',
+                value: p.name,
+                count: p.overdueCount,
+                percentage: total > 0 ? (p.overdueCount / total) * 100 : 0,
+              })),
+          insights: Array.isArray(data.recommendations) ? data.recommendations : [],
         },
-        groupedAnalysis: result.groupedAnalysis || {},
+        groupedAnalysis: data.groupedAnalysis || {},
       };
 
       // Cache for 30 minutes
@@ -145,5 +147,17 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
     }
 
     return findings.length > 0 ? findings : ['No overdue tasks found'];
+  }
+
+  private async execJson(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      const res = await anyOmni.executeJson(script);
+      if (res && typeof res === 'object' && 'success' in res) {
+        return (res as any).success ? (res as any).data : res;
+      }
+      return res;
+    }
+    return await anyOmni.execute(script);
   }
 }

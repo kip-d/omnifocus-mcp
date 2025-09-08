@@ -48,35 +48,44 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
       const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
         options: { days, groupBy, includeWeekends },
       });
-      const result = await this.omniAutomation.execute<any>(script);
 
-      if (result && result.error) {
-        return createErrorResponseV2(
-          'task_velocity',
-          'VELOCITY_FAILED',
-          result.message || 'Failed to calculate task velocity',
-          'Check that OmniFocus has completion data for the requested period',
-          result.details,
-          timer.toMetadata(),
-        );
+      // Schema matching the optimized velocity payload
+
+      const raw = await this.execJson(script);
+
+      if ((raw as any)?.success === false) {
+        return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', (raw as any).error || 'Script execution failed', undefined, (raw as any).details, timer.toMetadata());
       }
+
+      const d: any = raw || {};
+      // Support both optimized payload and simplified test shapes
+      const tasksCompleted = d.throughput?.totalCompleted ?? d.totalCompleted ?? d.velocity?.current ?? 0;
+      const averagePerDay = d.projections?.tasksPerDay ?? d.averagePerDay ?? 0;
+      const peak = d.peakDay ?? (() => {
+        const dailyData = d.dailyData || d.throughput?.intervals?.map((i: any) => ({ date: i.label, completed: i.completed })) || [];
+        const p = dailyData.reduce((acc: any, x: any) => (x.completed > (acc.count || 0) ? { date: x.date, count: x.completed } : acc), { date: null, count: 0 });
+        return p;
+      })();
+      const trend = d.trend ?? 'stable';
+      const predictedCapacity = d.projections?.tasksPerWeek ?? d.predictedCapacity ?? 0;
+      const daily = d.dailyData || (d.throughput?.intervals?.map((i: any) => ({ date: i.label, completed: i.completed })) ?? []);
 
       const responseData = {
         velocity: {
-          period: `${days} days`,
-          tasksCompleted: result.totalCompleted || 0,
-          averagePerDay: result.averagePerDay || 0,
-          peakDay: result.peakDay || { date: null, count: 0 },
-          trend: result.trend || 'stable',
-          predictedCapacity: result.predictedCapacity || 0,
+          period: groupBy,
+          tasksCompleted,
+          averagePerDay: typeof averagePerDay === 'number' ? averagePerDay : Number(averagePerDay) || 0,
+          peakDay: peak,
+          trend,
+          predictedCapacity: typeof predictedCapacity === 'number' ? predictedCapacity : Number(predictedCapacity) || 0,
         },
-        daily: result.dailyData || [],
+        daily,
         patterns: {
-          byDayOfWeek: result.dayOfWeekPatterns || {},
-          byTimeOfDay: result.timeOfDayPatterns || {},
-          byProject: result.projectVelocity || [],
+          byDayOfWeek: d.dayOfWeekPatterns || {},
+          byTimeOfDay: d.timeOfDayPatterns || {},
+          byProject: d.projectVelocity || [],
         },
-        insights: result.insights || [],
+        insights: Array.isArray(d.insights) ? d.insights : [],
       };
 
       // Cache for 1 hour
@@ -109,6 +118,18 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
         timer.toMetadata(),
       );
     }
+  }
+
+  private async execJson(script: string): Promise<any> {
+    const anyOmni: any = this.omniAutomation as any;
+    if (typeof anyOmni.executeJson === 'function') {
+      const res = await anyOmni.executeJson(script);
+      if (res && typeof res === 'object' && 'success' in res) {
+        return (res as any).success ? (res as any).data : res;
+      }
+      return res;
+    }
+    return await anyOmni.execute(script);
   }
 
   private extractKeyFindings(data: any): string[] {

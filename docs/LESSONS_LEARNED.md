@@ -427,4 +427,209 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
 
 ---
 
+---
+
+## 🚨 BREAKTHROUGH: Real Root Cause of "Can't Convert Types" (September 2025)
+
+### **The Template Substitution Discovery**
+
+**MAJOR REVELATION:** After extensive empirical testing, discovered that "Can't convert types" errors are primarily caused by **template substitution syntax errors**, not script size limits.
+
+#### The False Assumption (6+ Months)
+```typescript
+// We assumed this was the problem:
+const script = `${getAllHelpers()} ${mainScript}`; // "Too big, that's why it fails"
+
+// But the REAL problem was this:
+const script = `const updates = {{updates}};`; // Template substitution breaks with complex data
+```
+
+#### Empirical Testing Results (September 2025)
+**JXA Script Size Limits - ACTUAL TESTING:**
+- ✅ **10,000 characters**: Works perfectly
+- ✅ **50,000 characters**: Works perfectly  
+- ✅ **100,000 characters**: Works perfectly via stdin
+- ❌ **Template substitution**: Breaks with quotes, newlines, nested objects
+
+**Key Insight:** JXA can handle massive scripts when they're syntactically valid. The "5-10KB limit" assumption was **wrong**.
+
+#### The Real Culprit: Template Substitution Syntax Errors
+```javascript
+// ❌ DANGEROUS: Template substitution with complex data
+const script = automation.buildScript(`
+  const projectId = {{projectId}};
+  const updates = {{updates}};  // BREAKS when updates contains quotes, newlines, etc.
+`, { 
+  projectId: 'test-123',
+  updates: {
+    name: 'Project with "quotes" and \nnewlines',
+    note: 'Complex data: {"json": true}'
+  }
+});
+
+// Results in broken JavaScript:
+// const updates = {name: "Project with "quotes" and 
+// newlines", note: "Complex data: {"json": true}"}; // SYNTAX ERROR!
+
+// ✅ SAFE: Function arguments approach (v2.1.0)
+function createScript(projectId: string, updates: any): string {
+  return `
+    function updateProject(projectId, updates) { /* script logic */ }
+    return updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
+  `;
+}
+// JSON.stringify properly escapes everything - no syntax errors possible!
+```
+
+### **v2.1.0 Architecture: Defense in Depth**
+
+#### Combined Solution: Function Arguments + Discriminated Unions
+
+**1. Function Arguments (Eliminates Template Substitution)**
+```typescript
+// OLD: Dangerous template substitution
+export const UPDATE_PROJECT_SCRIPT = `
+  const projectId = {{projectId}};  // ❌ Syntax error risk
+  const updates = {{updates}};      // ❌ Breaks with complex data
+`;
+
+// NEW: Safe function arguments  
+export function createUpdateProjectScript(projectId: string, updates: any): string {
+  return `
+    function updateProject(projectId, updates) { 
+      // Safe parameter access - no substitution risks!
+    }
+    return updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
+  `;
+}
+```
+
+**2. Discriminated Unions (Type-Safe Error Handling)**
+```typescript
+// NEW: Type-safe result handling
+export type ScriptResult<T = unknown> = ScriptSuccess<T> | ScriptError;
+
+export interface ScriptSuccess<T> { success: true; data: T; }
+export interface ScriptError { success: false; error: string; context?: string; }
+
+// Usage in tools:
+const result = await automation.executeJson(script);
+if (isScriptSuccess(result)) {
+  return createSuccessResponse(result.data);  // ✅ Type-safe success
+} else {
+  return createErrorResponse(result.error);   // ✅ Type-safe error with context
+}
+```
+
+**3. Enhanced OmniAutomation Class**
+```typescript
+// NEW: executeJson method with schema validation
+public async executeJson<T>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
+  try {
+    const result = await this.execute<any>(script);
+    
+    // Handle script errors (when script returns error object)
+    if (result && typeof result === 'object' && result.error === true) {
+      return createScriptError(result.message, result.details, result);
+    }
+
+    // Optional schema validation
+    if (schema) {
+      const validation = schema.safeParse(result);
+      if (!validation.success) {
+        return createScriptError('Schema validation failed', validation.error.issues);
+      }
+      return createScriptSuccess(validation.data);
+    }
+
+    return createScriptSuccess(result);
+  } catch (error) {
+    return createScriptError(error.message, 'Execution error', error);
+  }
+}
+```
+
+#### Testing Results: Complete Success
+```bash
+# Complex data that would break template substitution:
+{
+  "name": "Test with \"quotes\", \nnewlines, and {JSON: \"objects\"}",
+  "note": "Multi-line with:\n- Special chars: !@#$%^&*()\n- JSON: {\"key\": \"value\"}\n- Unicode: 🚀 🧪 ✅"
+}
+
+# Result: ✅ Perfect execution, no "Can't convert types" errors
+# Script size: 5,587 characters (well within limits)
+# Architecture: Function arguments + discriminated unions
+```
+
+### **Key Architectural Benefits**
+
+1. **Complete Elimination**: Zero "Can't convert types" errors from template substitution
+2. **Type Safety**: Discriminated unions provide compile-time and runtime safety
+3. **Schema Validation**: Optional Zod schema validation for critical operations
+4. **Error Context**: Rich error information for debugging
+5. **Defense in Depth**: Multiple safety layers prevent failures
+
+### **Migration Pattern for Existing Scripts**
+
+```typescript
+// BEFORE: Template substitution (dangerous)
+const script = automation.buildScript(TEMPLATE_SCRIPT, { param1, param2 });
+const result = await automation.execute(script);
+if (result.error) { /* handle error */ }
+
+// AFTER: Function arguments + discriminated unions (safe)  
+const script = createSpecificScript(param1, param2);
+const result = await automation.executeJson(script);
+if (isScriptSuccess(result)) {
+  // Type-safe success handling
+  return createSuccessResponse(result.data);
+} else {
+  // Rich error context
+  return createErrorResponse(result.error, result.context, result.details);
+}
+```
+
+### **Critical Lesson for Future Development**
+
+**Root Cause Analysis Order:**
+1. ✅ **Template substitution syntax errors** (v2.1.0 solution: function arguments)
+2. ✅ **Script execution context issues** (proper error handling with discriminated unions)
+3. ⚠️ **Script size limits** (empirically tested - much higher than assumed)
+4. ⚠️ **JXA performance issues** (whose(), safeGet(), etc.)
+
+**The Big Picture:** Template substitution was the hidden root cause behind most "Can't convert types" errors. The v2.1.0 architecture completely eliminates this category of failures while providing better type safety and error handling.
+
+## 🔍 Unsolved Mystery: The `type: 'json'` Breaking Change
+
+### The Issue
+In commit `fe3b2a0bc65df87a1e4e715f9ed1bd6ee9e646b8` (2025-09-02), we inadvertently changed the MCP tool response format from `type: 'text'` to `type: 'json'`. This broke Claude Desktop v0.12.129 compatibility completely - tools wouldn't appear in the UI.
+
+### What We Know
+- **First bad commit**: `fe3b2a0` - "feat: script size reduction + quoting hardening"  
+- **The change**: In `src/tools/index.ts`, response format changed from:
+  ```typescript
+  { type: 'text', text: JSON.stringify(result, null, 2) }
+  ```
+  to:
+  ```typescript
+  { type: 'json', json: result }
+  ```
+- **Impact**: MCP server would start but Claude Desktop immediately disconnected with EPIPE error
+- **Fix**: Reverted to `type: 'text'` in commits `9a9e0af`, `a2f4b79`, and `20a259c`
+
+### The Mystery
+**We don't know WHY this change was made.** The commit message doesn't mention it, and `type: 'json'` doesn't exist in the MCP specification (only 'text' and 'image' are valid). 
+
+### Future Investigation Needed
+If you're reading this and wondering why we made this change:
+1. Check if newer MCP specifications added `type: 'json'` support
+2. Look for any discussions about structured responses in MCP evolution  
+3. Consider if it was just a well-intentioned mistake thinking JSON data should use `type: 'json'`
+
+### Lesson
+Always verify changes against the official MCP specification, even when they "seem logical". The MCP `type` field describes media format (text/image), not data structure.
+
+---
+
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.

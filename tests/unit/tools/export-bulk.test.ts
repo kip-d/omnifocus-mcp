@@ -13,7 +13,7 @@ vi.mock('fs/promises', () => ({
 // Mock the dependent tools
 vi.mock('../../../src/tools/export/ExportTasksTool.js', () => ({
   ExportTasksTool: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({
+    executeJson: vi.fn().mockResolvedValue({
       success: true,
       data: { data: '[]', count: 0 },
     }),
@@ -22,7 +22,7 @@ vi.mock('../../../src/tools/export/ExportTasksTool.js', () => ({
 
 vi.mock('../../../src/tools/export/ExportProjectsTool.js', () => ({
   ExportProjectsTool: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({
+    executeJson: vi.fn().mockResolvedValue({
       success: true,
       data: { data: '[]', count: 0 },
     }),
@@ -31,7 +31,7 @@ vi.mock('../../../src/tools/export/ExportProjectsTool.js', () => ({
 
 vi.mock('../../../src/tools/tags/TagsToolV2.js', () => ({
   TagsToolV2: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({
+    executeJson: vi.fn().mockResolvedValue({
       success: true,
       data: { items: [] },
       metadata: { total_count: 0 },
@@ -40,8 +40,8 @@ vi.mock('../../../src/tools/tags/TagsToolV2.js', () => ({
 }));
 
 // Mock response format utilities
-vi.mock('../../../src/utils/response-format.js', () => ({
-  createSuccessResponse: vi.fn((operation, data, metadata) => ({
+vi.mock('../../../src/utils/response-format-v2.js', () => ({
+  createSuccessResponseV2: vi.fn((operation, data, _summary, metadata) => ({
     success: true,
     data,
     metadata: {
@@ -51,9 +51,9 @@ vi.mock('../../../src/utils/response-format.js', () => ({
       ...metadata,
     },
   })),
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -63,10 +63,11 @@ vi.mock('../../../src/utils/response-format.js', () => ({
     error: {
       code,
       message,
+      suggestion,
       details,
     },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({
+  OperationTimerV2: vi.fn().mockImplementation(() => ({
     toMetadata: vi.fn(() => ({ query_time_ms: 100 })),
   })),
 }));
@@ -119,14 +120,14 @@ describe('BulkExportTool', () => {
       
       // Update mocks for CSV format
       (ExportTasksTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: true,
           data: { data: 'col1,col2\nval1,val2', count: 1 },
         }),
       }));
       
       (ExportProjectsTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: true,
           data: { data: 'col1,col2\nval1,val2', count: 1 },
         }),
@@ -184,7 +185,7 @@ describe('BulkExportTool', () => {
       const { ExportTasksTool } = await import('../../../src/tools/export/ExportTasksTool.js');
       
       (ExportTasksTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: true,
           data: { data: '[{"id":"1","name":"Test Task"}]', count: 1 },
         }),
@@ -206,7 +207,7 @@ describe('BulkExportTool', () => {
       const { ExportProjectsTool } = await import('../../../src/tools/export/ExportProjectsTool.js');
       
       (ExportProjectsTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: true,
           data: { data: '[{"id":"1","name":"Test Project"}]', count: 1 },
         }),
@@ -228,7 +229,7 @@ describe('BulkExportTool', () => {
       const { TagsToolV2 } = await import('../../../src/tools/tags/TagsToolV2.js');
       
       (TagsToolV2 as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: true,
           data: { items: [{ id: '1', name: 'Test Tag' }] },
           metadata: { total_count: 1 },
@@ -252,7 +253,7 @@ describe('BulkExportTool', () => {
       const { ExportTasksTool } = await import('../../../src/tools/export/ExportTasksTool.js');
       
       (ExportTasksTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: false,
           error: 'Task export failed',
         }),
@@ -272,7 +273,7 @@ describe('BulkExportTool', () => {
       const { ExportProjectsTool } = await import('../../../src/tools/export/ExportProjectsTool.js');
       
       (ExportProjectsTool as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: false,
           error: 'Project export failed',
         }),
@@ -290,7 +291,7 @@ describe('BulkExportTool', () => {
       const { TagsToolV2 } = await import('../../../src/tools/tags/TagsToolV2.js');
       
       (TagsToolV2 as any).mockImplementation(() => ({
-        execute: vi.fn().mockResolvedValue({
+        executeJson: vi.fn().mockResolvedValue({
           success: false,
           error: 'Tag export failed',
         }),

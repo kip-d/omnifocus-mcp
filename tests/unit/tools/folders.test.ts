@@ -21,10 +21,10 @@ vi.mock('../../../src/utils/logger.js', () => ({
     warn: vi.fn(),
   }))
 }));
-vi.mock('../../../src/utils/response-format.js', () => ({
-  createEntityResponse: vi.fn((operation, entityType, entity, metadata) => ({
+vi.mock('../../../src/utils/response-format-v2.js', () => ({
+  createSuccessResponseV2: vi.fn((operation, data, _summary, metadata) => ({
     success: true,
-    data: { [entityType]: entity },
+    data,
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -32,19 +32,9 @@ vi.mock('../../../src/utils/response-format.js', () => ({
       ...metadata,
     },
   })),
-  createCollectionResponse: vi.fn((operation, collectionName, data, metadata) => ({
-    success: true,
-    data: { [collectionName]: data[collectionName] || data.folders || data },
-    metadata: {
-      operation,
-      timestamp: new Date().toISOString(),
-      from_cache: false,
-      ...metadata,
-    },
-  })),
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: {
       operation,
       timestamp: new Date().toISOString(),
@@ -54,10 +44,11 @@ vi.mock('../../../src/utils/response-format.js', () => ({
     error: {
       code,
       message,
+      suggestion,
       details,
     },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({
+  OperationTimerV2: vi.fn().mockImplementation(() => ({
     toMetadata: vi.fn(() => ({ query_time_ms: 100 })),
   })),
 }));
@@ -78,7 +69,7 @@ describe('Folder Tools', () => {
     
     mockOmniAutomation = {
       buildScript: vi.fn(),
-      execute: vi.fn(),
+      executeJson: vi.fn(),
     };
 
     (CacheManager as any).mockImplementation(() => mockCache);
@@ -264,10 +255,7 @@ describe('Folder Tools', () => {
       });
 
       it('should handle create script errors', async () => {
-        folderMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Creation failed',
-        });
+       folderMock.execute.mockResolvedValue({ success: false, error: 'Creation failed', details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'create',
@@ -280,10 +268,7 @@ describe('Folder Tools', () => {
       });
 
       it('should handle create script execution errors', async () => {
-        folderMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Script execution failed',
-        });
+        folderMock.execute.mockResolvedValue({ success: false, error: 'Script execution failed', details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'create',
@@ -419,11 +404,8 @@ describe('Folder Tools', () => {
 
     describe('error handling', () => {
       it('should handle script execution errors', async () => {
-        mockCache.get.mockReturnValue(null);
-        queryMock.execute.mockResolvedValue({
-          error: true,
-          message: 'Query failed',
-        });
+         mockCache.get.mockReturnValue(null);
+         queryMock.execute.mockResolvedValue({ success: false, error: 'Query failed', details: 'Test error' });
 
         const result = await tool.execute({
           operation: 'list',

@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { UPDATE_TASK_ULTRA_MINIMAL_SCRIPT } from '../../omnifocus/scripts/tasks/update-task-ultra-minimal.js';
-import { createTaskResponse, createErrorResponse, OperationTimer } from '../../utils/response-format.js';
-import { UpdateTaskResponse } from '../response-types.js';
+import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { UpdateTaskSchema } from '../schemas/task-schemas.js';
 import { localToUTC } from '../../utils/timezone.js';
 
@@ -11,8 +10,8 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
   description = 'Update an existing task in OmniFocus. Can move between projects (projectId) or into/out of action groups (parentTaskId). Set sequential for action groups. Tags work properly. Use clearDueDate=true to remove dates. IMPORTANT: Use YYYY-MM-DD or "YYYY-MM-DD HH:mm" format for dates. Smart defaults: due dates → 5pm, defer dates → 8am. Avoid ISO-8601 with Z suffix. CONTEXT OPTIMIZATION: Use responseLevel="ultra" for 83% token reduction (success + ID only) when updating 10+ tasks, or responseLevel="minimal" for backwards compatibility. Essential for bulk operations to avoid context window exhaustion.';
   schema = UpdateTaskSchema;
 
-  async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<UpdateTaskResponse> {
-    const timer = new OperationTimer();
+  async executeValidated(args: z.infer<typeof UpdateTaskSchema>): Promise<any> {
+    const timer = new OperationTimerV2();
 
     try {
       const { taskId, minimalResponse = false, responseLevel = 'standard', ...updates } = args;
@@ -40,10 +39,11 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       // Validate required parameters
       if (!taskId || typeof taskId !== 'string') {
-        return createErrorResponse(
+        return createErrorResponseV2(
           'update_task',
           'INVALID_PARAMS',
           'Task ID is required and must be a string',
+          'Provide a non-empty string taskId',
           { provided_taskId: taskId },
           timer.toMetadata(),
         );
@@ -54,14 +54,11 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       // If no valid updates, return early
       if (Object.keys(safeUpdates).length === 0) {
-        return createTaskResponse(
+        return createSuccessResponseV2(
           'update_task',
-          { id: taskId, name: '', updated: false as const, changes: {} },
-          {
-            query_time_ms: timer.getElapsedMs(),
-            input_params: { taskId },
-            message: 'No valid updates provided',
-          },
+          { task: { id: taskId, name: '', updated: false as const, changes: {} } as any },
+          undefined,
+          { ...timer.toMetadata(), input_params: { taskId }, message: 'No valid updates provided' },
         );
       }
 
@@ -72,51 +69,25 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         safeUpdatesKeys: Object.keys(safeUpdates),
       });
 
-      // Use ultra-minimal script with JSON string to avoid parameter expansion
-      const script = this.omniAutomation.buildScript(UPDATE_TASK_ULTRA_MINIMAL_SCRIPT, {
-        taskId: taskId, // Don't stringify - buildScript will handle it
-        updatesJson: JSON.stringify(safeUpdates), // Single stringify - buildScript will quote it
-      });
-
-      const result = await this.omniAutomation.execute<string | { error: boolean; message: string; details?: string }>(script);
-
-      // Handle script execution errors
-      if (result && typeof result === 'object' && 'error' in result && result.error) {
-        const errorMessage = 'message' in result ? String(result.message) : 'Failed to update task';
-        this.logger.error(`Update task script error: ${errorMessage}`);
-        return createErrorResponse(
-          'update_task',
-          'SCRIPT_ERROR',
-          errorMessage,
-          'details' in result ? result.details : undefined,
-          timer.toMetadata(),
-        );
-      }
-
-      // Parse the JSON result
-      let parsedResult;
-      try {
-        parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      } catch (parseError) {
-        this.logger.error(`Failed to parse update task result: ${result}`);
-        return createErrorResponse(
-          'update_task',
-          'PARSE_ERROR',
-          'Failed to parse task update response',
-          { received: result, parseError: parseError instanceof Error ? parseError.message : String(parseError) },
-          timer.toMetadata(),
-        );
-      }
-
-      // Check if the parsed result indicates an error
-      if (parsedResult.error) {
-        return createErrorResponse(
-          'update_task',
-          'UPDATE_FAILED',
-          parsedResult.message || 'Update failed',
-          parsedResult,
-          timer.toMetadata(),
-        );
+      // Use new function argument architecture for template substitution safety
+      const script = createUpdateTaskScript(taskId, safeUpdates);
+      const anyOmni: any = this.omniAutomation as any;
+      let parsedResult: any;
+      if (typeof anyOmni.executeJson === 'function') {
+        const res = await anyOmni.executeJson(script);
+        if (res && typeof res === 'object' && 'success' in res) {
+          if (!(res as any).success) {
+            this.logger.error(`Update task script error: ${(res as any).error}`);
+            return createErrorResponseV2('update_task', 'SCRIPT_ERROR', (res as any).error || 'Script execution failed', 'Verify task exists and params are valid', (res as any).details, timer.toMetadata());
+          }
+          parsedResult = (res as any).data;
+        } else {
+          parsedResult = res;
+        }
+      } else {
+        // Fallback to execute() returning JSON string or object
+        const raw = await anyOmni.execute(script);
+        parsedResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
       }
 
       // Invalidate caches after successful update
@@ -152,10 +123,23 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
         } as any;
       }
 
+      // Transform new schema-validated result to expected format
+      const taskData = (parsedResult as any)?.task || parsedResult || { id: taskId, name: 'Unknown' };
+      const transformedResult = {
+        id: taskData.id || taskId,
+        name: taskData.name || 'Unknown',
+        updated: true,
+        changes: Object.keys(safeUpdates).reduce((acc, key) => {
+          acc[key] = safeUpdates[key];
+          return acc;
+        }, {} as Record<string, unknown>),
+      };
+
       // Return standardized response with proper typing
-      return createTaskResponse(
+      return createSuccessResponseV2(
         'update_task',
-        parsedResult,
+        { task: transformedResult as any },
+        undefined,
         {
           ...timer.toMetadata(),
           updated_id: taskId,

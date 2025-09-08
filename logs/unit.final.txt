@@ -1,0 +1,357 @@
+
+ RUN  v3.2.4 /Users/kip/codex/omnifocus-mcp
+
+ ✓ tests/unit/tools/tasks/manage-task-tool.test.ts (6 tests) 7ms
+ ✓ tests/unit/tools/base.test.ts (30 tests) 46ms
+ ❯ tests/unit/tools/projects/ProjectsToolV2.test.ts (30 tests | 4 failed) 32ms
+   ✓ ProjectsToolV2 > constructor and properties > should have correct name and description 2ms
+   ✓ ProjectsToolV2 > constructor and properties > should define input schema with required fields 3ms
+   ✓ ProjectsToolV2 > list operation > should list all projects with default parameters 1ms
+   × ProjectsToolV2 > list operation > should filter projects by status 10ms
+     → expected "spy" to be called with arguments: [ Any<String>, Anything ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   Any<String>,[90m
+[32m-   Anything,[90m
+[31m+   "script with {\"filter\":{\"limit\":50,\"includeDropped\":false,\"status\":\"active\"},\"limit\":50,\"includeStats\":false}",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m1[22m
+[39m
+   ✓ ProjectsToolV2 > list operation > should handle needsReview filter 1ms
+   ✓ ProjectsToolV2 > list operation > should use cache when available 0ms
+   ✓ ProjectsToolV2 > list operation > should cache successful results 0ms
+   ✓ ProjectsToolV2 > create operation > should create a new project 1ms
+   ✓ ProjectsToolV2 > create operation > should validate required name for create 0ms
+   ✓ ProjectsToolV2 > create operation > should handle tags during creation 0ms
+   × ProjectsToolV2 > update operation > should update an existing project 0ms
+     → Cannot read properties of undefined (reading 'name')
+   ✓ ProjectsToolV2 > update operation > should validate required projectId for update 0ms
+   × ProjectsToolV2 > update operation > should update project due date 0ms
+     → Cannot read properties of undefined (reading 'dueDate')
+   ✓ ProjectsToolV2 > complete operation > should complete a project 0ms
+   ✓ ProjectsToolV2 > complete operation > should validate required projectId for complete 0ms
+   ✓ ProjectsToolV2 > delete operation > should delete a project 0ms
+   ✓ ProjectsToolV2 > delete operation > should validate required projectId for delete 0ms
+   ✓ ProjectsToolV2 > review operation > should list projects needing review 0ms
+   ✓ ProjectsToolV2 > active operation > should list only active projects 2ms
+   ✓ ProjectsToolV2 > parameter coercion > should coerce string parameters to correct types 1ms
+   × ProjectsToolV2 > parameter coercion > should handle numeric strings for reviewInterval 1ms
+     → expected "spy" to be called with arguments: [ Any<String>, Anything ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   Any<String>,[90m
+[32m-   Anything,[90m
+[31m+   "[90m
+[31m+   [90m
+[31m+   // Core safe utility functions for OmniFocus automation[90m
+[31m+   function safeGet(getter, defaultValue = null) {[90m
+[31m+     try {[90m
+[31m+       const result = getter();[90m
+[31m+       return result !== null && result !== undefined ? result : defaultValue;[90m
+[31m+     } catch (e) {[90m
+[31m+       return defaultValue;[90m
+[31m+     }[90m
+[31m+   }[90m
+[31m+   [90m
+[31m+   function formatError(error, context = '') {[90m
+[31m+     const errorObj = {[90m
+[31m+       error: true,[90m
+[31m+       message: error.message || String(error),[90m
+[31m+       context: context[90m
+[31m+     };[90m
+[31m+     [90m
+[31m+     if (error.stack) {[90m
+[31m+       errorObj.stack = error.stack;[90m
+[31m+     }[90m
+[31m+     [90m
+[31m+     return JSON.stringify(errorObj);[90m
+[31m+   }[90m
+[31m+   [90m
+[31m+   function isValidDate(date) {[90m
+[31m+     return date && date.toString() !== 'missing value' && !isNaN(date.getTime());[90m
+[31m+   }[90m
+[31m+   [90m
+[31m+   [90m
+[31m+   function updateProject(projectId, updates) {[90m
+[31m+     try {[90m
+[31m+       const app = Application('OmniFocus');[90m
+[31m+       const doc = app.defaultDocument();[90m
+[31m+       [90m
+[31m+       // Find the project by ID[90m
+[31m+       const projects = doc.flattenedProjects();[90m
+[31m+       [90m
+[31m+       if (!projects) {[90m
+[31m+         return JSON.stringify({[90m
+[31m+           success: false,[90m
+[31m+           error: \"Failed to retrieve projects from OmniFocus.\"[90m
+[31m+         });[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       let targetProject = null;[90m
+[31m+       for (let i = 0; i < projects.length; i++) {[90m
+[31m+         if (projects[i].id() === projectId) {[90m
+[31m+           targetProject = projects[i];[90m
+[31m+           break;[90m
+[31m+         }[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (!targetProject) {[90m
+[31m+         return JSON.stringify({[90m
+[31m+           success: false,[90m
+[31m+           error: \"Project with ID '\" + projectId + \"' not found.\"[90m
+[31m+         });[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       // Apply updates - simplified logic[90m
+[31m+       const changes = [];[90m
+[31m+       [90m
+[31m+       if (updates.name && updates.name !== targetProject.name()) {[90m
+[31m+         targetProject.name = updates.name;[90m
+[31m+         changes.push(\"Name updated\");[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.note !== undefined) {[90m
+[31m+         const noteValue = updates.note === null ? '' : String(updates.note);[90m
+[31m+         targetProject.note = noteValue;[90m
+[31m+         changes.push(\"Note updated\");[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.deferDate !== undefined) {[90m
+[31m+         if (updates.deferDate === null) {[90m
+[31m+           targetProject.deferDate = null;[90m
+[31m+           changes.push(\"Defer date cleared\");[90m
+[31m+         } else {[90m
+[31m+           targetProject.deferDate = new Date(updates.deferDate);[90m
+[31m+           changes.push(\"Defer date set\");[90m
+[31m+         }[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.dueDate !== undefined) {[90m
+[31m+         if (updates.dueDate === null) {[90m
+[31m+           targetProject.dueDate = null;[90m
+[31m+           changes.push(\"Due date cleared\");[90m
+[31m+         } else {[90m
+[31m+           targetProject.dueDate = new Date(updates.dueDate);[90m
+[31m+           changes.push(\"Due date set\");[90m
+[31m+         }[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.flagged !== undefined) {[90m
+[31m+         targetProject.flagged = updates.flagged;[90m
+[31m+         changes.push(updates.flagged ? \"Flagged\" : \"Unflagged\");[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.sequential !== undefined) {[90m
+[31m+         targetProject.sequential = updates.sequential;[90m
+[31m+         changes.push(updates.sequential ? \"Set sequential\" : \"Set parallel\");[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (updates.status) {[90m
+[31m+         if (updates.status === 'active') {[90m
+[31m+           targetProject.status = app.Project.Status.active;[90m
+[31m+           changes.push(\"Status: active\");[90m
+[31m+         } else if (updates.status === 'onHold') {[90m
+[31m+           targetProject.status = app.Project.Status.onHold;[90m
+[31m+           changes.push(\"Status: on hold\");[90m
+[31m+         } else if (updates.status === 'dropped') {[90m
+[31m+           targetProject.status = app.Project.Status.dropped;[90m
+[31m+           changes.push(\"Status: dropped\");[90m
+[31m+         } else if (updates.status === 'done') {[90m
+[31m+           targetProject.status = app.Project.Status.done;[90m
+[31m+           targetProject.completionDate = new Date();[90m
+[31m+           changes.push(\"Status: completed\");[90m
+[31m+         }[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       // Simplified review interval handling[90m
+[31m+       if (updates.reviewInterval !== undefined) {[90m
+[31m+         try {[90m
+[31m+           if (updates.reviewInterval === null) {[90m
+[31m+             targetProject.reviewInterval = null;[90m
+[31m+             changes.push(\"Review interval cleared\");[90m
+[31m+           } else {[90m
+[31m+             targetProject.reviewInterval = {[90m
+[31m+               unit: updates.reviewInterval.unit,[90m
+[31m+               steps: updates.reviewInterval.steps,[90m
+[31m+               fixed: updates.reviewInterval.fixed || false[90m
+[31m+             };[90m
+[31m+             changes.push(\"Review interval updated\");[90m
+[31m+           }[90m
+[31m+         } catch (reviewError) {[90m
+[31m+           changes.push(\"Warning: Review interval update failed\");[90m
+[31m+         }[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       if (changes.length === 0) {[90m
+[31m+         return JSON.stringify({[90m
+[31m+           success: true,[90m
+[31m+           data: { [90m
+[31m+             success: true,[90m
+[31m+             message: \"No changes made\" [90m
+[31m+           }[90m
+[31m+         });[90m
+[31m+       }[90m
+[31m+       [90m
+[31m+       return JSON.stringify({[90m
+[31m+         success: true,[90m
+[31m+         data: {[90m
+[31m+           success: true,[90m
+[31m+           message: \"Project updated successfully\",[90m
+[31m+           changes: changes,[90m
+[31m+           // Store project data in details for tool consumption[90m
+[31m+           project: {[90m
+[31m+             id: targetProject.id(),[90m
+[31m+             name: targetProject.name(),[90m
+[31m+             note: targetProject.note(),[90m
+[31m+             dueDate: targetProject.dueDate() ? targetProject.dueDate().toISOString() : null,[90m
+[31m+             deferDate: targetProject.deferDate() ? targetProject.deferDate().toISOString() : null,[90m
+[31m+             flagged: targetProject.flagged()[90m
+[31m+           }[90m
+[31m+         }[90m
+[31m+       });[90m
+[31m+     } catch (error) {[90m
+[31m+       return formatError(error, 'update_project');[90m
+[31m+     }[90m
+[31m+   }[90m
+[31m+   [90m
+[31m+   // Execute with safe parameter passing[90m
+[31m+   return updateProject(\"p1\", {\"reviewInterval\":{\"unit\":\"days\",\"steps\":7,\"fixed\":true}});[90m
+[31m+   ",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m1[22m
+[39m
+   ✓ ProjectsToolV2 > parameter coercion > should validate limit bounds 2ms
+   ✓ ProjectsToolV2 > error handling > should handle script execution errors 1ms
+   ✓ ProjectsToolV2 > error handling > should handle permission errors 0ms
+   ✓ ProjectsToolV2 > error handling > should handle invalid operation gracefully 0ms
+   ✓ ProjectsToolV2 > error handling > should handle project not found errors 0ms
+   ✓ ProjectsToolV2 > metadata > should include metadata in all responses 0ms
+   ✓ ProjectsToolV2 > metadata > should include cache hit information 0ms
+   ✓ ProjectsToolV2 > summary generation > should generate comprehensive summary for list operations 0ms
+   ✓ ProjectsToolV2 > summary generation > should include operation-specific summary for create 0ms
+ ✓ tests/unit/tools/tasks/QueryTasksToolV2.test.ts (36 tests) 45ms
+ ✓ tests/unit/timezone.test.ts (31 tests) 175ms
+ ✓ tests/unit/code-changes-verification.test.ts (5 tests) 67ms
+ ❯ tests/unit/tools/task-crud.test.ts (30 tests | 9 failed) 32ms
+   × Task CRUD Operations > CreateTaskTool > successful operations > should create a simple task 8ms
+     → expected "spy" to be called with arguments: [ 'test script' ][90m
+
+Number of calls: [1m0[22m
+[39m
+   × Task CRUD Operations > CreateTaskTool > successful operations > should create a task with all optional fields 1ms
+     → expected "spy" to be called 1 times, but got 0 times
+   ✓ Task CRUD Operations > CreateTaskTool > successful operations > should handle object response from script 0ms
+   ✓ Task CRUD Operations > CreateTaskTool > validation > should reject missing name 3ms
+   ✓ Task CRUD Operations > CreateTaskTool > validation > should reject empty name 1ms
+   ✓ Task CRUD Operations > CreateTaskTool > validation > should reject invalid date format 3ms
+   ✓ Task CRUD Operations > CreateTaskTool > validation > should reject negative estimated minutes 1ms
+   × Task CRUD Operations > CreateTaskTool > error handling > should handle script execution error 4ms
+     → expected 'INTERNAL_ERROR' to be 'SCRIPT_ERROR' // Object.is equality
+   ✓ Task CRUD Operations > CreateTaskTool > error handling > should handle permission denied error 1ms
+   × Task CRUD Operations > UpdateTaskTool > successful operations > should update task name 1ms
+     → expected "spy" to be called with arguments: [ Any<String>, …(1) ][90m
+
+Number of calls: [1m0[22m
+[39m
+   × Task CRUD Operations > UpdateTaskTool > successful operations > should update multiple fields 2ms
+     → expected false to be true // Object.is equality
+   × Task CRUD Operations > UpdateTaskTool > successful operations > should clear due date when clearDueDate is true 1ms
+     → expected false to be true // Object.is equality
+   ✓ Task CRUD Operations > UpdateTaskTool > successful operations > should handle no updates provided 0ms
+   ✓ Task CRUD Operations > UpdateTaskTool > validation > should reject missing taskId 0ms
+   ✓ Task CRUD Operations > UpdateTaskTool > validation > should reject empty taskId 0ms
+   ✓ Task CRUD Operations > UpdateTaskTool > validation > should reject invalid date format 0ms
+   ✓ Task CRUD Operations > UpdateTaskTool > error handling > should handle script execution error 0ms
+   × Task CRUD Operations > CompleteTaskTool > successful operations > should complete a task 1ms
+     → expected false to be true // Object.is equality
+   × Task CRUD Operations > CompleteTaskTool > successful operations > should complete a task with custom completion date 0ms
+     → expected false to be true // Object.is equality
+   ✓ Task CRUD Operations > CompleteTaskTool > successful operations > should fallback to URL scheme on access denied 0ms
+   ✓ Task CRUD Operations > CompleteTaskTool > validation > should reject missing taskId 0ms
+   ✓ Task CRUD Operations > CompleteTaskTool > validation > should reject invalid completion date 0ms
+   ✓ Task CRUD Operations > CompleteTaskTool > error handling > should handle script execution error 0ms
+   ✓ Task CRUD Operations > CompleteTaskTool > error handling > should handle permission error with exception 0ms
+   × Task CRUD Operations > DeleteTaskTool > successful operations > should delete a task 1ms
+     → expected false to be true // Object.is equality
+   ✓ Task CRUD Operations > DeleteTaskTool > successful operations > should fallback to URL scheme on permission error 0ms
+   ✓ Task CRUD Operations > DeleteTaskTool > successful operations > should handle exception-based permission error 0ms
+   ✓ Task CRUD Operations > DeleteTaskTool > validation > should reject missing taskId 0ms
+   ✓ Task CRUD Operations > DeleteTaskTool > validation > should reject empty taskId 1ms
+   ✓ Task CRUD Operations > DeleteTaskTool > error handling > should handle script execution error 0ms
+ ✓ tests/unit/tools/folders.test.ts (21 tests) 20ms
+ ✓ tests/unit/tools/export.test.ts (32 tests) 21ms
+ ✓ tests/unit/tools/tags-v2.test.ts (13 tests) 9ms
+ ✓ tests/unit/tools/system-v2.test.ts (8 tests) 21ms
+ ✓ tests/unit/tools/reviews/manage-reviews.test.ts (6 tests) 10ms
+ ✓ tests/unit/tools/analytics.test.ts (30 tests) 39ms
+ ✓ tests/unit/omnifocus/OmniAutomation.test.ts (24 tests) 13ms
+ ✓ tests/unit/omnifocus/RobustOmniAutomation.test.ts (14 tests) 9ms
+ ✓ tests/unit/tools/analytics/pattern-analysis-v2.test.ts (3 tests) 7ms
+ ✓ tests/unit/tools/perspectives-v2.test.ts (8 tests) 12ms
+ ✓ tests/unit/tools/export-bulk.test.ts (11 tests) 20ms
+ ✓ tests/unit/tools/index-tools-registration.test.ts (1 test) 7ms
+ ✓ tests/unit/omnifocus/scripts/bridge-template.test.ts (33 tests) 3ms
+ ✓ tests/unit/tools/list-projects-tool.test.ts (9 tests) 7ms
+ ✓ tests/unit/tools/recurring.test.ts (14 tests) 8ms
+ ✓ tests/unit/utils/response-format-utilities.test.ts (34 tests) 45ms
+ ✓ tests/unit/completed-project-tasks.test.ts (11 tests) 11ms
+ ✓ tests/unit/tools/folders/folders-consolidated.test.ts (10 tests) 5ms
+ ✓ tests/unit/tools/list-tasks-tool.test.ts (7 tests) 4ms
+ ✓ tests/unit/tools/project-crud.test.ts (14 tests) 7ms
+ ✓ tests/unit/performance-optimizations.test.ts (15 tests) 4ms
+ ✓ tests/unit/type-adapters.test.ts (13 tests) 6ms
+ ✓ tests/unit/tools/tasks/query-tasks-upcoming.test.ts (3 tests) 8ms
+ ✓ tests/unit/response-format-consistency.test.ts (11 tests) 8ms
+ ✓ tests/unit/omnifocus/plugins/core-recurring-analyzer.test.ts (5 tests) 2ms
+stdout | tests/unit/tag-conversion.test.ts > Tag Type Conversion Issues > should check for array/object conversion patterns in tag scripts
+\nAnalyzing LIST_TAGS_SCRIPT for type conversion issues:
+  Found 1 instances of pattern 5: \.map\(
+\nAnalyzing MANAGE_TAGS_SCRIPT for type conversion issues:
+  Found 2 instances of pattern 1: \.push\([^)]+\)(?!;)
+  Found 1 instances of pattern 2: \.addTags\(\[
+  Found 1 instances of pattern 3: \.removeTags\(\[
+  Found 1 instances of pattern 5: \.map\(
+
+stdout | tests/unit/tag-conversion.test.ts > Tag Type Conversion Issues > should identify complex object serialization
+\nFound complex serialization patterns:
+  LIST_TAGS: 27 instances
+  MANAGE_TAGS: 26 instances
+\nFound complex serialization patterns:
+  LIST_TAGS: 1 instances
+
+ ✓ tests/unit/tag-conversion.test.ts (3 tests) 3ms
+ ✓ tests/unit/utils/error-messages.test.ts (10 tests) 2ms
+ ✓ tests/unit/cache-manager.test.ts (28 tests) 6ms
+ ✓ tests/unit/tools/export/export-tool.test.ts (5 tests) 3ms
+ ✓ tests/unit/utils/logger.test.ts (3 tests) 3ms
+ ✓ tests/unit/tools/tasks/query-tasks-smart-suggest.test.ts (3 tests) 7ms
+ ✓ tests/unit/utils/schema-validation.test.ts (35 tests) 8ms
+ ✓ tests/unit/utils/permissions.test.ts (6 tests) 7ms
+ ✓ tests/unit/omnifocus/scripts/ScriptBuilder.test.ts (29 tests) 4ms
+ ✓ tests/unit/tools/analytics/workflow-analysis-tool.test.ts (4 tests) 4ms
+ ✓ tests/unit/tag-operations.test.ts (4 tests) 4ms
+ ✓ tests/unit/tools/schemas/project-schemas.test.ts (8 tests) 6ms
+ ✓ tests/unit/mcp-client.test.ts (2 tests) 2ms
+ ✓ tests/unit/omnifocus/scripts/script-builder.test.ts (23 tests) 4ms
+ ✓ tests/unit/omnifocus/plugins/gaming-recurring-analyzer.test.ts (4 tests) 2ms
+ ↓ tests/unit/integration.test.ts (7 tests | 7 skipped)
+ ↓ tests/unit/test-data-management.test.ts (6 tests | 6 skipped)
+ ✓ tests/unit/task-search-limit.test.ts (3 tests) 2ms
+
+ Test Files  2 failed | 46 passed | 2 skipped (50)
+      Tests  13 failed | 675 passed | 13 skipped (701)
+   Start at  23:29:52
+   Duration  2.02s (transform 1.65s, setup 1.95s, collect 3.57s, tests 774ms, environment 6ms, prepare 2.87s)
+

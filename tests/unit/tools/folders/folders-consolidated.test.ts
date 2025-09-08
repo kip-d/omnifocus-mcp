@@ -26,14 +26,14 @@ vi.mock('../../../../src/tools/folders/ManageFolderTool.js', () => ({
   ManageFolderTool: vi.fn().mockImplementation(() => ({ execute: manageExecute }))
 }));
 
-vi.mock('../../../../src/utils/response-format.js', () => ({
-  createErrorResponse: vi.fn((operation, code, message, details, metadata) => ({
+vi.mock('../../../../src/utils/response-format-v2.js', () => ({
+  createErrorResponseV2: vi.fn((operation, code, message, suggestion, details, metadata) => ({
     success: false,
-    data: null,
+    data: {},
     metadata: { operation, timestamp: new Date().toISOString(), from_cache: false, ...metadata },
-    error: { code, message, details },
+    error: { code, message, suggestion, details },
   })),
-  OperationTimer: vi.fn().mockImplementation(() => ({ toMetadata: vi.fn(() => ({ query_time_ms: 1 })) })),
+  OperationTimerV2: vi.fn().mockImplementation(() => ({ toMetadata: vi.fn(() => ({ query_time_ms: 1 })) })),
 }));
 
 describe('FoldersTool (consolidated dispatcher)', () => {
@@ -121,4 +121,3 @@ describe('FoldersTool (consolidated dispatcher)', () => {
     expect(manageExecute).toHaveBeenCalledWith({ operation: 'set_status', folderId: 'f1', status: 'active', includeContents: true });
   });
 });
-

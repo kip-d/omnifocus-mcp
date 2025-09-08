@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    setupFiles: ['tests/support/setup-unit.ts'],
     testTimeout: 30000,        // 30s for most tests
     hookTimeout: 60000,        // 60s for setup/teardown hooks
     // Sandbox-friendly mode: when VITEST_SAFE=1, use single threaded pool
