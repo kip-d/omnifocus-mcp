@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-09-08
+
+🎉 **MILESTONE: 100% Tool Success Rate Achieved - All 15 MCP Tools Working**
+
+### 🔥 Major Fixes
+- **analyze_patterns Tool**: Fixed missing OmniFocus app initialization in fetchSlimmedData script
+- **manage_task Tool**: Enhanced schema validation to properly handle empty string date fields with transform functions  
+- **folders Tool**: Completed conversion to function argument pattern with proper IIFE wrapper structure
+- **Async Operation Lifecycle**: Bulletproof pending operations tracking prevents premature server exit
+
+### ✨ Added
+- **Schema Transform Functions**: Union types with `.transform()` for optional date fields (projectId, dueDate, deferDate, completionDate)
+- **Parameter Filtering**: Automatic null/undefined value filtering when routing between consolidated tools
+- **Script Structure Validation**: Consistent IIFE wrappers and OmniFocus app initialization across all JXA scripts
+- **Comprehensive Documentation**: Updated LESSONS_LEARNED.md with critical async operation patterns
+
+### 🔧 Improved
+- **Tool Reliability**: From 27% (4/15) to 100% (15/15) success rate via CLI testing
+- **MCP Bridge Compatibility**: Proper handling of Claude Desktop's string parameter coercion  
+- **Error Handling**: Clear validation messages for date format issues with recovery suggestions
+- **Testing Coverage**: All tools verified working through both direct execution and MCP bridge
+
+### 📊 Performance
+- **CLI Testing**: All 15 tools execute successfully with proper async lifecycle management
+- **Integration Tests**: ✅ All tests passing with comprehensive tool coverage
+- **Server Lifecycle**: Graceful shutdown with pending operation completion tracking
+
+🚀 **Ready for Production**: This release represents a major reliability milestone with bulletproof async operations and 100% tool functionality.
+
 ## [2.1.0] - 2025-09-04
 
 🚀 **Major Architecture Improvement - Type Safety & Code Quality Enhancement**

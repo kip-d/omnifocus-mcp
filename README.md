@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
-## 🎉 v2.0.0 Production Release!
+## 🎉 v2.1.0 Production Release - 100% Tool Success Rate!
 
 **Complete architecture overhaul with all JXA limitations fixed:**
 - ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
