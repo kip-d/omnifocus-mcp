@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { createCreateTaskScript } from '../../omnifocus/scripts/tasks.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { CreateTaskResponse } from '../types.js';
 import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
@@ -45,7 +45,8 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
         );
       }
 
-      const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
+      // Use new function argument architecture for template substitution safety
+      const script = createCreateTaskScript(convertedTaskData);
       const anyOmni: any = this.omniAutomation as any;
       let result: any;
       try {
