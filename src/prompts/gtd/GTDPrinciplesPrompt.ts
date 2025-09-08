@@ -12,7 +12,8 @@ Based on David Allen's Getting Things Done methodology and OmniFocus's implement
 Everything goes into the inbox first. Don't organize while capturing.
 \`\`\`javascript
 // Quick capture to inbox
-await create_task({ 
+await manage_task({ 
+  operation: 'create',
   name: "Call Bob about project proposal",
   note: "He mentioned concerns in meeting"
   // No project assignment yet - that's processing
@@ -27,8 +28,9 @@ For each inbox item, ask:
 
 \`\`\`javascript
 // Get inbox items
-const inbox = await list_tasks({ 
-  inInbox: true,
+const inbox = await tasks({ 
+  mode: 'all',
+  project: null, // Inbox items
   completed: false,
   limit: 10
 });
@@ -43,13 +45,12 @@ Assign to appropriate:
 
 \`\`\`javascript
 // Organize from inbox
-await update_task({
+await manage_task({
+  operation: 'update',
   taskId: inboxTask.id,
-  updates: {
-    projectId: "abc123",
-    tags: ["@office", "high-energy"],
-    deferDate: "2024-01-20"  // Not available until
-  }
+  projectId: "abc123",
+  tags: ["@office", "high-energy"],
+  deferDate: "2024-01-20"  // Not available until
 });
 \`\`\`
 
@@ -57,7 +58,8 @@ await update_task({
 Weekly review is critical:
 \`\`\`javascript
 // Find stale projects (no changes in 30 days)
-const projects = await list_projects({ 
+const projects = await projects({ 
+  operation: 'list',
   status: ["active"],
   includeStats: true 
 });
@@ -71,9 +73,9 @@ const stale = projects.items.filter(p =>
 Work from contexts and energy levels:
 \`\`\`javascript
 // What can I do at the office right now?
-const officeTasks = await list_tasks({
+const officeTasks = await tasks({
+  mode: 'available',
   tags: ["@office"],
-  available: true,  // Not deferred
   completed: false,
   sortBy: "dueDate"
 });
@@ -92,10 +94,10 @@ If it takes less than 2 minutes, do it now:
 // During inbox processing
 if (estimatedMinutes <= 2) {
   // Just do it!
-  await complete_task({ taskId: task.id });
+  await manage_task({ operation: 'complete', taskId: task.id });
 } else {
   // Organize it properly
-  await update_task({ /* ... */ });
+  await manage_task({ operation: 'update', /* ... */ });
 }
 \`\`\`
 
@@ -139,7 +141,7 @@ const thoughts = [
 ];
 
 for (const thought of thoughts) {
-  await create_task({ name: thought });
+  await manage_task({ operation: 'create', name: thought });
 }
 // Process and organize later!
 \`\`\`
@@ -147,27 +149,26 @@ for (const thought of thoughts) {
 ### Use Defer Dates Liberally
 Hide future tasks to reduce overwhelm:
 \`\`\`javascript
-await update_task({
+await manage_task({
+  operation: 'update',
   taskId: task.id,
-  updates: {
-    deferDate: "2024-02-01",  // Hide until February
-    tags: ["someday-maybe"]
-  }
+  deferDate: "2024-02-01",  // Hide until February
+  tags: ["someday-maybe"]
 });
 \`\`\`
 
 ### Contexts for Energy and Location
 \`\`\`javascript
 // High-energy morning work
-const brainWork = await list_tasks({
-  tags: ["high-energy", "@computer"],
-  available: true
+const brainWork = await tasks({
+  mode: 'available',
+  tags: ["high-energy", "@computer"]
 });
 
 // Low-energy evening tasks
-const easyStuff = await list_tasks({
-  tags: ["low-energy", "@home"],
-  available: true
+const easyStuff = await tasks({
+  mode: 'available',
+  tags: ["low-energy", "@home"]
 });
 \`\`\`
 

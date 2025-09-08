@@ -7,34 +7,37 @@ const QUICK_REFERENCE = `
 ## Essential Tools by Speed
 
 ### Instant (<100ms) - Cached
-- \`get_task_count\` - Just counts, no data
+- \`tasks({ mode: 'all', limit: 1, details: false })\` - Quick count
 - Previously called tools (cache hits)
 
 ### Fast (100-300ms)
-- \`list_tags({ namesOnly: true })\` - ~130ms
-- \`list_tags({ fastMode: true })\` - ~270ms
-- \`get_active_tags()\` - Tags with tasks only
-- \`todays_agenda({ includeDetails: false })\` - ~500ms
+- \`tags({ operation: 'list', namesOnly: true })\` - ~130ms
+- \`tags({ operation: 'list', fastMode: true })\` - ~270ms
+- \`tags({ operation: 'active' })\` - Tags with tasks only
+- \`tasks({ mode: 'today', details: false })\` - ~500ms
 
 ### Normal (300ms-1s)
-- \`list_tasks({ skipAnalysis: true })\` - ~700ms
-- \`list_projects({ includeStats: false })\` - ~800ms
-- \`get_overdue_tasks()\` - Optimized queries
-- \`get_upcoming_tasks()\` - Next N days
+- \`tasks({ mode: 'all', details: false })\` - ~700ms
+- \`projects({ operation: 'list', includeStats: false })\` - ~800ms
+- \`tasks({ mode: 'overdue' })\` - Optimized queries
+- \`tasks({ mode: 'upcoming' })\` - Next N days
 
 ### Slower (1s+)
-- \`list_tasks({ includeDetails: true })\` - Full analysis
-- \`list_projects({ includeStats: true })\` - With metrics
-- \`list_tags({ includeUsageStats: true })\` - ~3s
+- \`tasks({ mode: 'all', details: true })\` - Full analysis
+- \`projects({ operation: 'stats' })\` - With metrics
+- \`tags({ operation: 'list', includeUsageStats: true })\` - ~3s
 - Analytics tools - Complex calculations
 
 ## Must-Know Limitations
 
-1. **Tags on Creation**: Not supported
+1. **Tags on Creation**: ✅ NOW SUPPORTED (v2.0.0+)
    \`\`\`javascript
-   // Always two steps:
-   const task = await create_task({ name: "Task" });
-   await update_task({ taskId: task.id, updates: { tags: ["tag"] }});
+   // Single step works!
+   const task = await manage_task({ 
+     operation: 'create',
+     name: "Task", 
+     tags: ["work", "urgent"]
+   });
    \`\`\`
 
 2. **Period Values**: Exact strings only
@@ -44,19 +47,19 @@ const QUICK_REFERENCE = `
 3. **Date Format**: Local time
    - "2024-01-15" or "2024-01-15 14:30"
 
-4. **Project IDs**: Use strings from list_projects
+4. **Project IDs**: Use strings from projects tool
    - Not numeric IDs from Claude Desktop
 
 ## Performance Cheat Sheet
 
 | Operation | Fast Way | Slow Way |
 |-----------|----------|----------|
-| Today's tasks | \`todays_agenda()\` | \`list_tasks\` + filter |
-| Tag dropdown | \`list_tags({ namesOnly: true })\` | \`list_tags()\` |
-| Active tags | \`get_active_tags()\` | \`list_tags\` + filter |
-| Overdue | \`get_overdue_tasks()\` | \`list_tasks\` + dates |
-| Task count | \`get_task_count()\` | \`list_tasks\` + length |
-| Quick list | \`skipAnalysis: true\` | Default analysis |
+| Today's tasks | \`tasks({ mode: 'today' })\` | \`tasks({ mode: 'all' })\` + filter |
+| Tag dropdown | \`tags({ operation: 'list', namesOnly: true })\` | \`tags({ operation: 'list' })\` |
+| Active tags | \`tags({ operation: 'active' })\` | \`tags({ operation: 'list' })\` + filter |
+| Overdue | \`tasks({ mode: 'overdue' })\` | \`tasks({ mode: 'all' })\` + dates |
+| Task count | \`tasks({ mode: 'all', details: false, limit: 1 })\` | \`tasks({ mode: 'all' })\` + length |
+| Quick list | \`tasks({ details: false })\` | \`tasks({ details: true })\` |
 
 ## Cache Durations
 - Tasks: 30 seconds
@@ -65,28 +68,26 @@ const QUICK_REFERENCE = `
 - Analytics: 1 hour
 - Active tags: 1 minute
 
-## Available Prompts
-1. \`gtd_weekly_review\` - Weekly review workflow
-2. \`gtd_process_inbox\` - Process inbox items
-3. \`tag_performance_guide\` - Tag optimization
-4. \`tool_discovery_guide\` - All tools explained
-5. \`common_patterns_guide\` - Best practices
-6. \`troubleshooting_guide\` - Fix common issues
-7. \`quick_reference\` - This guide
+## Available Prompts (5 GTD-focused)
+1. \`gtd_principles\` - Core GTD methodology guide
+2. \`gtd_process_inbox\` - Process inbox using pure GTD (2-minute rule)
+3. \`eisenhower_matrix_inbox\` - Process inbox using priority quadrants
+4. \`gtd_weekly_review\` - Complete weekly review workflow
+5. \`quick_reference\` - This essential reference guide
 
 ## Emergency Commands
 \`\`\`javascript
 // Test connection
-await run_diagnostics();
+await system({ operation: 'diagnostics' });
 
 // Check version
-await get_version_info();
+await system({ operation: 'version' });
 
 // Minimal test
-await get_task_count({ limit: 1 });
+await tasks({ mode: 'all', limit: 1, details: false });
 
-// Force fresh data
-await list_tasks({ limit: Math.random() * 100 });
+// Force fresh data (bypass cache)
+await tasks({ mode: 'all', limit: Math.floor(Math.random() * 100) });
 \`\`\`
 
 Remember: Specialized tools > General tools with filters!
