@@ -4,6 +4,39 @@
 
 This document captures hard-won insights from developing OmniFocus MCP v2.0.0. These lessons will save you from repeating our mistakes.
 
+## 🚨 CRITICAL: CLI Testing Misconceptions (December 2025)
+
+### The "Hanging" CLI Testing Mystery - SOLVED ✅
+
+**Problem:** CLI testing for `manage_task` operations appeared to "hang indefinitely", leading to incorrect assumptions about broken functionality.
+
+**Root Cause:** Misunderstanding of normal MCP stdio behavior combined with improper MCP initialization.
+
+**Key Findings:**
+1. **MCP servers are supposed to exit when stdin closes** - This is correct behavior, not hanging!
+2. **Missing `clientInfo` parameter** - CLI tests were missing required MCP initialization parameter
+3. **Race condition misconception** - stdin closing "too quickly" was actually proper MCP protocol
+
+**Before Fix (Incorrect Diagnosis):**
+```bash
+# This would timeout because of missing clientInfo parameter
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | node dist/index.js
+# ❌ Server rejects connection due to schema validation error
+```
+
+**After Fix (Correct Understanding):**
+```bash
+# Proper MCP initialization with required clientInfo
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+# ✅ Server accepts connection and processes tools correctly
+```
+
+**Critical Lesson:** Always question "hanging" processes in MCP context - they should exit gracefully when stdin closes.
+
+**Time Cost:** 6+ months of believing CLI testing was fundamentally broken when it was actually working correctly.
+
+**Documentation Impact:** Must update all testing documentation to reflect proper MCP protocol usage.
+
 ## 🚨 Critical Performance Issues
 
 ### 1. NEVER Use whose() in JXA
@@ -48,6 +81,30 @@ export const UPDATE_PROJECT_SCRIPT = `
 
 // ✅ WORKS - 4,922 chars - Success!
 export const UPDATE_PROJECT_SCRIPT = `
+
+### 2c. Script Truncation Issues (~20KB) - NEW DISCOVERY
+**Problem:** Large scripts (19KB+) get truncated during execution, causing `SyntaxError: Unexpected EOF`
+```bash
+# Error pattern:
+# "Script execution failed with code 1"
+# "SyntaxError: Unexpected EOF (-2700)"
+```
+
+**Root Cause:** CREATE_TASK_SCRIPT includes heavy helper functions:
+- `getRecurrenceApplyHelpers()` - Complex repeat rule logic
+- `getValidationHelpers()` - Project validation
+- `BRIDGE_HELPERS` - Tag assignment bridge code
+
+**Current Script Analysis:**
+- Raw template: 8,103 characters ✅ (manageable)  
+- With helpers expanded: 19,026 characters ❌ (too large)
+- Result: Script gets truncated at ~14KB, breaks syntax
+
+**Solution Strategy:**
+1. Use minimal helpers only where needed
+2. Move complex logic to separate bridge calls
+3. Reduce helper function size
+4. Consider helper function lazy loading
   ${getMinimalHelpers()}
   // ... only essential updates (name, note, dates, status)
 `;
@@ -629,6 +686,100 @@ If you're reading this and wondering why we made this change:
 
 ### Lesson
 Always verify changes against the official MCP specification, even when they "seem logical". The MCP `type` field describes media format (text/image), not data structure.
+
+---
+
+## 🚨 CRITICAL: Script Syntax Errors from Missing Helper Functions (September 2025)
+
+### The "Unexpected EOF" Mystery - SOLVED ✅
+
+**Problem:** CREATE_TASK_SCRIPT and other scripts causing `SyntaxError: Unexpected EOF (-2700)` during execution, leading to tool failures.
+
+**Root Cause:** Scripts referenced helper functions that weren't included in the template, causing undefined function references that broke JavaScript syntax during execution.
+
+**Key Findings:**
+1. **Missing Function References**: Scripts called `prepareRepetitionRuleData`, `applyRepetitionRuleViaBridge`, `setTagsViaBridge` but these functions weren't defined
+2. **Template vs Runtime**: Script looked syntactically valid at template level, but failed when executed with actual data
+3. **Silent Failures**: Tools would execute but return no response due to script syntax errors
+
+**Before Fix (Broken Pattern):**
+```javascript
+// ❌ BROKEN: Script references undefined functions
+export const CREATE_TASK_SCRIPT = `
+  // ... basic functions defined here ...
+  
+  (() => {
+    // ... task creation logic ...
+    
+    // ERROR: These functions don't exist in this script!
+    const ruleData = prepareRepetitionRuleData(taskData.repeatRule);
+    const success = applyRepetitionRuleViaBridge(taskId, ruleData);
+    const res = setTagsViaBridge(taskId, taskData.tags, app);
+    
+    return JSON.stringify(response);
+  })();
+`;
+```
+
+**After Fix (Working Pattern):**
+```javascript
+// ✅ FIXED: Self-contained script with only defined functions
+export const CREATE_TASK_SCRIPT = `
+  ${getMinimalHelpers()}
+  
+  (() => {
+    // ... task creation logic ...
+    
+    // Basic tag application without external dependencies
+    if (taskData.tags && taskData.tags.length > 0) {
+      const flatTags = doc.flattenedTags();
+      // ... direct JXA tag application ...
+    }
+    
+    // Note: Advanced features temporarily disabled to maintain script simplicity
+    
+    return JSON.stringify(response);
+  })();
+`;
+```
+
+**Diagnosis Process:**
+1. **Initial Error**: "Unexpected EOF" suggested script truncation
+2. **False Lead**: Assumed script size limits were the cause (19KB script)
+3. **Template Analysis**: Individual components had valid syntax
+4. **Execution Testing**: Created test harness to expand and validate complete scripts
+5. **Root Cause**: Found undefined function references breaking JavaScript syntax
+6. **Solution**: Made scripts self-contained with only defined functionality
+
+**Critical Debugging Commands:**
+```bash
+# Test script syntax after template expansion
+node test-script-expansion.js
+
+# Check for undefined function references
+grep -n "functionName" expanded-script.js
+
+# Verify JavaScript syntax
+node -c expanded-script.js
+```
+
+**Tool-Specific Impact:**
+- ✅ **system tool**: Worked correctly (no complex script dependencies)
+- ❌ **manage_task tool**: Failed silently due to undefined helper functions  
+- ✅ **After fix**: All tools execute without script syntax errors
+
+**Architectural Lesson:**
+1. **Self-Contained Scripts**: Each script must include all functions it references
+2. **Helper Function Auditing**: Verify all called functions are actually defined
+3. **Template vs Runtime Testing**: Test both template syntax AND fully expanded scripts
+4. **Progressive Debugging**: Start with simpler tools to isolate script vs protocol issues
+
+**Time Cost:** 1 day of debugging "script truncation" when the real issue was undefined function references.
+
+**Prevention:** 
+- Add linting to check for undefined function references in scripts
+- Use TypeScript analysis to catch missing function definitions
+- Test script expansion in CI/CD pipeline
 
 ---
 

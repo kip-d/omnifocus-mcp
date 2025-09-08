@@ -139,7 +139,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     try {
       // Validate required parameters based on operation
       if (operation !== 'create' && !taskId) {
-        return createErrorResponseV2(
+        const error = createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
           `taskId is required for ${operation} operation`,
@@ -147,10 +147,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           { operation },
           timer.toMetadata(),
         );
+        return this.formatForCLI(error, operation, 'error');
       }
 
       if (operation === 'create' && !params.name) {
-        return createErrorResponseV2(
+        const error = createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
           'name is required for create operation',
@@ -158,13 +159,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           { operation },
           timer.toMetadata(),
         );
+        return this.formatForCLI(error, operation, 'error');
       }
 
       // Route to appropriate tool based on operation
+      let result: any;
       switch (operation) {
         case 'create':
           // Execute create operation
-          return await this.createTool.execute({
+          result = await this.createTool.execute({
             name: params.name!,
             note: params.note,
             projectId: params.projectId,
@@ -177,10 +180,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             sequential: params.sequential,
             repeatRule: params.repeatRule,
           });
+          break;
 
         case 'update':
           // Execute update operation
-          return await this.updateTool.execute({
+          result = await this.updateTool.execute({
             taskId: taskId!,
             name: params.name,
             note: params.note,
@@ -199,22 +203,25 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             minimalResponse: params.minimalResponse,
             repeatRule: params.repeatRule,
           });
+          break;
 
         case 'complete':
           // Execute complete operation
-          return await this.completeTool.execute({
+          result = await this.completeTool.execute({
             taskId: taskId!,
             completionDate: params.completionDate,
           });
+          break;
 
         case 'delete':
           // Execute delete operation
-          return await this.deleteTool.execute({
+          result = await this.deleteTool.execute({
             taskId: taskId!,
           });
+          break;
 
         default:
-          return createErrorResponseV2(
+          const error = createErrorResponseV2(
             'manage_task',
             'INVALID_OPERATION',
             `Invalid operation: ${operation}`,
@@ -222,9 +229,50 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             { operation },
             timer.toMetadata(),
           );
+          return this.formatForCLI(error, operation, 'error');
       }
+
+      // Format result for CLI testing if needed
+      return this.formatForCLI(result, operation, 'success');
+
     } catch (error) {
-      return this.handleError(error);
+      const errorResult = this.handleError(error);
+      return this.formatForCLI(errorResult, operation, 'error');
     }
+  }
+
+  /**
+   * Format response for CLI testing when MCP_CLI_TESTING environment variable is set
+   * This makes responses easier to parse in bash scripts
+   */
+  private formatForCLI(result: any, operation: string, type: 'success' | 'error'): any {
+    // Only modify output if in CLI testing mode
+    if (!process.env.MCP_CLI_TESTING) {
+      return result;
+    }
+
+    // Add CLI-friendly debug output to stderr (won't interfere with JSON)
+    if (type === 'success') {
+      console.error(`[CLI_DEBUG] manage_task ${operation} operation: SUCCESS`);
+      
+      // Extract key data for logging
+      if (result?.data?.task?.taskId || result?.data?.task?.id) {
+        const taskId = result.data.task.taskId || result.data.task.id;
+        console.error(`[CLI_DEBUG] Task ID: ${taskId}`);
+      }
+      
+      if (result?.data?.task?.name) {
+        console.error(`[CLI_DEBUG] Task name: ${result.data.task.name}`);
+      }
+      
+      console.error(`[CLI_DEBUG] Operation completed in ${result?.metadata?.query_time_ms || 'unknown'}ms`);
+      
+    } else {
+      console.error(`[CLI_DEBUG] manage_task ${operation} operation: ERROR`);
+      console.error(`[CLI_DEBUG] Error: ${result?.error?.message || 'Unknown error'}`);
+    }
+
+    // Still return the original result for MCP protocol compliance
+    return result;
   }
 }

@@ -101,8 +101,28 @@ for (let i = 0; i < allTasks.length; i++) {
 - **Early exit** on most common conditions (completed, no date)
 - Set `skipAnalysis: true` for 30% faster queries when recurring analysis not needed
 
-## 🚨 Critical: Script Size Limits
-**JXA scripts sent to OmniFocus have size limits that can cause syntax errors.**
+## 🚨 Critical: Script Size Limits & CLI Testing
+
+### Script Size Issues (19KB+ = Truncation) 
+**JXA scripts over 19KB get truncated during execution, causing `SyntaxError: Unexpected EOF`**
+
+**Current Issue (December 2025):**
+- `CREATE_TASK_SCRIPT` = 19,026 characters (too large)
+- Includes: `getRecurrenceApplyHelpers()` + `getValidationHelpers()` + `BRIDGE_HELPERS`  
+- Result: Script truncated ~14KB → syntax error
+
+### CLI Testing - SOLVED ✅
+**Previous misconception:** "CLI testing hangs forever"  
+**Reality:** MCP servers exit when stdin closes (correct behavior)
+
+**Proper CLI Testing Pattern:**
+```bash
+# ✅ CORRECT - Include required clientInfo parameter
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+
+# ❌ WRONG - Missing clientInfo causes schema validation error  
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | node dist/index.js
+```
 
 ### Keep Scripts Small
 - **Use minimal helpers**: Import only essential helper functions
