@@ -16,13 +16,45 @@ The server implements intelligent caching with different TTLs based on data vola
 
 | Data Type | TTL | Rationale |
 |-----------|-----|-----------|
-| Tasks | 30 seconds | Frequently changing |
-| Projects | 5 minutes | Less volatile |
-| Tags | 5 minutes | Relatively stable |
+| Tasks | 30 seconds | ↓ Reduced for faster GTD inbox processing |
+| Projects | 5 minutes | ↓ Reduced for weekly review workflows |
+| Folders | 10 minutes | Stable hierarchy |
+| Tags | 10 minutes | ↓ Reduced for active tag assignments |
+| Reviews | 3 minutes | ↓ Reduced for GTD review workflow |
 | Analytics | 1 hour | Expensive computations |
-| Active tags | 1 minute | Fast GTD workflow support |
 
 Cache is automatically invalidated on write operations to ensure data consistency.
+
+### GTD Workflow Optimizations
+
+The cache system includes GTD-specific optimizations to handle the rapid changes common in productive workflows:
+
+#### Selective Task Cache Invalidation
+Instead of clearing all task caches when one task changes, the system can selectively invalidate specific query patterns:
+
+```javascript
+// Only clear today's agenda and inbox caches, preserve others
+cacheManager.invalidateTaskQueries(['today', 'inbox']);
+
+// Clear overdue and upcoming but preserve general task lists
+cacheManager.invalidateTaskQueries(['overdue', 'upcoming']);
+```
+
+#### Workflow-Aware Cache Management
+Different GTD workflows have different caching needs:
+
+```javascript
+// Inbox processing - frequent updates needed
+cacheManager.refreshForWorkflow('inbox_processing');
+
+// Weekly review - comprehensive refresh
+cacheManager.refreshForWorkflow('weekly_review'); 
+
+// Daily planning - only clear time-sensitive caches
+cacheManager.refreshForWorkflow('daily_planning');
+```
+
+These optimizations ensure that users get fresh data when they need it most while preserving performance benefits for stable queries.
 
 ## Query Performance Optimization
 

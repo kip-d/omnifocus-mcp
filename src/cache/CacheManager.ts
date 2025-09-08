@@ -13,12 +13,12 @@ export class CacheManager {
   };
 
   private config: CacheConfig = {
-    tasks: { ttl: 60 * 1000 },        // 1 minute (was 30 seconds)
-    projects: { ttl: 600 * 1000 },    // 10 minutes (was 5 minutes)
-    folders: { ttl: 600 * 1000 },     // 10 minutes (folders change less frequently)
-    analytics: { ttl: 3600 * 1000 },  // 1 hour
-    tags: { ttl: 1200 * 1000 },       // 20 minutes (was 10 minutes)
-    reviews: { ttl: 300 * 1000 },     // 5 minutes (review data is time-sensitive)
+    tasks: { ttl: 30 * 1000 },        // 30 seconds - GTD inbox processing needs frequent updates
+    projects: { ttl: 300 * 1000 },    // 5 minutes - weekly review and project reorganization
+    folders: { ttl: 600 * 1000 },     // 10 minutes - folders change less frequently
+    analytics: { ttl: 3600 * 1000 },  // 1 hour - expensive computations
+    tags: { ttl: 600 * 1000 },        // 10 minutes - tag assignments during processing
+    reviews: { ttl: 180 * 1000 },     // 3 minutes - GTD review workflow needs fresh data
   };
 
   constructor(config?: Partial<CacheConfig>) {
@@ -149,5 +149,66 @@ export class CacheManager {
       this.set(category, key, data);
       return data;
     });
+  }
+
+  /**
+   * GTD-optimized selective cache invalidation
+   * Invalidates specific task query patterns while preserving others
+   */
+  public invalidateTaskQueries(patterns: ('today' | 'overdue' | 'upcoming' | 'inbox' | 'all')[] = ['all']): void {
+    let count = 0;
+    for (const [cacheKey] of this.cache) {
+      if (cacheKey.startsWith('tasks:')) {
+        const shouldInvalidate = patterns.some(pattern => {
+          switch (pattern) {
+            case 'today':
+              return cacheKey.includes('tasks_today') || cacheKey.includes('todays_agenda');
+            case 'overdue':
+              return cacheKey.includes('tasks_overdue') || cacheKey.includes('overdue');
+            case 'upcoming':
+              return cacheKey.includes('tasks_upcoming') || cacheKey.includes('upcoming');
+            case 'inbox':
+              return cacheKey.includes('inbox') || cacheKey.includes('project_null');
+            case 'all':
+              return true; // Invalidate all task queries
+            default:
+              return false;
+          }
+        });
+
+        if (shouldInvalidate) {
+          this.cache.delete(cacheKey);
+          count++;
+        }
+      }
+    }
+    
+    this.stats.evictions += count;
+    this.stats.size = this.cache.size;
+    logger.info(`Invalidated ${count} task cache entries for patterns: ${patterns.join(', ')}`);
+  }
+
+  /**
+   * GTD workflow-aware cache refresh
+   * Provides different caching strategies for different GTD contexts
+   */
+  public refreshForWorkflow(workflow: 'inbox_processing' | 'weekly_review' | 'daily_planning'): void {
+    switch (workflow) {
+      case 'inbox_processing':
+        // Clear task and project caches for immediate updates during processing
+        this.invalidateTaskQueries(['today', 'inbox']);
+        this.invalidate('projects'); // Projects might change as tasks are organized
+        break;
+      case 'weekly_review':
+        // Clear everything except analytics for comprehensive review
+        this.invalidate('tasks');
+        this.invalidate('projects');
+        this.invalidate('reviews');
+        break;
+      case 'daily_planning':
+        // Only clear today's agenda and upcoming tasks
+        this.invalidateTaskQueries(['today', 'upcoming', 'overdue']);
+        break;
+    }
   }
 }
