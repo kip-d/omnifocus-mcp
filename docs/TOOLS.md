@@ -4,7 +4,60 @@ This document provides comprehensive documentation for all available tools in th
 
 ## 📢 Important: v2.0.0 Consolidated Architecture
 
-**This documentation reflects the v2.0.0 consolidated tool architecture.** Tools have been consolidated from 22 to 14 for better LLM comprehension and reduced decision complexity.
+**This documentation reflects the v2.1.0 consolidated tool architecture.** Tools have been consolidated from 22 to 15 for better LLM comprehension and reduced decision complexity.
+
+## 🚀 Quick Tool Selection by Use Case
+
+### Task Management
+- **tasks**: Main workhorse. Use `details: false` for 30% speed boost
+- **manage_task**: CRUD operations (create, update, complete, delete)
+  - ✅ **Tags now work during creation** (v2.0.0+ fix)
+
+### Performance-Optimized Queries  
+- **tasks({ mode: 'today' })**: Faster than general queries for daily planning
+- **tasks({ mode: 'overdue' })**: ~2x faster than filtering by date
+- **tasks({ mode: 'upcoming' })**: Optimized for next N days view
+- **tags({ operation: 'active' })**: Returns only tags with incomplete tasks (fast for GTD)
+
+### Project Operations
+- **projects**: All project operations (list, create, update, complete, delete, stats)
+  - Use `includeStats: false` by default for speed
+
+### Analytics (Cached 1 hour)
+- **productivity_stats**: Period-based analysis (today|week|month|quarter|year)
+- **task_velocity**: Completion patterns and throughput analysis
+- **analyze_overdue**: Find bottlenecks by project/tag/age
+- **workflow_analysis**: Deep workflow pattern analysis
+
+### Tag Management  
+- **tags**: 3 performance modes - `namesOnly` (130ms), `fastMode` (270ms), full (700ms)
+- **tags({ operation: 'active' })**: Just tags with incomplete tasks
+- Tag operations: create/rename/delete/merge/nest
+
+### Bulk Operations
+- **export**: JSON/CSV/Markdown with filters (tasks, projects, or complete backup)
+- **recurring_tasks**: Analyze and manage recurring task patterns
+
+### Common Performance Patterns
+
+```javascript
+// ✅ Fast daily overview
+tasks({ mode: 'today', details: false, limit: 50 })
+
+// ✅ Quick task creation with tags (now works!)
+manage_task({ 
+  operation: 'create',
+  name: "Review report",
+  tags: ["urgent", "work"],  // Works in v2.0.0+!
+  projectId: "xyz789"
+})
+
+// ✅ Efficient tag dropdown
+tags({ operation: 'list', namesOnly: true })  // ~130ms vs ~700ms
+
+// ✅ GTD workflow - active tags only
+tags({ operation: 'active' })  // Skip empty tags
+```
 
 ---
 

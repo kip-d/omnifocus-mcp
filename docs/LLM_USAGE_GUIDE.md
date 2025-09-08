@@ -358,6 +358,158 @@ console.log({
 - `"move"` - Change parent (requires folderId, parentId)
 - `"set_status"` - Change status (requires folderId, status)
 
+## Common Anti-Patterns and Solutions
+
+### Task Management Patterns
+
+#### ❌ Inefficient Task Filtering
+```javascript
+// Slow: Getting all tasks then filtering client-side
+const allTasks = await tasks({ mode: 'all', limit: 1000 });
+const filtered = allTasks.filter(t => t.projectId === 'abc123');
+```
+
+#### ✅ Efficient Server-Side Filtering
+```javascript  
+// Fast: Use server-side filters
+const tasks = await tasks({ 
+  mode: 'all',
+  project: 'abc123',
+  completed: false,
+  details: false,  // 30% faster
+  limit: 50
+});
+
+// Even faster: Use specialized modes
+const overdue = await tasks({ mode: 'overdue', limit: 50 });
+const today = await tasks({ mode: 'today', details: false });
+```
+
+#### ✅ Task Creation with Tags (v2.0.0+)
+```javascript
+// Now works in single step!
+const task = await manage_task({ 
+  operation: 'create',
+  name: "Review report",
+  projectId: 'xyz789',
+  tags: ["urgent", "work"],  // ✅ Fixed in v2.0.0
+  dueDate: "2024-01-15 17:00"
+});
+```
+
+#### ❌ Multiple Separate Queries
+```javascript
+// Inefficient: Multiple calls
+const project1 = await tasks({ mode: 'all', project: 'proj1' });
+const project2 = await tasks({ mode: 'all', project: 'proj2' });
+```
+
+#### ✅ Batch Operations and Analytics
+```javascript
+// Better: Use analytics for summaries
+const stats = await productivity_stats({ 
+  period: 'week',
+  includeProjectStats: true 
+});
+
+// Or use search/filtering
+const tasks = await tasks({
+  mode: 'search', 
+  search: 'project1 OR project2'
+});
+```
+
+### Project Management Patterns  
+
+#### ✅ Hierarchical Project Creation
+```javascript
+// Folders are auto-created
+const project = await projects({
+  operation: 'create',
+  name: "Q1 Marketing Campaign",
+  folder: "Work/Marketing/2024",  // Creates all levels if needed
+  status: "active",
+  dueDate: "2024-03-31"
+});
+```
+
+### Tag Optimization Patterns
+
+#### ❌ Slow Tag Queries for UI
+```javascript
+// Slow: Full tag details for dropdown (~3s)
+const tags = await tags({ 
+  operation: 'list',
+  includeUsageStats: true
+});
+```
+
+#### ✅ Fast Tag Queries
+```javascript
+// Fast: Names only for dropdown (~130ms)
+const tagNames = await tags({ 
+  operation: 'list',
+  namesOnly: true 
+});
+
+// GTD workflow: Only tags with tasks
+const activeTags = await tags({ operation: 'active' });
+```
+
+### Batch Processing Patterns
+
+#### ✅ Process Inbox in Batches
+```javascript
+// Get manageable batch
+const inbox = await tasks({
+  mode: 'all',
+  project: null,  // Inbox items
+  completed: false,
+  limit: 10
+});
+
+// Process each item
+for (const task of inbox.data) {
+  if (task.estimatedMinutes && task.estimatedMinutes <= 2) {
+    await manage_task({ operation: 'complete', taskId: task.id });
+  } else {
+    await manage_task({
+      operation: 'update', 
+      taskId: task.id,
+      projectId: 'someProject',
+      tags: ['@context']
+    });
+  }
+}
+```
+
+## Advanced Performance Tips
+
+### Cache-Aware Querying
+```javascript
+// These hit different cache keys (force refresh):
+tasks({ mode: 'all', limit: 50 })
+tasks({ mode: 'all', limit: 51 })  // Different cache key
+
+// Force fresh data with random parameter
+tasks({ mode: 'all', limit: Math.floor(Math.random() * 100) })
+```
+
+### Context-Aware Task Querying
+```javascript
+// High-energy morning work
+const brainWork = await tasks({
+  mode: 'available',
+  tags: ["high-energy", "@computer"]
+});
+
+// Low-energy evening tasks  
+const easyStuff = await tasks({
+  mode: 'available', 
+  tags: ["low-energy", "@home"]
+});
+```
+
 ## Conclusion
 
 The consolidated tools in the OmniFocus MCP Server are specifically designed to reduce the decision complexity that AI agents face when working with task management operations. By using these tools with the patterns outlined in this guide, AI agents can:

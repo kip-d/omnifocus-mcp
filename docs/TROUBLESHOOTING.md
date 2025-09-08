@@ -114,36 +114,21 @@ npm run build
    }
    ```
 
-#### Tags not being assigned
-**Known limitation**: Tags cannot be assigned during task creation due to JXA API constraints.
+#### ~~Tags not being assigned~~ ✅ FIXED in v2.0.0
+**Previous limitation**: Tags could not be assigned during task creation.
 
-**Current Status**:
-- Tag creation and listing work perfectly
-- Tag assignment DURING task creation is not supported
-- Tag assignment via update_task after creation has mixed results
-
-**Workaround**:
+**Current Status (v2.0.0+)**: ✅ **Tag assignment now works during creation!**
 ```javascript
-// Step 1: Create task without tags
-const task = await create_task({ 
+// ✅ Now works in single step!
+const task = await manage_task({ 
+  operation: 'create',
   name: "My Task",
-  projectId: "someProjectId"
+  projectId: "someProjectId",
+  tags: ["work", "urgent"]  // Works perfectly!
 });
-
-// Step 2: Update with tags
-const result = await update_task({ 
-  taskId: task.id, 
-  tags: ["work", "urgent"] 
-});
-
-// Check if warning was returned
-if (result.warning) {
-  console.log("Tag assignment issue:", result.warning);
-  // Tags may need to be applied manually in OmniFocus
-}
 ```
 
-**Best Practice**: For reliable tag management, consider using the OmniFocus UI directly.
+This limitation was resolved using the `evaluateJavascript()` bridge. See [JXA Limitations and Workarounds](JXA-LIMITATIONS-AND-WORKAROUNDS.md) for technical details.
 
 #### Project Movement Issues
 
@@ -212,6 +197,114 @@ node dist/index.js --version
 3. **JSON Parsing**: Complex nested objects may fail
 
 These are Claude Desktop issues, not server bugs. Use workarounds provided above.
+
+## Additional Common Issues
+
+### 1. "Script execution failed with code 1"
+**Symptoms**: 75% of functions return this error
+
+**Cause**: Missing IIFE wrapper after script modularization
+
+**Solution**: Ensure all scripts have proper wrapper (fixed in current version):
+```javascript
+(() => {
+  // script content
+})();
+```
+
+### 2. "Task/Project not found" with Numeric IDs
+**Symptoms**: `Project with ID '547' not found`
+
+**Cause**: Claude Desktop bug converting string IDs to numbers
+
+**Solution**: 
+```javascript
+// Always get fresh IDs from list operations
+const projects = await projects({ operation: 'list', search: 'project name' });
+const projectId = projects.data[0].id;  // Use this string ID
+```
+
+### 3. Slow Performance Issues
+**Symptoms**: Operations taking 3+ seconds
+
+**Common Causes & Solutions**:
+
+1. **Using wrong tool**:
+   - ❌ `tasks({ mode: 'all' })` for today → ✅ `tasks({ mode: 'today' })`
+   - ❌ `tags({ operation: 'list' })` for dropdown → ✅ `tags({ operation: 'list', namesOnly: true })`
+
+2. **Missing performance flags**:
+   - Add `details: false` to tasks queries  
+   - Use `fastMode: true` for tags when IDs needed
+
+3. **Requesting too much data**:
+   - Use `limit` parameter (defaults: 25-100)
+   - Avoid `includeUsageStats` unless needed
+
+### 4. Permission Errors
+**Symptoms**: "Failed to get OmniFocus document"
+
+**Solution**:
+1. Open System Settings → Privacy & Security → Automation
+2. Enable OmniFocus for your terminal/app
+3. Run diagnostic: `system({ operation: 'diagnostics' })`
+
+### 5. Date/Time Issues
+**Symptoms**: Tasks created with wrong times
+
+**Cause**: Timezone handling
+
+**Solution**: Use local time format
+```javascript
+// Correct formats:
+"2024-01-15"          // Date only (smart defaults: due=5pm, defer=8am)
+"2024-01-15 14:30"    // Date and time (local)
+
+// Avoid: ISO format with Z suffix
+"2024-01-15T14:30:00Z"  // May cause timezone confusion
+```
+
+### 6. Cache-Related Issues
+**Symptoms**: Not seeing recent changes
+
+**Cache Durations**:
+- Tasks: 30 seconds
+- Projects: 5 minutes
+- Tags: 5 minutes
+- Analytics: 1 hour
+
+**Force Refresh**: Change any parameter
+```javascript
+// These hit different cache keys:
+tasks({ mode: 'all', limit: 50 })
+tasks({ mode: 'all', limit: 51 })  // Forces fresh data
+```
+
+### 7. Invalid Period Values
+**Symptoms**: "Invalid period" errors in analytics tools
+
+**Solution**: Use exact strings only
+```javascript
+// ✅ Valid periods:
+"today", "week", "month", "quarter", "year"  
+
+// ❌ Invalid:
+"last_week", "this_week", "current_week"
+```
+
+### 8. V2 Tool Migration Issues
+**Symptoms**: "Tool not found" errors
+
+**Solution**: Update to V2 consolidated tools:
+```javascript
+// ❌ Old V1 tools (removed):
+create_task({ name: "Task" })
+list_tasks({ completed: false })
+
+// ✅ New V2 tools:
+manage_task({ operation: 'create', name: "Task" })
+tasks({ mode: 'all', completed: false })
+```
 
 ### JXA whose() Constraints
 

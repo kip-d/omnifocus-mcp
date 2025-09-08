@@ -16,10 +16,11 @@ The server implements intelligent caching with different TTLs based on data vola
 
 | Data Type | TTL | Rationale |
 |-----------|-----|-----------|
-| Tasks | 1 minute | Frequently changing |
-| Projects | 10 minutes | Less volatile |
-| Tags | 20 minutes | Relatively stable |
+| Tasks | 30 seconds | Frequently changing |
+| Projects | 5 minutes | Less volatile |
+| Tags | 5 minutes | Relatively stable |
 | Analytics | 1 hour | Expensive computations |
+| Active tags | 1 minute | Fast GTD workflow support |
 
 Cache is automatically invalidated on write operations to ensure data consistency.
 
@@ -144,6 +145,64 @@ Many tools include performance metrics in their responses:
   }
 }
 ```
+
+## Tag Query Performance Optimization
+
+When working with tags in OmniFocus, choose the right tool and options based on your needs:
+
+### Quick Decision Tree
+
+1. **Need only tags with active tasks?** → Use `tags({ operation: 'active' })`
+   - Returns: Simple array of tag names  
+   - Performance: Very fast (processes only incomplete tasks)
+   - Best for: GTD workflows, filtering, autocomplete
+
+2. **Need just tag names for UI/autocomplete?** → Use `tags({ operation: 'list', namesOnly: true })`
+   - Returns: Array of tag names only
+   - Performance: ~130ms for 100+ tags
+   - Best for: Dropdowns, autocomplete, quick lists
+
+3. **Need tag IDs but not hierarchy?** → Use `tags({ operation: 'list', fastMode: true })`
+   - Returns: Tags with IDs and names only
+   - Performance: ~270ms for 100+ tags
+   - Best for: Basic tag management, simple listings
+
+4. **Need full tag information?** → Use `tags({ operation: 'list' })` (default)
+   - Returns: Complete tag data with hierarchy
+   - Performance: ~700ms for 100+ tags
+   - Best for: Tag organization, full analysis
+
+### Tag Performance Comparison
+
+| Mode | Method | Speed | Returns |
+|------|---------|-------|---------|
+| Active only | `tags({ operation: 'active' })` | Fastest | Tag names with tasks |
+| Names only | `namesOnly: true` | ~130ms | Just tag names |
+| Fast mode | `fastMode: true` | ~270ms | IDs + names |
+| Full mode | (default) | ~700ms | Everything |
+| With stats | `includeUsageStats: true` | ~3s+ | Full + task counts |
+
+### Tag Usage Examples
+
+```javascript
+// For task creation/filtering
+tags({ operation: 'active' })  // Only shows relevant tags
+
+// For quick tag lists  
+tags({ operation: 'list', namesOnly: true })  // Dropdown lists
+
+// For tag management
+tags({ operation: 'list', fastMode: true })  // IDs for operations
+
+// For tag analysis
+tags({ 
+  operation: 'list',
+  includeUsageStats: true,
+  includeEmpty: false 
+})  // Full hierarchy and usage
+```
+
+**Tips**: Users with 100+ tags benefit significantly from these optimizations. Default to performance modes unless you specifically need full hierarchy or statistics.
 
 ## Best Practices
 
