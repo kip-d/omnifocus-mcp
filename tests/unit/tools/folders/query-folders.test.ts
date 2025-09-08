@@ -15,7 +15,7 @@ describe('QueryFoldersTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCache = { get: vi.fn(), set: vi.fn() };
-    mockOmni = { buildScript: vi.fn(), execute: vi.fn() };
+    mockOmni = { buildScript: vi.fn(), execute: vi.fn(), executeJson: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
     tool = new QueryFoldersTool(mockCache as any);
@@ -30,18 +30,18 @@ describe('QueryFoldersTool', () => {
     expect(res.data.folders[0].name).toBe('Work');
   });
 
-  it('get returns PARSE_ERROR when response is invalid JSON', async () => {
+  it('get returns GET_FAILED when response is invalid JSON', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue('not-json');
+    mockOmni.execute.mockResolvedValue({ success: false, error: 'Script execution failed' });
     const res: any = await tool.execute({ operation: 'get', folderId: 'f123' } as any);
     expect(res.success).toBe(false);
-    expect(res.error.code).toBe('PARSE_ERROR');
+    expect(res.error.code).toBe('GET_FAILED');
   });
 
   it('get returns NOT_FOUND when folder id missing', async () => {
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.execute.mockResolvedValue(JSON.stringify({ folders: [] }));
+    mockOmni.execute.mockResolvedValue({ items: [] }); // Successful response but empty
     const res: any = await tool.execute({ operation: 'get', folderId: 'missing' } as any);
     expect(res.success).toBe(false);
     expect(res.error.code).toBe('NOT_FOUND');
