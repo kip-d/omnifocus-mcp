@@ -142,7 +142,12 @@ npm run dev          # Watch mode
 npm test             # Unit tests
 npm run test:integration  # Integration tests
 
-# Testing
+# Direct MCP Testing (Fast debugging - see docs/TESTING_TOOLS.md)
+node emergency-diagnostic.js  # Test all tools quickly
+node test-single-tool.js <tool_name> [params]  # Detailed single tool testing  
+node test-suite-comprehensive.js  # Full test suite
+
+# Legacy Testing
 node tests/integration/test-as-claude-desktop.js  # Simulate Claude Desktop
 npx @modelcontextprotocol/inspector dist/index.js  # Interactive testing
 ```
