@@ -153,18 +153,33 @@ npx @modelcontextprotocol/inspector dist/index.js  # Interactive testing
 ```
 
 ### Testing Pattern
-**MCP-compliant server termination for testing:**
+**🚨 CRITICAL: OmniFocus Tools Require Proper MCP Initialization**
+
+**❌ WRONG - Raw tool calls fail silently (bypasses MCP protocol):**
 ```bash
-# ✅ BEST - Proper MCP shutdown by closing stdin
+echo '{"jsonrpc":"2.0","method":"tools/call",...}' | node dist/index.js
+# Tools execute but produce no output - looks broken but isn't!
+```
+
+**✅ CORRECT - Use proper MCP testing tools:**
+```bash
+# For OmniFocus tools that need initialization
+node test-single-tool-proper.js tasks '{"mode":"today","limit":"3"}'
+node test-single-tool-proper.js manage_task '{"operation":"create","name":"Test"}'
+
+# For simple system tools (these work with raw calls)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
+```
+
+**Key Rule:** If a tool works in Claude Desktop but fails in direct testing, use `test-single-tool-proper.js` which follows the exact same MCP initialization sequence as Claude Desktop.
+
+**Legacy patterns (still work for system tools):**
+```bash
+# ✅ System tools work with direct calls
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
-
-# ✅ Quick tool count with proper shutdown  
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js | jq -r '.result.tools | length'
-
-# ✅ Test any MCP method with graceful termination
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
 
-# ⚠️ FALLBACK - Use timeout only if server doesn't exit gracefully
+# ⚠️ FALLBACK - Use timeout only if server doesn't exit gracefully  
 timeout 10s node dist/index.js <<< '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
@@ -247,6 +262,18 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 - **Success**: Tool execution log + graceful exit (JSON response may not be visible in bash output)
 - **Failure**: Tool execution log + JSON error response + graceful exit
 - **The graceful exit itself is NEVER an error** - it's required MCP compliance!
+
+### 🚨 Critical: The v2.1.0 CLI Testing Regression
+**KNOWN ISSUE (September 2025):** Despite implementing NEW ARCHITECTURE fixes, write operations with bridge helpers fail in CLI testing but work perfectly in Claude Desktop.
+
+**Pattern:**
+- ✅ Read-only tools (system, tasks, projects): Perfect CLI testing
+- ❌ Write tools with bridge helpers (manage_task create/update): Script truncates at line 145 in CLI
+- ✅ ALL tools work flawlessly in Claude Desktop
+
+**This is a REGRESSION** - these operations worked in CLI testing during early development. The root cause of the environment-specific script execution difference is unknown but documented in `docs/LESSONS_LEARNED.md`.
+
+**For Immediate Development:** Use Claude Desktop for testing write operations. CLI testing works for read-only tools only.
 
 ## Known Limitations & Workarounds
 

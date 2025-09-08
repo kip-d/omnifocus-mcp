@@ -2,7 +2,72 @@
 
 ## ⚠️ Essential Knowledge for Future Development
 
-This document captures hard-won insights from developing OmniFocus MCP v2.0.0. These lessons will save you from repeating our mistakes.
+This document captures hard-won insights from developing OmniFocus MCP v2.0.0+. These lessons will save you from repeating our mistakes.
+
+## 🚨 CRITICAL: MCP Testing Must Use Proper Initialization
+
+### The Great Testing Confusion of v2.1.0
+**Problem:** Spent significant time debugging "broken" tools that worked perfectly in Claude Desktop but failed in direct testing.
+
+**Root Cause:** MCP requires proper initialization sequence - you cannot send raw tool calls directly via stdin.
+
+```bash
+# ❌ WRONG - Bypasses MCP protocol, tools fail silently
+echo '{"jsonrpc":"2.0","method":"tools/call",...}' | node dist/index.js
+
+# ✅ CORRECT - Proper MCP initialization required
+# 1. Launch persistent server with spawn()
+# 2. Send initialize request first  
+# 3. Then send tool calls
+```
+
+**The Fix:** Created `test-single-tool-proper.js` that:
+- Uses `spawn()` for persistent connection (not `execSync`)
+- Sends proper `initialize` handshake first
+- Then calls tools exactly like Claude Desktop does
+- Provides identical results to Claude Desktop
+
+**Key Insight:** Early development testing worked because we used the proper MCP protocol. When we created "shortcut" testing tools that bypassed initialization, they failed and we incorrectly assumed the tools were broken.
+
+**Never Forget:** If tools work in Claude Desktop but fail in direct testing, check your MCP initialization sequence first!
+
+### The Recurring Script Truncation Crisis (v2.1.0)
+**CRITICAL PATTERN:** Despite implementing NEW ARCHITECTURE (function arguments instead of template substitution) and systematic helper optimization, **write operations continue to fail in CLI testing with script truncation at line 145**.
+
+**Status as of September 2025:**
+- ✅ **Read-only tools**: Work perfectly in CLI testing (system, tasks, projects)  
+- ❌ **Write tools with bridge helpers**: Fail with "Unexpected EOF" at line 145 consistently
+- ✅ **All tools work in Claude Desktop**: Including complex write operations
+
+**The Pattern:**
+```bash
+# CLI Testing Results:
+✅ system tool (109ms) - Simple operation
+✅ tasks tool (436ms) - Read operation with minimal helpers  
+✅ projects tool (618ms) - Read operation with basic helpers
+❌ manage_task create - Script truncates at line 145
+❌ manage_task update - Script truncates at line 145
+```
+
+**Root Cause Unknown:** Bridge helpers (`BRIDGE_HELPERS`) consistently cause script truncation at line 145 in CLI environment but work perfectly in Claude Desktop environment.
+
+**Previous Solutions Applied (but incomplete):**
+1. ✅ NEW ARCHITECTURE: Function arguments instead of template substitution
+2. ✅ Fixed `isZodOptional()` method for proper schema validation  
+3. ✅ Fixed `wrapScript()` to avoid template literal interpolation
+4. ✅ Systematic helper optimization (getAllHelpers → specific helpers)
+
+**The Frustrating Reality:** User reported these were "solved problems" that worked in early development. The CLI testing capability was lost somewhere in the development history.
+
+**Critical Investigation Needed:** 
+- Find the git commit where manage_task operations last worked in CLI testing
+- Identify what changed between working CLI testing and current broken state
+- The bridge helpers appear to have an environment-specific issue
+
+**For Future Debugging:**
+- Bridge helpers work in Claude Desktop environment
+- Bridge helpers fail consistently at line 145 in CLI/stdin environment
+- This suggests environment-specific script execution differences
 
 ## 🚨 Critical Performance Issues
 
