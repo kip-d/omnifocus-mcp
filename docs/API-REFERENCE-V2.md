@@ -1,4 +1,4 @@
-# OmniFocus MCP v2.0.0 API Reference (14 Consolidated Tools)
+# OmniFocus MCP v2.1.0 API Reference (15 Consolidated Tools)
 
 ## Task Operations (2 tools)
 
@@ -65,7 +65,7 @@
   - `set_schedule`: `projectId*` `reviewInterval*` `nextReviewDate?`
   - `clear_schedule`: `projectId*`
 
-## Analytics (4 tools - kept separate for clarity)
+## Analytics (5 tools - kept separate for clarity)
 
 ### productivity_stats - GTD Health Metrics
 **Parameters:** `period*` `includeProjectStats*` `includeTagStats*`
@@ -82,9 +82,15 @@
 - **GroupBy:** project | age | priority
 - **Returns:** Overdue patterns and bottlenecks
 
-### life_analysis - Deep Workflow Analysis
-**Parameters:** `analysisDepth*` `focusAreas*` `includeRawData*` `maxInsights*`
+### analyze_patterns - Database Pattern Analysis
+**Parameters:** `patterns*[]` `options*`
+- **Patterns:** duplicates | dormant_projects | tag_audit | deadline_health | waiting_for | estimation_bias | next_actions | review_gaps | all
+- **Returns:** Pattern analysis results and database health insights
+
+### workflow_analysis - Deep Workflow Analysis  
+**Parameters:** `analysisDepth*` `focusAreas*[]` `includeRawData*` `maxInsights*`
 - **Depth:** quick | standard | deep
+- **Focus Areas:** productivity | workload | project_health | time_patterns | bottlenecks | opportunities
 - **Returns:** Workflow health insights and recommendations
 
 ## Utilities (4 tools)
