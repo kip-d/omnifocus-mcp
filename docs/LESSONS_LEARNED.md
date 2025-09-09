@@ -926,4 +926,48 @@ process.stdin.on('end', async () => {
 
 ---
 
+## 🚨 Critical: fs.promises Hanging Issue in MCP Context (September 2025)
+
+**During V2.1.0 consolidation, bulk export operations would exit immediately without executing.**
+
+### The Problem
+```typescript
+// ❌ PROBLEMATIC - Causes MCP async operation tracking issues
+import { mkdir, writeFile } from 'fs/promises';
+await mkdir(outputDirectory, { recursive: true });
+await writeFile(taskFile, content, 'utf-8');
+```
+
+**Symptoms:**
+- Server would detect stdin closure before operations could start
+- Operations appeared to complete but files weren't created
+- No error messages, just silent hanging/failure
+
+### The Solution
+```typescript
+// ✅ WORKING - Use synchronous fs operations in MCP context
+const fsSync = await import('fs');
+fsSync.mkdirSync(outputDirectory, { recursive: true });
+fsSync.writeFileSync(taskFile, content, 'utf-8');
+```
+
+### Root Cause Analysis
+- `fs.promises` operations weren't being properly tracked by MCP async operation lifecycle
+- Server's stdin close detection would trigger before async file operations could complete
+- Synchronous operations complete immediately and don't interfere with MCP termination flow
+
+### Key Insights
+- **MCP async operation tracking is sensitive** - some Node.js async APIs don't integrate properly
+- **When in doubt, use sync operations** for file I/O in MCP tools where performance isn't critical
+- **Test with both direct calls AND Claude Desktop** - MCP bridge can expose timing issues not seen in direct testing
+- **Silent failures are the worst** - async operations that hang without errors are particularly difficult to debug
+
+**Debugging Process**: Problem appeared during consolidation testing → suspected MCP lifecycle issues → traced to fs.promises → replaced with sync operations → immediate resolution.
+
+**Time Cost:** 2 hours of debugging what appeared to be "immediate exit" but was actually hanging async operations.
+
+**Impact:** Restored bulk export functionality and prevented similar issues in other file I/O operations.
+
+---
+
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.

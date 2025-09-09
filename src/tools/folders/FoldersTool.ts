@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders.js';
 import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder.js';
+import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
+import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
+import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
@@ -134,17 +137,137 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           return createSuccessResponseV2('folders', { folders: foldersArr }, undefined, { ...timer.toMetadata(), operation: 'list', total_folders: foldersArr.length });
 
         case 'get':
-        case 'search':  
+          // Direct implementation of get folder by ID
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for get operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          // For get operation, use list with a filter approach since we don't have a separate get script
+          const getScript = createListFoldersScript({
+            includeHierarchy: true,
+            includeProjects: true,
+            limit: 1000, // Set high limit to ensure we get all folders for filtering
+          });
+          const getResult = await this.execJson(getScript);
+          if ((getResult as any).success === false) {
+            return createErrorResponseV2(
+              'folders',
+              'GET_FAILED',
+              (getResult as any).error || 'Get failed',
+              undefined,
+              { details: (getResult as any).details, operation: 'get', folderId: params.folderId },
+              timer.toMetadata(),
+            );
+          }
+
+          const parsedGetResult = getResult.data as any;
+
+          // Find the specific folder by ID
+          const folder = parsedGetResult.items?.find((f: any) => f.id === params.folderId);
+          if (!folder) {
+            return createErrorResponseV2(
+              'folders',
+              'NOT_FOUND',
+              `Folder not found with ID: ${params.folderId}`,
+              undefined,
+              { operation: 'get', folderId: params.folderId },
+              timer.toMetadata(),
+            );
+          }
+
+          return createSuccessResponseV2('folders', { folder: { ...folder, operation: 'get' } }, undefined, { ...timer.toMetadata(), operation: 'get', folder_id: params.folderId });
+
+        case 'search':
+          // Direct implementation of search folders by name
+          if (!params.searchQuery) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'searchQuery is required for search operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          const searchScript = createListFoldersScript({
+            search: params.searchQuery,
+            includeHierarchy: true,
+            includeProjects: true,
+            limit: 100,
+          });
+          const searchResult = await this.execJson(searchScript);
+          if ((searchResult as any).success === false) {
+            return createErrorResponseV2(
+              'folders',
+              'SEARCH_FAILED',
+              (searchResult as any).error || 'Search failed',
+              undefined,
+              { details: (searchResult as any).details, operation: 'search', searchTerm: params.searchQuery },
+              timer.toMetadata(),
+            );
+          }
+
+          const parsedSearchResult = searchResult.data as any;
+
+          return createSuccessResponseV2('folders', { folders: parsedSearchResult.items ?? parsedSearchResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: params.searchQuery, total_matches: parsedSearchResult.summary?.total || parsedSearchResult.items?.length || 0 });
+
         case 'projects':
-          // TODO: Implement these operations in future phases
-          return createErrorResponseV2(
-            'folders',
-            'NOT_IMPLEMENTED',
-            `Operation '${operation}' not yet implemented in consolidated version`,
-            'Use individual tools for now',
-            { operation },
-            timer.toMetadata(),
-          );
+          // Direct implementation of get projects within a folder
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for projects operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          // Get folder with projects included
+          const projectsScript = createListFoldersScript({
+            includeHierarchy: false,
+            includeProjects: true,
+            limit: 1000,
+          });
+          const projectsResult = await this.execJson(projectsScript);
+          if ((projectsResult as any).success === false) {
+            return createErrorResponseV2(
+              'folders',
+              'GET_PROJECTS_FAILED',
+              (projectsResult as any).error || 'Get projects failed',
+              undefined,
+              { details: (projectsResult as any).details, operation: 'get_projects', folderId: params.folderId },
+              timer.toMetadata(),
+            );
+          }
+
+          const parsedProjectsResult = projectsResult.data as any;
+
+          // Find the specific folder by ID and return its projects
+          const folderWithProjects = parsedProjectsResult.items?.find((f: any) => f.id === params.folderId);
+          if (!folderWithProjects) {
+            return createErrorResponseV2(
+              'folders',
+              'NOT_FOUND',
+              `Folder not found with ID: ${params.folderId}`,
+              undefined,
+              { operation: 'get_projects', folderId: params.folderId },
+              timer.toMetadata(),
+            );
+          }
+
+          const projects = (folderWithProjects as any)?.projects || [];
+
+          return createSuccessResponseV2('folders', { projects, count: projects.length, operation: 'get_projects' }, undefined, { ...timer.toMetadata(), operation: 'get_projects', folder_id: params.folderId, project_count: projects.length });
 
         // Management operations
         case 'create':
@@ -187,19 +310,182 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           return createSuccessResponseV2('folders', { folder: createdFolder }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: createdFolder?.id });
 
         case 'update':
+          // Direct implementation of update folder
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for update operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          const updates: any = {};
+          if (params.name !== undefined) updates.name = params.name;
+          if (params.status !== undefined) updates.status = params.status;
+
+          const updateScript = this.omniAutomation.buildScript(UPDATE_FOLDER_SCRIPT, {
+            folderId: params.folderId,
+            updates,
+          });
+          const updateResult = await this.execJson(updateScript);
+
+          if (!isScriptSuccess(updateResult)) {
+            return createErrorResponseV2(
+              'folders',
+              'UPDATE_FAILED',
+              updateResult.error,
+              'Verify folderId and parameters',
+              { details: updateResult.details, operation: 'update' },
+              timer.toMetadata(),
+            );
+          }
+
+          // Invalidate cache after successful update
+          this.cache.invalidate('folders');
+          this.cache.invalidate('projects');
+
+          const parsedUpdateResult = updateResult.data as any;
+
+          return createSuccessResponseV2('folders', { folder: { ...parsedUpdateResult, operation: 'update' } }, undefined, { ...timer.toMetadata(), operation: 'update', updated_id: params.folderId, changes: parsedUpdateResult.changes });
+
         case 'delete':
+          // Direct implementation of delete folder
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for delete operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          const deleteScript = this.omniAutomation.buildScript(DELETE_FOLDER_SCRIPT, {
+            folderId: params.folderId,
+            options: { moveContentsTo: params.parentFolderId, force: false },
+          });
+          const deleteResult = await this.execJson(deleteScript);
+
+          if (!isScriptSuccess(deleteResult)) {
+            return createErrorResponseV2(
+              'folders',
+              'DELETE_FAILED',
+              deleteResult.error,
+              undefined,
+              { details: deleteResult.details, operation: 'delete' },
+              timer.toMetadata(),
+            );
+          }
+
+          // Invalidate cache after successful deletion
+          this.cache.invalidate('folders');
+          this.cache.invalidate('projects');
+
+          const parsedDeleteResult = deleteResult.data as any;
+
+          return createSuccessResponseV2('folders', { folder: { ...parsedDeleteResult, operation: 'delete' } }, undefined, { ...timer.toMetadata(), operation: 'delete', deleted_id: params.folderId, moved_to: parsedDeleteResult.folder?.parent, moved_contents: parsedDeleteResult.changes });
+
         case 'move':
+          // Direct implementation of move folder
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for move operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          const moveScript = this.omniAutomation.buildScript(MOVE_FOLDER_SCRIPT, {
+            folderId: params.folderId,
+            options: { newParent: params.parentFolderId, position: undefined, relativeToFolder: undefined },
+          });
+          const moveResult = await this.execJson(moveScript);
+
+          if (!isScriptSuccess(moveResult)) {
+            return createErrorResponseV2(
+              'folders',
+              'MOVE_FAILED',
+              moveResult.error,
+              undefined,
+              { details: moveResult.details, operation: 'move' },
+              timer.toMetadata(),
+            );
+          }
+
+          // Invalidate cache after successful move
+          this.cache.invalidate('folders');
+
+          const parsedMoveResult = moveResult.data as any;
+
+          return createSuccessResponseV2('folders', { folder: { ...parsedMoveResult, operation: 'move' } }, undefined, { ...timer.toMetadata(), operation: 'move', moved_id: params.folderId, old_parent: parsedMoveResult.folder?.parent, new_parent: params.parentFolderId });
+
         case 'duplicate':
-        case 'set_status':
-          // TODO: Implement these operations in future phases
+          // Direct implementation placeholder - not implemented in original ManageFolderTool either
           return createErrorResponseV2(
             'folders',
             'NOT_IMPLEMENTED',
-            `Operation '${operation}' not yet implemented in consolidated version`,
-            'Use individual tools for now',
-            { operation },
+            'Duplicate operation is not yet implemented. Use create operation instead.',
+            undefined,
+            { operation: 'duplicate', folderId: params.folderId, newName: params.duplicateName },
             timer.toMetadata(),
           );
+
+        case 'set_status':
+          // Direct implementation of set status (uses update script)
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for set_status operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          if (!params.status) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'status is required for set_status operation',
+              undefined,
+              { operation },
+              timer.toMetadata(),
+            );
+          }
+
+          // Status change is just an update operation
+          const statusScript = this.omniAutomation.buildScript(UPDATE_FOLDER_SCRIPT, {
+            folderId: params.folderId,
+            updates: { status: params.status },
+          });
+          const statusResult = await this.execJson(statusScript);
+
+          if (!isScriptSuccess(statusResult)) {
+            return createErrorResponseV2(
+              'folders',
+              'SET_STATUS_FAILED',
+              statusResult.error,
+              undefined,
+              { details: statusResult.details, operation: 'set_status' },
+              timer.toMetadata(),
+            );
+          }
+
+          // Invalidate cache after successful status change
+          this.cache.invalidate('folders');
+          this.cache.invalidate('projects');
+
+          const parsedStatusResult = statusResult.data as any;
+
+          return createSuccessResponseV2('folders', { folder: { ...parsedStatusResult, operation: 'set_status' } }, undefined, { ...timer.toMetadata(), operation: 'set_status', updated_id: params.folderId, new_status: params.status });
 
         default:
           return createErrorResponseV2(

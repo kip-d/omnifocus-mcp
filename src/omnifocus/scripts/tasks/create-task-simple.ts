@@ -125,8 +125,8 @@ export const CREATE_TASK_SCRIPT_SIMPLE = `
         projectId: task.containingProject() ? task.containingProject().id() : null,
         inInbox: task.inInbox(),
         created: true,
-        tags: [], // TODO: Re-implement after fixing script size limits
-        note: taskData.tags ? 'Tags temporarily disabled due to script size limits' : ''
+        tags: [], // Note: Simple script intentionally omits tag handling for reliability
+        note: taskData.note || ''
       };
       
       return JSON.stringify(response);

@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { ExportTasksTool } from './ExportTasksTool.js';
-import { ExportProjectsTool } from './ExportProjectsTool.js';
-import { BulkExportTool } from './BulkExportTool.js';
-import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
+import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
+import { TagsToolV2 } from '../tags/TagsToolV2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
+import * as path from 'path';
 
 // Consolidated export schema
 const ExportSchema = z.object({
@@ -66,16 +67,8 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   description = 'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
   schema = ExportSchema;
 
-  private exportTasksTool: ExportTasksTool;
-  private exportProjectsTool: ExportProjectsTool;
-  private bulkExportTool: BulkExportTool;
-
   constructor(cache: any) {
     super(cache);
-    // Initialize the individual export tools
-    this.exportTasksTool = new ExportTasksTool(cache);
-    this.exportProjectsTool = new ExportProjectsTool(cache);
-    this.bulkExportTool = new BulkExportTool(cache);
   }
 
   async executeValidated(args: ExportInput): Promise<any> {
@@ -85,22 +78,22 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
     try {
       switch (type) {
         case 'tasks':
-          // Export tasks only
-          return await this.exportTasksTool.execute({
+          // Direct implementation of task export
+          return await this.handleTaskExport({
             format,
-            filter: params.filter,
+            filter: params.filter || {},
             fields: params.fields,
-          });
+          }, timer);
 
         case 'projects':
-          // Export projects only
-          return await this.exportProjectsTool.execute({
+          // Direct implementation of project export
+          return await this.handleProjectExport({
             format,
-            includeStats: params.includeStats,
-          });
+            includeStats: params.includeStats || false,
+          }, timer);
 
         case 'all':
-          // Bulk export everything
+          // Direct implementation of bulk export
           if (!params.outputDirectory) {
             return createErrorResponseV2(
               'export',
@@ -112,12 +105,12 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
             );
           }
 
-          return await this.bulkExportTool.execute({
+          return await this.handleBulkExport({
             outputDirectory: params.outputDirectory,
             format,
-            includeCompleted: params.includeCompleted,
-            includeProjectStats: params.includeProjectStats,
-          });
+            includeCompleted: params.includeCompleted || true,
+            includeProjectStats: params.includeProjectStats || true,
+          }, timer);
 
         default:
           return createErrorResponseV2(
@@ -130,6 +123,248 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           );
       }
     } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Direct implementation of task export
+  private async handleTaskExport(args: { format: string; filter: any; fields?: string[] }, timer: OperationTimerV2) {
+    const { format = 'json', filter = {}, fields } = args;
+
+    try {
+      const script = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
+        format,
+        filter,
+        fields,
+      });
+      const anyOmni: any = this.omniAutomation as any;
+      const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute(script);
+      
+      if (raw && typeof raw === 'object' && 'success' in raw) {
+        const sr: any = raw;
+        if (!sr.success) {
+          return createErrorResponseV2(
+            'export',
+            'TASK_EXPORT_FAILED',
+            sr.error || 'Failed to export tasks',
+            undefined,
+            { format, filter },
+            timer.toMetadata(),
+          );
+        }
+        const result = sr.data;
+        return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+      }
+      
+      const result: any = raw;
+      if (result && result.error) {
+        return createErrorResponseV2(
+          'export',
+          'TASK_EXPORT_FAILED',
+          result.message || 'Failed to export tasks',
+          undefined,
+          { format, filter },
+          timer.toMetadata(),
+        );
+      }
+
+      return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Direct implementation of project export
+  private async handleProjectExport(args: { format: string; includeStats: boolean }, timer: OperationTimerV2) {
+    const { format = 'json', includeStats = false } = args;
+
+    try {
+      const script = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
+        format,
+        includeStats,
+      });
+      const result = await this.omniAutomation.execute(script) as {
+        format: string;
+        data: any;
+        count: number;
+        error?: boolean;
+        message?: string;
+      };
+
+      if (result.error) {
+        return createErrorResponseV2(
+          'export',
+          'PROJECT_EXPORT_FAILED',
+          result.message || 'Failed to export projects',
+          undefined,
+          { format, includeStats },
+          timer.toMetadata(),
+        );
+      }
+
+      return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  // Direct implementation of bulk export
+  private async handleBulkExport(args: { outputDirectory: string; format: string; includeCompleted: boolean; includeProjectStats: boolean }, timer: OperationTimerV2) {
+    const { outputDirectory, format = 'json', includeCompleted = true, includeProjectStats = true } = args;
+
+    try {
+      // Ensure directory exists using synchronous fs to avoid hanging issues with fs.promises
+      try {
+        const fsSync = await import('fs');
+        fsSync.mkdirSync(outputDirectory, { recursive: true });
+      } catch (mkdirError) {
+        return createErrorResponseV2(
+          'export',
+          'MKDIR_FAILED',
+          `Failed to create directory: ${mkdirError}`,
+          undefined,
+          { outputDirectory, error: String(mkdirError) },
+          timer.toMetadata(),
+        );
+      }
+
+      const exports: any = {};
+      let totalExported = 0;
+
+      // Export tasks directly using script
+      const taskFilter = includeCompleted ? {} : { completed: false };
+      const taskScript = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
+        format,
+        filter: taskFilter,
+        fields: undefined,
+      });
+      const anyOmni: any = this.omniAutomation as any;
+      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute(taskScript);
+      
+      let taskResult: any = null;
+      if (taskRaw && typeof taskRaw === 'object' && 'success' in taskRaw) {
+        taskResult = taskRaw.success ? taskRaw.data : null;
+      } else {
+        taskResult = taskRaw;
+      }
+      
+      if (taskResult && !taskResult.error) {
+        const taskFile = path.join(outputDirectory, `tasks.${format}`);
+        const taskCount = taskResult.count || 0;
+
+        const payload = taskResult.data;
+        const toWrite = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+        const fsSync = await import('fs');
+        fsSync.writeFileSync(taskFile, toWrite, 'utf-8');
+
+        exports.tasks = {
+          format: format,
+          task_count: taskCount,
+          exported: true,
+        };
+        totalExported += taskCount;
+      }
+
+      // Export projects directly using script  
+      const projectScript = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
+        format,
+        includeStats: includeProjectStats,
+      });
+      const projectResult = await this.omniAutomation.execute(projectScript) as any;
+      
+      if (projectResult && !projectResult.error) {
+        const projectFile = path.join(outputDirectory, `projects.${format}`);
+        const projectCount = projectResult.count || 0;
+
+        const ppayload = projectResult.data;
+        const pwrite = typeof ppayload === 'string' ? ppayload : JSON.stringify(ppayload, null, 2);
+        const fsSync = await import('fs');
+        fsSync.writeFileSync(projectFile, pwrite, 'utf-8');
+
+        exports.projects = {
+          format: format,
+          project_count: projectCount,
+          exported: true,
+        };
+        totalExported += projectCount;
+      }
+
+      // Export tags (JSON only) - delegate to TagsToolV2
+      const tagExporter = new TagsToolV2(this.cache);
+      const tagResult: any = await tagExporter.execute({ includeEmpty: true });
+
+      if (tagResult && tagResult.success && tagResult.data) {
+        const tagFile = path.join(outputDirectory, 'tags.json');
+        const tagItems = (tagResult.data.items || tagResult.data.tags || []);
+        const tagCount = (tagResult.metadata?.total_count) || tagItems.length;
+
+        const fsSync = await import('fs');
+        fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
+
+        exports.tags = {
+          format: 'json',
+          tag_count: tagCount,
+          exported: true,
+        };
+        totalExported += tagCount;
+      }
+
+      return createSuccessResponseV2('export', { exports, summary: { totalExported, export_date: new Date().toISOString() } }, undefined, { ...timer.toMetadata(), operation: 'all' });
+    } catch (error) {
+      // Provide specific recovery information for file system errors
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('eacces') || errorMessage.includes('permission')) {
+          return createErrorResponseV2(
+            'export',
+            'PERMISSION_DENIED',
+            `Cannot write to directory: ${outputDirectory}`,
+            'Check directory permissions',
+            {
+              recovery: [
+                'Check that the directory exists and is writable',
+                'Try using a different output directory',
+                'Ensure you have write permissions to the parent directory',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata(),
+          );
+        }
+        if (errorMessage.includes('enospc')) {
+          return createErrorResponseV2(
+            'export',
+            'DISK_FULL',
+            'Not enough disk space to complete export',
+            'Free disk space and try again',
+            {
+              recovery: [
+                'Free up disk space and try again',
+                'Choose a different output directory on a drive with more space',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata(),
+          );
+        }
+        if (errorMessage.includes('enoent')) {
+          return createErrorResponseV2(
+            'export',
+            'PATH_NOT_FOUND',
+            `Output directory path not found: ${outputDirectory}`,
+            'Verify the output directory path',
+            {
+              recovery: [
+                'Verify the output directory path is correct',
+                'Create the parent directory first',
+                'Use an absolute path instead of a relative path',
+              ],
+              path: outputDirectory,
+            },
+            timer.toMetadata(),
+          );
+        }
+      }
       return this.handleError(error);
     }
   }
