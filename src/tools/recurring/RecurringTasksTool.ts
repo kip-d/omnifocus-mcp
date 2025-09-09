@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { AnalyzeRecurringTasksTool } from './AnalyzeRecurringTasksTool.js';
-import { GetRecurringPatternsTool } from './GetRecurringPatternsTool.js';
+import { ANALYZE_RECURRING_TASKS_SCRIPT, GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
@@ -44,14 +43,8 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
   description = 'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
   schema = RecurringTasksSchema;
 
-  private analyzeTool: AnalyzeRecurringTasksTool;
-  private patternsTool: GetRecurringPatternsTool;
-
   constructor(cache: any) {
     super(cache);
-    // Initialize the individual tools
-    this.analyzeTool = new AnalyzeRecurringTasksTool(cache);
-    this.patternsTool = new GetRecurringPatternsTool(cache);
   }
 
   async executeValidated(args: RecurringTasksInput): Promise<any> {
@@ -61,22 +54,145 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
     try {
       switch (operation) {
         case 'analyze':
-          // Detailed recurring task analysis
-          return await this.analyzeTool.execute({
-            activeOnly: params.activeOnly,
-            includeCompleted: params.includeCompleted,
-            includeDropped: params.includeDropped,
-            includeHistory: params.includeHistory,
-            sortBy: params.sortBy,
+          // Direct implementation of recurring task analysis
+          const analyzeOptions = {
+            activeOnly: params.activeOnly ?? true,
+            includeCompleted: params.includeCompleted ?? false,
+            includeDropped: params.includeDropped ?? false,
+            includeHistory: params.includeHistory ?? false,
+            sortBy: params.sortBy || 'dueDate',
+          };
+
+          // Try to use cache for recurring task analysis
+          const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
+          const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
+          if (cachedAnalysis) {
+            return cachedAnalysis;
+          }
+
+          // Execute analysis script
+          const analyzeScript = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, {
+            options: analyzeOptions,
           });
+          const analyzeResult = await this.omniAutomation.execute(analyzeScript) as {
+            tasks: any[];
+            summary: any;
+            error?: boolean;
+            message?: string;
+          };
+
+          if (analyzeResult.error) {
+            return createErrorResponseV2(
+              'recurring_tasks',
+              'SCRIPT_ERROR',
+              analyzeResult.message || 'Analysis failed',
+              undefined,
+              {},
+              timer.toMetadata(),
+            );
+          }
+
+          // Add metadata
+          const analyzeResponse = {
+            tasks: analyzeResult.tasks,
+            summary: analyzeResult.summary,
+            metadata: {
+              ...timer.toMetadata(),
+              operation: 'analyze',
+              filters_applied: analyzeOptions,
+              total_analyzed: analyzeResult.tasks?.length || 0,
+            },
+          };
+
+          // Cache for 1 hour (recurring tasks change infrequently)
+          this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
+
+          return analyzeResponse;
 
         case 'patterns':
-          // Frequency pattern analysis
-          return await this.patternsTool.execute({
-            activeOnly: params.activeOnly,
-            includeCompleted: params.includeCompleted,
-            includeDropped: params.includeDropped,
-          });
+          // Direct implementation of recurring pattern analysis
+          const patternsOptions = {
+            activeOnly: params.activeOnly ?? true,
+            includeCompleted: params.includeCompleted ?? false,
+            includeDropped: params.includeDropped ?? false,
+          };
+
+          // Try to use cache
+          const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
+          const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
+          if (cachedPatterns) {
+            return cachedPatterns;
+          }
+
+          // Execute pattern analysis script
+          const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, { options: patternsOptions });
+          const patternsResult = await this.omniAutomation.execute(patternsScript) as {
+            totalRecurring: number;
+            patterns: any[];
+            byProject: any[];
+            mostCommon: any;
+            error?: boolean;
+            message?: string;
+          };
+
+          if (patternsResult.error) {
+            return createErrorResponseV2(
+              'recurring_tasks',
+              'SCRIPT_ERROR',
+              patternsResult.message || 'Pattern analysis failed',
+              undefined,
+              {},
+              timer.toMetadata(),
+            );
+          }
+
+          // Add insights
+          const insights: string[] = [];
+
+          if (patternsResult.totalRecurring === 0) {
+            insights.push('No recurring tasks found in your OmniFocus database');
+          } else {
+            if (patternsResult.mostCommon) {
+              insights.push(`Most common recurrence pattern: ${patternsResult.mostCommon.pattern} (${patternsResult.mostCommon.count} tasks)`);
+            }
+            
+            if (patternsResult.patterns && patternsResult.patterns.length > 0) {
+              insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
+              
+              // Add specific pattern insights
+              const weeklyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('week')).length;
+              const dailyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('day')).length;
+              const monthlyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('month')).length;
+              
+              if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
+              if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
+              if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
+            }
+            
+            if (patternsResult.byProject && patternsResult.byProject.length > 0) {
+              const projectWithMostRecurring = patternsResult.byProject[0];
+              insights.push(`Project "${projectWithMostRecurring.project}" has the most recurring tasks (${projectWithMostRecurring.count})`);
+            }
+          }
+
+          const patternsResponse = {
+            totalRecurring: patternsResult.totalRecurring,
+            patterns: patternsResult.patterns || [],
+            byProject: patternsResult.byProject || [],
+            mostCommon: patternsResult.mostCommon,
+            insights,
+            metadata: {
+              ...timer.toMetadata(),
+              operation: 'patterns',
+              filters_applied: patternsOptions,
+              patterns_found: patternsResult.patterns?.length || 0,
+            },
+          };
+
+          // Cache for 1 hour
+          this.cache.set('analytics', patternsCacheKey, patternsResponse);
+
+          return patternsResponse;
 
         default:
           return createErrorResponseV2(

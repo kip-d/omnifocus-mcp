@@ -134,36 +134,75 @@ export const PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT = `
         }
       }
       
-      // Calculate overall statistics
-      let totalProjects = Object.keys(projectStats).length;
-      let activeProjects = 0;
+      // Calculate overall statistics directly from OmniFocus API
+      // This ensures we get correct totals even when includeProjectStats is false
+      const allTasks = doc.flattenedTasks();
       let totalTasks = 0;
       let totalCompleted = 0;
       let totalAvailable = 0;
+      let completedInPeriod = 0;
+      
+      // Count tasks directly
+      for (let i = 0; i < allTasks.length; i++) {
+        const task = allTasks[i];
+        try {
+          totalTasks++;
+          
+          const isCompleted = safeIsCompleted(task);
+          if (isCompleted) {
+            totalCompleted++;
+            
+            // Check if completed in period
+            const completionDateStr = safeGetDate(() => task.completionDate());
+            if (completionDateStr) {
+              const completionDate = new Date(completionDateStr);
+              if (completionDate >= periodStart) {
+                completedInPeriod++;
+              }
+            }
+          } else {
+            // Check if available (not blocked, not deferred)
+            const isAvailable = safeGet(() => {
+              const blocked = task.blocked();
+              const deferDateStr = safeGetDate(() => task.deferDate());
+              const isDeferred = deferDateStr && new Date(deferDateStr) > now;
+              return !blocked && !isDeferred;
+            }, false);
+            
+            if (isAvailable) {
+              totalAvailable++;
+            }
+          }
+        } catch (e) {
+          // Skip tasks that cause errors
+          continue;
+        }
+      }
+      
+      // Calculate project-level statistics for project stats section
+      let totalProjects = Object.keys(projectStats).length;
+      let activeProjects = 0;
       
       for (const projectName in projectStats) {
         const stats = projectStats[projectName];
         if (stats.status === 'active') activeProjects++;
-        totalTasks += stats.total;
-        totalCompleted += stats.completed;
-        totalAvailable += stats.available;
       }
       
       const completionRate = totalTasks > 0 ? 
         (totalCompleted / totalTasks * 100).toFixed(1) : 0;
       
       const daysInPeriod = Math.ceil((now - periodStart) / (1000 * 60 * 60 * 24));
-      const dailyAverage = (totalCompleted / daysInPeriod).toFixed(1);
+      const dailyAverage = (completedInPeriod / daysInPeriod).toFixed(1);
       
       // Generate insights
       const insights = [];
       
-      if (totalCompleted === 0) {
+      if (completedInPeriod === 0) {
         insights.push("No tasks completed in this period");
-      } else if (totalCompleted < 5) {
+      } else if (completedInPeriod < 5) {
         insights.push("Low task completion rate - consider reviewing your workflow");
-      } else if (totalCompleted > 50) {
-        insights.push("High productivity! " + totalCompleted + " tasks completed");
+      } else if (completedInPeriod > 50) {
+        insights.push("High productivity! " + completedInPeriod + " tasks completed");
       }
       
       if (activeProjects > 10) {
@@ -188,6 +227,7 @@ export const PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT = `
             activeProjects: activeProjects,
             totalTasks: totalTasks,
             completedTasks: totalCompleted,
+            completedInPeriod: completedInPeriod,
             availableTasks: totalAvailable,
             completionRate: parseFloat(completionRate),
             dailyAverage: parseFloat(dailyAverage),

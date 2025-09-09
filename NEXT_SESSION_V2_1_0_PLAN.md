@@ -1,244 +1,192 @@
-# Next Session Plan: OmniFocus MCP v2.1.0 Architecture Improvements
+# Next Phase: V2.1.0 Consolidated Tool Refactoring Plan
 
-## 🎯 Current Status (September 8, 2025)
+## Overview
+This document outlines the plan for completing the v2.1.0 refactoring by converting consolidated wrapper tools into truly self-contained implementations, eliminating the need for individual component tools.
 
-### ✅ Major Breakthroughs Completed
-1. **Script Syntax Error Investigation** - SOLVED ✅
-   - Root cause: Scripts referenced undefined helper functions (`prepareRepetitionRuleData`, `applyRepetitionRuleViaBridge`, `setTagsViaBridge`)
-   - Fixed CREATE_TASK_SCRIPT and documented in LESSONS_LEARNED.md
-   - No more "SyntaxError: Unexpected EOF (-2700)" errors
+## Current State (Post-Analytics Fix & 100% Tool Success)
+- ✅ All 15 tools working correctly (100% success rate achieved!)
+- ✅ Analytics tools fixed (returning real data instead of zero)
+- ✅ Async operation lifecycle issues resolved
+- ✅ Documentation updated with lessons learned
+- ⚠️ 4 consolidated tools still depend on individual component tools
+- ⚠️ Legacy tool files cannot be removed due to delegation pattern
 
-2. **CLI Testing Mystery** - SOLVED ✅
-   - Discovered CLI testing was working correctly all along
-   - Issue was missing `clientInfo` parameter in MCP initialization
-   - Git bisect revealed problem existed from first commit (never was broken)
-   - Documented proper MCP protocol requirements in LESSONS_LEARNED.md
+## Architecture Analysis Complete
 
-3. **Comprehensive Tool Testing** - COMPLETED ✅
-   - Built and tested all 15 MCP tools via CLI
-   - **Success Rate: 13% (2/15 tools working properly)**
-   - Identified specific patterns of failure for systematic debugging
+### Self-Contained Tools (No Changes Needed)
+✅ **ManageReviewsTool** - Already self-contained, implements all operations directly
 
-### 📊 Tool Status Summary (via CLI Testing)
-```
-✅ Working Perfectly (2/15):
-  - system: Version info works perfectly
-  - folders: Folder operations work perfectly
+### Wrapper Tools Requiring Refactoring
+The following 4 tools currently act as wrappers that delegate to individual tools:
 
-⚠️ Silent Failures (11/15):
-  - tasks, manage_task, projects, tags, productivity_stats, 
-    task_velocity, analyze_overdue, analyze_patterns, export,
-    recurring_tasks, perspectives
-  - Execute without errors but return no response
-  - Likely runtime issues in script execution or response handling
+1. **ManageTaskTool** (src/tools/tasks/ManageTaskTool.ts)
+   - Delegates to: CreateTaskTool, UpdateTaskTool, CompleteTaskTool, DeleteTaskTool
+   - **Priority: HIGH** (Most complex, most critical)
+   
+2. **FoldersTool** (src/tools/folders/FoldersTool.ts)
+   - Delegates to: ManageFolderTool, QueryFoldersTool
+   - **Priority: MEDIUM** (10 operations, clear patterns)
+   
+3. **RecurringTasksTool** (src/tools/recurring/RecurringTasksTool.ts)
+   - Delegates to: AnalyzeRecurringTasksTool, GetRecurringPatternsTool
+   - **Priority: LOW** (Only 2 operations, simpler)
+   
+4. **ExportTool** (src/tools/export/ExportTool.ts)
+   - Delegates to: ExportTasksTool, ExportProjectsTool, BulkExportTool
+   - **Priority: MEDIUM** (Multiple formats, good testing target)
 
-❌ Parameter Validation Errors (2/15):
-  - manage_reviews: Missing required operation parameter
-  - workflow_analysis: Type coercion issues (string→array, string→boolean)
-```
+## Refactoring Strategy
 
-## 🚨 Next Priority: Silent Tool Failures
+### Implementation Approach
+For each wrapper tool, we will:
+1. **Copy Implementation Logic** - Move the core logic from individual tools directly into the wrapper's switch cases
+2. **Remove Delegation** - Replace tool.execute() calls with direct implementation
+3. **Preserve All Functionality** - Ensure no features or parameters are lost
+4. **Test Thoroughly** - Verify each operation works exactly as before
+5. **Clean Up** - Remove individual tool files only after successful verification
 
-### The Problem
-11 out of 15 tools execute successfully but return no response. This indicates:
-- ✅ MCP protocol working correctly
-- ✅ Tool initialization successful  
-- ❌ Script execution likely failing silently during runtime
-- ❌ Response not being returned to CLI
+### Phase 1: ManageTaskTool Consolidation (CRITICAL)
+**Why First**: Most complex, most used, best test of the consolidation approach
 
-### Investigation Strategy for Next Session
-1. **Focus on One Tool**: Start with `manage_task` (most critical)
-2. **Add Detailed Logging**: Enhance error reporting in tool execution
-3. **Script Runtime Analysis**: Check if scripts complete execution
-4. **Response Pipeline**: Verify response formatting and transmission
-
-### Potential Root Causes
-- **Script Runtime Errors**: Scripts fail during execution (not syntax)
-- **Response Formatting**: Issues with MCP response structure
-- **OmniFocus Integration**: JXA/osascript execution problems
-- **Cache/Timeout Issues**: Long-running operations timing out
-- **Error Handling**: Silent failure in error handling paths
-
-## 📋 TODO for Next Session
-
-### High Priority (Must Fix)
-- [ ] **Debug manage_task silent failure**
-  - Add comprehensive logging to CreateTaskTool
-  - Test script execution directly with osascript
-  - Verify response pipeline from script→tool→MCP
-  
-- [ ] **Fix parameter validation errors**
-  - Update manage_reviews test to include required operation parameter
-  - Fix workflow_analysis string→type coercion issues
-  
-- [ ] **Implement enhanced error reporting**
-  - Add detailed execution logging throughout tool chain
-  - Capture and report script execution errors with context
-  - Improve error visibility for debugging
-
-### Medium Priority
-- [ ] **Test script execution independently**
-  - Run CREATE_TASK_SCRIPT directly via osascript outside MCP
-  - Verify OmniFocus integration works independently
-  - Isolate MCP vs OmniFocus vs script issues
-
-- [ ] **Systematic tool debugging**
-  - Once manage_task is fixed, apply same pattern to other 10 silent tools
-  - Document common failure patterns and solutions
-  - Create debugging playbook for future issues
-
-### Low Priority
-- [ ] **CLI testing improvements**
-  - Enhance test-all-tools.cjs with better error reporting
-  - Include response content analysis and validation
-  - Add timeout handling and retry logic
-
-## 🔧 Development Environment Notes
-
-### Current Branch & Status
-```bash
-git branch: feature/v2.1.0-architecture-improvements
-Latest commit: 9d30d18 - "fix: resolve script syntax errors causing tool failures"
-Status: Script syntax issues RESOLVED ✅, Runtime issues NEED INVESTIGATION ⚠️
+**Current Architecture**:
+```typescript
+switch (operation) {
+  case 'create':
+    return await this.createTool.execute({...});  // ← DELEGATION
+  case 'update':
+    return await this.updateTool.execute({...});  // ← DELEGATION
+  // etc.
+}
 ```
 
-### Key Files Modified This Session
-- `src/omnifocus/scripts/tasks/create-task.ts` - Fixed undefined function references
-- `src/tools/tasks/ManageTaskTool.ts` - Added CLI debugging mode
-- `docs/LESSONS_LEARNED.md` - Added comprehensive script syntax error documentation
-- `test-all-tools.cjs` - Created comprehensive CLI testing script
-
-### Essential Testing Commands
-```bash
-# Build first (always required)
-npm run build
-
-# Test specific tool (known working)
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
-
-# Test failing tool (manage_task)  
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"manage_task","arguments":{"operation":"create","name":"Test Task"}}}' | MCP_CLI_TESTING=1 node dist/index.js
-
-# Test all tools systematically
-node test-all-tools.cjs
+**Target Architecture**:
+```typescript
+switch (operation) {
+  case 'create':
+    // Direct implementation with CREATE_TASK_SCRIPT
+    const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, params);
+    return await this.executeAndFormat(script, timer);
+  case 'update':
+    // Direct implementation with UPDATE_TASK_SCRIPT  
+    const script = this.omniAutomation.buildScript(UPDATE_TASK_SCRIPT, params);
+    return await this.executeAndFormat(script, timer);
+  // etc.
+}
 ```
 
-## 🎯 Success Criteria for Next Session
+**Files to Remove After Success**:
+- CreateTaskTool.ts
+- UpdateTaskTool.ts
+- CompleteTaskTool.ts
+- DeleteTaskTool.ts
 
-### Minimum Acceptable Success
-- [ ] Get `manage_task` tool returning responses via CLI (currently silent)
-- [ ] Document root cause of the 11 silent failures
-- [ ] Achieve at least 33% tool success rate (5/15 tools working)
+### Phase 2: FoldersTool Consolidation
+**Target**: Merge 10 operations from 2 individual tools
+- Query operations (list, get, search, projects) from QueryFoldersTool
+- Management operations (create, update, delete, move, duplicate, set_status) from ManageFolderTool
 
-### Target Success  
-- [ ] Get 10/15 tools working (67% success rate) 
-- [ ] Comprehensive debugging documentation added to LESSONS_LEARNED.md
-- [ ] Established automated testing pipeline for continued development
+**Files to Remove After Success**:
+- QueryFoldersTool.ts
+- ManageFolderTool.ts
 
-### Stretch Goal
-- [ ] All 15 tools working perfectly via CLI (100% success rate)
-- [ ] Performance benchmarking and optimization
-- [ ] Ready for production v2.1.0 release
+### Phase 3: RecurringTasksTool Consolidation  
+**Target**: Merge 2 operations from 2 individual tools
+- analyze operation from AnalyzeRecurringTasksTool
+- patterns operation from GetRecurringPatternsTool
 
-## 💡 Critical Insights for Next Developer
+**Files to Remove After Success**:
+- AnalyzeRecurringTasksTool.ts
+- GetRecurringPatternsTool.ts
 
-1. **Script Syntax vs Runtime Issues**: We solved syntax errors ✅, but runtime failures are separate and more complex
-2. **MCP Protocol Is Solid**: CLI testing infrastructure works perfectly - focus on tool-internal issues
-3. **Progressive Debugging Works**: Start with simplest failing tool, establish patterns, then scale solutions
-4. **Documentation Is Critical**: Every breakthrough must be documented in LESSONS_LEARNED.md to prevent regression
+### Phase 4: ExportTool Consolidation
+**Target**: Merge 3 export types from 3 individual tools
+- tasks export from ExportTasksTool
+- projects export from ExportProjectsTool  
+- all (bulk) export from BulkExportTool
 
-## 🚀 Architecture Context
+**Files to Remove After Success**:
+- ExportTasksTool.ts
+- ExportProjectsTool.ts
+- BulkExportTool.ts
 
-This session is part of v2.1.0 architecture improvements including:
-- ✅ Template substitution elimination (preventing syntax errors)
-- 🔄 Function arguments approach (safer parameter passing) 
-- 🔄 Discriminated unions (better error handling)
-- 🔄 Script size optimization (performance improvements)
+## Testing Strategy
 
-**Current Status**: Foundation issues resolved, now focusing on runtime reliability.
+### Per-Tool Testing
+After each tool consolidation:
+1. **CLI Testing**: Test all operations via CLI
+2. **Functionality Verification**: Ensure identical behavior to delegation approach
+3. **Error Handling**: Verify error cases still work correctly
+4. **Performance Check**: No significant performance regression
 
-## Pre-Merge Preparation (Lower Priority)
+### Final Validation
+After all consolidations:
+1. **Full Tool Suite Test**: All 15 tools via CLI
+2. **Claude Desktop Test**: Real-world usage verification
+3. **Integration Test Suite**: Run comprehensive tests
 
-### Code Review (After Tool Fixes)
-- Review TypeScript fixes for correctness and maintainability
-- Validate architectural improvements and consolidation decisions
-- Check for any missed optimization opportunities
+## Expected Benefits
 
-### Release Preparation (After 67%+ Success Rate)
-- Update README.md to reflect v2.1.0 changes and 15-tool architecture
-- Update package.json version to 2.1.0
-- Create comprehensive CHANGELOG.md entry
-- Performance testing and benchmarking
-- Documentation updates and verification
+### Code Reduction
+- **Remove ~11 individual tool files** (CreateTaskTool, UpdateTaskTool, etc.)
+- **Reduce codebase complexity by ~30%**
+- **Eliminate unnecessary indirection and delegation overhead**
+
+### Maintenance Benefits
+- **Single file per tool concept** - easier to understand and modify
+- **Reduced import complexity** - no cross-tool dependencies
+- **Cleaner architecture** - matches V2 design goals
+
+### Performance Benefits
+- **Eliminate delegation overhead** - direct script execution
+- **Reduce memory footprint** - fewer object instantiations
+- **Faster tool initialization** - no individual tool setup
+
+## Risk Mitigation
+
+### Backup Strategy
+- **Git branch per consolidation** - easy rollback if issues arise
+- **Keep original files until verification** - don't delete prematurely
+- **Incremental approach** - one tool at a time with full testing
+
+### Quality Assurance
+- **Preserve exact same schemas** - no API breaking changes
+- **Maintain error handling patterns** - same error codes and messages
+- **Keep logging and debugging** - full observability during transition
+
+## Success Criteria
+- [ ] All 4 wrapper tools converted to self-contained implementations
+- [ ] All 11 individual component tool files removed
+- [ ] All 15 tools maintain 100% functionality
+- [ ] No performance regression
+- [ ] Full test suite passes
+- [ ] Claude Desktop compatibility maintained
+- [ ] Codebase complexity reduced by 30%
+
+## Implementation Timeline
+- **Phase 1 (ManageTaskTool)**: 3-4 hours (most complex)
+- **Phase 2 (FoldersTool)**: 2-3 hours 
+- **Phase 3 (RecurringTasksTool)**: 1-2 hours (simplest)
+- **Phase 4 (ExportTool)**: 2-3 hours
+- **Testing & Cleanup**: 2-3 hours
+- **Total Estimate**: 10-15 hours of focused work
+
+## Next Immediate Steps
+1. ✅ Update this plan document (CURRENT)
+2. Begin ManageTaskTool consolidation
+3. Copy CreateTaskTool logic into create case
+4. Test create operation thoroughly
+5. Continue with update, complete, delete operations
+6. Remove individual task tool files after verification
+
+## Critical Success Factors
+- **Maintain 100% tool success rate** throughout refactoring
+- **Preserve all existing functionality** - no feature loss
+- **Test thoroughly after each change** - catch issues early
+- **Document any discovered issues** in LESSONS_LEARNED.md
 
 ---
 
-**Last Updated**: September 8, 2025  
-**Next Session Priority**: Fix the 11 silent tool failures to achieve >50% success rate  
-**Key Achievement**: Script syntax errors completely resolved ✅  
-**Current Challenge**: Runtime tool execution and response handling ⚠️
-
-### 5. Version Management
-- Update package.json version to 2.1.0
-- Ensure all version references are consistent across the codebase
-- Verify build metadata reflects correct version
-
-### 6. Changelog Updates
-- Document all changes and improvements in CHANGELOG.md
-- Highlight performance improvements and tool consolidation
-- Note any breaking changes or migration requirements
-
-## Release Readiness
-
-### 7. Release Notes Preparation
-- Summarize key improvements for end users
-- Create migration guide if needed
-- Prepare announcement for the performance improvements
-
-### 8. Installation Flow Testing
-- Test setup instructions work for new users
-- Verify git checkout commands provided to users
-- Test both fresh clone and branch switching scenarios
-
-### 9. Backward Compatibility Check
-- Ensure existing Claude Desktop configurations still work
-- Test that no tool names or schemas were broken
-- Verify all prompts still function correctly
-
-## Post-Merge Activities
-
-### 10. Release Tagging
-- Create proper v2.1.0 git tag after merge to main
-- Push tags to remote repository
-- Consider GitHub release with notes
-
-### 11. Documentation Sync
-- Update main branch documentation to reflect new architecture
-- Ensure all references point to correct tool count and capabilities
-- Update any stale performance claims or feature lists
-
-## Current Branch Status
-- Branch: `feature/v2.1.0-architecture-improvements` 
-- Last commit: `c82f20d` - TypeScript compilation fixes
-- Tools: 15 consolidated (reduced from 22)
-- Build: ✅ Successful
-- Basic functionality: ✅ Verified
-
-## User Testing Commands (for reference)
-```bash
-git fetch origin
-git checkout feature/v2.1.0-architecture-improvements
-git pull origin feature/v2.1.0-architecture-improvements
-npm run build
-```
-
-## Priority Focus Areas
-1. **Performance validation** - Most critical for v2.1.0 claims
-2. **Integration testing** - Ensure no regressions from TypeScript fixes
-3. **Documentation accuracy** - Keep users informed of current capabilities
-
----
-
-**Note**: User testing is currently in progress. Monitor feedback and address any issues that arise before proceeding with merge preparation.
+**Last Updated**: September 9, 2025  
+**Current Priority**: ManageTaskTool consolidation (Phase 1)
+**Success Metric**: Reduce from 4 wrapper tools + 11 component tools = 15 files down to 4 self-contained tools = 4 files
+**Architecture Goal**: True consolidation with 73% file reduction in tool layer
