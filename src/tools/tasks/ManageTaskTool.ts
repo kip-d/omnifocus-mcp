@@ -178,6 +178,43 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
         return this.formatForCLI(error, operation, 'error');
       }
 
+      // New delegation layer: route to child tools and return immediately
+      if (operation === 'create') {
+        const { CreateTaskTool } = await import('./CreateTaskTool.js');
+        const tool = new CreateTaskTool(this.cache as any);
+        return await tool.execute({
+          name: (params as any).name,
+          note: (params as any).note,
+          projectId: (params as any).projectId,
+          parentTaskId: (params as any).parentTaskId,
+          dueDate: (params as any).dueDate,
+          deferDate: (params as any).deferDate,
+          flagged: (params as any).flagged,
+          estimatedMinutes: (params as any).estimatedMinutes,
+          tags: (params as any).tags,
+          sequential: (params as any).sequential,
+          repeatRule: (params as any).repeatRule,
+        } as any);
+      }
+
+      if (operation === 'update') {
+        const { UpdateTaskTool } = await import('./UpdateTaskTool.js');
+        const tool = new UpdateTaskTool(this.cache as any);
+        return await tool.execute({ taskId, ...params } as any);
+      }
+
+      if (operation === 'complete') {
+        const { CompleteTaskTool } = await import('./CompleteTaskTool.js');
+        const tool = new CompleteTaskTool(this.cache as any);
+        return await tool.execute({ taskId, completionDate: (params as any).completionDate } as any);
+      }
+
+      if (operation === 'delete') {
+        const { DeleteTaskTool } = await import('./DeleteTaskTool.js');
+        const tool = new DeleteTaskTool(this.cache as any);
+        return await tool.execute({ taskId } as any);
+      }
+
       // Route to appropriate tool based on operation
       let result: any;
       console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);

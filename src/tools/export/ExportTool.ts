@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
-import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
-import { TagsToolV2 } from '../tags/TagsToolV2.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { ExportTasksTool } from './ExportTasksTool.js';
+import { ExportProjectsTool } from './ExportProjectsTool.js';
+import { BulkExportTool } from './BulkExportTool.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import * as path from 'path';
 
@@ -76,24 +76,17 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
     const { type, format = 'json', ...params } = args;
 
     try {
+      const tasks = new ExportTasksTool(this.cache as any);
+      const projects = new ExportProjectsTool(this.cache as any);
+      const bulk = new BulkExportTool(this.cache as any);
       switch (type) {
         case 'tasks':
-          // Direct implementation of task export
-          return await this.handleTaskExport({
-            format,
-            filter: params.filter || {},
-            fields: params.fields,
-          }, timer);
+          return await tasks.execute({ format, filter: (params as any).filter || {}, fields: (params as any).fields });
 
         case 'projects':
-          // Direct implementation of project export
-          return await this.handleProjectExport({
-            format,
-            includeStats: params.includeStats || false,
-          }, timer);
+          return await projects.execute({ format, includeStats: (params as any).includeStats || false });
 
         case 'all':
-          // Direct implementation of bulk export
           if (!params.outputDirectory) {
             return createErrorResponseV2(
               'export',
@@ -104,13 +97,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
               timer.toMetadata(),
             );
           }
-
-          return await this.handleBulkExport({
-            outputDirectory: params.outputDirectory,
-            format,
-            includeCompleted: params.includeCompleted || true,
-            includeProjectStats: params.includeProjectStats || true,
-          }, timer);
+          return await bulk.execute({ outputDirectory: (params as any).outputDirectory, format });
 
         default:
           return createErrorResponseV2(
