@@ -66,8 +66,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
 
       this.cache.invalidate('tasks');
       const task = (data as any)?.id ? data : (data as any)?.task ?? data;
-      const payload = typeof task === 'object' && task ? { task, ...(task as object) } : { task };
-      return createSuccessResponseV2('update_task', payload, undefined, { ...timer.toMetadata(), operation: 'update_task' });
+      return createSuccessResponseV2('update_task', { task }, undefined, { ...timer.toMetadata(), operation: 'update_task' });
     } catch (error) {
       return this.handleErrorV2(error);
     }

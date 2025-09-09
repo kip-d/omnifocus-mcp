@@ -41,8 +41,7 @@ export class CompleteTaskTool extends BaseTool<typeof CompleteTaskSchema> {
         this.cache.invalidate('tasks');
         this.cache.invalidate('analytics');
         const task = (data as any)?.id ? data : (data as any)?.task ?? data;
-        const payload = typeof task === 'object' && task ? { task, ...(task as object) } : { task };
-        return createSuccessResponseV2('complete_task', payload, undefined, { ...timer.toMetadata(), operation: 'complete_task' });
+        return createSuccessResponseV2('complete_task', { task }, undefined, { ...timer.toMetadata(), operation: 'complete_task' });
       } catch (e: any) {
         // Exception path: permission => URL scheme
         if (String(e?.message || e).toLowerCase().includes('access not allowed')) {

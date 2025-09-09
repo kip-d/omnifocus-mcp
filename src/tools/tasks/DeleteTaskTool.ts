@@ -33,8 +33,7 @@ export class DeleteTaskTool extends BaseTool<typeof DeleteTaskSchema> {
         }
         this.cache.invalidate('tasks');
         const task = (data as any)?.id ? data : (data as any)?.task ?? data;
-        const payload = typeof task === 'object' && task ? { task, ...(task as object) } : { task };
-        return createSuccessResponseV2('delete_task', payload, undefined, { ...timer.toMetadata(), operation: 'delete_task' });
+        return createSuccessResponseV2('delete_task', { task }, undefined, { ...timer.toMetadata(), operation: 'delete_task' });
       } catch (e: any) {
         if (String(e?.message || e).toLowerCase().includes('access not allowed')) {
           await anyOmni.executeViaUrlScheme?.('omnifocus://task/delete');

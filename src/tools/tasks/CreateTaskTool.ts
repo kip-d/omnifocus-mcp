@@ -55,8 +55,7 @@ export class CreateTaskTool extends BaseTool<typeof CreateTaskSchema> {
       // Success path
       this.cache.invalidate('tasks');
       const task = (data as any)?.taskId ? data : (data as any)?.task ?? data;
-      const payload = typeof task === 'object' && task ? { task, ...(task as object) } : { task };
-      return createSuccessResponseV2('create_task', payload, undefined, { ...timer.toMetadata(), operation: 'create_task' });
+      return createSuccessResponseV2('create_task', { task }, undefined, { ...timer.toMetadata(), operation: 'create_task' });
     } catch (error) {
       return this.handleErrorV2(error);
     }
