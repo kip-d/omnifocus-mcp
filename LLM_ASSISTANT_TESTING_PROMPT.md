@@ -10,6 +10,8 @@
 
 You are testing the OmniFocus MCP (Model Context Protocol) server integration. This server provides 15 specialized tools for comprehensive OmniFocus task management and GTD (Getting Things Done) workflows.
 
+**Current Status**: v2.1.0 with 100% tool success rate - all 15 tools working reliably.
+
 ### Pre-Test Setup Verification
 First, verify the MCP connection is working:
 1. Check that you have access to OmniFocus MCP tools
@@ -143,9 +145,10 @@ First, verify the MCP connection is working:
    - Include project-level breakdowns
    - Include tag-level statistics
 
-4. **Workflow analysis** (advanced):
-   - Deep workflow health check
-   - Identify system bottlenecks
+4. **Workflow analysis** (using `workflow_analysis` tool):
+   - Deep workflow health check with different analysis depths (quick/standard/deep)
+   - Focus on specific areas (productivity, workload, bottlenecks, opportunities)
+   - Identify system bottlenecks and workflow patterns
    - Get actionable improvement insights
 
 **Success Criteria**: Analytics generate meaningful insights, data is accurate, recommendations are actionable
@@ -155,12 +158,13 @@ First, verify the MCP connection is working:
 ### Test Group 6: Pattern Analysis & System Health
 **Objective**: Test advanced pattern detection and system optimization
 
-1. **Pattern analysis**:
+1. **Pattern analysis** (using `analyze_patterns` tool):
    - Run duplicate task detection
    - Identify dormant projects (no activity)
    - Audit tag usage patterns
    - Check deadline health (realistic due dates)
    - Find "waiting for" patterns
+   - Run comprehensive pattern analysis with "all" option
 
 2. **System health checks**:
    - Next actions audit (every project has next action)
