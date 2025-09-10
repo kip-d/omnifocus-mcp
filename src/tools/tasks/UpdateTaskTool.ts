@@ -124,7 +124,7 @@ export class UpdateTaskTool extends BaseTool<typeof UpdateTaskSchema> {
       }
 
       // Transform new schema-validated result to expected format
-      const taskData = (parsedResult as any)?.task || parsedResult || { id: taskId, name: 'Unknown' };
+      const taskData = (parsedResult as any)?.data?.task || (parsedResult as any)?.task || parsedResult || { id: taskId, name: 'Unknown' };
       const transformedResult = {
         id: taskData.id || taskId,
         name: taskData.name || 'Unknown',
