@@ -229,7 +229,7 @@ export function createListFoldersScript(options: any): string {
         
         return JSON.stringify({
           success: true,
-          folders: serializedFolders,
+          items: serializedFolders,
           count: serializedFolders.length,
           totalFolders: allFolders.length,
           filters: {

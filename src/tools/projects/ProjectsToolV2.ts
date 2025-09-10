@@ -217,7 +217,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
 
     // Parse dates and cache
-    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
+    const projects = this.parseProjects((result.data as any).items || (result.data as any).projects || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(
@@ -327,13 +327,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const script = createUpdateProjectScript(args.projectId!, updates);
     const raw = await this.execJsonFlexible(script);
     const isErrorLike = raw && typeof raw === 'object' && 'success' in (raw as any) && (raw as any).success === false;
-    if (isErrorLike) {
+    const hasErrorField = raw && typeof raw === 'object' && 'error' in (raw as any) && (raw as any).error;
+    if (isErrorLike || hasErrorField) {
       return createErrorResponseV2(
         'projects',
         'UPDATE_FAILED',
-        (raw as any).error || 'Failed to update project',
+        (raw as any).error || (raw as any).message || 'Failed to update project',
         'Check the project ID and try again',
-        (raw as any).details,
+        (raw as any).details || raw,
         timer.toMetadata(),
       );
     }

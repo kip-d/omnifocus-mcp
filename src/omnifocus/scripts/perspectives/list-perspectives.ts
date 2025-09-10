@@ -57,7 +57,7 @@ export const LIST_PERSPECTIVES_SCRIPT = `
       }
       
       return JSON.stringify({
-        perspectives: perspectives,
+        items: perspectives,
         count: perspectives.length,
         error: null
       });

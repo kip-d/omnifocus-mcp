@@ -433,6 +433,18 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             // Fallback to execute() returning JSON string or object
             const raw = await anyOmniUpdate.execute(updateScript);
             parsedUpdateResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            
+            // Check for errors in the fallback path too
+            if (parsedUpdateResult && typeof parsedUpdateResult === 'object' && 'error' in parsedUpdateResult && parsedUpdateResult.error) {
+              this.logger.error(`Update task script error (fallback): ${parsedUpdateResult.message || parsedUpdateResult.error}`);
+              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', parsedUpdateResult.message || 'Task not found or update failed', 'Verify task exists and params are valid', parsedUpdateResult, timer.toMetadata());
+            }
+            
+            // Also check for success: false format
+            if (parsedUpdateResult && typeof parsedUpdateResult === 'object' && 'success' in parsedUpdateResult && parsedUpdateResult.success === false) {
+              this.logger.error(`Update task script failed (fallback): ${parsedUpdateResult.error}`);
+              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', parsedUpdateResult.error || 'Task update failed', 'Verify task exists and params are valid', parsedUpdateResult, timer.toMetadata());
+            }
           }
 
           // Invalidate caches after successful update
@@ -462,7 +474,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           }
 
           // Transform new schema-validated result to expected format
-          const taskData = (parsedUpdateResult as any)?.task || parsedUpdateResult || { id: taskId, name: 'Unknown' };
+          const taskData = (parsedUpdateResult as any)?.data?.task || (parsedUpdateResult as any)?.task || parsedUpdateResult || { id: taskId, name: 'Unknown' };
           const transformedResult = {
             id: taskData.id || taskId,
             name: taskData.name || 'Unknown',

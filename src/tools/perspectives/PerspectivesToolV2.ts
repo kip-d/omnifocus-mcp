@@ -116,7 +116,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       // Parse the result
       const parsedResult = result.data;
 
-      const perspectives = (parsedResult as any).perspectives || (parsedResult as any).items || [];
+      const perspectives = (parsedResult as any).items || (parsedResult as any).perspectives || [];
 
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';

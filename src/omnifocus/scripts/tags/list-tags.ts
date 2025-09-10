@@ -172,7 +172,7 @@ export const LIST_TAGS_SCRIPT = `
     const endTime = Date.now();
     
     return JSON.stringify({
-      tags: tags,
+      items: tags,
       summary: {
         totalTags: totalTags,
         activeTags: activeTags,

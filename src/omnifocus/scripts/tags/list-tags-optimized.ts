@@ -42,7 +42,7 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         
         const endTime = Date.now();
         return JSON.stringify({
-          tags: tagNames,
+          items: tagNames,
           summary: {
             totalTags: tagNames.length,
             query_time_ms: endTime - startTime,
@@ -69,7 +69,7 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         
         const endTime = Date.now();
         return JSON.stringify({
-          tags: tags,
+          items: tags,
           summary: {
             totalTags: tags.length,
             query_time_ms: endTime - startTime,
@@ -181,7 +181,7 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         tags.filter(t => !t.usage || t.usage.total === 0).length : 'unknown';
       
       return JSON.stringify({
-        tags: tags,
+        items: tags,
         summary: {
           totalTags: totalTags,
           activeTags: activeTags,
@@ -246,7 +246,7 @@ export const GET_ACTIVE_TAGS_SCRIPT = `
       const endTime = Date.now();
       
       return JSON.stringify({
-        tags: activeTags,
+        items: activeTags,
         summary: {
           totalTags: activeTags.length,
           query_time_ms: endTime - startTime,

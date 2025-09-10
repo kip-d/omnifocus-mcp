@@ -43,7 +43,11 @@ export const EXPORT_TASKS_SCRIPT = `
         const task = allTasks[i];
         
         // Apply filters
-        if (filter.available !== undefined && safeGet(() => task.effectivelyHidden(), false) === filter.available) continue;
+        if (filter.available !== undefined) {
+          const isHidden = safeGet(() => task.effectivelyHidden(), false);
+          const isAvailable = !isHidden;
+          if (isAvailable !== filter.available) continue;
+        }
       
       if (filter.completed !== undefined && safeIsCompleted(task) !== filter.completed) continue;
       

@@ -153,9 +153,9 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
 
       const response = createListResponseV2(
         'tags',
-        (parsedResult as any).tags || (parsedResult as any).items || [],
+        (parsedResult as any).items || [],
         'other',
-        { ...timer.toMetadata(), total: (parsedResult as any).count || (parsedResult as any).tags?.length || 0, operation: 'list', mode: useOptimized ? 'optimized' : 'full', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
+        { ...timer.toMetadata(), total: (parsedResult as any).summary?.totalTags || (parsedResult as any).items?.length || 0, operation: 'list', mode: useOptimized ? 'optimized' : 'full', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
       );
 
       // Cache the result
@@ -200,9 +200,9 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
 
       const response = createListResponseV2(
         'tags',
-        (parsedResult as any).tags || (parsedResult as any).items || [],
+        (parsedResult as any).items || [],
         'other',
-        { ...timer.toMetadata(), count: (parsedResult as any).count || (parsedResult as any).tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
+        { ...timer.toMetadata(), count: (parsedResult as any).summary?.totalTags || (parsedResult as any).items?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
       );
 
       // Cache the result (30 second TTL for active tags)

@@ -261,7 +261,7 @@ export const LIST_PROJECTS_SCRIPT = `
     }
     
     return JSON.stringify({ 
-      projects: projects,
+      items: projects,
       metadata: {
         total_available: allProjects.length,
         returned_count: projects.length,
