@@ -5,6 +5,7 @@ import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-fol
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
+import { createDuplicateFolderScript } from '../../omnifocus/scripts/folders/duplicate-folder.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
@@ -169,8 +170,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
           const parsedGetResult = getResult.data as any;
 
-          // Find the specific folder by ID
-          const folder = parsedGetResult.items?.find((f: any) => f.id === params.folderId);
+          // Find the specific folder by ID  
+          // Handle both direct items array and nested data.items structure
+          const itemsArray = parsedGetResult.items || parsedGetResult.data?.items;
+          const folder = itemsArray?.find((f: any) => f.id === params.folderId);
           if (!folder) {
             return createErrorResponseV2(
               'folders',
@@ -253,7 +256,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedProjectsResult = projectsResult.data as any;
 
           // Find the specific folder by ID and return its projects
-          const folderWithProjects = parsedProjectsResult.items?.find((f: any) => f.id === params.folderId);
+          // Handle both direct items array and nested data.items structure
+          const projectsItemsArray = parsedProjectsResult.items || parsedProjectsResult.data?.items;
+          const folderWithProjects = projectsItemsArray?.find((f: any) => f.id === params.folderId);
           if (!folderWithProjects) {
             return createErrorResponseV2(
               'folders',
@@ -427,15 +432,41 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           return createSuccessResponseV2('folders', { folder: { ...parsedMoveResult, operation: 'move' } }, undefined, { ...timer.toMetadata(), operation: 'move', moved_id: params.folderId, old_parent: parsedMoveResult.folder?.parent, new_parent: params.parentFolderId });
 
         case 'duplicate':
-          // Direct implementation placeholder - not implemented in original ManageFolderTool either
-          return createErrorResponseV2(
-            'folders',
-            'NOT_IMPLEMENTED',
-            'Duplicate operation is not yet implemented. Use create operation instead.',
-            undefined,
-            { operation: 'duplicate', folderId: params.folderId, newName: params.duplicateName },
-            timer.toMetadata(),
-          );
+          // Direct implementation of folder duplication
+          if (!params.folderId) {
+            return createErrorResponseV2(
+              'folders',
+              'MISSING_PARAMETER',
+              'folderId is required for duplicate operation',
+              'Provide the ID of the folder to duplicate',
+              { operation: 'duplicate' },
+              timer.toMetadata(),
+            );
+          }
+
+          const duplicateScript = createDuplicateFolderScript(params.folderId, params.duplicateName);
+          const duplicateResult = await this.execJson(duplicateScript);
+          
+          if ((duplicateResult as any).success === false) {
+            return createErrorResponseV2(
+              'folders',
+              'DUPLICATE_FAILED',
+              (duplicateResult as any).error || 'Folder duplication failed',
+              'Check that the source folder exists and you have permission to create folders',
+              { details: (duplicateResult as any).details, operation: 'duplicate', sourceId: params.folderId },
+              timer.toMetadata(),
+            );
+          }
+
+          const parsedDuplicateResult = duplicateResult.data as any;
+          
+          // Handle both direct folder object and nested data structure  
+          const folderData = parsedDuplicateResult.data || parsedDuplicateResult;
+          
+          // Invalidate folders cache since we created a new folder
+          this.cache.invalidate('folders');
+
+          return createSuccessResponseV2('folders', { folder: { ...folderData, operation: 'duplicate' } }, undefined, { ...timer.toMetadata(), operation: 'duplicate', source_id: params.folderId, new_name: params.duplicateName });
 
         case 'set_status':
           // Direct implementation of set status (uses update script)

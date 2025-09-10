@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CreateTaskTool } from '../../../src/tools/tasks/CreateTaskTool.js';
-import { UpdateTaskTool } from '../../../src/tools/tasks/UpdateTaskTool.js';
-import { CompleteTaskTool } from '../../../src/tools/tasks/CompleteTaskTool.js';
-import { DeleteTaskTool } from '../../../src/tools/tasks/DeleteTaskTool.js';
+import { ManageTaskTool } from '../../../src/tools/tasks/ManageTaskTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
@@ -22,9 +19,10 @@ vi.mock('../../../src/utils/logger.js', () => ({
   }))
 }));
 
-describe('Task CRUD Operations', () => {
+describe('Task CRUD Operations (via ManageTaskTool)', () => {
   let mockCache: any;
   let mockOmniAutomation: any;
+  let tool: ManageTaskTool;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,14 +42,11 @@ describe('Task CRUD Operations', () => {
 
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
+    
+    tool = new ManageTaskTool(mockCache);
   });
 
-  describe('CreateTaskTool', () => {
-    let tool: CreateTaskTool;
-
-    beforeEach(() => {
-      tool = new CreateTaskTool(mockCache);
-    });
+  describe('Create Operation', () => {
 
     describe('successful operations', () => {
       it('should create a simple task', async () => {
@@ -66,7 +61,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(taskData);
+        const result = await tool.execute({ operation: 'create', ...taskData });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String), // CREATE_TASK_SCRIPT
@@ -102,7 +97,7 @@ describe('Task CRUD Operations', () => {
 
         mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
-        const result = await tool.execute(taskData);
+        const result = await tool.execute({ operation: 'create', ...taskData });
 
         // Tags should now work successfully
         expect(result.success).toBe(true);
@@ -121,7 +116,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(expectedResult);
 
-        const result = await tool.execute(taskData);
+        const result = await tool.execute({ operation: 'create', ...taskData });
 
         expect(result.success).toBe(true);
         expect(result.data.task).toEqual(expectedResult);
@@ -130,17 +125,18 @@ describe('Task CRUD Operations', () => {
 
     describe('validation', () => {
       it('should reject missing name', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
+        await expect(tool.execute({ operation: 'create' })).rejects.toThrow('Invalid parameters');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should reject empty name', async () => {
-        await expect(tool.execute({ name: '' })).rejects.toThrow('Invalid parameters');
+        await expect(tool.execute({ operation: 'create', name: '' })).rejects.toThrow('Invalid parameters');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should reject invalid date format', async () => {
         await expect(tool.execute({
+          operation: 'create',
           name: 'Test task',
           dueDate: 'invalid-date'
         })).rejects.toThrow('Invalid parameters');
@@ -149,6 +145,7 @@ describe('Task CRUD Operations', () => {
 
       it('should reject negative estimated minutes', async () => {
         await expect(tool.execute({
+          operation: 'create',
           name: 'Test task',
           estimatedMinutes: -30
         })).rejects.toThrow('Invalid parameters');
@@ -164,7 +161,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script execution failed'
         , details: 'Test error' });
 
-        const result = await tool.execute(taskData);
+        const result = await tool.execute({ operation: 'create', ...taskData });
 
         expect(result.success).toBe(false);
         // Standardized script error from tool when executeJson returns { success:false }
@@ -179,7 +176,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
-        const result = await tool.execute(taskData);
+        const result = await tool.execute({ operation: 'create', ...taskData });
 
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('PERMISSION_DENIED');
@@ -188,12 +185,7 @@ describe('Task CRUD Operations', () => {
     });
   });
 
-  describe('UpdateTaskTool', () => {
-    let tool: UpdateTaskTool;
-
-    beforeEach(() => {
-      tool = new UpdateTaskTool(mockCache);
-    });
+  describe('Update Operation', () => {
 
     describe('successful operations', () => {
       it('should update task name', async () => {
@@ -211,7 +203,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(updateData);
+        const result = await tool.execute({ operation: 'update', ...updateData });
 
         // Script building path may differ in v2; focus on standardized output
         expect(result.success).toBe(true);
@@ -244,7 +236,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(updateData);
+        const result = await tool.execute({ operation: 'update', ...updateData });
 
         expect(result.success).toBe(true);
         expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
@@ -264,7 +256,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(updateData);
+        const result = await tool.execute({ operation: 'update', ...updateData });
 
         expect(result.success).toBe(true);
         expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
@@ -275,7 +267,7 @@ describe('Task CRUD Operations', () => {
           taskId: 'task-123'
         };
 
-        const result = await tool.execute(updateData);
+        const result = await tool.execute({ operation: 'update', ...updateData });
 
         expect(result.success).toBe(true);
         expect(result.data.task.updated).toBe(false);
@@ -312,7 +304,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
         , details: 'Test error' });
 
-        const result = await tool.execute(updateData);
+        const result = await tool.execute({ operation: 'update', ...updateData });
 
         expect(result.success).toBe(false);
         expect(result.error.code).toBe('SCRIPT_ERROR');
@@ -322,12 +314,7 @@ describe('Task CRUD Operations', () => {
     });
   });
 
-  describe('CompleteTaskTool', () => {
-    let tool: CompleteTaskTool;
-
-    beforeEach(() => {
-      tool = new CompleteTaskTool(mockCache);
-    });
+  describe('Complete Operation', () => {
 
     describe('successful operations', () => {
       it('should complete a task', async () => {
@@ -341,7 +328,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(completeData);
+        const result = await tool.execute({ operation: 'complete', ...completeData });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String), // COMPLETE_TASK_SCRIPT
@@ -367,7 +354,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(completeData);
+        const result = await tool.execute({ operation: 'complete', ...completeData });
 
         expect(result.success).toBe(true);
         expect(result.data.task).toEqual(expectedResult);
@@ -380,7 +367,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'access not allowed'
         , details: 'Test error' });
 
-        const result = await tool.execute(completeData);
+        const result = await tool.execute({ operation: 'complete', ...completeData });
 
         expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
         expect(result.success).toBe(true);
@@ -392,12 +379,13 @@ describe('Task CRUD Operations', () => {
 
     describe('validation', () => {
       it('should reject missing taskId', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
+        await expect(tool.execute({ operation: 'complete' })).rejects.toThrow('Invalid parameters');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should reject invalid completion date', async () => {
         await expect(tool.execute({
+          operation: 'complete',
           taskId: 'task-123',
           completionDate: 'invalid-date'
         })).rejects.toThrow('Invalid parameters');
@@ -413,7 +401,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
         , details: 'Test error' });
 
-        const result = await tool.execute(completeData);
+        const result = await tool.execute({ operation: 'complete', ...completeData });
 
         // Standardized error response shape (v2): success=false with error object
         expect(result.success).toBe(false);
@@ -427,7 +415,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
-        const result = await tool.execute(completeData);
+        const result = await tool.execute({ operation: 'complete', ...completeData });
 
         expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
         expect(result.success).toBe(true);
@@ -436,12 +424,7 @@ describe('Task CRUD Operations', () => {
     });
   });
 
-  describe('DeleteTaskTool', () => {
-    let tool: DeleteTaskTool;
-
-    beforeEach(() => {
-      tool = new DeleteTaskTool(mockCache);
-    });
+  describe('Delete Operation', () => {
 
     describe('successful operations', () => {
       it('should delete a task', async () => {
@@ -455,7 +438,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(JSON.stringify(expectedResult));
 
-        const result = await tool.execute(deleteData);
+        const result = await tool.execute({ operation: 'delete', ...deleteData });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String), // DELETE_TASK_SCRIPT
@@ -473,7 +456,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'parameter is missing'
         , details: 'Test error' });
 
-        const result = await tool.execute(deleteData);
+        const result = await tool.execute({ operation: 'delete', ...deleteData });
 
         expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
         expect(result.success).toBe(true);
@@ -487,7 +470,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
 
-        const result = await tool.execute(deleteData);
+        const result = await tool.execute({ operation: 'delete', ...deleteData });
 
         expect(mockOmniAutomation.executeViaUrlScheme).toHaveBeenCalled();
         expect(result.success).toBe(true);
@@ -497,12 +480,12 @@ describe('Task CRUD Operations', () => {
 
     describe('validation', () => {
       it('should reject missing taskId', async () => {
-        await expect(tool.execute({})).rejects.toThrow('Invalid parameters');
+        await expect(tool.execute({ operation: 'delete' })).rejects.toThrow('Invalid parameters');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
 
       it('should reject empty taskId', async () => {
-        await expect(tool.execute({ taskId: '' })).rejects.toThrow('Invalid parameters');
+        await expect(tool.execute({ operation: 'delete', taskId: '' })).rejects.toThrow('Invalid parameters');
         expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
       });
     });
@@ -515,7 +498,7 @@ describe('Task CRUD Operations', () => {
         mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Task not found'
         , details: 'Test error' });
 
-        const result = await tool.execute(deleteData);
+        const result = await tool.execute({ operation: 'delete', ...deleteData });
 
         // Standardized error response shape (v2): success=false with error object
         expect(result.success).toBe(false);

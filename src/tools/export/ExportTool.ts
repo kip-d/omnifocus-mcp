@@ -183,26 +183,21 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         format,
         includeStats,
       });
-      const result = await this.omniAutomation.execute(script) as {
-        format: string;
-        data: any;
-        count: number;
-        error?: boolean;
-        message?: string;
-      };
+      const result = await this.omniAutomation.executeJson(script);
 
-      if (result.error) {
+      if ((result as any).success === false) {
         return createErrorResponseV2(
           'export',
           'PROJECT_EXPORT_FAILED',
-          result.message || 'Failed to export projects',
+          (result as any).error || 'Failed to export projects',
           undefined,
           { format, includeStats },
           timer.toMetadata(),
         );
       }
 
-      return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+      const resultData = (result as any).data;
+      return createSuccessResponseV2('export', { format, data: resultData, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
     } catch (error) {
       return this.handleError(error);
     }
@@ -238,8 +233,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         filter: taskFilter,
         fields: undefined,
       });
-      const anyOmni: any = this.omniAutomation as any;
-      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute(taskScript);
+      const taskRaw = await this.omniAutomation.executeJson(taskScript);
       
       let taskResult: any = null;
       if (taskRaw && typeof taskRaw === 'object' && 'success' in taskRaw) {
@@ -270,7 +264,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         format,
         includeStats: includeProjectStats,
       });
-      const projectResult = await this.omniAutomation.execute(projectScript) as any;
+      const projectRaw = await this.omniAutomation.executeJson(projectScript);
+      
+      let projectResult: any = null;
+      if (projectRaw && typeof projectRaw === 'object' && 'success' in projectRaw) {
+        projectResult = projectRaw.success ? projectRaw.data : null;
+      } else {
+        projectResult = projectRaw;
+      }
       
       if (projectResult && !projectResult.error) {
         const projectFile = path.join(outputDirectory, `projects.${format}`);
@@ -291,7 +292,15 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
 
       // Export tags (JSON only) - delegate to TagsToolV2
       const tagExporter = new TagsToolV2(this.cache);
-      const tagResult: any = await tagExporter.execute({ includeEmpty: true });
+      const tagResult: any = await tagExporter.executeValidated({ 
+        operation: 'list',
+        sortBy: 'name',
+        includeEmpty: true,
+        includeUsageStats: false,
+        includeTaskCounts: false,
+        fastMode: false,
+        namesOnly: false
+      });
 
       if (tagResult && tagResult.success && tagResult.data) {
         const tagFile = path.join(outputDirectory, 'tags.json');

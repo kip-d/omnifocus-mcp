@@ -15,32 +15,32 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   }))
 }));
 
-// Spies for child tools
-const createExecute = vi.fn(async (args: any) => ({ success: true, data: { op: 'create', args }, metadata: { operation: 'create_task', from_cache: false, timestamp: new Date().toISOString() } }));
-const updateExecute = vi.fn(async (args: any) => ({ success: true, data: { op: 'update', args }, metadata: { operation: 'update_task', from_cache: false, timestamp: new Date().toISOString() } }));
-const completeExecute = vi.fn(async (args: any) => ({ success: true, data: { op: 'complete', args }, metadata: { operation: 'complete_task', from_cache: false, timestamp: new Date().toISOString() } }));
-const deleteExecute = vi.fn(async (args: any) => ({ success: true, data: { op: 'delete', args }, metadata: { operation: 'delete_task', from_cache: false, timestamp: new Date().toISOString() } }));
+// Mock OmniAutomation - the tool uses direct implementation, not delegation
+const mockOmniAutomation = {
+  buildScript: vi.fn((script, params) => `mocked_script_${script}_${JSON.stringify(params)}`),
+  executeJson: vi.fn(),
+  execute: vi.fn(),
+};
 
-vi.mock('../../../../src/tools/tasks/CreateTaskTool.js', () => ({
-  CreateTaskTool: vi.fn().mockImplementation(() => ({ execute: createExecute }))
-}));
-vi.mock('../../../../src/tools/tasks/UpdateTaskTool.js', () => ({
-  UpdateTaskTool: vi.fn().mockImplementation(() => ({ execute: updateExecute }))
-}));
-vi.mock('../../../../src/tools/tasks/CompleteTaskTool.js', () => ({
-  CompleteTaskTool: vi.fn().mockImplementation(() => ({ execute: completeExecute }))
-}));
-vi.mock('../../../../src/tools/tasks/DeleteTaskTool.js', () => ({
-  DeleteTaskTool: vi.fn().mockImplementation(() => ({ execute: deleteExecute }))
+vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({
+  OmniAutomation: vi.fn(() => mockOmniAutomation)
 }));
 
 describe('ManageTaskTool (consolidated CRUD)', () => {
   let tool: ManageTaskTool;
+  let mockCache: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (CacheManager as any).mockImplementation(() => ({}));
-    tool = new ManageTaskTool({} as any);
+    mockCache = {
+      invalidate: vi.fn(),
+    };
+    (CacheManager as any).mockImplementation(() => mockCache);
+    tool = new ManageTaskTool(mockCache);
+    // Reset mock implementations
+    mockOmniAutomation.executeJson.mockReset();
+    mockOmniAutomation.execute.mockReset();
+    mockOmniAutomation.buildScript.mockReset();
   });
 
   it('requires taskId for non-create operations', async () => {
@@ -59,7 +59,17 @@ describe('ManageTaskTool (consolidated CRUD)', () => {
     expect(res.error.message).toContain('name');
   });
 
-  it('delegates to CreateTaskTool with mapped fields', async () => {
+  it('creates task with direct implementation', async () => {
+    // Mock successful task creation response
+    mockOmniAutomation.executeJson.mockResolvedValue({
+      success: true,
+      data: {
+        taskId: 'task_123',
+        name: 'Write tests',
+        projectId: 'proj1'
+      }
+    });
+
     const args = {
       operation: 'create',
       name: 'Write tests',
@@ -77,22 +87,24 @@ describe('ManageTaskTool (consolidated CRUD)', () => {
 
     const res: any = await tool.executeValidated(args as any);
     expect(res.success).toBe(true);
-    expect(createExecute).toHaveBeenCalledWith({
-      name: 'Write tests',
-      note: 'Cover consolidated tool',
-      projectId: 'proj1',
-      parentTaskId: 'parent1',
-      dueDate: '2025-01-10 17:00',
-      deferDate: '2025-01-09 08:00',
-      flagged: 'true',
-      estimatedMinutes: '30',
-      tags: ['dev', 'tests'],
-      sequential: 'false',
-      repeatRule: { unit: 'week', steps: 1, method: 'fixed', weekday: 'friday' },
-    });
+    expect(res.data.task.taskId).toBe('task_123');
+    expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+    expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
   });
 
-  it('delegates to UpdateTaskTool including minimalResponse and clear flags', async () => {
+  it('updates task with direct implementation including minimalResponse', async () => {
+    // Mock successful task update response
+    mockOmniAutomation.executeJson.mockResolvedValue({
+      success: true,
+      data: {
+        task: {
+          id: 't1',
+          name: 'Updated Task',
+          updated: true
+        }
+      }
+    });
+
     const res: any = await tool.executeValidated({
       operation: 'update',
       taskId: 't1',
@@ -105,27 +117,49 @@ describe('ManageTaskTool (consolidated CRUD)', () => {
     } as any);
 
     expect(res.success).toBe(true);
-    expect(updateExecute).toHaveBeenCalledWith(expect.objectContaining({
-      taskId: 't1',
-      note: 'Updated',
-      clearDueDate: true,
-      clearDeferDate: true,
-      clearEstimatedMinutes: true,
-      clearRepeatRule: true,
-      minimalResponse: true,
-    }));
+    expect(res.id).toBe('t1'); // minimalResponse format
+    expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+    expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
   });
 
-  it('delegates to CompleteTaskTool with completionDate', async () => {
-    const res: any = await tool.executeValidated({ operation: 'complete', taskId: 't2', completionDate: '2025-01-01 12:00' } as any);
+  it('completes task with direct implementation', async () => {
+    // Mock successful task completion response
+    mockOmniAutomation.executeJson.mockResolvedValue({
+      success: true,
+      data: {
+        id: 't2',
+        name: 'Completed Task',
+        completed: true
+      }
+    });
+
+    const res: any = await tool.executeValidated({ 
+      operation: 'complete', 
+      taskId: 't2', 
+      completionDate: '2025-01-01 12:00' 
+    } as any);
+    
     expect(res.success).toBe(true);
-    expect(completeExecute).toHaveBeenCalledWith({ taskId: 't2', completionDate: '2025-01-01 12:00' });
+    expect(res.data.task.id).toBe('t2');
+    expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+    expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
   });
 
-  it('delegates to DeleteTaskTool', async () => {
+  it('deletes task with direct implementation', async () => {
+    // Mock successful task deletion response
+    mockOmniAutomation.executeJson.mockResolvedValue({
+      success: true,
+      data: {
+        id: 't3',
+        deleted: true
+      }
+    });
+
     const res: any = await tool.executeValidated({ operation: 'delete', taskId: 't3' } as any);
     expect(res.success).toBe(true);
-    expect(deleteExecute).toHaveBeenCalledWith({ taskId: 't3' });
+    expect(res.data.task.id).toBe('t3');
+    expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+    expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
   });
 });
 

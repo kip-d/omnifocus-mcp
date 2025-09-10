@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AnalyzeRecurringTasksTool } from '../../../src/tools/recurring/AnalyzeRecurringTasksTool.js';
-import { GetRecurringPatternsTool } from '../../../src/tools/recurring/GetRecurringPatternsTool.js';
+import { RecurringTasksTool } from '../../../src/tools/recurring/RecurringTasksTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
@@ -43,18 +42,18 @@ describe('Recurring Tools', () => {
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
   });
 
-  describe('AnalyzeRecurringTasksTool', () => {
-    let tool: AnalyzeRecurringTasksTool;
+  describe('RecurringTasksTool - Analyze Operation', () => {
+    let tool: RecurringTasksTool;
 
     beforeEach(() => {
-      tool = new AnalyzeRecurringTasksTool(mockCache);
+      tool = new RecurringTasksTool(mockCache);
     });
 
     describe('basic functionality', () => {
       it('should have correct name and description', () => {
-        expect(tool.name).toBe('analyze_recurring_tasks');
-        expect(tool.description).toContain('Analyze recurring tasks for patterns');
-        expect(tool.description).toContain('activeOnly=true');
+        expect(tool.name).toBe('recurring_tasks');
+        expect(tool.description).toContain('Analyze recurring tasks and patterns');
+        expect(tool.description).toContain('operation=\"analyze\"');
       });
 
       it('should use default options when not specified', async () => {
@@ -64,7 +63,7 @@ describe('Recurring Tools', () => {
           summary: { total: 0, active: 0 },
         });
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
@@ -106,7 +105,7 @@ describe('Recurring Tools', () => {
         
         mockCache.get.mockReturnValue(cachedData);
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(mockCache.get).toHaveBeenCalledWith('analytics', 'recurring_{"activeOnly":true,"includeCompleted":false,"includeDropped":false,"includeHistory":false,"sortBy":"dueDate"}');
         expect(result).toEqual(cachedData);
@@ -123,7 +122,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(mockCache.set).toHaveBeenCalledWith('analytics', 'recurring_{"activeOnly":true,"includeCompleted":false,"includeDropped":false,"includeHistory":false,"sortBy":"dueDate"}', {
           tasks: scriptResult.tasks,
@@ -142,7 +141,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
          mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed', details: 'Test error' });
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(result.error).toBe(true);
         expect(result.message).toContain('Script failed');
@@ -154,7 +153,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('Execution failed'));
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(result.success).toBe(false);
         expect(result.error?.message).toContain('Execution failed');
@@ -162,17 +161,17 @@ describe('Recurring Tools', () => {
     });
   });
 
-  describe('GetRecurringPatternsTool', () => {
-    let tool: GetRecurringPatternsTool;
+  describe('RecurringTasksTool - Patterns Operation', () => {
+    let tool: RecurringTasksTool;
 
     beforeEach(() => {
-      tool = new GetRecurringPatternsTool(mockCache);
+      tool = new RecurringTasksTool(mockCache);
     });
 
     describe('basic functionality', () => {
       it('should have correct name and description', () => {
-        expect(tool.name).toBe('get_recurring_patterns');
-        expect(tool.description).toContain('Get recurring task frequency patterns');
+        expect(tool.name).toBe('recurring_tasks');
+        expect(tool.description).toContain('Analyze recurring tasks and patterns');
       });
 
       it('should execute with default parameters', async () => {
@@ -185,7 +184,7 @@ describe('Recurring Tools', () => {
           mostCommon: null,
         });
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'patterns' });
 
         expect(mockOmniAutomation.buildScript).toHaveBeenCalledWith(
           expect.any(String),
@@ -203,6 +202,7 @@ describe('Recurring Tools', () => {
         });
 
         const result = await tool.execute({
+          operation: 'patterns',
           activeOnly: false,
           includeCompleted: true,
           includeDropped: true,
@@ -225,7 +225,7 @@ describe('Recurring Tools', () => {
         
         mockCache.get.mockReturnValue(cachedData);
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(mockCache.get).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}');
         expect(result).toEqual(cachedData);
@@ -244,7 +244,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(mockCache.set).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}', {
           totalRecurring: scriptResult.totalRecurring,
@@ -265,7 +265,7 @@ describe('Recurring Tools', () => {
          mockOmniAutomation.buildScript.mockReturnValue('test script');
          mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Pattern analysis failed', details: 'Test error' });
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(result.error).toBe(true);
         expect(result.message).toContain('Pattern analysis failed');
@@ -277,7 +277,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('Pattern analysis failed'));
 
-        const result = await tool.execute({});
+        const result = await tool.execute({ operation: 'analyze' });
 
         expect(result.success).toBe(false);
         expect(result.error?.message).toContain('Pattern analysis failed');

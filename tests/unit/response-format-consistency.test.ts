@@ -2,16 +2,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CacheManager } from '../../src/cache/CacheManager';
 import { OmniAutomation } from '../../src/omnifocus/OmniAutomation';
 
-// Import all tools to test
-import { CreateTaskTool } from '../../src/tools/tasks/CreateTaskTool';
-import { UpdateTaskTool } from '../../src/tools/tasks/UpdateTaskTool';
+// Import all tools to test (v2.1.0 consolidated tools)
+import { ManageTaskTool } from '../../src/tools/tasks/ManageTaskTool';
 import { QueryTasksToolV2 } from '../../src/tools/tasks/QueryTasksToolV2';
 import { ProductivityStatsToolV2 } from '../../src/tools/analytics/ProductivityStatsToolV2';
 import { TaskVelocityToolV2 } from '../../src/tools/analytics/TaskVelocityToolV2';
 import { OverdueAnalysisToolV2 } from '../../src/tools/analytics/OverdueAnalysisToolV2';
-import { ExportTasksTool } from '../../src/tools/export/ExportTasksTool';
-import { ExportProjectsTool } from '../../src/tools/export/ExportProjectsTool';
-import { BulkExportTool } from '../../src/tools/export/BulkExportTool';
+import { ExportTool } from '../../src/tools/export/ExportTool';
+import { FoldersTool } from '../../src/tools/folders/FoldersTool';
 import { ProjectsToolV2 } from '../../src/tools/projects/ProjectsToolV2';
 import { PerspectivesToolV2 } from '../../src/tools/perspectives/PerspectivesToolV2';
 import { SystemToolV2 } from '../../src/tools/system/SystemToolV2';
@@ -44,16 +42,17 @@ describe('Response Format Consistency Tests', () => {
   describe('Standardized Response Structure', () => {
     it('should verify all tool responses have consistent structure', async () => {
       const tools = [
-        new CreateTaskTool(mockCache),
-        new UpdateTaskTool(mockCache),
+        new ManageTaskTool(mockCache),
         new QueryTasksToolV2(mockCache),
         new ProductivityStatsToolV2(mockCache),
         new TaskVelocityToolV2(mockCache),
         new OverdueAnalysisToolV2(mockCache),
-        new ExportTasksTool(mockCache),
-        new ExportProjectsTool(mockCache),
-        new BulkExportTool(mockCache),
+        new ExportTool(mockCache),
+        new FoldersTool(mockCache),
         new ProjectsToolV2(mockCache),
+        new PerspectivesToolV2(mockCache),
+        new SystemToolV2(mockCache),
+        new TagsToolV2(mockCache),
       ];
 
       // Test that all tools have proper response structure
@@ -88,7 +87,7 @@ describe('Response Format Consistency Tests', () => {
     });
 
     it('should ensure error responses have required fields', async () => {
-      const tool = new CreateTaskTool(mockCache);
+      const tool = new ManageTaskTool(mockCache);
       
       // Mock error execution
       mockOmniAutomation.buildScript.mockReturnValue('test script');
@@ -184,7 +183,7 @@ describe('Response Format Consistency Tests', () => {
 
   describe('Export Tool Response Consistency', () => {
     it('should have nested export structure for export tools', async () => {
-      const tool = new ExportTasksTool(mockCache);
+      const tool = new ExportTool(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
@@ -238,7 +237,7 @@ describe('Response Format Consistency Tests', () => {
         new ProductivityStatsToolV2(mockCache),
         new TaskVelocityToolV2(mockCache),
         new OverdueAnalysisToolV2(mockCache),
-        new ExportTasksTool(mockCache),
+        new ExportTool(mockCache),
       ];
 
       for (const tool of tools) {
@@ -265,7 +264,7 @@ describe('Response Format Consistency Tests', () => {
     });
 
     it('should include recovery suggestions for known errors', async () => {
-      const tool = new CreateTaskTool(mockCache);
+      const tool = new ManageTaskTool(mockCache);
       
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockRejectedValue(new Error('access not allowed'));
@@ -289,9 +288,9 @@ describe('Response Format Consistency Tests', () => {
       // This test verifies at compile time that tools have proper return types
       // If any tool returns Promise<any>, TypeScript compilation will fail
       
-      const createTask = new CreateTaskTool(mockCache);
+      const createTask = new ManageTaskTool(mockCache);
       const productivity = new ProductivityStatsToolV2(mockCache);
-      const exportTasks = new ExportTasksTool(mockCache);
+      const exportTasks = new ExportTool(mockCache);
       
       // These assertions verify the types are properly defined
       expect(createTask.executeValidated).toBeDefined();
