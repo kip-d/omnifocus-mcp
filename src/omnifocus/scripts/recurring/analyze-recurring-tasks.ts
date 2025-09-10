@@ -1,17 +1,18 @@
-import { getRecurrenceHelpers } from '../shared/helpers.js';
+import { getCoreHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze recurring tasks in OmniFocus
- *
+ * 
+ * ULTRA-OPTIMIZED FOR SIZE: Uses only core helpers to stay under 19KB limit
  * Features:
  * - Detects recurring patterns from repetition rules
- * - Smart inference from task names and project context
+ * - Smart inference from task names and project context  
  * - Gaming-specific pattern detection
  * - Overdue tracking and next occurrence calculation
  * - Frequency summarization
  */
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
-  ${getRecurrenceHelpers()}
+  ${getCoreHelpers()}
   
   (() => {
   const options = {{options}};

@@ -1,8 +1,9 @@
-import { getRecurrenceHelpers } from '../shared/helpers.js';
+import { getCoreHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze and summarize recurring task patterns in OmniFocus
- *
+ * 
+ * OPTIMIZED FOR SIZE: Uses minimal helpers to stay under 19KB limit
  * Features:
  * - Pattern detection and grouping
  * - Frequency distribution analysis
@@ -11,7 +12,8 @@ import { getRecurrenceHelpers } from '../shared/helpers.js';
  * - Most common pattern identification
  */
 export const GET_RECURRING_PATTERNS_SCRIPT = `
-  ${getRecurrenceHelpers()}
+  ${getCoreHelpers()}
+  ${getRecurrenceApplyHelpers()}
   
   (() => {
   const options = {{options}};

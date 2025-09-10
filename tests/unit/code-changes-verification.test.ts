@@ -6,7 +6,10 @@ describe('Code Changes Verification', () => {
   describe('Bug Fix: Task Search Limit', () => {
     it('UPDATE_TASK_SCRIPT should avoid whose() and not hard-limit loops', () => {
       // Explicitly avoid whose() for performance/reliability
-      expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
+      // Check that we don't actually call whose() (ignore comments)
+      const codeLines = UPDATE_TASK_SCRIPT.split('\n').filter(line => !line.trim().startsWith('//'));
+      const codeOnly = codeLines.join('\n');
+      expect(codeOnly).not.toContain('whose(');
       // Should NOT have any artificial loop limit
       expect(UPDATE_TASK_SCRIPT).not.toContain('i < 100');
       expect(UPDATE_TASK_SCRIPT).not.toContain('Math.min(100');
