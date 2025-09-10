@@ -1,8 +1,9 @@
-import { getRecurrenceHelpers } from '../shared/helpers.js';
+import { getCoreHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new project in OmniFocus
- *
+ * 
+ * OPTIMIZED FOR SIZE: Uses minimal helpers to stay under 19KB limit  
  * Features:
  * - Create project with name, note, dates, and flagged status
  * - Place in specific folder (creates folder if needed)
@@ -12,7 +13,8 @@ import { getRecurrenceHelpers } from '../shared/helpers.js';
  * - Proper error handling and validation
  */
 export const CREATE_PROJECT_SCRIPT = `
-  ${getRecurrenceHelpers()}
+  ${getCoreHelpers()}
+  ${getRecurrenceApplyHelpers()}
   
   (() => {
     const name = {{name}};
