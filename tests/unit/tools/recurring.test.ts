@@ -81,6 +81,7 @@ describe('Recurring Tools', () => {
         });
 
         const result = await tool.execute({
+          operation: 'analyze',
           activeOnly: false,
           includeCompleted: true,
           includeDropped: true,
@@ -128,8 +129,10 @@ describe('Recurring Tools', () => {
           tasks: scriptResult.tasks,
           summary: scriptResult.summary,
           metadata: {
-            timestamp: expect.any(String),
-            options: { activeOnly: true, includeCompleted: false, includeDropped: false, includeHistory: false, sortBy: 'dueDate' },
+            query_time_ms: expect.any(Number),
+            operation: 'analyze',
+            filters_applied: { activeOnly: true, includeCompleted: false, includeDropped: false, includeHistory: false, sortBy: 'dueDate' },
+            total_analyzed: scriptResult.tasks?.length || 0,
           },
         });
       });
@@ -143,8 +146,9 @@ describe('Recurring Tools', () => {
 
         const result = await tool.execute({ operation: 'analyze' });
 
-        expect(result.error).toBe(true);
-        expect(result.message).toContain('Script failed');
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('SCRIPT_ERROR');
+        expect(result.error.message).toBe('Script failed');
         expect(mockCache.set).not.toHaveBeenCalled();
       });
 
@@ -225,7 +229,7 @@ describe('Recurring Tools', () => {
         
         mockCache.get.mockReturnValue(cachedData);
 
-        const result = await tool.execute({ operation: 'analyze' });
+        const result = await tool.execute({ operation: 'patterns' });
 
         expect(mockCache.get).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}');
         expect(result).toEqual(cachedData);
@@ -244,16 +248,19 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockResolvedValue(scriptResult);
 
-        const result = await tool.execute({ operation: 'analyze' });
+        const result = await tool.execute({ operation: 'patterns' });
 
         expect(mockCache.set).toHaveBeenCalledWith('analytics', 'recurring_patterns_{"activeOnly":true,"includeCompleted":false,"includeDropped":false}', {
           totalRecurring: scriptResult.totalRecurring,
           patterns: scriptResult.patterns,
           byProject: scriptResult.byProject,
+          mostCommon: scriptResult.mostCommon,
           insights: expect.any(Array),
           metadata: {
-            timestamp: expect.any(String),
-            options: { activeOnly: true, includeCompleted: false, includeDropped: false },
+            query_time_ms: expect.any(Number),
+            operation: 'patterns',
+            filters_applied: { activeOnly: true, includeCompleted: false, includeDropped: false },
+            patterns_found: scriptResult.patterns?.length || 0,
           },
         });
       });
@@ -265,10 +272,11 @@ describe('Recurring Tools', () => {
          mockOmniAutomation.buildScript.mockReturnValue('test script');
          mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Pattern analysis failed', details: 'Test error' });
 
-        const result = await tool.execute({ operation: 'analyze' });
+        const result = await tool.execute({ operation: 'patterns' });
 
-        expect(result.error).toBe(true);
-        expect(result.message).toContain('Pattern analysis failed');
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('SCRIPT_ERROR');
+        expect(result.error.message).toBe('Pattern analysis failed');
         expect(mockCache.set).not.toHaveBeenCalled();
       });
 
@@ -277,7 +285,7 @@ describe('Recurring Tools', () => {
         mockOmniAutomation.buildScript.mockReturnValue('test script');
         mockOmniAutomation.executeJson.mockRejectedValue(new Error('Pattern analysis failed'));
 
-        const result = await tool.execute({ operation: 'analyze' });
+        const result = await tool.execute({ operation: 'patterns' });
 
         expect(result.success).toBe(false);
         expect(result.error?.message).toContain('Pattern analysis failed');

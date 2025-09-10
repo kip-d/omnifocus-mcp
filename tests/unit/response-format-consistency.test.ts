@@ -192,7 +192,7 @@ describe('Response Format Consistency Tests', () => {
         count: 0,
       });
 
-      const result = await tool.executeValidated({ format: 'json' });
+      const result = await tool.executeValidated({ type: 'tasks', format: 'json' });
 
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('format');
@@ -247,7 +247,7 @@ describe('Response Format Consistency Tests', () => {
         (tool as any).omniAutomation = mockOmniAutomation;
         
         // All tools have minimal required args for testing
-        const args = tool.name === 'export_tasks' ? { format: 'json' as const } : 
+        const args = tool.name === 'export' ? { type: 'tasks' as const, format: 'json' as const } : 
                      tool.name === 'task_velocity' ? { days: 7 } :
                      tool.name === 'analyze_overdue' ? { limit: 50 } :
                      { period: 'week' as const };
@@ -274,7 +274,7 @@ describe('Response Format Consistency Tests', () => {
       // so we must inject the instance-level mock here to exercise the error path.
       (tool as any).omniAutomation = mockOmniAutomation;
 
-      const result = await tool.executeValidated({ title: 'Test task' });
+      const result = await tool.executeValidated({ operation: 'create', name: 'Test task' });
 
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('PERMISSION_DENIED');
