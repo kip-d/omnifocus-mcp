@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.1.0] - 2025-09-08 
+## [2.1.0] - 2025-09-08
 
 🚀 **Major Release: Complete V2 Architecture with 95% Performance Improvements & Full Test Suite**
 
