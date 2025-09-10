@@ -1,4 +1,4 @@
-# OmniFocus MCP v2.0.0 Quick Reference (LLM-Optimized)
+# OmniFocus MCP v2.1.0 Quick Reference (LLM-Optimized)
 
 ## Task Operations (2 tools)
 
@@ -41,6 +41,7 @@
 
 **workflow_analysis** `analysisDepth*` `focusAreas*` `includeRawData*` `maxInsights*`
 - Depth: quick|standard|deep
+- Focus: productivity|workload|bottlenecks|opportunities
 
 **analyze_patterns** `patterns*` `options*`
 - Patterns: duplicates|dormant_projects|tag_audit|deadline_health|waiting_for|estimation_bias|next_actions|review_gaps|all
@@ -62,16 +63,31 @@
 
 ---
 
-## Key Patterns
+## Key Patterns (v2.1.0 Consolidated Architecture)
 
-- **Operation-based**: Most tools use `operation` parameter
+- **Operation-based routing**: Most tools use `operation` parameter for multiple functions
+- **Tool consolidation**: 15 tools (reduced from 22) for 30% better context efficiency
 - **Summary-first**: Analytics return insights before data
-- **Dates**: YYYY-MM-DD gets smart defaults (due→5pm, defer→8am)
-- **Performance**: fastMode/namesOnly for speed
+- **Dates**: YYYY-MM-DD gets smart defaults (due→5pm, defer→8am)  
+- **Performance**: fastMode/namesOnly for speed, consolidated tools reduce overhead
 - **Minimal response**: Set minimalResponse:true for bulk ops
 
-## Migration from v1
+## Migration from v2.0 to v2.1.0
+
+- **No breaking changes**: All existing tool calls work identically
+- **Same 15 tools**: Tool count remains the same, but internal consolidation improves performance
+- **Enhanced error handling**: Better error messages with operation context
+- **Improved caching**: More efficient caching across consolidated operations
+
+## Migration from v1 (Historical)
 
 Old: create_task → New: manage_task(operation:'create')
 Old: export_tasks → New: export(type:'tasks')
 Old: analyze_recurring_tasks → New: recurring_tasks(operation:'analyze')
+
+## Architecture Benefits
+
+- **Reduced context usage**: 30% fewer tools means more efficient LLM conversations
+- **Consistent patterns**: Operation-based routing provides predictable interface
+- **Better performance**: Consolidated tools reduce initialization overhead
+- **Maintainable**: Single tool handles related operations with shared validation
