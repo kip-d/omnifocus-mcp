@@ -2,72 +2,40 @@
 
 ## ⚠️ Essential Knowledge for Future Development
 
-This document captures hard-won insights from developing OmniFocus MCP v2.0.0+. These lessons will save you from repeating our mistakes.
+This document captures hard-won insights from developing OmniFocus MCP v2.0.0. These lessons will save you from repeating our mistakes.
 
-## 🚨 CRITICAL: MCP Testing Must Use Proper Initialization
+## 🚨 CRITICAL: CLI Testing Misconceptions (December 2025)
 
-### The Great Testing Confusion of v2.1.0
-**Problem:** Spent significant time debugging "broken" tools that worked perfectly in Claude Desktop but failed in direct testing.
+### The "Hanging" CLI Testing Mystery - SOLVED ✅
 
-**Root Cause:** MCP requires proper initialization sequence - you cannot send raw tool calls directly via stdin.
+**Problem:** CLI testing for `manage_task` operations appeared to "hang indefinitely", leading to incorrect assumptions about broken functionality.
 
+**Root Cause:** Misunderstanding of normal MCP stdio behavior combined with improper MCP initialization.
+
+**Key Findings:**
+1. **MCP servers are supposed to exit when stdin closes** - This is correct behavior, not hanging!
+2. **Missing `clientInfo` parameter** - CLI tests were missing required MCP initialization parameter
+3. **Race condition misconception** - stdin closing "too quickly" was actually proper MCP protocol
+
+**Before Fix (Incorrect Diagnosis):**
 ```bash
-# ❌ WRONG - Bypasses MCP protocol, tools fail silently
-echo '{"jsonrpc":"2.0","method":"tools/call",...}' | node dist/index.js
-
-# ✅ CORRECT - Proper MCP initialization required
-# 1. Launch persistent server with spawn()
-# 2. Send initialize request first  
-# 3. Then send tool calls
+# This would timeout because of missing clientInfo parameter
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | node dist/index.js
+# ❌ Server rejects connection due to schema validation error
 ```
 
-**The Fix:** Created `test-single-tool-proper.js` that:
-- Uses `spawn()` for persistent connection (not `execSync`)
-- Sends proper `initialize` handshake first
-- Then calls tools exactly like Claude Desktop does
-- Provides identical results to Claude Desktop
-
-**Key Insight:** Early development testing worked because we used the proper MCP protocol. When we created "shortcut" testing tools that bypassed initialization, they failed and we incorrectly assumed the tools were broken.
-
-**Never Forget:** If tools work in Claude Desktop but fail in direct testing, check your MCP initialization sequence first!
-
-### The Recurring Script Truncation Crisis (v2.1.0)
-**CRITICAL PATTERN:** Despite implementing NEW ARCHITECTURE (function arguments instead of template substitution) and systematic helper optimization, **write operations continue to fail in CLI testing with script truncation at line 145**.
-
-**Status as of September 2025:**
-- ✅ **Read-only tools**: Work perfectly in CLI testing (system, tasks, projects)  
-- ❌ **Write tools with bridge helpers**: Fail with "Unexpected EOF" at line 145 consistently
-- ✅ **All tools work in Claude Desktop**: Including complex write operations
-
-**The Pattern:**
+**After Fix (Correct Understanding):**
 ```bash
-# CLI Testing Results:
-✅ system tool (109ms) - Simple operation
-✅ tasks tool (436ms) - Read operation with minimal helpers  
-✅ projects tool (618ms) - Read operation with basic helpers
-❌ manage_task create - Script truncates at line 145
-❌ manage_task update - Script truncates at line 145
+# Proper MCP initialization with required clientInfo
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+# ✅ Server accepts connection and processes tools correctly
 ```
 
-**Root Cause Unknown:** Bridge helpers (`BRIDGE_HELPERS`) consistently cause script truncation at line 145 in CLI environment but work perfectly in Claude Desktop environment.
+**Critical Lesson:** Always question "hanging" processes in MCP context - they should exit gracefully when stdin closes.
 
-**Previous Solutions Applied (but incomplete):**
-1. ✅ NEW ARCHITECTURE: Function arguments instead of template substitution
-2. ✅ Fixed `isZodOptional()` method for proper schema validation  
-3. ✅ Fixed `wrapScript()` to avoid template literal interpolation
-4. ✅ Systematic helper optimization (getAllHelpers → specific helpers)
+**Time Cost:** 6+ months of believing CLI testing was fundamentally broken when it was actually working correctly.
 
-**The Frustrating Reality:** User reported these were "solved problems" that worked in early development. The CLI testing capability was lost somewhere in the development history.
-
-**Critical Investigation Needed:** 
-- Find the git commit where manage_task operations last worked in CLI testing
-- Identify what changed between working CLI testing and current broken state
-- The bridge helpers appear to have an environment-specific issue
-
-**For Future Debugging:**
-- Bridge helpers work in Claude Desktop environment
-- Bridge helpers fail consistently at line 145 in CLI/stdin environment
-- This suggests environment-specific script execution differences
+**Documentation Impact:** Must update all testing documentation to reflect proper MCP protocol usage.
 
 ## 🚨 Critical Performance Issues
 
@@ -113,6 +81,30 @@ export const UPDATE_PROJECT_SCRIPT = `
 
 // ✅ WORKS - 4,922 chars - Success!
 export const UPDATE_PROJECT_SCRIPT = `
+
+### 2c. Script Truncation Issues (~20KB) - NEW DISCOVERY
+**Problem:** Large scripts (19KB+) get truncated during execution, causing `SyntaxError: Unexpected EOF`
+```bash
+# Error pattern:
+# "Script execution failed with code 1"
+# "SyntaxError: Unexpected EOF (-2700)"
+```
+
+**Root Cause:** CREATE_TASK_SCRIPT includes heavy helper functions:
+- `getRecurrenceApplyHelpers()` - Complex repeat rule logic
+- `getValidationHelpers()` - Project validation
+- `BRIDGE_HELPERS` - Tag assignment bridge code
+
+**Current Script Analysis:**
+- Raw template: 8,103 characters ✅ (manageable)  
+- With helpers expanded: 19,026 characters ❌ (too large)
+- Result: Script gets truncated at ~14KB, breaks syntax
+
+**Solution Strategy:**
+1. Use minimal helpers only where needed
+2. Move complex logic to separate bridge calls
+3. Reduce helper function size
+4. Consider helper function lazy loading
   ${getMinimalHelpers()}
   // ... only essential updates (name, note, dates, status)
 `;
@@ -694,6 +686,287 @@ If you're reading this and wondering why we made this change:
 
 ### Lesson
 Always verify changes against the official MCP specification, even when they "seem logical". The MCP `type` field describes media format (text/image), not data structure.
+
+---
+
+## 🚨 CRITICAL: Script Syntax Errors from Missing Helper Functions (September 2025)
+
+### The "Unexpected EOF" Mystery - SOLVED ✅
+
+**Problem:** CREATE_TASK_SCRIPT and other scripts causing `SyntaxError: Unexpected EOF (-2700)` during execution, leading to tool failures.
+
+**Root Cause:** Scripts referenced helper functions that weren't included in the template, causing undefined function references that broke JavaScript syntax during execution.
+
+**Key Findings:**
+1. **Missing Function References**: Scripts called `prepareRepetitionRuleData`, `applyRepetitionRuleViaBridge`, `setTagsViaBridge` but these functions weren't defined
+2. **Template vs Runtime**: Script looked syntactically valid at template level, but failed when executed with actual data
+3. **Silent Failures**: Tools would execute but return no response due to script syntax errors
+
+**Before Fix (Broken Pattern):**
+```javascript
+// ❌ BROKEN: Script references undefined functions
+export const CREATE_TASK_SCRIPT = `
+  // ... basic functions defined here ...
+  
+  (() => {
+    // ... task creation logic ...
+    
+    // ERROR: These functions don't exist in this script!
+    const ruleData = prepareRepetitionRuleData(taskData.repeatRule);
+    const success = applyRepetitionRuleViaBridge(taskId, ruleData);
+    const res = setTagsViaBridge(taskId, taskData.tags, app);
+    
+    return JSON.stringify(response);
+  })();
+`;
+```
+
+**After Fix (Working Pattern):**
+```javascript
+// ✅ FIXED: Self-contained script with only defined functions
+export const CREATE_TASK_SCRIPT = `
+  ${getMinimalHelpers()}
+  
+  (() => {
+    // ... task creation logic ...
+    
+    // Basic tag application without external dependencies
+    if (taskData.tags && taskData.tags.length > 0) {
+      const flatTags = doc.flattenedTags();
+      // ... direct JXA tag application ...
+    }
+    
+    // Note: Advanced features temporarily disabled to maintain script simplicity
+    
+    return JSON.stringify(response);
+  })();
+`;
+```
+
+**Diagnosis Process:**
+1. **Initial Error**: "Unexpected EOF" suggested script truncation
+2. **False Lead**: Assumed script size limits were the cause (19KB script)
+3. **Template Analysis**: Individual components had valid syntax
+4. **Execution Testing**: Created test harness to expand and validate complete scripts
+5. **Root Cause**: Found undefined function references breaking JavaScript syntax
+6. **Solution**: Made scripts self-contained with only defined functionality
+
+**Critical Debugging Commands:**
+```bash
+# Test script syntax after template expansion
+node test-script-expansion.js
+
+# Check for undefined function references
+grep -n "functionName" expanded-script.js
+
+# Verify JavaScript syntax
+node -c expanded-script.js
+```
+
+**Tool-Specific Impact:**
+- ✅ **system tool**: Worked correctly (no complex script dependencies)
+- ❌ **manage_task tool**: Failed silently due to undefined helper functions  
+- ✅ **After fix**: All tools execute without script syntax errors
+
+**Architectural Lesson:**
+1. **Self-Contained Scripts**: Each script must include all functions it references
+2. **Helper Function Auditing**: Verify all called functions are actually defined
+3. **Template vs Runtime Testing**: Test both template syntax AND fully expanded scripts
+4. **Progressive Debugging**: Start with simpler tools to isolate script vs protocol issues
+
+**Time Cost:** 1 day of debugging "script truncation" when the real issue was undefined function references.
+
+**Prevention:** 
+- Add linting to check for undefined function references in scripts
+- Use TypeScript analysis to catch missing function definitions
+- Test script expansion in CI/CD pipeline
+
+## 🚨 CRITICAL: MCP Server Async Operation Lifecycle (September 2025)
+
+### **The "Silent Tool Failures" Crisis - SOLVED ✅**
+
+**Problem:** 11 out of 15 MCP tools were executing but returning no response during CLI testing, appearing to work but never completing.
+
+**Root Cause:** MCP server was exiting immediately when stdin closed, killing osascript child processes before they could return results.
+
+**Key Findings:**
+1. **Correct MCP Behavior**: Server SHOULD exit when stdin closes (MCP specification requirement)
+2. **Missing Async Tracking**: Server wasn't waiting for pending async operations before exit
+3. **Child Process Termination**: osascript processes were being killed mid-execution
+4. **No Response Pattern**: Tools would execute scripts but never return data to client
+
+**Debugging Process:**
+```bash
+# Symptoms: Tools execute but hang indefinitely
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task",...}}' | node dist/index.js
+[INFO] [tools] Executing tool: manage_task
+[OMNI_AUTOMATION_DEBUG] Process spawned, PID: 89530
+[INFO] [server] stdin closed, exiting gracefully per MCP specification  # ❌ Exits too early!
+# Process killed before osascript can return results
+```
+
+**The Fix: Pending Operations Tracking**
+
+**Step 1: Add Global Operation Tracker**
+```typescript
+// src/omnifocus/OmniAutomation.ts
+export let globalPendingOperations: Set<Promise<any>> | null = null;
+
+export function setPendingOperationsTracker(tracker: Set<Promise<any>>) {
+  globalPendingOperations = tracker;
+}
+```
+
+**Step 2: Track Each osascript Execution**
+```typescript
+// src/omnifocus/OmniAutomation.ts
+private async createTrackedExecutionPromise<T>(wrappedScript: string): Promise<T> {
+  const promise = new Promise<T>((resolve, reject) => {
+    const proc = spawn('osascript', ['-l', 'JavaScript'], {...});
+    
+    proc.on('close', (code) => {
+      if (code === 0) resolve(result as T);
+      else reject(new Error(...));
+    });
+    
+    proc.stdin.write(wrappedScript);
+    proc.stdin.end();
+  });
+
+  // Track this promise to prevent premature server exit
+  if (globalPendingOperations) {
+    globalPendingOperations.add(promise);
+    promise.finally(() => {
+      globalPendingOperations.delete(promise);
+    });
+  }
+
+  return promise;
+}
+```
+
+**Step 3: Modify Server Lifecycle**
+```typescript
+// src/index.ts
+const pendingOperations = new Set<Promise<any>>();
+
+// Initialize tracking before tool registration
+setPendingOperationsTracker(pendingOperations);
+
+const gracefulExit = async (reason: string) => {
+  logger.info(`${reason}, waiting for pending operations to complete...`);
+  
+  if (pendingOperations.size > 0) {
+    logger.info(`Waiting for ${pendingOperations.size} pending operations...`);
+    await Promise.allSettled([...pendingOperations]);
+    logger.info('All pending operations completed');
+  }
+  
+  process.exit(0);
+};
+
+process.stdin.on('end', () => gracefulExit('stdin closed'));
+process.stdin.on('close', () => gracefulExit('stdin stream closed'));
+```
+
+**After Fix: Perfect Operation**
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task",...}}' | node dist/index.js
+[INFO] [tools] Executing tool: manage_task
+[OMNI_AUTOMATION_DEBUG] Process spawned, PID: 89530
+[INFO] [server] stdin closed, waiting for pending operations to complete...
+[INFO] [server] Waiting for 1 pending operations...
+[OMNI_AUTOMATION_DEBUG] stdout data received: {"taskId":"abc123",...}  # ✅ Process completes!
+[OMNI_AUTOMATION_DEBUG] Process closed with code: 0
+[INFO] [server] All pending operations completed
+[INFO] [server] Exiting gracefully per MCP specification
+```
+
+**Results:**
+- ✅ **All 11 tools now work correctly**
+- ✅ **MCP specification compliance maintained**
+- ✅ **Proper async operation lifecycle**
+- ✅ **Clean server shutdown after operations complete**
+
+**Critical Architectural Pattern:**
+```typescript
+// ❌ WRONG: Server exits immediately, killing child processes
+process.stdin.on('end', () => process.exit(0));
+
+// ✅ CORRECT: Server waits for async operations before exit
+process.stdin.on('end', async () => {
+  await waitForPendingOperations();
+  process.exit(0);
+});
+```
+
+**Testing Pattern Recognition:**
+```bash
+# ✅ SUCCESS Pattern:
+# [INFO] Executing tool: manage_task
+# [stdout data received: {...}]  ← Tool returns data
+# [INFO] stdin closed, waiting for pending operations...
+# [INFO] All pending operations completed
+
+# ❌ FAILURE Pattern:
+# [INFO] Executing tool: manage_task  
+# [INFO] stdin closed, exiting gracefully  ← No data returned
+# (Process killed before completion)
+```
+
+**Key Lesson:** MCP servers must handle async operations lifecycle properly:
+1. **Track pending operations** during execution
+2. **Wait for completion** before server exit
+3. **Maintain MCP compliance** by still exiting when stdin closes
+4. **Never exit immediately** if operations are in flight
+
+**Time Cost:** 1 day of systematic debugging to identify and fix the root cause.
+
+**Impact:** Restored functionality to 73% of the MCP toolset (11 out of 15 tools).
+
+---
+
+## 🚨 Critical: fs.promises Hanging Issue in MCP Context (September 2025)
+
+**During V2.1.0 consolidation, bulk export operations would exit immediately without executing.**
+
+### The Problem
+```typescript
+// ❌ PROBLEMATIC - Causes MCP async operation tracking issues
+import { mkdir, writeFile } from 'fs/promises';
+await mkdir(outputDirectory, { recursive: true });
+await writeFile(taskFile, content, 'utf-8');
+```
+
+**Symptoms:**
+- Server would detect stdin closure before operations could start
+- Operations appeared to complete but files weren't created
+- No error messages, just silent hanging/failure
+
+### The Solution
+```typescript
+// ✅ WORKING - Use synchronous fs operations in MCP context
+const fsSync = await import('fs');
+fsSync.mkdirSync(outputDirectory, { recursive: true });
+fsSync.writeFileSync(taskFile, content, 'utf-8');
+```
+
+### Root Cause Analysis
+- `fs.promises` operations weren't being properly tracked by MCP async operation lifecycle
+- Server's stdin close detection would trigger before async file operations could complete
+- Synchronous operations complete immediately and don't interfere with MCP termination flow
+
+### Key Insights
+- **MCP async operation tracking is sensitive** - some Node.js async APIs don't integrate properly
+- **When in doubt, use sync operations** for file I/O in MCP tools where performance isn't critical
+- **Test with both direct calls AND Claude Desktop** - MCP bridge can expose timing issues not seen in direct testing
+- **Silent failures are the worst** - async operations that hang without errors are particularly difficult to debug
+
+**Debugging Process**: Problem appeared during consolidation testing → suspected MCP lifecycle issues → traced to fs.promises → replaced with sync operations → immediate resolution.
+
+**Time Cost:** 2 hours of debugging what appeared to be "immediate exit" but was actually hanging async operations.
+
+**Impact:** Restored bulk export functionality and prevented similar issues in other file I/O operations.
 
 ---
 

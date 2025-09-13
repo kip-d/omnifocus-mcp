@@ -15,15 +15,15 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   }))
 }));
 
-// Capture calls to underlying tools
-const queryExecute = vi.fn(async (_args: any) => ({ success: true, data: {}, metadata: { operation: 'query_folders' } }));
-const manageExecute = vi.fn(async (_args: any) => ({ success: true, data: {}, metadata: { operation: 'manage_folder' } }));
-
-vi.mock('../../../../src/tools/folders/QueryFoldersTool.js', () => ({
-  QueryFoldersTool: vi.fn().mockImplementation(() => ({ execute: queryExecute }))
+// Mock the script creation functions since we're testing the self-contained implementation
+vi.mock('../../../../src/omnifocus/scripts/folders/list-folders.js', () => ({
+  createListFoldersScript: vi.fn(() => 'mock-list-script')
 }));
-vi.mock('../../../../src/tools/folders/ManageFolderTool.js', () => ({
-  ManageFolderTool: vi.fn().mockImplementation(() => ({ execute: manageExecute }))
+vi.mock('../../../../src/omnifocus/scripts/folders/create-folder.js', () => ({
+  CREATE_FOLDER_SCRIPT: 'mock-create-script'
+}));
+vi.mock('../../../../src/omnifocus/scripts/folders/update-folder.js', () => ({
+  UPDATE_FOLDER_SCRIPT: 'mock-update-script'
 }));
 
 vi.mock('../../../../src/utils/response-format-v2.js', () => ({
@@ -33,91 +33,148 @@ vi.mock('../../../../src/utils/response-format-v2.js', () => ({
     metadata: { operation, timestamp: new Date().toISOString(), from_cache: false, ...metadata },
     error: { code, message, suggestion, details },
   })),
+  createSuccessResponseV2: vi.fn((operation, data, suggestion, metadata) => ({
+    success: true,
+    data,
+    metadata: { operation, timestamp: new Date().toISOString(), from_cache: false, ...metadata },
+  })),
   OperationTimerV2: vi.fn().mockImplementation(() => ({ toMetadata: vi.fn(() => ({ query_time_ms: 1 })) })),
 }));
 
-describe('FoldersTool (consolidated dispatcher)', () => {
+describe('FoldersTool (self-contained implementation)', () => {
   let tool: FoldersTool;
+  let mockCache: any;
+  let mockOmni: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (CacheManager as any).mockImplementation(() => ({ }));
-    tool = new FoldersTool({} as any);
+    mockCache = { get: vi.fn(), set: vi.fn(), invalidate: vi.fn() };
+    mockOmni = { buildScript: vi.fn(), execute: vi.fn(), executeJson: vi.fn() };
+    
+    (CacheManager as any).mockImplementation(() => mockCache);
+    tool = new FoldersTool(mockCache);
+    (tool as any).omniAutomation = mockOmni;
+    
+    // Mock the execJson method that the consolidated tool uses
+    (tool as any).execJson = vi.fn();
   });
 
-  it('routes list to QueryFoldersTool with include flags', async () => {
-    await tool.executeValidated({ operation: 'list', includeProjects: true, includeSubfolders: false } as any);
-    expect(queryExecute).toHaveBeenCalledWith({ operation: 'list', includeProjects: true, includeSubfolders: false });
+  describe('Query Operations', () => {
+    it('list uses cache when available', async () => {
+      mockCache.get.mockReturnValue([{ id: 'f1', name: 'Work' }]);
+      await tool.executeValidated({ operation: 'list' } as any);
+      
+      expect(mockCache.get).toHaveBeenCalledWith('folders', 'folders');
+      // Should use cache and not call execJson
+      expect((tool as any).execJson).not.toHaveBeenCalled();
+    });
+
+    it('validates get requires folderId', async () => {
+      const res: any = await tool.executeValidated({ operation: 'get' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('folderId is required');
+    });
+
+    it('validates search requires searchQuery', async () => {
+      const res: any = await tool.executeValidated({ operation: 'search' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('searchQuery is required');
+    });
+
+    it('validates projects requires folderId', async () => {
+      const res: any = await tool.executeValidated({ operation: 'projects' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('folderId is required');
+    });
   });
 
-  it('validates get requires folderId or folderName', async () => {
-    const res: any = await tool.executeValidated({ operation: 'get' } as any);
-    expect(res.success).toBe(false);
-    expect(res.error.code).toBe('MISSING_PARAMETER');
+  describe('Management Operations', () => {
+    it('create requires name parameter', async () => {
+      const res: any = await tool.executeValidated({ operation: 'create' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('name is required');
+    });
 
-    await tool.executeValidated({ operation: 'get', folderId: 'f1' } as any);
-    expect(queryExecute).toHaveBeenCalledWith({ operation: 'get', folderId: 'f1', folderName: undefined });
+    it('update requires folderId parameter', async () => {
+      const res: any = await tool.executeValidated({ operation: 'update', name: 'NewName' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('folderId is required');
+    });
+
+    it('delete requires folderId parameter', async () => {
+      const res: any = await tool.executeValidated({ operation: 'delete' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('folderId is required');
+    });
+
+    it('move requires folderId parameter', async () => {
+      const res: any = await tool.executeValidated({ operation: 'move', parentFolderId: 'parent' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('MISSING_PARAMETER');
+      expect(res.error.message).toContain('folderId is required');
+    });
+
+    it('set_status requires both folderId and status', async () => {
+      const res1: any = await tool.executeValidated({ operation: 'set_status', status: 'active' } as any);
+      expect(res1.success).toBe(false);
+      expect(res1.error.code).toBe('MISSING_PARAMETER');
+      expect(res1.error.message).toContain('folderId is required');
+
+      const res2: any = await tool.executeValidated({ operation: 'set_status', folderId: 'f1' } as any);
+      expect(res2.success).toBe(false);
+      expect(res2.error.code).toBe('MISSING_PARAMETER');
+      expect(res2.error.message).toContain('status is required');
+    });
+
+    it('duplicate returns NOT_IMPLEMENTED error', async () => {
+      const res: any = await tool.executeValidated({ operation: 'duplicate', folderId: 'f1' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('NOT_IMPLEMENTED');
+      expect(res.error.message).toContain('Duplicate operation is not yet implemented');
+    });
   });
 
-  it('validates search requires searchQuery', async () => {
-    const res: any = await tool.executeValidated({ operation: 'search' } as any);
-    expect(res.success).toBe(false);
-    await tool.executeValidated({ operation: 'search', searchQuery: 'Work' } as any);
-    expect(queryExecute).toHaveBeenCalledWith({ operation: 'search', searchQuery: 'Work' });
-  });
+  describe('Script Execution', () => {
+    it('handles successful script execution for list operation', async () => {
+      mockCache.get.mockReturnValue(null); // No cache
+      (tool as any).execJson.mockResolvedValue({
+        success: true,
+        data: { items: [{ id: 'f1', name: 'Work' }] }
+      });
 
-  it('validates projects requires folderId or folderName', async () => {
-    const res: any = await tool.executeValidated({ operation: 'projects' } as any);
-    expect(res.success).toBe(false);
-    await tool.executeValidated({ operation: 'projects', folderName: 'Area' } as any);
-    expect(queryExecute).toHaveBeenCalledWith({ operation: 'projects', folderId: undefined, folderName: 'Area' });
-  });
+      const res: any = await tool.executeValidated({ operation: 'list' } as any);
+      expect(res.success).toBe(true);
+      expect(res.data.folders).toHaveLength(1);
+      expect(res.data.folders[0].name).toBe('Work');
+    });
 
-  it('create requires name and maps params', async () => {
-    const bad: any = await tool.executeValidated({ operation: 'create' } as any);
-    expect(bad.success).toBe(false);
-    await tool.executeValidated({ operation: 'create', name: 'New', parentFolderId: 'root' } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'create', name: 'New', parentFolderId: 'root' });
-  });
+    it('handles script execution failures', async () => {
+      (tool as any).execJson.mockResolvedValue({
+        success: false,
+        error: 'Script execution failed'
+      });
 
-  it('update requires folderId and name', async () => {
-    const r1: any = await tool.executeValidated({ operation: 'update', name: 'X' } as any);
-    expect(r1.success).toBe(false);
-    const r2: any = await tool.executeValidated({ operation: 'update', folderId: 'f1' } as any);
-    expect(r2.success).toBe(false);
-    await tool.executeValidated({ operation: 'update', folderId: 'f1', name: 'Renamed' } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'update', folderId: 'f1', name: 'Renamed' });
-  });
+      const res: any = await tool.executeValidated({ operation: 'get', folderId: 'f1' } as any);
+      expect(res.success).toBe(false);
+      expect(res.error.code).toBe('GET_FAILED');
+    });
 
-  it('delete requires folderId', async () => {
-    const bad: any = await tool.executeValidated({ operation: 'delete' } as any);
-    expect(bad.success).toBe(false);
-    await tool.executeValidated({ operation: 'delete', folderId: 'f1' } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'delete', folderId: 'f1' });
-  });
+    it('invalidates cache after successful mutations', async () => {
+      (tool as any).execJson.mockResolvedValue({
+        success: true,
+        data: { id: 'f1', name: 'Updated Folder' }
+      });
 
-  it('move requires folderId and parentFolderId', async () => {
-    const r1: any = await tool.executeValidated({ operation: 'move', parentFolderId: 'p' } as any);
-    expect(r1.success).toBe(false);
-    const r2: any = await tool.executeValidated({ operation: 'move', folderId: 'f1' } as any);
-    expect(r2.success).toBe(false);
-    await tool.executeValidated({ operation: 'move', folderId: 'f1', parentFolderId: 'p' } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'move', folderId: 'f1', parentFolderId: 'p' });
-  });
-
-  it('duplicate requires folderId and maps optional name', async () => {
-    const bad: any = await tool.executeValidated({ operation: 'duplicate' } as any);
-    expect(bad.success).toBe(false);
-    await tool.executeValidated({ operation: 'duplicate', folderId: 'f1', duplicateName: 'Copy' } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'duplicate', folderId: 'f1', duplicateName: 'Copy' });
-  });
-
-  it('set_status requires folderId and status, passes includeContents', async () => {
-    const r1: any = await tool.executeValidated({ operation: 'set_status', status: 'dropped' } as any);
-    expect(r1.success).toBe(false);
-    const r2: any = await tool.executeValidated({ operation: 'set_status', folderId: 'f1' } as any);
-    expect(r2.success).toBe(false);
-    await tool.executeValidated({ operation: 'set_status', folderId: 'f1', status: 'active', includeContents: true } as any);
-    expect(manageExecute).toHaveBeenCalledWith({ operation: 'set_status', folderId: 'f1', status: 'active', includeContents: true });
+      await tool.executeValidated({ operation: 'update', folderId: 'f1', name: 'Updated' } as any);
+      
+      expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+    });
   });
 });

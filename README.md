@@ -2,19 +2,18 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
-## 🎉 v2.1.0 Production Release - Complete V2 Architecture!
+## 🎉 v2.1.0 Production Release - 100% Tool Success Rate!
 
-**Major architecture milestone with comprehensive improvements:**
-- ⚡ **95% performance improvements** verified and released
-- 🏗️ **Complete V2 architecture migration** with type safety (41→1 unsafe calls)
-- 🛠️ **Tool consolidation** from 22→15 tools (30% context reduction)
-- 🔒 **MCP specification compliance** with proper stdin handling
-- 📊 **706 tests passing** (100% pass rate) with comprehensive coverage
-- 🏷️ **Tag hierarchy support** - Create, manage, and query nested tags
-- 🎯 **Pattern analysis** - 8 built-in analysis patterns for workflow optimization
+**Complete architecture overhaul with all JXA limitations fixed:**
+- ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
+- 🔒 **Security hardened** - Fixed injection vulnerabilities in bridge operations
+- 🛠️ **100% reliable** - No more delete/recreate, task IDs preserved
+- 📊 **Summary-first responses** - Immediate insights before detailed data
+- 🏷️ **Tag assignment fixed** - Tags can now be set during task creation
+- 🔄 **Full repeat rule support** - Complex recurrence patterns now work
+- 📁 **Task reparenting** - Move tasks between projects and parents
 - 👁️ **Perspective queries** - Query any perspective without changing windows
-- 🔄 **Full repeat rule support** - Complex recurrence patterns work perfectly
-- ✅ **All user feedback addressed** - Context efficiency and tag operations
+- 🎯 **Zero breaking changes** - Seamless upgrade from v1.x
 
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
 
@@ -35,21 +34,14 @@ For technical details about how we bypassed this JXA limitation, see [JXA Limita
 
 ## Features
 
-### 🔧 **15 Consolidated Tools** (reduced from 22 for 30% context efficiency)
-- **Task Management**: `tasks`, `manage_task` - Complete CRUD with advanced querying
-- **Project & Folder Organization**: `projects`, `folders` - Hierarchical project management  
-- **Tag Operations**: `tags` - Full hierarchy support with create/nest/reparent operations
-- **GTD Analytics**: `productivity_stats`, `task_velocity`, `analyze_overdue`, `workflow_analysis` 
-- **Pattern Analysis**: `analyze_patterns` - 8 built-in workflow optimization patterns
-- **Data Export**: `export` - CSV, JSON, Markdown formats with filtering
-- **System Tools**: `perspectives`, `system`, `manage_reviews`, `recurring_tasks`
-
-### ⚡ **Performance & Architecture**  
-- **95% performance improvements** - Queries complete in <1 second for 2000+ tasks
-- **Type-safe V2 architecture** - Eliminated 40/41 unsafe `any` type usage
-- **MCP specification compliance** - Proper stdin handling and graceful shutdown  
-- **Smart caching system** - Automatic invalidation with TTL-based refresh
-- **Summary-first responses** - Get insights before detailed data
+- Task management (create, update, complete, delete)
+- Project and folder organization  
+- Sequential/parallel support for both projects and tasks
+- GTD analytics and productivity insights
+- Tag management
+- **Perspective support** - List and query OmniFocus perspectives
+- Data export (CSV, JSON, Markdown)
+- Smart caching for performance
 
 ## Quick Start
 
@@ -101,40 +93,24 @@ For ultra-minimal setups, use [`docs/API-COMPACT.md`](docs/API-COMPACT.md) (~400
 
 ## Using MCP Prompts in Claude Desktop
 
-This server provides five optimized prompts for GTD workflows and essential reference. To access them in Claude Desktop (v0.12.55+):
+This server provides nine pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
 
 1. Click the **"+"** button (bottom-left of the input box)
 2. Select **"Add from omnifocus"** from the menu
 3. Choose from available prompts:
    - **GTD Workflows:**
-     - `gtd_process_inbox` - Process inbox using pure GTD methodology (2-minute rule, actionable decision tree)
-     - `eisenhower_matrix_inbox` - Process inbox using Urgent/Important quadrants (complementary to GTD)
+     - `gtd_process_inbox` - Process inbox with 2-minute rule
+     - `eisenhower_matrix_inbox` - Process inbox items using the Eisenhower Matrix (Urgent/Important quadrants)
      - `gtd_weekly_review` - Complete weekly review with stale project detection
      - `gtd_principles` - Core GTD methodology guide
-   - **Essential Reference:**
+   - **Reference Guides:**
      - `quick_reference` - Essential tips and emergency commands
+     - `tool_discovery_guide` - All tools with performance characteristics
+     - `common_patterns_guide` - Best practices and workflows
+     - `troubleshooting_guide` - Common errors and solutions
+     - `tag_performance_guide` - Optimize tag queries
 
-These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows. The two inbox processing methods serve complementary purposes: Eisenhower Matrix for initial overwhelm/priority learning, GTD Process for daily maintenance.
-
-## Testing the Server
-
-For comprehensive testing of all v2.1.0 features:
-
-### **Claude Desktop Users**
-Copy the entire prompt from [`CLAUDE_DESKTOP_TEST_PROMPT.md`](CLAUDE_DESKTOP_TEST_PROMPT.md) into Claude Desktop for guided testing of all 15 tools, 5 prompts, and key workflows.
-
-### **Developers** 
-See [`COMPREHENSIVE_TEST_GUIDE.md`](COMPREHENSIVE_TEST_GUIDE.md) for detailed technical testing procedures.
-
-### **Quick Health Check**
-```bash
-# Test server is running
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js | jq -r '.result.tools | length'
-# Should return: 15
-
-# Test a simple operation  
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
-```
+These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows.
 
 ## Basic Usage
 

@@ -7,6 +7,7 @@ import { CacheManager } from './cache/CacheManager.js';
 import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
 import { getVersionInfo } from './utils/version.js';
+import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
 
 const logger = createLogger('server');
 
@@ -25,8 +26,14 @@ const server = new Server(
   },
 );
 
+// Track pending async operations to prevent premature exit
+const pendingOperations = new Set<Promise<any>>();
+
 // Start server
 async function runServer() {
+  // Initialize pending operations tracking
+  setPendingOperationsTracker(pendingOperations);
+  
   // Initialize cache manager
   const cacheManager = new CacheManager();
 
@@ -60,15 +67,52 @@ async function runServer() {
 
   const transport = new StdioServerTransport();
 
-  // Handle stdin closure for proper MCP lifecycle compliance
-  process.stdin.on('end', () => {
-    logger.info('stdin closed, exiting gracefully per MCP specification');
+  // Handle stdin closure for proper MCP lifecycle compliance  
+  // Wait for pending operations before exiting
+  const gracefulExit = async (reason: string) => {
+    logger.info(`${reason}, waiting for pending operations to complete...`);
+    
+    if (pendingOperations.size > 0) {
+      logger.info(`Waiting for ${pendingOperations.size} pending operations...`);
+      try {
+        await Promise.allSettled([...pendingOperations]);
+        logger.info('All pending operations completed');
+      } catch (error) {
+        logger.error('Error waiting for pending operations:', error);
+      }
+    }
+    
+    logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
+  };
+  
+  process.stdin.on('end', () => {
+    gracefulExit('stdin closed');
   });
 
   process.stdin.on('close', () => {
-    logger.info('stdin stream closed, exiting gracefully per MCP specification');
-    process.exit(0);
+    gracefulExit('stdin stream closed');
+  });
+
+  // Handle EPIPE errors when Claude Desktop disconnects abruptly
+  process.stdout.on('error', (err) => {
+    if (err.code === 'EPIPE') {
+      logger.info('stdout EPIPE - client disconnected, exiting gracefully');
+      process.exit(0);
+    } else {
+      logger.error('stdout error:', err);
+      process.exit(1);
+    }
+  });
+
+  process.stderr.on('error', (err) => {
+    if (err.code === 'EPIPE') {
+      logger.info('stderr EPIPE - client disconnected, exiting gracefully');
+      process.exit(0);
+    } else {
+      console.error('stderr error:', err);
+      process.exit(1);
+    }
   });
 
   // Handle EPIPE errors when Claude Desktop disconnects abruptly

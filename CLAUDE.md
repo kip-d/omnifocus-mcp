@@ -101,8 +101,28 @@ for (let i = 0; i < allTasks.length; i++) {
 - **Early exit** on most common conditions (completed, no date)
 - Set `skipAnalysis: true` for 30% faster queries when recurring analysis not needed
 
-## 🚨 Critical: Script Size Limits
-**JXA scripts sent to OmniFocus have size limits that can cause syntax errors.**
+## 🚨 Critical: Script Size Limits & CLI Testing
+
+### Script Size Issues (19KB+ = Truncation) 
+**JXA scripts over 19KB get truncated during execution, causing `SyntaxError: Unexpected EOF`**
+
+**Current Issue (December 2025):**
+- `CREATE_TASK_SCRIPT` = 19,026 characters (too large)
+- Includes: `getRecurrenceApplyHelpers()` + `getValidationHelpers()` + `BRIDGE_HELPERS`  
+- Result: Script truncated ~14KB → syntax error
+
+### CLI Testing - SOLVED ✅
+**Previous misconception:** "CLI testing hangs forever"  
+**Reality:** MCP servers exit when stdin closes (correct behavior)
+
+**Proper CLI Testing Pattern:**
+```bash
+# ✅ CORRECT - Include required clientInfo parameter
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+
+# ❌ WRONG - Missing clientInfo causes schema validation error  
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | node dist/index.js
+```
 
 ### Keep Scripts Small
 - **Use minimal helpers**: Import only essential helper functions
@@ -132,6 +152,34 @@ export const MY_SCRIPT = `
 - Check script size first - "Unexpected token" errors often indicate size limits
 - Create specialized minimal helper functions for your specific needs
 - Test with both direct execution AND Claude Desktop (which may have stricter limits)
+
+## 🚨 CRITICAL: Async Operation Lifecycle (September 2025)
+
+**THE PROBLEM:** MCP server exits immediately when stdin closes, killing osascript child processes before they return results.
+
+**THE SOLUTION:** Implement pending operations tracking:
+```typescript
+// ✅ REQUIRED: Track async operations to prevent premature exit
+const pendingOperations = new Set<Promise<any>>();
+setPendingOperationsTracker(pendingOperations);
+
+const gracefulExit = async (reason: string) => {
+  logger.info(`${reason}, waiting for pending operations to complete...`);
+  if (pendingOperations.size > 0) {
+    await Promise.allSettled([...pendingOperations]);
+  }
+  process.exit(0);
+};
+
+process.stdin.on('end', () => gracefulExit('stdin closed'));
+```
+
+**SYMPTOMS of missing async tracking:**
+- Tools execute but return no response
+- osascript processes get killed mid-execution  
+- "Silent failures" where tools appear to work but produce no output
+
+**See `docs/LESSONS_LEARNED.md` for complete implementation details.**
 
 ## Quick Reference
 

@@ -629,10 +629,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       if (task.flagged) score += 50;
 
       // Available tasks get bonus (not blocked, not deferred)
-      const isAvailable = !task.completed && 
-                         (!task.deferDate || new Date(task.deferDate) <= now) &&
-                         !task.blocked;
-      if (isAvailable) score += 30;
+      // Note: Status checking available via task.blocked() and task.next() properties
+      if (task.available) score += 30;
 
       // Tasks with short estimated duration get bonus (quick wins)
       if (task.estimatedMinutes && task.estimatedMinutes <= 15) score += 20;

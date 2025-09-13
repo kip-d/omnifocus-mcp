@@ -15,13 +15,17 @@ const WorkflowAnalysisSchema = z.object({
     .default(['productivity', 'workload', 'bottlenecks'])
     .describe('Specific areas to focus analysis on'),
 
-  includeRawData: z.boolean()
+  includeRawData: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true')
+  ]).pipe(z.boolean())
     .default(false)
     .describe('Include raw task/project data for LLM exploration (increases token usage)'),
 
-  maxInsights: z.number()
-    .min(5)
-    .max(50)
+  maxInsights: z.union([
+    z.number(),
+    z.string().transform(val => parseInt(val, 10))
+  ]).pipe(z.number().min(5).max(50))
     .default(15)
     .describe('Maximum number of insights to generate'),
 });
