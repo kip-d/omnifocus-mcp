@@ -1,18 +1,72 @@
-import { getRecurrenceHelpers } from '../shared/helpers.js';
-import { BRIDGE_HELPERS } from '../shared/bridge-helpers.js';
+import { getRecurrenceApplyHelpers, getValidationHelpers, getCoreHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
  *
- * Handles:
+ * OPTIMIZED FOR SIZE: Uses minimal helpers to stay under 19KB script limit
  * - Basic property updates (name, note, flags, dates, etc.)
  * - Project reassignment (using moveTasks() bridge for ID preservation)
  * - Tag updates with comprehensive error handling
  * - Claude Desktop numeric ID bug detection
  */
 export const UPDATE_TASK_SCRIPT = `
-  ${getRecurrenceHelpers()}
-  ${BRIDGE_HELPERS}
+  ${getCoreHelpers()}
+  ${getValidationHelpers()}
+  ${getRecurrenceApplyHelpers()}
+  
+  // Minimal bridge helper for task movement
+  function __formatBridgeScript(template, params) {
+    let script = template;
+    for (const key in params) {
+      const re = new RegExp('\\\\$' + key + '\\\\$', 'g');
+      const v = params[key];
+      let rep;
+      if (v === null || v === undefined) rep = 'null';
+      else if (typeof v === 'boolean' || typeof v === 'number') rep = String(v);
+      else rep = JSON.stringify(v);
+      script = script.replace(re, rep);
+    }
+    return script;
+  }
+  
+  const __MOVE_TASK_TEMPLATE = [
+    '(() => {',
+    '  const task = Task.byIdentifier($TASK_ID$);',
+    '  if (!task) return JSON.stringify({ success: false, error: "task_not_found" });',
+    '  const targetType = $TARGET_TYPE$;',
+    '  const targetId = $TARGET_ID$;',
+    '  try {',
+    '    if (targetType === "inbox") {',
+    '      moveTasks([task], inbox.beginning);',
+    '      return JSON.stringify({ success: true, moved: "inbox" });',
+    '    } else if (targetType === "project") {',
+    '      const project = Project.byIdentifier(targetId);',
+    '      if (!project) return JSON.stringify({ success: false, error: "project_not_found" });',
+    '      moveTasks([task], project.beginning);',
+    '      return JSON.stringify({ success: true, moved: "project", projectId: targetId });',
+    '    } else if (targetType === "parent") {',
+    '      const parent = Task.byIdentifier(targetId);',
+    '      if (!parent) return JSON.stringify({ success: false, error: "parent_not_found" });',
+    '      moveTasks([task], parent);',
+    '      return JSON.stringify({ success: true, moved: "parent", parentId: targetId });',
+    '    } else {',
+    '      return JSON.stringify({ success: false, error: "invalid_target_type" });',
+    '    }',
+    '  } catch (e) {',
+    '    return JSON.stringify({ success: false, error: String(e) });',
+    '  }',
+    '})()'
+  ].join('\\n');
+  
+  function moveTaskViaBridge(taskId, targetType, targetId, app) {
+    try {
+      const script = __formatBridgeScript(__MOVE_TASK_TEMPLATE, { TASK_ID: taskId, TARGET_TYPE: targetType, TARGET_ID: targetId });
+      const result = app.evaluateJavascript(script);
+      return JSON.parse(result);
+    } catch (e) { 
+      return { success: false, error: String(e) };
+    }
+  }
   
   (() => {
     const taskId = {{taskId}};
@@ -445,8 +499,63 @@ export const UPDATE_TASK_SCRIPT = `
  */
 export function createUpdateTaskScript(taskId: string, updates: any): string {
   return `
-  ${getRecurrenceHelpers()}
-  ${BRIDGE_HELPERS}
+  ${getCoreHelpers()}
+  ${getValidationHelpers()}
+  ${getRecurrenceApplyHelpers()}
+  
+  // Minimal bridge helper for task movement
+  function __formatBridgeScript(template, params) {
+    let script = template;
+    for (const key in params) {
+      const re = new RegExp('\\\\$' + key + '\\\\$', 'g');
+      const v = params[key];
+      let rep;
+      if (v === null || v === undefined) rep = 'null';
+      else if (typeof v === 'boolean' || typeof v === 'number') rep = String(v);
+      else rep = JSON.stringify(v);
+      script = script.replace(re, rep);
+    }
+    return script;
+  }
+  
+  const __MOVE_TASK_TEMPLATE = [
+    '(() => {',
+    '  const task = Task.byIdentifier($TASK_ID$);',
+    '  if (!task) return JSON.stringify({ success: false, error: "task_not_found" });',
+    '  const targetType = $TARGET_TYPE$;',
+    '  const targetId = $TARGET_ID$;',
+    '  try {',
+    '    if (targetType === "inbox") {',
+    '      moveTasks([task], inbox.beginning);',
+    '      return JSON.stringify({ success: true, moved: "inbox" });',
+    '    } else if (targetType === "project") {',
+    '      const project = Project.byIdentifier(targetId);',
+    '      if (!project) return JSON.stringify({ success: false, error: "project_not_found" });',
+    '      moveTasks([task], project.beginning);',
+    '      return JSON.stringify({ success: true, moved: "project", projectId: targetId });',
+    '    } else if (targetType === "parent") {',
+    '      const parent = Task.byIdentifier(targetId);',
+    '      if (!parent) return JSON.stringify({ success: false, error: "parent_not_found" });',
+    '      moveTasks([task], parent);',
+    '      return JSON.stringify({ success: true, moved: "parent", parentId: targetId });',
+    '    } else {',
+    '      return JSON.stringify({ success: false, error: "invalid_target_type" });',
+    '    }',
+    '  } catch (e) {',
+    '    return JSON.stringify({ success: false, error: String(e) });',
+    '  }',
+    '})()'
+  ].join('\\n');
+  
+  function moveTaskViaBridge(taskId, targetType, targetId, app) {
+    try {
+      const script = __formatBridgeScript(__MOVE_TASK_TEMPLATE, { TASK_ID: taskId, TARGET_TYPE: targetType, TARGET_ID: targetId });
+      const result = app.evaluateJavascript(script);
+      return JSON.parse(result);
+    } catch (e) { 
+      return { success: false, error: String(e) };
+    }
+  }
   
   function updateTask(taskId, updates) {
     try {
@@ -593,7 +702,8 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
     }
   }
   
-  // Execute with safe parameter passing
-  return updateTask(${JSON.stringify(taskId)}, ${JSON.stringify(updates)});
+  // Execute with safe parameter passing and return result
+  const result = updateTask(${JSON.stringify(taskId)}, ${JSON.stringify(updates)});
+  result;
   `;
 }
