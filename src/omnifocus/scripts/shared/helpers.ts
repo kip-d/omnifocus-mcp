@@ -330,7 +330,7 @@ export const PROJECT_VALIDATION = `
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
     
-    // Find by iteration (avoid whose())
+    // Find by iteration (avoid the whose method)
     let foundProject = null;
     const projects = doc.flattenedProjects();
     for (let i = 0; i < projects.length; i++) {

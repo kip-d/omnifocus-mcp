@@ -6,7 +6,7 @@
  */
 
 // Re-export the modularized scripts
-export { CREATE_TASK_SCRIPT, CREATE_TASK_SCRIPT_MINIMAL, createCreateTaskScript } from './tasks/create-task.js';
+export { CREATE_TASK_SCRIPT } from './tasks/create-task.js';
 export { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from './tasks/complete-task.js';
 export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task.js';
 export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
