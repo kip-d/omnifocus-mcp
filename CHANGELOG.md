@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-01-13 - Self-Contained Architecture Consolidation
+
+### Architecture
+- **MAJOR**: All consolidated tools now use self-contained implementations instead of delegation
+- Removed 11 obsolete individual tool files that were replaced by consolidation
+- **PERFORMANCE**: Eliminated wrapper overhead - all tools execute operations directly
+- **MAINTAINABILITY**: Simplified codebase with single implementation per consolidated tool
+
+### Removed Files
+- Individual task tools: `CreateTaskTool.ts`, `UpdateTaskTool.ts`, `CompleteTaskTool.ts`, `DeleteTaskTool.ts`
+- Individual folder tools: `QueryFoldersTool.ts`, `ManageFolderTool.ts`
+- Individual export tools: `ExportTasksTool.ts`, `ExportProjectsTool.ts`, `BulkExportTool.ts`  
+- Individual recurring tools: `AnalyzeRecurringTasksTool.ts`, `GetRecurringPatternsTool.ts`
+
+### Fixed
+- **MCP Lifecycle**: Fixed `fs.promises` hanging issue in bulk export by using synchronous operations
+- **TypeScript**: Fixed compilation errors with missing script exports
+- **Tests**: Updated test mocking patterns to work with self-contained architecture
+
+### Documentation
+- Updated all tool references from `query_tasks` to `tasks` throughout documentation
+- Updated all tool references from `manage_folder` to `folders` throughout documentation  
+- Fixed API reference tool count and consolidated architecture descriptions
+- Added V2.1.0 self-contained architecture highlights to README
+
+### Migration
+- **NO BREAKING CHANGES**: All tool signatures and responses remain identical
+- Internal delegation replaced with direct implementation - no client-side changes needed
+
 ## [2.1.0] - 2025-09-08
 
 🎉 **MILESTONE: 100% Tool Success Rate Achieved - All 15 MCP Tools Working**

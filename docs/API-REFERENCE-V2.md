@@ -1,4 +1,4 @@
-# OmniFocus MCP v2.1.0 API Reference (15 Consolidated Tools)
+# OmniFocus MCP v2.1.0 API Reference (15 Self-Contained Tools)
 
 ## Task Operations (2 tools)
 
@@ -123,13 +123,14 @@
 
 ---
 
-## Key Improvements in v2.0.0
+## Key Improvements in v2.1.0
 
-1. **Consolidated from 22 to 14 tools** (36% reduction)
+1. **100% Self-contained tools** - No delegation, direct implementation
 2. **Consistent operation-based patterns** across all tools
 3. **Clear tool naming** (verbs for actions, nouns for queries)
 4. **Summary-first responses** for better UX
 5. **Performance optimized** (<1 second for 95% of operations)
+6. **Reduced maintenance** - Removed 11 obsolete individual tool files
 
 ## Migration from v1
 
@@ -153,7 +154,7 @@
 // Create a task
 manage_task({ operation: 'create', name: 'Review Q4 goals', dueDate: '2024-12-31' })
 
-// Get today's agenda
+// Get today's agenda  
 tasks({ mode: 'today', details: true })
 
 // Export all data

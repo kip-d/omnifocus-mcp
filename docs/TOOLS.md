@@ -2,9 +2,9 @@
 
 This document provides comprehensive documentation for all available tools in the OmniFocus MCP Server.
 
-## 📢 Important: v2.0.0 Consolidated Architecture
+## 📢 Important: v2.1.0 Self-Contained Architecture
 
-**This documentation reflects the v2.1.0 consolidated tool architecture.** Tools have been consolidated from 22 to 15 for better LLM comprehension and reduced decision complexity.
+**This documentation reflects the v2.1.0 self-contained tool architecture.** All consolidated tools now directly implement their operations without delegation, providing better performance and maintainability.
 
 ## 🚀 Quick Tool Selection by Use Case
 
@@ -61,45 +61,42 @@ tags({ operation: 'active' })  // Skip empty tags
 
 ---
 
-## Available Tools (v2.0.0)
+## Available Tools (v2.1.0)
 
-### query_tasks
-**Unified task querying interface.** Replaces 7 individual task query tools with a single, consistent interface.
+### tasks
+**Self-contained task querying interface.** Direct implementation with 8 query modes.
 
 **Parameters:**
-- `queryType` (string, required): Type of query to perform:
-  - `"list"` - General purpose task listing with filters
-  - `"search"` - Text search in task names and notes (requires `searchTerm`)
-  - `"next_actions"` - GTD next actions (available, actionable tasks)
+- `mode` (string, required): Type of query to perform:
+  - `"all"` - General purpose task listing with filters
+  - `"search"` - Text search in task names and notes (requires `search`)
+  - `"today"` - Today's tasks (optimized for daily planning)
   - `"blocked"` - Tasks waiting on prerequisites or dependencies
   - `"available"` - All currently workable tasks
   - `"overdue"` - Tasks past their due date
   - `"upcoming"` - Tasks due in next N days (use `daysAhead` parameter)
+  - `"flagged"` - All flagged tasks
 
-**Common Parameters (all query types):**
-- `completed` (boolean): Filter by completion status
-- `flagged` (boolean): Filter by flagged status
-- `projectId` (string): Filter by project ID
+**Common Parameters (all modes):**
+- `completed` (boolean): Filter by completion status (default: false)
+- `limit` (number): Maximum tasks to return (default: 25)
+- `details` (boolean): Include full task details (default: false for performance)
+- `project` (string): Filter by project ID
 - `tags` (string[]): Filter by tags
-- `limit` (number): Maximum tasks to return (default: 100)
-- `includeDetails` (boolean): Include full task details (default: true)
-- `skipAnalysis` (boolean): Skip recurring task analysis for 30% faster queries
 
-**Query-specific Parameters:**
-- `searchTerm` (string): Required for "search" queryType
-- `daysAhead` (number): Days to look ahead for "upcoming" queryType (default: 7)
-- `includeToday` (boolean): Include today's tasks in "upcoming" queries
-- `showBlockingTasks` (boolean): For "blocked" queries, show what's blocking each task
-- `includeFlagged` (boolean): For "available" queries, include flagged tasks
+**Mode-specific Parameters:**
+- `search` (string): Required for "search" mode
+- `daysAhead` (number): Days to look ahead for "upcoming" mode (default: 7)
+- `dueBy` (string): Filter tasks due by specific date
 
 **Examples:**
 
 General task list:
 ```javascript
 {
-  "tool": "query_tasks",
+  "tool": "tasks",
   "arguments": {
-    "queryType": "list",
+    "mode": "all",
     "completed": false,
     "tags": ["work"],
     "limit": 50
@@ -110,28 +107,28 @@ General task list:
 Search for tasks:
 ```javascript
 {
-  "tool": "query_tasks", 
+  "tool": "tasks", 
   "arguments": {
-    "queryType": "search",
-    "searchTerm": "budget review",
+    "mode": "search",
+    "search": "budget review",
     "completed": false
   }
 }
 ```
 
-Get next actions:
+Today's tasks:
 ```javascript
 {
-  "tool": "query_tasks",
+  "tool": "tasks",
   "arguments": {
-    "queryType": "next_actions",
-    "includeFlagged": true
+    "mode": "today",
+    "details": true
   }
 }
 ```
 
-### manage_folder
-**Unified folder management interface.** Combines create, update, delete, move, and status operations.
+### folders
+**Self-contained folder management interface.** Direct implementation of all folder operations.
 
 **Parameters:**
 - `operation` (string, required): Operation to perform:
@@ -172,11 +169,11 @@ Get next actions:
 Create folder:
 ```javascript
 {
-  "tool": "manage_folder",
+  "tool": "folders",
   "arguments": {
     "operation": "create",
     "name": "New Project Area",
-    "parent": "parentFolder123"
+    "parentFolderId": "parentFolder123"
   }
 }
 ```
@@ -184,12 +181,11 @@ Create folder:
 Update folder:
 ```javascript
 {
-  "tool": "manage_folder",
+  "tool": "folders",
   "arguments": {
     "operation": "update", 
     "folderId": "folder123",
-    "name": "Updated Name",
-    "status": "on_hold"
+    "name": "Updated Name"
   }
 }
 ```
@@ -249,10 +245,10 @@ Batch complete tasks:
 
 ## Legacy Task Operations
 
-> **⚠️ Deprecated:** Use [`query_tasks`](#query_tasks) instead for all task querying operations.
+> **⚠️ Deprecated:** Use [`tasks`](#tasks) instead for all task querying operations.
 
 ### list_tasks
-**DEPRECATED:** Use `query_tasks` with `queryType: "list"` instead.
+**DEPRECATED:** Use `tasks` with `mode: "all"` instead.
 
 *Advanced task filtering with smart caching.*
 
@@ -377,7 +373,7 @@ Permanently delete a task.
 - `taskId` (string, required): Task ID to delete
 
 ### get_task_count
-**DEPRECATED:** Use `query_tasks` with `includeDetails: false` instead.
+**DEPRECATED:** Use `tasks` with `details: false` instead.
 
 *Get count of tasks matching filters without returning task data.*
 
@@ -396,19 +392,19 @@ Get today's tasks with optimized defaults. *(Still recommended - no consolidatio
 
 ## Legacy Folder Operations
 
-> **⚠️ Deprecated:** Use [`manage_folder`](#manage_folder) instead for all folder operations.
+> **⚠️ Deprecated:** Use [`folders`](#folders) instead for all folder operations.
 
 ### create_folder
-**DEPRECATED:** Use `manage_folder` with `operation: "create"` instead.
+**DEPRECATED:** Use `folders` with `operation: "create"` instead.
 
 ### update_folder  
-**DEPRECATED:** Use `manage_folder` with `operation: "update"` instead.
+**DEPRECATED:** Use `folders` with `operation: "update"` instead.
 
 ### delete_folder
-**DEPRECATED:** Use `manage_folder` with `operation: "delete"` instead.
+**DEPRECATED:** Use `folders` with `operation: "delete"` instead.
 
 ### move_folder
-**DEPRECATED:** Use `manage_folder` with `operation: "move"` instead.
+**DEPRECATED:** Use `folders` with `operation: "move"` instead.
 
 ---
 
@@ -540,7 +536,7 @@ Export all OmniFocus data.
 ## Date Range Queries
 
 ### date_range_query
-**DEPRECATED:** Use `query_tasks` with appropriate filters instead.
+**DEPRECATED:** Use `tasks` with appropriate filters instead.
 
 *Query tasks by date ranges with operators.*
 
@@ -552,7 +548,7 @@ Export all OmniFocus data.
 - `includeCompleted` (boolean): Include completed tasks
 
 ### overdue_tasks
-**DEPRECATED:** Use `query_tasks` with `queryType: "overdue"` instead.
+**DEPRECATED:** Use `tasks` with `mode: "overdue"` instead.
 
 *Get all overdue tasks.*
 
@@ -561,7 +557,7 @@ Export all OmniFocus data.
 - `sortBy` (string): "dueDate", "project", "priority"
 
 ### upcoming_tasks
-**DEPRECATED:** Use `query_tasks` with `queryType: "upcoming"` instead.
+**DEPRECATED:** Use `tasks` with `mode: "upcoming"` instead.
 
 *Get tasks due in next N days.*
 
@@ -624,16 +620,16 @@ Run comprehensive system diagnostics.
 
 | Legacy Tool | Consolidated Tool | Parameters |
 |------------|-------------------|------------|
-| `list_tasks` | `query_tasks` | `{ queryType: "list", ...filters }` |
-| `next_actions` | `query_tasks` | `{ queryType: "next_actions" }` |
-| `blocked_tasks` | `query_tasks` | `{ queryType: "blocked" }` |
-| `available_tasks` | `query_tasks` | `{ queryType: "available" }` |
-| `overdue_tasks` | `query_tasks` | `{ queryType: "overdue" }` |
-| `upcoming_tasks` | `query_tasks` | `{ queryType: "upcoming", daysAhead: N }` |
-| `create_folder` | `manage_folder` | `{ operation: "create", name: "..." }` |
-| `update_folder` | `manage_folder` | `{ operation: "update", folderId: "...", ...updates }` |
-| `delete_folder` | `manage_folder` | `{ operation: "delete", folderId: "..." }` |
-| `move_folder` | `manage_folder` | `{ operation: "move", folderId: "...", parentId: "..." }` |
+| `list_tasks` | `tasks` | `{ mode: "all", ...filters }` |
+| `next_actions` | `tasks` | `{ mode: "available" }` |
+| `blocked_tasks` | `tasks` | `{ mode: "blocked" }` |
+| `available_tasks` | `tasks` | `{ mode: "available" }` |
+| `overdue_tasks` | `tasks` | `{ mode: "overdue" }` |
+| `upcoming_tasks` | `tasks` | `{ mode: "upcoming", daysAhead: N }` |
+| `create_folder` | `folders` | `{ operation: "create", name: "..." }` |
+| `update_folder` | `folders` | `{ operation: "update", folderId: "...", name: "..." }` |
+| `delete_folder` | `folders` | `{ operation: "delete", folderId: "..." }` |
+| `move_folder` | `folders` | `{ operation: "move", folderId: "...", parentFolderId: "..." }` |
 | `projects_for_review` | `manage_reviews` | `{ operation: "list_for_review" }` |
 | `mark_project_reviewed` | `manage_reviews` | `{ operation: "mark_reviewed", projectId: "..." }` |
 | `set_review_schedule` | `manage_reviews` | `{ operation: "set_schedule", projectId: "...", reviewInterval: "..." }` |

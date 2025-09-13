@@ -2,9 +2,10 @@
 
 A Model Context Protocol (MCP) server for OmniFocus task management automation.
 
-## 🎉 v2.1.0 Production Release - 100% Tool Success Rate!
+## 🎉 v2.1.0 Production Release - Self-Contained Architecture!
 
-**Complete architecture overhaul with all JXA limitations fixed:**
+**Complete architecture consolidation with all tools now self-contained:**
+- 🏗️ **Self-contained tools** - All consolidated tools directly implement operations (no delegation)
 - ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
 - 🔒 **Security hardened** - Fixed injection vulnerabilities in bridge operations
 - 🛠️ **100% reliable** - No more delete/recreate, task IDs preserved
@@ -13,6 +14,7 @@ A Model Context Protocol (MCP) server for OmniFocus task management automation.
 - 🔄 **Full repeat rule support** - Complex recurrence patterns now work
 - 📁 **Task reparenting** - Move tasks between projects and parents
 - 👁️ **Perspective queries** - Query any perspective without changing windows
+- 🧹 **Reduced complexity** - Removed 11 obsolete individual tool files
 - 🎯 **Zero breaking changes** - Seamless upgrade from v1.x
 
 > **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
@@ -114,13 +116,13 @@ These prompts provide guided conversations with pre-configured questions and res
 
 ## Basic Usage
 
-### Query Tasks (List)
-The `list_tasks` tool is deprecated and retained only for backward compatibility. Use `query_tasks` with `queryType: "list"` instead:
+### Query Tasks
+Use the consolidated `tasks` tool with different modes:
 ```javascript
 {
-  "tool": "query_tasks",
+  "tool": "tasks",
   "arguments": {
-    "queryType": "list",
+    "mode": "all",
     "completed": false,
     "limit": 50
   }
@@ -130,8 +132,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Create Task
 ```javascript
 {
-  "tool": "create_task", 
+  "tool": "manage_task", 
   "arguments": {
+    "operation": "create",
     "name": "Review Q4 budget",
     "dueDate": "2024-01-15T17:00:00Z",
     "flagged": true
@@ -142,8 +145,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Create Sequential Project
 ```javascript
 {
-  "tool": "create_project",
+  "tool": "projects",
   "arguments": {
+    "operation": "create",
     "name": "Website Redesign",
     "sequential": true,  // Tasks must be done in order
     "folder": "Work"
@@ -155,16 +159,19 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ```javascript
 // List all perspectives
 {
-  "tool": "list_perspectives",
-  "arguments": {}
+  "tool": "perspectives",
+  "arguments": {
+    "operation": "list"
+  }
 }
 
 // Query tasks from a perspective
 {
-  "tool": "query_perspective",
+  "tool": "perspectives",
   "arguments": {
+    "operation": "query",
     "perspectiveName": "Inbox",
-    "limit": "10"
+    "limit": 10
   }
 }
 ```
@@ -172,8 +179,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Create Project with Review Settings
 ```javascript
 {
-  "tool": "create_project",
+  "tool": "projects",
   "arguments": {
+    "operation": "create",
     "name": "Quarterly Goals",
     "reviewInterval": {
       "unit": "week",   // day, week, month, year
@@ -189,8 +197,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ```javascript
 // Create parent task (action group)
 {
-  "tool": "create_task",
+  "tool": "manage_task",
   "arguments": {
+    "operation": "create",
     "name": "Plan Party",
     "sequential": true,  // Subtasks must be done in order
     "projectId": "xyz789"
@@ -200,8 +209,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 
 // Add subtasks
 {
-  "tool": "create_task",
+  "tool": "manage_task",
   "arguments": {
+    "operation": "create",
     "name": "Make guest list",
     "parentTaskId": "abc123"  // Creates as subtask
   }
@@ -211,9 +221,10 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Get Today's Agenda
 ```javascript
 {
-  "tool": "todays_agenda",
+  "tool": "tasks",
   "arguments": {
-    "includeOverdue": true
+    "mode": "today",
+    "details": true
   }
 }
 ```
@@ -232,9 +243,9 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 }
 ```
 
-## Available Tools (15 Consolidated)
+## Available Tools (15 Self-Contained)
 
-### V2.0.0 Consolidated Architecture
+### V2.1.0 Self-Contained Architecture
 
 **Task Operations (2 tools)**:
 - `tasks` - Unified task querying with modes (search, overdue, today, upcoming, available, blocked, flagged)
@@ -275,7 +286,8 @@ The `list_tasks` tool is deprecated and retained only for backward compatibility
 ### Daily Task
 ```javascript
 // Review inbox every morning
-create_task({
+manage_task({
+  operation: "create",
   name: "Review OmniFocus inbox",
   dueDate: "2025-01-15 09:00",
   repeatRule: {
@@ -289,7 +301,8 @@ create_task({
 ### Weekly on Specific Days
 ```javascript
 // Team standup on Mon/Wed/Fri
-create_task({
+manage_task({
+  operation: "create",
   name: "Team standup",
   dueDate: "2025-01-13 10:00",  // Starting Monday
   repeatRule: {
@@ -304,7 +317,8 @@ create_task({
 ### Monthly on Specific Day
 ```javascript
 // Pay rent on 1st of each month
-create_task({
+manage_task({
+  operation: "create",
   name: "Pay rent",
   dueDate: "2025-02-01",
   repeatRule: {
@@ -318,7 +332,8 @@ create_task({
 ### Monthly on Position (e.g., 2nd Tuesday)
 ```javascript
 // Team retrospective on 2nd Tuesday of each month
-create_task({
+manage_task({
+  operation: "create",
   name: "Team retrospective",
   dueDate: "2025-01-14 14:00",
   repeatRule: {
@@ -334,7 +349,8 @@ create_task({
 ### After Completion
 ```javascript
 // Water plants 3 days after last watering
-create_task({
+manage_task({
+  operation: "create",
   name: "Water plants",
   repeatRule: {
     unit: "day",
@@ -347,7 +363,8 @@ create_task({
 ### With Defer Date
 ```javascript
 // Quarterly review (defer 1 week before due)
-create_task({
+manage_task({
+  operation: "create",
   name: "Quarterly business review",
   dueDate: "2025-03-31",
   repeatRule: {
