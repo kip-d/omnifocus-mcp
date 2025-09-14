@@ -3,6 +3,11 @@
  *
  * This module defines discriminated unions and type guards to eliminate
  * scattered error checking and improve type safety across the codebase.
+ *
+ * NOTE: This module is being phased out in favor of the more comprehensive
+ * jxa-script-result-types.ts which provides better JXA integration types.
+ *
+ * @deprecated Use jxa-script-result-types.ts for new implementations
  */
 
 import { z } from 'zod';
