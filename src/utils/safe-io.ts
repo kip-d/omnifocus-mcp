@@ -34,7 +34,7 @@ export function isEnvelope(value: unknown): value is JxaEnvelope {
 type LegacyErrorShape = { error: true; message?: unknown; details?: unknown };
 
 function isLegacyErrorShape(val: unknown): val is LegacyErrorShape {
-  return !!val && typeof val === 'object' && (val as Record<string, unknown>).hasOwnProperty('error') && (val as Record<string, unknown>).error === true;
+  return !!val && typeof val === 'object' && Object.prototype.hasOwnProperty.call(val, 'error') && (val as Record<string, unknown>).error === true;
 }
 
 export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {

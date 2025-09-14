@@ -2,7 +2,7 @@ import { getCoreHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js'
 
 /**
  * Script to analyze and summarize recurring task patterns in OmniFocus
- * 
+ *
  * OPTIMIZED FOR SIZE: Uses minimal helpers to stay under 19KB limit
  * Features:
  * - Pattern detection and grouping

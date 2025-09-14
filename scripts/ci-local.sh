@@ -48,11 +48,11 @@ TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cu
 echo "Lint errors: $ERROR_COUNT"
 echo "Total problems: $TOTAL_PROBLEMS"
 
-if [ "$ERROR_COUNT" -gt 250 ]; then
-    print_error "Too many lint errors ($ERROR_COUNT > 250)"
+if [ "$ERROR_COUNT" -gt 50 ]; then
+    print_error "Too many lint errors ($ERROR_COUNT > 50)"
     exit 1
 else
-    print_success "Lint error count acceptable ($ERROR_COUNT <= 250)"
+    print_success "Lint error count acceptable ($ERROR_COUNT <= 50)"
 fi
 
 # Step 4: Unit tests
@@ -98,7 +98,7 @@ echo "================================="
 echo -e "${BLUE}Summary:${NC}"
 echo "- TypeScript compilation: ✅"
 echo "- Type checking: ✅"
-echo "- Lint errors: ✅ ($ERROR_COUNT <= 200)"
+echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ✅"
 echo "- MCP server startup: ✅"

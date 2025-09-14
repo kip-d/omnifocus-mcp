@@ -66,12 +66,12 @@ jobs:
           echo "Lint errors: $ERROR_COUNT"
           echo "Total problems: $TOTAL_PROBLEMS"
           
-          # Fail if more than 250 errors (allow for current technical debt but prevent regression)
-          if [ "$ERROR_COUNT" -gt 250 ]; then
-            echo "❌ Too many lint errors ($ERROR_COUNT > 250). Please fix critical issues."
+          # Fail if more than 50 errors (significantly improved from 250 after lint cleanup)
+          if [ "$ERROR_COUNT" -gt 50 ]; then
+            echo "❌ Too many lint errors ($ERROR_COUNT > 50). Please fix critical issues."
             exit 1
           else
-            echo "✅ Lint error count acceptable ($ERROR_COUNT <= 250)"
+            echo "✅ Lint error count acceptable ($ERROR_COUNT <= 50)"
           fi
 
   # Comprehensive testing (Note: macOS runners not available on free GitHub)

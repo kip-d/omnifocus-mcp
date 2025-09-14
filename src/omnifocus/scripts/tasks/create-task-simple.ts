@@ -1,5 +1,5 @@
 /**
- * Simplified Script to create a new task in OmniFocus  
+ * Simplified Script to create a new task in OmniFocus
  * MINIMAL VERSION: Basic task creation without heavy helpers
  * Size: ~3KB (well under limits)
  */

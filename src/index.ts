@@ -33,7 +33,7 @@ const pendingOperations = new Set<Promise<any>>();
 async function runServer() {
   // Initialize pending operations tracking
   setPendingOperationsTracker(pendingOperations);
-  
+
   // Initialize cache manager
   const cacheManager = new CacheManager();
 
@@ -67,11 +67,11 @@ async function runServer() {
 
   const transport = new StdioServerTransport();
 
-  // Handle stdin closure for proper MCP lifecycle compliance  
+  // Handle stdin closure for proper MCP lifecycle compliance
   // Wait for pending operations before exiting
   const gracefulExit = async (reason: string) => {
     logger.info(`${reason}, waiting for pending operations to complete...`);
-    
+
     if (pendingOperations.size > 0) {
       logger.info(`Waiting for ${pendingOperations.size} pending operations...`);
       try {
@@ -81,11 +81,11 @@ async function runServer() {
         logger.error('Error waiting for pending operations:', error);
       }
     }
-    
+
     logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
   };
-  
+
   process.stdin.on('end', () => {
     gracefulExit('stdin closed');
   });

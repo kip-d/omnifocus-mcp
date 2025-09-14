@@ -83,7 +83,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
       // Route to appropriate tool based on operation type
       switch (operation) {
         // Query operations
-        case 'list':
+        case 'list': {
           // Direct implementation of list folders
           const {
             includeHierarchy = true,
@@ -135,8 +135,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           }
 
           return createSuccessResponseV2('folders', { folders: foldersArr }, undefined, { ...timer.toMetadata(), operation: 'list', total_folders: foldersArr.length });
+        }
 
-        case 'get':
+        case 'get': {
           // Direct implementation of get folder by ID
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -183,8 +184,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           }
 
           return createSuccessResponseV2('folders', { folder: { ...folder, operation: 'get' } }, undefined, { ...timer.toMetadata(), operation: 'get', folder_id: params.folderId });
+        }
 
-        case 'search':
+        case 'search': {
           // Direct implementation of search folders by name
           if (!params.searchQuery) {
             return createErrorResponseV2(
