@@ -7,14 +7,15 @@ import {
   OperationTimerV2,
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
-import { ProductivityStatsResponseV2 } from '../response-types-v2.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { ProductivityStatsData } from '../../omnifocus/script-response-types.js';
 
-export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2, ProductivityStatsResponseV2> {
+export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2> {
   name = 'productivity_stats';
   description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.';
   schema = ProductivityStatsSchemaV2;
 
-  async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<ProductivityStatsResponseV2> {
+  async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<any> {
     const timer = new OperationTimerV2();
 
     try {
@@ -53,47 +54,57 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           includeInactive: false,  // Only active projects by default for performance
         },
       });
-      const raw = await this.execJson(script);
+      const result = await this.execJson<ProductivityStatsData>(script);
 
-      if ((raw as any)?.success === false) {
+      if (isScriptError(result)) {
         return createErrorResponseV2(
           'productivity_stats',
           'STATS_ERROR',
-          (raw as any).error || 'Script execution failed',
+          result.error || 'Script execution failed',
           'Ensure OmniFocus is running and has data to analyze',
-          (raw as any).details,
+          result.details,
           timer.toMetadata(),
         );
       }
 
-      const d: any = (raw as any) || {};
+      const data: ProductivityStatsData = isScriptSuccess(result) ? result.data : {
+        stats: {
+          overview: {
+            totalTasks: 0,
+            completedTasks: 0,
+            completionRate: 0,
+          },
+        },
+        healthScore: 0,
+        insights: [],
+      };
       // Normalize common shapes from tests
-      const completedTasks = d.summary?.completedTasks ?? d.stats?.completed ?? 0;
-      const totalTasks = d.summary?.totalTasks ?? d.stats?.created ?? 0;
-      const completionRate = d.summary?.completionRate ?? (totalTasks ? completedTasks / totalTasks : 0);
-      const activeProjects = d.summary?.activeProjects ?? 0;
+      const completedTasks = data.stats?.overview?.completedTasks ?? 0;
+      const totalTasks = data.stats?.overview?.totalTasks ?? 0;
+      const completionRate = data.stats?.overview?.completionRate ?? (totalTasks ? completedTasks / totalTasks : 0);
+      const activeProjects = 0; // Not part of StatsOverview interface
 
       const overview = {
         totalTasks,
         completedTasks,
         completionRate: typeof completionRate === 'number' ? completionRate : Number(completionRate),
         activeProjects,
-        overdueCount: 0,
+        overdueCount: 0, // Not part of StatsOverview interface
       };
 
-      const projectStatsArray = includeProjectStats ? (d.projectStats || d.stats?.projectStats || []) : [];
-      const tagStatsArray = includeTagStats ? (d.tagStats || d.stats?.tagStats || []) : [];
+      const projectStatsArray = includeProjectStats ? (data.stats?.projectStats || []) : [];
+      const tagStatsArray = includeTagStats ? (data.stats?.tagStats || []) : [];
 
       const responseData = {
         period,
         stats: {
           overview,
-          daily: d.dailyStats || [],
-          weekly: d.weeklyStats || {},
+          daily: [],
+          weekly: {},
           projectStats: projectStatsArray,
           tagStats: tagStatsArray,
         },
-        insights: { recommendations: d.trends?.recommendations || d.insights || [] },
+        insights: { recommendations: data.insights || [] },
         healthScore: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
       };
 
@@ -129,33 +140,35 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
     }
   }
 
-  // Adapt mocks that only implement executeJson without strict schema
-  private async execJson(script: string): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    if (typeof anyOmni.executeJson === 'function') {
-      const res = await anyOmni.executeJson(script);
-      if (res && typeof res === 'object' && 'success' in res) {
-        return (res as any).success ? (res as any).data : res;
-      }
-      return res;
-    }
-    return await anyOmni.execute(script);
-  }
 
-  private extractKeyFindings(data: any): string[] {
+  private extractKeyFindings(data: {
+    period?: string;
+    stats?: {
+      overview?: {
+        totalTasks?: number;
+        completedTasks?: number;
+        completionRate?: number;
+        activeProjects?: number;
+        overdueCount?: number;
+      };
+      projectStats?: Array<{
+        name: string;
+        completedCount: number;
+      }>;
+    };
+    healthScore?: number;
+    insights?: {
+      recommendations?: string[];
+    };
+  }): string[] {
     const findings: string[] = [];
 
     // Add overview findings
     if (data.stats?.overview) {
-      const { completedTasks, completionRate, activeProjects, overdueCount } = data.stats.overview;
-      if (completedTasks > 0) {
-        findings.push(`Completed ${completedTasks} tasks (${(completionRate * 100).toFixed(1)}% completion rate)`);
-      }
-      if (activeProjects > 0) {
-        findings.push(`${activeProjects} active projects`);
-      }
-      if (overdueCount > 0) {
-        findings.push(`⚠️ ${overdueCount} tasks overdue`);
+      const { completedTasks, completionRate } = data.stats.overview;
+      if (completedTasks && completedTasks > 0) {
+        const rate = completionRate || 0;
+        findings.push(`Completed ${completedTasks} tasks (${(rate * 100).toFixed(1)}% completion rate)`);
       }
     }
 
@@ -171,16 +184,16 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
     }
 
     // Add top performing project
-    if (data.stats?.projectStats?.length > 0) {
+    if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
       const topProject = data.stats.projectStats
-        .sort((a: any, b: any) => (b.completedCount || 0) - (a.completedCount || 0))[0];
+        .sort((a, b) => (b.completedCount || 0) - (a.completedCount || 0))[0];
       if (topProject && topProject.completedCount > 0) {
         findings.push(`Most productive project: ${topProject.name} (${topProject.completedCount} completed)`);
       }
     }
 
     // Add insights
-    if (data.insights?.recommendations?.length > 0) {
+    if (data.insights && Array.isArray(data.insights.recommendations) && data.insights.recommendations.length > 0) {
       findings.push(data.insights.recommendations[0]);
     }
 

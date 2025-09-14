@@ -6,7 +6,7 @@ import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-fol
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 
 // Consolidated folders schema
@@ -115,13 +115,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           console.error(`[FOLDERS_DEBUG] Generated script length: ${script?.length}, type: ${typeof script}`);
           console.error(`[FOLDERS_DEBUG] Script preview: ${script?.substring(0, 100)}...`);
           const listResult = await this.execJson(script);
-          if ((listResult as any).success === false) {
+          if (isScriptError(listResult)) {
             return createErrorResponseV2(
               'folders',
               'LIST_FAILED',
-              (listResult as any).error || 'Query failed',
+              listResult.error || 'Query failed',
               'Ensure folder data is accessible',
-              { details: (listResult as any).details, operation: 'list' },
+              { details: listResult.details, operation: 'list' },
               timer.toMetadata(),
             );
           }
@@ -157,13 +157,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             limit: 1000, // Set high limit to ensure we get all folders for filtering
           });
           const getResult = await this.execJson(getScript);
-          if ((getResult as any).success === false) {
+          if (isScriptError(getResult)) {
             return createErrorResponseV2(
               'folders',
               'GET_FAILED',
-              (getResult as any).error || 'Get failed',
+              getResult.error || 'Get failed',
               undefined,
-              { details: (getResult as any).details, operation: 'get', folderId: params.folderId },
+              { details: getResult.details, operation: 'get', folderId: params.folderId },
               timer.toMetadata(),
             );
           }
@@ -206,13 +206,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             limit: 100,
           });
           const searchResult = await this.execJson(searchScript);
-          if ((searchResult as any).success === false) {
+          if (isScriptError(searchResult)) {
             return createErrorResponseV2(
               'folders',
               'SEARCH_FAILED',
-              (searchResult as any).error || 'Search failed',
+              searchResult.error || 'Search failed',
               undefined,
-              { details: (searchResult as any).details, operation: 'search', searchTerm: params.searchQuery },
+              { details: searchResult.details, operation: 'search', searchTerm: params.searchQuery },
               timer.toMetadata(),
             );
           }
@@ -242,13 +242,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             limit: 1000,
           });
           const projectsResult = await this.execJson(projectsScript);
-          if ((projectsResult as any).success === false) {
+          if (isScriptError(projectsResult)) {
             return createErrorResponseV2(
               'folders',
               'GET_PROJECTS_FAILED',
-              (projectsResult as any).error || 'Get projects failed',
+              projectsResult.error || 'Get projects failed',
               undefined,
-              { details: (projectsResult as any).details, operation: 'get_projects', folderId: params.folderId },
+              { details: projectsResult.details, operation: 'get_projects', folderId: params.folderId },
               timer.toMetadata(),
             );
           }
@@ -512,22 +512,4 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
     }
   }
 
-  // Helper to execute JSON scripts with consistent error handling
-  private async execJson(script: string, _schema?: any): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    const res = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute(script);
-    if (res === null || res === undefined) {
-      return { success: false, error: 'NULL_RESULT' };
-    }
-    if (res && typeof res === 'object') {
-      const obj: any = res;
-      if (obj.success === false) return obj;
-      // Treat presence of folders/items or ok/updated flags as success
-      if (Array.isArray(obj.folders) || Array.isArray(obj.items) || obj.ok === true || typeof obj.updated === 'number') {
-        return { success: true, data: obj };
-      }
-    }
-    // Fallback: wrap as success with raw data
-    return { success: true, data: res };
-  }
 }

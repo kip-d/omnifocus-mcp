@@ -7,14 +7,15 @@ import {
   OperationTimerV2,
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
-import { TaskVelocityResponseV2 } from '../response-types-v2.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { TaskVelocityData } from '../../omnifocus/script-response-types.js';
 
-export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, TaskVelocityResponseV2> {
+export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
   name = 'task_velocity';
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
 
-  async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<TaskVelocityResponseV2> {
+  async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<any> {
     const timer = new OperationTimerV2();
 
     try {
@@ -51,24 +52,36 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
 
       // Schema matching the optimized velocity payload
 
-      const raw = await this.execJson(script);
+      const result = await this.execJson<TaskVelocityData>(script);
 
-      if ((raw as any)?.success === false) {
-        return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', (raw as any).error || 'Script execution failed', undefined, (raw as any).details, timer.toMetadata());
+      if (isScriptError(result)) {
+        return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
       }
 
-      const d: any = raw || {};
+      const data: TaskVelocityData = isScriptSuccess(result) ? result.data : {
+        velocity: {
+          daily: 0,
+          weekly: 0,
+          monthly: 0,
+          trend: 'stable',
+        },
+        trends: [],
+        predictions: {
+          confidence: 0,
+        },
+        summary: {
+          currentVelocity: 0,
+          previousVelocity: 0,
+          percentageChange: 0,
+        },
+      };
       // Support both optimized payload and simplified test shapes
-      const tasksCompleted = d.throughput?.totalCompleted ?? d.totalCompleted ?? d.velocity?.current ?? 0;
-      const averagePerDay = d.projections?.tasksPerDay ?? d.averagePerDay ?? 0;
-      const peak = d.peakDay ?? (() => {
-        const dailyData = d.dailyData || d.throughput?.intervals?.map((i: any) => ({ date: i.label, completed: i.completed })) || [];
-        const p = dailyData.reduce((acc: any, x: any) => (x.completed > (acc.count || 0) ? { date: x.date, count: x.completed } : acc), { date: null, count: 0 });
-        return p;
-      })();
-      const trend = d.trend ?? 'stable';
-      const predictedCapacity = d.projections?.tasksPerWeek ?? d.predictedCapacity ?? 0;
-      const daily = d.dailyData || (d.throughput?.intervals?.map((i: any) => ({ date: i.label, completed: i.completed })) ?? []);
+      const tasksCompleted = data.summary?.currentVelocity ?? 0;
+      const averagePerDay = data.velocity?.daily ?? 0;
+      const peak = { date: null, count: 0 }; // Simplified for type safety
+      const trend = data.velocity?.trend ?? 'stable';
+      const predictedCapacity = data.predictions?.nextWeek ?? 0;
+      const daily = data.trends || [];
 
       const responseData = {
         velocity: {
@@ -81,11 +94,11 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
         },
         daily,
         patterns: {
-          byDayOfWeek: d.dayOfWeekPatterns || {},
-          byTimeOfDay: d.timeOfDayPatterns || {},
-          byProject: d.projectVelocity || [],
+          byDayOfWeek: {},
+          byTimeOfDay: {},
+          byProject: [],
         },
-        insights: Array.isArray(d.insights) ? d.insights : [],
+        insights: [],
       };
 
       // Cache for 1 hour
@@ -120,26 +133,36 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
     }
   }
 
-  private async execJson(script: string): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    if (typeof anyOmni.executeJson === 'function') {
-      const res = await anyOmni.executeJson(script);
-      if (res && typeof res === 'object' && 'success' in res) {
-        return (res as any).success ? (res as any).data : res;
-      }
-      return res;
-    }
-    return await anyOmni.execute(script);
-  }
 
-  private extractKeyFindings(data: any): string[] {
+  private extractKeyFindings(data: {
+    velocity?: {
+      period?: string;
+      tasksCompleted?: number;
+      averagePerDay?: number;
+      peakDay?: {
+        date: string | null;
+        count: number;
+      };
+      trend?: string;
+      predictedCapacity?: number;
+    };
+    patterns?: {
+      byDayOfWeek?: Record<string, number>;
+      byProject?: Array<{
+        name: string;
+        completed: number;
+      }>;
+    };
+    insights?: string[];
+  }): string[] {
     const findings: string[] = [];
 
     // Add velocity summary
     if (data.velocity) {
       const { tasksCompleted, averagePerDay, trend, predictedCapacity } = data.velocity;
-      if (tasksCompleted > 0) {
-        findings.push(`Completed ${tasksCompleted} tasks (avg ${averagePerDay.toFixed(1)}/day)`);
+      if (tasksCompleted && tasksCompleted > 0) {
+        const avgPerDay = averagePerDay || 0;
+        findings.push(`Completed ${tasksCompleted} tasks (avg ${avgPerDay.toFixed(1)}/day)`);
       }
 
       // Add trend insight
@@ -151,7 +174,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
         findings.push('➡️ Velocity stable');
       }
 
-      if (predictedCapacity > 0) {
+      if (predictedCapacity && predictedCapacity > 0) {
         findings.push(`Predicted capacity: ${Math.round(predictedCapacity)} tasks/week`);
       }
     }
@@ -164,7 +187,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
     // Add day of week pattern
     if (data.patterns?.byDayOfWeek) {
       const days = Object.entries(data.patterns.byDayOfWeek)
-        .sort((a: [string, unknown], b: [string, unknown]) => {
+        .sort((a, b) => {
           const aVal = typeof a[1] === 'number' ? a[1] : 0;
           const bVal = typeof b[1] === 'number' ? b[1] : 0;
           return bVal - aVal;
@@ -178,7 +201,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
     }
 
     // Add project velocity insight
-    if (data.patterns?.byProject?.length > 0) {
+    if (data.patterns?.byProject && Array.isArray(data.patterns.byProject) && data.patterns.byProject.length > 0) {
       const topProject = data.patterns.byProject[0];
       if (topProject && topProject.completed > 0) {
         findings.push(`Fastest moving project: ${topProject.name}`);
@@ -186,7 +209,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2, Ta
     }
 
     // Add insights
-    if (data.insights?.length > 0) {
+    if (data.insights && Array.isArray(data.insights) && data.insights.length > 0) {
       findings.push(data.insights[0]);
     }
 

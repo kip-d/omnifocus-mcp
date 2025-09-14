@@ -8,7 +8,7 @@ import {
   GET_PROJECT_STATS_SCRIPT,
 } from '../../omnifocus/scripts/projects.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
-import { isScriptSuccess, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -203,15 +203,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const raw = await this.execJsonFlexible(script);
-    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
-    if (!(result as any).success) {
+    const result = await this.execJson(script);
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
-        (result as any).error || 'Script execution failed',
+        result.error || 'Script execution failed',
         'Check if OmniFocus is running',
-        (result as any).details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -262,15 +261,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       name: args.name,
       options: projectData,
     });
-    const raw = await this.execJsonFlexible(script);
-    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
-    if (!(result as any).success) {
+    const result = await this.execJson(script);
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
         'CREATE_FAILED',
-        (result as any).error || 'Script execution failed',
+        result.error || 'Script execution failed',
         'Check the project name and try again',
-        (result as any).details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -325,15 +323,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     // Execute update using new function argument approach with schema validation
     const script = createUpdateProjectScript(args.projectId!, updates);
-    const raw = await this.execJsonFlexible(script);
-    const isErrorLike = raw && typeof raw === 'object' && 'success' in (raw as any) && (raw as any).success === false;
-    if (isErrorLike) {
+    const result = await this.execJson(script);
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
         'UPDATE_FAILED',
-        (raw as any).error || 'Failed to update project',
+        result.error || 'Failed to update project',
         'Check the project ID and try again',
-        (raw as any).details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -341,7 +338,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     // Invalidate cache
     this.cache.invalidate('projects');
 
-    const updated = raw;
+    const updated = result.data;
     return createSuccessResponseV2(
       'projects',
       {
@@ -371,15 +368,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       completeAllTasks: false, // Default to not completing all tasks
     });
 
-    const raw = await this.execJsonFlexible(script);
-    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
-    if (!(result as any).success) {
+    const result = await this.execJson(script);
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
         'COMPLETE_FAILED',
-        (result as any).error || 'Script execution failed',
+        result.error || 'Script execution failed',
         'Check the project ID and ensure it\'s not already completed',
-        (result as any).details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -414,15 +410,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       deleteTasks: false, // Don't delete tasks, move them to inbox
     });
 
-    const raw = await this.execJsonFlexible(script);
-    const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw };
-    if (!(result as any).success) {
+    const result = await this.execJson(script);
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
         'DELETE_FAILED',
-        (result as any).error || 'Script execution failed',
+        result.error || 'Script execution failed',
         'Check the project ID and permissions',
-        (result as any).details,
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -439,18 +434,6 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     );
   }
 
-  // Flexible execJson: unwrap ScriptResult when present, otherwise return raw
-  private async execJsonFlexible(script: string): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    if (typeof anyOmni.executeJson === 'function') {
-      const res = await anyOmni.executeJson(script);
-      if (res && typeof res === 'object' && 'success' in res) {
-        return (res as any).success ? (res as any).data : res;
-      }
-      return res;
-    }
-    return await anyOmni.execute(script);
-  }
 
   private async handleReviewProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
     // Get projects needing review

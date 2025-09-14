@@ -4,6 +4,8 @@ import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
 
 // Schema for the workflow analysis tool
 const WorkflowAnalysisSchema = z.object({
@@ -79,18 +81,31 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         },
       });
 
-      const raw = await this.execJsonFlexible(script);
-      const result = (raw && typeof raw === 'object' && 'success' in (raw as any)) ? (raw as any) : { success: true, data: raw } as any;
-      if (!(result as any).success) {
+      const result = await this.execJson<WorkflowAnalysisData>(script);
+
+      if (isScriptError(result)) {
         return createErrorResponseV2(
           'workflow_analysis',
           'ANALYSIS_FAILED',
-          (result as any).error || 'Script execution failed',
+          result.error || 'Script execution failed',
           'Check that OmniFocus has sufficient data for analysis',
-          (result as any).details,
+          result.details,
           timer.toMetadata(),
         );
       }
+
+      const data: WorkflowAnalysisData = isScriptSuccess(result) ? result.data : {
+        analysis: {
+          patterns: [],
+          bottlenecks: [],
+          recommendations: [],
+          insights: [],
+        },
+        summary: {
+          score: 0,
+          status: 'No data available',
+        },
+      };
 
       // Structure the response data
       const responseData = {
@@ -99,15 +114,16 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
           focusAreas: args.focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: (result.data as any)?.insights || [],
-        patterns: (result.data as any)?.patterns || {},
-        recommendations: (result.data as any)?.recommendations || [],
-        data: args.includeRawData ? ((result.data as any)?.data || {}) : undefined,
+        insights: data.analysis?.insights || [],
+        patterns: data.analysis?.patterns || [],
+        recommendations: data.analysis?.recommendations || [],
+        data: args.includeRawData ? data : undefined,
         metadata: {
-          totalTasks: (result.data as any)?.totalTasks || 0,
-          totalProjects: (result.data as any)?.totalProjects || 0,
-          analysisTime: (result.data as any)?.analysisTime || 0,
-          dataPoints: (result.data as any)?.dataPoints || 0,
+          totalTasks: 0,
+          totalProjects: 0,
+          analysisTime: 0,
+          dataPoints: data.analysis?.patterns?.length || 0,
+          score: data.summary?.score || 0,
         },
       };
 
@@ -143,37 +159,44 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
     }
   }
 
-  private extractKeyFindings(data: any): string[] {
+  private extractKeyFindings(data: {
+    insights?: Array<string | { insight?: string; message?: string }>;
+    recommendations?: Array<string | { recommendation?: string; message?: string }>;
+    patterns?: unknown[];
+    metadata?: {
+      score?: number;
+    };
+  }): string[] {
     const findings: string[] = [];
 
     if (data.insights && Array.isArray(data.insights)) {
-      findings.push(...data.insights.slice(0, 3).map((i: any) => i.insight || i.message || String(i)));
+      findings.push(...data.insights.slice(0, 3).map(i => {
+        if (typeof i === 'string') return i;
+        if (typeof i === 'object' && i !== null) {
+          return (i as any).insight || (i as any).message || String(i);
+        }
+        return String(i);
+      }));
     }
 
     if (data.recommendations && Array.isArray(data.recommendations)) {
-      findings.push(...data.recommendations.slice(0, 2).map((r: any) => r.recommendation || r.message || String(r)));
+      findings.push(...data.recommendations.slice(0, 2).map(r => {
+        if (typeof r === 'string') return r;
+        if (typeof r === 'object' && r !== null) {
+          return (r as any).recommendation || (r as any).message || String(r);
+        }
+        return String(r);
+      }));
     }
 
-    if (data.patterns) {
-      const patternKeys = Object.keys(data.patterns);
-      if (patternKeys.length > 0) {
-        findings.push(`Found ${patternKeys.length} key patterns in your workflow`);
-      }
+    if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
+      findings.push(`Found ${data.patterns.length} key patterns in your workflow`);
+    }
+
+    if (data.metadata?.score && data.metadata.score > 0) {
+      findings.push(`Workflow health score: ${data.metadata.score}/100`);
     }
 
     return findings.length > 0 ? findings : ['Analysis completed successfully'];
-  }
-
-  // Flexible unwrapping similar to other V2 tools
-  private async execJsonFlexible(script: string): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    if (typeof anyOmni.executeJson === 'function') {
-      const res = await anyOmni.executeJson(script);
-      if (res && typeof res === 'object' && 'success' in res) {
-        return (res as any).success ? (res as any).data : res;
-      }
-      return res;
-    }
-    return await anyOmni.execute(script);
   }
 }

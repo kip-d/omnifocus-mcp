@@ -9,7 +9,7 @@ import {
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
 import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
-import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
   createTaskResponseV2,
   createErrorResponseV2,
@@ -20,7 +20,6 @@ import {
 } from '../../utils/response-format-v2.js';
 import { OmniFocusTask } from '../response-types.js';
 import { TasksResponseV2 } from '../response-types-v2.js';
-import type { ScriptResult } from '../../omnifocus/script-result-types.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -188,8 +187,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Parse and cache
-    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
-    this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as any).summary });
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
+    this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as { summary?: unknown }).summary });
 
     return createTaskResponseV2(
       'tasks',
@@ -233,7 +233,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Parse and cache
-    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -360,12 +361,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         'SCRIPT_ERROR',
         'Search failed',
         'Try a simpler search term or check if OmniFocus is running',
-        (result as any).details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
 
     // Cache search results
     this.cache.set('tasks', cacheKey, { tasks });
@@ -415,12 +417,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         'SCRIPT_ERROR',
         'Failed to get available tasks',
         'Try using all mode with fewer filters',
-        (result as any).details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -463,12 +466,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         'SCRIPT_ERROR',
         'Failed to get blocked tasks',
         'Try using all mode instead',
-        (result as any).details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -510,7 +514,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       );
     }
 
-    const tasks = this.parseTasks((result.data as any).tasks || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
     return createTaskResponseV2(
@@ -549,12 +554,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         'SCRIPT_ERROR',
         'Failed to get tasks',
         'Try a more specific mode like overdue or today',
-        (result as any).details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    const tasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
 
     return createTaskResponseV2(
       'tasks',
@@ -599,12 +605,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         'SCRIPT_ERROR',
         'Failed to get task suggestions',
         'Try using mode: "today" or "overdue" instead',
-        (result as any).details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    const allTasks = this.parseTasks(((result.data as any).tasks) || (result.data as any).items || []);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const allTasks = this.parseTasks(data.tasks || data.items || []);
     const now = new Date();
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
@@ -683,54 +690,4 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }));
   }
 
-  // Backward-compatible helper for tests that mock only `execute`
-  private async execJson(script: string): Promise<ScriptResult<unknown>> {
-    const anyOmni: any = this.omniAutomation as any;
-    if (typeof anyOmni.executeJson === 'function') {
-      const maybe = await anyOmni.executeJson(script);
-      if (maybe && typeof maybe === 'object' && (maybe as any).error === true) {
-        const m: any = maybe;
-        return { success: false, error: m.message || 'Script execution failed', details: m.details } as ScriptResult<unknown>;
-      }
-      if (maybe && typeof maybe === 'object' && 'success' in maybe) {
-        const sr: any = maybe;
-        if (sr.success && sr.data && typeof sr.data === 'object' && (sr.data as any).error === true) {
-          const m: any = sr.data;
-          return { success: false, error: m.message || 'Script execution failed', details: m.details } as ScriptResult<unknown>;
-        }
-        return sr as ScriptResult<unknown>;
-      }
-      // Try to coerce raw shapes into ListResultSchema
-      let candidate: any = maybe;
-      let parsed = ListResultSchema.safeParse(candidate);
-      if (!parsed.success && maybe && typeof maybe === 'object') {
-        const obj: any = maybe;
-        if (Array.isArray(obj.tasks)) {
-          candidate = { items: obj.tasks, summary: obj.summary, metadata: obj.metadata };
-          parsed = ListResultSchema.safeParse(candidate);
-        }
-      }
-      if (parsed.success) {
-        return { success: true, data: parsed.data } as ScriptResult<unknown>;
-      }
-      return { success: false, error: 'Script result validation failed', details: { errors: parsed.error.issues } } as ScriptResult<unknown>;
-    }
-    const raw = await anyOmni.execute(script);
-    let candidate: any = raw;
-    let parsed = ListResultSchema.safeParse(candidate);
-    if (!parsed.success && raw && typeof raw === 'object') {
-      const obj: any = raw;
-      if (obj && obj.error === true) {
-        return { success: false, error: obj.message || 'Script execution failed', details: obj.details } as ScriptResult<unknown>;
-      }
-      if (Array.isArray(obj.tasks)) {
-        candidate = { items: obj.tasks, summary: obj.summary, metadata: obj.metadata };
-        parsed = ListResultSchema.safeParse(candidate);
-      }
-    }
-    if (parsed.success) {
-      return { success: true, data: parsed.data } as ScriptResult<unknown>;
-    }
-    return { success: false, error: 'Script result validation failed', details: { errors: parsed.error.issues } } as ScriptResult<unknown>;
-  }
 }

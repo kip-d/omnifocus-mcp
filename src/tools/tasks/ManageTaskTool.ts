@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { CreateTaskResponse } from '../types.js';
-import { CreateTaskScriptResponse } from '../../omnifocus/script-types.js';
 import { localToUTC } from '../../utils/timezone.js';
 import {
   parsingError,
@@ -227,53 +227,23 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           console.error('[MANAGE_TASK_DEBUG] Converted task data:', JSON.stringify(convertedTaskData, null, 2));
 
           const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
-          const anyOmni: any = this.omniAutomation as any;
           let createResult: any;
 
           try {
-            // Prefer instance-level executeJson when available
-            if (typeof anyOmni.executeJson === 'function' && Object.prototype.hasOwnProperty.call(anyOmni, 'executeJson')) {
-              console.error('[MANAGE_TASK_DEBUG] Using executeJson method');
-              const sr = await anyOmni.executeJson(script);
-              console.error('[MANAGE_TASK_DEBUG] executeJson returned:', JSON.stringify(sr, null, 2));
+            const scriptResult = await this.execJson(script);
+            console.error('[MANAGE_TASK_DEBUG] execJson returned:', JSON.stringify(scriptResult, null, 2));
 
-              if (sr && typeof sr === 'object' && 'success' in sr) {
-                if (!(sr as any).success) {
-                  return createErrorResponseV2(
-                    'manage_task',
-                    'SCRIPT_ERROR',
-                    (sr as any).error || 'Script execution failed',
-                    undefined,
-                    (sr as any).details,
-                    timer.toMetadata(),
-                  );
-                }
-                createResult = (sr as any).data;
-              } else {
-                createResult = sr;
-              }
-            } else if (typeof anyOmni.executeJson === 'function') {
-              const sr = await anyOmni.executeJson(script);
-              if (sr && typeof sr === 'object' && 'success' in sr) {
-                if (!(sr as any).success) {
-                  return createErrorResponseV2(
-                    'manage_task',
-                    'SCRIPT_ERROR',
-                    (sr as any).error || 'Script execution failed',
-                    undefined,
-                    (sr as any).details,
-                    timer.toMetadata(),
-                  );
-                }
-                createResult = (sr as any).data;
-              } else {
-                createResult = sr;
-              }
-            } else {
-              console.error('[MANAGE_TASK_DEBUG] Using fallback execute method');
-              createResult = await anyOmni.execute(script) as CreateTaskScriptResponse;
-              console.error('[MANAGE_TASK_DEBUG] execute returned:', JSON.stringify(createResult, null, 2));
+            if (isScriptError(scriptResult)) {
+              return createErrorResponseV2(
+                'manage_task',
+                'SCRIPT_ERROR',
+                scriptResult.error || 'Script execution failed',
+                undefined,
+                scriptResult.details,
+                timer.toMetadata(),
+              );
             }
+            createResult = scriptResult.data;
           } catch (e) {
             console.error('[MANAGE_TASK_DEBUG] Script execution threw error:', e);
             return this.handleError(e);
@@ -417,24 +387,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
           // Use new function argument architecture for template substitution safety
           const updateScript = createUpdateTaskScript(taskId!, safeUpdates);
-          const anyOmniUpdate: any = this.omniAutomation as any;
-          let parsedUpdateResult: any;
-          if (typeof anyOmniUpdate.executeJson === 'function') {
-            const res = await anyOmniUpdate.executeJson(updateScript);
-            if (res && typeof res === 'object' && 'success' in res) {
-              if (!(res as any).success) {
-                this.logger.error(`Update task script error: ${(res as any).error}`);
-                return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', (res as any).error || 'Script execution failed', 'Verify task exists and params are valid', (res as any).details, timer.toMetadata());
-              }
-              parsedUpdateResult = (res as any).data;
-            } else {
-              parsedUpdateResult = res;
-            }
-          } else {
-            // Fallback to execute() returning JSON string or object
-            const raw = await anyOmniUpdate.execute(updateScript);
-            parsedUpdateResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const updateResult = await this.execJson(updateScript);
+          if (isScriptError(updateResult)) {
+            this.logger.error(`Update task script error: ${updateResult.error}`);
+            return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', updateResult.error || 'Script execution failed', 'Verify task exists and params are valid', updateResult.details, timer.toMetadata());
           }
+          const parsedUpdateResult = updateResult.data;
 
           // Invalidate caches after successful update
           this.cache.invalidate('tasks');

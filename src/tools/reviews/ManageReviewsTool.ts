@@ -6,7 +6,8 @@ import {
 } from '../../omnifocus/scripts/reviews.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
-import { isScriptSuccess, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import { ReviewListData } from '../../omnifocus/script-response-types.js';
 
 export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   name = 'manage_reviews';
@@ -74,27 +75,21 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     const script = this.omniAutomation.buildScript(PROJECTS_FOR_REVIEW_SCRIPT, {
       filter: args,
     });
-    const omni: any = this.omniAutomation as any;
-    const raw = typeof omni.executeJson === 'function' ? await omni.executeJson(script) : await omni.execute(script);
-    if (raw == null) {
-      return createErrorResponseV2('manage_reviews', 'NULL_RESULT', 'No data returned from script', 'Ensure OmniFocus is running', {}, timer.toMetadata());
+    const result = await this.execJson<ReviewListData>(script);
+    if (isScriptError(result)) {
+      return createErrorResponseV2('manage_reviews', 'SCRIPT_ERROR', result.error || 'Script error', undefined, result.details, timer.toMetadata());
     }
-    if (raw && typeof raw === 'object' && (raw as any).error === true) {
-      return createErrorResponseV2('manage_reviews', 'SCRIPT_ERROR', (raw as any).message || 'Script error', undefined, { details: (raw as any).details }, timer.toMetadata());
-    }
-    const dataAny: any = (raw as any).data !== undefined ? (raw as any).data : raw;
-    if (dataAny == null) {
-      return createErrorResponseV2('manage_reviews', 'NULL_RESULT', 'No data returned from script', undefined, {}, timer.toMetadata());
-    }
+
+    const data: ReviewListData = isScriptSuccess(result) ? result.data : { projects: [], count: 0 };
     // Ensure projects array exists (accept both wrapped and raw)
-    const src = dataAny?.projects || dataAny?.items;
-    if (!src) {
+    const src = data?.projects || data?.items || [];
+    if (!Array.isArray(src)) {
       return createErrorResponseV2(
         'manage_reviews',
         'INVALID_RESPONSE',
         'Invalid response from OmniFocus: projects array not found',
         'Script should return { projects: [...] } or { items: [...] }',
-        { received: dataAny, expected: 'object with projects/items array' },
+        { received: data, expected: 'object with projects/items array' },
         timer.toMetadata(),
       );
     }
@@ -154,7 +149,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
           due_soon: parsedProjects.filter((p: any) => p.reviewStatus === 'due_soon').length,
           no_schedule: parsedProjects.filter((p: any) => p.reviewStatus === 'no_schedule').length,
         },
-        ...(dataAny?.metadata || {}),
+        ...(data && typeof data === 'object' && 'metadata' in data ? (data as any).metadata : {}),
       },
     );
 
@@ -179,15 +174,15 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewDate: actualReviewDate,
       updateNextReviewDate,
     });
-    const result = await this.execJson(script, SimpleOperationResultSchema);
+    const result = await this.execJson(script);
 
-    if (!isScriptSuccess(result)) {
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'manage_reviews',
         'SCRIPT_ERROR',
-        (result as any).error,
+        result.error || 'Script execution failed',
         'Try again with updateNextReviewDate=false',
-        { details: (result as any).details },
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -214,15 +209,15 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewInterval,
       nextReviewDate,
     });
-    const result = await this.execJson(script, SimpleOperationResultSchema);
+    const result = await this.execJson(script);
 
-    if (!isScriptSuccess(result)) {
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'manage_reviews',
         'SCRIPT_ERROR',
-        (result as any).error,
+        result.error || 'Script execution failed',
         'Verify project IDs and schedule details',
-        { details: (result as any).details },
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -249,15 +244,15 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       reviewInterval: null,
       nextReviewDate: null,
     });
-    const result = await this.execJson(script, SimpleOperationResultSchema);
+    const result = await this.execJson(script);
 
-    if (!isScriptSuccess(result)) {
+    if (isScriptError(result)) {
       return createErrorResponseV2(
         'manage_reviews',
         'SCRIPT_ERROR',
-        (result as any).error,
+        result.error || 'Script execution failed',
         undefined,
-        { details: (result as any).details },
+        result.details,
         timer.toMetadata(),
       );
     }
@@ -306,22 +301,4 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     return normalized as ManageReviewsInput;
   }
 
-  // Helper to adapt mocks that return raw objects or null
-  private async execJson(script: string, _schema?: any): Promise<any> {
-    const anyOmni: any = this.omniAutomation as any;
-    const res = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute(script);
-    if (res === null || res === undefined) {
-      return { success: false, error: 'NULL_RESULT' };
-    }
-    if (res && typeof res === 'object') {
-      const obj: any = res;
-      if (obj.success === false) return obj;
-      // Treat presence of projects/items or ok/updated flags as success
-      if (Array.isArray(obj.projects) || Array.isArray(obj.items) || obj.ok === true || typeof obj.updated === 'number') {
-        return { success: true, data: obj };
-      }
-    }
-    // Fallback: wrap as success with raw data; listForReview will validate presence of projects/items
-    return { success: true, data: res };
-  }
 }

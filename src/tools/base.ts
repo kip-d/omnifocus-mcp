@@ -17,6 +17,7 @@ import {
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { ScriptResult, createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
 
 /**
  * Base class for all MCP tools with Zod schema validation
@@ -416,6 +417,67 @@ export abstract class BaseTool<
   set omniAutomation(value: OmniAutomation) {
     this._omniAutomation = value;
     this.applyExecuteJsonShim(this._omniAutomation);
+  }
+
+  /**
+   * Type-safe wrapper for script execution that returns ScriptResult<T>
+   * Centralizes the logic from individual tool execJson helpers
+   */
+  protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
+    try {
+      const omni = this.omniAutomation as any;
+      const res = typeof omni.executeJson === 'function'
+        ? await omni.executeJson(script)
+        : await omni.execute(script);
+
+      // Handle null/undefined results
+      if (res === null || res === undefined) {
+        return createScriptError('NULL_RESULT', 'Script returned null or undefined');
+      }
+
+      // If already in ScriptResult format, return as-is
+      if (res && typeof res === 'object' && 'success' in res) {
+        return res as ScriptResult<T>;
+      }
+
+      // Handle raw string results (try to parse JSON)
+      if (typeof res === 'string') {
+        try {
+          const parsed = JSON.parse(res);
+          return createScriptSuccess<T>(parsed);
+        } catch {
+          return createScriptSuccess<T>(res as T);
+        }
+      }
+
+      // Handle object responses that indicate success patterns
+      if (res && typeof res === 'object') {
+        const obj = res as any;
+        // Check for common success indicators
+        if (Array.isArray(obj.folders) || Array.isArray(obj.items) ||
+            obj.ok === true || typeof obj.updated === 'number' ||
+            Array.isArray(obj.tasks) || Array.isArray(obj.projects)) {
+          return createScriptSuccess<T>(obj);
+        }
+        // Check for explicit error indication
+        if (obj.success === false || obj.error) {
+          return createScriptError(
+            obj.error || 'Script execution failed',
+            obj.context,
+            obj.details,
+          );
+        }
+      }
+
+      // Default: wrap as success
+      return createScriptSuccess<T>(res);
+    } catch (error) {
+      return createScriptError(
+        error instanceof Error ? error.message : String(error),
+        'Script execution exception',
+        error,
+      );
+    }
   }
 
   /**
