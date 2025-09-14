@@ -29,14 +29,14 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       const cacheKey = `productivity_v2_${period}_${includeProjectStats}_${includeTagStats}`;
 
       // Check cache (1 hour TTL for analytics)
-      const cached = this.cache.get<any>('analytics', cacheKey);
+      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; healthScore?: number }>('analytics', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached productivity stats');
         return createAnalyticsResponseV2(
           'productivity_stats',
           cached,
           'Productivity Analysis',
-          this.extractKeyFindings(cached),
+          this.extractKeyFindings(cached as { period?: string; stats?: Record<string, unknown>; healthScore?: number }),
           {
             from_cache: true,
             period,

@@ -46,7 +46,7 @@ export abstract class BaseTool<
   /**
    * Get JSON Schema from Zod schema for MCP compatibility
    */
-  get inputSchema(): any {
+  get inputSchema(): Record<string, unknown> {
     // Convert Zod schema to JSON Schema format
     // For now, we'll use a simplified conversion
     // In production, consider using a library like zod-to-json-schema
@@ -57,7 +57,7 @@ export abstract class BaseTool<
    * Simple Zod to JSON Schema converter
    * In production, use a proper library like zod-to-json-schema
    */
-  private zodToJsonSchema(schema: z.ZodType): any {
+  private zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
     // This is a simplified implementation
     // For full compatibility, use a library like zod-to-json-schema
 
@@ -68,8 +68,8 @@ export abstract class BaseTool<
     }
 
     if (schema instanceof z.ZodObject) {
-      const shape = schema.shape;
-      const properties: Record<string, any> = {};
+      const shape = schema.shape as Record<string, z.ZodType>;
+      const properties: Record<string, unknown> = {};
       const required: string[] = [];
 
       for (const [key, value] of Object.entries(shape)) {
@@ -94,7 +94,7 @@ export abstract class BaseTool<
   /**
    * Convert individual Zod types to JSON Schema
    */
-  private zodTypeToJsonSchema(schema: z.ZodType): any {
+  private zodTypeToJsonSchema(schema: z.ZodType): Record<string, unknown> {
     if (schema instanceof z.ZodString) {
       return { type: 'string', description: schema.description };
     }
@@ -121,9 +121,9 @@ export abstract class BaseTool<
     }
     if (schema instanceof z.ZodUnion) {
       const options = schema._def.options;
-      if (options.length === 2 && options.some((o: any) => o instanceof z.ZodNull)) {
+      if (options.length === 2 && options.some((o: z.ZodTypeAny) => o instanceof z.ZodNull)) {
         // Handle nullable fields
-        const nonNull = options.find((o: any) => !(o instanceof z.ZodNull));
+        const nonNull = options.find((o: z.ZodTypeAny) => !(o instanceof z.ZodNull));
         const result = this.zodTypeToJsonSchema(nonNull);
         // Preserve the union's description if it has one
         if (schema.description) {
@@ -152,8 +152,8 @@ export abstract class BaseTool<
     }
     if (schema instanceof z.ZodObject) {
       // Handle nested objects properly
-      const shape = schema.shape;
-      const properties: Record<string, any> = {};
+      const shape = schema.shape as Record<string, z.ZodType>;
+      const properties: Record<string, unknown> = {};
       const required: string[] = [];
 
       for (const [key, value] of Object.entries(shape)) {
@@ -231,7 +231,7 @@ export abstract class BaseTool<
     args: unknown,
     errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR',
     errorMessage: string,
-    validationErrors?: any,
+    validationErrors?: z.ZodIssue[],
   ): void {
     try {
       // Create logs directory if it doesn't exist
@@ -304,7 +304,7 @@ export abstract class BaseTool<
           let candidate = raw;
           let parsed = schema.safeParse(candidate);
           if (!parsed.success && raw && typeof raw === 'object') {
-            const obj: any = raw;
+            const obj = raw as { projects?: unknown[]; tasks?: unknown[]; tags?: unknown[]; perspectives?: unknown[]; summary?: unknown; metadata?: unknown; count?: number };
             if (Array.isArray(obj.projects) || Array.isArray(obj.tasks) || Array.isArray(obj.tags) || Array.isArray(obj.perspectives)) {
               candidate = {
                 items: Array.isArray(obj.projects)
@@ -322,8 +322,8 @@ export abstract class BaseTool<
           }
           if (parsed.success) return { success: true, data: parsed.data };
           let errMsg = 'Script result validation failed';
-          if (raw && typeof raw === 'object' && (raw as any).error && typeof (raw as any).message === 'string') {
-            errMsg = (raw as any).message;
+          if (raw && typeof raw === 'object' && (raw as { error?: unknown; message?: unknown }).error && typeof (raw as { message?: unknown }).message === 'string') {
+            errMsg = (raw as { message: string }).message;
           }
           if (raw == null) errMsg = 'NULL_RESULT';
           return { success: false, error: errMsg, details: { errors: parsed.error.issues } };
@@ -384,7 +384,7 @@ export abstract class BaseTool<
           let candidate = raw;
           let parsed = schema.safeParse(candidate);
           if (!parsed.success && raw && typeof raw === 'object') {
-            const obj: any = raw;
+            const obj = raw as { projects?: unknown[]; tasks?: unknown[]; tags?: unknown[]; perspectives?: unknown[]; summary?: unknown; metadata?: unknown; count?: number };
             if (Array.isArray(obj.projects) || Array.isArray(obj.tasks) || Array.isArray(obj.tags) || Array.isArray(obj.perspectives)) {
               candidate = {
                 items: Array.isArray(obj.projects)
@@ -425,10 +425,12 @@ export abstract class BaseTool<
    */
   protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
     try {
-      const omni = this.omniAutomation as any;
+      const omni = this.omniAutomation as { executeJson?: (script: string) => Promise<unknown>; execute?: (script: string) => Promise<unknown> };
       const res = typeof omni.executeJson === 'function'
         ? await omni.executeJson(script)
-        : await omni.execute(script);
+        : typeof omni.execute === 'function'
+        ? await omni.execute(script)
+        : null;
 
       // Handle null/undefined results
       if (res === null || res === undefined) {
@@ -452,25 +454,25 @@ export abstract class BaseTool<
 
       // Handle object responses that indicate success patterns
       if (res && typeof res === 'object') {
-        const obj = res as any;
+        const obj = res as { folders?: unknown[]; items?: unknown[]; ok?: boolean; updated?: number; tasks?: unknown[]; projects?: unknown[]; success?: boolean; error?: string; context?: unknown; details?: unknown };
         // Check for common success indicators
         if (Array.isArray(obj.folders) || Array.isArray(obj.items) ||
             obj.ok === true || typeof obj.updated === 'number' ||
             Array.isArray(obj.tasks) || Array.isArray(obj.projects)) {
-          return createScriptSuccess<T>(obj);
+          return createScriptSuccess<T>(obj as T);
         }
         // Check for explicit error indication
         if (obj.success === false || obj.error) {
           return createScriptError(
             obj.error || 'Script execution failed',
-            obj.context,
+            obj.context as string | undefined,
             obj.details,
           );
         }
       }
 
       // Default: wrap as success
-      return createScriptSuccess<T>(res);
+      return createScriptSuccess<T>(res as T);
     } catch (error) {
       return createScriptError(
         error instanceof Error ? error.message : String(error),
@@ -543,7 +545,7 @@ export abstract class BaseTool<
         error.message || 'Script execution failed',
         'Check that OmniFocus is not showing any dialogs',
       );
-      const omniError = error as any; // Type assertion for OmniAutomationError
+      const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
       return createErrorResponse(
         this.name,
         'OMNIFOCUS_ERROR',
@@ -603,7 +605,7 @@ export abstract class BaseTool<
 
     if (error instanceof Error && error.name === 'OmniAutomationError') {
       const info = scriptExecutionError(this.name, error.message || 'Script execution failed', 'Check that OmniFocus is not showing any dialogs');
-      const omniError = error as any; // Type assertion for OmniAutomationError
+      const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
       return createErrorResponseV2(this.name, 'OMNIFOCUS_ERROR', info.message, formatErrorWithRecovery(info), { script: omniError.details?.script, stderr: omniError.details?.stderr }, timer.toMetadata());
     }
 
@@ -643,7 +645,7 @@ export abstract class BaseTool<
     }
 
     if (error instanceof Error && error.name === 'OmniAutomationError') {
-      const omniError = error as any; // Type assertion for OmniAutomationError
+      const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
       throw new McpError(
         ErrorCode.InternalError,
         error.message,

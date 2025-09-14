@@ -64,7 +64,7 @@ interface QueryPerspectiveData {
   perspectiveName: string;
   perspectiveType: 'builtin' | 'custom';
   tasks: PerspectiveTask[];
-  filterRules: any;
+  filterRules: Record<string, unknown>;
   aggregation: string;
 }
 
@@ -116,12 +116,12 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       // Parse the result
       const parsedResult = result.data;
 
-      const perspectives = (parsedResult as any).perspectives || (parsedResult as any).items || [];
+      const perspectives = (parsedResult as { perspectives?: PerspectiveInfo[]; items?: PerspectiveInfo[] }).perspectives || (parsedResult as { perspectives?: PerspectiveInfo[]; items?: PerspectiveInfo[] }).items || [];
 
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';
       if (sortBy === 'name') {
-        perspectives.sort((a: PerspectiveInfo, b: PerspectiveInfo) =>
+        (perspectives as PerspectiveInfo[]).sort((a: PerspectiveInfo, b: PerspectiveInfo) =>
           a.name.localeCompare(b.name),
         );
       }

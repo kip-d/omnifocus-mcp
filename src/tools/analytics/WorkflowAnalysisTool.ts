@@ -54,14 +54,14 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       const cacheKey = `workflow_analysis_${args.analysisDepth}_${args.focusAreas.sort().join('_')}_${args.maxInsights}`;
 
       // Check cache (2 hours TTL for deep analysis)
-      const cached = this.cache.get<any>('analytics', cacheKey);
+      const cached = this.cache.get<{ insights?: unknown[]; recommendations?: unknown[]; patterns?: unknown[]; metadata?: Record<string, unknown> }>('analytics', cacheKey);
       if (cached) {
         logger.debug('Returning cached workflow analysis');
         return createAnalyticsResponseV2(
           'workflow_analysis',
           cached,
           'Workflow Analysis Results',
-          this.extractKeyFindings(cached),
+          this.extractKeyFindings(cached as any),
           {
             from_cache: true,
             analysis_depth: args.analysisDepth,
@@ -173,7 +173,7 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       findings.push(...data.insights.slice(0, 3).map(i => {
         if (typeof i === 'string') return i;
         if (typeof i === 'object' && i !== null) {
-          return (i as any).insight || (i as any).message || String(i);
+          return (i as { insight?: string; message?: string }).insight || (i as { insight?: string; message?: string }).message || String(i);
         }
         return String(i);
       }));
@@ -183,7 +183,7 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       findings.push(...data.recommendations.slice(0, 2).map(r => {
         if (typeof r === 'string') return r;
         if (typeof r === 'object' && r !== null) {
-          return (r as any).recommendation || (r as any).message || String(r);
+          return (r as { recommendation?: string; message?: string }).recommendation || (r as { recommendation?: string; message?: string }).message || String(r);
         }
         return String(r);
       }));
