@@ -26,8 +26,7 @@ export class RobustOmniAutomation extends OmniAutomation {
       if (!testResult) {
         throw new OmniAutomationError(
           'Connection test failed - OmniFocus may be unresponsive',
-          script,
-          'Connection timeout after ' + Math.round(timeSinceLastSuccess / 1000) + ' seconds',
+          { script, stderr: 'Connection timeout after ' + Math.round(timeSinceLastSuccess / 1000) + ' seconds' },
         );
       }
     }
@@ -62,8 +61,7 @@ export class RobustOmniAutomation extends OmniAutomation {
 
         throw new OmniAutomationError(
           `Script execution failed after ${this.consecutiveFailures} attempts. ${diagnosis.summary}`,
-          script,
-          JSON.stringify(diagnosis),
+          { script, stderr: JSON.stringify(diagnosis) },
         );
       }
 
@@ -71,8 +69,7 @@ export class RobustOmniAutomation extends OmniAutomation {
       if (error instanceof Error && error.message.includes('Cannot convert undefined or null to object')) {
         const enhancedError = new OmniAutomationError(
           `${error.message} - This often indicates OmniFocus has become unresponsive or the document is no longer available`,
-          script,
-          (error as any).stderr || error.message,
+          { script, stderr: (error as any).stderr || error.message },
         );
         throw enhancedError;
       }

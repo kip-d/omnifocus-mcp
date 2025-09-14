@@ -315,13 +315,13 @@ describe('OmniAutomation', () => {
 
   describe('error handling', () => {
     it('should create OmniAutomationError with script and stderr', () => {
-      const error = new OmniAutomationError('Test error', 'test script', 'stderr output');
+      const error = new OmniAutomationError('Test error', { script: 'test script', stderr: 'stderr output' });
 
       expect(error).toBeInstanceOf(Error);
       expect(error.name).toBe('OmniAutomationError');
       expect(error.message).toBe('Test error');
-      expect(error.script).toBe('test script');
-      expect(error.stderr).toBe('stderr output');
+      expect(error.details?.script).toBe('test script');
+      expect(error.details?.stderr).toBe('stderr output');
     });
 
     it('should handle timeout properly', async () => {

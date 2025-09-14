@@ -182,7 +182,7 @@ export class CacheManager {
         }
       }
     }
-    
+
     this.stats.evictions += count;
     this.stats.size = this.cache.size;
     logger.info(`Invalidated ${count} task cache entries for patterns: ${patterns.join(', ')}`);

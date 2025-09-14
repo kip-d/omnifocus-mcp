@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
+// Remove conflicting import
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
@@ -26,7 +27,7 @@ export abstract class BaseTool<
   TSchema extends z.ZodType = z.ZodType,
   TResponse = StandardResponse<unknown> | unknown
 > {
-  private _omniAutomation: any;
+  private _omniAutomation: OmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
 
@@ -274,7 +275,7 @@ export abstract class BaseTool<
   /**
    * Provide a fallback executeJson when tests inject a mock with only `execute`.
    */
-  protected applyExecuteJsonShim(anyOmni: any): void {
+  protected applyExecuteJsonShim(anyOmni: OmniAutomation): void {
     if (!anyOmni) return;
 
     // Capture originals (may be undefined)
@@ -406,13 +407,13 @@ export abstract class BaseTool<
     }
   }
 
-  get omniAutomation(): any {
+  get omniAutomation(): OmniAutomation {
     // Always ensure shim exists when accessed
     this.applyExecuteJsonShim(this._omniAutomation);
     return this._omniAutomation;
   }
 
-  set omniAutomation(value: any) {
+  set omniAutomation(value: OmniAutomation) {
     this._omniAutomation = value;
     this.applyExecuteJsonShim(this._omniAutomation);
   }
@@ -480,13 +481,14 @@ export abstract class BaseTool<
         error.message || 'Script execution failed',
         'Check that OmniFocus is not showing any dialogs',
       );
+      const omniError = error as any; // Type assertion for OmniAutomationError
       return createErrorResponse(
         this.name,
         'OMNIFOCUS_ERROR',
         errorDetails.message,
         {
-          script: (error as any).script,
-          stderr: (error as any).stderr,
+          script: omniError.details?.script,
+          stderr: omniError.details?.stderr,
           recovery: errorDetails.recovery,
           formatted: formatErrorWithRecovery(errorDetails),
         },
@@ -539,7 +541,8 @@ export abstract class BaseTool<
 
     if (error instanceof Error && error.name === 'OmniAutomationError') {
       const info = scriptExecutionError(this.name, error.message || 'Script execution failed', 'Check that OmniFocus is not showing any dialogs');
-      return createErrorResponseV2(this.name, 'OMNIFOCUS_ERROR', info.message, formatErrorWithRecovery(info), { script: (error as any).script, stderr: (error as any).stderr }, timer.toMetadata());
+      const omniError = error as any; // Type assertion for OmniAutomationError
+      return createErrorResponseV2(this.name, 'OMNIFOCUS_ERROR', info.message, formatErrorWithRecovery(info), { script: omniError.details?.script, stderr: omniError.details?.stderr }, timer.toMetadata());
     }
 
     return createErrorResponseV2(
@@ -578,12 +581,13 @@ export abstract class BaseTool<
     }
 
     if (error instanceof Error && error.name === 'OmniAutomationError') {
+      const omniError = error as any; // Type assertion for OmniAutomationError
       throw new McpError(
         ErrorCode.InternalError,
         error.message,
         {
-          script: (error as any).script,
-          stderr: (error as any).stderr,
+          script: omniError.details?.script,
+          stderr: omniError.details?.stderr,
         },
       );
     }

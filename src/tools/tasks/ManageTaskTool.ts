@@ -45,7 +45,7 @@ const ManageTaskSchema = z.object({
   dueDate: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
     z.literal(''),
-    z.null()
+    z.null(),
   ])
     .optional()
     .nullable()
@@ -55,7 +55,7 @@ const ManageTaskSchema = z.object({
   deferDate: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
     z.literal(''),
-    z.null()
+    z.null(),
   ])
     .optional()
     .nullable()
@@ -99,7 +99,7 @@ const ManageTaskSchema = z.object({
   completionDate: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
     z.literal(''),
-    z.null()
+    z.null(),
   ])
     .optional()
     .nullable()
@@ -181,12 +181,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       // Route to appropriate tool based on operation
       let result: any;
       console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);
-      
+
       switch (operation) {
         case 'create':
           // Direct implementation of task creation
-          console.error(`[MANAGE_TASK_DEBUG] Starting create operation with params:`, JSON.stringify(params, null, 2));
-          
+          console.error('[MANAGE_TASK_DEBUG] Starting create operation with params:', JSON.stringify(params, null, 2));
+
           // Filter out null/undefined values and convert dates
           const createArgs: any = { name: params.name! };
           if (params.note) createArgs.note = params.note;
@@ -199,7 +199,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           if (params.tags) createArgs.tags = params.tags;
           if (params.sequential !== undefined) createArgs.sequential = params.sequential;
           if (params.repeatRule) createArgs.repeatRule = params.repeatRule;
-          
+
           // Convert local dates to UTC for OmniFocus with error handling
           let convertedTaskData;
           try {
@@ -223,20 +223,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               timer.toMetadata(),
             );
           }
-          
-          console.error(`[MANAGE_TASK_DEBUG] Converted task data:`, JSON.stringify(convertedTaskData, null, 2));
-          
+
+          console.error('[MANAGE_TASK_DEBUG] Converted task data:', JSON.stringify(convertedTaskData, null, 2));
+
           const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
           const anyOmni: any = this.omniAutomation as any;
           let createResult: any;
-          
+
           try {
             // Prefer instance-level executeJson when available
             if (typeof anyOmni.executeJson === 'function' && Object.prototype.hasOwnProperty.call(anyOmni, 'executeJson')) {
-              console.error(`[MANAGE_TASK_DEBUG] Using executeJson method`);
+              console.error('[MANAGE_TASK_DEBUG] Using executeJson method');
               const sr = await anyOmni.executeJson(script);
-              console.error(`[MANAGE_TASK_DEBUG] executeJson returned:`, JSON.stringify(sr, null, 2));
-              
+              console.error('[MANAGE_TASK_DEBUG] executeJson returned:', JSON.stringify(sr, null, 2));
+
               if (sr && typeof sr === 'object' && 'success' in sr) {
                 if (!(sr as any).success) {
                   return createErrorResponseV2(
@@ -270,22 +270,22 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
                 createResult = sr;
               }
             } else {
-              console.error(`[MANAGE_TASK_DEBUG] Using fallback execute method`);
+              console.error('[MANAGE_TASK_DEBUG] Using fallback execute method');
               createResult = await anyOmni.execute(script) as CreateTaskScriptResponse;
-              console.error(`[MANAGE_TASK_DEBUG] execute returned:`, JSON.stringify(createResult, null, 2));
+              console.error('[MANAGE_TASK_DEBUG] execute returned:', JSON.stringify(createResult, null, 2));
             }
           } catch (e) {
-            console.error(`[MANAGE_TASK_DEBUG] Script execution threw error:`, e);
+            console.error('[MANAGE_TASK_DEBUG] Script execution threw error:', e);
             return this.handleError(e);
           }
-          
-          console.error(`[MANAGE_TASK_DEBUG] Processing result:`, JSON.stringify(createResult, null, 2));
-          
+
+          console.error('[MANAGE_TASK_DEBUG] Processing result:', JSON.stringify(createResult, null, 2));
+
           if (createResult && typeof createResult === 'object' && 'error' in createResult && createResult.error) {
             // Enhanced error response with recovery suggestions
             const errorMessage = createResult.message || 'Failed to create task';
             const recovery = [];
-            
+
             if (errorMessage.toLowerCase().includes('project')) {
               recovery.push('Use list_projects to find valid project IDs');
               recovery.push('Ensure the project exists and is not completed');
@@ -296,7 +296,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               recovery.push('Check that all required parameters are provided');
               recovery.push('Verify OmniFocus is running and not showing dialogs');
             }
-            
+
             return createErrorResponseV2(
               'manage_task',
               'SCRIPT_ERROR',
@@ -306,7 +306,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               timer.toMetadata(),
             );
           }
-          
+
           // Parse the JSON result since the script may return a JSON string
           let parsedCreateResult;
           try {
@@ -327,7 +327,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               timer.toMetadata(),
             );
           }
-          
+
           // Check if parsedResult is valid
           if (!parsedCreateResult || typeof parsedCreateResult !== 'object' || (!('taskId' in parsedCreateResult) && !('id' in parsedCreateResult))) {
             return createErrorResponseV2(
@@ -339,15 +339,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               timer.toMetadata(),
             );
           }
-          
+
           // Invalidate caches after successful task creation
           this.cache.invalidate('tasks');
           this.cache.invalidate('analytics');
           if (createArgs.projectId !== undefined) this.cache.invalidate('projects');
           if (Array.isArray(createArgs.tags) && createArgs.tags.length > 0) this.cache.invalidate('tags');
-          
-          console.error(`[MANAGE_TASK_DEBUG] About to return success response with parsedResult:`, JSON.stringify(parsedCreateResult, null, 2));
-          
+
+          console.error('[MANAGE_TASK_DEBUG] About to return success response with parsedResult:', JSON.stringify(parsedCreateResult, null, 2));
+
           result = createSuccessResponseV2(
             'manage_task',
             { task: parsedCreateResult as CreateTaskResponse },
@@ -364,8 +364,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               },
             },
           );
-          
-          console.error(`[MANAGE_TASK_DEBUG] Final create success response:`, JSON.stringify(result, null, 2));
+
+          console.error('[MANAGE_TASK_DEBUG] Final create success response:', JSON.stringify(result, null, 2));
           break;
 
         case 'update':
@@ -596,15 +596,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       }
 
       // Format result for CLI testing if needed
-      console.error(`[MANAGE_TASK_DEBUG] Final result before formatForCLI:`, JSON.stringify(result, null, 2));
+      console.error('[MANAGE_TASK_DEBUG] Final result before formatForCLI:', JSON.stringify(result, null, 2));
       const finalResult = this.formatForCLI(result, operation, 'success');
-      console.error(`[MANAGE_TASK_DEBUG] Final result after formatForCLI:`, JSON.stringify(finalResult, null, 2));
+      console.error('[MANAGE_TASK_DEBUG] Final result after formatForCLI:', JSON.stringify(finalResult, null, 2));
       return finalResult;
 
     } catch (error) {
-      console.error(`[MANAGE_TASK_DEBUG] ERROR caught in executeValidated:`, error);
+      console.error('[MANAGE_TASK_DEBUG] ERROR caught in executeValidated:', error);
       const errorResult = this.handleError(error);
-      console.error(`[MANAGE_TASK_DEBUG] Error result:`, JSON.stringify(errorResult, null, 2));
+      console.error('[MANAGE_TASK_DEBUG] Error result:', JSON.stringify(errorResult, null, 2));
       return this.formatForCLI(errorResult, operation, 'error');
     }
   }
@@ -757,19 +757,19 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     // Add CLI-friendly debug output to stderr (won't interfere with JSON)
     if (type === 'success') {
       console.error(`[CLI_DEBUG] manage_task ${operation} operation: SUCCESS`);
-      
+
       // Extract key data for logging
       if (result?.data?.task?.taskId || result?.data?.task?.id) {
         const taskId = result.data.task.taskId || result.data.task.id;
         console.error(`[CLI_DEBUG] Task ID: ${taskId}`);
       }
-      
+
       if (result?.data?.task?.name) {
         console.error(`[CLI_DEBUG] Task name: ${result.data.task.name}`);
       }
-      
+
       console.error(`[CLI_DEBUG] Operation completed in ${result?.metadata?.query_time_ms || 'unknown'}ms`);
-      
+
     } else {
       console.error(`[CLI_DEBUG] manage_task ${operation} operation: ERROR`);
       console.error(`[CLI_DEBUG] Error: ${result?.error?.message || 'Unknown error'}`);

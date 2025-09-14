@@ -54,8 +54,7 @@ class ErrorTestTool extends BaseTool<z.ZodObject<any>> {
       case 'omni-automation':
         const error = new Error('Script failed');
         error.name = 'OmniAutomationError';
-        (error as any).script = 'test script';
-        (error as any).stderr = 'test stderr';
+        (error as any).details = { script: 'test script', stderr: 'test stderr' };
         throw error;
       case 'generic':
       default:
@@ -415,8 +414,7 @@ describe('BaseTool', () => {
           } else if (args.errorType === 'omni') {
             const error = new Error('OmniAutomation error');
             error.name = 'OmniAutomationError';
-            (error as any).script = 'script';
-            (error as any).stderr = 'stderr';
+            (error as any).details = { script: 'script', stderr: 'stderr' };
             this.throwMcpError(error);
           } else {
             this.throwMcpError(new Error('Generic error'));

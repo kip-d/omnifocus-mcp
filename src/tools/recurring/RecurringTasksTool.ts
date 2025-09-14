@@ -155,20 +155,20 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
             if (patternsResult.mostCommon) {
               insights.push(`Most common recurrence pattern: ${patternsResult.mostCommon.pattern} (${patternsResult.mostCommon.count} tasks)`);
             }
-            
+
             if (patternsResult.patterns && patternsResult.patterns.length > 0) {
               insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
-              
+
               // Add specific pattern insights
               const weeklyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('week')).length;
               const dailyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('day')).length;
               const monthlyCount = patternsResult.patterns.filter((p: any) => p.pattern && p.pattern.includes('month')).length;
-              
+
               if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
               if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
               if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
             }
-            
+
             if (patternsResult.byProject && patternsResult.byProject.length > 0) {
               const projectWithMostRecurring = patternsResult.byProject[0];
               insights.push(`Project "${projectWithMostRecurring.project}" has the most recurring tasks (${projectWithMostRecurring.count})`);

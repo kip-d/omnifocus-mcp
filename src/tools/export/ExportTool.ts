@@ -139,7 +139,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
       });
       const anyOmni: any = this.omniAutomation as any;
       const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute(script);
-      
+
       if (raw && typeof raw === 'object' && 'success' in raw) {
         const sr: any = raw;
         if (!sr.success) {
@@ -155,7 +155,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         const result = sr.data;
         return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
       }
-      
+
       const result: any = raw;
       if (result && result.error) {
         return createErrorResponseV2(
@@ -240,14 +240,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
       });
       const anyOmni: any = this.omniAutomation as any;
       const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute(taskScript);
-      
+
       let taskResult: any = null;
       if (taskRaw && typeof taskRaw === 'object' && 'success' in taskRaw) {
         taskResult = taskRaw.success ? taskRaw.data : null;
       } else {
         taskResult = taskRaw;
       }
-      
+
       if (taskResult && !taskResult.error) {
         const taskFile = path.join(outputDirectory, `tasks.${format}`);
         const taskCount = taskResult.count || 0;
@@ -265,13 +265,13 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         totalExported += taskCount;
       }
 
-      // Export projects directly using script  
+      // Export projects directly using script
       const projectScript = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
         format,
         includeStats: includeProjectStats,
       });
       const projectResult = await this.omniAutomation.execute(projectScript) as any;
-      
+
       if (projectResult && !projectResult.error) {
         const projectFile = path.join(outputDirectory, `projects.${format}`);
         const projectCount = projectResult.count || 0;
