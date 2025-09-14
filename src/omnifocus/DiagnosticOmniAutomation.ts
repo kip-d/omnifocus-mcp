@@ -64,7 +64,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
       proc.on('error', (error) => {
         this.log('Process error', { error: error.message });
-        reject(new OmniAutomationError('Failed to execute script', script, error.message));
+        reject(new OmniAutomationError('Failed to execute script', { script, stderr: error.message }));
       });
 
       proc.on('close', (code) => {
@@ -72,7 +72,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
         if (code !== 0) {
           this.log('Script execution failed with non-zero code', { code, stderr });
-          reject(new OmniAutomationError(`Script execution failed with code ${code}`, script, stderr));
+          reject(new OmniAutomationError(`Script execution failed with code ${code}`, { script, stderr, code: code || undefined }));
           return;
         }
 
@@ -112,7 +112,7 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
           });
 
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
-            reject(new OmniAutomationError('Invalid JSON response from script', script, trimmedOutput));
+            reject(new OmniAutomationError('Invalid JSON response from script', { script, stderr: trimmedOutput }));
           } else {
             resolve(trimmedOutput as T);
           }

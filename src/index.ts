@@ -27,7 +27,7 @@ const server = new Server(
 );
 
 // Track pending async operations to prevent premature exit
-const pendingOperations = new Set<Promise<any>>();
+const pendingOperations = new Set<Promise<unknown>>();
 
 // Start server
 async function runServer() {
@@ -95,7 +95,7 @@ async function runServer() {
   });
 
   // Handle EPIPE errors when Claude Desktop disconnects abruptly
-  process.stdout.on('error', (err) => {
+  process.stdout.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
       logger.info('stdout EPIPE - client disconnected, exiting gracefully');
       process.exit(0);
@@ -105,28 +105,7 @@ async function runServer() {
     }
   });
 
-  process.stderr.on('error', (err) => {
-    if (err.code === 'EPIPE') {
-      logger.info('stderr EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
-    } else {
-      console.error('stderr error:', err);
-      process.exit(1);
-    }
-  });
-
-  // Handle EPIPE errors when Claude Desktop disconnects abruptly
-  process.stdout.on('error', (err) => {
-    if (err.code === 'EPIPE') {
-      logger.info('stdout EPIPE - client disconnected, exiting gracefully');
-      process.exit(0);
-    } else {
-      logger.error('stdout error:', err);
-      process.exit(1);
-    }
-  });
-
-  process.stderr.on('error', (err) => {
+  process.stderr.on('error', (err: Error & { code?: string }) => {
     if (err.code === 'EPIPE') {
       logger.info('stderr EPIPE - client disconnected, exiting gracefully');
       process.exit(0);
