@@ -78,8 +78,8 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
           overdueTasks: (scriptData.overdueTasks ?? []).map(task => ({
             id: task.id || '',
             name: task.name || '',
-            dueDate: task.dueDate || null,
-            project: task.projectId || null,
+            dueDate: task.dueDate ?? null,
+            project: task.projectId ?? undefined,
             daysOverdue: 0, // Calculate if needed
           })),
           patterns: Array.isArray(scriptData.patterns)

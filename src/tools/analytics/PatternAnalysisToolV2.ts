@@ -128,7 +128,7 @@ interface PatternFinding {
   type: string;
   severity: 'info' | 'warning' | 'critical';
   count: number;
-  items?: any[];
+  items?: unknown;
   recommendation?: string;
 }
 
@@ -152,6 +152,39 @@ interface SlimTask {
   children?: number;
 }
 
+interface ProjectData {
+  id: string;
+  name: string;
+  status: string;
+  taskCount?: number;
+  availableTaskCount?: number;
+  lastReviewDate?: string;
+  nextReviewDate?: string;
+  creationDate?: string;
+  modificationDate?: string;
+  completionDate?: string;
+}
+
+interface TagData {
+  id: string;
+  name: string;
+  taskCount?: number;
+}
+
+interface DuplicateCluster {
+  cluster_size: number;
+  tasks: Array<{ id: string; name: string; project?: string }>;
+}
+
+interface DormantProject {
+  id: string;
+  name: string;
+  days_dormant: number;
+  last_modified?: string;
+  task_count?: number;
+  available_tasks?: number;
+}
+
 export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema> {
   name = 'analyze_patterns';
   description = 'Analyze patterns across entire OmniFocus database for insights and improvements';
@@ -159,7 +192,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
   protected logger = createLogger('PatternAnalysisToolV2');
 
-  protected async executeValidated(params: PatternAnalysisParams): Promise<any> {
+  protected async executeValidated(params: PatternAnalysisParams): Promise<unknown> {
     const startTime = Date.now();
 
     try {
@@ -269,7 +302,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     }
   }
 
-  private async fetchSlimmedData(options: any): Promise<{ tasks: SlimTask[], projects: any[], tags: any[] }> {
+  private async fetchSlimmedData(options: Record<string, unknown>): Promise<{ tasks: SlimTask[], projects: ProjectData[], tags: TagData[] }> {
     // Fetch tasks with minimal data for pattern analysis
     const taskScript = `(() => {
       const app = Application('OmniFocus');
@@ -400,12 +433,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     if (typeof result === 'string') {
       return JSON.parse(result);
     }
-    return result as { tasks: SlimTask[], projects: any[], tags: any[] };
+    return result as { tasks: SlimTask[], projects: ProjectData[], tags: TagData[] };
   }
 
-  private async detectDuplicates(tasks: SlimTask[], options: any): Promise<PatternFinding> {
+  private async detectDuplicates(tasks: SlimTask[], options: Record<string, unknown>): Promise<PatternFinding> {
     const duplicates: Array<{ task1: SlimTask, task2: SlimTask, similarity: number }> = [];
-    const threshold = options.duplicate_similarity_threshold;
+    const threshold = typeof options.duplicate_similarity_threshold === 'number' ? options.duplicate_similarity_threshold : 0.85;
 
     // Simple duplicate detection based on name similarity
     for (let i = 0; i < tasks.length - 1; i++) {
@@ -480,7 +513,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     return dp[m][n];
   }
 
-  private clusterDuplicates(duplicates: any[]): any[] {
+  private clusterDuplicates(duplicates: Array<{ task1: SlimTask; task2: SlimTask; similarity: number }>): DuplicateCluster[] {
     // Group duplicates into clusters
     const clusters: Map<string, Set<string>> = new Map();
 
@@ -518,10 +551,10 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     });
   }
 
-  private async detectDormantProjects(projects: any[], thresholdDays: number): Promise<PatternFinding> {
+  private async detectDormantProjects(projects: ProjectData[], thresholdDays: number): Promise<PatternFinding> {
     const now = new Date();
     const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
-    const dormant: any[] = [];
+    const dormant: DormantProject[] = [];
 
     for (const project of projects) {
       // Skip completed/dropped projects
@@ -560,7 +593,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async auditTags(tasks: SlimTask[], allTags: any[] = []): Promise<PatternFinding> {
+  private async auditTags(tasks: SlimTask[], allTags: TagData[] = []): Promise<PatternFinding> {
     const tagStats = new Map<string, number>();
     const tagProjects = new Map<string, Set<string>>();
 
@@ -587,7 +620,13 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     }
 
     // Analyze tag patterns
-    const findings: any = {
+    const findings: {
+      total_tags: number;
+      unused_tags: string[];
+      underused_tags: Array<{ tag: string; count: number }>;
+      overused_tags: Array<{ tag: string; count: number; project_spread: number }>;
+      potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }>;
+    } = {
       total_tags: tagStats.size,
       unused_tags: [],
       underused_tags: [],
@@ -654,7 +693,11 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private generateTagRecommendation(findings: any): string {
+  private generateTagRecommendation(findings: {
+    underused_tags: Array<{ tag: string; count: number }>;
+    potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number }>;
+    overused_tags: Array<{ tag: string; count: number; project_spread: number }>;
+  }): string {
     const recommendations: string[] = [];
 
     if (findings.underused_tags.length > 5) {
@@ -676,7 +719,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
   private async analyzeDeadlines(tasks: SlimTask[]): Promise<PatternFinding> {
     const now = new Date();
-    const findings: any = {
+    const findings: {
+      overdue: Array<{ id: string; name: string; project?: string; days_overdue: number }>;
+      due_today: Array<{ id: string; name: string }>;
+      due_this_week: Array<{ id: string; name: string; days_until: number }>;
+      deadline_bunching: Map<string, number>;
+    } = {
       overdue: [],
       due_today: [],
       due_this_week: [],
@@ -729,12 +777,15 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       type: 'deadline_health',
       severity,
       count: findings.overdue.length,
-      items: deadlineInfo as any,
+      items: deadlineInfo,
       recommendation: this.generateDeadlineRecommendation(findings, bunchedDates),
     };
   }
 
-  private generateDeadlineRecommendation(findings: any, bunchedDates: any[]): string {
+  private generateDeadlineRecommendation(
+    findings: { overdue: unknown[] },
+    bunchedDates: Array<[string, number]>
+  ): string {
     const recommendations: string[] = [];
 
     if (findings.overdue.length > 5) {
@@ -757,7 +808,13 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       /after/i, /once .* complete/i, /pending/i,
     ];
 
-    const waitingTasks: any[] = [];
+    const waitingTasks: Array<{
+      id: string;
+      name: string;
+      project?: string;
+      reason: 'name_pattern' | 'tag' | 'blocked';
+      days_waiting: number;
+    }> = [];
 
     for (const task of tasks) {
       if (task.completed) continue;
@@ -839,7 +896,16 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
 
     // Check for common estimation anti-patterns
-    const findings: any = {
+    const findings: {
+      stats: {
+        count: number;
+        min: number;
+        max: number;
+        mean: number;
+        median: number;
+      };
+      patterns: string[];
+    } = {
       stats,
       patterns: [],
     };
@@ -872,7 +938,12 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   }
 
   private async analyzeNextActions(tasks: SlimTask[]): Promise<PatternFinding> {
-    const issues: any[] = [];
+    const issues: Array<{
+      id: string;
+      name: string;
+      project?: string;
+      problems: string[];
+    }> = [];
 
     // Patterns that suggest unclear next actions
     const vaguePatterns = [
@@ -928,9 +999,16 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async analyzeReviewGaps(projects: any[]): Promise<PatternFinding> {
+  private async analyzeReviewGaps(projects: ProjectData[]): Promise<PatternFinding> {
     const now = new Date();
-    const gaps: any[] = [];
+    const gaps: Array<{
+      id: string;
+      name: string;
+      issue: 'never_reviewed' | 'overdue_review';
+      task_count?: number;
+      days_overdue?: number;
+      last_review?: string;
+    }> = [];
 
     for (const project of projects) {
       // Skip completed/dropped projects
@@ -968,11 +1046,13 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     gaps.sort((a, b) => {
       if (a.issue === 'never_reviewed' && b.issue !== 'never_reviewed') return -1;
       if (b.issue === 'never_reviewed' && a.issue !== 'never_reviewed') return 1;
-      return (b.days_overdue || 0) - (a.days_overdue || 0);
+      const bDays = 'days_overdue' in b ? (b.days_overdue ?? 0) : 0;
+      const aDays = 'days_overdue' in a ? (a.days_overdue ?? 0) : 0;
+      return bDays - aDays;
     });
 
     const severity = gaps.filter(g => g.issue === 'never_reviewed').length > 5 ||
-                     gaps.filter(g => g.days_overdue > 30).length > 3 ? 'warning' : 'info';
+                     gaps.filter(g => (g.days_overdue ?? 0) > 30).length > 3 ? 'warning' : 'info';
 
     return {
       type: 'review_gaps',
@@ -985,7 +1065,19 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private generateSummary(findings: Record<string, PatternFinding>, data: any): any {
+  private generateSummary(findings: Record<string, PatternFinding>, data: {
+    tasks: SlimTask[];
+    projects: ProjectData[];
+  }): {
+    health_score: number;
+    health_rating: string;
+    total_tasks_analyzed: number;
+    total_projects_analyzed: number;
+    patterns_analyzed: number;
+    critical_findings: number;
+    warning_findings: number;
+    key_insights: string[];
+  } {
     const criticalCount = Object.values(findings).filter(f => f.severity === 'critical').length;
     const warningCount = Object.values(findings).filter(f => f.severity === 'warning').length;
 

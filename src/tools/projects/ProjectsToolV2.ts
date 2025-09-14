@@ -18,6 +18,7 @@ import {
   normalizeStringInput,
 } from '../../utils/response-format-v2.js';
 import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
+import { CacheManager } from '../../cache/CacheManager.js';
 
 // Unified schema for all project operations
 const ProjectsToolSchemaV2 = z.object({
@@ -71,6 +72,9 @@ const ProjectsToolSchemaV2 = z.object({
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;
 
 export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, ProjectsResponseV2 | ProjectOperationResponseV2> {
+  constructor(cache: CacheManager) {
+    super(cache);
+  }
   name = 'projects';
   description = 'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
   schema = ProjectsToolSchemaV2;
@@ -108,7 +112,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
             'Use one of: list, create, update, complete, delete, review, active, stats',
             { provided: normalizedArgs.operation },
             timer.toMetadata(),
-          ) as ProjectsResponseV2;
+          ) as unknown as ProjectsResponseV2;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -128,7 +132,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         suggestion,
         error,
         timer.toMetadata(),
-      ) as ProjectsResponseV2;
+      ) as unknown as ProjectsResponseV2;
     }
   }
 
@@ -168,8 +172,13 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     return normalized;
   }
 
-  private async handleListProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
-    const filter: any = {
+  private async handleListProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
+    const filter: {
+      limit?: number;
+      includeDropped?: boolean;
+      status?: string;
+      folder?: string;
+    } = {
       limit: args.limit,
       includeDropped: args.status === 'all' || args.status === 'dropped',
     };
@@ -187,14 +196,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const cacheKey = `projects_list_${JSON.stringify(filter)}`;
 
     // Check cache
-    const cached = this.cache.get<any>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
       return createListResponseV2(
         'projects',
         cached.projects,
         'projects',
         { ...timer.toMetadata(), from_cache: true, operation: 'list' },
-      );
+      ) as unknown as ProjectsResponseV2;
     }
 
     // Execute query
@@ -216,7 +225,8 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
 
     // Parse dates and cache
-    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
+    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(
@@ -224,10 +234,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       projects,
       'projects',
       { ...timer.toMetadata(), from_cache: false, operation: 'list' },
-    );
+    ) as unknown as ProjectsResponseV2;
   }
 
-  private async handleCreateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleCreateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     if (!args.name) {
       return createErrorResponseV2(
         'projects',
@@ -239,7 +249,18 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       );
     }
 
-    const projectData: any = {
+    const projectData: {
+      note?: string;
+      dueDate?: string;
+      flagged?: boolean;
+      tags?: string[];
+      sequential: boolean;
+      reviewInterval?: {
+        unit: string;
+        steps: number;
+        fixed: boolean;
+      };
+    } = {
       note: args.note,
       dueDate: args.dueDate,
       flagged: args.flagged,
@@ -278,13 +299,13 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { project: result.data },
+      { project: result.data, operation: 'create' },
       undefined, // No summary for create operation
       { ...timer.toMetadata(), operation: 'create' },
-    );
+    ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleUpdateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleUpdateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     if (!args.projectId) {
       return createErrorResponseV2(
         'projects',
@@ -342,15 +363,15 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     return createSuccessResponseV2(
       'projects',
       {
-        operation: updated,
-        project: (updated && (updated as any).project) ? (updated as any).project : updated,
+        operation: 'update',
+        project: (updated && (updated as { project?: unknown }).project) ? (updated as { project: unknown }).project : updated,
       },
       undefined,
       { ...timer.toMetadata(), operation: 'update' },
-    );
+    ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleCompleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleCompleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     if (!args.projectId) {
       return createErrorResponseV2(
         'projects',
@@ -386,13 +407,13 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { project: result.data },
+      { project: result.data, operation: 'complete' },
       undefined, // No summary for complete operation
       { ...timer.toMetadata(), operation: 'complete' },
-    );
+    ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleDeleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleDeleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     if (!args.projectId) {
       return createErrorResponseV2(
         'projects',
@@ -428,14 +449,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      { deleted: true },
+      { project: { deleted: true }, operation: 'delete' },
       undefined, // No summary for delete operation
       { ...timer.toMetadata(), operation: 'delete' },
-    );
+    ) as unknown as ProjectOperationResponseV2;
   }
 
 
-  private async handleReviewProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleReviewProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
     // Get projects needing review
     const filter = {
       needsReview: true,
@@ -445,14 +466,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const cacheKey = 'projects_review';
 
     // Check cache
-    const cached = this.cache.get<any>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
       return createListResponseV2(
         'projects',
         cached.projects,
         'projects',
         { ...timer.toMetadata(), from_cache: true, operation: 'review' },
-      );
+      ) as unknown as ProjectsResponseV2;
     }
 
     // Execute query
@@ -475,10 +496,12 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
 
     // Filter for review and cache
-    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
+    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
     const needingReview = projects.filter(p => {
-      if (!p.nextReviewDate) return false;
-      return new Date(p.nextReviewDate) < new Date();
+      const project = p as { nextReviewDate?: string };
+      if (!project.nextReviewDate) return false;
+      return new Date(project.nextReviewDate) < new Date();
     });
 
     this.cache.set('projects', cacheKey, { projects: needingReview });
@@ -488,10 +511,10 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       needingReview,
       'projects',
       { ...timer.toMetadata(), from_cache: false, operation: 'review' },
-    );
+    ) as unknown as ProjectsResponseV2;
   }
 
-  private async handleActiveProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleActiveProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
     const filter = {
       status: 'active',
       limit: args.limit,
@@ -500,14 +523,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const cacheKey = 'projects_active';
 
     // Check cache
-    const cached = this.cache.get<any>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
       return createListResponseV2(
         'projects',
         cached.projects,
         'projects',
         { ...timer.toMetadata(), from_cache: true, operation: 'active' },
-      );
+      ) as unknown as ProjectsResponseV2;
     }
 
     // Execute query
@@ -530,7 +553,8 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
 
     // Parse and cache
-    const projects = this.parseProjects((result.data as any).projects || (result.data as any).items || result.data);
+    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
     return createListResponseV2(
@@ -538,21 +562,21 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       projects,
       'projects',
       { ...timer.toMetadata(), from_cache: false, operation: 'active' },
-    );
+    ) as unknown as ProjectsResponseV2;
   }
 
-  private async handleProjectStats(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleProjectStats(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
     const cacheKey = `projects_stats_${args.projectId || 'all'}`;
 
     // Check cache
-    const cached = this.cache.get<any>('projects', cacheKey);
+    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
       return createSuccessResponseV2(
         'projects',
-        cached,
+        { projects: cached },
         undefined, // No summary for stats operation
         { ...timer.toMetadata(), from_cache: true, operation: 'stats' },
-      );
+      ) as unknown as ProjectsResponseV2;
     }
 
     // Execute the stats script
@@ -581,21 +605,24 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
 
     return createSuccessResponseV2(
       'projects',
-      result.data,
+      { projects: result.data as unknown as unknown[] },
       undefined, // No summary for stats operation
       { ...timer.toMetadata(), from_cache: false, operation: 'stats' },
-    );
+    ) as unknown as ProjectsResponseV2;
   }
 
-  private parseProjects(projects: any[]): any[] {
+  private parseProjects(projects: unknown): unknown[] {
     if (!Array.isArray(projects)) return [];
 
-    return projects.map(project => ({
-      ...project,
-      dueDate: project.dueDate ? new Date(project.dueDate) : undefined,
-      completionDate: project.completionDate ? new Date(project.completionDate) : undefined,
-      nextReviewDate: project.nextReviewDate ? new Date(project.nextReviewDate) : undefined,
-      lastReviewDate: project.lastReviewDate ? new Date(project.lastReviewDate) : undefined,
-    }));
+    return projects.map((project: unknown) => {
+      const projectRecord = project as Record<string, unknown>;
+      return {
+        ...projectRecord,
+        dueDate: projectRecord.dueDate ? new Date(projectRecord.dueDate as string) : undefined,
+        completionDate: projectRecord.completionDate ? new Date(projectRecord.completionDate as string) : undefined,
+        nextReviewDate: projectRecord.nextReviewDate ? new Date(projectRecord.nextReviewDate as string) : undefined,
+        lastReviewDate: projectRecord.lastReviewDate ? new Date(projectRecord.lastReviewDate as string) : undefined,
+      };
+    });
   }
 }

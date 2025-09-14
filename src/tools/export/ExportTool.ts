@@ -6,6 +6,7 @@ import { TagsToolV2 } from '../tags/TagsToolV2.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import * as path from 'path';
+import { CacheManager } from '../../cache/CacheManager.js';
 
 // Consolidated export schema
 const ExportSchema = z.object({
@@ -67,11 +68,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   description = 'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
   schema = ExportSchema;
 
-  constructor(cache: any) {
+  constructor(cache: CacheManager) {
     super(cache);
   }
 
-  async executeValidated(args: ExportInput): Promise<any> {
+  async executeValidated(args: ExportInput): Promise<unknown> {
     const timer = new OperationTimerV2();
     const { type, format = 'json', ...params } = args;
 
@@ -128,7 +129,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   }
 
   // Direct implementation of task export
-  private async handleTaskExport(args: { format: string; filter: any; fields?: string[] }, timer: OperationTimerV2) {
+  private async handleTaskExport(args: {
+    format: string;
+    filter: Record<string, unknown>;
+    fields?: string[];
+  }, timer: OperationTimerV2): Promise<unknown> {
     const { format = 'json', filter = {}, fields } = args;
 
     try {
@@ -137,11 +142,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         filter,
         fields,
       });
-      const anyOmni: any = this.omniAutomation as any;
-      const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute(script);
+      const anyOmni = this.omniAutomation as {
+        executeJson?: (script: string) => Promise<unknown>;
+        execute?: (script: string) => Promise<unknown>;
+      };
+      const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute!(script);
 
       if (raw && typeof raw === 'object' && 'success' in raw) {
-        const sr: any = raw;
+        const sr = raw as { success: boolean; error?: string; data?: unknown };
         if (!sr.success) {
           return createErrorResponseV2(
             'export',
@@ -152,11 +160,17 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
             timer.toMetadata(),
           );
         }
-        const result = sr.data;
+        const result = sr.data as { format: string; data: unknown; count: number };
         return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
       }
 
-      const result: any = raw;
+      const result = raw as {
+        error?: boolean;
+        message?: string;
+        format: string;
+        data: unknown;
+        count: number;
+      };
       if (result && result.error) {
         return createErrorResponseV2(
           'export',
@@ -175,7 +189,10 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   }
 
   // Direct implementation of project export
-  private async handleProjectExport(args: { format: string; includeStats: boolean }, timer: OperationTimerV2) {
+  private async handleProjectExport(args: {
+    format: string;
+    includeStats: boolean;
+  }, timer: OperationTimerV2): Promise<unknown> {
     const { format = 'json', includeStats = false } = args;
 
     try {
@@ -185,7 +202,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
       });
       const result = await this.omniAutomation.execute(script) as {
         format: string;
-        data: any;
+        data: unknown;
         count: number;
         error?: boolean;
         message?: string;
@@ -209,7 +226,12 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   }
 
   // Direct implementation of bulk export
-  private async handleBulkExport(args: { outputDirectory: string; format: string; includeCompleted: boolean; includeProjectStats: boolean }, timer: OperationTimerV2) {
+  private async handleBulkExport(args: {
+    outputDirectory: string;
+    format: string;
+    includeCompleted: boolean;
+    includeProjectStats: boolean;
+  }, timer: OperationTimerV2): Promise<unknown> {
     const { outputDirectory, format = 'json', includeCompleted = true, includeProjectStats = true } = args;
 
     try {
@@ -228,7 +250,13 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         );
       }
 
-      const exports: any = {};
+      const exports: Record<string, {
+        format: string;
+        task_count?: number;
+        project_count?: number;
+        tag_count?: number;
+        exported: boolean;
+      }> = {};
       let totalExported = 0;
 
       // Export tasks directly using script
@@ -238,14 +266,18 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         filter: taskFilter,
         fields: undefined,
       });
-      const anyOmni: any = this.omniAutomation as any;
-      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute(taskScript);
+      const anyOmni = this.omniAutomation as {
+        executeJson?: (script: string) => Promise<unknown>;
+        execute?: (script: string) => Promise<unknown>;
+      };
+      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute!(taskScript);
 
-      let taskResult: any = null;
+      let taskResult: { error?: boolean; data?: unknown; count?: number } | null = null;
       if (taskRaw && typeof taskRaw === 'object' && 'success' in taskRaw) {
-        taskResult = taskRaw.success ? taskRaw.data : null;
+        const successRaw = taskRaw as { success: boolean; data?: unknown };
+        taskResult = successRaw.success ? (successRaw.data as { error?: boolean; data?: unknown; count?: number }) : null;
       } else {
-        taskResult = taskRaw;
+        taskResult = taskRaw as { error?: boolean; data?: unknown; count?: number } | null;
       }
 
       if (taskResult && !taskResult.error) {
@@ -270,7 +302,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         format,
         includeStats: includeProjectStats,
       });
-      const projectResult = await this.omniAutomation.execute(projectScript) as any;
+      const projectResult = await this.omniAutomation.execute(projectScript) as {
+        error?: boolean;
+        data?: unknown;
+        count?: number;
+      };
 
       if (projectResult && !projectResult.error) {
         const projectFile = path.join(outputDirectory, `projects.${format}`);
@@ -291,12 +327,21 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
 
       // Export tags (JSON only) - delegate to TagsToolV2
       const tagExporter = new TagsToolV2(this.cache);
-      const tagResult: any = await tagExporter.execute({ includeEmpty: true });
+      const tagResult = await tagExporter.execute({ includeEmpty: true }) as {
+        success?: boolean;
+        data?: {
+          items?: unknown[];
+          tags?: unknown[];
+        };
+        metadata?: {
+          total_count?: number;
+        };
+      };
 
       if (tagResult && tagResult.success && tagResult.data) {
         const tagFile = path.join(outputDirectory, 'tags.json');
         const tagItems = (tagResult.data.items || tagResult.data.tags || []);
-        const tagCount = (tagResult.metadata?.total_count) || tagItems.length;
+        const tagCount = (tagResult.metadata?.total_count) || (tagItems as unknown[]).length;
 
         const fsSync = await import('fs');
         fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');

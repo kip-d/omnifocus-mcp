@@ -8,6 +8,7 @@ import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
 } from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
