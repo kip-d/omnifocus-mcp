@@ -220,8 +220,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedSearchResult = searchResult.data as any;
 
           return createSuccessResponseV2('folders', { folders: parsedSearchResult.items ?? parsedSearchResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: params.searchQuery, total_matches: parsedSearchResult.summary?.total || parsedSearchResult.items?.length || 0 });
+        }
 
-        case 'projects':
+        case 'projects': {
           // Direct implementation of get projects within a folder
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -270,9 +271,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const projects = (folderWithProjects as any)?.projects || [];
 
           return createSuccessResponseV2('folders', { projects, count: projects.length, operation: 'get_projects' }, undefined, { ...timer.toMetadata(), operation: 'get_projects', folder_id: params.folderId, project_count: projects.length });
+        }
 
         // Management operations
-        case 'create':
+        case 'create': {
           if (!params.name) {
             return createErrorResponseV2(
               'folders',
@@ -310,8 +312,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
           const createdFolder = createResult.data as any;
           return createSuccessResponseV2('folders', { folder: createdFolder }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: createdFolder?.id });
+        }
 
-        case 'update':
+        case 'update': {
           // Direct implementation of update folder
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -352,8 +355,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedUpdateResult = updateResult.data as any;
 
           return createSuccessResponseV2('folders', { folder: { ...parsedUpdateResult, operation: 'update' } }, undefined, { ...timer.toMetadata(), operation: 'update', updated_id: params.folderId, changes: parsedUpdateResult.changes });
+        }
 
-        case 'delete':
+        case 'delete': {
           // Direct implementation of delete folder
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -390,8 +394,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedDeleteResult = deleteResult.data as any;
 
           return createSuccessResponseV2('folders', { folder: { ...parsedDeleteResult, operation: 'delete' } }, undefined, { ...timer.toMetadata(), operation: 'delete', deleted_id: params.folderId, moved_to: parsedDeleteResult.folder?.parent, moved_contents: parsedDeleteResult.changes });
+        }
 
-        case 'move':
+        case 'move': {
           // Direct implementation of move folder
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -427,8 +432,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedMoveResult = moveResult.data as any;
 
           return createSuccessResponseV2('folders', { folder: { ...parsedMoveResult, operation: 'move' } }, undefined, { ...timer.toMetadata(), operation: 'move', moved_id: params.folderId, old_parent: parsedMoveResult.folder?.parent, new_parent: params.parentFolderId });
+        }
 
-        case 'duplicate':
+        case 'duplicate': {
           // Direct implementation placeholder - not implemented in original ManageFolderTool either
           return createErrorResponseV2(
             'folders',
@@ -438,8 +444,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             { operation: 'duplicate', folderId: params.folderId, newName: params.duplicateName },
             timer.toMetadata(),
           );
+        }
 
-        case 'set_status':
+        case 'set_status': {
           // Direct implementation of set status (uses update script)
           if (!params.folderId) {
             return createErrorResponseV2(
@@ -488,6 +495,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedStatusResult = statusResult.data as any;
 
           return createSuccessResponseV2('folders', { folder: { ...parsedStatusResult, operation: 'set_status' } }, undefined, { ...timer.toMetadata(), operation: 'set_status', updated_id: params.folderId, new_status: params.status });
+        }
 
         default:
           return createErrorResponseV2(
