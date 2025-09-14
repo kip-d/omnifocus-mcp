@@ -60,7 +60,7 @@ jobs:
           echo "📋 Running lint check..."
           # Count lint errors (not warnings) and fail if > threshold
           LINT_OUTPUT=$(npm run lint 2>&1 || true)
-          ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -c "error" || true)
+          ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 || echo "0")
           TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 || 0)
           
           echo "Lint errors: $ERROR_COUNT"

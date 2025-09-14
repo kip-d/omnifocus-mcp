@@ -42,7 +42,7 @@ print_success "TypeScript type checking passed"
 # Step 3: Lint check (with reasonable threshold)
 print_step "Lint check (error count threshold)"
 LINT_OUTPUT=$(npm run lint 2>&1 || true)
-ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -c "error" || true)
+ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 || echo "0")
 TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 || 0)
 
 echo "Lint errors: $ERROR_COUNT"
