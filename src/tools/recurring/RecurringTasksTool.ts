@@ -53,7 +53,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
 
     try {
       switch (operation) {
-        case 'analyze':
+        case 'analyze': {
           // Direct implementation of recurring task analysis
           const analyzeOptions = {
             activeOnly: params.activeOnly ?? true,
@@ -108,8 +108,9 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
 
           return analyzeResponse;
+        }
 
-        case 'patterns':
+        case 'patterns': {
           // Direct implementation of recurring pattern analysis
           const patternsOptions = {
             activeOnly: params.activeOnly ?? true,
@@ -193,6 +194,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           this.cache.set('analytics', patternsCacheKey, patternsResponse);
 
           return patternsResponse;
+        }
 
         default:
           return createErrorResponseV2(

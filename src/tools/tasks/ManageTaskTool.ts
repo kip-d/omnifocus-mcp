@@ -183,7 +183,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);
 
       switch (operation) {
-        case 'create':
+        case 'create': {
           // Direct implementation of task creation
           console.error('[MANAGE_TASK_DEBUG] Starting create operation with params:', JSON.stringify(params, null, 2));
 
@@ -367,8 +367,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
           console.error('[MANAGE_TASK_DEBUG] Final create success response:', JSON.stringify(result, null, 2));
           break;
+        }
 
-        case 'update':
+        case 'update': {
           // Direct implementation of task update
           const { minimalResponse = false, ...updates } = params;
 
@@ -490,8 +491,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             },
           );
           break;
+        }
 
-        case 'complete':
+        case 'complete': {
           // Direct implementation of task completion
           // Convert completionDate if provided
           const processedCompleteArgs = {
@@ -538,8 +540,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             return this.handleError(jxaError);
           }
           break;
+        }
 
-        case 'delete':
+        case 'delete': {
           // Direct implementation of task deletion
           // Try JXA first, fall back to URL scheme if access denied
           try {
@@ -582,8 +585,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             return this.handleError(jxaError);
           }
           break;
+        }
 
-        default:
+        default: {
           const error = createErrorResponseV2(
             'manage_task',
             'INVALID_OPERATION',
@@ -593,6 +597,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             timer.toMetadata(),
           );
           return this.formatForCLI(error, operation, 'error');
+        }
       }
 
       // Format result for CLI testing if needed
