@@ -29,7 +29,7 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
-    "ci:local": "./scripts/local-ci.sh"
+    "ci:local": "./scripts/ci-local.sh"
   },
   "keywords": [
     "mcp",
