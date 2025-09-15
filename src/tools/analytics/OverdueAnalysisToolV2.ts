@@ -213,31 +213,34 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
       }
     }
 
-    // Add pattern insights
-    if (data.stats?.patterns && data.stats.patterns.length > 0) {
+    // Add pattern insights with defensive null checks
+    if (data?.stats?.patterns && Array.isArray(data.stats.patterns) && data.stats.patterns.length > 0) {
       const topPattern = data.stats.patterns[0];
-      if (topPattern && topPattern.type && topPattern.count) {
+      if (topPattern && typeof topPattern === 'object' && topPattern.type && typeof topPattern.count === 'number' && topPattern.count > 0) {
         findings.push(`Most overdue in: ${topPattern.type} (${topPattern.count} tasks)`);
       }
     }
 
-    // Add grouped analysis insights
-    if (data.groupedAnalysis && Object.keys(data.groupedAnalysis).length > 0) {
+    // Add grouped analysis insights with defensive null checks
+    if (data?.groupedAnalysis && typeof data.groupedAnalysis === 'object' && Object.keys(data.groupedAnalysis).length > 0) {
       const groups = Object.entries(data.groupedAnalysis)
+        .filter(([_, info]) => info && typeof info === 'object' && typeof info.count === 'number')
         .sort((a, b) => (b[1].count || 0) - (a[1].count || 0))
         .slice(0, 2);
 
       groups.forEach(([name, info]) => {
-        if (info.count && info.count > 0) {
+        if (info && typeof info.count === 'number' && info.count > 0) {
           findings.push(`${name}: ${info.count} overdue tasks`);
         }
       });
     }
 
-    // Add recommendations if available
-    if (data.stats?.insights?.topRecommendations && Array.isArray(data.stats.insights.topRecommendations) && data.stats.insights.topRecommendations.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      findings.push(data.stats.insights.topRecommendations[0]);
+    // Add recommendations if available with defensive null checks
+    if (data?.stats?.insights?.topRecommendations && Array.isArray(data.stats.insights.topRecommendations) && data.stats.insights.topRecommendations.length > 0) {
+      const firstRecommendation = data.stats.insights.topRecommendations[0];
+      if (firstRecommendation && typeof firstRecommendation === 'string') {
+        findings.push(firstRecommendation);
+      }
     }
 
     return findings.length > 0 ? findings : ['No overdue tasks found'];

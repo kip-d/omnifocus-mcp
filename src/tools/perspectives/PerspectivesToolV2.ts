@@ -113,10 +113,17 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         );
       }
 
-      // Parse the result
+      // Parse the result - handle both perspectives and items properties
       const parsedResult = result.data;
 
-      const perspectives = (parsedResult as { perspectives?: PerspectiveInfo[]; items?: PerspectiveInfo[] }).perspectives || (parsedResult as { perspectives?: PerspectiveInfo[]; items?: PerspectiveInfo[] }).items || [];
+      // Handle different response formats from the script
+      let perspectives: PerspectiveInfo[];
+      if (parsedResult && typeof parsedResult === 'object') {
+        const data = parsedResult as { perspectives?: PerspectiveInfo[]; items?: PerspectiveInfo[] };
+        perspectives = data.perspectives || data.items || [];
+      } else {
+        perspectives = [];
+      }
 
       // Sort perspectives (default to 'name' if not specified)
       const sortBy = args.sortBy || 'name';

@@ -77,7 +77,7 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       const script = this.omniAutomation.buildScript(WORKFLOW_ANALYSIS_SCRIPT, {
         options: {
           analysisDepth: args.analysisDepth,
-          focusAreas: args.focusAreas,
+          focusAreas: args.focusAreas.join(','), // Convert array to comma-separated string for script compatibility
           maxInsights: args.maxInsights,
           includeRawData: args.includeRawData,
         },
