@@ -433,8 +433,8 @@ describe('QueryTasksToolV2', () => {
   describe('error handling', () => {
     it('should handle script execution errors', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
-        error: true,
-        message: 'Script failed',
+        success: false,
+        error: 'Script failed',
         details: { code: -1743 },
       });
       
@@ -469,17 +469,17 @@ describe('QueryTasksToolV2', () => {
 
     it('should handle permission errors', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
-        error: true,
-        message: 'Error: -1743 - Not allowed to send Apple events',
+        success: false,
+        error: 'Error: -1743 - Not allowed to send Apple events',
         details: { code: -1743 },
       });
       
       const result = await tool.execute({ mode: 'all' });
       
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('SCRIPT_ERROR');
-      // The suggestion is 'Try a more specific mode like overdue or today'
-      expect(result.error.suggestion).toContain('Try a more specific mode');
+      expect(result.error.code).toBe('PERMISSION_DENIED');
+      // The suggestion should contain System Settings
+      expect(result.error.suggestion).toContain('System Settings');
     });
 
     it('should handle timeout errors', async () => {

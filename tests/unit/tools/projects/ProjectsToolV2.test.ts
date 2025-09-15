@@ -336,7 +336,7 @@ describe('ProjectsToolV2', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.deleted).toBe(true);
+      expect(result.data.project.deleted).toBe(true);
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
     });
 

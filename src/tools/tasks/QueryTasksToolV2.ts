@@ -104,11 +104,43 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Provide helpful suggestions for common errors
+      // Check for specific OmniFocus errors first (following base tool pattern)
+      if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+        return createErrorResponseV2(
+          'tasks',
+          'OMNIFOCUS_NOT_RUNNING',
+          'OmniFocus is not running or not accessible',
+          'Start OmniFocus and ensure it is running',
+          error,
+          timer.toMetadata(),
+        );
+      }
+
+      if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+        return createErrorResponseV2(
+          'tasks',
+          'PERMISSION_DENIED',
+          'Permission denied: automation access required',
+          'Enable automation access in System Settings > Privacy & Security > Automation',
+          error,
+          timer.toMetadata(),
+        );
+      }
+
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+        return createErrorResponseV2(
+          'tasks',
+          'SCRIPT_TIMEOUT',
+          'Script execution timed out',
+          'Try reducing the limit parameter or using a more specific mode',
+          error,
+          timer.toMetadata(),
+        );
+      }
+
+      // Provide helpful suggestions for other errors
       let suggestion = undefined;
-      if (errorMessage.includes('timeout')) {
-        suggestion = 'Try reducing the limit parameter or using a more specific mode';
-      } else if (errorMessage.includes('date')) {
+      if (errorMessage.includes('date')) {
         suggestion = 'Use natural language dates like "tomorrow" or "next week", or ISO format';
       }
 
@@ -121,6 +153,50 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         timer.toMetadata(),
       );
     }
+  }
+
+  private getSpecificErrorResponse(error: unknown, operation: string, timer: OperationTimerV2): TasksResponseV2 | null {
+    const errorMessage = error && typeof error === 'object' && 'error' in error
+      ? String(error.error)
+      : String(error);
+
+    // Check for permission errors
+    if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+      return createErrorResponseV2(
+        'tasks',
+        'PERMISSION_DENIED',
+        'Permission denied: automation access required',
+        'Enable automation access in System Settings > Privacy & Security > Automation',
+        error,
+        timer.toMetadata(),
+      );
+    }
+
+    // Check for OmniFocus not running
+    if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+      return createErrorResponseV2(
+        'tasks',
+        'OMNIFOCUS_NOT_RUNNING',
+        'OmniFocus is not running or not accessible',
+        'Start OmniFocus and ensure it is running',
+        error,
+        timer.toMetadata(),
+      );
+    }
+
+    // Check for timeout errors
+    if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_TIMEOUT',
+        'Script execution timed out',
+        'Try reducing the limit parameter or using a more specific mode',
+        error,
+        timer.toMetadata(),
+      );
+    }
+
+    return null; // No specific error detected
   }
 
   private normalizeInputs(args: QueryTasksArgsV2): QueryTasksArgsV2 {
@@ -558,6 +634,12 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
+      // Check for specific error types first
+      const specificError = this.getSpecificErrorResponse(result, 'all', timer);
+      if (specificError) {
+        return specificError;
+      }
+
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',

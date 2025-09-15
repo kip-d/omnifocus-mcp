@@ -117,7 +117,30 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Provide helpful suggestions
+      // Check for specific OmniFocus errors first (following base tool pattern)
+      if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+        return createErrorResponseV2(
+          'projects',
+          'OMNIFOCUS_NOT_RUNNING',
+          'OmniFocus is not running or not accessible',
+          'Start OmniFocus and ensure it is running',
+          error,
+          timer.toMetadata(),
+        ) as unknown as ProjectsResponseV2;
+      }
+
+      if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+        return createErrorResponseV2(
+          'projects',
+          'PERMISSION_DENIED',
+          'Permission denied: automation access required',
+          'Enable automation access in System Settings > Privacy & Security > Automation',
+          error,
+          timer.toMetadata(),
+        ) as unknown as ProjectsResponseV2;
+      }
+
+      // Provide helpful suggestions for other errors
       let suggestion = undefined;
       if (errorMessage.includes('projectId')) {
         suggestion = 'First use operation:"list" to find the project ID';
@@ -134,6 +157,38 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
         timer.toMetadata(),
       ) as unknown as ProjectsResponseV2;
     }
+  }
+
+  private getSpecificErrorResponse(error: unknown, operation: string, timer: OperationTimerV2): ProjectsResponseV2 | null {
+    const errorMessage = error && typeof error === 'object' && 'error' in error
+      ? String(error.error)
+      : String(error);
+
+    // Check for permission errors
+    if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+      return createErrorResponseV2(
+        'projects',
+        'PERMISSION_DENIED',
+        'Permission denied: automation access required',
+        'Enable automation access in System Settings > Privacy & Security > Automation',
+        error,
+        timer.toMetadata(),
+      ) as unknown as ProjectsResponseV2;
+    }
+
+    // Check for OmniFocus not running
+    if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+      return createErrorResponseV2(
+        'projects',
+        'OMNIFOCUS_NOT_RUNNING',
+        'OmniFocus is not running or not accessible',
+        'Start OmniFocus and ensure it is running',
+        error,
+        timer.toMetadata(),
+      ) as unknown as ProjectsResponseV2;
+    }
+
+    return null; // No specific error detected
   }
 
   private normalizeInputs(args: ProjectsArgsV2): ProjectsArgsV2 {
@@ -214,6 +269,12 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     });
     const result = await this.execJson(script);
     if (isScriptError(result)) {
+      // Check for specific error types first
+      const specificError = this.getSpecificErrorResponse(result, 'list', timer);
+      if (specificError) {
+        return specificError;
+      }
+
       return createErrorResponseV2(
         'projects',
         'SCRIPT_ERROR',
@@ -284,6 +345,12 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     });
     const result = await this.execJson(script);
     if (isScriptError(result)) {
+      // Check for specific error types first
+      const specificError = this.getSpecificErrorResponse(result, 'create', timer);
+      if (specificError) {
+        return specificError;
+      }
+
       return createErrorResponseV2(
         'projects',
         'CREATE_FAILED',
