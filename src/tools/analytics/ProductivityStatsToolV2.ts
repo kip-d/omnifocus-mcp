@@ -84,8 +84,22 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
         insights?: string[];
       }
 
-      // Handle both ProductivityStatsData and direct script responses
-      const scriptData: unknown = result && result.data ? result.data : result;
+      // Handle the script result - it returns {ok: true, data: {summary, projectStats, tagStats, insights}}
+      let actualData: unknown;
+      if (result && typeof result === 'object' && result !== null) {
+        if ('ok' in result && 'data' in result) {
+          // Script success format: {ok: true, data: {...}}
+          actualData = (result as {ok: boolean, data: unknown}).data;
+        } else if ('data' in result) {
+          // Standard wrapper: {data: {...}}
+          actualData = (result as {data: unknown}).data;
+        } else {
+          // Direct data
+          actualData = result;
+        }
+      } else {
+        actualData = result;
+      }
 
       // Handle the actual script response format
       let overview: ScriptOverview;
@@ -93,10 +107,10 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       let tagStatsArray: Record<string, unknown>;
       let insights: string[];
 
-      // Type guard for script response format
-      if (scriptData && typeof scriptData === 'object' && scriptData !== null && 'summary' in scriptData) {
+      // Type guard for script response format (now looking in actualData)
+      if (actualData && typeof actualData === 'object' && actualData !== null && 'summary' in actualData) {
         // Script returns: {summary: {...}, projectStats: {...}, tagStats: {...}, insights: [...]}
-        const typedScriptData = scriptData as ScriptData;
+        const typedScriptData = actualData as ScriptData;
         const summary = typedScriptData.summary!;
         overview = {
           totalTasks: summary.totalTasks || 0,
