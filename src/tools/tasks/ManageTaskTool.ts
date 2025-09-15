@@ -38,10 +38,10 @@ const ManageTaskSchema = z.object({
     .optional()
     .describe('Task note/description'),
 
-  projectId: z.union([z.string().min(1), z.literal(''), z.null()])
+  projectId: z.union([z.string(), z.null()])
     .optional()
     .nullable()
-    .transform(val => val === '' ? null : val)
+    .transform(val => val === '' || val === null ? null : val)
     .describe('Project ID to assign the task to (null/empty to move to inbox)'),
 
   parentTaskId: z.union([z.string().min(1), z.literal(''), z.null()])
