@@ -155,7 +155,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
   }
 
-  private getSpecificErrorResponse(error: unknown, operation: string, timer: OperationTimerV2): TasksResponseV2 | null {
+  private getSpecificErrorResponse(error: unknown, _operation: string, timer: OperationTimerV2): TasksResponseV2 | null {
     const errorMessage = error && typeof error === 'object' && 'error' in error
       ? String(error.error)
       : String(error);

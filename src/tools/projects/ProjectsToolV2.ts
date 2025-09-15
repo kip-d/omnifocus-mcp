@@ -159,7 +159,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     }
   }
 
-  private getSpecificErrorResponse(error: unknown, operation: string, timer: OperationTimerV2): ProjectsResponseV2 | null {
+  private getSpecificErrorResponse(error: unknown, _operation: string, timer: OperationTimerV2): ProjectsResponseV2 | null {
     const errorMessage = error && typeof error === 'object' && 'error' in error
       ? String(error.error)
       : String(error);
@@ -348,7 +348,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       // Check for specific error types first
       const specificError = this.getSpecificErrorResponse(result, 'create', timer);
       if (specificError) {
-        return specificError;
+        return specificError as unknown as ProjectOperationResponseV2;
       }
 
       return createErrorResponseV2(
