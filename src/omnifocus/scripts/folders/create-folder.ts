@@ -35,8 +35,13 @@ export const CREATE_FOLDER_SCRIPT = `
         }
         
         for (let i = 0; i < folders.length; i++) {
-          if (folders[i].name() === options.parent) {
-            parentFolder = folders[i];
+          const folder = folders[i];
+          // Try matching by ID first, then by name
+          const folderId = safeGet(() => folder.id());
+          const folderName = safeGet(() => folder.name());
+
+          if (folderId === options.parent || folderName === options.parent) {
+            parentFolder = folder;
             break;
           }
         }

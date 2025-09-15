@@ -176,6 +176,8 @@ export const CREATE_TASK_SCRIPT = `
           // Save document to ensure tag persistence
           try {
             doc.save();
+            // Give OmniFocus a moment to update indexes
+            delay(0.5);
           } catch (saveError) {
             console.log('Warning: Could not save document after tag operations');
           }
