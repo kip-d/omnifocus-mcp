@@ -306,6 +306,6 @@ export function createUpdateProjectScript(projectId: string, updates: any): stri
   }
   
   // Execute with safe parameter passing
-  return updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
+  updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
   `;
 }
