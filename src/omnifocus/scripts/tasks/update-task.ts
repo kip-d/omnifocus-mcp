@@ -701,9 +701,8 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
       return formatError(error, 'update_task');
     }
   }
-  
-  // Execute with safe parameter passing and return result
-  const result = updateTask(${JSON.stringify(taskId)}, ${JSON.stringify(updates)});
-  result;
+
+  // Execute with safe parameter passing
+  updateTask(${JSON.stringify(taskId)}, ${JSON.stringify(updates)});
   `;
 }
