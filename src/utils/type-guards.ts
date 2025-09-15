@@ -101,5 +101,7 @@ export function safeToString(value: unknown): string {
       return '[object]';
     }
   }
+  // Type guard utility needs to handle any unknown value type
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   return String(value);
 }

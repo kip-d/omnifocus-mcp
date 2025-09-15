@@ -89,7 +89,7 @@ export class OmniAutomation {
         return createScriptError(
           error.message,
           'OmniAutomation execution error',
-          { script: (error as any).details?.script, stderr: (error as any).details?.stderr },
+          { script: error.details?.script, stderr: error.details?.stderr },
         );
       }
 
@@ -119,7 +119,9 @@ export class OmniAutomation {
       const err = new OmniAutomationError(msg, { stderr: typeof env.error.details === 'string' ? env.error.details : undefined });
       throw err;
     }
-    return dataSchema.parse(env.data);
+    // Zod parse returns properly typed data based on schema
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return dataSchema.parse(env.data) as z.infer<T>;
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
@@ -162,12 +164,12 @@ export class OmniAutomation {
       let _stdout = '';
       let stderr = '';
 
-      proc.stdout.on('data', (data) => {
+      proc.stdout.on('data', (data: Buffer) => {
         console.error('[OMNI_AUTOMATION_DEBUG] stdout data received:', data.toString());
         _stdout += data.toString();
       });
 
-      proc.stderr.on('data', (data) => {
+      proc.stderr.on('data', (data: Buffer) => {
         console.error('[OMNI_AUTOMATION_DEBUG] stderr data received:', data.toString());
         stderr += data.toString();
       });
@@ -390,7 +392,9 @@ export class OmniAutomation {
       }
     }
 
-    return String(value);
+    // Handle remaining primitive types (string, number, boolean, etc.)
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
   }
 
   // Execute OmniFocus automation via URL scheme (for operations requiring higher permissions)
@@ -415,11 +419,11 @@ export class OmniAutomation {
       let _stdout = '';
       let stderr = '';
 
-      proc.stdout.on('data', (data) => {
+      proc.stdout.on('data', (data: Buffer) => {
         _stdout += data.toString();
       });
 
-      proc.stderr.on('data', (data) => {
+      proc.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
@@ -470,7 +474,8 @@ export class OmniAutomation {
         if (result.status === 'fulfilled') {
           results.push(result.value);
         } else {
-          errors.push(result.reason);
+          // Promise rejection reason can be any type
+          errors.push(result.reason instanceof Error ? result.reason : new Error(String(result.reason)));
         }
       }
     }

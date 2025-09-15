@@ -117,7 +117,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           return createErrorResponseV2(
             'export',
             'INVALID_TYPE',
-            `Invalid export type: ${type}`,
+            `Invalid export type: ${String(type)}`,
             undefined,
             { type },
             timer.toMetadata(),
@@ -243,7 +243,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         return createErrorResponseV2(
           'export',
           'MKDIR_FAILED',
-          `Failed to create directory: ${mkdirError}`,
+          `Failed to create directory: ${String(mkdirError)}`,
           undefined,
           { outputDirectory, error: String(mkdirError) },
           timer.toMetadata(),

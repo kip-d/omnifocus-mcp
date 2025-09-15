@@ -137,7 +137,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         'perspectives',
         { perspectives },
         undefined,
-        { ...timer.toMetadata(), ...(parsedResult as any).metadata, operation: 'list' },
+        { ...timer.toMetadata(), ...(parsedResult as { metadata?: Record<string, unknown> }).metadata, operation: 'list' },
       );
     } catch (error) {
       return createErrorResponseV2(
@@ -187,14 +187,14 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
       this.logger.debug(`Querying perspective: ${perspectiveName}`);
       // For query operation, legacy tests return a direct object with success flag
-      let raw: any = await (this.omniAutomation as any).execute(script);
-      if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { /* ignore */ } }
+      let raw: unknown = await (this.omniAutomation as { execute: (script: string) => Promise<unknown> }).execute(script);
+      if (typeof raw === 'string') { try { raw = JSON.parse(raw) as unknown; } catch { /* ignore */ } }
 
-      if (!raw || raw.error === true) {
+      if (!raw || (raw as { error?: boolean }).error === true) {
         return createErrorResponseV2(
           'perspectives',
           'SCRIPT_ERROR',
-          (raw && raw.message) ? raw.message : 'Script failed',
+          (raw && (raw as { message?: string }).message) ? (raw as { message: string }).message : 'Script failed',
           undefined,
           { rawResult: raw },
           timer.toMetadata(),
@@ -202,11 +202,11 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
       }
 
       // Legacy success/false pattern
-      if (raw.success === false) {
+      if ((raw as { success?: boolean }).success === false) {
         return createErrorResponseV2(
           'perspectives',
           'PERSPECTIVE_NOT_FOUND',
-          raw.error || `Perspective "${perspectiveName}" not found`,
+          (raw as { error?: string }).error || `Perspective "${perspectiveName}" not found`,
           undefined,
           { perspectiveName },
           timer.toMetadata(),
@@ -215,9 +215,9 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
       const response = createSuccessResponseV2(
         'perspectives',
-        { perspectiveName: raw.perspectiveName, perspectiveType: raw.perspectiveType, tasks: raw.tasks || [], filterRules: raw.filterRules, aggregation: raw.aggregation },
+        { perspectiveName: (raw as { perspectiveName: string }).perspectiveName, perspectiveType: (raw as { perspectiveType: 'builtin' | 'custom' }).perspectiveType, tasks: (raw as { tasks?: PerspectiveTask[] }).tasks || [], filterRules: (raw as { filterRules: Record<string, unknown> }).filterRules, aggregation: (raw as { aggregation: string }).aggregation },
         undefined,
-        { ...timer.toMetadata(), operation: 'query', total_count: raw.count || 0, filter_rules_applied: !!raw.filterRules },
+        { ...timer.toMetadata(), operation: 'query', total_count: (raw as { count?: number }).count || 0, filter_rules_applied: !!(raw as { filterRules?: Record<string, unknown> }).filterRules },
       );
 
       // Cache the result

@@ -27,6 +27,8 @@ export function redactArgs<T>(value: T, depth = 0): T {
   if (typeof value !== 'object') return value;
 
   if (Array.isArray(value)) {
+    // Array mapping preserves generic type structure
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return value.map(v => redactArgs(v, depth + 1)) as unknown as T;
   }
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
-import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
@@ -43,7 +43,7 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
     super(cache);
   }
 
-  async executeValidated(args: WorkflowAnalysisArgs): Promise<any> {
+  async executeValidated(args: WorkflowAnalysisArgs): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
     const logger = createLogger('workflow_analysis');
 
@@ -61,6 +61,8 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
           'workflow_analysis',
           cached,
           'Workflow Analysis Results',
+          // Cached workflow analysis data is untyped from previous executions
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
           this.extractKeyFindings(cached as any),
           {
             from_cache: true,
@@ -173,9 +175,9 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       findings.push(...data.insights.slice(0, 3).map(i => {
         if (typeof i === 'string') return i;
         if (typeof i === 'object' && i !== null) {
-          return (i as { insight?: string; message?: string }).insight || (i as { insight?: string; message?: string }).message || String(i);
+          return (i as { insight?: string; message?: string }).insight || (i as { insight?: string; message?: string }).message || JSON.stringify(i);
         }
-        return String(i);
+        return JSON.stringify(i);
       }));
     }
 
@@ -183,9 +185,9 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       findings.push(...data.recommendations.slice(0, 2).map(r => {
         if (typeof r === 'string') return r;
         if (typeof r === 'object' && r !== null) {
-          return (r as { recommendation?: string; message?: string }).recommendation || (r as { recommendation?: string; message?: string }).message || String(r);
+          return (r as { recommendation?: string; message?: string }).recommendation || (r as { recommendation?: string; message?: string }).message || JSON.stringify(r);
         }
-        return String(r);
+        return JSON.stringify(r);
       }));
     }
 

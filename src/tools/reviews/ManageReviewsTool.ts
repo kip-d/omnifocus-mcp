@@ -4,7 +4,7 @@ import {
   MARK_PROJECT_REVIEWED_SCRIPT,
   SET_REVIEW_SCHEDULE_SCRIPT,
 } from '../../omnifocus/scripts/reviews.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';
@@ -14,7 +14,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   description = 'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
   schema = ManageReviewsSchema;
 
-  async executeValidated(args: ManageReviewsInput): Promise<any> {
+  async executeValidated(args: ManageReviewsInput): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
 
     try {
@@ -39,9 +39,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
           return createErrorResponseV2(
             'manage_reviews',
             'INVALID_OPERATION',
-            `Unknown operation: ${(args as any).operation}`,
+            `Unknown operation: ${(args as { operation?: string }).operation}`,
             'Use one of: list_for_review, mark_reviewed, set_schedule, clear_schedule',
-            { operation: (args as any).operation },
+            { operation: (args as { operation?: string }).operation },
             timer.toMetadata(),
           );
       }
@@ -53,18 +53,18 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   private async listForReview(
     args: Extract<ManageReviewsInput, { operation: 'list_for_review' }>,
     timer: OperationTimerV2,
-  ): Promise<any> {
+  ): Promise<StandardResponseV2<unknown>> {
     // Create cache key from filter
     const cacheKey = JSON.stringify(args);
 
     // Check cache (shorter TTL for review data since it's time-sensitive)
-    const cached = this.cache.get<any>('reviews', cacheKey);
+    const cached = this.cache.get<{ metadata?: Record<string, unknown>; projects?: unknown[] }>('reviews', cacheKey);
     if (cached) {
       this.logger.debug('Returning cached projects for review');
       return {
         ...cached,
         metadata: {
-          ...cached.metadata,
+          ...cached?.metadata,
           from_cache: true,
           ...timer.toMetadata(),
         },
@@ -96,8 +96,17 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
     // Parse dates and calculate review status
     const now = new Date();
-    const sourceProjects = src;
-    const parsedProjects = sourceProjects.map((project: any) => {
+    const sourceProjects = src as Array<{
+      id?: string;
+      name?: string;
+      nextReviewDate?: string;
+      lastReviewDate?: string;
+      dueDate?: string;
+      deferDate?: string;
+      completionDate?: string;
+      [key: string]: unknown;
+    }>;
+    const parsedProjects = sourceProjects.map((project) => {
       const nextReviewDate = project.nextReviewDate ? new Date(project.nextReviewDate) : null;
       const lastReviewDate = project.lastReviewDate ? new Date(project.lastReviewDate) : null;
 
@@ -130,6 +139,13 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         daysUntilReview,
         daysSinceLastReview: lastReviewDate ?
           Math.floor((now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24)) : null,
+      } as {
+        id?: string;
+        name?: string;
+        reviewStatus: string;
+        daysUntilReview: number | null;
+        daysSinceLastReview: number | null;
+        [key: string]: unknown;
       };
     });
 
@@ -144,12 +160,12 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
         filters_applied: args,
         review_summary: {
           total_projects: parsedProjects.length,
-          overdue: parsedProjects.filter((p: any) => p.reviewStatus === 'overdue').length,
-          due_today: parsedProjects.filter((p: any) => p.reviewStatus === 'due_today').length,
-          due_soon: parsedProjects.filter((p: any) => p.reviewStatus === 'due_soon').length,
-          no_schedule: parsedProjects.filter((p: any) => p.reviewStatus === 'no_schedule').length,
+          overdue: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'overdue').length,
+          due_today: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_today').length,
+          due_soon: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_soon').length,
+          no_schedule: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'no_schedule').length,
         },
-        ...(data && typeof data === 'object' && 'metadata' in data ? (data as any).metadata : {}),
+        ...(data && typeof data === 'object' && 'metadata' in data ? (data as { metadata?: Record<string, unknown> }).metadata : {}),
       },
     );
 
@@ -162,7 +178,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   private async markReviewed(
     args: Extract<ManageReviewsInput, { operation: 'mark_reviewed' }>,
     timer: OperationTimerV2,
-  ): Promise<any> {
+  ): Promise<StandardResponseV2<unknown>> {
     const { projectId, reviewDate, updateNextReviewDate } = args;
 
     // Use current date if no review date provided
@@ -192,7 +208,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('reviews');
 
     // Parse the result
-    const parsedResult = result.data;
+    const parsedResult = (result as { data?: unknown }).data;
 
     return createSuccessResponseV2('manage_reviews', { project: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'mark_reviewed', reviewed_id: projectId, review_date: actualReviewDate, next_review_calculated: updateNextReviewDate, input_params: { projectId, reviewDate: actualReviewDate, updateNextReviewDate } });
   }
@@ -200,7 +216,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   private async setSchedule(
     args: Extract<ManageReviewsInput, { operation: 'set_schedule' }>,
     timer: OperationTimerV2,
-  ): Promise<any> {
+  ): Promise<StandardResponseV2<unknown>> {
     const { projectIds, reviewInterval, nextReviewDate } = args;
 
     // Execute batch review schedule script
@@ -227,7 +243,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('reviews');
 
     // Parse the result
-    const parsedResult = result.data;
+    const parsedResult = (result as { data?: unknown }).data;
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'set_schedule', projects_updated: projectIds.length, review_interval: reviewInterval, next_review_date: nextReviewDate, input_params: { projectIds, reviewInterval, nextReviewDate } });
   }
@@ -235,7 +251,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
   private async clearSchedule(
     args: Extract<ManageReviewsInput, { operation: 'clear_schedule' }>,
     timer: OperationTimerV2,
-  ): Promise<any> {
+  ): Promise<StandardResponseV2<unknown>> {
     const { projectIds } = args;
 
     // Clear schedule by setting no review interval and null next review date
@@ -262,18 +278,23 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     this.cache.invalidate('reviews');
 
     // Parse the result
-    const parsedResult = result.data;
+    const parsedResult = (result as { data?: unknown }).data;
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'clear_schedule', projects_updated: projectIds.length, input_params: { projectIds } });
   }
 
+  // Claude Desktop sends parameters as strings, requiring runtime conversion
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private normalizeArgs(args: any): ManageReviewsInput {
     // Handle Claude Desktop sometimes sending stringified parameters
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const normalized = { ...args };
 
     // Parse projectIds if it's a string
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.projectIds === 'string') {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
         normalized.projectIds = JSON.parse(normalized.projectIds);
       } catch {
         this.logger.warn('Failed to parse projectIds string, keeping as-is');
@@ -281,8 +302,10 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     }
 
     // Parse reviewInterval if it's a string
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.reviewInterval === 'string') {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
         normalized.reviewInterval = JSON.parse(normalized.reviewInterval);
       } catch {
         this.logger.warn('Failed to parse reviewInterval string, keeping as-is');
@@ -290,8 +313,10 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     }
 
     // Parse other potentially stringified arrays/objects
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.tags === 'string') {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
         normalized.tags = JSON.parse(normalized.tags);
       } catch {
         this.logger.warn('Failed to parse tags string, keeping as-is');

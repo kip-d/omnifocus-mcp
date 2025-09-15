@@ -300,7 +300,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           try {
             parsedCreateResult = typeof createResult === 'string' ? JSON.parse(createResult) : createResult;
           } catch (parseError) {
-            this.logger.error(`Failed to parse create task result: ${createResult}`);
+            this.logger.error(`Failed to parse create task result: ${String(createResult)}`);
             const errorDetails = parsingError('task creation', String(createResult), 'valid JSON');
             return createErrorResponseV2(
               'manage_task',
@@ -512,11 +512,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             this.cache.invalidate('analytics');
 
             result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, { ...timer.toMetadata(), completed_id: taskId, method: 'jxa', input_params: { taskId: taskId } });
-          } catch (jxaError: any) {
+          } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
-            if (jxaError.message &&
-                (jxaError.message.toLowerCase().includes('parameter is missing') ||
-                 jxaError.message.toLowerCase().includes('access not allowed'))) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+            if ((jxaError as any).message &&
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+                ((jxaError as any).message.toLowerCase().includes('parameter is missing') ||
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+                 (jxaError as any).message.toLowerCase().includes('access not allowed'))) {
               this.logger.info('JXA failed, falling back to URL scheme for task completion');
               // Note: URL scheme fallback would be implemented here if needed
               return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
@@ -581,7 +584,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           const error = createErrorResponseV2(
             'manage_task',
             'INVALID_OPERATION',
-            `Invalid operation: ${operation}`,
+            `Invalid operation: ${String(operation)}`,
             undefined,
             { operation },
             timer.toMetadata(),

@@ -21,7 +21,7 @@ export interface TaskV2 {
   blocked?: boolean;
   available?: boolean;
   effectivelyCompleted?: boolean;
-  repetitionRule?: any;
+  repetitionRule?: Record<string, unknown>;
   numberOfAvailableTasks?: number;
   numberOfCompletedTasks?: number;
   modificationDate?: string;
@@ -65,7 +65,7 @@ export interface ProjectsDataV2 {
 export interface ProjectOperationDataV2 {
   project: ProjectV2;
   operation: string;
-  changes?: Record<string, any>;
+  changes?: Record<string, unknown>;
 }
 
 export type ProjectsResponseV2 = StandardResponseV2<ProjectsDataV2>;
@@ -92,12 +92,12 @@ export interface OverdueAnalysisDataV2 {
       count: number;
       percentage: number;
     }>;
-    insights: Record<string, any>;
+    insights: Record<string, unknown>;
   };
   groupedAnalysis: Record<string, {
     count: number;
     averageDaysOverdue?: number;
-    tasks?: any[];
+    tasks?: unknown[];
   }>;
 }
 
@@ -113,8 +113,8 @@ export interface ProductivityStatsDataV2 {
       activeProjects: number;
       overdueCount: number;
     };
-    daily: any[];
-    weekly: Record<string, any>;
+    daily: unknown[];
+    weekly: Record<string, unknown>;
     projectStats: Array<{
       name: string;
       completedCount: number;
@@ -126,7 +126,7 @@ export interface ProductivityStatsDataV2 {
       count: number;
     }>;
   };
-  insights: Record<string, any>;
+  insights: Record<string, unknown>;
   healthScore: number;
 }
 

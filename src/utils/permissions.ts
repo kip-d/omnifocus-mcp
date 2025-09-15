@@ -46,6 +46,8 @@ export class PermissionChecker {
           return;
         }
 
+        // Error objects from external processes can be any type
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         const msg = error instanceof Error ? error.message : String(error);
 
         if (msg.includes('-1743') || msg.includes('not allowed')) {
@@ -120,7 +122,7 @@ export async function checkOmniFocusPermissions(): Promise<PermissionStatus> {
 /**
  * Create a permission error response for MCP tools
  */
-export function createPermissionErrorResponse(status: PermissionStatus): any {
+export function createPermissionErrorResponse(status: PermissionStatus): Record<string, unknown> {
   return {
     error: true,
     message: status.error || 'Permission denied',

@@ -5,6 +5,7 @@ import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
   OperationTimerV2,
+  StandardResponseV2,
 } from '../../utils/response-format-v2.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
@@ -15,7 +16,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
 
-  async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<any> {
+  async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
 
     try {
@@ -29,7 +30,12 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
       const cacheKey = `velocity_v2_${days}_${groupBy}_${includeWeekends}`;
 
       // Check cache (1 hour TTL for analytics)
-      const cached = this.cache.get<any>('analytics', cacheKey);
+      // Cached velocity data structure matches our response interface
+      const cached = this.cache.get<{
+        velocity?: { period?: string; tasksCompleted?: number; averagePerDay?: number };
+        patterns?: unknown;
+        insights?: string[];
+      }>('analytics', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached task velocity');
         return createAnalyticsResponseV2(

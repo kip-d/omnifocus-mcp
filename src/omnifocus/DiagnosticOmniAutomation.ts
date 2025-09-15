@@ -50,13 +50,13 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout.on('data', (data) => {
+      proc.stdout.on('data', (data: Buffer) => {
         const chunk = data.toString();
         stdout += chunk;
         this.log('Received stdout chunk', { length: chunk.length });
       });
 
-      proc.stderr.on('data', (data) => {
+      proc.stderr.on('data', (data: Buffer) => {
         const chunk = data.toString();
         stderr += chunk;
         this.log('Received stderr chunk', { length: chunk.length, content: chunk });

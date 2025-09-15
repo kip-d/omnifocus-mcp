@@ -41,7 +41,7 @@ export interface ListTasksArgs extends TaskFilter {
   limit?: number;
 }
 
-export interface GetTaskCountArgs extends TaskFilter {}
+export type GetTaskCountArgs = TaskFilter;
 
 export interface TodaysAgendaArgs {
   includeFlagged?: boolean;
@@ -76,7 +76,7 @@ export interface CompleteProjectArgs {
   completeTasks?: boolean;
 }
 
-export interface ListProjectsArgs extends ProjectFilter {}
+export type ListProjectsArgs = ProjectFilter;
 
 // Tag Tool Arguments
 export interface ListTagsArgs {
@@ -172,7 +172,7 @@ export interface ProjectListResponse {
 
 export interface TagListResponse {
   tags: OmniFocusTag[];
-  hierarchy?: any; // Complex nested structure
+  hierarchy?: Record<string, unknown>; // Complex nested structure
 }
 
 export interface CreateTaskResponse {
@@ -271,8 +271,8 @@ export interface OverdueAnalysisResponse {
 
 export interface ProductivityStatsResponse {
   stats: ProductivityStats;
-  trends?: any;
-  insights?: any;
+  trends?: Record<string, unknown>;
+  insights?: string[];
 }
 
 export interface TaskVelocityResponse {
@@ -322,7 +322,7 @@ export interface RecurringPatternsResponse {
 
 // Export Response Types
 export interface ExportResponse {
-  data: string | any; // JSON object or CSV/Markdown string
+  data: string | Record<string, unknown>; // JSON object or CSV/Markdown string
   format: 'json' | 'csv' | 'markdown';
   itemCount: number;
   exportDate: string;

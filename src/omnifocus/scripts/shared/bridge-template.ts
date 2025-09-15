@@ -164,6 +164,8 @@ export function executeBridgeTemplate(
 ): any {
   try {
     const script = formatBridgeScript(template, params);
+    // JXA Application objects are inherently untyped
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const resultStr = app.evaluateJavascript(script);
 
     // Try to parse as JSON if it looks like JSON

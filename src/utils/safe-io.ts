@@ -68,6 +68,8 @@ export function toError(e: unknown): Error {
 
 export function safeStringify(value: unknown): string {
   try {
+    // JSON.stringify replacer function handles unknown values safely
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return JSON.stringify(value, (_k, v) => (typeof v === 'bigint' ? String(v) : v));
   } catch {
     return '[unserializable]';

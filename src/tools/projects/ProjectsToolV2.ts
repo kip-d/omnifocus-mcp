@@ -317,7 +317,20 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       );
     }
 
-    const updates: any = {};
+    // Dynamic update object that matches OmniFocus script expectations
+    const updates: {
+      name?: string;
+      note?: string;
+      dueDate?: string;
+      flagged?: boolean;
+      tags?: string[];
+      reviewInterval?: {
+        unit: string;
+        steps: number;
+        fixed: boolean;
+      } | number;
+      status?: string;
+    } = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.note !== undefined) updates.note = args.note;
     if (args.dueDate !== undefined) updates.dueDate = args.dueDate;

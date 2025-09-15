@@ -69,6 +69,8 @@ export class RobustOmniAutomation extends OmniAutomation {
       if (error instanceof Error && error.message.includes('Cannot convert undefined or null to object')) {
         const enhancedError = new OmniAutomationError(
           `${error.message} - This often indicates OmniFocus has become unresponsive or the document is no longer available`,
+          // External process errors may have arbitrary properties
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
           { script, stderr: (error as any).stderr || error.message },
         );
         throw enhancedError;

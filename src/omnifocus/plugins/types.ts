@@ -30,7 +30,7 @@ export interface TaskContext {
   completionDate(): Date | null;
   completed(): boolean;
   dropped(): boolean;
-  repetitionRule(): any;
+  repetitionRule(): Record<string, unknown>;
   containingProject(): { name(): string; id(): string } | null;
   tags(): Array<{ name(): string; id(): string }>;
   note(): string | null;

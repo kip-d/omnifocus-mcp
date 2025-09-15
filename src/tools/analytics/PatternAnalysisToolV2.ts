@@ -39,12 +39,12 @@ const PatternAnalysisSchema = z.object({
 
         try {
           // Try to parse as JSON
-          const parsed = JSON.parse(val);
+          const parsed = JSON.parse(val) as unknown;
 
           // If parsed result is a string, try parsing again (double-encoded)
           if (typeof parsed === 'string') {
             try {
-              const doubleParsed = JSON.parse(parsed);
+              const doubleParsed = JSON.parse(parsed as string) as unknown;
               return doubleParsed;
             } catch {
               // If double parsing fails, return the first parse result
@@ -248,31 +248,31 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       for (const pattern of patterns) {
         switch (pattern) {
           case 'duplicates':
-            findings.duplicates = await this.detectDuplicates(slimData.tasks, options);
+            findings.duplicates = this.detectDuplicates(slimData.tasks, options);
             break;
           case 'dormant_projects':
-            findings.dormant_projects = await this.detectDormantProjects(
+            findings.dormant_projects = this.detectDormantProjects(
               slimData.projects,
               options.dormant_threshold_days,
             );
             break;
           case 'tag_audit':
-            findings.tag_audit = await this.auditTags(slimData.tasks, slimData.tags);
+            findings.tag_audit = this.auditTags(slimData.tasks, slimData.tags);
             break;
           case 'deadline_health':
-            findings.deadline_health = await this.analyzeDeadlines(slimData.tasks);
+            findings.deadline_health = this.analyzeDeadlines(slimData.tasks);
             break;
           case 'waiting_for':
-            findings.waiting_for = await this.analyzeWaitingFor(slimData.tasks);
+            findings.waiting_for = this.analyzeWaitingFor(slimData.tasks);
             break;
           case 'estimation_bias':
-            findings.estimation_bias = await this.analyzeEstimationBias(slimData.tasks);
+            findings.estimation_bias = this.analyzeEstimationBias(slimData.tasks);
             break;
           case 'next_actions':
-            findings.next_actions = await this.analyzeNextActions(slimData.tasks);
+            findings.next_actions = this.analyzeNextActions(slimData.tasks);
             break;
           case 'review_gaps':
-            findings.review_gaps = await this.analyzeReviewGaps(slimData.projects);
+            findings.review_gaps = this.analyzeReviewGaps(slimData.projects);
             break;
         }
       }
@@ -312,8 +312,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       
       // Fetch tasks
       const allTasks = doc.flattenedTasks();
-      const maxTasks = ${options.max_tasks};
-      const includeCompleted = ${options.include_completed};
+      const maxTasks = ${String(options.max_tasks)};
+      const includeCompleted = ${String(options.include_completed)};
       
       for (let i = 0; i < Math.min(allTasks.length, maxTasks); i++) {
         const task = allTasks[i];
@@ -431,12 +431,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
     // OmniAutomation.execute may return already parsed object or string
     if (typeof result === 'string') {
+      // JSON parsing of OmniAutomation result string is untyped
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return JSON.parse(result);
     }
     return result as { tasks: SlimTask[], projects: ProjectData[], tags: TagData[] };
   }
 
-  private async detectDuplicates(tasks: SlimTask[], options: Record<string, unknown>): Promise<PatternFinding> {
+  private detectDuplicates(tasks: SlimTask[], options: Record<string, unknown>): PatternFinding {
     const duplicates: Array<{ task1: SlimTask, task2: SlimTask, similarity: number }> = [];
     const threshold = typeof options.duplicate_similarity_threshold === 'number' ? options.duplicate_similarity_threshold : 0.85;
 
@@ -491,6 +493,8 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   private levenshteinDistance(str1: string, str2: string): number {
     const m = str1.length;
     const n = str2.length;
+    // Array creation with fill/map pattern is untyped but mathematically correct
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
     const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
 
     for (let i = 0; i <= m; i++) dp[i][0] = i;
@@ -551,7 +555,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     });
   }
 
-  private async detectDormantProjects(projects: ProjectData[], thresholdDays: number): Promise<PatternFinding> {
+  private detectDormantProjects(projects: ProjectData[], thresholdDays: number): PatternFinding {
     const now = new Date();
     const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
     const dormant: DormantProject[] = [];
@@ -593,7 +597,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async auditTags(tasks: SlimTask[], allTags: TagData[] = []): Promise<PatternFinding> {
+  private auditTags(tasks: SlimTask[], allTags: TagData[] = []): PatternFinding {
     const tagStats = new Map<string, number>();
     const tagProjects = new Map<string, Set<string>>();
 
@@ -717,7 +721,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       'Tag usage appears well-balanced.';
   }
 
-  private async analyzeDeadlines(tasks: SlimTask[]): Promise<PatternFinding> {
+  private analyzeDeadlines(tasks: SlimTask[]): PatternFinding {
     const now = new Date();
     const findings: {
       overdue: Array<{ id: string; name: string; project?: string; days_overdue: number }>;
@@ -784,7 +788,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
   private generateDeadlineRecommendation(
     findings: { overdue: unknown[] },
-    bunchedDates: Array<[string, number]>
+    bunchedDates: Array<[string, number]>,
   ): string {
     const recommendations: string[] = [];
 
@@ -801,7 +805,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       'Deadline distribution looks manageable.';
   }
 
-  private async analyzeWaitingFor(tasks: SlimTask[]): Promise<PatternFinding> {
+  private analyzeWaitingFor(tasks: SlimTask[]): PatternFinding {
     // Look for tasks that might be waiting (based on name patterns or tags)
     const waitingPatterns = [
       /waiting/i, /wait for/i, /blocked by/i, /depends on/i,
@@ -860,7 +864,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async analyzeEstimationBias(tasks: SlimTask[]): Promise<PatternFinding> {
+  private analyzeEstimationBias(tasks: SlimTask[]): PatternFinding {
     const estimatedTasks = tasks.filter(t => t.estimatedMinutes && t.completed && t.completionDate);
 
     if (estimatedTasks.length < 10) {
@@ -937,7 +941,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async analyzeNextActions(tasks: SlimTask[]): Promise<PatternFinding> {
+  private analyzeNextActions(tasks: SlimTask[]): PatternFinding {
     const issues: Array<{
       id: string;
       name: string;
@@ -999,7 +1003,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     };
   }
 
-  private async analyzeReviewGaps(projects: ProjectData[]): Promise<PatternFinding> {
+  private analyzeReviewGaps(projects: ProjectData[]): PatternFinding {
     const now = new Date();
     const gaps: Array<{
       id: string;

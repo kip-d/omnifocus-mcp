@@ -28,12 +28,12 @@ export function entityNotFoundError(entityType: string, id: string, listToolName
  */
 export function invalidParameterError(
   paramName: string,
-  value: any,
+  value: unknown,
   expectedFormat: string,
   example: string,
 ): ErrorWithRecovery {
   return {
-    message: `Invalid ${paramName}: '${value}'.`,
+    message: `Invalid ${paramName}: '${String(value)}'.`,
     recovery: [
       `Expected format: ${expectedFormat}`,
       `Example: ${example}`,

@@ -111,7 +111,7 @@ export function createListResponse<T>(
 export function createCollectionResponse<T>(
   operation: string,
   collectionType: string,
-  collectionData: { [key: string]: any; count?: number },
+  collectionData: { [key: string]: unknown; count?: number },
   metadata: Partial<StandardMetadata> = {},
 ): StandardResponse<typeof collectionData> {
   const items = collectionData[collectionType] as T[] || [];

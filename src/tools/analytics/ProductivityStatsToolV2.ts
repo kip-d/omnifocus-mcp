@@ -5,6 +5,7 @@ import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
   OperationTimerV2,
+  StandardResponseV2,
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
@@ -15,7 +16,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
   description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.';
   schema = ProductivityStatsSchemaV2;
 
-  async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<any> {
+  async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
 
     try {

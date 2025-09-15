@@ -46,7 +46,7 @@ interface DiagnosticsResult {
   tests: {
     [key: string]: {
       success: boolean;
-      result?: any;
+      result?: unknown;
       error?: string;
       stderr?: string;
     };
@@ -62,7 +62,7 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
 
   private diagnosticOmni: DiagnosticOmniAutomation;
 
-  constructor(cache: any) {
+  constructor(cache: import('../../cache/CacheManager.js').CacheManager) {
     super(cache);
     this.diagnosticOmni = new DiagnosticOmniAutomation();
   }
@@ -79,7 +79,7 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         return createErrorResponseV2(
           'system',
           'INVALID_OPERATION',
-          `Invalid operation: ${operation}`,
+          `Invalid operation: ${String(operation)}`,
           undefined,
           { operation },
           { executionTime: 0 },
@@ -87,26 +87,26 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
     }
   }
 
-  private async getVersion(): Promise<StandardResponseV2<VersionInfo>> {
+  private getVersion(): Promise<StandardResponseV2<VersionInfo>> {
     const timer = new OperationTimerV2();
 
     try {
       const versionInfo = getVersionInfo();
-      return createSuccessResponseV2(
+      return Promise.resolve(createSuccessResponseV2(
         'system',
         versionInfo,
         undefined,
         { ...timer.toMetadata(), operation: 'version' },
-      );
+      ));
     } catch (error) {
-      return createErrorResponseV2(
+      return Promise.resolve(createErrorResponseV2(
         'system',
         'VERSION_ERROR',
         error instanceof Error ? error.message : 'Failed to get version info',
         undefined,
         { operation: 'version' },
         timer.toMetadata(),
-      );
+      ));
     }
   }
 
@@ -129,16 +129,17 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result: any = await this.diagnosticOmni.execute(basicScript);
+        const result: unknown = await this.diagnosticOmni.execute(basicScript);
         results.tests.basic_connection = {
           success: true,
           result,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as { message?: string; stderr?: string };
         results.tests.basic_connection = {
           success: false,
-          error: error.message,
-          stderr: error.stderr,
+          error: err.message || 'Unknown error',
+          stderr: err.stderr,
         };
       }
 
@@ -191,16 +192,17 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
 
       try {
         // Prefer plain execute so tests can mock without schema
-        const result: any = await this.diagnosticOmni.execute(collectionScript);
+        const result = await this.diagnosticOmni.execute(collectionScript);
         results.tests.collection_access = {
           success: true,
           result,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as { message?: string; stderr?: string };
         results.tests.collection_access = {
           success: false,
-          error: error.message,
-          stderr: error.stderr,
+          error: err.message || 'Unknown error',
+          stderr: err.stderr,
         };
       }
 
@@ -252,16 +254,17 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       `;
 
       try {
-        const result: any = await this.diagnosticOmni.execute(propertyScript);
+        const result = await this.diagnosticOmni.execute(propertyScript);
         results.tests.property_access = {
           success: true,
           result,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as { message?: string; stderr?: string };
         results.tests.property_access = {
           success: false,
-          error: error.message,
-          stderr: error.stderr,
+          error: err.message || 'Unknown error',
+          stderr: err.stderr,
         };
       }
 
@@ -274,16 +277,17 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         });
 
         try {
-          const result: any = await this.diagnosticOmni.execute(script);
+          const result = await this.diagnosticOmni.execute(script);
           results.tests.list_tasks_script = {
             success: true,
             result,
           };
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const err = error as { message?: string; stderr?: string };
           results.tests.list_tasks_script = {
             success: false,
-            error: error.message,
-            stderr: error.stderr,
+            error: err.message || 'Unknown error',
+            stderr: err.stderr,
           };
         }
       }

@@ -155,15 +155,15 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     return normalized;
   }
 
-  private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     const cacheKey = `tasks_overdue_${args.limit}_${args.completed}`;
 
     // Check cache for speed
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'overdue' },
       );
     }
@@ -199,16 +199,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     const days = args.daysAhead || 7;
     const cacheKey = `tasks_upcoming_${days}_${args.limit}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days },
       );
     }
@@ -245,16 +245,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     // Use the ultra-fast optimized script for today's agenda
     const cacheKey = `tasks_today_${args.limit}_${args.details}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'today' },
       );
     }
@@ -312,7 +312,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     return createTaskResponseV2('tasks', todayTasks, metadata);
   }
 
-  private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     if (!args.search) {
       return createErrorResponseV2(
         'tasks',
@@ -338,11 +338,11 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const cacheKey = `tasks_search_${JSON.stringify(filter)}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         {
           ...timer.toMetadata(),
           from_cache: true,
@@ -385,7 +385,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleAvailableTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleAvailableTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     const filter = {
       completed: false,
       available: true,
@@ -399,11 +399,11 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const cacheKey = `tasks_available_${args.limit}_${args.project || 'all'}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'available' },
       );
     }
@@ -434,7 +434,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleBlockedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleBlockedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     const filter = {
       completed: false,
       blocked: true,
@@ -448,11 +448,11 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const cacheKey = `tasks_blocked_${args.limit}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'blocked' },
       );
     }
@@ -483,15 +483,15 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     const cacheKey = `tasks_flagged_${args.limit}_${args.completed}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'flagged' },
       );
     }
@@ -526,8 +526,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleAllTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
-    const filter: any = {
+  private async handleAllTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    const filter: {
+      completed?: boolean;
+      limit?: number;
+      includeDetails?: boolean;
+      project?: string;
+      tags?: string[];
+      dueBefore?: string;
+      [key: string]: unknown;
+    } = {
       completed: args.completed,
       limit: args.limit,
       includeDetails: args.details,
@@ -575,16 +583,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<any> {
+  private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     // Smart suggest combines overdue, today, and flagged tasks to suggest what to work on
     const cacheKey = `tasks_smart_suggest_${args.limit}`;
 
     // Check cache
-    const cached = this.cache.get<any>('tasks', cacheKey);
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       return createTaskResponseV2(
         'tasks',
-        cached.tasks,
+        cached?.tasks || [],
         { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' },
       );
     }
@@ -681,14 +689,23 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     );
   }
 
-  private parseTasks(tasks: any[]): OmniFocusTask[] {
-    return tasks.map(task => ({
-      ...task,
-      dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-      deferDate: task.deferDate ? new Date(task.deferDate) : undefined,
-      completionDate: task.completionDate ? new Date(task.completionDate) : undefined,
-      added: task.added ? new Date(task.added) : undefined,
-    }));
+  private parseTasks(tasks: unknown[]): OmniFocusTask[] {
+    return tasks.map(task => {
+      const t = task as {
+        dueDate?: string | Date;
+        deferDate?: string | Date;
+        completionDate?: string | Date;
+        added?: string | Date;
+        [key: string]: unknown;
+      };
+      return {
+        ...t,
+        dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
+        deferDate: t.deferDate ? new Date(t.deferDate) : undefined,
+        completionDate: t.completionDate ? new Date(t.completionDate) : undefined,
+        added: t.added ? new Date(t.added) : undefined,
+      } as unknown as OmniFocusTask;
+    });
   }
 
 }

@@ -5,6 +5,7 @@ import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
   OperationTimerV2,
+  StandardResponseV2,
 } from '../../utils/response-format-v2.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisDataV2 } from '../response-types-v2.js';
@@ -16,7 +17,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
   description = 'Analyze overdue tasks for patterns and bottlenecks. Returns summary with key findings first, then detailed analysis.';
   schema = OverdueAnalysisSchemaV2;
 
-  async executeValidated(args: z.infer<typeof OverdueAnalysisSchemaV2>): Promise<any> {
+  async executeValidated(args: z.infer<typeof OverdueAnalysisSchemaV2>): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
 
     try {
@@ -95,8 +96,12 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
           Object.entries(scriptData.groupedAnalysis ?? {}).map(([key, value]) => [
             key,
             {
+              // OmniFocus script results are untyped, requiring unsafe operations for data extraction
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               count: typeof value === 'object' && value !== null && 'count' in value ? (value as any).count || 0 : 0,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               averageDaysOverdue: typeof value === 'object' && value !== null && 'averageDaysOverdue' in value ? (value as any).averageDaysOverdue : undefined,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               tasks: typeof value === 'object' && value !== null && 'tasks' in value ? (value as any).tasks : undefined,
             },
           ]),
@@ -169,6 +174,7 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
 
     // Add recommendations if available
     if (data.stats?.insights?.topRecommendations && Array.isArray(data.stats.insights.topRecommendations) && data.stats.insights.topRecommendations.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       findings.push(data.stats.insights.topRecommendations[0]);
     }
 

@@ -3,6 +3,36 @@
  * Optimized for LLM processing speed and user experience
  */
 
+// Type interfaces for OmniFocus data structures
+interface OmniFocusTask {
+  id?: string;
+  name?: string;
+  completed?: boolean;
+  flagged?: boolean;
+  status?: string;
+  dueDate?: string | Date | null;
+  project?: string | null;
+  [key: string]: unknown;
+}
+
+interface OmniFocusProject {
+  id?: string;
+  name?: string;
+  status?: string;
+  nextReviewDate?: string | Date | null;
+  modifiedDate?: string | Date | null;
+  [key: string]: unknown;
+}
+
+// Type guard functions
+function isValidDateValue(value: unknown): value is string | Date {
+  return typeof value === 'string' || value instanceof Date;
+}
+
+function isValidStringValue(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
 export interface TaskSummary extends Record<string, unknown> {
   total_count: number;
   returned_count: number;
@@ -99,7 +129,7 @@ export interface StandardResponseV2<T> {
 /**
  * Generate enhanced task summary with insights and preview
  */
-export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSummary {
+export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskSummary {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
@@ -122,10 +152,13 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
     preview: [],
   };
 
-  let mostOverdueTask: any = null;
+  let mostOverdueTask: OmniFocusTask | null = null;
   let mostOverdueDays = 0;
 
-  for (const task of tasks) {
+  for (const taskItem of tasks) {
+    // Type assertion for OmniFocus task data from scripts
+    const task = taskItem as OmniFocusTask;
+
     // Count by status
     if (task.completed) summary.breakdown!.completed = (summary.breakdown!.completed || 0) + 1;
     if (task.flagged) summary.breakdown!.flagged = (summary.breakdown!.flagged || 0) + 1;
@@ -165,8 +198,9 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
 
   // Pattern detection for bottlenecks
   const projectCounts: Record<string, number> = {};
-  for (const task of tasks) {
-    if (task.project && !task.completed && task.dueDate) {
+  for (const taskItem of tasks) {
+    const task = taskItem as OmniFocusTask;
+    if (isValidStringValue(task.project) && !task.completed && isValidDateValue(task.dueDate)) {
       const dueDate = new Date(task.dueDate);
       if (dueDate < now) {
         projectCounts[task.project] = (projectCounts[task.project] || 0) + 1;
@@ -198,11 +232,12 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
 
   // Generate preview of most important tasks
   const previewTasks = tasks
+    .map(item => item as OmniFocusTask)
     .filter(t => !t.completed)
     .sort((a, b) => {
       // Sort by: overdue first, then due today, then flagged
-      const aDate = a.dueDate ? new Date(a.dueDate) : null;
-      const bDate = b.dueDate ? new Date(b.dueDate) : null;
+      const aDate = isValidDateValue(a.dueDate) ? new Date(a.dueDate) : null;
+      const bDate = isValidDateValue(b.dueDate) ? new Date(b.dueDate) : null;
 
       if (aDate && bDate) {
         if (aDate < now && bDate >= now) return -1;
@@ -234,7 +269,7 @@ export function generateTaskSummary(tasks: any[], limit: number = 25): TaskSumma
 /**
  * Generate enhanced project summary with insights
  */
-export function generateProjectSummary(projects: any[]): ProjectSummary {
+export function generateProjectSummary(projects: unknown[]): ProjectSummary {
   const summary: ProjectSummary = {
     total_projects: projects.length,
     active: 0,
@@ -246,11 +281,14 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
     bottlenecks: [],
   };
 
-  let mostOverdueReview: any = null;
+  let mostOverdueReview: OmniFocusProject | null = null;
   let mostOverdueDays = 0;
   const now = new Date();
 
-  for (const project of projects) {
+  for (const projectItem of projects) {
+    // Type assertion for OmniFocus project data from scripts
+    const project = projectItem as OmniFocusProject;
+
     // Count by status
     switch (project.status) {
       case 'active': summary.active = (summary.active || 0) + 1; break;
@@ -262,7 +300,7 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
     }
 
     // Check for review
-    if (project.nextReviewDate) {
+    if (isValidDateValue(project.nextReviewDate)) {
       const reviewDate = new Date(project.nextReviewDate);
       if (reviewDate < now) {
         summary.needs_review = (summary.needs_review || 0) + 1;
@@ -290,9 +328,11 @@ export function generateProjectSummary(projects: any[]): ProjectSummary {
   }
 
   // Detect stalled projects (active but no recent activity)
-  const stalledProjects = projects.filter(p => {
+  const stalledProjects = projects
+    .map(item => item as OmniFocusProject)
+    .filter(p => {
     if (p.status !== 'active') return false;
-    if (!p.modifiedDate) return false;
+    if (!isValidDateValue(p.modifiedDate)) return false;
     const daysSinceModified = Math.floor((now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24));
     return daysSinceModified > 14;
   });
@@ -354,7 +394,16 @@ export function createAnalyticsResponseV2<T>(
 
   // Extract item count from data if available
   if (data && typeof data === 'object') {
-    const dataObj = data as any;
+    // Analytics data structure from OmniFocus scripts is untyped
+    const dataObj = data as {
+      stats?: {
+        overdueTasks?: unknown[];
+        totalTasks?: number;
+      };
+      velocity?: {
+        tasksCompleted?: number;
+      };
+    };
     if (dataObj.stats?.overdueTasks?.length) {
       summary.total_items_analyzed = dataObj.stats.overdueTasks.length;
     } else if (dataObj.velocity?.tasksCompleted) {
@@ -370,7 +419,7 @@ export function createAnalyticsResponseV2<T>(
 /**
  * Create enhanced error response with suggestions
  */
-export function createErrorResponseV2<T = any>(
+export function createErrorResponseV2<T = unknown>(
   operation: string,
   errorCode: string,
   message: string,
@@ -408,9 +457,9 @@ export function createListResponseV2<T>(
   // Generate summary based on item type
   let summary: TaskSummary | ProjectSummary | undefined;
   if (itemType === 'tasks') {
-    summary = generateTaskSummary(items as any[]);
+    summary = generateTaskSummary(items as unknown[]);
   } else if (itemType === 'projects') {
-    summary = generateProjectSummary(items as any[]);
+    summary = generateProjectSummary(items as unknown[]);
   }
 
   // Create preview (first 5 items for quick processing)
@@ -442,7 +491,7 @@ export function createTaskResponseV2<T>(
   tasks: T[],
   metadata: Partial<StandardMetadataV2> = {},
 ): StandardResponseV2<{ tasks: T[]; preview?: T[] }> {
-  const summary = generateTaskSummary(tasks as any[]);
+  const summary = generateTaskSummary(tasks as unknown[]);
 
   return {
     success: true,

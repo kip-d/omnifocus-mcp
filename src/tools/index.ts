@@ -96,13 +96,13 @@ export function registerTools(server: Server, cache: CacheManager): void {
     logger.info(`Executing tool: ${name}`);
     logger.debug(`Args for ${name}:`, redactArgs({
       argsType: typeof args,
-      argsKeys: args ? Object.keys(args as any) : [],
+      argsKeys: args ? Object.keys(args as Record<string, unknown>) : [],
       args,
     }));
 
     // Special logging for update_task to debug date parameter issues
     if (name === 'update_task' && args) {
-      const a: any = args;
+      const a = args as { taskId?: unknown; dueDate?: unknown; [key: string]: unknown };
       logger.debug('UpdateTask param snapshot:', redactArgs({
         taskId: a.taskId,
         dueDate: {
@@ -122,6 +122,8 @@ export function registerTools(server: Server, cache: CacheManager): void {
       }));
     }
 
+    // Tool execution requires dynamic method call for polymorphic tools
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const result = await (tool as any).execute(args || {});
 
     return {
