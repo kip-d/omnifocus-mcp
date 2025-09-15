@@ -42,9 +42,10 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         
         const endTime = Date.now();
         return JSON.stringify({
-          tags: tagNames,
+          items: tagNames,
           summary: {
-            totalTags: tagNames.length,
+            total: tagNames.length,
+            insights: ["Found " + tagNames.length + " tags (names only mode)"],
             query_time_ms: endTime - startTime,
             mode: 'names_only'
           }
@@ -69,9 +70,10 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         
         const endTime = Date.now();
         return JSON.stringify({
-          tags: tags,
+          items: tags,
           summary: {
-            totalTags: tags.length,
+            total: tags.length,
+            insights: ["Found " + tags.length + " tags (fast mode)"],
             query_time_ms: endTime - startTime,
             mode: 'fast'
           }
@@ -181,11 +183,10 @@ export const LIST_TAGS_OPTIMIZED_SCRIPT = `
         tags.filter(t => !t.usage || t.usage.total === 0).length : 'unknown';
       
       return JSON.stringify({
-        tags: tags,
+        items: tags,
         summary: {
-          totalTags: totalTags,
-          activeTags: activeTags,
-          emptyTags: emptyTags,
+          total: totalTags,
+          insights: ["Found " + totalTags + " tags (" + activeTags + " active, " + emptyTags + " empty)"],
           query_time_ms: endTime - startTime,
           mode: 'full'
         }
@@ -246,12 +247,12 @@ export const GET_ACTIVE_TAGS_SCRIPT = `
       const endTime = Date.now();
       
       return JSON.stringify({
-        tags: activeTags,
+        items: activeTags,
         summary: {
-          totalTags: activeTags.length,
+          total: activeTags.length,
+          insights: ["Found " + activeTags.length + " active tags with available tasks"],
           query_time_ms: endTime - startTime,
-          mode: 'active_only',
-          note: 'Only includes tags with available (incomplete, non-deferred) tasks'
+          mode: 'active_only'
         }
       });
       

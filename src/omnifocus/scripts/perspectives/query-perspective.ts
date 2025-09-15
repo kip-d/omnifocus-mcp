@@ -1,4 +1,4 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers, getSerializationHelpers } from '../shared/helpers.js';
 
 /**
  * Script to query tasks from a specific perspective
@@ -6,6 +6,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  */
 export const QUERY_PERSPECTIVE_SCRIPT = `
   ${getMinimalHelpers()}
+  ${getSerializationHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

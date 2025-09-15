@@ -172,12 +172,10 @@ export const LIST_TAGS_SCRIPT = `
     const endTime = Date.now();
     
     return JSON.stringify({
-      tags: tags,
+      items: tags,
       summary: {
-        totalTags: totalTags,
-        activeTags: activeTags,
-        emptyTags: emptyTags,
-        mostUsed: tags.length > 0 ? tags[0].name : null,
+        total: totalTags,
+        insights: ["Found " + totalTags + " tags (" + activeTags + " active, " + emptyTags + " empty)", tags.length > 0 ? ("Most used: " + tags[0].name) : null].filter(Boolean),
         query_time_ms: endTime - startTime
       }
     });
