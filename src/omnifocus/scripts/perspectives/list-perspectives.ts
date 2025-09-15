@@ -57,9 +57,11 @@ export const LIST_PERSPECTIVES_SCRIPT = `
       }
       
       return JSON.stringify({
-        perspectives: perspectives,
-        count: perspectives.length,
-        error: null
+        items: perspectives,
+        summary: {
+          total: perspectives.length,
+          insights: ["Found " + perspectives.length + " perspectives (" + perspectives.filter(p => p.isBuiltIn).length + " built-in, " + perspectives.filter(p => !p.isBuiltIn).length + " custom)"]
+        }
       });
     } catch (error) {
       return formatError(error, 'list_perspectives');

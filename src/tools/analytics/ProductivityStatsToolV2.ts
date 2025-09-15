@@ -8,7 +8,7 @@ import {
   StandardResponseV2,
 } from '../../utils/response-format-v2.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ProductivityStatsData } from '../../omnifocus/script-response-types.js';
 
 export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2> {
@@ -68,33 +68,60 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
         );
       }
 
-      const data: ProductivityStatsData = isScriptSuccess(result) ? result.data : {
-        stats: {
-          overview: {
-            totalTasks: 0,
-            completedTasks: 0,
-            completionRate: 0,
-          },
-        },
-        healthScore: 0,
-        insights: [],
-      };
-      // Normalize common shapes from tests
-      const completedTasks = data.stats?.overview?.completedTasks ?? 0;
-      const totalTasks = data.stats?.overview?.totalTasks ?? 0;
-      const completionRate = data.stats?.overview?.completionRate ?? (totalTasks ? completedTasks / totalTasks : 0);
-      const activeProjects = 0; // Not part of StatsOverview interface
+      // Handle the script result properly - omniAutomation returns the script data directly
+      interface ScriptOverview {
+        totalTasks?: number;
+        completedTasks?: number;
+        completionRate?: number;
+        activeProjects?: number;
+        overdueCount?: number;
+      }
 
-      const overview = {
-        totalTasks,
-        completedTasks,
-        completionRate: typeof completionRate === 'number' ? completionRate : Number(completionRate),
-        activeProjects,
-        overdueCount: 0, // Not part of StatsOverview interface
-      };
+      interface ScriptData {
+        summary?: ScriptOverview;
+        projectStats?: Record<string, unknown>;
+        tagStats?: Record<string, unknown>;
+        insights?: string[];
+      }
 
-      const projectStatsArray = includeProjectStats ? (data.stats?.projectStats || []) : [];
-      const tagStatsArray = includeTagStats ? (data.stats?.tagStats || []) : [];
+      // Handle both ProductivityStatsData and direct script responses
+      const scriptData: unknown = result && result.data ? result.data : result;
+
+      // Handle the actual script response format
+      let overview: ScriptOverview;
+      let projectStatsArray: Array<{ name: string; completedCount: number; }> | Record<string, unknown>;
+      let tagStatsArray: Record<string, unknown>;
+      let insights: string[];
+
+      // Type guard for script response format
+      if (scriptData && typeof scriptData === 'object' && scriptData !== null && 'summary' in scriptData) {
+        // Script returns: {summary: {...}, projectStats: {...}, tagStats: {...}, insights: [...]}
+        const typedScriptData = scriptData as ScriptData;
+        const summary = typedScriptData.summary!;
+        overview = {
+          totalTasks: summary.totalTasks || 0,
+          completedTasks: summary.completedTasks || 0,
+          completionRate: summary.completionRate || 0,
+          activeProjects: summary.activeProjects || 0,
+          overdueCount: summary.overdueCount || 0,
+        };
+
+        projectStatsArray = includeProjectStats ? (typedScriptData.projectStats || []) : [];
+        tagStatsArray = includeTagStats ? (typedScriptData.tagStats || {}) : {};
+        insights = typedScriptData.insights || [];
+      } else {
+        // Fallback for empty/error cases
+        overview = {
+          totalTasks: 0,
+          completedTasks: 0,
+          completionRate: 0,
+          activeProjects: 0,
+          overdueCount: 0,
+        };
+        projectStatsArray = [];
+        tagStatsArray = {};
+        insights = [];
+      }
 
       const responseData = {
         period,
@@ -102,10 +129,10 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           overview,
           daily: [],
           weekly: {},
-          projectStats: projectStatsArray,
+          projectStats: Array.isArray(projectStatsArray) ? projectStatsArray : [],
           tagStats: tagStatsArray,
         },
-        insights: { recommendations: data.insights || [] },
+        insights: { recommendations: insights },
         healthScore: Math.max(0, Math.min(100, Math.round((overview.completionRate || 0) * 100))),
       };
 

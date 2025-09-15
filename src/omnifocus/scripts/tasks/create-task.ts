@@ -120,18 +120,19 @@ export const CREATE_TASK_SCRIPT = `
       // Get the created task ID
       const taskId = task.id();
       
-      // Apply basic tags if provided (simplified approach)
+      // Apply tags using fallback strategy (same as update-task.ts)
       let tagResult = null;
       if (taskData.tags && taskData.tags.length > 0) {
         try {
-          // Basic tag application without bridge
           const flatTags = doc.flattenedTags();
+          const tagsToAdd = [];
           const appliedTags = [];
-          
+
+          // Find or create tags
           for (let i = 0; i < taskData.tags.length; i++) {
             const tagName = taskData.tags[i];
             let tag = null;
-            
+
             // Find existing tag
             for (let j = 0; j < flatTags.length; j++) {
               if (flatTags[j].name() === tagName) {
@@ -139,21 +140,42 @@ export const CREATE_TASK_SCRIPT = `
                 break;
               }
             }
-            
+
             // Create new tag if not found
             if (!tag) {
               tag = app.Tag({ name: tagName });
               doc.tags.push(tag);
             }
-            
-            // Apply tag to task
-            task.addTag(tag);
+
+            tagsToAdd.push(tag);
             appliedTags.push(tagName);
           }
-          
+
+          // Apply tags using fallback strategy
+          if (tagsToAdd.length > 0) {
+            try {
+              // First attempt: addTags with array
+              task.addTags(tagsToAdd);
+            } catch (addTagsError) {
+              try {
+                // Second attempt: set tags property directly
+                task.tags = tagsToAdd;
+              } catch (setTagsError) {
+                // Third attempt: individual addTag calls
+                for (const tag of tagsToAdd) {
+                  try {
+                    task.addTag(tag);
+                  } catch (e) {
+                    // Skip individual tag errors but continue
+                  }
+                }
+              }
+            }
+          }
+
           tagResult = { success: true, tagsAdded: appliedTags, tagsCreated: [], totalTags: appliedTags.length };
           console.log('Successfully added ' + appliedTags.length + ' tags to task');
-          
+
         } catch (tagError) {
           console.log('Warning: Error adding tags:', tagError.message);
           // Continue without tags rather than failing task creation

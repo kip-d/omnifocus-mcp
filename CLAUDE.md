@@ -17,6 +17,10 @@ This document contains hard-won insights that will save you from repeating costl
 - **Always run integration tests** before considering features complete
 - Build before running: `npm run build`
 
+## 🚨 CRITICAL: Systematic Debugging Workflow
+**Before fixing ANY issues, consult `/docs/DEBUGGING_WORKFLOW.md`**
+This document prevents the Fix → Lint → Build error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per fix and creates better code.
+
 ## 🚨 CRITICAL LESSON: MCP stdin Handling
 
 **We spent 6+ months with broken MCP lifecycle compliance!** 

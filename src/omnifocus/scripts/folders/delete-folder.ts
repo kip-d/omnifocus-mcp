@@ -84,7 +84,7 @@ export const DELETE_FOLDER_SCRIPT = `
       }
       
       // Folder is empty - safe to delete
-      targetFolder.markForDeletion();
+      targetFolder.delete();
       
       return JSON.stringify({
         success: true,

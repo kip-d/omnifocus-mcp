@@ -4,7 +4,7 @@ import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
 
 // Schema for the workflow analysis tool
@@ -13,7 +13,10 @@ const WorkflowAnalysisSchema = z.object({
     .default('standard')
     .describe('Analysis depth: quick (insights only), standard (insights + key data), deep (insights + full dataset)'),
 
-  focusAreas: z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities']))
+  focusAreas: z.union([
+    z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])),
+    z.string().transform(val => val.split(',').map(s => s.trim()).filter(s => s)),
+  ]).pipe(z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])))
     .default(['productivity', 'workload', 'bottlenecks'])
     .describe('Specific areas to focus analysis on'),
 
@@ -54,16 +57,14 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       const cacheKey = `workflow_analysis_${args.analysisDepth}_${args.focusAreas.sort().join('_')}_${args.maxInsights}`;
 
       // Check cache (2 hours TTL for deep analysis)
-      const cached = this.cache.get<{ insights?: unknown[]; recommendations?: unknown[]; patterns?: unknown[]; metadata?: Record<string, unknown> }>('analytics', cacheKey);
+      const cached = this.cache.get<{ insights?: Array<string | { insight?: string; message?: string }>; recommendations?: Array<string | { recommendation?: string; message?: string }>; patterns?: unknown[]; metadata?: Record<string, unknown> }>('analytics', cacheKey);
       if (cached) {
         logger.debug('Returning cached workflow analysis');
         return createAnalyticsResponseV2(
           'workflow_analysis',
           cached,
           'Workflow Analysis Results',
-          // Cached workflow analysis data is untyped from previous executions
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
-          this.extractKeyFindings(cached as any),
+          this.extractKeyFindings(cached),
           {
             from_cache: true,
             analysis_depth: args.analysisDepth,
@@ -96,18 +97,66 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         );
       }
 
-      const data: WorkflowAnalysisData = isScriptSuccess(result) ? result.data : {
-        analysis: {
-          patterns: [],
-          bottlenecks: [],
-          recommendations: [],
-          insights: [],
-        },
-        summary: {
-          score: 0,
-          status: 'No data available',
-        },
-      };
+      // Handle the script result properly - check for actual data structure
+      interface WorkflowScriptData {
+        insights?: Array<string | { insight?: string; message?: string }>;
+        patterns?: unknown[];
+        recommendations?: Array<string | { recommendation?: string; message?: string }>;
+        bottlenecks?: unknown[];
+        metadata?: {
+          score?: number;
+        };
+      }
+
+      interface WorkflowAnalysisResponse {
+        analysis?: {
+          patterns?: unknown[];
+          bottlenecks?: unknown[];
+          recommendations?: Array<string | { recommendation?: string; message?: string }>;
+          insights?: Array<string | { insight?: string; message?: string }>;
+        };
+        summary?: {
+          score?: number;
+          status?: string;
+        };
+      }
+
+      // Handle both WorkflowAnalysisData and direct script responses
+      const scriptData: unknown = result && result.data ? result.data : result;
+
+      let data: WorkflowAnalysisResponse;
+      // Type guard for script response format
+      if (scriptData && typeof scriptData === 'object' && scriptData !== null &&
+          ('insights' in scriptData || 'patterns' in scriptData || 'recommendations' in scriptData)) {
+        // Script returns data directly with insights, patterns, recommendations at top level
+        const typedScriptData = scriptData as WorkflowScriptData;
+        data = {
+          analysis: {
+            patterns: typedScriptData.patterns || [],
+            bottlenecks: typedScriptData.bottlenecks || [],
+            recommendations: typedScriptData.recommendations || [],
+            insights: typedScriptData.insights || [],
+          },
+          summary: {
+            score: typedScriptData.metadata?.score || 0,
+            status: 'Analysis completed',
+          },
+        };
+      } else {
+        // Fallback for empty/error cases
+        data = {
+          analysis: {
+            patterns: [],
+            bottlenecks: [],
+            recommendations: [],
+            insights: [],
+          },
+          summary: {
+            score: 0,
+            status: 'No data available',
+          },
+        };
+      }
 
       // Structure the response data
       const responseData = {

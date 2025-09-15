@@ -2,7 +2,7 @@
 
 **Purpose**: Validate the complete user experience of the OmniFocus MCP server through systematic testing of all 15 tools and core workflows.
 
-**Target Assistants**: Claude Desktop, ChatGPT with MCP support, or any LLM with OmniFocus MCP integration.
+**Target Assistants**: Claude Desktop (primary), ChatGPT with MCP support, or any LLM with OmniFocus MCP integration.
 
 ---
 
@@ -14,9 +14,10 @@ You are testing the OmniFocus MCP (Model Context Protocol) server integration. T
 
 ### Pre-Test Setup Verification
 First, verify the MCP connection is working:
-1. Check that you have access to OmniFocus MCP tools
-2. Run a simple system check to confirm connectivity
-3. Verify OmniFocus is running and accessible on the system
+1. Check that you have access to OmniFocus MCP tools (should see 15 tools available)
+2. Run `system` tool with operation "version" to confirm connectivity
+3. Run `system` tool with operation "diagnostics" to verify OmniFocus is accessible
+4. Confirm OmniFocus application is running on the system
 
 ---
 
@@ -25,8 +26,8 @@ First, verify the MCP connection is working:
 ### Test Group 1: Basic Task Operations
 **Objective**: Verify core task CRUD operations work correctly
 
-1. **Create a test project**: Create a project called "MCP Testing Project" 
-2. **Add tasks with various properties**:
+1. **Create a test project**: Use `projects` tool with operation "create" to create a project called "MCP Testing Project 2025-09-15"
+2. **Add tasks with various properties** using `manage_task` tool with operation "create":
    - Simple task: "Test basic task creation"
    - Task with due date: "Task due tomorrow" (due tomorrow at 5 PM)
    - Task with defer date: "Deferred task" (defer until next week)
@@ -34,19 +35,19 @@ First, verify the MCP connection is working:
    - Task with time estimate: "30-minute task" (estimated 30 minutes)
    - Task with tags: "Tagged task" (add tags: @work, @urgent)
 
-3. **Query and verify**: 
-   - Search for tasks containing "MCP"
-   - List today's tasks
-   - Show flagged tasks
-   - Query tasks by tags (@work, @urgent)
+3. **Query and verify** using `tasks` tool:
+   - Search for tasks containing "MCP" (mode="search", search="MCP")
+   - List today's tasks (mode="today")
+   - Show flagged tasks (mode="flagged")
+   - Query tasks by tags (mode="all", tags=["@work", "@urgent"])
 
-4. **Update operations**:
-   - Mark one task as completed
-   - Change due date on another task
-   - Update task name and add notes
-   - Remove and add tags
+4. **Update operations** using `manage_task` tool:
+   - Mark one task as completed (operation="complete")
+   - Change due date on another task (operation="update")
+   - Update task name and add notes (operation="update")
+   - Remove and add tags (operation="update")
 
-5. **Cleanup**: Delete the test tasks and project
+5. **Cleanup**: Delete the test tasks and project using `manage_task` and `projects` tools with operation="delete"
 
 **Success Criteria**: All operations complete without errors, data persists correctly in OmniFocus
 
