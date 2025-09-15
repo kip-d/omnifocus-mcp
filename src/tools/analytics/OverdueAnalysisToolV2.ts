@@ -237,7 +237,9 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
 
     // Add recommendations if available with defensive null checks
     if (data?.stats?.insights?.topRecommendations && Array.isArray(data.stats.insights.topRecommendations) && data.stats.insights.topRecommendations.length > 0) {
-      const firstRecommendation = data.stats.insights.topRecommendations[0];
+      const recommendations = data.stats.insights.topRecommendations;
+      // Type assertion is safe here - we've verified it's a non-empty array
+      const firstRecommendation = recommendations[0] as unknown;
       if (firstRecommendation && typeof firstRecommendation === 'string') {
         findings.push(firstRecommendation);
       }
