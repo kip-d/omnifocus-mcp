@@ -173,13 +173,11 @@ export const CREATE_TASK_SCRIPT = `
             }
           }
 
-          // Save document to ensure tag persistence
+          // Give OmniFocus a moment to update indexes (no save to avoid user workflow disruption)
           try {
-            doc.save();
-            // Give OmniFocus a moment to update indexes
             delay(0.5);
-          } catch (saveError) {
-            console.log('Warning: Could not save document after tag operations');
+          } catch (e) {
+            // Delay is safe and non-disruptive
           }
 
           // Verify tags were actually applied by re-querying
