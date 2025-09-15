@@ -156,7 +156,8 @@ export const QUERY_PERSPECTIVE_SCRIPT = `
           }
           
           // Now filter tasks based on perspective rules
-          const allTasks = flattenedTasks;
+          const doc = Application('OmniFocus').defaultDocument();
+          const allTasks = doc.flattenedTasks;
           const tasks = [];
           let count = 0;
           

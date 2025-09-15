@@ -288,7 +288,14 @@ export const EXPORT_TASKS_SCRIPT = `
         data: tasks,
         count: tasks.length,
         limited: tasksAdded >= maxTasks,
-        message: tasksAdded >= maxTasks ? 'Export limited to ' + maxTasks + ' tasks. Use filter.limit to adjust.' : undefined
+        debug: {
+          totalTasksInDB: allTasks.length,
+          maxTasksAllowed: maxTasks,
+          filtersApplied: Object.keys(filter || {}),
+          fieldsRequested: allFields
+        },
+        message: tasksAdded >= maxTasks ? 'Export limited to ' + maxTasks + ' tasks. Use filter.limit to adjust.' :
+                 tasksAdded === 0 ? 'No tasks matched the export filters. Try removing filters or checking filter values.' : undefined
       });
     }
   } catch (error) {
