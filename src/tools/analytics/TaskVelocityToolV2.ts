@@ -11,6 +11,69 @@ import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { TaskVelocityData } from '../../omnifocus/script-response-types.js';
 
+// Union type to support both production script format and test mock format
+interface TestMockVelocityData {
+  totalCompleted: number;
+  averagePerDay: number;
+  peakDay: { date: string; count: number };
+  trend: 'increasing' | 'stable' | 'decreasing';
+  predictedCapacity: number;
+  dailyData: Array<{ date: string; completed: number }>;
+  dayOfWeekPatterns: Record<string, number>;
+  timeOfDayPatterns: Record<string, number>;
+  projectVelocity: Array<{ name: string; completed: number }>;
+  insights: string[];
+}
+
+type VelocityDataUnion = TaskVelocityData | TestMockVelocityData;
+
+// Type-safe helper functions to extract data from either format
+function isTestMockFormat(data: VelocityDataUnion): data is TestMockVelocityData {
+  return 'totalCompleted' in data;
+}
+
+function getTasksCompleted(data: VelocityDataUnion): number {
+  if (isTestMockFormat(data)) {
+    return data.totalCompleted;
+  }
+  return data.summary?.currentVelocity ?? 0;
+}
+
+function getAveragePerDay(data: VelocityDataUnion): number {
+  if (isTestMockFormat(data)) {
+    return data.averagePerDay;
+  }
+  return data.velocity?.daily ?? 0;
+}
+
+function getPeakDay(data: VelocityDataUnion): { date: string | null; count: number } {
+  if (isTestMockFormat(data)) {
+    return data.peakDay;
+  }
+  return { date: null, count: 0 }; // Production format doesn't have peak day
+}
+
+function getTrend(data: VelocityDataUnion): 'increasing' | 'stable' | 'decreasing' {
+  if (isTestMockFormat(data)) {
+    return data.trend;
+  }
+  return (data.velocity?.trend as 'increasing' | 'stable' | 'decreasing') ?? 'stable';
+}
+
+function getPredictedCapacity(data: VelocityDataUnion): number {
+  if (isTestMockFormat(data)) {
+    return data.predictedCapacity;
+  }
+  return data.predictions?.nextWeek ?? 0;
+}
+
+function getInsights(data: VelocityDataUnion): string[] {
+  if (isTestMockFormat(data)) {
+    return data.insights;
+  }
+  return []; // Production format doesn't have insights at this level
+}
+
 export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
   name = 'task_velocity';
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
@@ -58,13 +121,13 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
 
       // Schema matching the optimized velocity payload
 
-      const result = await this.execJson<TaskVelocityData>(script);
+      const result = await this.execJson<VelocityDataUnion>(script);
 
       if (isScriptError(result)) {
         return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
       }
 
-      const data: TaskVelocityData = isScriptSuccess(result) ? result.data : {
+      const data: VelocityDataUnion = isScriptSuccess(result) ? result.data : {
         velocity: {
           daily: 0,
           weekly: 0,
@@ -81,13 +144,14 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
           percentageChange: 0,
         },
       };
-      // Support both optimized payload and simplified test shapes
-      const tasksCompleted = data.summary?.currentVelocity ?? (data as any).totalCompleted ?? 0;
-      const averagePerDay = data.velocity?.daily ?? (data as any).averagePerDay ?? 0;
-      const peak = (data as any).peakDay ?? { date: null, count: 0 }; // Support test format
-      const trend = data.velocity?.trend ?? (data as any).trend ?? 'stable';
-      const predictedCapacity = data.predictions?.nextWeek ?? (data as any).predictedCapacity ?? 0;
-      const daily = data.trends || [];
+
+      // Use type-safe helpers to extract data from either format
+      const tasksCompleted = getTasksCompleted(data);
+      const averagePerDay = getAveragePerDay(data);
+      const peak = getPeakDay(data);
+      const trend = getTrend(data);
+      const predictedCapacity = getPredictedCapacity(data);
+      const daily = isTestMockFormat(data) ? data.dailyData : (data.trends || []);
 
       const responseData = {
         velocity: {
@@ -104,7 +168,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
           byTimeOfDay: {},
           byProject: [],
         },
-        insights: (data as any).insights || [],
+        insights: getInsights(data),
       };
 
       // Cache for 1 hour

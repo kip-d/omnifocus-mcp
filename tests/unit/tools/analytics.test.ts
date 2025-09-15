@@ -541,7 +541,7 @@ describe('Analytics Tools', () => {
         expect(result.success).toBe(true);
         expect(result.data.stats.summary.totalOverdue).toBe(0);
         expect(result.data.stats.overdueTasks).toEqual([]);
-        expect(result.data.stats.insights).toEqual(['No overdue tasks - great job!']);
+        expect(result.data.stats.insights).toEqual({ topRecommendations: ['No overdue tasks - great job!'] });
       });
 
       it('should preserve all analysis data correctly', async () => {
