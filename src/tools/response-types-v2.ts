@@ -88,7 +88,8 @@ export interface OverdueAnalysisDataV2 {
       tags?: string[];
     }>;
     patterns: Array<{
-      category: string;
+      type: string;
+      value: string;
       count: number;
       percentage: number;
     }>;
