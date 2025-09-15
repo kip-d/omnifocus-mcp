@@ -42,7 +42,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
           'task_velocity',
           cached,
           'Task Velocity Analysis',
-          this.extractKeyFindings(cached),
+          this.extractKeyFindings(cached as Parameters<typeof this.extractKeyFindings>[0]),
           {
             from_cache: true,
             days,

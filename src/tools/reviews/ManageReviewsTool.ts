@@ -64,11 +64,13 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
       return {
         ...cached,
         metadata: {
+          operation: 'manage_reviews',
+          timestamp: new Date().toISOString(),
           ...cached?.metadata,
           from_cache: true,
           ...timer.toMetadata(),
         },
-      };
+      } as StandardResponseV2<unknown>;
     }
 
     // Execute script

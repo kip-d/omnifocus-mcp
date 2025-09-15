@@ -252,10 +252,10 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
     })
     .slice(0, 3)
     .map(t => ({
-      id: t.id,
-      name: t.name,
-      dueDate: t.dueDate,
-      project: t.project,
+      id: t.id || '',
+      name: t.name || '',
+      dueDate: t.dueDate && t.dueDate !== null ? (typeof t.dueDate === 'string' ? t.dueDate : t.dueDate.toISOString()) : undefined,
+      project: t.project || undefined,
       flagged: t.flagged,
     }));
 

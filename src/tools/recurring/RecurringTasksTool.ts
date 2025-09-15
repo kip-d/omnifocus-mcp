@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { ANALYZE_RECURRING_TASKS_SCRIPT, GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
-import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 
@@ -68,7 +68,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
           const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
           if (cachedAnalysis) {
-            return cachedAnalysis;
+            return cachedAnalysis as StandardResponseV2<unknown>;
           }
 
           // Execute analysis script
@@ -94,16 +94,20 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           }
 
           // Add metadata
-          const analyzeResponse = {
-            tasks: analyzeResult.tasks,
-            summary: analyzeResult.summary,
-            metadata: {
+          const analyzeResponse = createSuccessResponseV2(
+            'recurring_tasks',
+            {
+              tasks: analyzeResult.tasks,
+              summary: analyzeResult.summary,
+            },
+            undefined,
+            {
               ...timer.toMetadata(),
               operation: 'analyze',
               filters_applied: analyzeOptions,
               total_analyzed: analyzeResult.tasks?.length || 0,
             },
-          };
+          );
 
           // Cache for 1 hour (recurring tasks change infrequently)
           this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
@@ -123,7 +127,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
           const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
           if (cachedPatterns) {
-            return cachedPatterns;
+            return cachedPatterns as StandardResponseV2<unknown>;
           }
 
           // Execute pattern analysis script
@@ -177,19 +181,23 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
             }
           }
 
-          const patternsResponse = {
-            totalRecurring: patternsResult.totalRecurring,
-            patterns: patternsResult.patterns || [],
-            byProject: patternsResult.byProject || [],
-            mostCommon: patternsResult.mostCommon,
-            insights,
-            metadata: {
+          const patternsResponse = createSuccessResponseV2(
+            'recurring_tasks',
+            {
+              totalRecurring: patternsResult.totalRecurring,
+              patterns: patternsResult.patterns || [],
+              byProject: patternsResult.byProject || [],
+              mostCommon: patternsResult.mostCommon,
+              insights,
+            },
+            undefined,
+            {
               ...timer.toMetadata(),
               operation: 'patterns',
               filters_applied: patternsOptions,
               patterns_found: patternsResult.patterns?.length || 0,
             },
-          };
+          );
 
           // Cache for 1 hour
           this.cache.set('analytics', patternsCacheKey, patternsResponse);

@@ -116,7 +116,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tag list');
-        return cached; // Keep identity to satisfy test equality; cached object may already be a formatted response
+        return cached as StandardResponseV2<unknown>; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
       // Choose script based on options
@@ -176,7 +176,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached active tags');
-        return cached;
+        return cached as StandardResponseV2<unknown>;
       }
 
       // Execute script
