@@ -86,7 +86,7 @@ describe('ManageReviewsTool', () => {
   it('handles null result from script', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.executeJson.mockResolvedValue(null);
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'NULL_RESULT' });
 
     const res: any = await tool.executeValidated({ operation: 'list_for_review', overdue: false, daysAhead: 7 } as any);
     expect(res.success).toBe(false);

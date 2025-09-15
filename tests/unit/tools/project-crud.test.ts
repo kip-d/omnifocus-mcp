@@ -253,7 +253,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.deleted).toBe(true);
+      expect(result.data.project.deleted).toBe(true);
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
       expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
     });

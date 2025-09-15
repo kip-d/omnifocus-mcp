@@ -85,12 +85,13 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
           })),
           patterns: Array.isArray(scriptData.patterns)
             ? scriptData.patterns.map(p => ({
-                category: p.type || 'unknown',
+                type: p.type || 'unknown',
+                value: (p as any).value || 'unknown',
                 count: p.count || 0,
                 percentage: p.percentage || 0,
               }))
             : [],  // Simplified fallback for type safety
-          insights: {},
+          insights: (scriptData as any).recommendations || [],
         },
         groupedAnalysis: Object.fromEntries(
           Object.entries(scriptData.groupedAnalysis ?? {}).map(([key, value]) => [
@@ -154,8 +155,8 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
     // Add pattern insights
     if (data.stats?.patterns && data.stats.patterns.length > 0) {
       const topPattern = data.stats.patterns[0];
-      if (topPattern && topPattern.category && topPattern.count) {
-        findings.push(`Most overdue in: ${topPattern.category} (${topPattern.count} tasks)`);
+      if (topPattern && (topPattern as any).type && topPattern.count) {
+        findings.push(`Most overdue in: ${(topPattern as any).type} (${topPattern.count} tasks)`);
       }
     }
 

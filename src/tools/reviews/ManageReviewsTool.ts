@@ -79,7 +79,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
     });
     const result = await this.execJson<ReviewListData>(script);
     if (isScriptError(result)) {
-      return createErrorResponseV2('manage_reviews', 'SCRIPT_ERROR', result.error || 'Script error', undefined, result.details, timer.toMetadata());
+      return createErrorResponseV2('manage_reviews', result.error === 'NULL_RESULT' ? 'NULL_RESULT' : 'SCRIPT_ERROR', result.error || 'Script error', undefined, result.details, timer.toMetadata());
     }
 
     const data: ReviewListData = isScriptSuccess(result) ? result.data : { projects: [], count: 0 };
