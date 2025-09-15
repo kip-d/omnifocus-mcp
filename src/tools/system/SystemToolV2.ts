@@ -268,9 +268,81 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         };
       }
 
-      // Test 4: Run actual LIST_TASKS_SCRIPT if requested
+      // Test 4: Method Availability (for analytics tools)
+      this.logger.info('Running Test 4: Method Availability');
+      const methodScript = `
+        const methodTests = {};
+
+        try {
+          const tasks = doc.flattenedTasks();
+          if (tasks && tasks.length > 0) {
+            const firstTask = tasks[0];
+
+            // Test methods used by analytics tools
+            methodTests.blocked = {
+              available: typeof firstTask.blocked === 'function',
+              type: typeof firstTask.blocked
+            };
+
+            methodTests.next = {
+              available: typeof firstTask.next === 'function',
+              type: typeof firstTask.next
+            };
+
+            methodTests.effectivelyCompleted = {
+              available: typeof firstTask.effectivelyCompleted === 'function',
+              type: typeof firstTask.effectivelyCompleted
+            };
+
+            // Test if methods actually work (safely)
+            if (typeof firstTask.blocked === 'function') {
+              try {
+                const blockedResult = firstTask.blocked();
+                methodTests.blocked.testResult = { success: true, value: blockedResult };
+              } catch (e) {
+                methodTests.blocked.testResult = { success: false, error: e.toString() };
+              }
+            }
+
+            if (typeof firstTask.next === 'function') {
+              try {
+                const nextResult = firstTask.next();
+                methodTests.next.testResult = { success: true, value: nextResult };
+              } catch (e) {
+                methodTests.next.testResult = { success: false, error: e.toString() };
+              }
+            }
+          } else {
+            methodTests.error = 'No tasks available for method testing';
+          }
+        } catch (e) {
+          methodTests.error = e.toString();
+        }
+
+        return JSON.stringify({
+          test: 'method_availability',
+          methods: methodTests
+        });
+      `;
+
+      try {
+        const result = await this.diagnosticOmni.execute(methodScript);
+        results.tests.method_availability = {
+          success: true,
+          result,
+        };
+      } catch (error: unknown) {
+        const err = error as { message?: string; stderr?: string };
+        results.tests.method_availability = {
+          success: false,
+          error: err.message || 'Unknown error',
+          stderr: err.stderr,
+        };
+      }
+
+      // Test 5: Run actual LIST_TASKS_SCRIPT if requested
       if (args.testScript === 'list_tasks') {
-        this.logger.info('Running Test 4: Actual LIST_TASKS_SCRIPT');
+        this.logger.info('Running Test 5: Actual LIST_TASKS_SCRIPT');
         const { LIST_TASKS_SCRIPT } = await import('../../omnifocus/scripts/tasks.js');
         const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
           filter: { limit: 1 },

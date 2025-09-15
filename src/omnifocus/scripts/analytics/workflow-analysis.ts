@@ -165,8 +165,9 @@ export const WORKFLOW_ANALYSIS_SCRIPT = `
         try {
           const completed = safeIsCompleted(task);
           const flagged = safeIsFlagged(task);
-          const blocked = safeGet(() => task.blocked(), false);
-          const next = safeGet(() => task.next(), false);
+          // Check if these methods exist in this OmniFocus version
+          const blocked = (typeof task.blocked === 'function') ? safeGet(() => task.blocked(), false) : false;
+          const next = (typeof task.next === 'function') ? safeGet(() => task.next(), false) : false;
           const overdueDays = getOverdueDays(task);
           const taskAge = getTaskAge(task);
           const estimatedMinutes = safeGetEstimatedMinutes(task) || 0;

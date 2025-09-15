@@ -173,8 +173,30 @@ export const CREATE_TASK_SCRIPT = `
             }
           }
 
-          tagResult = { success: true, tagsAdded: appliedTags, tagsCreated: [], totalTags: appliedTags.length };
-          console.log('Successfully added ' + appliedTags.length + ' tags to task');
+          // Save document to ensure tag persistence
+          try {
+            doc.save();
+          } catch (saveError) {
+            console.log('Warning: Could not save document after tag operations');
+          }
+
+          // Verify tags were actually applied by re-querying
+          let verifiedTags = [];
+          try {
+            verifiedTags = safeGetTags(task);
+          } catch (verifyError) {
+            console.log('Warning: Could not verify tag application');
+          }
+
+          tagResult = {
+            success: true,
+            tagsAdded: appliedTags,
+            tagsCreated: [],
+            totalTags: appliedTags.length,
+            verified: verifiedTags.length,
+            verifiedTags: verifiedTags
+          };
+          console.log('Successfully added ' + appliedTags.length + ' tags to task, verified: ' + verifiedTags.length);
 
         } catch (tagError) {
           console.log('Warning: Error adding tags:', tagError.message);

@@ -48,8 +48,10 @@ export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
         const task = allTasks[i];
         
         try {
-          // Use direct API method to check if effectively completed
-          if (safeGet(() => task.effectivelyCompleted(), false)) {
+          // Use direct API method to check if effectively completed (with method existence check)
+          const isEffectivelyCompleted = (typeof task.effectivelyCompleted === 'function') ?
+            safeGet(() => task.effectivelyCompleted(), false) : safeIsCompleted(task);
+          if (isEffectivelyCompleted) {
             continue;
           }
           
@@ -64,11 +66,11 @@ export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
           const taskName = safeGet(() => task.name(), 'Unnamed Task');
           const taskId = safeGet(() => task.id(), 'unknown');
           
-          // Use direct API method to check if blocked
-          const isBlocked = safeGet(() => task.blocked(), false);
-          
-          // Use direct API method to check if it's a next action
-          const isNext = safeGet(() => task.next(), false);
+          // Use direct API method to check if blocked (with method existence check)
+          const isBlocked = (typeof task.blocked === 'function') ? safeGet(() => task.blocked(), false) : false;
+
+          // Use direct API method to check if it's a next action (with method existence check)
+          const isNext = (typeof task.next === 'function') ? safeGet(() => task.next(), false) : false;
           
           // Calculate days overdue
           const daysOverdue = Math.floor((now - dueDate) / (1000 * 60 * 60 * 24));
