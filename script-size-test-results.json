@@ -1,0 +1,124 @@
+{
+  "timestamp": "2025-09-16T19:41:34.733Z",
+  "testConfig": {
+    "startSize": 1024,
+    "maxSize": 524288,
+    "tolerance": 1024,
+    "timeout": 15000,
+    "testPatterns": [
+      "pure-js",
+      "jxa-api",
+      "mixed-content"
+    ],
+    "executionMethods": [
+      "node-stdin",
+      "file"
+    ]
+  },
+  "results": [
+    {
+      "pattern": "pure-js",
+      "method": "node-stdin",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "pure-js",
+      "method": "file",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "jxa-api",
+      "method": "node-stdin",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "jxa-api",
+      "method": "file",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "mixed-content",
+      "method": "node-stdin",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "mixed-content",
+      "method": "file",
+      "lastSuccess": 523266,
+      "lastFailure": 524288,
+      "limit": 523266,
+      "range": 1022
+    },
+    {
+      "pattern": "simple-omnijs",
+      "method": "omnijs-bridge",
+      "limit": 0,
+      "range": 2044
+    },
+    {
+      "pattern": "omnifocus-omnijs",
+      "method": "omnijs-bridge",
+      "limit": 0,
+      "range": 2044
+    }
+  ],
+  "insights": {
+    "jxaStdinResults": [
+      {
+        "pattern": "pure-js",
+        "method": "node-stdin",
+        "lastSuccess": 523266,
+        "lastFailure": 524288,
+        "limit": 523266,
+        "range": 1022
+      },
+      {
+        "pattern": "jxa-api",
+        "method": "node-stdin",
+        "lastSuccess": 523266,
+        "lastFailure": 524288,
+        "limit": 523266,
+        "range": 1022
+      },
+      {
+        "pattern": "mixed-content",
+        "method": "node-stdin",
+        "lastSuccess": 523266,
+        "lastFailure": 524288,
+        "limit": 523266,
+        "range": 1022
+      }
+    ],
+    "bridgeResults": [
+      {
+        "pattern": "simple-omnijs",
+        "method": "omnijs-bridge",
+        "limit": 0,
+        "range": 2044
+      },
+      {
+        "pattern": "omnifocus-omnijs",
+        "method": "omnijs-bridge",
+        "limit": 0,
+        "range": 2044
+      }
+    ],
+    "avgJXALimit": 523266,
+    "avgBridgeLimit": 0
+  }
+}

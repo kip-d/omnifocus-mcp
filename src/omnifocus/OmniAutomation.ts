@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createLogger } from '../utils/logger.js';
 import { ScriptResult, createScriptSuccess, createScriptError } from './script-result-types.js';
 import { JxaEnvelopeSchema, normalizeToEnvelope } from '../utils/safe-io.js';
+import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor.js';
 // Remove conflicting import
 
 // For TypeScript type information about OmniFocus objects, see:
@@ -32,16 +33,25 @@ export class OmniAutomation {
 
   constructor(maxScriptSize?: number, timeout?: number) {
     // Allow configuration via environment variables or constructor parameters
+    // Updated to use empirical JXA limit (523KB) with 25% safety margin (392KB)
     this.maxScriptSize = maxScriptSize ||
-      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10) : 300000); // Default 300KB to accommodate helper-heavy scripts
+      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10) : Math.floor(EMPIRICAL_LIMITS.jxaDirect * 0.75));
     this.timeout = timeout ||
       (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
   }
 
   public async execute<T = unknown>(script: string): Promise<T> {
     console.error(`[OMNI_AUTOMATION_DEBUG] execute called with script length: ${script.length}, max: ${this.maxScriptSize}`);
+
+    // Use empirical size monitoring for better feedback
+    const sizeAnalysis = monitorScriptSize(script, 'jxa');
+
+    // Hard limit check (should be very rare given our empirical findings)
     if (script.length > this.maxScriptSize) {
-      throw new OmniAutomationError(`Script too large: ${script.length} bytes (max: ${this.maxScriptSize})`);
+      throw new OmniAutomationError(
+        `Script too large: ${sizeAnalysis.sizeKB}KB (limit: ${Math.round(this.maxScriptSize / 1024)}KB). ` +
+        `Empirical JXA capacity is ${sizeAnalysis.limitKB}KB - consider increasing maxScriptSize if needed.`
+      );
     }
 
     console.error('[OMNI_AUTOMATION_DEBUG] Script size OK, delegating to executeInternal...');

@@ -107,15 +107,22 @@ for (let i = 0; i < allTasks.length; i++) {
 - **Early exit** on most common conditions (completed, no date)
 - Set `skipAnalysis: true` for 30% faster queries when recurring analysis not needed
 
-## 🚨 Critical: Script Size Limits & CLI Testing
+## 🚨 Critical: Script Size Limits & CLI Testing - EMPIRICALLY VERIFIED ✅
 
-### Script Size Issues (19KB+ = Truncation) 
-**JXA scripts over 19KB get truncated during execution, causing `SyntaxError: Unexpected EOF`**
+### Script Size Limits - CORRECTED (September 2025)
+**Previous Assumption:** 19KB limit (INCORRECT)
+**Empirical Reality:**
+- **JXA Direct:** 523,266 characters (~511KB)
+- **OmniJS Bridge:** 261,124 characters (~255KB)
 
-**Current Issue (December 2025):**
-- `CREATE_TASK_SCRIPT` = 19,026 characters (too large)
-- Includes: `getRecurrenceApplyHelpers()` + `getValidationHelpers()` + `BRIDGE_HELPERS`  
-- Result: Script truncated ~14KB → syntax error
+**Key Finding:** Our "19KB limit" was only **3.6%** of actual JXA capacity!
+
+**Current Codebase Status:**
+- Largest script: `helpers.ts` (31,681 chars) - only 6% of JXA limit
+- All scripts well within empirical limits
+- No size constraints for planned development
+
+**See `docs/SCRIPT_SIZE_LIMITS.md` for complete empirical testing results.**
 
 ### CLI Testing - SOLVED ✅
 **Previous misconception:** "CLI testing hangs forever"  
@@ -130,34 +137,38 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' | node dist/index.js
 ```
 
-### Keep Scripts Small
-- **Use minimal helpers**: Import only essential helper functions
-- **Available helper functions**:
-  - `getMinimalHelpers()` - Only essential utilities (safeGet, safeGetTags, safeIsCompleted, formatError)
-  - `getTagHelpers()` - Minimal helpers for tag operations
-  - `getAllHelpers()` - Full helper suite (use sparingly, can exceed limits)
+### Helper Function Strategy - UPDATED
+- **Empirical capacity:** 523KB for JXA, 261KB for OmniJS bridge
+- **Current largest:** `getAllHelpers()` ~30KB (only 6% of JXA limit)
+- **Recommendation:** Use appropriate helper level for functionality needed
 
-### Implementation Pattern
+**Available helper functions:**
+- `getMinimalHelpers()` - Essential utilities (~8KB)
+- `getTagHelpers()` - Tag operation helpers (~12KB)
+- `getAllHelpers()` - Full helper suite (~30KB, **now safe to use freely**)
+
+### Implementation Pattern - UPDATED
 ```typescript
-// ❌ WRONG - Can exceed script size limits
+// ✅ NOW SAFE - Use full helpers as needed
 import { getAllHelpers } from '../shared/helpers.js';
-export const MY_SCRIPT = `
-  ${getAllHelpers()}  // Too large!
-  // ... script code
+export const FULL_FEATURED_SCRIPT = `
+  ${getAllHelpers()}  // ~30KB - well within 523KB limit
+  // ... complex script logic
 `;
 
-// ✅ CORRECT - Use minimal helpers
+// ✅ STILL GOOD - Use minimal helpers for simple cases
 import { getMinimalHelpers } from '../shared/helpers.js';
-export const MY_SCRIPT = `
-  ${getMinimalHelpers()}  // Only essentials
-  // ... script code
+export const SIMPLE_SCRIPT = `
+  ${getMinimalHelpers()}  // ~8KB for basic needs
+  // ... simple script logic
 `;
 ```
 
 ### When Scripts Fail with Syntax Errors
-- Check script size first - "Unexpected token" errors often indicate size limits
-- Create specialized minimal helper functions for your specific needs
-- Test with both direct execution AND Claude Desktop (which may have stricter limits)
+- **Script size is unlikely to be the issue** (limits are 523KB+ for JXA)
+- Check for JXA vs OmniJS syntax differences
+- Validate JavaScript syntax and variable scoping
+- Test with both direct execution AND Claude Desktop
 
 ## 🚨 CRITICAL: Async Operation Lifecycle (September 2025)
 

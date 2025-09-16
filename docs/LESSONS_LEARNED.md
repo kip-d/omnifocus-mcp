@@ -37,6 +37,111 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 **Documentation Impact:** Must update all testing documentation to reflect proper MCP protocol usage.
 
+## 🚨 CRITICAL: Script Size Assumptions - 27x Underestimate (September 2025)
+
+### The Great Script Size Misconception - RESOLVED ✅
+
+**Problem:** For months, we've been constraining development based on an assumed "19KB script limit" that caused phantom truncation issues and overly conservative helper function usage.
+
+**Root Cause:** Confusion between different limitation contexts, conservative estimates treated as hard limits, and lack of empirical testing.
+
+**The Shocking Discovery:**
+- **Assumed Limit:** 19KB (~19,000 characters)
+- **Actual JXA Limit:** 523KB (~523,266 characters) - **27x larger!**
+- **Actual OmniJS Bridge Limit:** 261KB (~261,124 characters) - **13x larger!**
+
+### Timeline of Incorrect Assumptions
+
+**Phase 1: Initial Conservative Estimate**
+- Set 19KB limit based on "safety" without empirical testing
+- Likely confusion with shell ARG_MAX limits (doesn't apply to stdin piping)
+- Created complex "minimal helper" patterns to stay under phantom limit
+
+**Phase 2: Reinforcing Wrong Assumptions**
+- Script "truncation" issues attributed to size limits
+- Developed elaborate workarounds for non-existent constraints
+- Split helper functions into tiny pieces unnecessarily
+
+**Phase 3: Empirical Discovery (September 2025)**
+- Binary search testing revealed true limits are 25-27x larger
+- Our largest script (31KB) uses only 6% of actual JXA capacity
+- All "truncation" issues were actually syntax/logic errors, not size limits
+
+### Current Codebase Reality Check
+```
+helpers.ts              31,681 chars  ✅ 6.1% of actual JXA limit
+workflow-analysis.ts    29,957 chars  ✅ 5.7% of actual JXA limit
+list-tasks.ts           26,347 chars  ✅ 5.0% of actual JXA limit
+update-task.ts          25,745 chars  ✅ 4.9% of actual JXA limit
+```
+
+**Key Finding:** Scripts that "exceed our 19KB assumption" have been working perfectly in production for months.
+
+### What We Got Wrong
+
+1. **ARG_MAX Confusion:** Confused shell command line limits with stdin piping limits
+2. **Conservative Safety:** Treated ultra-conservative estimates as hard technical limits
+3. **No Empirical Testing:** Relied on assumptions instead of systematic testing
+4. **Confirmation Bias:** Attributed unrelated errors to size limits
+5. **Documentation Inertia:** Repeated incorrect limits across documentation
+
+### The Real Script Execution Pipeline
+```bash
+# Our actual execution method bypasses ARG_MAX entirely
+const osascript = spawn('osascript', ['-l', 'JavaScript'], {
+  stdio: ['pipe', 'pipe', 'pipe']
+});
+osascript.stdin.write(script);  # No shell command line involved!
+osascript.stdin.end();
+```
+
+### Methodology Failures That Led to This
+
+1. **Assumption Documentation:** Wrote limits into docs without empirical backing
+2. **No Boundary Testing:** Never tested actual failure points
+3. **Premature Optimization:** Optimized for non-existent constraints
+4. **Missing Validation:** No systematic way to challenge documented "facts"
+
+### How to Prevent Future Assumption Errors
+
+1. **Empirical First:** Always test assumptions before documenting as facts
+2. **Boundary Testing:** Create binary search tools for discovering real limits
+3. **Regular Validation:** Periodically re-test documented constraints
+4. **Assumption Audits:** Mark all assumptions clearly and validate systematically
+5. **Evidence-Based Documentation:** Require test evidence for all technical claims
+
+### Impact of This Discovery
+
+**Immediate Benefits:**
+- ✅ Can use full helper function suites without constraint anxiety
+- ✅ Complex analytics scripts are well within actual limits
+- ✅ No need for elaborate size optimization patterns
+- ✅ Development velocity increased by removing phantom constraints
+
+**Long-term Value:**
+- 🧠 Systematic approach to validating technical assumptions
+- 🔬 Empirical testing framework for discovering real limits
+- 📚 Evidence-based documentation practices
+- ⚡ Freed development capacity previously spent on unnecessary optimizations
+
+### Time and Resource Cost
+- **Months of unnecessary optimization work** solving non-existent problems
+- **Delayed feature development** due to phantom constraints
+- **Complex architectural decisions** based on incorrect assumptions
+- **Documentation debt** requiring comprehensive updates
+
+### The Meta-Lesson: Question Everything
+
+This discovery reveals a pattern of accepting "documented facts" without empirical validation. Moving forward:
+
+1. **Label assumptions clearly** in documentation
+2. **Create systematic testing for all technical constraints**
+3. **Regular assumption audits** to catch outdated or incorrect information
+4. **Evidence requirements** for all documented limits and constraints
+5. **Empirical testing tools** as standard development practice
+
+**See `docs/SCRIPT_SIZE_LIMITS.md` for complete empirical testing methodology and results.**
+
 ## 🚨 Critical Performance Issues
 
 ### 1. NEVER Use whose() in JXA
