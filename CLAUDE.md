@@ -6,6 +6,8 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 **Before making ANY architectural changes or optimizations, consult `/docs/LESSONS_LEARNED.md`**
 This document contains hard-won insights that will save you from repeating costly mistakes.
 
+**LATEST ADDITION (Sept 2025):** OmniJS Bridge for Tag Assignment - Critical lesson about tag visibility issues and the two-context JavaScript architecture in OmniFocus automation.
+
 ## Critical: V2 Architecture
 - **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
 - V1 tools removed in v2.0.0 for 30% context reduction

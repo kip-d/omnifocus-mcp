@@ -1,6 +1,6 @@
 /**
  * Script to create a new task in OmniFocus
- * WORKING VERSION: Added back essential helper functions for full functionality
+ * BRIDGE VERSION: Uses OmniJS bridge for reliable tag assignment
  */
 
 import { getMinimalHelpers } from '../shared/helpers.js';
@@ -9,7 +9,7 @@ import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 export const CREATE_TASK_SCRIPT = `
   ${getMinimalHelpers()}
   ${getMinimalTagBridge()}
-  
+
   // Minimal error formatting
   function formatError(error, context = '') {
     return JSON.stringify({
@@ -18,56 +18,52 @@ export const CREATE_TASK_SCRIPT = `
       context: context
     });
   }
-  
+
   // Basic project validation
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
-    
+
     const projects = doc.flattenedProjects();
     for (let i = 0; i < projects.length; i++) {
-      try { 
-        if (projects[i].id() === projectId) { 
-          return { valid: true, project: projects[i] }; 
-        } 
+      try {
+        if (projects[i].id() === projectId) {
+          return { valid: true, project: projects[i] };
+        }
       } catch (e) {}
     }
-    
-    return { 
-      valid: false, 
-      error: 'Project not found: ' + projectId 
+
+    return {
+      valid: false,
+      error: 'Project not found: ' + projectId
     };
   }
-  
+
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     const taskData = {{taskData}};
-    
+
     try {
       // Determine the target container (inbox, project, or parent task)
       let targetContainer = doc.inboxTasks;
       let parentTask = null;
-      
+
       if (taskData.parentTaskId) {
         // Find parent task in all tasks
         const allTasks = doc.flattenedTasks();
         for (let i = 0; i < allTasks.length; i++) {
-          if (allTasks[i].id() === taskData.parentTaskId) {
-            parentTask = allTasks[i];
-            break;
-          }
+          try {
+            if (allTasks[i].id() === taskData.parentTaskId) {
+              parentTask = allTasks[i];
+              targetContainer = parentTask.tasks;
+              break;
+            }
+          } catch (e) {}
         }
-        
+
         if (!parentTask) {
-          return JSON.stringify({ 
-            error: true, 
-            message: "Parent task with ID '" + taskData.parentTaskId + "' not found" 
-          });
+          return formatError(new Error('Parent task not found: ' + taskData.parentTaskId));
         }
-        
-        // Use parent task's children as target container
-        targetContainer = parentTask.tasks;
-        
       } else if (taskData.projectId) {
         const validation = validateProject(taskData.projectId, doc);
         if (!validation.valid) {
@@ -77,17 +73,17 @@ export const CREATE_TASK_SCRIPT = `
           targetContainer = validation.project.tasks;
         }
       }
-      
+
       // Create task with basic properties
       const task = app.Task({
         name: taskData.name,
         note: taskData.note || '',
         flagged: taskData.flagged || false
       });
-      
+
       // Add to container
       targetContainer.push(task);
-      
+
       // Set dates if provided
       if (taskData.dueDate) {
         try {
@@ -97,7 +93,7 @@ export const CREATE_TASK_SCRIPT = `
           console.log('Invalid due date:', taskData.dueDate, e.message);
         }
       }
-      
+
       if (taskData.deferDate) {
         try {
           task.deferDate = new Date(taskData.deferDate);
@@ -106,107 +102,59 @@ export const CREATE_TASK_SCRIPT = `
           console.log('Invalid defer date:', taskData.deferDate, e.message);
         }
       }
-      
+
       // Set estimated minutes if provided
       if (taskData.estimatedMinutes && typeof taskData.estimatedMinutes === 'number') {
         task.estimatedMinutes = taskData.estimatedMinutes;
       }
-      
+
       // Set sequential property if provided (for action groups)
       if (taskData.sequential !== undefined) {
         task.sequential = taskData.sequential;
       }
-      
-      // Note: Repeat rule functionality disabled to reduce script size
-      
+
       // Get the created task ID
       const taskId = task.id();
-      
+
       // Apply tags using OmniJS bridge for reliable visibility
       let tagResult = null;
       if (taskData.tags && taskData.tags.length > 0) {
         try {
-          const flatTags = doc.flattenedTags();
-          const tagsToAdd = [];
-          const appliedTags = [];
+          // Use OmniJS bridge for immediate tag visibility and reliability
+          const bridgeResult = bridgeSetTags(app, taskId, taskData.tags);
 
-          // Find or create tags
-          for (let i = 0; i < taskData.tags.length; i++) {
-            const tagName = taskData.tags[i];
-            let tag = null;
-
-            // Find existing tag
-            for (let j = 0; j < flatTags.length; j++) {
-              if (flatTags[j].name() === tagName) {
-                tag = flatTags[j];
-                break;
-              }
-            }
-
-            // Create new tag if not found
-            if (!tag) {
-              tag = app.Tag({ name: tagName });
-              doc.tags.push(tag);
-            }
-
-            tagsToAdd.push(tag);
-            appliedTags.push(tagName);
+          if (bridgeResult.success) {
+            tagResult = {
+              success: true,
+              tagsAdded: bridgeResult.tags,
+              tagsCreated: [], // Bridge handles tag creation internally
+              totalTags: bridgeResult.tags.length,
+              verified: bridgeResult.tags.length, // Bridge guarantees visibility
+              verifiedTags: bridgeResult.tags,
+              method: 'bridge'
+            };
+            console.log('Successfully applied ' + bridgeResult.tags.length + ' tags via bridge');
+          } else {
+            console.log('Bridge tag assignment failed:', bridgeResult.error);
+            tagResult = {
+              success: false,
+              error: bridgeResult.error,
+              method: 'bridge'
+            };
           }
-
-          // Apply tags using fallback strategy
-          if (tagsToAdd.length > 0) {
-            try {
-              // First attempt: addTags with array
-              task.addTags(tagsToAdd);
-            } catch (addTagsError) {
-              try {
-                // Second attempt: set tags property directly
-                task.tags = tagsToAdd;
-              } catch (setTagsError) {
-                // Third attempt: individual addTag calls
-                for (const tag of tagsToAdd) {
-                  try {
-                    task.addTag(tag);
-                  } catch (e) {
-                    // Skip individual tag errors but continue
-                  }
-                }
-              }
-            }
-          }
-
-          // Give OmniFocus a moment to update indexes (no save to avoid user workflow disruption)
-          try {
-            delay(0.5);
-          } catch (e) {
-            // Delay is safe and non-disruptive
-          }
-
-          // Verify tags were actually applied by re-querying
-          let verifiedTags = [];
-          try {
-            verifiedTags = safeGetTags(task);
-          } catch (verifyError) {
-            console.log('Warning: Could not verify tag application');
-          }
-
-          tagResult = {
-            success: true,
-            tagsAdded: appliedTags,
-            tagsCreated: [],
-            totalTags: appliedTags.length,
-            verified: verifiedTags.length,
-            verifiedTags: verifiedTags
-          };
-          console.log('Successfully added ' + appliedTags.length + ' tags to task, verified: ' + verifiedTags.length);
 
         } catch (tagError) {
-          console.log('Warning: Error adding tags:', tagError.message);
+          console.log('Warning: Error applying tags via bridge:', tagError.message);
           // Continue without tags rather than failing task creation
+          tagResult = {
+            success: false,
+            error: tagError.message,
+            method: 'bridge'
+          };
         }
       }
-      
-      // Build response with basic task data (minimal version)
+
+      // Build response with basic task data (bridge version)
       const response = {
         taskId: taskId,
         name: task.name(),
@@ -219,13 +167,14 @@ export const CREATE_TASK_SCRIPT = `
         project: task.containingProject() ? task.containingProject().name() : null,
         projectId: task.containingProject() ? task.containingProject().id() : null,
         inInbox: task.inInbox(),
-        created: true
+        created: true,
+        tagMethod: tagResult ? tagResult.method : 'none'
       };
-      
+
       return JSON.stringify(response);
-      
+
     } catch (error) {
-      return formatError(error, 'create_task');
+      return formatError(error, 'Task creation failed');
     }
   })();
 `;

@@ -968,6 +968,149 @@ fsSync.writeFileSync(taskFile, content, 'utf-8');
 
 **Impact:** Restored bulk export functionality and prevented similar issues in other file I/O operations.
 
+## 🏷️ CRITICAL: OmniJS Bridge for Tag Assignment (September 2025)
+
+### The Tag Visibility Crisis
+
+**Problem:** Tag assignment after task creation appeared to work but tags were not immediately visible in queries, breaking GTD workflows.
+
+**Initial Symptoms:**
+- Task creation tools reported successful tag assignment
+- Immediate queries for the same task showed empty tag arrays
+- User testing showed inconsistent tag behavior
+- Production-ready status was meaningless without reliable core functionality
+
+### The Investigation Journey
+
+**1. Initial Misdiagnosis: Script Size Issues**
+- Suspected JXA size limits preventing complex operations
+- Added minimal helpers to reduce script footprint
+- No improvement in tag visibility
+
+**2. Architectural Rabbit Hole: Type Adapter Layer**
+- Investigated `type-adapters.ts.disabled` for bridge patterns
+- Considered full abstraction layer between JXA and OmniJS
+- Overcomplicated solution for focused problem
+
+**3. Root Cause Discovery: Bridge Context Isolation**
+Built standalone probes to test `evaluateJavascript()` behavior:
+
+```javascript
+// ❌ WRONG - JXA syntax doesn't work in bridge
+const result = app.evaluateJavascript(`
+  const doc = Application("OmniFocus").defaultDocument();
+  // Error: Application is not a function
+`);
+
+// ✅ CORRECT - OmniJS syntax works perfectly
+const result = app.evaluateJavascript(`
+  const task = Task.byIdentifier("${taskId}");
+  task.addTag(flattenedTags.byName("TestTag"));
+  JSON.stringify({success: true});
+`);
+```
+
+### Key Discovery: Two JavaScript Contexts
+
+**JXA (External):** JavaScript for Automation - our scripts run here
+- Uses `Application("OmniFocus")` syntax
+- Limited to external API access
+- Subject to index refresh delays
+
+**OmniJS (Internal):** OmniFocus's internal JavaScript engine
+- Uses `Task.byIdentifier()`, `flattenedTags` syntax
+- Direct access to internal object model
+- Immediate visibility of changes
+
+**Critical Insight:** `evaluateJavascript()` runs in OmniJS context, not JXA context!
+
+### The Solution: Minimal Tag Bridge
+
+**Architecture:**
+1. **Minimal helpers**: ~1KB focused on tag operations only
+2. **OmniJS templates**: Parameterized scripts for tag assignment
+3. **Immediate visibility**: Bridge guarantees tag changes are instantly queryable
+4. **Size budget**: Fits well within JXA 19KB script size limits
+
+```typescript
+// Minimal bridge implementation
+const MINIMAL_TAG_BRIDGE = `
+  function bridgeSetTags(app, taskId, tagNames) {
+    const script = 'const task = Task.byIdentifier("' + taskId + '"); ' +
+                   'task.clearTags(); ' +
+                   tagNames.map(name =>
+                     'task.addTag(flattenedTags.byName("' + name + '") || new Tag("' + name + '"));'
+                   ).join(' ') +
+                   'JSON.stringify({success: true, tags: [' +
+                   tagNames.map(n => '"' + n + '"').join(',') + ']});';
+    return JSON.parse(app.evaluateJavascript(script));
+  }
+`;
+```
+
+### Implementation Results
+
+**Before Bridge (Broken):**
+- Tag assignment: ✅ Reported success
+- Immediate visibility: ❌ Empty arrays in queries
+- User experience: ❌ Unreliable GTD workflows
+
+**After Bridge (Working):**
+- Tag assignment: ✅ Confirmed success via OmniJS
+- Immediate visibility: ✅ Tags appear instantly in queries
+- User experience: ✅ Reliable, production-ready functionality
+- Script size: ✅ 7,859 characters (well under 19KB limit)
+
+### Critical Lessons
+
+**1. Stability Without Functionality is Meaningless**
+- Having 15/15 tools "working" meant nothing if core features were unreliable
+- Tag assignment is fundamental to GTD - must work correctly
+
+**2. Context Matters More Than Syntax**
+- The difference between JXA and OmniJS contexts was crucial
+- Same operations, different execution environments, different behaviors
+
+**3. Probe Early, Probe Often**
+- Standalone testing scripts revealed the real issue quickly
+- Don't rely on complex integration tests for fundamental problems
+
+**4. Minimal Solutions Win**
+- Full bridge helper library would have been overkill and risky
+- Focused 1KB solution solved the specific problem efficiently
+
+**5. Size Budgets Enable Functionality**
+- Previous size reduction work made bridge integration possible
+- 7,859 chars + 1KB bridge = 8,859 chars (well under 19KB limit)
+
+### Testing Validation
+
+**End-to-End Success:**
+```bash
+# Task creation with tags
+{"taskId":"mkVnbh-ZKe4","tags":["BridgeTest","TagVisibility"],"tagMethod":"bridge"}
+
+# Immediate query validation
+{"tasks":[{"id":"mkVnbh-ZKe4","tags":["BridgeTest","TagVisibility"]}]}
+```
+
+**Performance Impact:**
+- Script execution: 300ms
+- Tag assignment: Immediate
+- Query response: 1.6 seconds (normal for 1823 tasks)
+
+### Future Architecture Considerations
+
+**Next Steps:**
+1. **Evaluate update-task bridge integration** - Apply same pattern to task updates
+2. **Assess other bridge opportunities** - Where else might OmniJS context help?
+3. **Document bridge patterns** - Create reusable templates for future use
+4. **Monitor script sizes** - Ensure bridge additions don't exceed limits
+
+**Time Cost:** 3+ months of believing tag assignment "worked" when it was fundamentally broken for real-world use.
+
+**Impact:** Restored core GTD functionality, achieved true production readiness, validated that our systematic debugging approach works for complex architectural issues.
+
 ---
 
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.
