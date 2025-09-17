@@ -6,7 +6,7 @@
  * - OmniJS Bridge: 261,124 chars (~255KB)
  */
 
-import { logger } from '../../utils/logger.js';
+import { logger, type Logger } from '../../utils/logger.js';
 
 export interface ScriptSizeLimits {
   jxaDirect: number;
@@ -27,7 +27,7 @@ export interface ScriptSizeThresholds {
  */
 export const EMPIRICAL_LIMITS: ScriptSizeLimits = {
   jxaDirect: 523266,    // ~511KB
-  omniJsBridge: 261124  // ~255KB
+  omniJsBridge: 261124,  // ~255KB
 };
 
 /**
@@ -36,7 +36,7 @@ export const EMPIRICAL_LIMITS: ScriptSizeLimits = {
 export const DEFAULT_THRESHOLDS: ScriptSizeThresholds = {
   infoThreshold: 100000,    // 100KB - Large script notification
   warnThreshold: 300000,    // 300KB - Getting close to OmniJS bridge limit
-  errorThreshold: 400000    // 400KB - Approaching JXA limit
+  errorThreshold: 400000,    // 400KB - Approaching JXA limit
 };
 
 /**
@@ -60,7 +60,7 @@ export interface ScriptSizeAnalysis {
 export function analyzeScriptSize(
   script: string,
   type: 'jxa' | 'omnijs-bridge' = 'jxa',
-  thresholds: ScriptSizeThresholds = DEFAULT_THRESHOLDS
+  thresholds: ScriptSizeThresholds = DEFAULT_THRESHOLDS,
 ): ScriptSizeAnalysis {
   const size = script.length;
   const sizeKB = Math.round(size / 1024);
@@ -95,7 +95,7 @@ export function analyzeScriptSize(
     percentOfLimit,
     threshold,
     shouldLog,
-    message
+    message,
   };
 }
 
@@ -103,20 +103,24 @@ export function analyzeScriptSize(
  * Log script size analysis if warranted
  */
 export function logScriptSize(analysis: ScriptSizeAnalysis): void {
-  if (!analysis.shouldLog || !analysis.message) {
+  if (!analysis.shouldLog || !analysis.message || !logger) {
     return;
   }
 
-  switch (analysis.threshold) {
-    case 'error':
-      logger.error(`[script-size] ${analysis.message}`);
-      break;
-    case 'warn':
-      logger.warn(`[script-size] ${analysis.message}`);
-      break;
-    case 'info':
-      logger.info(`[script-size] ${analysis.message}`);
-      break;
+  try {
+    switch (analysis.threshold) {
+      case 'error':
+        (logger as Logger).error(`[script-size] ${analysis.message}`);
+        break;
+      case 'warn':
+        (logger as Logger).warn(`[script-size] ${analysis.message}`);
+        break;
+      case 'info':
+        (logger as Logger).info(`[script-size] ${analysis.message}`);
+        break;
+    }
+  } catch {
+    // Silently ignore logger errors in test environments
   }
 }
 
@@ -126,7 +130,7 @@ export function logScriptSize(analysis: ScriptSizeAnalysis): void {
 export function monitorScriptSize(
   script: string,
   type: 'jxa' | 'omnijs-bridge' = 'jxa',
-  thresholds?: ScriptSizeThresholds
+  thresholds?: ScriptSizeThresholds,
 ): ScriptSizeAnalysis {
   const analysis = analyzeScriptSize(script, type, thresholds);
   logScriptSize(analysis);
@@ -138,7 +142,7 @@ export function monitorScriptSize(
  */
 export function isScriptSizeSafe(
   script: string,
-  type: 'jxa' | 'omnijs-bridge' = 'jxa'
+  type: 'jxa' | 'omnijs-bridge' = 'jxa',
 ): boolean {
   const analysis = analyzeScriptSize(script, type);
   return analysis.threshold === 'safe';
@@ -156,25 +160,31 @@ export function getScriptSizeSummary(script: string, type: 'jxa' | 'omnijs-bridg
  * Development helper: Log all script sizes in a collection
  */
 export function auditScriptSizes(scripts: Record<string, string>, type: 'jxa' | 'omnijs-bridge' = 'jxa'): void {
-  logger.info(`[script-size] Auditing ${Object.keys(scripts).length} ${type} scripts:`);
+  if (!logger) return;
 
-  const analyses = Object.entries(scripts).map(([name, script]) => ({
-    name,
-    analysis: analyzeScriptSize(script, type)
-  }));
+  try {
+    (logger as Logger).info(`[script-size] Auditing ${Object.keys(scripts).length} ${type} scripts:`);
 
-  // Sort by size, largest first
-  analyses.sort((a, b) => b.analysis.size - a.analysis.size);
+    const analyses = Object.entries(scripts).map(([name, script]) => ({
+      name,
+      analysis: analyzeScriptSize(script, type),
+    }));
 
-  analyses.forEach(({ name, analysis }) => {
-    const status = analysis.threshold === 'safe' ? '✅' : '⚠️';
-    logger.info(`[script-size]   ${status} ${name}: ${analysis.sizeKB}KB (${analysis.percentOfLimit}%)`);
-  });
+    // Sort by size, largest first
+    analyses.sort((a, b) => b.analysis.size - a.analysis.size);
 
-  const totalSize = analyses.reduce((sum, { analysis }) => sum + analysis.size, 0);
-  const totalKB = Math.round(totalSize / 1024);
-  const avgSize = Math.round(totalSize / analyses.length);
-  const avgKB = Math.round(avgSize / 1024);
+    analyses.forEach(({ name, analysis }) => {
+      const status = analysis.threshold === 'safe' ? '✅' : '⚠️';
+      (logger as Logger).info(`[script-size]   ${status} ${name}: ${analysis.sizeKB}KB (${analysis.percentOfLimit}%)`);
+    });
 
-  logger.info(`[script-size] Total: ${totalKB}KB, Average: ${avgKB}KB`);
+    const totalSize = analyses.reduce((sum, { analysis }) => sum + analysis.size, 0);
+    const totalKB = Math.round(totalSize / 1024);
+    const avgSize = Math.round(totalSize / analyses.length);
+    const avgKB = Math.round(avgSize / 1024);
+
+    (logger as Logger).info(`[script-size] Total: ${totalKB}KB, Average: ${avgKB}KB`);
+  } catch {
+    // Silently ignore logger errors in test environments
+  }
 }

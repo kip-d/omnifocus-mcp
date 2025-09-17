@@ -50,7 +50,7 @@ export class OmniAutomation {
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(
         `Script too large: ${sizeAnalysis.sizeKB}KB (limit: ${Math.round(this.maxScriptSize / 1024)}KB). ` +
-        `Empirical JXA capacity is ${sizeAnalysis.limitKB}KB - consider increasing maxScriptSize if needed.`
+        `Empirical JXA capacity is ${sizeAnalysis.limitKB}KB - consider increasing maxScriptSize if needed.`,
       );
     }
 

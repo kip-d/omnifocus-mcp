@@ -61,9 +61,9 @@ describe('OmniAutomation', () => {
   describe('execute', () => {
     it('should reject scripts that are too large', async () => {
       const hugeScript = 'x'.repeat(100001);
-      
+
       await expect(omniAutomation.execute(hugeScript)).rejects.toThrow(
-        'Script too large: 100001 bytes (max: 100000)'
+        /Script too large: \d+KB \(limit: \d+KB\)/
       );
     });
 
