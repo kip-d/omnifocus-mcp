@@ -35,7 +35,7 @@ export const MINIMAL_TAG_BRIDGE = `
     '  }',
     '  return JSON.stringify({success: true, tags: added});',
     '})()'
-  ].join('\n');
+  ].join('\\n');
 
   // Apply tags using OmniJS bridge for immediate visibility
   function bridgeSetTags(app, taskId, tagNames) {

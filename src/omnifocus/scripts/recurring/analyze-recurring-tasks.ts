@@ -26,7 +26,7 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
         '  const out = { ruleString: rule.ruleString || null, method: method };',
         '  return JSON.stringify(out);',
         '})()'
-      ].join('\n');
+      ].join('\\n');
       const result = app.evaluateJavascript(script);
       return result === 'null' ? null : JSON.parse(result);
     } catch (e) {

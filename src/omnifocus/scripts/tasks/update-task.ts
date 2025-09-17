@@ -56,7 +56,7 @@ export const UPDATE_TASK_SCRIPT = `
     '    return JSON.stringify({ success: false, error: String(e) });',
     '  }',
     '})()'
-  ].join('\n');
+  ].join('\\n');
   
   function moveTaskViaBridge(taskId, targetType, targetId, app) {
     try {
@@ -545,7 +545,7 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
     '    return JSON.stringify({ success: false, error: String(e) });',
     '  }',
     '})()'
-  ].join('\n');
+  ].join('\\n');
   
   function moveTaskViaBridge(taskId, targetType, targetId, app) {
     try {
