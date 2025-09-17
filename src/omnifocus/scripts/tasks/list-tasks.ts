@@ -594,8 +594,8 @@ export const LIST_TASKS_SCRIPT = `
       
       // Check by project name
       if (filter.project !== undefined) {
-        if (filter.project === null && project !== null) return false;
-        if (filter.project !== null && (!project || project.name !== filter.project)) return false;
+        if ((filter.project === null || filter.project === '') && project !== null) return false;
+        if (filter.project !== null && filter.project !== '' && (!project || project.name !== filter.project)) return false;
       }
       
       // Check by project ID
@@ -722,10 +722,10 @@ export const LIST_TASKS_SCRIPT = `
               
               // Check by project name
               if (filter.project !== undefined) {
-                if (filter.project === "" && project) continue;
-                if (filter.project !== "" && (!project || project.name !== filter.project)) continue;
+                if ((filter.project === "" || filter.project === null) && project) continue;
+                if (filter.project !== "" && filter.project !== null && (!project || project.name !== filter.project)) continue;
               }
-              
+
               // Check by project ID
               if (filter.projectId !== undefined) {
                 if (filter.projectId === "" && project) continue;
