@@ -56,7 +56,7 @@ export const UPDATE_TASK_SCRIPT = `
     '    return JSON.stringify({ success: false, error: String(e) });',
     '  }',
     '})()'
-  ].join('\\n');
+  ].join('\n');
   
   function moveTaskViaBridge(taskId, targetType, targetId, app) {
     try {
@@ -545,7 +545,7 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
     '    return JSON.stringify({ success: false, error: String(e) });',
     '  }',
     '})()'
-  ].join('\\n');
+  ].join('\n');
   
   function moveTaskViaBridge(taskId, targetType, targetId, app) {
     try {
@@ -629,6 +629,34 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
         } else {
           task.deferDate = new Date(updates.deferDate);
           changes.push("Defer date set");
+        }
+      }
+
+      // Repeat rule updates
+      if (updates.clearRepeatRule) {
+        try {
+          task.repetitionRule = null;
+          changes.push("Repeat rule cleared");
+        } catch (e) {
+          changes.push("Warning: Could not clear repeat rule");
+        }
+      } else if (updates.repeatRule !== undefined) {
+        try {
+          const ruleData = prepareRepetitionRuleData(updates.repeatRule);
+          let applied = false;
+          if (ruleData && ruleData.needsBridge) {
+            applied = applyRepetitionRuleViaBridge(task.id(), ruleData);
+          }
+
+          if (!applied) {
+            changes.push("Warning: Could not update repeat rule via bridge");
+          } else {
+            changes.push("Repeat rule updated");
+          }
+
+          applyDeferAnother(task, updates.repeatRule);
+        } catch (repeatError) {
+          changes.push("Warning: Failed to update repeat rule");
         }
       }
       

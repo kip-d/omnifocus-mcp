@@ -14,6 +14,26 @@ import { getCoreHelpers } from '../shared/helpers.js';
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
   ${getCoreHelpers()}
   
+  function fetchRepeatRuleViaBridge(taskId) {
+    try {
+      const app = Application('OmniFocus');
+      const script = [
+        '(() => {',
+        '  const task = Task.byIdentifier(' + JSON.stringify(taskId) + ');',
+        '  if (!task || !task.repetitionRule) return "null";',
+        '  const rule = task.repetitionRule;',
+        '  const method = rule.method ? (typeof rule.method === "string" ? rule.method : (rule.method.name || null)) : null;',
+        '  const out = { ruleString: rule.ruleString || null, method: method };',
+        '  return JSON.stringify(out);',
+        '})()'
+      ].join('\n');
+      const result = app.evaluateJavascript(script);
+      return result === 'null' ? null : JSON.parse(result);
+    } catch (e) {
+      return null;
+    }
+  }
+  
   (() => {
   const options = {{options}};
   
@@ -140,6 +160,17 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
         }
       }
       
+      if ((!ruleData.ruleString || !ruleData.method) && typeof task.id === 'function') {
+        const bridgeRule = fetchRepeatRuleViaBridge(task.id());
+        if (bridgeRule && bridgeRule.ruleString) {
+          ruleData.ruleString = bridgeRule.ruleString;
+          if (bridgeRule.method) {
+            ruleData.method = bridgeRule.method;
+          }
+          ruleData._inferenceSource = 'bridge';
+        }
+      }
+      
       // Try some hardcoded common patterns from OmniFocus automation
       try {
         // Check if it has a description or string representation
@@ -179,6 +210,13 @@ export const ANALYZE_RECURRING_TASKS_SCRIPT = `
           taskInfo.projectId = project.id();
         }
       } catch (e) {}
+
+      if (options.project && taskInfo.project && taskInfo.project !== options.project) {
+        continue;
+      }
+      if (options.projectId && taskInfo.projectId && taskInfo.projectId !== options.projectId) {
+        continue;
+      }
       
       // Add dates
       const deferDate = task.deferDate();

@@ -357,7 +357,7 @@ export const LIST_TASKS_SCRIPT = `
       scriptParts.push('  return JSON.stringify(out);');
       scriptParts.push('})()');
 
-      const bridgeScript = scriptParts.join('\\n');
+      const bridgeScript = scriptParts.join('\n');
       const resultJson = app.evaluateJavascript(bridgeScript);
       if (!resultJson) return null;
 

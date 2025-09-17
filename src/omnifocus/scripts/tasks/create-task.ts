@@ -3,11 +3,12 @@
  * WORKING VERSION: Added back essential helper functions for full functionality
  */
 
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 
 export const CREATE_TASK_SCRIPT = `
   ${getMinimalHelpers()}
+  ${getRecurrenceApplyHelpers()}
   ${getMinimalTagBridge()}
   
   // Minimal error formatting
@@ -117,10 +118,25 @@ export const CREATE_TASK_SCRIPT = `
         task.sequential = taskData.sequential;
       }
       
-      // Note: Repeat rule functionality disabled to reduce script size
-      
       // Get the created task ID
       const taskId = task.id();
+
+      // Apply repeat rule if provided
+      if (taskData.repeatRule) {
+        try {
+          const ruleData = prepareRepetitionRuleData(taskData.repeatRule);
+          if (ruleData && ruleData.needsBridge) {
+            const success = applyRepetitionRuleViaBridge(taskId, ruleData);
+            if (!success) {
+              console.log('Warning: Could not apply repeat rule via bridge');
+            }
+          }
+
+          applyDeferAnother(task, taskData.repeatRule);
+        } catch (ruleError) {
+          console.log('Warning: Failed to apply repeat rule:', ruleError.message);
+        }
+      }
       
       // Apply tags using OmniJS bridge for reliable visibility
       let tagResult = null;

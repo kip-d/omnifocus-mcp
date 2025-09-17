@@ -205,17 +205,10 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           if (params.estimatedMinutes !== undefined) createArgs.estimatedMinutes = typeof params.estimatedMinutes === 'string' ? parseInt(params.estimatedMinutes, 10) : params.estimatedMinutes;
           if (params.tags) createArgs.tags = params.tags;
           if (params.sequential !== undefined) createArgs.sequential = typeof params.sequential === 'string' ? params.sequential === 'true' : params.sequential;
-          if (params.repeatRule) {
-            const rule = params.repeatRule;
-            createArgs.repeatRule = {
-              unit: rule.unit,
-              steps: typeof rule.steps === 'string' ? parseInt(rule.steps, 10) : rule.steps,
-              method: rule.method,
-              weekdays: rule.weekdays,
-              weekPosition: Array.isArray(rule.weekPosition) ? rule.weekPosition[0] : rule.weekPosition,
-              weekday: rule.weekday,
-              deferAnother: rule.deferAnother,
-            };
+          const repeatRuleForUpdate = this.normalizeRepeatRuleInput(params.repeatRule);
+          if (repeatRuleForUpdate) {
+            console.error('[MANAGE_TASK_DEBUG] Normalized repeat rule for creation:', JSON.stringify(repeatRuleForUpdate));
+            createArgs.repeatRule = repeatRuleForUpdate;
           }
 
           // Convert local dates to UTC for OmniFocus with error handling
@@ -328,6 +321,25 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             );
           }
 
+          const createdTaskId = (parsedCreateResult as { taskId?: string; id?: string }).taskId || (parsedCreateResult as { id?: string }).id || null;
+          console.error('[MANAGE_TASK_DEBUG] Post-create task ID:', createdTaskId);
+
+          if (repeatRuleForUpdate && createdTaskId) {
+            try {
+              console.error('[MANAGE_TASK_DEBUG] Applying repeat rule via update');
+              const repeatOnlyScript = createUpdateTaskScript(createdTaskId, { repeatRule: repeatRuleForUpdate });
+              const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+              console.error('[MANAGE_TASK_DEBUG] Repeat rule update result:', JSON.stringify(repeatUpdateResult, null, 2));
+              if (isScriptError(repeatUpdateResult)) {
+                this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
+              } else {
+                this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
+              }
+            } catch (repeatError) {
+              this.logger.warn('Exception applying repeat rule post-creation', repeatError);
+            }
+          }
+
           // Invalidate caches after successful task creation
           this.cache.invalidate('tasks');
           this.cache.invalidate('analytics');
@@ -342,13 +354,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             undefined,
             {
               ...timer.toMetadata(),
-              created_id: (parsedCreateResult as { taskId?: string }).taskId || null,
+              created_id: createdTaskId,
               project_id: createArgs.projectId || null,
               input_params: {
                 name: createArgs.name,
                 has_project: !!createArgs.projectId,
                 has_due_date: !!createArgs.dueDate,
                 has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
+                has_repeat_rule: !!repeatRuleForUpdate,
               },
             },
           );
@@ -730,8 +743,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     }
 
     // Handle repeat rule
-    if (updates.repeatRule && typeof updates.repeatRule === 'object') {
-      sanitized.repeatRule = updates.repeatRule;
+    if (updates.repeatRule !== undefined) {
+      const normalizedRepeat = this.normalizeRepeatRuleInput(updates.repeatRule);
+      if (normalizedRepeat) {
+        sanitized.repeatRule = normalizedRepeat;
+        this.logger.debug('Sanitized repeatRule:', normalizedRepeat);
+      }
     }
 
     // Handle clear repeat rule flag
@@ -776,5 +793,74 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
     // Still return the original result for MCP protocol compliance
     return result;
+  }
+
+  private normalizeRepeatMethod(method: unknown): 'fixed' | 'start-after-completion' | 'due-after-completion' | 'none' {
+    if (typeof method !== 'string') return 'fixed';
+    const normalized = method.toLowerCase().trim();
+    switch (normalized) {
+      case 'start-after-completion':
+        return 'start-after-completion';
+      case 'due-after-completion':
+      case 'after-completion':
+        return 'due-after-completion';
+      case 'none':
+        return 'none';
+      case 'fixed':
+      default:
+        return 'fixed';
+    }
+  }
+
+  private normalizeRepeatRuleInput(rule: unknown): TaskCreationArgs['repeatRule'] | undefined {
+    if (!rule || typeof rule !== 'object') return undefined;
+    const raw = rule as Record<string, unknown>;
+    if (typeof raw.unit !== 'string') return undefined;
+
+    type RepeatRule = NonNullable<TaskCreationArgs['repeatRule']>;
+
+    const normalized: RepeatRule = {
+      unit: raw.unit as RepeatRule['unit'],
+      steps: (() => {
+        const value = raw.steps;
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          const parsed = parseInt(value, 10);
+          return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+        }
+        return 1;
+      })(),
+      method: this.normalizeRepeatMethod(raw.method),
+    };
+
+    if (Array.isArray(raw.weekdays)) {
+      normalized.weekdays = raw.weekdays as RepeatRule['weekdays'];
+    }
+    if (raw.weekPosition !== undefined) {
+      normalized.weekPosition = raw.weekPosition as RepeatRule['weekPosition'];
+    }
+    if (typeof raw.weekday === 'string') {
+      normalized.weekday = raw.weekday as RepeatRule['weekday'];
+    }
+    if (raw.deferAnother && typeof raw.deferAnother === 'object') {
+      const defer = raw.deferAnother as Record<string, unknown>;
+      if (typeof defer.unit === 'string') {
+        const stepsValue = defer.steps;
+        const stepsNumber = typeof stepsValue === 'number'
+          ? stepsValue
+          : typeof stepsValue === 'string'
+            ? parseInt(stepsValue, 10)
+            : undefined;
+        if (stepsNumber && Number.isFinite(stepsNumber) && stepsNumber > 0) {
+          type DeferAnother = NonNullable<RepeatRule['deferAnother']>;
+          normalized.deferAnother = {
+            unit: defer.unit as DeferAnother['unit'],
+            steps: stepsNumber,
+          };
+        }
+      }
+    }
+
+    return normalized;
   }
 }
