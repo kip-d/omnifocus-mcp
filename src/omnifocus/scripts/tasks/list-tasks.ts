@@ -30,6 +30,7 @@ export const LIST_TASKS_SCRIPT = `
   (() => {
     const filter = {{filter}};
     const tasks = [];
+    const tagBridgeCache = Object.create(null);
     
     // Check if we should skip recurring analysis (default to false for backwards compatibility)
     const skipRecurringAnalysis = filter.skipAnalysis === true;
@@ -334,6 +335,102 @@ export const LIST_TASKS_SCRIPT = `
     };
   }
   
+  function fetchTagsViaBridge(ids) {
+    if (!ids || ids.length === 0) return null;
+    try {
+      const app = Application('OmniFocus');
+      const scriptParts = [];
+      scriptParts.push('(function () {');
+      scriptParts.push('  var ids = ' + JSON.stringify(ids) + ';');
+      scriptParts.push('  var out = {};');
+      scriptParts.push('  for (var i = 0; i < ids.length; i++) {');
+      scriptParts.push('    var task = Task.byIdentifier(ids[i]);');
+      scriptParts.push('    if (task) {');
+      scriptParts.push('      var tagList = task.tags ? task.tags : [];');
+      scriptParts.push('      var names = [];');
+      scriptParts.push('      for (var j = 0; j < tagList.length; j++) {');
+      scriptParts.push('        try { names.push(tagList[j].name); } catch (e) {}');
+      scriptParts.push('      }');
+      scriptParts.push('      out[ids[i]] = names;');
+      scriptParts.push('    }');
+      scriptParts.push('  }');
+      scriptParts.push('  return JSON.stringify(out);');
+      scriptParts.push('})()');
+
+      const bridgeScript = scriptParts.join('\\n');
+      const resultJson = app.evaluateJavascript(bridgeScript);
+      if (!resultJson) return null;
+
+      const tagMap = JSON.parse(resultJson);
+      const keys = Object.keys(tagMap);
+      for (let i = 0; i < keys.length; i++) {
+        tagBridgeCache[keys[i]] = tagMap[keys[i]] || [];
+      }
+      return tagMap;
+    } catch (bridgeError) {
+      return null;
+    }
+  }
+
+  function hydrateTaskTagsViaBridge(taskObjects) {
+    try {
+      if (!taskObjects || taskObjects.length === 0) return;
+      const ids = [];
+      for (let i = 0; i < taskObjects.length; i++) {
+        if (taskObjects[i] && taskObjects[i].id) {
+          ids.push(taskObjects[i].id);
+        }
+      }
+      let tagMap = null;
+      if (ids.length > 0) {
+        tagMap = fetchTagsViaBridge(ids);
+      }
+
+      for (let i = 0; i < taskObjects.length; i++) {
+        const taskObj = taskObjects[i];
+        if (!taskObj || !taskObj.id) continue;
+        if (tagBridgeCache[taskObj.id]) {
+          taskObj.tags = tagBridgeCache[taskObj.id];
+        } else if (tagMap && tagMap[taskObj.id]) {
+          taskObj.tags = tagMap[taskObj.id];
+        }
+      }
+    } catch (bridgeError) {
+      // Ignore bridge errors to keep script resilient
+    }
+  }
+
+  function passesTagFilter(task, requiredTags) {
+    if (!requiredTags || requiredTags.length === 0) return true;
+
+    const taskTags = safeGetTags(task);
+    const hasAllTags = requiredTags.every(tag => taskTags.includes(tag));
+    const taskId = safeGet(() => task.id());
+
+    if (taskId && !(taskId in tagBridgeCache)) {
+      tagBridgeCache[taskId] = taskTags;
+    }
+
+    if (hasAllTags) {
+      return true;
+    }
+
+    if (!taskId) {
+      return false;
+    }
+
+    if (tagBridgeCache[taskId] && requiredTags.every(tag => tagBridgeCache[taskId].includes(tag))) {
+      return true;
+    }
+
+    const tagMap = fetchTagsViaBridge([taskId]);
+    if (!tagMap || !tagMap[taskId]) {
+      return false;
+    }
+
+    return requiredTags.every(tag => tagMap[taskId].includes(tag));
+  }
+
   // Helper function to build task object
   function buildTaskObject(task, filter, skipRecurringAnalysis) {
     const taskObj = {
@@ -372,7 +469,16 @@ export const LIST_TASKS_SCRIPT = `
     const deferDate = safeGetDate(() => task.deferDate());
     if (deferDate) taskObj.deferDate = deferDate;
     
-    taskObj.tags = safeGetTags(task);
+    const cachedTags = tagBridgeCache[taskObj.id];
+    if (cachedTags) {
+      taskObj.tags = cachedTags;
+    } else {
+      const tags = safeGetTags(task);
+      taskObj.tags = tags;
+      if (!(taskObj.id in tagBridgeCache)) {
+        tagBridgeCache[taskObj.id] = tags;
+      }
+    }
     
     // Extract repeat rule information if present
     const repetitionRule = safeGet(() => task.repetitionRule());
@@ -523,9 +629,7 @@ export const LIST_TASKS_SCRIPT = `
     
     // Tags filter (most expensive - only run if needed)
     if (filter.tags && filter.tags.length > 0) {
-      const taskTags = safeGetTags(task);
-      const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-      if (!hasAllTags) return false;
+      if (!passesTagFilter(task, filter.tags)) return false;
     }
     
     // Available filter (legacy - use available property filter below)
@@ -640,6 +744,8 @@ export const LIST_TASKS_SCRIPT = `
             }
           }
           
+          hydrateTaskTagsViaBridge(tasks);
+
           return JSON.stringify({
             success: true,
             tasks: tasks,
@@ -707,6 +813,8 @@ export const LIST_TASKS_SCRIPT = `
     // For performance: estimate has_more based on whether we hit the limit
     const hasMore = count > tasks.length;
     
+    hydrateTaskTagsViaBridge(tasks);
+
     return JSON.stringify({
       tasks: tasks,
       metadata: {
@@ -747,4 +855,3 @@ export const LIST_TASKS_SCRIPT = `
   }
   })();
 `;
-
