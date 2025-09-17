@@ -170,6 +170,16 @@ npm run typecheck
 npm run test:all
 ```
 
+#### Local OmniFocus smoke check
+When working on JXA/OmniAutomation scripts locally, build the project and run a real `manage_task` request against OmniFocus to catch escaping issues that unit mocks miss:
+
+```bash
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task","arguments":{"operation":"create","name":"Smoke Test Task","projectId":null}}}' | node dist/index.js
+```
+
+The command creates a temporary inbox task—delete it afterwards. Always perform this check before pushing changes that touch `src/omnifocus/scripts/`.
+
 ### Performance Testing
 For performance-sensitive features:
 ```bash
