@@ -487,9 +487,25 @@ export abstract class BaseTool<
         return createScriptError('NULL_RESULT', 'Script returned null or undefined');
       }
 
-      // If already in ScriptResult format, return as-is
+      // If already in ScriptResult format, inspect for nested legacy errors before returning
       if (res && typeof res === 'object' && 'success' in res) {
-        return res as ScriptResult<T>;
+        const scriptResult = res as ScriptResult<T>;
+
+        if (scriptResult.success === true) {
+          const data = scriptResult.data as unknown;
+          if (data && typeof data === 'object') {
+            const maybeError = data as { error?: unknown; success?: unknown; message?: unknown };
+            const errorValue = maybeError.error;
+            if (errorValue === true || errorValue === 'true' || maybeError.success === false) {
+              const message = typeof maybeError.message === 'string'
+                ? maybeError.message
+                : 'Script execution failed';
+              return createScriptError(message, 'Legacy script error', data);
+            }
+          }
+        }
+
+        return scriptResult;
       }
 
       // Handle raw string results (try to parse JSON)
@@ -497,6 +513,25 @@ export abstract class BaseTool<
         try {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const parsed = JSON.parse(res);
+
+          if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+            const errorValue = (parsed as { error?: unknown }).error;
+            if (errorValue === true || errorValue === 'true') {
+              const message = typeof (parsed as { message?: unknown }).message === 'string'
+                ? (parsed as { message: string }).message
+                : 'Script execution failed';
+              return createScriptError(message, 'Legacy script error', parsed);
+            }
+          }
+
+          if (parsed && typeof parsed === 'object' && 'success' in parsed && (parsed as { success?: unknown }).success === false) {
+            const message = typeof (parsed as { message?: unknown }).message === 'string'
+              ? (parsed as { message: string }).message
+              : 'Script execution failed';
+            const details = (parsed as { details?: unknown }).details ?? parsed;
+            return createScriptError(message, 'Legacy script error', details);
+          }
+
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           return createScriptSuccess<T>(parsed);
         } catch {

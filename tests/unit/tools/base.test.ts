@@ -117,6 +117,26 @@ describe('BaseTool', () => {
     });
   });
 
+  describe('execJson', () => {
+    it('should convert legacy error JSON strings into ScriptError results', async () => {
+      const legacyError = JSON.stringify({ error: true, message: 'Task with ID abc not found' });
+
+      // Provide a minimal omniAutomation stub so execJson calls resolve to our legacy payload
+      const fakeAutomation = {
+        executeJson: vi.fn().mockResolvedValue(legacyError),
+        execute: vi.fn(),
+      } as unknown as OmniAutomation;
+
+      testTool.omniAutomation = fakeAutomation;
+
+      const result = await (testTool as any).execJson('ignored-script');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Task with ID abc not found');
+      expect(fakeAutomation.executeJson).toHaveBeenCalled();
+    });
+  });
+
   describe('inputSchema', () => {
     it('should convert Zod schema to JSON Schema', () => {
       const jsonSchema = testTool.inputSchema;

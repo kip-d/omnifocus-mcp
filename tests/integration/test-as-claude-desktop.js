@@ -2,141 +2,346 @@
 import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 
-console.log('Testing OmniFocus MCP Server as Claude Desktop would...\n');
+const TEST_PROJECT_NAME = `MCP Integration ${Date.now()}`;
+const PARENT_TASK_NAME = `MCP Parent ${Date.now()}`;
+const CHILD_TASK_NAME = `MCP Child ${Date.now()}`;
+const TEST_TAG_NAME = 'IntegrationTag';
+const INVALID_TASK_ID = 'invalid-task-id-for-error-check';
+
+let cleanupDone = false;
+let requestId = 1;
+let testProjectId = null;
+let parentTaskId = null;
+let childTaskId = null;
+let todayTaskVerified = false;
+let parentChildVerified = false;
 
 const server = spawn('node', ['dist/index.js'], {
-  stdio: ['pipe', 'pipe', 'inherit']
+  stdio: ['pipe', 'pipe', 'inherit'],
 });
 
 const rl = createInterface({
   input: server.stdout,
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
-let requestId = 1;
-let cleanupDone = false;
+const failAndExit = (message) => {
+  console.error(`\n❌ Integration test failed: ${message}`);
+  cleanup(1);
+};
 
-// Cleanup function to properly terminate server
-const cleanup = () => {
+const cleanup = (code = 0) => {
   if (cleanupDone) return;
   cleanupDone = true;
-  
-  server.stdin.end();
+
+  try {
+    server.stdin.end();
+  } catch (e) {}
+
   server.kill('SIGTERM');
-  
+
   setTimeout(() => {
     if (!server.killed) {
       server.kill('SIGKILL');
     }
-    process.exit(0);
-  }, 1000);
+    process.exit(code);
+  }, 750);
 };
 
-// Helper to send JSON-RPC request
+const parsePayload = (response) => {
+  if (!response?.result?.content || response.result.content.length === 0) return null;
+  const [first] = response.result.content;
+  if (!first) return null;
+  if (first.type === 'json') return first.json;
+  if (first.type === 'text') {
+    try {
+      return JSON.parse(first.text);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
 const sendRequest = (method, params = {}) => {
   const request = {
     jsonrpc: '2.0',
     method,
     params,
-    id: requestId++
+    id: requestId++,
   };
-  
+
   console.log(`→ Sending: ${method}`);
   server.stdin.write(JSON.stringify(request) + '\n');
 };
 
-// Handle responses
+const sendToolCall = (name, args = {}) => {
+  sendRequest('tools/call', {
+    name,
+    arguments: args,
+  });
+};
+
+const ensureSuccess = (payload, context) => {
+  if (!payload) {
+    failAndExit(`${context}: empty payload`);
+    return false;
+  }
+  if (payload.success === false) {
+    const message = payload?.error?.message || 'Unknown error';
+    failAndExit(`${context}: ${message}`);
+    return false;
+  }
+  return true;
+};
+
+const extractTaskId = (task) => {
+  if (!task) return null;
+  return task.taskId || task.id || null;
+};
+
 rl.on('line', (line) => {
+  let response;
   try {
-    const response = JSON.parse(line);
-    console.log(`← Response for ${response.id}:`, JSON.stringify(response, null, 2));
-    
-    // Process based on response
-    if (response.id === 1) {
-      // After initialize, list tools
-      sendRequest('tools/list');
-    } else if (response.id === 2) {
-      // After listing tools, try to list tasks
-      sendRequest('tools/call', {
-        name: 'tasks',
-        arguments: {
-          mode: 'overdue',
-          limit: '5',
-          details: 'false'
-        }
-      });
-    } else if (response.id === 3) {
-      // After listing tasks, create a test task
-      sendRequest('tools/call', {
-        name: 'create_task',
-        arguments: {
-          name: 'Test task from MCP client',
-          note: 'Created via MCP integration test',
-          flagged: 'true',
-          sequential: 'false'
-        }
-      });
-    } else if (response.id === 4) {
-      // After creating task, test version info
-      sendRequest('tools/call', {
-        name: 'get_version_info',
-        arguments: {}
-      });
-    } else if (response.id === 5) {
-      // After version info, list projects
-      try {
-        const versionResult = JSON.parse(response.result.content[0].text);
-        console.log(`\n📋 Version: ${versionResult.data.name} v${versionResult.data.version} (${versionResult.data.build.buildId})`);
-      } catch (e) {
-        console.log('Version info received');
-      }
-      
-      sendRequest('tools/call', {
-        name: 'projects',
-        arguments: {
-          operation: 'list',
-          limit: '5',
-          details: 'false'
-        }
-      });
-    } else if (response.id === 6) {
-      // Done with tests
-      console.log('\n✅ All tests completed successfully!');
-      cleanup();
-    }
+    response = JSON.parse(line);
   } catch (e) {
-    // Ignore non-JSON lines
+    return; // Ignore non-JSON output
+  }
+
+  console.log(`← Response for ${response.id}:`, JSON.stringify(response, null, 2));
+
+  switch (response.id) {
+    case 1: {
+      // initialize -> list tools
+      sendRequest('tools/list');
+      break;
+    }
+
+    case 2: {
+      // After tool listing, create a dedicated test project
+      if (!response?.result?.tools || !Array.isArray(response.result.tools) || response.result.tools.length === 0) {
+        failAndExit('tools/list returned empty payload');
+        return;
+      }
+      sendToolCall('projects', {
+        operation: 'create',
+        name: TEST_PROJECT_NAME,
+        note: 'Integration test project created automatically',
+      });
+      break;
+    }
+
+    case 3: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Project creation')) return;
+      const projectContainer = payload.data?.project;
+      const project = projectContainer?.project || projectContainer;
+      testProjectId = project?.id || project?.projectId || null;
+      if (!testProjectId) {
+        failAndExit('Could not determine created project ID');
+        return;
+      }
+
+      sendToolCall('manage_task', {
+        operation: 'create',
+        name: PARENT_TASK_NAME,
+        projectId: testProjectId,
+      });
+      break;
+    }
+
+    case 4: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Parent task creation')) return;
+      const task = payload.data?.task || payload.data;
+      parentTaskId = extractTaskId(task);
+      if (!parentTaskId) {
+        failAndExit('Could not determine parent task ID');
+        return;
+      }
+
+      sendToolCall('manage_task', {
+        operation: 'create',
+        name: CHILD_TASK_NAME,
+        projectId: testProjectId,
+        parentTaskId,
+      });
+      break;
+    }
+
+    case 5: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Child task creation')) return;
+      const task = payload.data?.task || payload.data;
+      childTaskId = extractTaskId(task);
+      if (!childTaskId) {
+        failAndExit('Could not determine child task ID');
+        return;
+      }
+
+      // Attempt update with invalid ID to verify error propagation
+      sendToolCall('manage_task', {
+        operation: 'update',
+        taskId: INVALID_TASK_ID,
+        name: 'This should fail',
+      });
+      break;
+    }
+
+    case 6: {
+      const payload = parsePayload(response);
+      if (!payload || payload.success !== false) {
+        failAndExit('Invalid task update did not return an error');
+        return;
+      }
+      if (payload.error?.code !== 'SCRIPT_ERROR') {
+        failAndExit(`Expected SCRIPT_ERROR for invalid task update, got ${payload.error?.code}`);
+        return;
+      }
+
+      const today = new Date();
+      const dueDate = today.toISOString().slice(0, 10);
+      sendToolCall('manage_task', {
+        operation: 'update',
+        taskId: childTaskId,
+        dueDate,
+        flagged: true,
+        tags: [TEST_TAG_NAME],
+      });
+      break;
+    }
+
+    case 7: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Child task tagging/due update')) return;
+
+      // Query today tasks without details to verify tags surface
+      sendToolCall('tasks', {
+        mode: 'today',
+        limit: 25,
+        details: false,
+      });
+      break;
+    }
+
+    case 8: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Today task query')) return;
+      const tasks = payload.data?.tasks || [];
+      const hasTags = tasks.some(t => Array.isArray(t.tags) && t.tags.length > 0);
+      if (!hasTags) {
+        failAndExit('Today view returned without tag data');
+        return;
+      }
+      todayTaskVerified = true;
+
+      // Query project-specific tasks to inspect parent linkage and confirm our task update
+      sendToolCall('tasks', {
+        mode: 'all',
+        project: TEST_PROJECT_NAME,
+        limit: 10,
+        details: true,
+      });
+      break;
+    }
+
+    case 9: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Project task query')) return;
+      const tasks = payload.data?.tasks || [];
+      const match = tasks.find(t => t.id === childTaskId || t.name === CHILD_TASK_NAME);
+      if (!match) {
+        failAndExit('Child task not returned in project results');
+        return;
+      }
+
+      const parentEntry = tasks.find(t => t.id === parentTaskId || t.name === PARENT_TASK_NAME);
+      const childCounts = parentEntry && typeof parentEntry === 'object'
+        ? parentEntry.childCounts
+        : undefined;
+      if (!parentEntry || !childCounts || (childCounts.total ?? 0) < 1) {
+        failAndExit('Parent task does not reflect child membership');
+        return;
+      }
+
+      if (match.flagged !== true) {
+        failAndExit('Updated child task is not flagged as expected');
+        return;
+      }
+      parentChildVerified = true;
+
+      // Cleanup child task first
+      sendToolCall('manage_task', {
+        operation: 'delete',
+        taskId: childTaskId,
+      });
+      break;
+    }
+
+    case 10: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Child task deletion')) return;
+
+      // Delete parent task
+      sendToolCall('manage_task', {
+        operation: 'delete',
+        taskId: parentTaskId,
+      });
+      break;
+    }
+
+    case 11: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Parent task deletion')) return;
+
+      // Delete project (cleanup)
+      sendToolCall('projects', {
+        operation: 'delete',
+        projectId: testProjectId,
+      });
+      break;
+    }
+
+    case 12: {
+      const payload = parsePayload(response);
+      if (!ensureSuccess(payload, 'Project deletion')) return;
+
+      if (!todayTaskVerified || !parentChildVerified) {
+        failAndExit('One or more validation checks did not complete');
+        return;
+      }
+
+      console.log('\n✅ Integration validations completed successfully!');
+      cleanup(0);
+      break;
+    }
+
+    default:
+      break;
   }
 });
 
-// Start with initialize
-sendRequest('initialize', {
-  protocolVersion: '0.1.0',
-  capabilities: {},
-  clientInfo: {
-    name: 'mcp-test-client',
-    version: '1.0.0'
-  }
-});
-
-// Timeout after 10 seconds
-setTimeout(() => {
-  console.error('\n❌ Test timeout!');
-  cleanup();
-  process.exit(1);
-}, 10000);
-
-// Handle server errors
 server.on('error', (err) => {
-  console.error('Server error:', err);
-  cleanup();
-  process.exit(1);
+  failAndExit(`Server process error: ${err.message}`);
 });
 
-// Handle unexpected server exit
 server.on('exit', (code) => {
   if (!cleanupDone) {
-    console.error(`Server exited unexpectedly with code ${code}`);
-    process.exit(1);
+    failAndExit(`Server exited unexpectedly with code ${code}`);
   }
 });
+
+// Start handshake
+sendRequest('initialize', {
+  protocolVersion: '2025-06-18',
+  capabilities: {},
+  clientInfo: {
+    name: 'mcp-integration-test',
+    version: '2.1.0',
+  },
+});
+
+// Guard against hang
+setTimeout(() => {
+  failAndExit('Integration test timed out');
+}, 30000);

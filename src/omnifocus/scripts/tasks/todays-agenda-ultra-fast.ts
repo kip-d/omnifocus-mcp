@@ -116,23 +116,42 @@ export const TODAYS_AGENDA_ULTRA_FAST_SCRIPT = `
               taskObj.flagged = true;
             }
             
-            // Add details if requested
-            if (includeDetails) {
-              try {
-                taskObj.note = task.note() || '';
-                const project = task.containingProject();
-                if (project) {
-                  taskObj.project = project.name();
-                  taskObj.projectId = project.id();
-                }
-                const tags = task.tags();
-                if (tags && tags.length > 0) {
-                  taskObj.tags = tags.map(t => t.name());
-                }
-              } catch (e) {
-                // Skip detail errors
+          // Capture tag names once so they're available even without includeDetails
+          let tagNames = null;
+          try {
+            const tags = task.tags();
+            if (tags && tags.length > 0) {
+              tagNames = [];
+              for (var ti = 0; ti < tags.length; ti++) {
+                try {
+                  tagNames.push(tags[ti].name());
+                } catch (tagErr) {}
               }
             }
+          } catch (tagsError) {
+            tagNames = null;
+          }
+
+          if (tagNames && tagNames.length > 0) {
+            taskObj.tags = tagNames;
+          }
+
+          // Add richer details if requested
+          if (includeDetails) {
+            try {
+              taskObj.note = task.note() || '';
+              const project = task.containingProject();
+              if (project) {
+                taskObj.project = project.name();
+                taskObj.projectId = project.id();
+              }
+              if (tagNames && tagNames.length > 0) {
+                taskObj.tags = tagNames;
+              }
+            } catch (e) {
+              // Skip detail errors
+            }
+          }
             
             tasks.push(taskObj);
           }

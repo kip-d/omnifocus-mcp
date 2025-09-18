@@ -46,6 +46,8 @@ First, verify the MCP connection is working:
    - Change due date on another task (operation="update")
    - Update task name and add notes (operation="update")
    - Remove and add tags (operation="update")
+   - After applying flag/tag updates to a child task, run the `tasks` tool with `mode="today"`, `limit=25`, `details=false` and confirm the task still appears with its new tags (this validates the ultra-fast today script now returns tag metadata by default).
+   - Also run `tasks` with `mode="all"`, `project="<your test project name>"`, `limit=10`, `details=true` and verify: (a) the parent task reports a `childCounts.total` ≥ 1, and (b) the child task entry shows the expected `parentTaskId`, `flagged` status, and updated tags. This catches regressions in parent/child propagation and project-scoped filtering.
 
 5. **Cleanup**: Delete the test tasks and project using `manage_task` and `projects` tools with operation="delete"
 

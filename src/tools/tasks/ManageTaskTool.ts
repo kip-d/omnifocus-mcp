@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
-import { isScriptError } from '../../omnifocus/script-result-types.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { CreateTaskResponse } from '../types.js';
 import { localToUTC } from '../../utils/timezone.js';
@@ -423,6 +423,29 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           if (isScriptError(updateResult)) {
             this.logger.error(`Update task script error: ${updateResult.error}`);
             return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', updateResult.error || 'Script execution failed', 'Verify task exists and params are valid', updateResult.details, timer.toMetadata());
+          }
+
+          if (isScriptSuccess(updateResult)) {
+            const rawData = updateResult.data as { success?: unknown; error?: unknown; message?: unknown } | undefined;
+            if (rawData && typeof rawData === 'object') {
+              const errorValue = rawData.error;
+              const subSuccess = rawData.success;
+              if (errorValue || subSuccess === false) {
+                const errorMessage = typeof rawData.message === 'string'
+                  ? rawData.message
+                  : typeof errorValue === 'string'
+                    ? errorValue
+                    : 'Script execution failed';
+                return createErrorResponseV2(
+                  'manage_task',
+                  'SCRIPT_ERROR',
+                  errorMessage,
+                  'Verify task exists and params are valid',
+                  rawData,
+                  timer.toMetadata(),
+                );
+              }
+            }
           }
           const parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
 

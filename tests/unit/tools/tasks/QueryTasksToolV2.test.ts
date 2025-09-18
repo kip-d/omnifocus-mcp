@@ -339,6 +339,46 @@ describe('QueryTasksToolV2', () => {
       expect(result.metadata.timestamp).toBeDefined();
       expect(result.metadata.query_time_ms).toBeGreaterThanOrEqual(0);
     });
+
+    it('preserves parent metadata when querying project tasks', async () => {
+      mockOmni.executeJson.mockResolvedValueOnce({
+        tasks: [
+          {
+            id: 'parent-1',
+            name: 'Parent Task',
+            childCounts: { total: 1 },
+          },
+          {
+            id: 'child-1',
+            name: 'Child Task',
+            parentTaskId: 'parent-1',
+            parentTaskName: 'Parent Task',
+            flagged: true,
+            tags: ['IntegrationTag'],
+          },
+        ],
+        summary: { total_tasks: 2, completed: 0, incomplete: 2 },
+      });
+
+      const result = await tool.execute({
+        mode: 'all',
+        project: 'Integration Project',
+        details: true,
+      });
+
+      expect(result.success).toBe(true);
+      const tasks = result.data?.tasks ?? [];
+
+      const child = tasks.find(task => task.id === 'child-1');
+      expect(child?.parentTaskId).toBe('parent-1');
+      expect(child?.parentTaskName).toBe('Parent Task');
+      expect(Array.isArray(child?.tags)).toBe(true);
+      expect(child?.tags).toContain('IntegrationTag');
+      expect(child?.flagged).toBe(true);
+
+      const parent = tasks.find(task => task.id === 'parent-1');
+      expect(parent?.childCounts?.total).toBe(1);
+    });
   });
 
   describe('mode-specific behavior', () => {
