@@ -528,7 +528,8 @@ export abstract class BaseTool<
             const message = typeof (parsed as { message?: unknown }).message === 'string'
               ? (parsed as { message: string }).message
               : 'Script execution failed';
-            const details = (parsed as { details?: unknown }).details ?? parsed;
+            const parsedRecord = parsed as Record<string, unknown>;
+            const details: unknown = parsedRecord.details !== undefined ? parsedRecord.details : parsed;
             return createScriptError(message, 'Legacy script error', details);
           }
 
