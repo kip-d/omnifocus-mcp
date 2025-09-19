@@ -1,49 +1,19 @@
 # OmniFocus MCP Server
 
-A Model Context Protocol (MCP) server for OmniFocus task management automation.
+A Model Context Protocol (MCP) server that provides programmatic access to OmniFocus task management via Claude Desktop and other MCP clients.
 
-## 🎉 v2.1.0 Production Release - Self-Contained Architecture!
+> **Personal Project Notice**: This is a hobby project designed for my specific OmniFocus workflow automation needs. It's MIT licensed and you're welcome to use or adapt it, but no support or maintenance is guaranteed.
 
-**Complete architecture consolidation with all tools now self-contained:**
-- 🏗️ **Self-contained tools** - All consolidated tools directly implement operations (no delegation)
-- ⚡ **95% faster performance** - Queries now complete in <1 second for 2000+ tasks
-- 🔒 **Security hardened** - Fixed injection vulnerabilities in bridge operations
-- 🛠️ **100% reliable** - No more delete/recreate, task IDs preserved
-- 📊 **Summary-first responses** - Immediate insights before detailed data
-- 🏷️ **Tag assignment fixed** - Tags can now be set during task creation
-- 🔄 **Full repeat rule support** - Complex recurrence patterns now work
-- 📁 **Task reparenting** - Move tasks between projects and parents
-- 👁️ **Perspective queries** - Query any perspective without changing windows
-- 🧹 **Reduced complexity** - Removed 11 obsolete individual tool files
-- 🎯 **Zero breaking changes** - Seamless upgrade from v1.x
-
-> **Personal Project Notice**: This is a hobby project I built for my own OmniFocus workflow automation. While it's MIT licensed and you're welcome to use or adapt it, please note that it's designed for my specific needs and workflows. If it happens to work for you too, that's wonderful but unexpected! No support or maintenance is guaranteed.
-
-## ⚠️ Known Limitations
-
-### ~~Tags Cannot Be Assigned During Task Creation~~ ✅ FIXED in v2.0.0-beta.1
-**Update**: Tags can now be assigned during task creation! We've implemented a workaround using the `evaluateJavascript()` bridge that allows immediate tag assignment.
-
-```javascript
-// Now works in a single step!
-const task = await create_task({ 
-  name: "My Task",
-  tags: ["work", "urgent"]  // ✅ Tags are assigned immediately
-});
-```
-
-For technical details about how we bypassed this JXA limitation, see [JXA Limitations and Workarounds](docs/JXA-LIMITATIONS-AND-WORKAROUNDS.md).
 
 ## Features
 
-- Task management (create, update, complete, delete)
-- Project and folder organization  
-- Sequential/parallel support for both projects and tasks
-- GTD analytics and productivity insights
-- Tag management
-- **Perspective support** - List and query OmniFocus perspectives
-- Data export (CSV, JSON, Markdown)
-- Smart caching for performance
+- **Task Operations**: Create, update, complete, delete tasks with full property support
+- **Project Management**: Create and manage projects with folders, sequential/parallel modes
+- **GTD Analytics**: Productivity insights, workflow analysis, and bottleneck detection
+- **Tag Management**: Complete tag operations including hierarchy and bulk operations
+- **Perspective Access**: Query any OmniFocus perspective programmatically
+- **Data Export**: Export data in JSON, CSV, or Markdown formats
+- **Performance**: Optimized queries handle 2000+ tasks in under 1 second
 
 ## Quick Start
 
@@ -72,343 +42,140 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-## 🚀 Optimizing Your AI Assistant's Performance
+## API Documentation
 
-### Quick Setup: Add API Reference to Your Assistant
+For AI assistants and developers:
+- [`docs/API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) - Complete reference (~900 tokens)
+- [`docs/API-COMPACT.md`](docs/API-COMPACT.md) - Essential commands (~400 tokens)
 
-For the best experience with any AI assistant (Claude, ChatGPT, etc.), you can optionally include the compact API reference in your system prompt. This helps the AI understand all available tools without consuming much context:
+## Built-in Prompts
 
-1. **Copy the compact reference** from [`docs/API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) (~900 tokens)
-2. **Add to your system prompt** or custom instructions:
-   ```
-   You have access to OmniFocus MCP tools. Here's the API reference:
-   [paste API-REFERENCE-LLM.md content here]
-   ```
+Nine pre-built prompts for common workflows:
+- **GTD Workflows**: Inbox processing, weekly review, methodology guide
+- **Reference Guides**: Quick reference, troubleshooting, best practices
 
-This is **completely optional** but provides:
-- ✅ Faster, more accurate tool usage
-- ✅ Better error recovery
-- ✅ Reduced failed tool calls
-- ✅ The AI knows all capabilities upfront
+Access via Claude Desktop: "+" button → "Add from omnifocus"
 
-For ultra-minimal setups, use [`docs/API-COMPACT.md`](docs/API-COMPACT.md) (~400 tokens).
-
-## Using MCP Prompts in Claude Desktop
-
-This server provides nine pre-built prompts for common GTD workflows and reference guides. To access them in Claude Desktop (v0.12.55+):
-
-1. Click the **"+"** button (bottom-left of the input box)
-2. Select **"Add from omnifocus"** from the menu
-3. Choose from available prompts:
-   - **GTD Workflows:**
-     - `gtd_process_inbox` - Process inbox with 2-minute rule
-     - `eisenhower_matrix_inbox` - Process inbox items using the Eisenhower Matrix (Urgent/Important quadrants)
-     - `gtd_weekly_review` - Complete weekly review with stale project detection
-     - `gtd_principles` - Core GTD methodology guide
-   - **Reference Guides:**
-     - `quick_reference` - Essential tips and emergency commands
-     - `tool_discovery_guide` - All tools with performance characteristics
-     - `common_patterns_guide` - Best practices and workflows
-     - `troubleshooting_guide` - Common errors and solutions
-     - `tag_performance_guide` - Optimize tag queries
-
-These prompts provide guided conversations with pre-configured questions and responses tailored to specific workflows.
-
-## Basic Usage
+## Usage Examples
 
 ### Query Tasks
-Use the consolidated `tasks` tool with different modes:
 ```javascript
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "all",
-    "completed": false,
-    "limit": 50
-  }
-}
+// Get today's tasks
+{ "tool": "tasks", "arguments": { "mode": "today" } }
+
+// Search tasks
+{ "tool": "tasks", "arguments": { "mode": "search", "query": "budget" } }
 ```
 
-### Create Task
+### Manage Tasks
 ```javascript
+// Create task
 {
-  "tool": "manage_task", 
+  "tool": "manage_task",
   "arguments": {
     "operation": "create",
     "name": "Review Q4 budget",
-    "dueDate": "2024-01-15T17:00:00Z",
+    "dueDate": "2024-01-15 17:00",
+    "tags": ["work", "urgent"]
+  }
+}
+
+// Update task
+{
+  "tool": "manage_task",
+  "arguments": {
+    "operation": "update",
+    "taskId": "abc123",
     "flagged": true
   }
 }
 ```
 
-### Create Sequential Project
+### Project Operations
 ```javascript
+// Create project
 {
   "tool": "projects",
   "arguments": {
     "operation": "create",
     "name": "Website Redesign",
-    "sequential": true,  // Tasks must be done in order
+    "sequential": true,
     "folder": "Work"
   }
 }
 ```
 
-### Work with Perspectives
-```javascript
-// List all perspectives
-{
-  "tool": "perspectives",
-  "arguments": {
-    "operation": "list"
-  }
-}
+## Available Tools
 
-// Query tasks from a perspective
-{
-  "tool": "perspectives",
-  "arguments": {
-    "operation": "query",
-    "perspectiveName": "Inbox",
-    "limit": 10
-  }
-}
-```
+**Core Operations**:
+- `tasks` - Query tasks with modes (today, overdue, search, flagged, etc.)
+- `manage_task` - Create, update, complete, delete tasks
+- `projects` - Project operations (list, create, update, stats)
+- `folders` - Folder management and organization
+- `tags` - Tag operations including hierarchy management
 
-### Create Project with Review Settings
-```javascript
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "create",
-    "name": "Quarterly Goals",
-    "reviewInterval": {
-      "unit": "week",   // day, week, month, year
-      "steps": 1,       // Review every 1 week
-      "fixed": false    // Floating schedule
-    },
-    "nextReviewDate": "2025-01-15"
-  }
-}
-```
-
-### Create Action Group with Subtasks
-```javascript
-// Create parent task (action group)
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "create",
-    "name": "Plan Party",
-    "sequential": true,  // Subtasks must be done in order
-    "projectId": "xyz789"
-  }
-}
-// Returns: { taskId: "abc123" }
-
-// Add subtasks
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "create",
-    "name": "Make guest list",
-    "parentTaskId": "abc123"  // Creates as subtask
-  }
-}
-```
-
-### Get Today's Agenda
-```javascript
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "today",
-    "details": true
-  }
-}
-```
-
-### Analyze Database Patterns (NEW)
-```javascript
-// Find duplicates, dormant projects, and tag issues
-{
-  "tool": "analyze_patterns",
-  "arguments": {
-    "patterns": ["duplicates", "dormant_projects", "tag_audit"],
-    "options": {
-      "dormant_threshold_days": "60"
-    }
-  }
-}
-```
-
-## Available Tools (15 Self-Contained)
-
-### V2.1.0 Self-Contained Architecture
-
-**Task Operations (2 tools)**:
-- `tasks` - Unified task querying with modes (search, overdue, today, upcoming, available, blocked, flagged)
-- `manage_task` - All task CRUD operations (create, update, complete, delete)
-
-**Project Operations (1 tool)**:
-- `projects` - All project operations (list, create, update, complete, delete, review, stats)
-
-**Organization (3 tools)**:
-- `folders` - Complete folder operations (list, get, search, create, update, delete, move)
-- `tags` - Tag management (list, active, create, rename, delete, merge, hierarchy)
-- `manage_reviews` - GTD review workflow management
-
-**Analytics (5 tools)**:
-- `productivity_stats` - GTD health metrics and completion statistics
-- `task_velocity` - Completion trends and velocity analysis  
+**Analytics**:
+- `productivity_stats` - GTD metrics and completion statistics
+- `task_velocity` - Completion trends and velocity analysis
 - `analyze_overdue` - Bottleneck analysis for overdue items
 - `workflow_analysis` - Deep workflow pattern analysis
-- `analyze_patterns` - Database-wide pattern detection (duplicates, dormant projects, etc.)
+- `analyze_patterns` - Database-wide pattern detection
 
-**Utilities (4 tools)**:
-- `export` - Data export in JSON/CSV/Markdown formats
-- `recurring_tasks` - Recurring task analysis and patterns
-- `perspectives` - Access to OmniFocus perspectives
-- `system` - Version info and diagnostics
+**Utilities**:
+- `export` - Data export in multiple formats
+- `perspectives` - Query OmniFocus perspectives
+- `recurring_tasks` - Recurring task analysis
+- `manage_reviews` - GTD review workflow
+- `system` - Version and diagnostic info
 
-### Documentation
 
-- `/docs/API-REFERENCE.md` - Complete API documentation (~4,800 tokens)
-- `/docs/API-REFERENCE-LLM.md` - LLM-optimized reference (~900 tokens) 
-- `/docs/API-COMPACT.md` - Ultra-compact reference (~400 tokens)
-- `/docs/TOOLS.md` - Detailed tool documentation
-- `/docs/TOOL_CONSOLIDATION.md` - Consolidation guide and migration help  
-- `/docs/LLM_USAGE_GUIDE.md` - Best practices for AI agents
+## Recurring Tasks
 
-## Recurrence Examples
+Supports complex recurrence patterns:
 
-### Daily Task
 ```javascript
-// Review inbox every morning
-manage_task({
-  operation: "create",
-  name: "Review OmniFocus inbox",
-  dueDate: "2025-01-15 09:00",
-  repeatRule: {
-    unit: "day",
-    steps: 1,
-    method: "fixed"  // Due again next day regardless of completion
+// Daily task
+{
+  "repeatRule": {
+    "unit": "day",
+    "steps": 1,
+    "method": "fixed"
   }
-})
+}
+
+// Weekly on specific days
+{
+  "repeatRule": {
+    "unit": "week",
+    "steps": 1,
+    "weekdays": ["monday", "wednesday", "friday"]
+  }
+}
+
+// Monthly position (2nd Tuesday)
+{
+  "repeatRule": {
+    "unit": "month",
+    "steps": 1,
+    "weekPosition": "2",
+    "weekday": "tuesday"
+  }
+}
 ```
 
-### Weekly on Specific Days
-```javascript
-// Team standup on Mon/Wed/Fri
-manage_task({
-  operation: "create",
-  name: "Team standup",
-  dueDate: "2025-01-13 10:00",  // Starting Monday
-  repeatRule: {
-    unit: "week",
-    steps: 1,
-    weekdays: ["monday", "wednesday", "friday"],
-    method: "fixed"
-  }
-})
-```
+## Limitations
 
-### Monthly on Specific Day
-```javascript
-// Pay rent on 1st of each month
-manage_task({
-  operation: "create",
-  name: "Pay rent",
-  dueDate: "2025-02-01",
-  repeatRule: {
-    unit: "month",
-    steps: 1,
-    method: "fixed"
-  }
-})
-```
+- **Task Movement**: Moving tasks between projects may recreate task with new ID
+- **Parent Assignment**: Cannot move existing tasks into action groups after creation
+- **Sequential Blocking**: Inbox tasks don't show as blocked (requires project context)
 
-### Monthly on Position (e.g., 2nd Tuesday)
-```javascript
-// Team retrospective on 2nd Tuesday of each month
-manage_task({
-  operation: "create",
-  name: "Team retrospective",
-  dueDate: "2025-01-14 14:00",
-  repeatRule: {
-    unit: "month",
-    steps: 1,
-    weekPosition: "2",  // 2nd occurrence
-    weekday: "tuesday",
-    method: "fixed"
-  }
-})
-```
-
-### After Completion
-```javascript
-// Water plants 3 days after last watering
-manage_task({
-  operation: "create",
-  name: "Water plants",
-  repeatRule: {
-    unit: "day",
-    steps: 3,
-    method: "start-after-completion"  // Next due 3 days after marking complete
-  }
-})
-```
-
-### With Defer Date
-```javascript
-// Quarterly review (defer 1 week before due)
-manage_task({
-  operation: "create",
-  name: "Quarterly business review",
-  dueDate: "2025-03-31",
-  repeatRule: {
-    unit: "month",
-    steps: 3,
-    method: "fixed",
-    deferAnother: {
-      unit: "week",
-      steps: 1  // Becomes available 1 week before due
-    }
-  }
-})
-```
-
-## Known Limitations
-
-- **Recurrence/Repetition**: ✅ **NOW WORKING** via `evaluateJavascript()` bridge! See examples above. Implementation uses a hybrid approach bridging JXA to Omni Automation. Technical details in `/docs/JXA-LIMITATIONS.md`.
-- **Tags**: ✅ **NOW WORKING** - Can be assigned during task creation using `evaluateJavascript()` bridge (v2.0.0-beta.1).
-- **Project Movement**: Moving tasks between projects may require recreation with new ID
-- **Parent Task Assignment**: Cannot move existing tasks into action groups via `update_task` (JXA limitation). The OmniFocus JXA API does not support reassigning tasks to new parents after creation. Workaround: Create new subtasks directly under the action group using `create_task` with `parentTaskId`.
-- **Sequential Task Blocking**: Tasks in the inbox do not show as blocked even when sequential, as they lack project context. Sequential blocking only applies to tasks within projects or action groups.
-- **Performance**: v1.13.0 revolutionizes performance with hybrid JXA/Omni Automation approach. Most queries now 60-96% faster, completing in <1 second even with large databases.
-
-See `/docs/TROUBLESHOOTING.md` for solutions and `/docs/JXA-LIMITATIONS.md` for technical details.
-
-## Data Format Conventions
-
-- **Data Fields** (task/project properties): Use camelCase to match OmniFocus API
-  - Examples: `dueDate`, `deferDate`, `estimatedMinutes`, `flagged`
-- **Metadata Fields** (response metadata): Use snake_case for consistency
-  - Examples: `task_count`, `export_date`, `query_time_ms`, `from_cache`
-
-This distinction ensures compatibility with OmniFocus while maintaining consistent metadata formatting.
+See `/docs/TROUBLESHOOTING.md` for solutions.
 
 ## Documentation
 
-- `/docs/TOOLS.md` - Detailed tool documentation
-- `/docs/GTD-WORKFLOW-MANUAL.md` - GTD workflow guides
-- `/docs/PERFORMANCE.md` - Performance optimization
+- `/docs/TOOLS.md` - Complete tool reference
+- `/docs/TROUBLESHOOTING.md` - Common issues and solutions
 - `/docs/PERMISSIONS.md` - macOS permissions setup
-
-### Bridge Safety (Developers)
-- Use `src/omnifocus/scripts/shared/bridge-helpers.ts` (`BRIDGE_HELPERS`) for all bridge writes (tags, task moves, repetition rules). Do not hand‑roll `evaluateJavascript` strings.
-- The legacy `getBridgeHelpers()` bundle has been removed. If you see references in older branches, replace them with BRIDGE_HELPERS templates/helpers.
 
 ## License
 
