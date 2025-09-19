@@ -14,7 +14,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - More accurate blocking analysis
  * - OPTIMIZED: Uses analytics helpers (~130 lines vs 551 lines - 76% reduction)
  */
-export const ANALYZE_OVERDUE_OPTIMIZED_SCRIPT = `
+export const ANALYZE_OVERDUE_SCRIPT = `
   ${getAnalyticsHelpers()}
   
   (() => {

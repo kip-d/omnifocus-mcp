@@ -12,7 +12,6 @@ export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task
 export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { UPDATE_TASK_SCRIPT } from './tasks/update-task.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
-export { TODAYS_AGENDA_ULTRA_FAST_SCRIPT } from './tasks/todays-agenda-ultra-fast.js';
 export { LIST_TASKS_SCRIPT } from './tasks/list-tasks.js';
 
 // Legacy helper export

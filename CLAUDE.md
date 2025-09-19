@@ -9,6 +9,35 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 **Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
 
+## 🚨 JavaScript Execution Decision Tree
+
+**Always start with Pure JXA, then add bridge only when needed:**
+
+```
+Operation needed?
+├── Reading data (tasks, projects, tags)
+│   ├── Simple queries → Pure JXA
+│   └── Complex filters or bulk → JXA + Bridge (if needed)
+├── Creating/Updating tasks
+│   ├── Without tags → Pure JXA
+│   ├── With tags → JXA + Bridge (REQUIRED)
+│   └── With repetition → JXA + Bridge (REQUIRED)
+├── Task movement/organization
+│   ├── Simple property changes → Pure JXA
+│   └── Project movement/hierarchy → JXA + Bridge
+└── Bulk operations (>100 items) → JXA + Bridge
+```
+
+**Bridge is REQUIRED for:**
+- ✅ Tag assignment during task creation (JXA limitation)
+- ✅ Setting repetition rules (complex rule objects)
+- ✅ Task movement between projects (preserves IDs)
+
+**Bridge provides PERFORMANCE boost for:**
+- Bulk operations (100+ items)
+- Perspective queries
+- Complex data transformations
+
 ## Critical: V2 Architecture
 - **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
 - V1 tools removed in v2.0.0 for 30% context reduction

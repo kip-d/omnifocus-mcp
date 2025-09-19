@@ -27,14 +27,36 @@ The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combi
 
 ## Decision Tree: Which Approach to Use
 
+### Quick Decision Guide
+
+**Start with Pure JXA for:**
+- Reading task/project/tag properties
+- Simple CRUD operations (create, update, delete)
+- Queries and filters
+- Most standard OmniFocus operations
+
+**Add Bridge for:**
+- ✅ **Tag assignment during task creation** (JXA limitation)
+- ✅ **Task movement between projects** (preserves IDs better)
+- ✅ **Setting repetition rules** (complex rule objects)
+- ✅ **Bulk operations** (100+ items, significant performance boost)
+- ✅ **Perspective queries** (faster execution)
+
+### Detailed Decision Tree
+
 ```
 Operation needed?
-├── Simple read/write → Use Pure JXA
-├── Tags during creation → Use JXA + Bridge
-├── Task movement → Use JXA + Bridge
-├── Repetition rules → Use JXA + Bridge
-├── Bulk operations → Use JXA + Bridge (if performance needed)
-└── Everything else → Start with Pure JXA, add bridge if needed
+├── Reading data (tasks, projects, tags)
+│   ├── Simple queries → Pure JXA
+│   └── Complex filters or bulk → JXA + Bridge (if needed)
+├── Creating/Updating tasks
+│   ├── Without tags → Pure JXA
+│   ├── With tags → JXA + Bridge
+│   └── With repetition → JXA + Bridge
+├── Task movement/organization
+│   ├── Simple property changes → Pure JXA
+│   └── Project movement/hierarchy → JXA + Bridge
+└── Bulk operations (>100 items) → JXA + Bridge
 ```
 
 ## Implementation Patterns

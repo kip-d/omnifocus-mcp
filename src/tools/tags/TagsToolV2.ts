@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
-import { LIST_TAGS_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/tags/list-tags-optimized.js';
+import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
@@ -119,9 +118,8 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         return cached as StandardResponseV2<unknown>; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
-      // Choose script based on options
-      const useOptimized = namesOnly || (fastMode && !includeTaskCounts && !includeUsageStats);
-      const scriptTemplate = useOptimized ? LIST_TAGS_OPTIMIZED_SCRIPT : LIST_TAGS_SCRIPT;
+      // Use consolidated script that handles all optimization modes internally
+      const scriptTemplate = LIST_TAGS_SCRIPT;
 
       const script = this.omniAutomation.buildScript(scriptTemplate, {
         options: {
@@ -134,7 +132,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         },
       });
 
-      this.logger.debug(`Executing list tags script (optimized: ${useOptimized})`);
+      this.logger.debug('Executing consolidated list tags script');
       const result = await this.omniAutomation.executeJson(script, ListResultSchema);
 
       if (!isScriptSuccess(result)) {
@@ -155,7 +153,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         'tags',
         (parsedResult as { tags?: unknown[]; items?: unknown[] }).tags || (parsedResult as { tags?: unknown[]; items?: unknown[] }).items || [],
         'other',
-        { ...timer.toMetadata(), total: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'list', mode: useOptimized ? 'optimized' : 'full', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
+        { ...timer.toMetadata(), total: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'list', mode: 'unified', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
       );
 
       // Cache the result

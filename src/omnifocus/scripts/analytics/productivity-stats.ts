@@ -14,7 +14,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - No timeout issues with large databases
  * - Lower memory usage
  */
-export const PRODUCTIVITY_STATS_OPTIMIZED_SCRIPT = `
+export const PRODUCTIVITY_STATS_SCRIPT = `
   ${getAnalyticsHelpers()}
   
   (() => {

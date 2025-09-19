@@ -65,7 +65,7 @@ describe('Completed Project Task Handling', () => {
         GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT,
         GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
         GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT 
-      } = await import('../../src/omnifocus/scripts/date-range-queries-optimized-v3.js');
+      } = await import('../../src/omnifocus/scripts/date-range-queries.js');
       
       // Verify date range queries use the correct completion check in property assignment
       expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');

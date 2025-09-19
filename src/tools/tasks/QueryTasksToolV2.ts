@@ -2,12 +2,12 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import {
   LIST_TASKS_SCRIPT,
-  TODAYS_AGENDA_ULTRA_FAST_SCRIPT,
+  TODAYS_AGENDA_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-optimized-v3.js';
+} from '../../omnifocus/scripts/date-range-queries.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
@@ -345,7 +345,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     };
 
     // Use the optimized today's agenda script (now returns typed envelope)
-    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_ULTRA_FAST_SCRIPT, { options });
+    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, { options });
     const TodayPayloadSchema = z.object({
       tasks: z.array(z.object({
         id: z.string(),

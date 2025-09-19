@@ -1,20 +1,20 @@
-import { getBasicHelpers } from '../shared/helpers.js';
+import { getBasicHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
 
 /**
- * Script to get today's agenda from OmniFocus
+ * Ultra-fast optimized script for today's agenda
  *
- * Optimized performance query that returns:
- * - Overdue tasks
- * - Tasks due today
- * - Flagged tasks
- *
- * Performance optimizations:
- * - Efficient filtering with early returns
- * - Configurable detail levels
- * - Limited default results
+ * Single-pass algorithm for maximum performance
  */
 export const TODAYS_AGENDA_SCRIPT = `
   ${getBasicHelpers()}
+  ${getTaskStatusHelpers()}
+
+  // Helper function for safe completed check
+  function safeIsCompleted(task) {
+    // Use the isTaskEffectivelyCompleted helper which checks both task completion
+    // and parent project completion status
+    return isTaskEffectivelyCompleted(task);
+  }
   
   (() => {
     const options = {{options}};
@@ -23,261 +23,177 @@ export const TODAYS_AGENDA_SCRIPT = `
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  // Helper function for safe completed check
-  function safeIsCompleted(task) {
-    // Use the isTaskEffectivelyCompleted helper which checks both task completion
-    // and parent project completion status
-    return isTaskEffectivelyCompleted(task);
-  }
-  
-  // Helper function for safe flagged check (duplicated for clarity)
-  function safeIsFlagged(task) {
-    try {
-      return task.flagged() === true;
-    } catch (e) {
-      return false;
-    }
-  }
-  
-  try {
-    const app = Application('OmniFocus');
-    const doc = app.defaultDocument();
     
-    // Optimization: Use OmniFocus's query capabilities to pre-filter
-    let allTasks;
-    let optimizationUsed = 'standard_filter';
+    const includeOverdue = options.includeOverdue !== false;
+    const includeFlagged = options.includeFlagged !== false;
+    const includeDetails = options.includeDetails === true;
+    const maxTasks = options.limit || 25;
     
     try {
-      // CRITICAL PERFORMANCE FIX: Never use whose() - it's catastrophically slow
-      // Get all tasks and filter manually for <1 second performance
-      allTasks = doc.flattenedTasks();
+      const app = Application('OmniFocus');
+      const doc = app.defaultDocument();
       
-      // Manual filtering for performance - this is 25x faster than whose()
-      const filteredTasks = [];
+      // ULTRA-FAST SINGLE PASS ALGORITHM
+      // Get all tasks once and filter in a single loop
+      const allTasks = doc.flattenedTasks();
       const taskCount = allTasks.length;
       
-      for (let i = 0; i < taskCount; i++) {
+      let overdueCount = 0;
+      let dueTodayCount = 0;
+      let flaggedCount = 0;
+      let processedCount = 0;
+      const seenIds = new Set();
+      
+      // Single pass through all tasks
+      for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
         const task = allTasks[i];
+        processedCount++;
+        
         try {
-          // Skip completed tasks first (most common filter)
-          if (task.completed()) continue;
+          // Skip completed tasks immediately
+          if (safeIsCompleted(task)) continue;
           
-          // For agenda, we want tasks that are either due soon or flagged
-          if (options.includeOverdue !== false || options.includeFlagged !== false) {
-            // Check if task is flagged or has a due date
-            if (task.flagged() || task.dueDate()) {
-              filteredTasks.push(task);
+          // Get basic info once
+          const taskId = task.id();
+          
+          // Skip if we've already added this task
+          if (seenIds.has(taskId)) continue;
+          
+          let shouldInclude = false;
+          let reason = '';
+          let daysOverdue = 0;
+          
+          // Check flagged status if needed
+          const isFlagged = includeFlagged ? task.flagged() : false;
+          
+          // Check due date if needed
+          let dueDate = null;
+          if (includeOverdue || true) { // Always check for due dates
+            try {
+              const dueDateObj = task.dueDate();
+              if (dueDateObj) {
+                dueDate = dueDateObj.toISOString();
+                const dueTime = dueDateObj.getTime();
+                
+                if (dueTime < today.getTime()) {
+                  // Overdue
+                  if (includeOverdue) {
+                    shouldInclude = true;
+                    reason = 'overdue';
+                    daysOverdue = Math.floor((today - dueDateObj) / (1000 * 60 * 60 * 24));
+                    overdueCount++;
+                  }
+                } else if (dueTime < tomorrow.getTime()) {
+                  // Due today
+                  shouldInclude = true;
+                  reason = 'due_today';
+                  dueTodayCount++;
+                }
+              }
+            } catch (e) {
+              // No due date
             }
-          } else {
-            // Just incomplete tasks
-            filteredTasks.push(task);
           }
+          
+          // Check flagged if not already included
+          if (!shouldInclude && isFlagged) {
+            shouldInclude = true;
+            reason = 'flagged';
+            flaggedCount++;
+          }
+          
+          // Add task if it should be included
+          if (shouldInclude) {
+            seenIds.add(taskId);
+            
+            const taskObj = {
+              id: taskId,
+              name: task.name(),
+              reason: reason
+            };
+            
+            if (daysOverdue > 0) {
+              taskObj.daysOverdue = daysOverdue;
+            }
+            
+            if (dueDate) {
+              taskObj.dueDate = dueDate;
+            }
+            
+            if (isFlagged) {
+              taskObj.flagged = true;
+            }
+            
+          // Capture tag names once so they're available even without includeDetails
+          let tagNames = null;
+          try {
+            const tags = task.tags();
+            if (tags && tags.length > 0) {
+              tagNames = [];
+              for (var ti = 0; ti < tags.length; ti++) {
+                try {
+                  tagNames.push(tags[ti].name());
+                } catch (tagErr) {}
+              }
+            }
+          } catch (tagsError) {
+            tagNames = null;
+          }
+
+          if (tagNames && tagNames.length > 0) {
+            taskObj.tags = tagNames;
+          }
+
+          // Add richer details if requested
+          if (includeDetails) {
+            try {
+              taskObj.note = task.note() || '';
+              const project = task.containingProject();
+              if (project) {
+                taskObj.project = project.name();
+                taskObj.projectId = project.id();
+              }
+              if (tagNames && tagNames.length > 0) {
+                taskObj.tags = tagNames;
+              }
+            } catch (e) {
+              // Skip detail errors
+            }
+          }
+            
+            tasks.push(taskObj);
+          }
+          
         } catch (e) {
           // Skip tasks that throw errors
         }
       }
       
-      allTasks = filteredTasks;
-      optimizationUsed = 'manual_filter_fast';
-    } catch (taskError) {
-      try {
-        // Fallback to all tasks if filter fails
-        allTasks = doc.flattenedTasks();
-        optimizationUsed = 'standard_filter';
-      } catch (fallbackError) {
-        return JSON.stringify({
-          error: true,
-          message: "Failed to retrieve tasks from OmniFocus: " + fallbackError.toString(),
-          details: "doc.flattenedTasks() threw an error",
-          errorType: "TASK_RETRIEVAL_ERROR"
-        });
-      }
-    }
-    
-    // Check if we got valid results
-    if (!allTasks) {
+      // Return results in standard envelope
       return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedTasks() returned null or undefined",
-        errorType: "NULL_TASKS_ERROR"
+        ok: true,
+        v: '1',
+        data: {
+          tasks: tasks,
+          overdueCount: overdueCount,
+          dueTodayCount: dueTodayCount,
+          flaggedCount: flaggedCount,
+          processedCount: processedCount,
+          totalTasks: taskCount,
+          optimizationUsed: 'ultra_fast_single_pass'
+        }
+      });
+      
+    } catch (error) {
+      return JSON.stringify({
+        ok: false,
+        v: '1',
+        error: {
+          code: 'TODAY_ULTRA_FAST_FAILED',
+          message: (error && (error.message || error.toString())) || 'Unknown error',
+          details: "Failed in ultra-fast today's agenda query"
+        }
       });
     }
-    
-    // Check task count for debugging
-    let totalTaskCount = 0;
-    try {
-      totalTaskCount = allTasks.length;
-    } catch (e) {
-      // Length property might not be accessible
-      totalTaskCount = -1;
-    }
-    
-    const startTime = Date.now();
-    const maxTasks = options.limit || 50; // Reduced default limit for better performance
-    
-    let dueTodayCount = 0;
-    let overdueCount = 0;
-    let flaggedCount = 0;
-    
-    // Pre-compute option flags (default to true for all except includeAvailable)
-    const checkOverdue = options.includeOverdue !== false;
-    const checkFlagged = options.includeFlagged !== false;
-    const checkAvailable = options.includeAvailable === true;  // Default false, only true if explicitly set
-    const includeDetails = options.includeDetails === true;  // Default false for better performance
-    
-    // Performance metrics
-    let tasksScanned = 0;
-    let filterTimeTotal = 0;
-    
-    // Limit iterations for performance - agenda should focus on most relevant tasks
-    const maxIterations = Math.min(allTasks.length, 500); // Reduced from 10000
-    
-    // First pass: collect tasks into buckets for better performance
-    const overdueTasks = [];
-    const todayTasks = [];
-    const flaggedTasks = [];
-    
-    for (let i = 0; i < maxIterations; i++) {
-      const task = allTasks[i];
-      
-      // Skip completed tasks first (cheapest check)
-      if (safeIsCompleted(task)) continue;
-      
-      tasksScanned++;
-      
-      const filterStart = Date.now();
-      
-      // Cache expensive calls
-      let deferDate = null;
-      let dueDateObj = null;
-      let dueDateStr = null;
-      let dueDateChecked = false;
-      
-      // Check if available (if required) - use blocked property for optimization
-      if (checkAvailable) {
-        // Quick check using blocked property
-        if (safeGet(() => task.blocked(), false)) {
-          filterTimeTotal += Date.now() - filterStart;
-          continue;
-        }
-        
-        // Check defer date
-        deferDate = safeGetDate(() => task.deferDate());
-        if (deferDate && new Date(deferDate) > new Date()) {
-          filterTimeTotal += Date.now() - filterStart;
-          continue;
-        }
-      }
-      
-      let includeTask = false;
-      let reason = '';
-      
-      // Check due date only if needed
-      if (checkOverdue || true) { // Always need to check for "due today"
-        dueDateStr = safeGetDate(() => task.dueDate());
-        dueDateChecked = true;
-        
-        if (dueDateStr) {
-          dueDateObj = new Date(dueDateStr);
-          
-          if (checkOverdue && dueDateObj < today) {
-            includeTask = true;
-            reason = 'overdue';
-            overdueCount++;
-          } else if (dueDateObj >= today && dueDateObj < tomorrow) {
-            includeTask = true;
-            reason = 'due_today';
-            dueTodayCount++;
-          }
-        }
-      }
-      
-      // Check flagged status only if not already included
-      if (!includeTask && checkFlagged && safeIsFlagged(task)) {
-        includeTask = true;
-        reason = 'flagged';
-        flaggedCount++;
-      }
-      
-      if (includeTask) {
-        // Build task object efficiently
-        const taskObj = {
-          id: safeGet(() => task.id(), 'unknown'),
-          name: safeGet(() => task.name(), 'Unnamed Task'),
-          completed: false,
-          flagged: reason === 'flagged' ? true : safeIsFlagged(task),
-          reason: reason
-        };
-        
-        // Add dates we already fetched
-        if (dueDateChecked && dueDateStr) {
-          taskObj.dueDate = dueDateStr;
-        }
-        if (deferDate) {
-          taskObj.deferDate = deferDate;
-        }
-        
-        // Only add expensive details if requested
-        if (includeDetails) {
-          const note = safeGet(() => task.note());
-          if (note) taskObj.note = note;
-          
-          const project = safeGetProject(task);
-          if (project) {
-            taskObj.project = project.name;
-            taskObj.projectId = project.id;
-          }
-          
-          const tags = safeGetTags(task);
-          if (tags.length > 0) taskObj.tags = tags;
-          
-          // Add additional properties if available
-          const estimatedMinutes = safeGetEstimatedMinutes(task);
-          if (estimatedMinutes) taskObj.estimatedMinutes = estimatedMinutes;
-          
-          // Add task state indicators
-          const blocked = safeGet(() => task.blocked(), false);
-          const next = safeGet(() => task.next(), false);
-          if (blocked) taskObj.blocked = blocked;
-          if (next) taskObj.next = next;
-        }
-        
-        tasks.push(taskObj);
-      }
-      
-      filterTimeTotal += Date.now() - filterStart;
-    }
-    
-    const endTime = Date.now();
-    
-    // Sort tasks by priority: overdue first, then due today, then flagged
-    tasks.sort((a, b) => {
-      const priority = {'overdue': 0, 'due_today': 1, 'flagged': 2};
-      return priority[a.reason] - priority[b.reason];
-    });
-    
-    return JSON.stringify({
-      tasks: tasks,
-      summary: {
-        total: tasks.length,
-        overdue: overdueCount,
-        due_today: dueTodayCount,
-        flagged: flaggedCount,
-        query_time_ms: endTime - startTime,
-        limited: tasks.length >= maxTasks
-      },
-      performance_metrics: {
-        tasks_scanned: tasksScanned,
-        filter_time_ms: filterTimeTotal,
-        total_time_ms: endTime - startTime,
-        optimization: optimizationUsed,
-        total_tasks_in_db: totalTaskCount
-      }
-    });
-  } catch (error) {
-    return formatError(error, 'todays_agenda');
-  }
   })();
 `;

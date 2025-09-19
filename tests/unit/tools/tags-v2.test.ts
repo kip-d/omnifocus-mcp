@@ -91,7 +91,7 @@ describe('TagsToolV2', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.metadata.mode).toBe('optimized');
+      expect(result.metadata.mode).toBe('unified');
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
       // Verify the script contains helper functions (our new architecture)
       const [scriptCall, paramsCall] = mockOmniAutomation.buildScript.mock.calls[0];
