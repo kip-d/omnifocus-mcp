@@ -2,11 +2,12 @@
 
 This file provides critical guidance to Claude Code (claude.ai/code) when working with this OmniFocus MCP server.
 
-## 📚 CRITICAL: Read LESSONS_LEARNED.md First!
-**Before making ANY architectural changes or optimizations, consult `/docs/LESSONS_LEARNED.md`**
-This document contains hard-won insights that will save you from repeating costly mistakes.
+## 📚 CRITICAL: Read Architecture Documentation First!
+**Before making ANY changes, consult these essential documents:**
+- `/docs/ARCHITECTURE.md` - Unified JavaScript execution patterns and decision tree
+- `/docs/LESSONS_LEARNED.md` - Hard-won insights that will save you from repeating costly mistakes
 
-**LATEST ADDITION (Sept 2025):** OmniJS Bridge for Tag Assignment - Critical lesson about tag visibility issues and the two-context JavaScript architecture in OmniFocus automation.
+**Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
 
 ## Critical: V2 Architecture
 - **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
@@ -143,9 +144,28 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 - **Recommendation:** Use appropriate helper level for functionality needed
 
 **Available helper functions:**
-- `getMinimalHelpers()` - Essential utilities (~8KB)
-- `getTagHelpers()` - Tag operation helpers (~12KB)
+- `getCoreHelpers()` - Essential JXA utilities (~8KB)
 - `getAllHelpers()` - Full helper suite (~30KB, **now safe to use freely**)
+- `getBridgeOperations()` - evaluateJavascript() bridge templates
+
+## 🚨 CRITICAL: JavaScript Execution Decision Tree
+
+**When to use each approach:**
+```
+Operation needed?
+├── Simple read/write → Use Pure JXA
+├── Tags during creation → Use JXA + Bridge
+├── Task movement → Use JXA + Bridge
+├── Repetition rules → Use JXA + Bridge
+├── Bulk operations → Use JXA + Bridge (if performance needed)
+└── Everything else → Start with Pure JXA, add bridge if needed
+```
+
+**Key Rules:**
+- All scripts MUST start with JXA (`Application('OmniFocus')`)
+- NEVER use pure OmniJS without JXA wrapper
+- Bridge operations use `app.evaluateJavascript(omniJsCode)`
+- See `/docs/ARCHITECTURE.md` for complete implementation patterns
 
 ### Implementation Pattern - UPDATED
 ```typescript
