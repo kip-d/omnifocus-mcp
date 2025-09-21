@@ -25,12 +25,26 @@ await Promise.all([
 
 #### Batch Operation Tools
 **Problem**: Creating/updating multiple items requires separate API calls
-**Solution**: Single tools that handle multiple operations atomically
-**Impact**: 10x faster for bulk operations, reduced API surface
+**Solution**: Single tools that handle multiple operations atomically with hierarchical support
+**Impact**: 10x faster for bulk operations, reduced API surface, complex project creation in single call
 **Implementation**:
-- `batch_create_tasks` - Create multiple tasks in one call
+- `batch_create_tasks` - Create multiple tasks with hierarchical relationships using temporary IDs
 - `batch_update_tasks` - Update multiple tasks with different changes
 - `batch_move_tasks` - Move multiple tasks between projects efficiently
+- **Enhanced with temporary ID system** (inspired by themotionmachine implementation):
+```typescript
+// Support complex hierarchies in single batch:
+{
+  items: [
+    { tempId: "proj1", type: "project", name: "Vacation Planning" },
+    { tempId: "task1", parentTempId: "proj1", type: "task", name: "Book flights" },
+    { tempId: "task2", parentTempId: "proj1", type: "task", name: "Reserve hotel" },
+    { tempId: "subtask1", parentTempId: "task1", type: "task", name: "Compare prices" }
+  ],
+  createSequentially: true,
+  atomicOperation: true
+}
+```
 
 #### Query Result Pagination
 **Problem**: Large datasets (2000+ tasks) cause timeouts and memory issues
@@ -114,17 +128,53 @@ logger.info('Tool execution started', {
 
 #### Advanced Search Capabilities
 **Problem**: Limited search functionality compared to OmniFocus UI
-**Solution**: Full-text search with natural language query parsing
-**Impact**: More powerful task discovery and organization
+**Solution**: Hybrid approach combining natural language with flexible field-based querying
+**Impact**: More powerful task discovery and organization with performance optimization
 **Implementation**:
 ```typescript
-// Natural language queries:
+// Natural language queries (existing):
 "tasks due this week in work projects"
 "overdue tasks tagged urgent or important"
 "completed tasks from last month with notes containing 'budget'"
 
-// Full-text search:
+// Enhanced with field selection and complex filtering (inspired by themotionmachine):
+{
+  mode: "search",                    // Keep LLM-friendly modes
+  query: "quarterly review",         // Full-text search
+  fields: ["id", "name", "dueDate", "project"], // Optional performance optimization
+  filters: {
+    tags: { operator: "OR", values: ["work", "personal"] },
+    dueDate: { operator: ">=", value: "2025-09-20" },
+    status: { operator: "IN", values: ["available", "next"] },
+    project: { operator: "CONTAINS", value: "Q4" }
+  },
+  sort: [{ field: "dueDate", direction: "asc" }],
+  limit: 50
+}
+
+// Full-text search with field targeting:
 "find tasks containing 'quarterly review' in name or notes"
+```
+
+#### Perspective View Tools
+**Problem**: Limited interaction with OmniFocus perspectives beyond basic listing
+**Solution**: Rich perspective-based querying with formatted output and metadata
+**Impact**: Access to OmniFocus's powerful perspective system through MCP
+**Implementation**:
+```typescript
+// New tool: get_perspective_view (inspired by themotionmachine)
+{
+  perspectiveName: "Today",
+  includeMetadata: true,
+  formatOutput: true,        // Rich formatting with checkboxes, flags, dates
+  fields: ["id", "name", "dueDate", "project", "tags", "flagged"],
+  limit: 50,
+  groupBy: "project"         // Optional grouping
+}
+
+// Rich output format:
+// ☐ [🚩] Task name (Due: Today, Project: Work, Tags: urgent, meeting)
+// ☑ Completed task (Completed: Yesterday)
 ```
 
 #### Workflow Automation
@@ -196,14 +246,31 @@ logger.info('Tool execution started', {
 - Standard plugin interfaces for common patterns
 
 #### Import/Export Improvements
-**Problem**: Limited format support for data exchange
-**Solution**: Enhanced import/export with multiple formats
-**Impact**: Better integration with other productivity tools
+**Problem**: Limited format support for data exchange and no complete database export
+**Solution**: Enhanced import/export with multiple formats including complete database dumps
+**Impact**: Better integration with other productivity tools, backup/migration capabilities
 **Implementation**:
+- **Complete Database Export** (inspired by themotionmachine):
+```typescript
+{
+  exportType: "complete_database",
+  includeCompleted: false,
+  includeRecurring: true,
+  includeAttachments: false,     // Metadata only due to MCP limitations
+  optimized: true,               // Use selective field retrieval
+  format: "json" | "csv" | "yaml",
+  filters: {
+    dateRange: { from: "2025-01-01", to: "2025-12-31" },
+    projects: ["specific-project-id"],
+    tags: ["work", "personal"]
+  }
+}
+```
 - JSON/YAML export with full metadata
 - CSV import/export for spreadsheet compatibility
 - Markdown export for documentation
 - iCal export for calendar integration
+- **Performance optimization**: Large database handling with streaming export
 - *Import formats: CSV, JSON, plain text with smart parsing*
 
 ## 🔧 Quick Wins (Same-day implementation)
@@ -239,14 +306,26 @@ logger.info('Tool execution started', {
 |------------|-------------|---------------------|-------------------|
 | Error Messages | High | Low | 2-3 hours |
 | Cache Warming | High | Low | 1-2 hours |
+| **Field Selection (themotionmachine)** | **High** | **Low** | **3-4 hours** |
 | Batch Operations | High | Medium | 4-6 hours |
+| **Enhanced Batch Ops (temp IDs)** | **High** | **Medium** | **6-8 hours** |
 | Usage Analytics | Medium | Low | 2-4 hours |
 | Structured Logging | Medium | Low | 2-3 hours |
+| **Perspective Views** | **High** | **Medium** | **4-6 hours** |
 | Auto-Recovery | High | Medium | 6-8 hours |
+| **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
 | Advanced Search | High | High | 1-2 days |
+| **Database Export Enhancement** | **Medium** | **Medium** | **6-8 hours** |
 | Workflow Automation | High | High | 2-3 days |
 | Webhook Support | Medium | High | 1-2 days |
 | Plugin Architecture | Low | High | 3-5 days |
+
+### High-Value Additions from themotionmachine Analysis
+- **Field Selection**: Optional field filtering for performance optimization
+- **Enhanced Batch Operations**: Temporary ID system for hierarchical creation
+- **Perspective Views**: Rich perspective-based querying capabilities
+- **Cache Validation**: Checksum-based change detection
+- **Database Export**: Complete database dump with optimization
 
 ## 🧪 Advanced Testing & Validation
 
@@ -302,13 +381,179 @@ describe('LLM Integration Tests', () => {
 - **Resources**: GPU/CPU for inference (even small models)
 - **Test reliability**: Non-deterministic results require statistical validation
 
+## 🔍 Insights from themotionmachine's OmniFocus MCP Implementation
+
+*Based on analysis conducted September 20, 2025 of https://github.com/themotionmachine/OmniFocus-MCP*
+
+### Comparative Analysis
+
+#### Their Approach vs Ours
+- **Architecture**: Uses AppleScript for OmniFocus interaction vs our JXA approach
+- **Tool Count**: 10 focused tools vs our 15 multi-function tools
+- **Caching**: No apparent caching layer vs our sophisticated TTL-based cache (30s tasks, 5m projects, 1h analytics)
+- **Query System**: 30+ queryable fields with complex filtering vs our mode-based simplicity
+- **Batch Operations**: Advanced temporary ID references for hierarchical creation vs our planned basic batch operations
+
+#### Our Unique Strengths They Lack
+- **Advanced Analytics Suite**: 5 dedicated analytics tools (productivity_stats, analyze_overdue, task_velocity, etc.)
+- **Sophisticated Caching**: 70-90% API call reduction with automatic invalidation
+- **Performance Optimization**: Empirically tested script limits (523KB JXA), helper function strategy
+- **Production Readiness**: Comprehensive error handling, MCP lifecycle compliance, async operation tracking
+- **Folder Management**: Complete folder hierarchy support
+- **Review Management**: Project review workflow support
+- **Recurring Task Analysis**: Specialized insights for recurring patterns
+
+#### Their Unique Strengths We Should Consider
+- **Flexible Query Engine**: 30+ fields with AND/OR logic and field selection for performance
+- **Advanced Batch Operations**: Temporary ID references for complex hierarchical task creation
+- **Perspective Views**: Direct perspective-based querying with rich formatting
+- **Database Export**: Complete database dump with optimization strategies
+- **Simpler Architecture**: Easier to understand and modify for basic use cases
+
+### Features Worth Adopting
+
+#### 1. Enhanced Batch Operations with Temporary IDs
+**Current State**: Basic batch operations planned but not fully implemented
+**Enhancement**: Add their temporary ID reference system for within-batch relationships
+```typescript
+// Example from their implementation:
+{
+  tempId: "task1",
+  parentTempId: "project1",
+  hierarchyLevel: 2,
+  createSequentially: true
+}
+```
+**Benefits**: Enable complex project hierarchies in single batch operation, atomic success/failure tracking
+
+#### 2. Flexible Query Engine with Field Selection
+**Current State**: Mode-based queries (today, upcoming, all, etc.)
+**Enhancement**: Add optional field selection and complex filtering while maintaining mode simplicity
+```typescript
+// Enhanced query options:
+{
+  mode: "today",           // Keep our LLM-friendly modes
+  fields: ["id", "name", "dueDate", "project"],  // Optional performance optimization
+  filters: {
+    tags: { operator: "AND", values: ["work", "urgent"] },
+    dueDate: { operator: "<=", value: "2025-09-27" }
+  }
+}
+```
+
+#### 3. Perspective View Capabilities
+**Current State**: Basic perspective listing
+**Enhancement**: Rich perspective-based querying with formatted output
+```typescript
+// New tool: get_perspective_view
+{
+  perspectiveName: "Today",
+  includeMetadata: true,
+  formatOutput: true,  // Checkbox, flags, dates, etc.
+  limit: 50
+}
+```
+
+#### 4. Complete Database Export
+**Current State**: CSV/JSON export for specific data
+**Enhancement**: Full database dump with filters and optimization
+```typescript
+// Enhanced export capabilities:
+{
+  exportType: "complete_database",
+  includeCompleted: false,
+  includeRecurring: true,
+  optimized: true,  // Use their caching strategies
+  format: "json" | "csv"
+}
+```
+
+### Implementation Patterns to Consider
+
+#### Cache Management Enhancement
+Their approach uses checksum validation for change detection:
+```typescript
+// Adopt their cache validation pattern:
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  checksum: string;  // Based on task count, project count, last modification
+  size: number;      // For size-based eviction
+}
+```
+
+#### Error Handling Improvements
+Their granular success/failure tracking for batch operations:
+```typescript
+// Enhanced batch result structure:
+interface BatchResult {
+  totalProcessed: number;
+  successCount: number;
+  failureCount: number;
+  results: Array<{
+    tempId?: string;
+    actualId?: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+```
+
+#### Script Execution Strategy
+Their dynamic script generation with cleanup:
+```typescript
+// Consider their temporary file approach for complex scripts:
+const scriptPath = await createTemporaryScript(scriptContent);
+const result = await executeJXAScript(scriptPath);
+await cleanupTemporaryScript(scriptPath);
+```
+
+### Integration Strategy
+
+#### What to Adopt Immediately (High Value, Low Risk)
+1. **Field Selection**: Add optional field filtering to our existing tools for performance
+2. **Batch Operations Enhancement**: Complete our planned batch_operations tool with their temporary ID system
+3. **Cache Validation**: Add checksum-based cache invalidation detection
+4. **Perspective Views**: Implement get_perspective_view tool
+
+#### What to Consider Medium-Term
+1. **Query Engine Hybrid**: Extend our mode-based system with optional complex filtering
+2. **Database Export Enhancement**: Add complete dump capabilities to our export tool
+3. **Error Tracking**: Implement their granular success/failure tracking patterns
+
+#### What to Preserve (Our Competitive Advantages)
+1. **JXA Architecture**: More modern and performant than AppleScript
+2. **Caching Strategy**: Our TTL-based cache provides significant performance benefits
+3. **Analytics Tools**: Our productivity insights are unique and valuable
+4. **MCP Compliance**: Our lifecycle management and error handling are superior
+5. **Mode-Based Queries**: More LLM-friendly than complex field systems
+
+### Performance Considerations
+
+#### Their Performance Approach
+- **Selective field retrieval** reduces data transfer overhead
+- **Targeted queries** avoid full database scans
+- **Optimized database dumping** with configurable filters
+- **Note**: Their documentation mentions "Dump_database tool currently fails for very large omnifocus databases"
+
+#### Our Performance Approach
+- **Caching reduces API calls** by 70-90%
+- **Ultra-optimized scripts** for common operations (empirically tested)
+- **Helper function strategy** balances functionality vs script size
+- **Early exit patterns** for performance in large datasets
+
+#### Hybrid Approach Recommendation
+Combine our caching advantages with their selective retrieval for optimal performance across all use cases.
+
 ## 🎯 Recommended Next Steps
 
 1. **Start with Quick Wins**: Error messages and cache warming for immediate impact
-2. **Add Batch Operations**: High user value with reasonable complexity
-3. **Implement Analytics**: Data-driven optimization foundation
-4. **Experiment with Real LLM Testing**: Validate AI reasoning patterns (optional)
-5. **Consider Advanced Features**: Based on user feedback and analytics data
+2. **Enhance Batch Operations**: Complete our batch_operations tool with temporary ID support inspired by their implementation
+3. **Add Field Selection**: Implement optional field filtering in our query tools for performance
+4. **Implement Perspective Views**: Add get_perspective_view tool for richer perspective interaction
+5. **Implement Analytics**: Data-driven optimization foundation
+6. **Experiment with Real LLM Testing**: Validate AI reasoning patterns (optional)
+7. **Consider Advanced Features**: Based on user feedback and analytics data
 
 ## 📊 Success Metrics
 
