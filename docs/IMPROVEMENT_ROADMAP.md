@@ -302,36 +302,47 @@ logger.info('Tool execution started', {
 
 ## 📋 Implementation Priority Matrix
 
+### 🎯 Quick Wins (High Impact, Low Effort)
 | Improvement | User Impact | Technical Complexity | Implementation Time |
 |------------|-------------|---------------------|-------------------|
-| Error Messages | High | Low | 2-3 hours |
 | Cache Warming | High | Low | 1-2 hours |
+| Error Messages | High | Low | 2-3 hours |
+| **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
 | **Field Selection (themotionmachine)** | **High** | **Low** | **3-4 hours** |
+
+### ⚡ High-Value Medium Effort (4-8 hours)
+| Improvement | User Impact | Technical Complexity | Implementation Time |
+|------------|-------------|---------------------|-------------------|
 | Batch Operations | High | Medium | 4-6 hours |
+| **Perspective Views** | **High** | **Medium** | **4-6 hours** |
+| **Real LLM Testing (Ollama bridges)** | **High** | **Medium** | **4-6 hours** |
 | **Enhanced Batch Ops (temp IDs)** | **High** | **Medium** | **6-8 hours** |
+| Auto-Recovery | High | Medium | 6-8 hours |
+| **Database Export Enhancement** | **Medium** | **Medium** | **6-8 hours** |
+
+### 📈 Infrastructure Improvements (Lower Priority)
+| Improvement | User Impact | Technical Complexity | Implementation Time |
+|------------|-------------|---------------------|-------------------|
 | Usage Analytics | Medium | Low | 2-4 hours |
 | Structured Logging | Medium | Low | 2-3 hours |
-| **Perspective Views** | **High** | **Medium** | **4-6 hours** |
-| Auto-Recovery | High | Medium | 6-8 hours |
-| **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
+
+### 🚀 Major Features (1-3 days)
+| Improvement | User Impact | Technical Complexity | Implementation Time |
+|------------|-------------|---------------------|-------------------|
 | Advanced Search | High | High | 1-2 days |
-| **Database Export Enhancement** | **Medium** | **Medium** | **6-8 hours** |
-| Workflow Automation | High | High | 2-3 days |
 | Webhook Support | Medium | High | 1-2 days |
+| Workflow Automation | High | High | 2-3 days |
 | Plugin Architecture | Low | High | 3-5 days |
 
-### High-Value Additions from themotionmachine Analysis
-- **Field Selection**: Optional field filtering for performance optimization
-- **Enhanced Batch Operations**: Temporary ID system for hierarchical creation
-- **Perspective Views**: Rich perspective-based querying capabilities
-- **Cache Validation**: Checksum-based change detection
-- **Database Export**: Complete database dump with optimization
+### High-Value Additions from Analysis
+- **themotionmachine insights**: Field Selection, Enhanced Batch Operations, Perspective Views, Cache Validation, Database Export
+- **Ollama bridge discovery**: Real LLM testing now feasible with existing infrastructure (ollama-mcp-bridge)
 
 ## 🧪 Advanced Testing & Validation
 
 ### Real LLM Integration Testing with Ollama
 **Problem**: Current simulation tests use scripted workflows, not actual AI reasoning
-**Solution**: Hybrid testing approach with both scripted and real LLM integration tests
+**Solution**: Use existing Ollama-MCP bridges for real LLM integration testing
 **Impact**: Validate genuine AI decision-making and discover emergent tool usage patterns
 
 #### Current Implementation (Scripted Simulation)
@@ -340,46 +351,99 @@ logger.info('Tool execution started', {
 - **Full MCP protocol compliance** with initialization, tool discovery, error handling
 - **Fast & deterministic** - ideal for CI/CD validation
 
-#### Proposed Ollama Integration
+#### Available Ollama-MCP Bridge Solutions
+
+##### 1. ollama-mcp-bridge by jonigl (Recommended)
+**Drop-in proxy solution** that makes any MCP server work with Ollama:
+```bash
+npm install -g ollama-mcp-bridge
+```
+
+**Configuration** (`mcp-config.json`):
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "/path/to/omnifocus-mcp"
+    }
+  }
+}
+```
+
+**Usage**:
 ```typescript
-// Hybrid testing approach
-describe('LLM Integration Tests', () => {
-  // Fast, deterministic protocol validation (existing)
-  describe('Scripted Workflows', () => { /* 14 current tests */ });
+// Start bridge: ollama-mcp-bridge
+// Point to bridge instead of Ollama directly
+const ollamaWithMCP = new OllamaAPI("http://localhost:8000");
 
-  // Slow, realistic AI reasoning validation (new)
-  describe('Real LLM Workflows', () => {
-    it('should handle "plan my week" with actual AI', async () => {
-      const conversation = await ollama.chat([
-        { role: 'system', content: 'You are a productivity assistant...' },
-        { role: 'user', content: 'Help me plan my week' }
-      ], { tools: await mcpServer.getToolDefinitions() });
-
-      // Validate LLM made sensible tool choices
-      expect(conversation.toolCalls).toContainLogicalSequence();
-    });
-  });
+// Test with any model
+const response = await ollamaWithMCP.chat({
+  model: "phi3.5:3.8b",
+  messages: [
+    { role: "system", content: "You are a productivity assistant with OmniFocus tools..." },
+    { role: "user", content: "What should I work on today?" }
+  ],
+  tools: true // Bridge automatically provides our MCP tools
 });
 ```
 
-#### Implementation Strategy
-- **Keep current tests** for fast CI/CD and deterministic validation
-- **Add ollama tests** as optional deep integration tests
-- **Environment flag** to enable/disable (`ENABLE_REAL_LLM_TESTS=true`)
-- **Recommended models**: Phi-3-mini (3.8B), Qwen2-0.5B, Llama 3.2 1B
+##### 2. ollama-mcp-bridge by patruff
+**TypeScript implementation** with direct protocol translation:
+- More control over the integration
+- TypeScript-native approach
+- Custom tool handling logic
+
+##### 3. Dolphin MCP
+**CLI + Python library** approach:
+- Multi-provider support (Ollama, OpenAI, DeepSeek)
+- Natural language query interface
+- Python library for programmatic control
+
+#### Practical Implementation
+```typescript
+// Real LLM Integration Tests (4-6 hours to implement)
+describe('Real LLM Integration Tests', () => {
+  beforeAll(async () => {
+    // Start our MCP server
+    mcpServer = spawn('node', ['dist/index.js']);
+
+    // Start ollama-mcp-bridge with our server
+    bridge = spawn('ollama-mcp-bridge', ['--config', 'mcp-config.json']);
+
+    await waitForBridgeReady();
+  });
+
+  it('should handle realistic productivity workflows', async () => {
+    const result = await ollamaWithMCP.chat({
+      model: "phi3.5:3.8b",
+      messages: [
+        { role: "user", content: "Help me plan my day based on my tasks" }
+      ],
+      tools: true
+    });
+
+    // Validate LLM made logical tool choices
+    expect(result.toolCalls).toIncludeAny(['tasks', 'productivity_stats', 'analyze_overdue']);
+    expect(result.finalResponse).toContain('based on your tasks');
+  });
+});
+```
 
 #### Benefits of Real LLM Testing
 - **Genuine AI reasoning** about tool selection and sequencing
 - **Natural language understanding** of complex user requests
 - **Emergent behavior discovery** - unexpected but valid tool combinations
-- **Stress testing** - non-deterministic exploration of edge cases
-- **Validation of tool descriptions** - do they actually guide LLM decisions correctly?
+- **Tool description validation** - do they actually guide LLM decisions correctly?
+- **Production-like testing** - similar to Claude Desktop experience
 
 #### Implementation Requirements
-- **Effort**: 1-2 days for basic integration
-- **Dependencies**: ollama installation, model management
-- **Resources**: GPU/CPU for inference (even small models)
-- **Test reliability**: Non-deterministic results require statistical validation
+- **Effort**: 4-6 hours (bridge solutions already exist!)
+- **Dependencies**: ollama, ollama-mcp-bridge, test models
+- **Models**: Phi-3.5 (3.8B), Qwen2.5 (0.5B-3B), Llama 3.2 (1B-3B)
+- **Resources**: Moderate CPU/GPU for small models
+- **Environment**: `ENABLE_REAL_LLM_TESTS=true` flag
 
 ## 🔍 Insights from themotionmachine's OmniFocus MCP Implementation
 
