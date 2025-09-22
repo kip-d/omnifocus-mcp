@@ -306,8 +306,11 @@ logger.info('Tool execution started', {
 | Improvement | User Impact | Technical Complexity | Implementation Time |
 |------------|-------------|---------------------|-------------------|
 | Cache Warming | High | Low | 1-2 hours |
+| **Enhanced Error Categorization (PR #23)** | **High** | **Low** | **2 hours** |
 | Error Messages | High | Low | 2-3 hours |
+| **Helper Context Types (PR #23)** | **Medium** | **Low** | **2 hours** |
 | **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
+| **Performance Metrics Collection (PR #23)** | **Medium** | **Low** | **3 hours** |
 | **Field Selection (themotionmachine)** | **High** | **Low** | **3-4 hours** |
 
 ### ⚡ High-Value Medium Effort (4-8 hours)
@@ -337,6 +340,7 @@ logger.info('Tool execution started', {
 ### High-Value Additions from Analysis
 - **themotionmachine insights**: Field Selection, Enhanced Batch Operations, Perspective Views, Cache Validation, Database Export
 - **Ollama bridge discovery**: Real LLM testing now feasible with existing infrastructure (ollama-mcp-bridge)
+- **PR #23 extracted concepts**: Enhanced Error Categorization, Performance Metrics Collection, Helper Context Types
 
 ## 🧪 Advanced Testing & Validation
 
@@ -444,6 +448,81 @@ describe('Real LLM Integration Tests', () => {
 - **Models**: Phi-3.5 (3.8B), Qwen2.5 (0.5B-3B), Llama 3.2 (1B-3B)
 - **Resources**: Moderate CPU/GPU for small models
 - **Environment**: `ENABLE_REAL_LLM_TESTS=true` flag
+
+## 📝 Insights from PR #23: Comprehensive JXA Types
+
+*Based on analysis of closed PR #23 "Add comprehensive JXA integration types"*
+
+### What Was Proposed
+PR #23 attempted to add an **extremely comprehensive type system** for JXA integration with over **3,200+ lines** of new type definitions across 6 new files:
+
+- **Exhaustive JXA type definitions** - Every possible OmniFocus object method signature
+- **10 specific error types** - Categorizing failures (ScriptTimeout, PermissionDenied, etc.)
+- **Performance monitoring types** - Tracking script execution times and sizes
+- **Runtime validation** - Extensive Zod schemas for validating JXA responses
+- **Comprehensive documentation** - Detailed explanations of the type system
+
+### Why It Was Closed
+The PR was closed because:
+- **Over-engineered for our needs** - 3,200+ lines for type definitions alone
+- **Current approach is more pragmatic** - ESLint rule relaxation + selective typing
+- **Maintenance burden** - Exhaustive types would require constant updates
+- **Diminishing returns** - Our current `any` + focused typing works effectively
+
+### Valuable Concepts Worth Extracting
+
+#### 1. Enhanced Error Categorization
+Instead of generic errors, categorize common script failures:
+```typescript
+type ScriptErrorType =
+  | 'TIMEOUT'
+  | 'PERMISSION_DENIED'
+  | 'OMNIFOCUS_NOT_RUNNING'
+  | 'INVALID_ID'
+  | 'SCRIPT_TOO_LARGE'
+  | 'BRIDGE_FAILURE';
+
+interface CategorizedScriptError extends ScriptError {
+  errorType: ScriptErrorType;
+  actionable?: string; // Suggested fix
+}
+```
+
+#### 2. Performance Metrics Collection
+Track script execution for optimization insights:
+```typescript
+interface ScriptExecutionMetrics {
+  executionTime: number;
+  scriptSize: number;
+  cacheHit: boolean;
+  helperLevel: 'minimal' | 'tag' | 'full';
+  retryCount?: number;
+}
+```
+
+#### 3. Helper Context Types
+Improve helper function APIs with proper context:
+```typescript
+interface HelperContext {
+  maxRetries?: number;
+  timeout?: number;
+  skipAnalysis?: boolean;
+  performanceTracking?: boolean;
+  cacheStrategy?: 'aggressive' | 'conservative' | 'disabled';
+}
+```
+
+### What We're Skipping
+- **Exhaustive JXA type definitions** - Maintenance nightmare, current approach sufficient
+- **Complex runtime validation** - Our existing Zod schemas handle core needs
+- **Over-engineered type hierarchies** - Simple discriminated unions work better
+
+### Integration Strategy
+Extract the 3-4 most valuable patterns (~7 hours total effort) while maintaining our pragmatic approach:
+1. **Enhanced error categorization** improves debugging experience
+2. **Performance metrics** feed into planned analytics tools
+3. **Helper context types** make helper functions more maintainable
+4. **Skip complexity** that doesn't provide proportional value
 
 ## 🔍 Insights from themotionmachine's OmniFocus MCP Implementation
 
