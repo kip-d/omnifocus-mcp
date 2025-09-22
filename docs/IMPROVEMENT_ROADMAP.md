@@ -310,6 +310,7 @@ logger.info('Tool execution started', {
 | Error Messages | High | Low | 2-3 hours |
 | **Helper Context Types (PR #23)** | **Medium** | **Low** | **2 hours** |
 | **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
+| **Cross-reference Prompts Documentation** | **Medium** | **Low** | **2-3 hours** |
 | **Performance Metrics Collection (PR #23)** | **Medium** | **Low** | **3 hours** |
 | **Field Selection (themotionmachine)** | **High** | **Low** | **3-4 hours** |
 
@@ -319,6 +320,7 @@ logger.info('Tool execution started', {
 | Batch Operations | High | Medium | 4-6 hours |
 | **Perspective Views** | **High** | **Medium** | **4-6 hours** |
 | **Real LLM Testing (Ollama bridges)** | **High** | **Medium** | **4-6 hours** |
+| **Prompt Discovery CLI** | **Medium** | **Medium** | **4-6 hours** |
 | **Enhanced Batch Ops (temp IDs)** | **High** | **Medium** | **6-8 hours** |
 | Auto-Recovery | High | Medium | 6-8 hours |
 | **Database Export Enhancement** | **Medium** | **Medium** | **6-8 hours** |
@@ -341,6 +343,7 @@ logger.info('Tool execution started', {
 - **themotionmachine insights**: Field Selection, Enhanced Batch Operations, Perspective Views, Cache Validation, Database Export
 - **Ollama bridge discovery**: Real LLM testing now feasible with existing infrastructure (ollama-mcp-bridge)
 - **PR #23 extracted concepts**: Enhanced Error Categorization, Performance Metrics Collection, Helper Context Types
+- **Prompts architecture analysis**: Cross-reference documentation, Prompt discovery CLI, Template generation
 
 ## 🧪 Advanced Testing & Validation
 
@@ -523,6 +526,105 @@ Extract the 3-4 most valuable patterns (~7 hours total effort) while maintaining
 2. **Performance metrics** feed into planned analytics tools
 3. **Helper context types** make helper functions more maintainable
 4. **Skip complexity** that doesn't provide proportional value
+
+## 📋 Prompts Architecture Analysis
+
+*Based on directory analysis conducted September 22, 2025*
+
+### Current Prompts Structure
+
+#### Two Distinct Prompt Systems
+The project maintains **two complementary prompt directories** serving different purposes:
+
+1. **Root `prompts/` Directory** - User-facing templates
+2. **`src/prompts/` Directory** - MCP server programmatic prompts
+
+### Detailed Analysis
+
+#### Root `prompts/` Directory (Manual Templates)
+- **Format**: Markdown files (.md)
+- **Purpose**: Copy/paste templates for direct Claude Desktop usage
+- **Target Users**: All users, especially beginners
+- **Usage Pattern**: Manual copy/paste into Claude conversations
+- **Content**: Human-readable workflows and instructions
+
+**Current Files:**
+- `daily-gtd-workflow.md` - Complete daily GTD routine
+- `test-v2-comprehensive.md` - Full functionality testing
+- `v2-features-test.md` - Quick V2 feature validation
+- `README.md` - Usage guide and troubleshooting
+
+#### `src/prompts/` Directory (MCP Server Integration)
+- **Format**: TypeScript classes (.ts)
+- **Purpose**: Built-in MCP server prompt system
+- **Target Users**: Advanced users, programmatic workflows
+- **Usage Pattern**: Called via MCP prompt protocol
+- **Content**: Structured prompt classes generating conversation flows
+
+**Current Implementation:**
+- `base.ts` - Abstract base class for all prompts
+- `index.ts` - Prompt registration and MCP handlers
+- `gtd/` - GTD-specific prompt classes (4 files)
+- `reference/` - Quick reference prompts
+
+### Value Assessment
+
+#### Why Both Are Needed
+- **Different technical approaches**: Manual vs programmatic
+- **Different user experiences**: Copy/paste vs integrated
+- **Different skill levels**: Beginner-friendly vs advanced
+- **Complementary functionality**: Documentation + server features
+
+#### Current State Analysis
+- **Root prompts**: Well-documented, ready-to-use, accessible
+- **Src prompts**: Full MCP integration, parameterized workflows
+- **No significant duplication**: Different delivery mechanisms
+- **Low maintenance burden**: Both are relatively stable
+
+### Potential Improvements
+
+#### Cross-Reference Documentation
+- **Add note in root `prompts/README.md`** explaining MCP programmatic prompts
+- **Document relationship** between manual and programmatic approaches
+- **Create usage guide** for when to use each approach
+
+#### Enhanced Integration (Future)
+- **Prompt discovery tool** - List available MCP prompts via CLI
+- **Template generation** - Auto-generate markdown from TypeScript prompts
+- **Bi-directional sync** - Keep similar workflows synchronized
+- **Usage analytics** - Track which prompt types are most valuable
+
+#### Implementation Ideas
+
+##### Quick Wins (2-3 hours each):
+1. **Cross-reference documentation** in both directories
+2. **Add MCP prompt listing** to root README
+3. **Create comparison guide** for choosing approach
+
+##### Medium Effort (4-6 hours each):
+1. **Prompt discovery CLI** - `npm run prompts:list`
+2. **Template generator** - Convert TypeScript prompts to markdown
+3. **Enhanced MCP prompt descriptions** with examples
+
+##### Advanced Features (1-2 days each):
+1. **Dynamic prompt generation** - Runtime prompt creation
+2. **Prompt composition** - Combine multiple prompts
+3. **Workflow orchestration** - Chain prompts for complex scenarios
+
+### Strategic Recommendation
+
+#### Keep Both Systems
+- **No consolidation needed** - they serve different purposes effectively
+- **Enhance cross-referencing** to improve discoverability
+- **Document the distinction** clearly for users
+- **Consider future integration** opportunities without forcing convergence
+
+#### Priority for Improvements
+1. **Documentation enhancement** (immediate, low effort)
+2. **Discovery improvements** (medium term, moderate effort)
+3. **Advanced integration** (future, based on user feedback)
+
+This dual-prompt architecture demonstrates thoughtful design serving different user needs and technical requirements.
 
 ## 🔍 Insights from themotionmachine's OmniFocus MCP Implementation
 
