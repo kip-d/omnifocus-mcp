@@ -14,12 +14,23 @@ This document outlines the systematic approach for fixing issues to avoid the **
 
 ### 1. Pre-Fix Analysis (2-3 minutes)
 
-**Run all checks to understand current state:**
+**🚨 CRITICAL: Test MCP Integration First**
 ```bash
+# ALWAYS test the actual MCP tool BEFORE debugging internals
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{...}}}' | node dist/index.js
+
+# If MCP test fails, THEN run individual checks
 npm run lint        # Current lint warnings
 npm run build       # Current build errors
 npm test           # Current test status
 ```
+
+**Why MCP testing first:**
+- Tests actual integration, not isolated components
+- Fresh process picks up new built code (no caching issues)
+- Matches production behavior exactly
+- Reveals real vs. imagined problems
 
 **Study existing patterns:**
 ```bash

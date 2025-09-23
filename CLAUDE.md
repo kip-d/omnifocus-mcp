@@ -53,6 +53,14 @@ Operation needed?
 **Before fixing ANY issues, consult `/docs/DEBUGGING_WORKFLOW.md`**
 This document prevents the Fix → Lint → Build error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per fix and creates better code.
 
+### 🚨 CRITICAL DEBUGGING RULE: Test MCP Integration First
+**ALWAYS test the actual MCP tool BEFORE debugging internals:**
+```bash
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{...}}}' | node dist/index.js
+```
+**Why:** Tests actual integration, fresh process picks up new code, matches production behavior, reveals real vs. imagined problems. Do NOT debug isolated scripts/components until MCP integration test fails.
+
 ## 🚨 CRITICAL LESSON: MCP stdin Handling
 
 **We spent 6+ months with broken MCP lifecycle compliance!** 
