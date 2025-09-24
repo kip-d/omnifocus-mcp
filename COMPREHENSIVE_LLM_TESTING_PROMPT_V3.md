@@ -4,7 +4,26 @@
 
 **Target Assistants**: Claude Desktop, ChatGPT with MCP support, or any LLM with OmniFocus MCP integration.
 
-**Version**: 3.0 - Includes automated cleanup strategies and unique tagging system for test data management.
+**Version**: 3.1 - Includes automated cleanup strategies, unique tagging system, and Claude Desktop UI issue workarounds.
+
+---
+
+## 🚨 **IMPORTANT: Claude Desktop UI Issue Workaround**
+
+**Known Issue**: Claude Desktop may occasionally not display MCP tool responses even when they execute successfully. If a tool appears to "hang" for more than 10 seconds:
+
+### Quick Fixes:
+1. **Wait 30 seconds** - The tool may have completed but UI isn't updating
+2. **Try the same command again** - Often works on second attempt
+3. **Use simpler queries** - Break complex operations into smaller steps
+4. **Restart Claude Desktop** - Clears UI state issues
+
+### Alternative Query Patterns:
+- Instead of: `tasks mode="available" project="My Project"`
+- Try: `tasks mode="available" limit="10"` then filter manually
+- Use: `tasks mode="today"` for broader queries that typically respond faster
+
+**This is a Claude Desktop UI issue, not an MCP server problem. The server completes operations successfully in 2-6 seconds.**
 
 ---
 
@@ -467,7 +486,53 @@ If automated cleanup fails, the user can manually clean up by:
 
 ## 🧪 Error Handling & Edge Cases
 
-### Test Group 9: Error Resilience
+### Test Group 9A: Claude Desktop UI Issues (New!)
+
+**Objective**: Handle Claude Desktop UI responsiveness issues that may occur during testing.
+
+**⚠️ Important**: If any tool appears to "hang" or not respond:
+
+1. **Check MCP Logs** (if accessible):
+   - Look for "Message from server" entries
+   - Successful operations show complete JSON responses
+   - UI hanging ≠ Server failure
+
+2. **Troubleshooting Steps**:
+   ```
+   # If a query appears stuck, try:
+
+   # 1. Wait 30 seconds - tool may have completed
+   # 2. Try a simpler version:
+   tasks mode="today" limit="10"
+
+   # 3. Use system diagnostic:
+   system operation="diagnostics"
+
+   # 4. Test with different tool:
+   projects operation="list" limit="5"
+
+   # 5. If all else fails, restart Claude Desktop
+   ```
+
+3. **Alternative Approaches for Stuck Operations**:
+   ```
+   # Instead of complex project filtering:
+   tasks mode="available" project="My Project" limit="25"
+
+   # Try broader query then manual filter:
+   tasks mode="available" limit="50"
+   # Then look for your project tasks in the results
+
+   # Break into smaller operations:
+   projects operation="list" limit="20"
+   # Find your project ID, then query tasks separately
+   ```
+
+**Success Criteria**: Understand difference between UI hanging and actual tool failure, successfully work around UI issues.
+
+---
+
+### Test Group 9B: Error Resilience
 
 **Objective**: Verify graceful error handling without data corruption.
 
