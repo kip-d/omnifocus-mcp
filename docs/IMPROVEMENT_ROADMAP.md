@@ -790,15 +790,94 @@ await cleanupTemporaryScript(scriptPath);
 #### Hybrid Approach Recommendation
 Combine our caching advantages with their selective retrieval for optimal performance across all use cases.
 
-## 🎯 Recommended Next Steps
+## 🎯 Recommended Implementation Order (Synthesized from Both Roadmaps)
 
-1. **Start with Quick Wins**: Error messages and cache warming for immediate impact
-2. **Enhance Batch Operations**: Complete our batch_operations tool with temporary ID support inspired by their implementation
-3. **Add Field Selection**: Implement optional field filtering in our query tools for performance
-4. **Implement Perspective Views**: Add get_perspective_view tool for richer perspective interaction
-5. **Implement Analytics**: Data-driven optimization foundation
-6. **Experiment with Real LLM Testing**: Validate AI reasoning patterns (optional)
-7. **Consider Advanced Features**: Based on user feedback and analytics data
+*Based on analysis of CODEX_SUGGESTED_ROADMAP.md and IMPROVEMENT_ROADMAP.md convergence*
+
+### Phase 1: Foundation (1 Day Total) - Prerequisites for Everything Else
+
+#### 1. Enhanced Error Categorization (2 hours)
+- **Both roadmaps agree**: High priority, low complexity
+- **Implementation**: Create `ScriptErrorType` enum in BaseTool
+- **Validation**: Unit tests + manual negative testing (OmniFocus closed)
+- **Dependencies**: None - start here
+
+#### 2. Structured Logging v1 (2-3 hours)
+- **CODEX emphasis**: Correlation IDs for tool calls
+- **Implementation**: Extend createLogger with correlation support
+- **Validation**: JSON structure parses via `jq` during `npm run dev`
+- **Dependencies**: Error Taxonomy helper
+
+#### 3. Performance Metrics Collection (3 hours)
+- **Both roadmaps want**: Usage analytics foundation
+- **Implementation**: Capture counters in BaseTool (tool name, duration, success/error)
+- **Validation**: Unit tests for metrics aggregation
+- **Dependencies**: Structured Logging v1
+
+### Phase 2: Quick Optimizations (4-6 hours) - High Impact, Low Risk
+
+#### 4. Field Selection for Tasks (3-4 hours)
+- **themotionmachine insight**: Reduce payload size
+- **Implementation**: Add optional `fields` array to tasks schema
+- **Validation**: Unit tests verifying payload shaping
+- **Dependencies**: None
+
+#### 5. Cache Warming Investigation (1-2 hours)
+- **CODEX spike**: Determine if pre-load is worth the cost
+- **Implementation**: Prototype warm-up for projects/tags behind env flag
+- **Validation**: Measure startup latency across 5 runs
+- **Dependencies**: Metrics to capture hit/miss deltas
+
+#### 6. Cross-reference Prompts Documentation (2 hours)
+- **Quick win**: Improve discoverability
+- **Implementation**: Update both README.md files with cross-references
+- **Validation**: Markdown lint + reviewer confirmation
+- **Dependencies**: None
+
+### Phase 3: High-Value Features (8-12 hours) - Major Capabilities
+
+#### 7. Batch Operations Foundation (4-6 hours)
+- **Both roadmaps critical**: Multi-entity operations
+- **Implementation**: Temporary ID resolution + rollback semantics
+- **Validation**: Integration tests + manual project creation
+- **Dependencies**: Error taxonomy + metrics for observability
+
+#### 8. Perspective View Tool (4-6 hours)
+- **Both roadmaps want**: Rich perspective querying
+- **Implementation**: Build get_perspective_view with metadata extraction
+- **Validation**: Manual testing against built-in perspectives
+- **Dependencies**: Field-scoped queries for shared data paths
+
+### Research Spikes (Timeboxed 1-2 weeks each)
+
+#### Cursor-Based Pagination Investigation
+- **Question**: Can JXA fetch deterministic slices without full re-query?
+- **Exit Criteria**: Prototype with ≥5k tasks, feasibility verdict doc
+- **Decision Point**: Implement if feasible, otherwise document limitation
+
+#### Real LLM Bridge Testing
+- **Question**: Ollama bridge vs simulator for CI?
+- **Exit Criteria**: Pilot run with small model, capture pros/cons
+- **Decision Point**: Add to CI if resource footprint acceptable
+
+### Deferred Items (Revisit Q1 2026)
+- **Plugin Architecture**: High cost, requires untrusted code execution
+- **Complete Database Export**: Exceeds MCP payload limits
+- **Webhook Support**: OmniFocus lacks real-time event APIs
+- **Workflow Automation Bundles**: Wait for stable batch operations
+
+## 📊 Success Metrics for Implementation
+
+### Phase Completion Criteria
+- **Phase 1**: All error responses use taxonomy, 100% of tool calls have correlation IDs
+- **Phase 2**: 20%+ reduction in average response payload size (field selection)
+- **Phase 3**: Batch operations handle 50+ items reliably, perspectives return in <2s
+
+### Overall Success Indicators
+- **Performance**: Query response time <500ms p95
+- **Reliability**: Error rate <1% for valid requests
+- **Observability**: All failures traceable via correlation ID
+- **User Satisfaction**: Clear, actionable error messages
 
 ## 📊 Success Metrics
 
