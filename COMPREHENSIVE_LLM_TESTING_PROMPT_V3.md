@@ -4,7 +4,7 @@
 
 **Target Assistants**: Claude Desktop, ChatGPT with MCP support, or any LLM with OmniFocus MCP integration.
 
-**Version**: 3.1 - Includes automated cleanup strategies, unique tagging system, and Claude Desktop UI issue workarounds.
+**Version**: 3.2 - Includes automated cleanup strategies, unique tagging system, Claude Desktop UI issue workarounds, and real user testing feedback integration.
 
 ---
 
@@ -24,6 +24,47 @@
 - Use: `tasks mode="today"` for broader queries that typically respond faster
 
 **This is a Claude Desktop UI issue, not an MCP server problem. The server completes operations successfully in 2-6 seconds.**
+
+---
+
+## 📋 **Real User Testing Results & Known Issues**
+
+**Based on comprehensive user testing with 1,777 tasks, 183 projects, 126 tags:**
+
+### ✅ **Confirmed Working Tools (13/15 = 87% Success Rate)**
+- System Diagnostics, Tasks Query, Task Management, Projects (minor format issue)
+- Folders, Tags, Productivity Stats, Pattern Analysis, Recurring Tasks
+- Perspectives, Export (parameter issue), System Version
+
+### ⚠️ **Known Issues & Workarounds**
+
+#### **1. manage_reviews Tool Issues**
+- **Problem**: Tool has internal bugs preventing proper execution
+- **Correct Usage**:
+  ```
+  manage_reviews operation="list_for_review"  # ✅ NOT "list"
+  manage_reviews operation="mark_reviewed" projectId="your-project-id"
+  ```
+- **Workaround**: Use `projects` tool for review-related queries until fixed
+
+#### **2. export Tool Parameter Issue**
+- **Problem**: Parameter mismatch causes empty datasets
+- **Correct Usage**:
+  ```
+  export type="tasks" format="json" completed="false"  # ✅ NOT "includeCompleted"
+  export type="tasks" format="csv" completed="true"    # For completed tasks
+  ```
+- **Note**: Tool works but parameter naming is inconsistent
+
+#### **3. workflow_analysis False Failures**
+- **Problem**: Claude Desktop UI may not show successful responses
+- **Reality**: Tool works perfectly (15-second execution, comprehensive analysis)
+- **Workaround**: Wait 30 seconds, try again, or restart Claude Desktop
+
+#### **4. projects Tool Format Issue**
+- **Problem**: Returns valid data but also shows error message
+- **Impact**: Data is usable, ignore error message
+- **Status**: Minor cosmetic issue, does not affect functionality
 
 ---
 
@@ -286,8 +327,8 @@ If automated cleanup fails, the user can manually clean up by:
    # List all test projects
    projects with operation="list", status=["active", "on-hold"], details=true
 
-   # Check projects needing review
-   manage_reviews with operation="list"
+   # Check projects needing review (⚠️ Known issue - may fail)
+   manage_reviews with operation="list_for_review"  # ✅ Correct parameter
 
    # Get project statistics
    projects with operation="stats"
@@ -373,14 +414,15 @@ If automated cleanup fails, the user can manually clean up by:
    productivity_stats with period="month", includeProjectStats=false, includeTagStats=true
    ```
 
-4. **Workflow Analysis**:
+4. **Workflow Analysis** (⚠️ May appear to hang due to Claude Desktop UI issue):
    ```
    workflow_analysis with analysisDepth="standard", focusAreas="productivity",
-   includeRawData=false, maxInsights=10
+   includeRawData=false, maxInsights=10  # ✅ Works perfectly, wait 30 seconds
 
    workflow_analysis with analysisDepth="deep", focusAreas="bottlenecks",
-   includeRawData=true, maxInsights=5
+   includeRawData=true, maxInsights=5  # ✅ Comprehensive analysis, be patient
    ```
+   **Note**: This tool works flawlessly but Claude Desktop may not show the response immediately.
 
 **Success Criteria**: Analytics generate meaningful insights, performance is acceptable.
 
@@ -423,12 +465,12 @@ If automated cleanup fails, the user can manually clean up by:
 
 1. **Various Export Operations**:
    ```
-   # Export test tasks only
-   export with type="tasks", format="json",
-   filter={"tags": ["@mcp-test-{timestamp}"], "completed": false}
+   # Export test tasks only (⚠️ Parameter corrected based on testing)
+   export with type="tasks", format="json", completed=false,
+   filter={"tags": ["@mcp-test-{timestamp}"]}  # ✅ Fixed parameter location
 
    # Export with specific fields
-   export with type="tasks", format="csv",
+   export with type="tasks", format="csv", completed=false,
    filter={"tags": ["@mcp-test-{timestamp}"]},
    fields=["name", "project", "tags", "dueDate", "completed"]
 
@@ -436,7 +478,7 @@ If automated cleanup fails, the user can manually clean up by:
    export with type="projects", format="json", includeStats=true
 
    # Export in markdown format
-   export with type="tasks", format="markdown",
+   export with type="tasks", format="markdown", completed=false,
    filter={"project": "{test-project-id}"}
    ```
 
@@ -586,10 +628,10 @@ If automated cleanup fails, the user can manually clean up by:
 
 1. **Review Preparation**:
    ```
-   # Check projects needing review (including test projects)
-   manage_reviews with operation="list"
+   # Check projects needing review (⚠️ Known issue - may fail)
+   manage_reviews with operation="list_for_review"  # ✅ Correct parameter
 
-   # Mark test projects as reviewed
+   # Mark test projects as reviewed (⚠️ Known issue - may fail)
    manage_reviews with operation="mark_reviewed", projectId="{test-project-id}"
 
    # Update project status
