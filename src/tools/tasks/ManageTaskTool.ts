@@ -726,6 +726,33 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       }
     }
 
+    // Handle completion date (for complete operation)
+    if (updates.completionDate !== undefined && updates.completionDate !== null) {
+      this.logger.info('Processing completionDate:', {
+        value: updates.completionDate,
+        type: typeof updates.completionDate,
+      });
+
+      if (typeof updates.completionDate === 'string') {
+        try {
+          // Convert local time to UTC for OmniFocus
+          const utcDate = localToUTC(updates.completionDate, 'completion');
+          this.logger.info('CompletionDate converted to UTC:', {
+            original: updates.completionDate,
+            converted: utcDate,
+          });
+          sanitized.completionDate = utcDate;
+        } catch (error) {
+          this.logger.warn(`Invalid completionDate format: ${updates.completionDate}`, error);
+        }
+      } else {
+        this.logger.warn('Unexpected completionDate type:', {
+          value: updates.completionDate,
+          type: typeof updates.completionDate,
+        });
+      }
+    }
+
     // Handle numeric fields with separate clear flag
     if (updates.clearEstimatedMinutes) {
       this.logger.info('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
