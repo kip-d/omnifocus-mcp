@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerTools } from './tools/index.js';
 import { registerPrompts } from './prompts/index.js';
 import { CacheManager } from './cache/CacheManager.js';
+import { CacheWarmer } from './cache/CacheWarmer.js';
 import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
 import { getVersionInfo } from './utils/version.js';
@@ -64,6 +65,29 @@ async function runServer() {
   // Register all tools and prompts AFTER server creation but BEFORE connection
   await registerTools(server, cacheManager);
   registerPrompts(server);
+
+  // Warm cache with frequently accessed data (non-blocking)
+  const cacheWarmer = new CacheWarmer(cacheManager, {
+    enabled: true,
+    timeout: 5000, // 5 second timeout to prevent startup delays
+    categories: {
+      projects: true,
+      tags: true,
+      tasks: true,
+      perspectives: false, // Skip perspectives for faster startup
+    },
+    taskWarmingOptions: {
+      today: true,
+      overdue: true,
+      upcoming: true,
+      flagged: false, // Skip flagged for faster startup
+    },
+  });
+
+  // Warm cache in background - don't block server startup
+  cacheWarmer.warmCache().catch(error => {
+    logger.warn('Cache warming failed:', error);
+  });
 
   const transport = new StdioServerTransport();
 

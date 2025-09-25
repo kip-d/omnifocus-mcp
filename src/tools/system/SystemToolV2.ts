@@ -7,9 +7,9 @@ import { getSystemMetrics, getMetricsSummary } from '../../utils/metrics.js';
 
 // Consolidated schema for all system operations
 const SystemToolSchema = z.object({
-  operation: z.enum(['version', 'diagnostics', 'metrics'])
+  operation: z.enum(['version', 'diagnostics', 'metrics', 'cache'])
     .default('version')
-    .describe('Operation to perform: get version info, run diagnostics, or get performance metrics'),
+    .describe('Operation to perform: get version info, run diagnostics, get performance metrics, or get cache statistics'),
 
   // Diagnostics operation parameters
   testScript: z.string()
@@ -66,11 +66,11 @@ interface MetricsResult {
   data: unknown; // Will be either SystemMetrics or MetricsSummary
 }
 
-type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult | MetricsResult>;
+type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult | MetricsResult | Record<string, unknown>>;
 
 export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
-  description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, or view performance metrics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics.';
+  description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, view performance metrics, or get cache statistics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics, operation="cache" for cache statistics.';
   schema = SystemToolSchema;
 
   private diagnosticOmni: DiagnosticOmniAutomation;
@@ -90,6 +90,8 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         return this.runDiagnostics(args);
       case 'metrics':
         return this.getMetrics(args);
+      case 'cache':
+        return this.getCacheStats();
       default:
         return createErrorResponseV2(
           'system',
@@ -439,6 +441,57 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         error instanceof Error ? error.message : 'Failed to get metrics',
         undefined,
         { operation: 'metrics', metricsType },
+        timer.toMetadata(),
+      ));
+    }
+  }
+
+  private async getCacheStats(): Promise<StandardResponseV2<Record<string, unknown>>> {
+    const timer = new OperationTimerV2();
+
+    try {
+      const cacheStats = this.cache.getStats();
+
+      const result = {
+        timestamp: new Date().toISOString(),
+        stats: {
+          hits: cacheStats.hits,
+          misses: cacheStats.misses,
+          evictions: cacheStats.evictions,
+          size: cacheStats.size,
+          hitRate: cacheStats.hits + cacheStats.misses > 0
+            ? (cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100
+            : 0,
+        },
+        configuration: {
+          categories: {
+            tasks: '30 seconds TTL',
+            projects: '5 minutes TTL',
+            folders: '10 minutes TTL',
+            analytics: '1 hour TTL',
+            tags: '10 minutes TTL',
+            reviews: '3 minutes TTL',
+          },
+        },
+        description: 'Cache eliminates cold start delays for frequently accessed data',
+      };
+
+      return Promise.resolve(createSuccessResponseV2(
+        'system',
+        result,
+        undefined,
+        {
+          ...timer.toMetadata(),
+          operation: 'cache',
+        },
+      ));
+    } catch (error) {
+      return Promise.resolve(createErrorResponseV2(
+        'system',
+        'CACHE_ERROR',
+        error instanceof Error ? error.message : 'Failed to get cache statistics',
+        undefined,
+        { operation: 'cache' },
         timer.toMetadata(),
       ));
     }
