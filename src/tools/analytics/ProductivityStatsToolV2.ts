@@ -146,7 +146,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           projectStats: Array.isArray(projectStatsArray) ? projectStatsArray : Object.entries(projectStatsArray || {}).map(([name, data]) => ({
             name,
             completedCount: (data && typeof data === 'object' && 'completedCount' in data) ? Number(data.completedCount) || 0 : 0,
-            ...(data && typeof data === 'object' ? data as Record<string, unknown> : {})
+            ...(data && typeof data === 'object' ? data as Record<string, unknown> : {}),
           })),
           tagStats: tagStatsArray,
         },

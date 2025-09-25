@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
@@ -936,7 +936,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
   private async handleBulkOperation(
     operation: 'bulk_complete' | 'bulk_delete',
     args: ManageTaskInput,
-    timer: OperationTimerV2
+    timer: OperationTimerV2,
   ): Promise<unknown> {
     const { taskIds, bulkCriteria } = args;
 
@@ -967,7 +967,6 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
         };
 
         // Use the same script as QueryTasksToolV2
-        const { LIST_TASKS_SCRIPT } = require('../../omnifocus/scripts/tasks.js');
         const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
         const result = await this.execJson(script);
 
