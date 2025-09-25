@@ -18,16 +18,22 @@ export const TODAYS_AGENDA_SCRIPT = `
   
   (() => {
     const options = {{options}};
+    const fields = {{fields}};
     const tasks = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     const includeOverdue = options.includeOverdue !== false;
     const includeFlagged = options.includeFlagged !== false;
     const includeDetails = options.includeDetails === true;
     const maxTasks = options.limit || 25;
+
+    // Field selection helper
+    function shouldIncludeField(fieldName) {
+      return !fields || fields.length === 0 || fields.includes(fieldName);
+    }
     
     try {
       const app = Application('OmniFocus');
@@ -105,56 +111,73 @@ export const TODAYS_AGENDA_SCRIPT = `
           // Add task if it should be included
           if (shouldInclude) {
             seenIds.add(taskId);
-            
-            const taskObj = {
-              id: taskId,
-              name: task.name(),
-              reason: reason
-            };
-            
+
+            const taskObj = {};
+
+            // Always include id (needed for identification)
+            if (shouldIncludeField('id')) {
+              taskObj.id = taskId;
+            }
+
+            // Always include name (core field)
+            if (shouldIncludeField('name')) {
+              taskObj.name = task.name();
+            }
+
+            // Include reason (specific to today's agenda)
+            taskObj.reason = reason;
+
             if (daysOverdue > 0) {
               taskObj.daysOverdue = daysOverdue;
             }
-            
-            if (dueDate) {
+
+            if (dueDate && shouldIncludeField('dueDate')) {
               taskObj.dueDate = dueDate;
             }
-            
-            if (isFlagged) {
+
+            if (isFlagged && shouldIncludeField('flagged')) {
               taskObj.flagged = true;
             }
             
-          // Capture tag names once so they're available even without includeDetails
-          let tagNames = null;
-          try {
-            const tags = task.tags();
-            if (tags && tags.length > 0) {
-              tagNames = [];
-              for (var ti = 0; ti < tags.length; ti++) {
-                try {
-                  tagNames.push(tags[ti].name());
-                } catch (tagErr) {}
-              }
-            }
-          } catch (tagsError) {
-            tagNames = null;
-          }
-
-          if (tagNames && tagNames.length > 0) {
-            taskObj.tags = tagNames;
-          }
-
-          // Add richer details if requested
-          if (includeDetails) {
+          // Capture tag names if requested
+          if (shouldIncludeField('tags')) {
+            let tagNames = null;
             try {
-              taskObj.note = task.note() || '';
-              const project = task.containingProject();
-              if (project) {
-                taskObj.project = project.name();
-                taskObj.projectId = project.id();
+              const tags = task.tags();
+              if (tags && tags.length > 0) {
+                tagNames = [];
+                for (var ti = 0; ti < tags.length; ti++) {
+                  try {
+                    tagNames.push(tags[ti].name());
+                  } catch (tagErr) {}
+                }
               }
-              if (tagNames && tagNames.length > 0) {
-                taskObj.tags = tagNames;
+            } catch (tagsError) {
+              tagNames = null;
+            }
+
+            if (tagNames && tagNames.length > 0) {
+              taskObj.tags = tagNames;
+            }
+          }
+
+          // Add richer details if requested and fields are selected
+          if (includeDetails || shouldIncludeField('note') || shouldIncludeField('project') || shouldIncludeField('projectId')) {
+            try {
+              if (shouldIncludeField('note')) {
+                taskObj.note = task.note() || '';
+              }
+
+              if (shouldIncludeField('project') || shouldIncludeField('projectId')) {
+                const project = task.containingProject();
+                if (project) {
+                  if (shouldIncludeField('project')) {
+                    taskObj.project = project.name();
+                  }
+                  if (shouldIncludeField('projectId')) {
+                    taskObj.projectId = project.id();
+                  }
+                }
               }
             } catch (e) {
               // Skip detail errors

@@ -372,7 +372,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     };
 
     // Use the optimized today's agenda script (now returns typed envelope)
-    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, { options });
+    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
+      options,
+      fields: args.fields || [],
+    });
     const TodayPayloadSchema = z.object({
       tasks: z.array(z.object({
         id: z.string(),
@@ -460,7 +463,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Execute search
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -520,7 +526,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -573,7 +582,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -672,7 +684,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     });
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -734,7 +749,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     };
 
     // Execute comprehensive query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {

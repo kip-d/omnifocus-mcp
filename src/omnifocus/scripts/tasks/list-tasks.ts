@@ -29,11 +29,17 @@ export const LIST_TASKS_SCRIPT = `
   
   (() => {
     const filter = {{filter}};
+    const fields = {{fields}};
     const tasks = [];
     const tagBridgeCache = Object.create(null);
-    
+
     // Check if we should skip recurring analysis (default to false for backwards compatibility)
     const skipRecurringAnalysis = filter.skipAnalysis === true;
+
+    // Field selection helper
+    function shouldIncludeField(fieldName) {
+      return !fields || fields.length === 0 || fields.includes(fieldName);
+    }
   
   // Initialize plugin system
   function initializePlugins() {
@@ -435,89 +441,138 @@ export const LIST_TASKS_SCRIPT = `
 
   // Helper function to build task object
   function buildTaskObject(task, filter, skipRecurringAnalysis) {
-    const taskObj = {
-      id: safeGet(() => task.id(), 'unknown'),
-      name: safeGet(() => task.name(), 'Unnamed Task'),
-      completed: safeIsCompleted(task),
-      flagged: isFlagged(task),
-      inInbox: safeGet(() => task.inInbox(), false),
-      // Add status properties
-      taskStatus: getTaskStatus(task),
-      blocked: isTaskBlocked(task),
-      next: isTaskNext(task),
-      available: isTaskAvailableForWork(task)
-    };
+    const taskObj = {};
+
+    // Core fields (always needed for identification)
+    if (shouldIncludeField('id')) {
+      taskObj.id = safeGet(() => task.id(), 'unknown');
+    }
+    if (shouldIncludeField('name')) {
+      taskObj.name = safeGet(() => task.name(), 'Unnamed Task');
+    }
+    if (shouldIncludeField('completed')) {
+      taskObj.completed = safeIsCompleted(task);
+    }
+    if (shouldIncludeField('flagged')) {
+      taskObj.flagged = isFlagged(task);
+    }
+
+    // Extended status fields
+    if (shouldIncludeField('inInbox')) {
+      taskObj.inInbox = safeGet(() => task.inInbox(), false);
+    }
+    if (shouldIncludeField('blocked')) {
+      taskObj.blocked = isTaskBlocked(task);
+    }
+    if (shouldIncludeField('available')) {
+      taskObj.available = isTaskAvailableForWork(task);
+    }
+
+    // Additional status properties
+    const taskStatus = getTaskStatus(task);
+    const next = isTaskNext(task);
+    if (taskStatus) taskObj.taskStatus = taskStatus;
+    if (next) taskObj.next = next;
     
     // Add optional properties using safe utilities
-    const note = safeGet(() => task.note());
-    if (note) taskObj.note = note;
-    
-    const project = safeGetProject(task);
-    if (project) {
-      taskObj.project = project.name;
-      taskObj.projectId = project.id;
+    if (shouldIncludeField('note')) {
+      const note = safeGet(() => task.note());
+      if (note) taskObj.note = note;
     }
-    
-    // Get parent task if this is a subtask
+
+    if (shouldIncludeField('project') || shouldIncludeField('projectId')) {
+      const project = safeGetProject(task);
+      if (project) {
+        if (shouldIncludeField('project')) {
+          taskObj.project = project.name;
+        }
+        if (shouldIncludeField('projectId')) {
+          taskObj.projectId = project.id;
+        }
+      }
+    }
+
+    // Get parent task if this is a subtask (no field filtering for internal properties)
     const parentTask = safeGet(() => task.parent());
     if (parentTask) {
       taskObj.parentTaskId = safeGet(() => parentTask.id());
       taskObj.parentTaskName = safeGet(() => parentTask.name());
     }
-    
-    const dueDate = safeGetDate(() => task.dueDate());
-    if (dueDate) taskObj.dueDate = dueDate;
-    
-    const deferDate = safeGetDate(() => task.deferDate());
-    if (deferDate) taskObj.deferDate = deferDate;
-    
-    const cachedTags = tagBridgeCache[taskObj.id];
-    if (cachedTags) {
-      taskObj.tags = cachedTags;
-    } else {
-      const tags = safeGetTags(task);
-      taskObj.tags = tags;
-      if (!(taskObj.id in tagBridgeCache)) {
-        tagBridgeCache[taskObj.id] = tags;
+
+    if (shouldIncludeField('dueDate')) {
+      const dueDate = safeGetDate(() => task.dueDate());
+      if (dueDate) taskObj.dueDate = dueDate;
+    }
+
+    if (shouldIncludeField('deferDate')) {
+      const deferDate = safeGetDate(() => task.deferDate());
+      if (deferDate) taskObj.deferDate = deferDate;
+    }
+
+    if (shouldIncludeField('tags')) {
+      const taskId = taskObj.id || safeGet(() => task.id());
+      const cachedTags = tagBridgeCache[taskId];
+      if (cachedTags) {
+        taskObj.tags = cachedTags;
+      } else {
+        const tags = safeGetTags(task);
+        taskObj.tags = tags;
+        if (taskId && !(taskId in tagBridgeCache)) {
+          tagBridgeCache[taskId] = tags;
+        }
       }
     }
     
-    // Extract repeat rule information if present
+    // Extract repeat rule information if present (keep for recurring analysis)
     const repetitionRule = safeGet(() => task.repetitionRule());
     if (repetitionRule) {
       taskObj.repetitionRule = extractRepeatRuleInfo(repetitionRule);
     }
-    
-    const added = safeGetDate(() => task.added());
-    if (added) taskObj.added = added;
-    
+
+    // Optional datetime fields
+    if (shouldIncludeField('added')) {
+      const added = safeGetDate(() => task.added());
+      if (added) taskObj.added = added;
+    }
+
+    if (shouldIncludeField('completionDate')) {
+      const completionDate = safeGetDate(() => task.completionDate());
+      if (completionDate) taskObj.completionDate = completionDate;
+    }
+
     // Enhanced properties discovered through API exploration
-    // Task state properties that affect actionability
+    // Task state properties that affect actionability (avoid duplication with earlier checks)
     const blocked = safeGet(() => task.blocked(), false);
     const next = safeGet(() => task.next(), false);
-    if (blocked) taskObj.blocked = blocked;
-    if (next) taskObj.next = next;
-    
+    if (blocked && !taskObj.blocked) taskObj.blocked = blocked;
+    if (next && !taskObj.next) taskObj.next = next;
+
     // Effective dates (inherited from parent)
     const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
     const effectiveDueDate = safeGetDate(() => task.effectiveDueDate());
-    // Since safeGetDate returns ISO string, we can only compare strings
-    if (effectiveDeferDate && effectiveDeferDate !== deferDate) {
+    const currentDeferDate = shouldIncludeField('deferDate') ? taskObj.deferDate : safeGetDate(() => task.deferDate());
+    const currentDueDate = shouldIncludeField('dueDate') ? taskObj.dueDate : safeGetDate(() => task.dueDate());
+
+    if (effectiveDeferDate && effectiveDeferDate !== currentDeferDate) {
       taskObj.effectiveDeferDate = effectiveDeferDate;
     }
-    if (effectiveDueDate && effectiveDueDate !== dueDate) {
+    if (effectiveDueDate && effectiveDueDate !== currentDueDate) {
       taskObj.effectiveDueDate = effectiveDueDate;
     }
-    
+
     // Include metadata if requested (avoid overhead by default)
-    if (filter.includeMetadata) {
-      const creationDate = safeGetDate(() => task.creationDate());
-      const modificationDate = safeGetDate(() => task.modificationDate());
-      if (creationDate) taskObj.creationDate = creationDate;
-      if (modificationDate) taskObj.modificationDate = modificationDate;
+    if (filter.includeMetadata || shouldIncludeField('creationDate') || shouldIncludeField('modificationDate')) {
+      if (shouldIncludeField('creationDate')) {
+        const creationDate = safeGetDate(() => task.creationDate());
+        if (creationDate) taskObj.creationDate = creationDate;
+      }
+      if (shouldIncludeField('modificationDate')) {
+        const modificationDate = safeGetDate(() => task.modificationDate());
+        if (modificationDate) taskObj.modificationDate = modificationDate;
+      }
     }
-    
-    // Child task counts (for parent tasks)
+
+    // Child task counts (for parent tasks) - no field filtering, always useful for parent tasks
     const numberOfTasks = safeGet(() => task.numberOfTasks(), 0);
     if (numberOfTasks > 0) {
       taskObj.childCounts = {
@@ -526,10 +581,12 @@ export const LIST_TASKS_SCRIPT = `
         completed: safeGet(() => task.numberOfCompletedTasks(), 0)
       };
     }
-    
+
     // Estimated duration
-    const estimatedMinutes = safeGetEstimatedMinutes(task);
-    if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
+    if (shouldIncludeField('estimatedMinutes')) {
+      const estimatedMinutes = safeGetEstimatedMinutes(task);
+      if (estimatedMinutes !== null) taskObj.estimatedMinutes = estimatedMinutes;
+    }
     
     // Sequential property (for action groups)
     const sequential = safeGet(() => task.sequential(), false);
