@@ -125,9 +125,21 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       const scriptData: unknown = result && result.data ? result.data : result;
 
       let data: WorkflowAnalysisResponse;
+
+      // Check if we have any meaningful data
+      if (!scriptData || typeof scriptData !== 'object' || scriptData === null) {
+        return createErrorResponseV2(
+          'workflow_analysis',
+          'NO_DATA',
+          'No workflow analysis data returned from OmniFocus',
+          'Ensure OmniFocus has tasks and projects to analyze',
+          { scriptData },
+          timer.toMetadata(),
+        );
+      }
+
       // Type guard for script response format
-      if (scriptData && typeof scriptData === 'object' && scriptData !== null &&
-          ('insights' in scriptData || 'patterns' in scriptData || 'recommendations' in scriptData)) {
+      if ('insights' in scriptData || 'patterns' in scriptData || 'recommendations' in scriptData) {
         // Script returns data directly with insights, patterns, recommendations at top level
         const typedScriptData = scriptData as WorkflowScriptData;
         data = {
@@ -199,11 +211,31 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
 
     } catch (error) {
       logger.error('Workflow analysis failed', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Provide specific error handling based on error type
+      let suggestion = 'Try reducing analysis depth or focus areas';
+      let errorCode = 'EXECUTION_ERROR';
+
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+        errorCode = 'SCRIPT_TIMEOUT';
+        suggestion = 'Try using "quick" analysis depth or reduce the focus areas for faster results';
+      } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+        errorCode = 'OMNIFOCUS_NOT_RUNNING';
+        suggestion = 'Start OmniFocus and ensure it is running';
+      } else if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+        errorCode = 'PERMISSION_DENIED';
+        suggestion = 'Enable automation access in System Settings > Privacy & Security > Automation';
+      } else if (errorMessage.includes('insufficient data') || errorMessage.includes('no data')) {
+        errorCode = 'INSUFFICIENT_DATA';
+        suggestion = 'Add more tasks and projects to OmniFocus before running workflow analysis';
+      }
+
       return createErrorResponseV2(
         'workflow_analysis',
-        'EXECUTION_ERROR',
+        errorCode,
         'Failed to execute workflow analysis',
-        'Try reducing analysis depth or focus areas',
+        suggestion,
         error instanceof Error ? error.message : String(error),
         timer.toMetadata(),
       );

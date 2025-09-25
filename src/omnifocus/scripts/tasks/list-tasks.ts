@@ -404,7 +404,9 @@ export const LIST_TASKS_SCRIPT = `
     if (!requiredTags || requiredTags.length === 0) return true;
 
     const taskTags = safeGetTags(task);
-    const hasAllTags = requiredTags.every(tag => taskTags.includes(tag));
+    // Case-insensitive tag matching to handle variations
+    const taskTagsLower = taskTags.map(tag => tag.toLowerCase());
+    const hasAllTags = requiredTags.every(tag => taskTagsLower.includes(tag.toLowerCase()));
     const taskId = safeGet(() => task.id());
 
     if (taskId && !(taskId in tagBridgeCache)) {
@@ -618,12 +620,16 @@ export const LIST_TASKS_SCRIPT = `
     if (filter.search) {
       const searchTerm = filter.search.toLowerCase();
       const name = safeGet(() => task.name(), '') || '';
-      
-      // Quick check if name contains search term before getting note
+
+      // Quick check if name contains search term
       if (!name.toLowerCase().includes(searchTerm)) {
-        // Only get note if name doesn't match
-        const note = safeGet(() => task.note(), '') || '';
-        if (!note.toLowerCase().includes(searchTerm)) return false;
+        // Only get note if name doesn't match and not in fast search mode
+        if (filter.fastSearch) {
+          return false; // Fast search mode: only search names
+        } else {
+          const note = safeGet(() => task.note(), '') || '';
+          if (!note.toLowerCase().includes(searchTerm)) return false;
+        }
       }
     }
     
@@ -664,14 +670,18 @@ export const LIST_TASKS_SCRIPT = `
     if (filter.tags && filter.tags.length === 1 && !filter.search) {
       const tagName = filter.tags[0];
       const startTime = Date.now();
-      
+
       try {
-        // Avoid whose(); scan tags and match by name
+        // Avoid whose(); scan tags and match by name (case-insensitive)
         const allTags = doc.flattenedTags();
         let tag = null;
         for (let i = 0; i < allTags.length; i++) {
           try {
-            if (allTags[i].name() === tagName) { tag = allTags[i]; break; }
+            const currentTagName = allTags[i].name();
+            if (currentTagName && currentTagName.toLowerCase() === tagName.toLowerCase()) {
+              tag = allTags[i];
+              break;
+            }
           } catch (e) { /* ignore bad tag entries */ }
         }
         if (tag) {

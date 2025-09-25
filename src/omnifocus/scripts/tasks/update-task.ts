@@ -584,7 +584,7 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
       const changes = [];
       
       // Update basic properties
-      if (updates.name && updates.name !== task.name()) {
+      if (updates.name !== undefined && updates.name !== task.name()) {
         task.name = updates.name;
         changes.push("Name updated");
       }

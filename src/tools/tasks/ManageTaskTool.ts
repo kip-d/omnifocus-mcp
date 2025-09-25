@@ -959,7 +959,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     if (bulkCriteria && !taskIds) {
       try {
         const filter = {
-          completed: bulkCriteria.completed || false,
+          completed: bulkCriteria.completed, // Don't default to false - search all tasks unless specified
           limit: 200, // Safety limit
           tags: bulkCriteria.tags,
           project: bulkCriteria.projectName,

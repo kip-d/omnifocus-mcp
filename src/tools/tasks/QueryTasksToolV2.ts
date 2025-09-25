@@ -63,6 +63,10 @@ const QueryTasksToolSchemaV2 = z.object({
     z.boolean(),
     z.string().transform(val => val === 'true' || val === '1'),
   ]).default(false).describe('Include full task details (default: false for speed)'),
+  fastSearch: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1'),
+  ]).default(false).describe('Fast search mode: only search task names, not notes (improves performance)'),
 });
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
@@ -408,11 +412,12 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       project: args.project, // Pass as project name, not ID
       tags: args.tags,
       skipAnalysis: !args.details, // Skip expensive analysis if not needed
+      fastSearch: args.fastSearch, // Only search task names for better performance
     };
 
     // Generate cache key for search with consistent tag ordering
     const sortedTags = args.tags ? [...args.tags].sort() : undefined;
-    const cacheKey = `tasks_search_${args.search}_${args.completed}_${args.limit}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}_${args.details}`;
+    const cacheKey = `tasks_search_${args.search}_${args.completed}_${args.limit}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}_${args.details}_${args.fastSearch}`;
 
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
