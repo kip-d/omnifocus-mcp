@@ -67,6 +67,24 @@ const QueryTasksToolSchemaV2 = z.object({
     z.boolean(),
     z.string().transform(val => val === 'true' || val === '1'),
   ]).default(false).describe('Fast search mode: only search task names, not notes (improves performance)'),
+
+  // Field selection for response optimization
+  fields: z.array(z.enum([
+    'id',
+    'name',
+    'completed',
+    'flagged',
+    'blocked',
+    'available',
+    'estimatedMinutes',
+    'dueDate',
+    'deferDate',
+    'completionDate',
+    'note',
+    'projectId',
+    'project',
+    'tags',
+  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, completionDate, note, projectId, project, tags'),
 });
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
@@ -241,9 +259,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache for speed
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'overdue' },
       );
     }
@@ -272,9 +291,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as { summary?: unknown }).summary });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'overdue' },
     );
   }
@@ -286,9 +306,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days },
       );
     }
@@ -318,9 +339,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'upcoming', days_ahead: days },
     );
   }
@@ -332,9 +354,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'today' },
       );
     }
@@ -389,7 +412,8 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       optimization: data.optimizationUsed || 'ultra_fast',
     };
 
-    return createTaskResponseV2('tasks', todayTasks, metadata);
+    const projectedTasks = this.projectFields(todayTasks, args.fields);
+    return createTaskResponseV2('tasks', projectedTasks, metadata);
   }
 
   private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -422,9 +446,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         {
           ...timer.toMetadata(),
           from_cache: true,
@@ -455,9 +480,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Cache search results
     this.cache.set('tasks', cacheKey, { tasks });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       {
         ...timer.toMetadata(),
         from_cache: false,
@@ -485,9 +511,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'available' },
       );
     }
@@ -511,9 +538,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'available' },
     );
   }
@@ -536,9 +564,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'blocked' },
       );
     }
@@ -562,9 +591,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'blocked' },
     );
   }
@@ -575,9 +605,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'flagged' },
       );
     }
@@ -605,9 +636,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const tasks = this.parseTasks(data.tasks || data.items || []);
     this.cache.set('tasks', cacheKey, { tasks });
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'flagged' },
     );
   }
@@ -663,9 +695,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
 
+    const projectedTasks = this.projectFields(tasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      tasks,
+      projectedTasks,
       {
         ...timer.toMetadata(),
         from_cache: false,
@@ -684,9 +717,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
       return createTaskResponseV2(
         'tasks',
-        cached?.tasks || [],
+        projectedTasks,
         { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' },
       );
     }
@@ -772,9 +806,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Cache results
     this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
 
+    const projectedTasks = this.projectFields(suggestedTasks, args.fields);
     return createTaskResponseV2(
       'tasks',
-      suggestedTasks,
+      projectedTasks,
       {
         ...timer.toMetadata(),
         from_cache: false,
@@ -800,6 +835,36 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         completionDate: t.completionDate ? new Date(t.completionDate) : undefined,
         added: t.added ? new Date(t.added) : undefined,
       } as unknown as OmniFocusTask;
+    });
+  }
+
+  /**
+   * Project task fields based on user selection for performance optimization
+   */
+  private projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): OmniFocusTask[] {
+    // If no fields specified, return all fields
+    if (!selectedFields || selectedFields.length === 0) {
+      return tasks;
+    }
+
+    // Project each task to only include selected fields
+    return tasks.map(task => {
+      const projectedTask: Partial<OmniFocusTask> = {};
+
+      // Always include id if not explicitly excluded (needed for identification)
+      if (selectedFields.includes('id') || !selectedFields.length) {
+        projectedTask.id = task.id;
+      }
+
+      // Project only requested fields
+      selectedFields.forEach(field => {
+        if (field in task) {
+          const typedField = field as keyof OmniFocusTask;
+          (projectedTask as Record<string, unknown>)[field] = task[typedField];
+        }
+      });
+
+      return projectedTask as OmniFocusTask;
     });
   }
 
