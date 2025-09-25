@@ -1,7 +1,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
-import { createLogger, redactArgs } from '../utils/logger.js';
+import {
+  createLogger,
+  createCorrelatedLogger,
+  redactArgs,
+  generateCorrelationId,
+} from '../utils/logger.js';
 
 // Import v2.0.0 CONSOLIDATED tools (reduced from 22 to 14 tools)
 
@@ -42,11 +47,32 @@ import { SystemToolV2 } from './system/SystemToolV2.js';
 
 const logger = createLogger('tools');
 
+// Interface for tools that support correlation context
+interface CorrelationCapable {
+  withCorrelation: (correlationId: string) => CorrelationCapable & {
+    execute: (args: Record<string, unknown>) => Promise<unknown>;
+  };
+}
+
+// Base tool interface
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+// Type guard to check if a tool supports correlation
+function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
+  return 'withCorrelation' in tool &&
+         typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
+}
+
 export function registerTools(server: Server, cache: CacheManager): void {
   logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (15 tools, reduced from 22)');
 
   // All tools are now consolidated for optimal LLM usage
-  const tools = [
+  const tools: Tool[] = [
     // Task operations (2 tools)
     new QueryTasksToolV2(cache),        // 'tasks' - Query/search tasks
     new ManageTaskTool(cache),          // 'manage_task' - Create/update/complete/delete tasks
@@ -87,14 +113,32 @@ export function registerTools(server: Server, cache: CacheManager): void {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
+    // Generate correlation ID for this request
+    const correlationId = generateCorrelationId();
+    const startTime = Date.now();
+
+    // Create correlated logger for this tool execution
+    const correlatedLogger = createCorrelatedLogger(
+      'tools',
+      correlationId,
+      name,
+      name,
+      {
+        requestId: correlationId,
+        toolName: name,
+        startTime: startTime,
+      },
+    );
+
     const tool = tools.find(t => t.name === name);
     if (!tool) {
+      correlatedLogger.error(`Tool not found: ${name}`);
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
 
-    // Keep info logs minimal; dump details at debug and redacted
-    logger.info(`Executing tool: ${name}`);
-    logger.debug(`Args for ${name}:`, redactArgs({
+    // Enhanced logging with correlation ID
+    correlatedLogger.info(`Executing tool: ${name}`);
+    correlatedLogger.debug(`Args for ${name}:`, redactArgs({
       argsType: typeof args,
       argsKeys: args ? Object.keys(args as Record<string, unknown>) : [],
       args,
@@ -103,7 +147,7 @@ export function registerTools(server: Server, cache: CacheManager): void {
     // Special logging for update_task to debug date parameter issues
     if (name === 'update_task' && args) {
       const a = args as { taskId?: unknown; dueDate?: unknown; [key: string]: unknown };
-      logger.debug('UpdateTask param snapshot:', redactArgs({
+      correlatedLogger.debug('UpdateTask param snapshot:', redactArgs({
         taskId: a.taskId,
         dueDate: {
           provided: Object.prototype.hasOwnProperty.call(a, 'dueDate'),
@@ -122,18 +166,45 @@ export function registerTools(server: Server, cache: CacheManager): void {
       }));
     }
 
-    // Tool execution requires dynamic method call for polymorphic tools
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const result = await (tool as any).execute(args || {});
+    try {
+      // Pass correlation context to the tool if it supports it
+      let result: unknown;
+      if (supportsCorrelation(tool)) {
+        // Tool supports correlation context
+        const correlatedTool = tool.withCorrelation(correlationId);
+        result = await correlatedTool.execute(args || {});
+      } else {
+        // Standard tool execution
+        result = await tool.execute(args || {});
+      }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+      // Log successful execution with timing
+      const executionTime = Date.now() - startTime;
+      correlatedLogger.info(`Tool execution completed: ${name}`, {
+        executionTime,
+        success: true,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      // Log execution failure with timing and correlation
+      const executionTime = Date.now() - startTime;
+      correlatedLogger.error(`Tool execution failed: ${name}`, {
+        executionTime,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Re-throw the error to maintain existing error handling behavior
+      throw error;
+    }
   });
 
 }

@@ -1,10 +1,41 @@
 import { stderr } from 'node:process';
+import { randomUUID } from 'node:crypto';
 
 export interface Logger {
   info: (message: string, ...args: unknown[]) => void;
   error: (message: string, ...args: unknown[]) => void;
   debug: (message: string, ...args: unknown[]) => void;
   warn: (message: string, ...args: unknown[]) => void;
+  // Enhanced methods with correlation ID support
+  withCorrelation: (correlationId: string) => Logger;
+}
+
+export interface LogContext {
+  correlationId?: string;
+  operation?: string;
+  tool?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface StructuredLogEntry {
+  timestamp: string;
+  level: string;
+  context: string;
+  message: string;
+  correlationId?: string;
+  operation?: string;
+  tool?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+  args?: unknown[];
+}
+
+/**
+ * Generate a new correlation ID for request tracking
+ */
+export function generateCorrelationId(): string {
+  return randomUUID();
 }
 
 // Keys whose values should be redacted in logs
@@ -45,51 +76,115 @@ export function redactArgs<T>(value: T, depth = 0): T {
   return out as unknown as T;
 }
 
-export function createLogger(context: string): Logger {
+export function createLogger(context: string, initialContext?: LogContext): Logger {
   const logLevel = process.env.LOG_LEVEL || 'info';
   const levels = ['error', 'warn', 'info', 'debug'];
   const currentLevelIndex = levels.indexOf(logLevel);
+  const useStructuredLogging = process.env.STRUCTURED_LOGGING === 'true';
 
   const shouldLog = (level: string): boolean => {
     return levels.indexOf(level) <= currentLevelIndex;
   };
 
-  const formatMessage = (level: string, message: string, args: unknown[]): string => {
+  const createStructuredEntry = (
+    level: string,
+    message: string,
+    args: unknown[],
+    logContext?: LogContext,
+  ): StructuredLogEntry => {
+    return {
+      timestamp: new Date().toISOString(),
+      level: level.toUpperCase(),
+      context,
+      message,
+      correlationId: logContext?.correlationId || initialContext?.correlationId,
+      operation: logContext?.operation || initialContext?.operation,
+      tool: logContext?.tool || initialContext?.tool,
+      userId: logContext?.userId || initialContext?.userId,
+      metadata: {
+        ...initialContext?.metadata,
+        ...logContext?.metadata,
+      },
+      args: args.length > 0 ? redactArgs(args) : undefined,
+    };
+  };
+
+  const formatMessage = (level: string, message: string, args: unknown[], logContext?: LogContext): string => {
+    if (useStructuredLogging) {
+      const entry = createStructuredEntry(level, message, args, logContext);
+      return JSON.stringify(entry);
+    }
+
+    // Traditional format with correlation ID
     const timestamp = new Date().toISOString();
+    const correlationId = logContext?.correlationId || initialContext?.correlationId;
+    const correlationPrefix = correlationId ? ` [${correlationId.substring(0, 8)}]` : '';
+
     // Only include structured args at debug level; redact first
     const includeArgs = level === 'debug' && args.length > 0;
     const redacted = includeArgs ? ' ' + JSON.stringify(redactArgs(args)) : '';
-    return `[${timestamp}] [${level.toUpperCase()}] [${context}] ${message}${redacted}`;
+    return `[${timestamp}] [${level.toUpperCase()}] [${context}]${correlationPrefix} ${message}${redacted}`;
   };
 
-  return {
-    info: (message: string, ...args: unknown[]) => {
-      if (shouldLog('info')) {
-        void args; // keep signature compatible without logging structured data
-        // Gate verbose args behind debug; info logs message only
-        stderr.write(formatMessage('info', message, []) + '\n');
-      }
+  const logWithContext = (level: string, message: string, args: unknown[], logContext?: LogContext) => {
+    if (shouldLog(level)) {
+      stderr.write(formatMessage(level, message, args, logContext) + '\n');
+    }
+  };
+
+  const logger: Logger = {
+    info: (message: string, ..._args: unknown[]) => {
+      logWithContext('info', message, [], undefined);
     },
     error: (message: string, ...args: unknown[]) => {
-      if (shouldLog('error')) {
-        void args; // keep signature compatible without logging structured data
-        // Avoid dumping large objects at error; rely on message
-        const errArg = args && args.length === 1 && args[0] instanceof Error
-          ? (args[0] as Error).message
-          : undefined;
-        stderr.write(formatMessage('error', errArg ? `${message} ${errArg}` : message, []) + '\n');
-      }
+      // Enhanced error logging with better context preservation
+      const errArg = args && args.length === 1 && args[0] instanceof Error
+        ? (args[0] as Error).message
+        : undefined;
+      const finalMessage = errArg ? `${message} ${errArg}` : message;
+      logWithContext('error', finalMessage, useStructuredLogging ? args : [], undefined);
     },
     debug: (message: string, ...args: unknown[]) => {
-      if (shouldLog('debug')) {
-        stderr.write(formatMessage('debug', message, args) + '\n');
-      }
+      logWithContext('debug', message, args, undefined);
     },
-    warn: (message: string, ...args: unknown[]) => {
-      if (shouldLog('warn')) {
-        void args; // keep signature compatible without logging structured data
-        stderr.write(formatMessage('warn', message, []) + '\n');
-      }
+    warn: (message: string, ..._args: unknown[]) => {
+      logWithContext('warn', message, [], undefined);
+    },
+    withCorrelation: (correlationId: string) => {
+      return createLogger(context, {
+        ...initialContext,
+        correlationId,
+      });
     },
   };
+
+  return logger;
+}
+
+/**
+ * Create a logger with correlation context for tool execution
+ */
+export function createCorrelatedLogger(
+  context: string,
+  correlationId: string,
+  operation?: string,
+  tool?: string,
+  metadata?: Record<string, unknown>,
+): Logger {
+  return createLogger(context, {
+    correlationId,
+    operation,
+    tool,
+    metadata,
+  });
+}
+
+/**
+ * Extract correlation ID from logger if available
+ */
+export function getCorrelationId(_logger: Logger): string | undefined {
+  // This is a simple way to access correlation ID from logger
+  // In a real implementation, you might want a more sophisticated approach
+  // For now, return undefined as correlation ID is managed internally
+  return undefined;
 }

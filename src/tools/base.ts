@@ -8,12 +8,17 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
 import { createErrorResponseV2, OperationTimerV2 } from '../utils/response-format-v2.js';
 import {
-  permissionError,
-  formatErrorWithRecovery,
-  scriptTimeoutError,
-  omniFocusNotRunningError,
-  scriptExecutionError,
-} from '../utils/error-messages.js';
+  ScriptErrorType,
+  CategorizedScriptError,
+  categorizeError,
+  getErrorMessage,
+  isRecoverableError,
+  getErrorSeverity,
+} from '../utils/error-taxonomy.js';
+import {
+  recordToolExecution,
+  ToolExecutionMetrics,
+} from '../utils/metrics.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -56,11 +61,17 @@ export abstract class BaseTool<
   protected cache: CacheManager;
   protected logger: Logger;
 
-  constructor(cache: CacheManager) {
+  constructor(cache: CacheManager, private correlationId?: string) {
     this.cache = cache;
     this._omniAutomation = new OmniAutomation();
     this.applyExecuteJsonShim(this._omniAutomation);
-    this.logger = createLogger(this.constructor.name);
+
+    // Create logger with correlation context if available
+    if (correlationId) {
+      this.logger = createLogger(this.constructor.name, { correlationId });
+    } else {
+      this.logger = createLogger(this.constructor.name);
+    }
   }
 
   abstract name: string;
@@ -204,20 +215,52 @@ export abstract class BaseTool<
   }
 
   /**
-   * Execute the tool with validation
+   * Execute the tool with validation and metrics collection
    */
   async execute(args: unknown): Promise<TResponse> {
+    const startTime = Date.now();
+    let errorType: string | undefined;
+    let resultSize: number | undefined;
+
     try {
       // Validate input with Zod
       const validated = this.schema.parse(args) as z.infer<TSchema>;
+
+      // Count parameters for metrics
+      const parameterCount = typeof args === 'object' && args !== null
+        ? Object.keys(args).length
+        : 0;
 
       // Log the validated input
       this.logger.debug(`Executing ${this.name} with validated args:`, validated);
 
       // Execute the tool-specific logic
-      return await this.executeValidated(validated);
+      const result = await this.executeValidated(validated);
+
+      // Calculate result size for metrics (approximate JSON size)
+      try {
+        resultSize = JSON.stringify(result).length;
+      } catch {
+        resultSize = undefined; // Skip if result is not serializable
+      }
+
+      // Record successful execution metrics
+      this.recordExecutionMetrics({
+        toolName: this.name,
+        executionTime: Date.now() - startTime,
+        success: true,
+        timestamp: startTime,
+        correlationId: this.correlationId,
+        resultSize,
+        parameterCount,
+      });
+
+      return result;
     } catch (error) {
+
       if (error instanceof z.ZodError) {
+        errorType = 'VALIDATION_ERROR';
+
         // Convert Zod errors to MCP errors with helpful messages
         const issues = error.issues.map(issue => {
           const path = issue.path.join('.');
@@ -226,6 +269,17 @@ export abstract class BaseTool<
 
         // Log validation failure for analysis
         this.logToolFailure(args, 'VALIDATION_ERROR', issues, error.issues);
+
+        // Record validation error metrics
+        this.recordExecutionMetrics({
+          toolName: this.name,
+          executionTime: Date.now() - startTime,
+          success: false,
+          errorType,
+          timestamp: startTime,
+          correlationId: this.correlationId,
+          parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
+        });
 
         throw new McpError(
           ErrorCode.InvalidParams,
@@ -238,12 +292,40 @@ export abstract class BaseTool<
 
       // Re-throw McpErrors directly (from throwMcpError calls)
       if (error instanceof McpError) {
+        errorType = 'MCP_ERROR';
+
+        // Record MCP error metrics
+        this.recordExecutionMetrics({
+          toolName: this.name,
+          executionTime: Date.now() - startTime,
+          success: false,
+          errorType,
+          timestamp: startTime,
+          correlationId: this.correlationId,
+          parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
+        });
+
         throw error;
       }
 
+      // Categorize the error for metrics
+      const categorizedError = categorizeError(error, this.name);
+      errorType = categorizedError.errorType;
+
       // Log other failures for analysis
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage);
+      this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage, undefined, categorizedError);
+
+      // Record execution error metrics
+      this.recordExecutionMetrics({
+        toolName: this.name,
+        executionTime: Date.now() - startTime,
+        success: false,
+        errorType,
+        timestamp: startTime,
+        correlationId: this.correlationId,
+        parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
+      });
 
       // Handle other errors - return standardized error response
       return this.handleError(error) as TResponse;
@@ -251,13 +333,26 @@ export abstract class BaseTool<
   }
 
   /**
-   * Log tool call failures for analysis and improvement
+   * Record execution metrics for this tool
+   */
+  private recordExecutionMetrics(metrics: ToolExecutionMetrics): void {
+    try {
+      recordToolExecution(metrics);
+    } catch (error) {
+      // Don't let metrics recording break tool execution
+      this.logger.debug('Failed to record execution metrics:', error);
+    }
+  }
+
+  /**
+   * Log tool call failures for analysis and improvement with enhanced categorization
    */
   private logToolFailure(
     args: unknown,
-    errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR',
+    errorType: 'VALIDATION_ERROR' | 'EXECUTION_ERROR' | ScriptErrorType,
     errorMessage: string,
     validationErrors?: z.ZodIssue[],
+    categorizedError?: CategorizedScriptError,
   ): void {
     try {
       // Create logs directory if it doesn't exist
@@ -266,7 +361,7 @@ export abstract class BaseTool<
         mkdirSync(logsDir, { recursive: true });
       }
 
-      // Create failure log entry
+      // Create enhanced failure log entry with categorization
       const logEntry = {
         timestamp: new Date().toISOString(),
         tool: this.name,
@@ -274,8 +369,15 @@ export abstract class BaseTool<
         errorMessage,
         validationErrors,
         inputArgs: redactArgs(args),
-        // Add schema information to help understand what was expected
         schemaDescription: this.description,
+        // Enhanced categorization data
+        categorization: categorizedError ? {
+          errorType: categorizedError.errorType,
+          severity: getErrorSeverity(categorizedError.errorType),
+          recoverable: isRecoverableError(categorizedError.errorType),
+          actionable: categorizedError.actionable,
+          context: categorizedError.context,
+        } : undefined,
       };
 
       // Append to daily log file
@@ -285,8 +387,12 @@ export abstract class BaseTool<
       // Append as JSON Lines format for easy parsing
       writeFileSync(logFile, JSON.stringify(logEntry) + '\n', { flag: 'a' });
 
-      // Also log to debug for immediate visibility
-      this.logger.debug(`Tool failure logged: ${this.name} - ${errorType}`);
+      // Enhanced debug logging with categorization
+      const severity = categorizedError ? getErrorSeverity(categorizedError.errorType) : 'unknown';
+      this.logger.debug(`Tool failure logged: ${this.name} - ${errorType} [${severity}]`, {
+        recoverable: categorizedError ? isRecoverableError(categorizedError.errorType) : undefined,
+        actionable: categorizedError?.actionable,
+      });
     } catch (logError) {
       // Don't let logging failures break the tool
       this.logger.error('Failed to log tool failure:', logError);
@@ -298,6 +404,15 @@ export abstract class BaseTool<
    * Returns the response type specified by the tool implementation
    */
   protected abstract executeValidated(args: z.infer<TSchema>): Promise<TResponse>;
+
+  /**
+   * Create a new instance of this tool with correlation context
+   */
+  withCorrelation(correlationId: string): this {
+    // Create a new instance of the same tool class with correlation ID
+    const ctor = this.constructor as new (cache: CacheManager, correlationId?: string) => this;
+    return new ctor(this.cache, correlationId);
+  }
 
   /**
    * Provide a fallback executeJson when tests inject a mock with only `execute`.
@@ -571,139 +686,91 @@ export abstract class BaseTool<
   }
 
   /**
-   * Handle errors consistently across all tools
+   * Handle errors consistently across all tools with enhanced categorization
    * Returns a standardized error response instead of throwing
    */
   protected handleError(error: unknown): StandardResponse<unknown> {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimer();
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorString = errorMessage.toLowerCase();
+    // Categorize the error using the enhanced taxonomy
+    const categorizedError = categorizeError(error, this.name);
 
-    // Check for permission errors
-    if (errorString.includes('-1743') || errorString.includes('not allowed') || errorString.includes('authorization')) {
-      const errorDetails = permissionError(this.name);
-      return createErrorResponse(
-        this.name,
-        'PERMISSION_DENIED',
-        errorDetails.message,
-        {
-          recovery: errorDetails.recovery,
-          formatted: formatErrorWithRecovery(errorDetails),
-        },
-        timer.toMetadata(),
-      );
-    }
+    // Log the failure with categorization information
+    this.logToolFailure(
+      {},
+      categorizedError.errorType,
+      categorizedError.message,
+      undefined,
+      categorizedError,
+    );
 
-    // Check for timeout errors
-    if (errorString.includes('timeout') || errorString.includes('timed out')) {
-      const errorDetails = scriptTimeoutError(this.name);
-      return createErrorResponse(
-        this.name,
-        'SCRIPT_TIMEOUT',
-        errorDetails.message,
-        {
-          recovery: errorDetails.recovery,
-          formatted: formatErrorWithRecovery(errorDetails),
-        },
-        timer.toMetadata(),
-      );
-    }
+    // Merge original error details with enhanced categorization
+    const originalErrorDetails = categorizedError.originalError && typeof categorizedError.originalError === 'object' &&
+      'details' in categorizedError.originalError && categorizedError.originalError.details ?
+      categorizedError.originalError.details as Record<string, unknown> : {};
 
-    // Check if OmniFocus is not running
-    if (errorString.includes('not running') || errorString.includes('can\'t find process')) {
-      const errorDetails = omniFocusNotRunningError(this.name);
-      return createErrorResponse(
-        this.name,
-        'OMNIFOCUS_NOT_RUNNING',
-        errorDetails.message,
-        {
-          recovery: errorDetails.recovery,
-          formatted: formatErrorWithRecovery(errorDetails),
-        },
-        timer.toMetadata(),
-      );
-    }
-
-    // OmniAutomation specific errors
-    if (error instanceof Error && error.name === 'OmniAutomationError') {
-      const errorDetails = scriptExecutionError(
-        this.name,
-        error.message || 'Script execution failed',
-        'Check that OmniFocus is not showing any dialogs',
-      );
-      const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
-      return createErrorResponse(
-        this.name,
-        'OMNIFOCUS_ERROR',
-        errorDetails.message,
-        {
-          script: omniError.details?.script,
-          stderr: omniError.details?.stderr,
-          recovery: errorDetails.recovery,
-          formatted: formatErrorWithRecovery(errorDetails),
-        },
-        timer.toMetadata(),
-      );
-    }
-
-    // Generic error handling with improved suggestions
+    // Return enhanced error response with categorization
     return createErrorResponse(
       this.name,
-      'INTERNAL_ERROR',
-      error instanceof Error ? error.message : 'An unknown error occurred',
+      categorizedError.errorType,
+      categorizedError.message,
       {
-        originalError: error,
-        recovery: [
-          'Try the operation again',
-          'Check that OmniFocus is running and responsive',
-          'Verify your parameters are correct',
-          'If the issue persists, restart OmniFocus',
-        ],
+        ...originalErrorDetails, // Preserve original error details (script, stderr, etc.)
+        errorType: categorizedError.errorType,
+        severity: getErrorSeverity(categorizedError.errorType),
+        recoverable: isRecoverableError(categorizedError.errorType),
+        actionable: categorizedError.actionable,
+        recovery: categorizedError.recovery,
+        context: categorizedError.context,
+        formatted: getErrorMessage(categorizedError),
+        originalError: categorizedError.originalError,
       },
       timer.toMetadata(),
     );
   }
 
   /**
-   * V2 error handler: same mappings as handleError, but returns V2 response format.
+   * V2 error handler: enhanced categorization with V2 response format
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected handleErrorV2(error: unknown): any {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimerV2();
 
-    const errMsg = error instanceof Error ? error.message : String(error);
-    const s = errMsg.toLowerCase();
+    // Categorize the error using the enhanced taxonomy
+    const categorizedError = categorizeError(error, this.name);
 
-    if (s.includes('-1743') || s.includes('not allowed') || s.includes('authorization')) {
-      const info = permissionError(this.name);
-      return createErrorResponseV2(this.name, 'PERMISSION_DENIED', info.message, formatErrorWithRecovery(info), undefined, timer.toMetadata());
-    }
+    // Log the failure with categorization information
+    this.logToolFailure(
+      {},
+      categorizedError.errorType,
+      categorizedError.message,
+      undefined,
+      categorizedError,
+    );
 
-    if (s.includes('timeout') || s.includes('timed out')) {
-      const info = scriptTimeoutError(this.name);
-      return createErrorResponseV2(this.name, 'SCRIPT_TIMEOUT', info.message, formatErrorWithRecovery(info), undefined, timer.toMetadata());
-    }
+    // Merge original error details with enhanced categorization
+    const originalErrorDetails = categorizedError.originalError && typeof categorizedError.originalError === 'object' &&
+      'details' in categorizedError.originalError && categorizedError.originalError.details ?
+      categorizedError.originalError.details as Record<string, unknown> : {};
 
-    if (s.includes('not running') || s.includes("can't find process")) {
-      const info = omniFocusNotRunningError(this.name);
-      return createErrorResponseV2(this.name, 'OMNIFOCUS_NOT_RUNNING', info.message, formatErrorWithRecovery(info), undefined, timer.toMetadata());
-    }
-
-    if (error instanceof Error && error.name === 'OmniAutomationError') {
-      const info = scriptExecutionError(this.name, error.message || 'Script execution failed', 'Check that OmniFocus is not showing any dialogs');
-      const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
-      return createErrorResponseV2(this.name, 'OMNIFOCUS_ERROR', info.message, formatErrorWithRecovery(info), { script: omniError.details?.script, stderr: omniError.details?.stderr }, timer.toMetadata());
-    }
-
+    // Return enhanced V2 error response with categorization
     return createErrorResponseV2(
       this.name,
-      'INTERNAL_ERROR',
-      errMsg || 'An unknown error occurred',
-      'Try again, verify OmniFocus is running, and check parameters',
-      { originalError: error },
+      categorizedError.errorType,
+      categorizedError.message,
+      getErrorMessage(categorizedError),
+      {
+        ...originalErrorDetails, // Preserve original error details (script, stderr, etc.)
+        errorType: categorizedError.errorType,
+        severity: getErrorSeverity(categorizedError.errorType),
+        recoverable: isRecoverableError(categorizedError.errorType),
+        actionable: categorizedError.actionable,
+        recovery: categorizedError.recovery,
+        context: categorizedError.context,
+        originalError: categorizedError.originalError,
+      },
       timer.toMetadata(),
     );
   }

@@ -3,18 +3,25 @@ import { BaseTool } from '../base.js';
 import { getVersionInfo } from '../../utils/version.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { getSystemMetrics, getMetricsSummary } from '../../utils/metrics.js';
 
 // Consolidated schema for all system operations
 const SystemToolSchema = z.object({
-  operation: z.enum(['version', 'diagnostics'])
+  operation: z.enum(['version', 'diagnostics', 'metrics'])
     .default('version')
-    .describe('Operation to perform: get version info or run diagnostics'),
+    .describe('Operation to perform: get version info, run diagnostics, or get performance metrics'),
 
   // Diagnostics operation parameters
   testScript: z.string()
     .optional()
     .default('list_tasks')
     .describe('Optional custom script to test for diagnostics (defaults to basic list_tasks)'),
+
+  // Metrics operation parameters
+  metricsType: z.enum(['summary', 'detailed'])
+    .optional()
+    .default('summary')
+    .describe('Type of metrics to return: summary for overview, detailed for full metrics'),
 });
 
 interface VersionInfo {
@@ -53,11 +60,17 @@ interface DiagnosticsResult {
   };
 }
 
-type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult>;
+interface MetricsResult {
+  timestamp: string;
+  type: 'summary' | 'detailed';
+  data: unknown; // Will be either SystemMetrics or MetricsSummary
+}
+
+type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult | MetricsResult>;
 
 export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
-  description = 'System utilities for OmniFocus MCP: get version information or run diagnostics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection.';
+  description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, or view performance metrics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics.';
   schema = SystemToolSchema;
 
   private diagnosticOmni: DiagnosticOmniAutomation;
@@ -75,6 +88,8 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         return this.getVersion();
       case 'diagnostics':
         return this.runDiagnostics(args);
+      case 'metrics':
+        return this.getMetrics(args);
       default:
         return createErrorResponseV2(
           'system',
@@ -383,6 +398,49 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         { operation: 'diagnostics' },
         timer.toMetadata(),
       );
+    }
+  }
+
+  private getMetrics(args: z.infer<typeof SystemToolSchema>): Promise<StandardResponseV2<MetricsResult>> {
+    const timer = new OperationTimerV2();
+    const { metricsType = 'summary' } = args;
+
+    try {
+      let metricsData: unknown;
+
+      if (metricsType === 'detailed') {
+        // Get full system metrics with all tool details
+        metricsData = getSystemMetrics();
+      } else {
+        // Get summary metrics for quick overview
+        metricsData = getMetricsSummary();
+      }
+
+      const result: MetricsResult = {
+        timestamp: new Date().toISOString(),
+        type: metricsType,
+        data: metricsData,
+      };
+
+      return Promise.resolve(createSuccessResponseV2(
+        'system',
+        result,
+        undefined,
+        {
+          ...timer.toMetadata(),
+          operation: 'metrics',
+          metricsType,
+        },
+      ));
+    } catch (error) {
+      return Promise.resolve(createErrorResponseV2(
+        'system',
+        'METRICS_ERROR',
+        error instanceof Error ? error.message : 'Failed to get metrics',
+        undefined,
+        { operation: 'metrics', metricsType },
+        timer.toMetadata(),
+      ));
     }
   }
 }

@@ -4,6 +4,7 @@ import { BaseTool } from '../../../src/tools/base';
 import { CacheManager } from '../../../src/cache/CacheManager';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -395,12 +396,12 @@ describe('BaseTool', () => {
 
     it('should handle generic errors', async () => {
       const result = await errorTestTool.execute({ errorType: 'generic' });
-      
+
       expect(result).toMatchObject({
         success: false,
         error: {
           code: 'INTERNAL_ERROR',
-          message: 'Generic error for testing',
+          message: expect.stringContaining('Generic error for testing'),
         },
       });
     });
@@ -611,6 +612,103 @@ describe('BaseTool', () => {
         expect.stringContaining('2025-08-25T10:00:00.000Z'),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('Enhanced Error Categorization', () => {
+    it('should categorize permission denied errors', async () => {
+      const result = await errorTestTool.execute({ errorType: 'permission' });
+
+      expect(result.error?.details?.errorType).toBe(ScriptErrorType.PERMISSION_DENIED);
+      expect(result.error?.details?.severity).toBe('critical');
+      expect(result.error?.details?.recoverable).toBe(true);
+      expect(result.error?.details?.actionable).toBe('Grant automation permissions in System Settings');
+      expect(result.error?.details?.recovery).toContain('You may see a permission dialog - click "OK" to grant access');
+    });
+
+    it('should categorize timeout errors', async () => {
+      const result = await errorTestTool.execute({ errorType: 'timeout' });
+
+      expect(result.error?.details?.errorType).toBe(ScriptErrorType.SCRIPT_TIMEOUT);
+      expect(result.error?.details?.severity).toBe('medium');
+      expect(result.error?.details?.recoverable).toBe(true);
+      expect(result.error?.details?.actionable).toBe('Reduce query scope or enable skipAnalysis for better performance');
+      expect(result.error?.details?.recovery).toContain('Try reducing the amount of data requested (use limit parameter)');
+    });
+
+    it('should categorize OmniFocus not running errors', async () => {
+      const result = await errorTestTool.execute({ errorType: 'not-running' });
+
+      expect(result.error?.details?.errorType).toBe(ScriptErrorType.OMNIFOCUS_NOT_RUNNING);
+      expect(result.error?.details?.severity).toBe('critical');
+      expect(result.error?.details?.recoverable).toBe(true);
+      expect(result.error?.details?.actionable).toBe('Launch OmniFocus and ensure it\'s fully loaded');
+      expect(result.error?.details?.recovery).toContain('Open OmniFocus from your Applications folder or Dock');
+    });
+
+    it('should categorize OmniAutomation errors', async () => {
+      const result = await errorTestTool.execute({ errorType: 'omni-automation' });
+
+      expect(result.error?.details?.errorType).toBe(ScriptErrorType.OMNIFOCUS_ERROR);
+      expect(result.error?.details?.severity).toBe('high');
+      expect(result.error?.details?.recoverable).toBe(true);
+      expect(result.error?.details?.actionable).toBe('Clear OmniFocus dialogs and ensure app is responsive');
+      expect(result.error?.details?.recovery).toContain('Check that OmniFocus is not showing any dialogs');
+    });
+
+    it('should categorize generic errors as internal errors', async () => {
+      const result = await errorTestTool.execute({ errorType: 'generic' });
+
+      expect(result.error?.details?.errorType).toBe(ScriptErrorType.INTERNAL_ERROR);
+      expect(result.error?.details?.severity).toBe('high');
+      expect(result.error?.details?.recoverable).toBe(false);
+      expect(result.error?.details?.actionable).toBe('Retry operation and verify system state');
+      expect(result.error?.details?.recovery).toContain('Try the operation again');
+    });
+
+    it('should include formatted error message', async () => {
+      const result = await errorTestTool.execute({ errorType: 'permission' });
+
+      expect(result.error?.details?.formatted).toContain('Permission denied');
+      expect(result.error?.details?.formatted).toContain('Quick fix: Grant automation permissions in System Settings');
+      expect(result.error?.details?.formatted).toContain('How to resolve:');
+    });
+
+    it('should log error with categorization information', async () => {
+      const writeFileSyncSpy = vi.mocked(fs.writeFileSync);
+
+      await errorTestTool.execute({ errorType: 'timeout' });
+
+      expect(writeFileSyncSpy).toHaveBeenCalled();
+      const logCall = writeFileSyncSpy.mock.calls.find(call =>
+        typeof call[1] === 'string' && call[1].includes('categorization')
+      );
+
+      expect(logCall).toBeTruthy();
+      if (logCall) {
+        const logEntry = JSON.parse(logCall[1] as string);
+        expect(logEntry.categorization).toMatchObject({
+          errorType: ScriptErrorType.SCRIPT_TIMEOUT,
+          severity: 'medium',
+          recoverable: true,
+          actionable: 'Reduce query scope or enable skipAnalysis for better performance'
+        });
+      }
+    });
+
+    it('should preserve original error in categorized response', async () => {
+      const result = await errorTestTool.execute({ errorType: 'generic' });
+
+      expect(result.error?.details?.originalError).toBeInstanceOf(Error);
+      expect(result.error?.details?.originalError.message).toContain('Generic error for testing');
+    });
+
+    it('should include context in categorized errors', async () => {
+      // The error test tool doesn't provide context, but we can test that context is preserved
+      const result = await errorTestTool.execute({ errorType: 'permission' });
+
+      // Context should be included in the error details (even if empty)
+      expect('context' in (result.error?.details || {})).toBe(true);
     });
   });
 });

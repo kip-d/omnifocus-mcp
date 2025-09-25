@@ -1,5 +1,10 @@
 import { OmniAutomation, OmniAutomationError } from './OmniAutomation.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  categorizeError,
+  getErrorSeverity,
+  isRecoverableError,
+} from '../utils/error-taxonomy.js';
 
 const logger = createLogger('robust-omniautomation');
 
@@ -43,40 +48,77 @@ export class RobustOmniAutomation extends OmniAutomation {
     } catch (error: unknown) {
       this.consecutiveFailures++;
 
-      // Log detailed error information
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorType = error instanceof Error ? error.constructor.name : 'Unknown';
+      // Categorize the error using the enhanced taxonomy
+      const categorizedError = categorizeError(error, 'script execution', {
+        consecutiveFailures: this.consecutiveFailures,
+        timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
+        script: script.substring(0, 200) + (script.length > 200 ? '...' : ''), // Truncate for logging
+      });
 
+      // Log detailed error information with categorization
       logger.error('Script execution failed', {
         consecutiveFailures: this.consecutiveFailures,
         timeSinceLastSuccess: Date.now() - this.lastSuccessTime,
-        errorMessage: errorMessage,
-        errorType: errorType,
+        errorType: categorizedError.errorType,
+        severity: getErrorSeverity(categorizedError.errorType),
+        recoverable: isRecoverableError(categorizedError.errorType),
+        actionable: categorizedError.actionable,
+        errorMessage: categorizedError.message,
       });
 
       // If we've had too many consecutive failures, try to diagnose
       if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
         const diagnosis = await this.diagnoseConnection();
-        logger.error('Connection diagnosis after repeated failures', diagnosis);
+        logger.error('Connection diagnosis after repeated failures', {
+          ...diagnosis,
+          categorization: {
+            errorType: categorizedError.errorType,
+            severity: getErrorSeverity(categorizedError.errorType),
+            recoverable: isRecoverableError(categorizedError.errorType),
+          },
+        });
 
-        throw new OmniAutomationError(
+        // Create enhanced error with diagnosis
+        const enhancedError = new OmniAutomationError(
           `Script execution failed after ${this.consecutiveFailures} attempts. ${diagnosis.summary}`,
-          { script, stderr: JSON.stringify(diagnosis) },
+          {
+            script,
+            stderr: JSON.stringify(diagnosis),
+            // Note: OmniAutomationError may not support custom fields - stored in message
+          },
         );
+        throw enhancedError;
       }
 
       // For "Cannot convert undefined or null to object" errors, add more context
       if (error instanceof Error && error.message.includes('Cannot convert undefined or null to object')) {
         const enhancedError = new OmniAutomationError(
           `${error.message} - This often indicates OmniFocus has become unresponsive or the document is no longer available`,
-          // External process errors may have arbitrary properties
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-          { script, stderr: (error as any).stderr || error.message },
+          {
+            script,
+            // External process errors may have arbitrary properties
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+            stderr: (error as any).stderr || error.message,
+          },
         );
         throw enhancedError;
       }
 
-      throw error;
+      // For OmniAutomationError, preserve original structure
+      if (error instanceof OmniAutomationError) {
+        const details = error.details || {};
+        const enhancedError = new OmniAutomationError(error.message, { ...details, script });
+        throw enhancedError;
+      }
+
+      // For other errors, create new OmniAutomationError
+      throw new OmniAutomationError(
+        categorizedError.message,
+        {
+          script,
+          stderr: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
 
