@@ -410,8 +410,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       skipAnalysis: !args.details, // Skip expensive analysis if not needed
     };
 
-    // Generate cache key for search
-    const cacheKey = `tasks_search_${JSON.stringify(filter)}`;
+    // Generate cache key for search with consistent tag ordering
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_search_${args.search}_${args.completed}_${args.limit}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}_${args.details}`;
 
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
@@ -472,7 +473,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       skipAnalysis: false, // Need analysis for accurate availability
     };
 
-    const cacheKey = `tasks_available_${args.limit}_${args.project || 'all'}`;
+    // Include tags in cache key to avoid incorrect caching
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_available_${args.limit}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
 
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
@@ -521,7 +524,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       skipAnalysis: false, // Need analysis for blocking detection
     };
 
-    const cacheKey = `tasks_blocked_${args.limit}`;
+    // Include tags in cache key to avoid incorrect caching
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_blocked_${args.limit}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
 
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
@@ -667,7 +672,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
   private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     // Smart suggest combines overdue, today, and flagged tasks to suggest what to work on
-    const cacheKey = `tasks_smart_suggest_${args.limit}`;
+    // Include tags in cache key if provided for filtering
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_smart_suggest_${args.limit}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
 
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
@@ -684,6 +691,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       completed: false,
       limit: Math.min(args.limit * 2, 100), // Get more for analysis
       includeDetails: args.details,
+      tags: args.tags, // Include tag filtering for smart suggestions
     };
 
     // Execute comprehensive query

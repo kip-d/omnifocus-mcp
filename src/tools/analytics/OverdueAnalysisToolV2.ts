@@ -190,12 +190,31 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Provide specific error handling based on error type
+      let suggestion = 'Ensure OmniFocus is running and has data to analyze';
+      let errorCode = 'ANALYSIS_ERROR';
+
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+        errorCode = 'SCRIPT_TIMEOUT';
+        suggestion = 'Try reducing the limit parameter or use basic analysis without grouping';
+      } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+        errorCode = 'OMNIFOCUS_NOT_RUNNING';
+        suggestion = 'Start OmniFocus and ensure it is running';
+      } else if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+        errorCode = 'PERMISSION_DENIED';
+        suggestion = 'Enable automation access in System Settings > Privacy & Security > Automation';
+      } else if (errorMessage.includes('no overdue') || errorMessage.includes('no data')) {
+        errorCode = 'NO_OVERDUE_TASKS';
+        suggestion = 'No overdue tasks found - this is actually good news for your productivity!';
+      }
+
       return createErrorResponseV2(
         'analyze_overdue',
-        'ANALYSIS_ERROR',
+        errorCode,
         errorMessage,
-        'Ensure OmniFocus is running and has data to analyze',
-        undefined,
+        suggestion,
+        error instanceof Error ? { stack: error.stack } : undefined,
         timer.toMetadata(),
       );
     }

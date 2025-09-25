@@ -143,7 +143,11 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
           overview,
           daily: [],
           weekly: {},
-          projectStats: Array.isArray(projectStatsArray) ? projectStatsArray : [],
+          projectStats: Array.isArray(projectStatsArray) ? projectStatsArray : Object.entries(projectStatsArray || {}).map(([name, data]) => ({
+            name,
+            completedCount: (data && typeof data === 'object' && 'completedCount' in data) ? Number(data.completedCount) || 0 : 0,
+            ...(data && typeof data === 'object' ? data as Record<string, unknown> : {})
+          })),
           tagStats: tagStatsArray,
         },
         insights: { recommendations: insights },
@@ -171,12 +175,31 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Provide specific error handling based on error type
+      let suggestion = 'Ensure OmniFocus is running and has data to analyze';
+      let errorCode = 'STATS_ERROR';
+
+      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+        errorCode = 'SCRIPT_TIMEOUT';
+        suggestion = 'Try reducing the analysis period or exclude project/tag stats for faster results';
+      } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+        errorCode = 'OMNIFOCUS_NOT_RUNNING';
+        suggestion = 'Start OmniFocus and ensure it is running';
+      } else if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+        errorCode = 'PERMISSION_DENIED';
+        suggestion = 'Enable automation access in System Settings > Privacy & Security > Automation';
+      } else if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
+        errorCode = 'NO_DATA';
+        suggestion = 'Add some tasks to OmniFocus before running productivity analysis';
+      }
+
       return createErrorResponseV2(
         'productivity_stats',
-        'STATS_ERROR',
+        errorCode,
         errorMessage,
-        'Ensure OmniFocus is running and has data to analyze',
-        undefined,
+        suggestion,
+        error instanceof Error ? { stack: error.stack } : undefined,
         timer.toMetadata(),
       );
     }

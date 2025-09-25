@@ -21,13 +21,27 @@ import {
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
-  operation: z.enum(['create', 'update', 'complete', 'delete'])
-    .describe('The operation to perform on the task'),
+  operation: z.enum(['create', 'update', 'complete', 'delete', 'bulk_complete', 'bulk_delete'])
+    .describe('The operation to perform on the task. Use bulk_complete or bulk_delete for operations on multiple tasks.'),
 
   // Task identification (for update/complete/delete)
   taskId: z.string()
     .optional()
     .describe('ID of the task (required for update/complete/delete operations)'),
+
+  // Bulk operations support
+  taskIds: z.array(z.string())
+    .optional()
+    .describe('Array of task IDs for bulk operations (bulk_complete/bulk_delete)'),
+
+  bulkCriteria: z.object({
+    tags: z.array(z.string()).optional().describe('Match tasks with all these tags'),
+    projectName: z.string().optional().describe('Match tasks in this project'),
+    search: z.string().optional().describe('Match tasks containing this text'),
+    completed: z.boolean().optional().describe('Match completed/incomplete tasks'),
+  })
+    .optional()
+    .describe('Search criteria for bulk operations (alternative to taskIds)'),
 
   // Create/Update parameters
   name: z.string()
@@ -161,7 +175,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
     try {
       // Validate required parameters based on operation
-      if (operation !== 'create' && !taskId) {
+      if (!['create', 'bulk_complete', 'bulk_delete'].includes(operation) && !taskId) {
         const error = createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
@@ -616,6 +630,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           break;
         }
 
+        case 'bulk_complete':
+        case 'bulk_delete': {
+          return this.handleBulkOperation(operation, args, timer);
+        }
+
         default: {
           const error = createErrorResponseV2(
             'manage_task',
@@ -912,5 +931,146 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     }
 
     return normalized;
+  }
+
+  private async handleBulkOperation(
+    operation: 'bulk_complete' | 'bulk_delete',
+    args: ManageTaskInput,
+    timer: OperationTimerV2
+  ): Promise<unknown> {
+    const { taskIds, bulkCriteria } = args;
+
+    // Validate that we have either taskIds or criteria
+    if (!taskIds && !bulkCriteria) {
+      const error = createErrorResponseV2(
+        'manage_task',
+        'MISSING_PARAMETER',
+        'Either taskIds or bulkCriteria is required for bulk operations',
+        'Provide an array of task IDs or search criteria to identify tasks',
+        { operation },
+        timer.toMetadata(),
+      );
+      return this.formatForCLI(error, operation, 'error');
+    }
+
+    let targetTaskIds = taskIds;
+
+    // If criteria provided, find matching tasks first
+    if (bulkCriteria && !taskIds) {
+      try {
+        const filter = {
+          completed: bulkCriteria.completed || false,
+          limit: 200, // Safety limit
+          tags: bulkCriteria.tags,
+          project: bulkCriteria.projectName,
+          search: bulkCriteria.search,
+        };
+
+        // Use the same script as QueryTasksToolV2
+        const { LIST_TASKS_SCRIPT } = require('../../omnifocus/scripts/tasks.js');
+        const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
+        const result = await this.execJson(script);
+
+        if (isScriptError(result)) {
+          const error = createErrorResponseV2(
+            'manage_task',
+            'SEARCH_ERROR',
+            'Failed to find tasks matching criteria',
+            'Check the search criteria and ensure OmniFocus is running',
+            result.details,
+            timer.toMetadata(),
+          );
+          return this.formatForCLI(error, operation, 'error');
+        }
+
+        const data = result.data as { tasks?: { id: string }[]; items?: { id: string }[] };
+        const tasks = data.tasks || data.items || [];
+        targetTaskIds = tasks.map(task => task.id);
+
+        if (targetTaskIds.length === 0) {
+          const error = createErrorResponseV2(
+            'manage_task',
+            'NO_TASKS_FOUND',
+            'No tasks found matching the specified criteria',
+            'Try adjusting the search criteria',
+            { criteria: bulkCriteria },
+            timer.toMetadata(),
+          );
+          return this.formatForCLI(error, operation, 'error');
+        }
+      } catch (searchError) {
+        const error = createErrorResponseV2(
+          'manage_task',
+          'SEARCH_ERROR',
+          'Error searching for tasks',
+          'Check the search criteria and ensure OmniFocus is running',
+          searchError,
+          timer.toMetadata(),
+        );
+        return this.formatForCLI(error, operation, 'error');
+      }
+    }
+
+    if (!targetTaskIds || targetTaskIds.length === 0) {
+      const error = createErrorResponseV2(
+        'manage_task',
+        'NO_TASKS_SPECIFIED',
+        'No tasks specified for bulk operation',
+        'Provide task IDs or search criteria',
+        { operation },
+        timer.toMetadata(),
+      );
+      return this.formatForCLI(error, operation, 'error');
+    }
+
+    // Perform bulk operation
+    const results = [];
+    const errors = [];
+
+    for (const taskId of targetTaskIds) {
+      try {
+        if (operation === 'bulk_complete') {
+          const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, { taskId });
+          const result = await this.execJson(script);
+
+          if (isScriptError(result)) {
+            errors.push({ taskId, error: result.error });
+          } else {
+            results.push({ taskId, status: 'completed' });
+          }
+        } else if (operation === 'bulk_delete') {
+          const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId });
+          const result = await this.execJson(script);
+
+          if (isScriptError(result)) {
+            errors.push({ taskId, error: result.error });
+          } else {
+            results.push({ taskId, status: 'deleted' });
+          }
+        }
+
+        // Invalidate task cache after each operation
+        this.cache.clear('tasks');
+      } catch (error) {
+        errors.push({ taskId, error: String(error) });
+      }
+    }
+
+    const responseData = {
+      operation,
+      successCount: results.length,
+      errorCount: errors.length,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+
+    const response = createSuccessResponseV2(
+      'manage_task',
+      responseData,
+      undefined, // No summary needed for bulk operations
+      timer.toMetadata(),
+    );
+
+    return this.formatForCLI(response, operation, 'success');
   }
 }
