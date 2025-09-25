@@ -170,7 +170,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm projects cache: ${error}`);
+      logger.warn(`Failed to warm projects cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -191,7 +191,10 @@ export class CacheWarmer {
         // Active tags (most common for filtering)
         this.warmSingleOperation('tags', 'active_tags', async () => {
           const result = await tagsTool.execute({ operation: 'list', active: true });
-          return (result as any).success ? (result as any).data : null;
+          if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+            return result.success ? result.data : null;
+          }
+          return null;
         }),
 
         // All tags with usage stats
@@ -201,7 +204,10 @@ export class CacheWarmer {
             sortBy: 'usage',
             includeUsageStats: true,
           });
-          return (result as any).success ? (result as any).data : null;
+          if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+            return result.success ? result.data : null;
+          }
+          return null;
         }),
       ]);
 
@@ -211,7 +217,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm tags cache: ${error}`);
+      logger.warn(`Failed to warm tags cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -240,7 +246,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm today's tasks cache: ${error}`);
+      logger.warn(`Failed to warm today's tasks cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -269,7 +275,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm overdue tasks cache: ${error}`);
+      logger.warn(`Failed to warm overdue tasks cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -298,7 +304,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm upcoming tasks cache: ${error}`);
+      logger.warn(`Failed to warm upcoming tasks cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -327,7 +333,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm flagged tasks cache: ${error}`);
+      logger.warn(`Failed to warm flagged tasks cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -347,7 +353,10 @@ export class CacheWarmer {
       // List all perspectives (store under tasks category since they query tasks)
       await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
         const result = await perspectivesTool.execute({ operation: 'list' });
-        return (result as any).success ? (result as any).data : null;
+        if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+          return result.success ? result.data : null;
+        }
+        return null;
       });
 
       const duration = Date.now() - startTime;
@@ -356,7 +365,7 @@ export class CacheWarmer {
       return { operation, success: true, duration };
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm perspectives cache: ${error}`);
+      logger.warn(`Failed to warm perspectives cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }

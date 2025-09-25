@@ -543,9 +543,7 @@ export const LIST_TASKS_SCRIPT = `
     // Enhanced properties discovered through API exploration
     // Task state properties that affect actionability (avoid duplication with earlier checks)
     const blocked = safeGet(() => task.blocked(), false);
-    const next = safeGet(() => task.next(), false);
     if (blocked && !taskObj.blocked) taskObj.blocked = blocked;
-    if (next && !taskObj.next) taskObj.next = next;
 
     // Effective dates (inherited from parent)
     const effectiveDeferDate = safeGetDate(() => task.effectiveDeferDate());
