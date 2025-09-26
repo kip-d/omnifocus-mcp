@@ -275,25 +275,27 @@ npx @modelcontextprotocol/inspector dist/index.js  # Interactive testing
 ```
 
 ### Testing Pattern
-**🚨 CRITICAL: OmniFocus Tools Require Proper MCP Initialization**
+**✅ ALL TOOLS NOW WORK WITH PROPER MCP CALLS**
 
-**❌ WRONG - Raw tool calls fail silently (bypasses MCP protocol):**
+**✅ RECOMMENDED - Direct MCP tool calls (now working for all tools):**
 ```bash
-echo '{"jsonrpc":"2.0","method":"tools/call",...}' | node dist/index.js
-# Tools execute but produce no output - looks broken but isn't!
+# Initialize and call any tool directly
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+
+# Test OmniFocus tools (all working in CLI as of Sept 2025)
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tasks","arguments":{"mode":"today","limit":"3"}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"manage_task","arguments":{"operation":"create","name":"CLI Test"}}}' | node dist/index.js
+
+# System tools also work
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
 ```
 
-**✅ CORRECT - Use proper MCP testing tools:**
+**Alternative - Legacy testing scripts (if available):**
 ```bash
-# For OmniFocus tools that need initialization
+# Alternative method using helper scripts
 node test-single-tool-proper.js tasks '{"mode":"today","limit":"3"}'
 node test-single-tool-proper.js manage_task '{"operation":"create","name":"Test"}'
-
-# For simple system tools (these work with raw calls)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | node dist/index.js
 ```
-
-**Key Rule:** If a tool works in Claude Desktop but fails in direct testing, use `test-single-tool-proper.js` which follows the exact same MCP initialization sequence as Claude Desktop.
 
 **Legacy patterns (still work for system tools):**
 ```bash
@@ -385,17 +387,21 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 - **Failure**: Tool execution log + JSON error response + graceful exit
 - **The graceful exit itself is NEVER an error** - it's required MCP compliance!
 
-### 🚨 Critical: The v2.1.0 CLI Testing Regression
-**KNOWN ISSUE (September 2025):** Despite implementing NEW ARCHITECTURE fixes, write operations with bridge helpers fail in CLI testing but work perfectly in Claude Desktop.
+### ✅ CLI Testing Status - RESOLVED (September 2025)
+**ISSUE RESOLVED:** The previously documented v2.1.0 CLI testing regression has been resolved as of current codebase state.
 
-**Pattern:**
+**Current Status:**
 - ✅ Read-only tools (system, tasks, projects): Perfect CLI testing
-- ❌ Write tools with bridge helpers (manage_task create/update): Script truncates at line 145 in CLI
-- ✅ ALL tools work flawlessly in Claude Desktop
+- ✅ Write tools with bridge helpers (manage_task create/update): **Now working in CLI**
+- ✅ ALL tools work in both CLI and Claude Desktop
 
-**This is a REGRESSION** - these operations worked in CLI testing during early development. The root cause of the environment-specific script execution difference is unknown but documented in `docs/LESSONS_LEARNED.md`.
+**Testing Verification (September 26, 2025):**
+- Bridge operations (`app.evaluateJavascript`) execute successfully in CLI
+- Tag assignment via bridge works correctly in CLI testing
+- Task creation with tags completes without truncation issues
+- The "line 145 truncation" issue no longer reproduces
 
-**For Immediate Development:** Use Claude Desktop for testing write operations. CLI testing works for read-only tools only.
+**For Development:** Both CLI testing and Claude Desktop can be used for all operations. The regression documented in earlier versions has been resolved.
 
 ## Known Limitations & Workarounds
 
