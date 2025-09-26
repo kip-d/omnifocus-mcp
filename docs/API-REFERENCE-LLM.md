@@ -57,8 +57,9 @@
 **recurring_tasks** `operation*` `activeOnly:"true"` `includeCompleted:"false"` `includeDropped:"false"` `includeHistory?` `sortBy?`
 - Ops: analyze(includeHistory?,sortBy?)|patterns
 
-**perspectives** `operation*` `perspectiveName?` `limit?` `includeDetails?` `includeFilterRules?` `sortBy?`
+**perspectives** `operation*` `perspectiveName?` `limit?` `includeDetails?` `includeFilterRules?` `sortBy?` `formatOutput?` `groupBy?` `fields[]?` `includeMetadata?`
 - Ops: list|query(perspectiveName*)
+- Enhanced: formatOutput→human-readable, groupBy→project|tag|dueDate|status, fields→performance
 
 **system** `operation*` `testScript?`
 - Ops: version|diagnostics

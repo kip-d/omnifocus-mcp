@@ -24,7 +24,7 @@
 ### Utilities (4)
 - export(type*:tasks|projects|all,format*:json,filter?,fields?,outputDirectory?)
 - recurring_tasks(operation*:analyze|patterns,activeOnly*:true,includeCompleted*:false)
-- perspectives(operation*:list|query,perspectiveName?,...)
+- perspectives(operation*:list|query,perspectiveName?,limit?,includeDetails?,formatOutput?,groupBy?:none|project|tag|dueDate|status,fields[]?,includeMetadata?)
 - system(operation*:version|diagnostics,testScript?)
 
 ## Notes

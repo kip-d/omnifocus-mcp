@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full `CacheWarmer` class pre-populating projects, tags, tasks, and perspectives
   - Integrated into server startup sequence
   - **IMPACT**: Eliminates 1-3 second cold start delays on first queries
+- **Perspective Views Enhancement** (commit xxxxxxx)
+  - Enhanced PerspectivesToolV2 with rich formatting, grouping, field selection, and metadata
+  - Added 5 new parameters: `formatOutput`, `groupBy`, `fields[]`, `includeMetadata`
+  - Rich formatted output with visual indicators (checkboxes, flags, due dates)
+  - Task grouping by project, tag, dueDate, or status for organized display
+  - Field selection for performance optimization and payload reduction
+  - Comprehensive metadata generation (task counts, statistics)
+  - **IMPACT**: Full perspective system access with human-readable output and performance optimization
 
 #### Fixed
 - **Critical JavaScript Syntax Error** (commit c76b250)
@@ -60,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✅ Comprehensive test coverage for new error taxonomy system
 - ✅ Systematic debugging workflow followed for all fixes
 
-**Total Implementation**: ~14 hours across 5 major commits representing completion of Phase 1 Foundation and Phase 2 Quick Optimizations from the improvement roadmap.
+**Total Implementation**: ~18 hours across 6 major commits representing completion of Phase 1 Foundation, Phase 2 Quick Optimizations, and Phase 3 High-Value Features from the improvement roadmap.
 
 ## [2.1.0] - 2025-01-13 - Self-Contained Architecture Consolidation
 

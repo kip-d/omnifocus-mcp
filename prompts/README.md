@@ -98,8 +98,44 @@ When creating your own prompts:
 4. Add placeholder {{variables}} for dynamic content
 5. Structure with clear sections and expected outcomes
 
+## 🔗 MCP Programmatic Prompts
+
+In addition to these manual copy/paste templates, the OmniFocus MCP server includes **built-in programmatic prompts** that you can call directly through the MCP protocol.
+
+### Available MCP Prompts
+
+You can access these prompts by asking Claude to "use the [prompt_name] prompt":
+
+#### GTD Workflow Prompts
+- **`gtd_principles`** - Core GTD methodology and principles guide
+- **`gtd_weekly_review`** - Complete weekly review process with OmniFocus integration
+- **`gtd_process_inbox`** - Structured inbox processing workflow
+- **`eisenhower_matrix_inbox`** - Prioritize inbox items using the Eisenhower Matrix
+
+#### Reference Prompts
+- **`quick_reference`** - Essential OmniFocus MCP commands and patterns
+
+### Usage Examples
+
+```
+# Use built-in prompts directly:
+"Use the gtd_weekly_review prompt to help me with my weekly review"
+"Show me the gtd_principles prompt"
+"Use the eisenhower_matrix_inbox prompt to prioritize my tasks"
+```
+
+### Manual Templates vs MCP Prompts
+
+| Approach | Best For | Usage |
+|----------|----------|-------|
+| **Manual Templates** (this directory) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
+| **MCP Prompts** (`src/prompts/`) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
+
+Both approaches use the same underlying V2 tools and provide similar functionality through different interfaces.
+
 ## Support
 
 - Report issues: [GitHub Issues](https://github.com/kip-d/omnifocus-mcp/issues)
 - Documentation: See /docs directory
 - Version info: Ask Claude to "show me the MCP server version"
+- MCP Prompts: Ask Claude to "list available prompts" to see programmatic options

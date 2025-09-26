@@ -113,7 +113,12 @@
 **Parameters:** `operation*` + operation-specific params
 - **Operations:**
   - `list`: `includeFilterRules?` `sortBy?`
-  - `query`: `perspectiveName*` `limit?` `includeDetails?`
+  - `query`: `perspectiveName*` `limit?` `includeDetails?` `formatOutput?` `groupBy?` `fields[]?` `includeMetadata?`
+    - **Enhanced Features:**
+      - `formatOutput`: Return human-readable formatted text with checkboxes and visual indicators
+      - `groupBy`: Organize results by `project|tag|dueDate|status`
+      - `fields[]`: Select specific fields for performance optimization
+      - `includeMetadata`: Include task statistics and summary information
 
 ### system - System Operations
 **Parameters:** `operation*` `testScript?`

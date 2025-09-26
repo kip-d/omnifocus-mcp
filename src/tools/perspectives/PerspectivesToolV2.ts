@@ -33,6 +33,26 @@ const PerspectivesToolSchema = z.object({
   includeDetails: coerceBoolean()
     .default(false)
     .describe('Include task details like notes and subtasks (query operation)'),
+
+  // Enhanced formatting options (query operation)
+  formatOutput: coerceBoolean()
+    .default(false)
+    .describe('Return rich formatted text with checkboxes, flags, and visual indicators (query operation)'),
+
+  groupBy: z.enum(['none', 'project', 'tag', 'dueDate', 'status'])
+    .default('none')
+    .describe('Group results by project, tag, due date, or status for better organization (query operation)'),
+
+  fields: z.array(z.enum([
+    'id', 'name', 'flagged', 'dueDate', 'deferDate', 'completed',
+    'project', 'projectId', 'tags', 'available', 'note', 'estimatedMinutes',
+  ]))
+    .optional()
+    .describe('Select specific fields to return for performance optimization (query operation)'),
+
+  includeMetadata: coerceBoolean()
+    .default(true)
+    .describe('Include perspective metadata and summary information (query operation)'),
 });
 
 interface PerspectiveInfo {
@@ -66,13 +86,35 @@ interface QueryPerspectiveData {
   tasks: PerspectiveTask[];
   filterRules: Record<string, unknown>;
   aggregation: string;
+  // Enhanced formatting support
+  formattedOutput?: string;
+  groupedResults?: GroupedPerspectiveResults;
+  metadata?: PerspectiveMetadata;
+}
+
+interface GroupedPerspectiveResults {
+  [groupKey: string]: {
+    title: string;
+    count: number;
+    tasks: PerspectiveTask[];
+  };
+}
+
+interface PerspectiveMetadata {
+  totalTasks: number;
+  completedTasks: number;
+  flaggedTasks: number;
+  overdueTasks: number;
+  availableTasks: number;
+  grouping: string;
+  formatting: 'raw' | 'formatted';
 }
 
 type PerspectivesResponse = StandardResponseV2<{ perspectives: PerspectiveInfo[] } | QueryPerspectiveData>;
 
 export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> {
   name = 'perspectives';
-  description = 'Manage OmniFocus perspectives: list all available perspectives or query tasks from a specific perspective. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective.';
+  description = 'Manage OmniFocus perspectives with enhanced viewing capabilities. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective with rich formatting, grouping, and field selection options. Set formatOutput=true for human-readable display with checkboxes and visual indicators.';
   schema = PerspectivesToolSchema;
 
   async executeValidated(args: z.infer<typeof PerspectivesToolSchema>): Promise<PerspectivesResponse> {
@@ -162,7 +204,15 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
     const timer = new OperationTimerV2();
 
     try {
-      const { perspectiveName, limit, includeDetails } = args;
+      const {
+        perspectiveName,
+        limit,
+        includeDetails,
+        formatOutput,
+        groupBy,
+        fields,
+        includeMetadata,
+      } = args;
 
       if (!perspectiveName) {
         return createErrorResponseV2(
@@ -175,8 +225,9 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         );
       }
 
-      // Create cache key
-      const cacheKey = `perspective:${perspectiveName}:${limit}:${includeDetails}`;
+      // Create cache key including new formatting options
+      const fieldsKey = fields ? fields.sort().join(',') : 'all';
+      const cacheKey = `perspective:${perspectiveName}:${limit}:${includeDetails}:${formatOutput}:${groupBy}:${fieldsKey}:${includeMetadata}`;
 
       // Check cache (30 second TTL for perspective queries)
       const cached = this.cache.get<StandardResponseV2<QueryPerspectiveData>>('tasks', cacheKey);
@@ -220,11 +271,73 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         );
       }
 
+      // Extract raw data
+      const rawData = raw as {
+        perspectiveName: string;
+        perspectiveType: 'builtin' | 'custom';
+        tasks?: PerspectiveTask[];
+        filterRules?: Record<string, unknown>;
+        aggregation?: string;
+        metadata?: Record<string, unknown>;
+      };
+
+      let tasks = rawData.tasks || [];
+
+      // Apply field selection if specified
+      if (fields && fields.length > 0) {
+        tasks = tasks.map(task => {
+          const filteredTask: Record<string, unknown> = {};
+          for (const field of fields) {
+            if (field in task) {
+              filteredTask[field] = task[field as keyof PerspectiveTask];
+            }
+          }
+          return filteredTask as unknown as PerspectiveTask;
+        });
+      }
+
+      // Generate enhanced data
+      const metadata = includeMetadata
+        ? this.generateMetadata(tasks, groupBy || 'none', formatOutput ? 'formatted' : 'raw')
+        : undefined;
+
+      const groupedResults = (groupBy && groupBy !== 'none')
+        ? this.groupTasks(tasks, groupBy)
+        : undefined;
+
+      const formattedOutput = formatOutput
+        ? this.createFormattedOutput(
+            rawData.perspectiveName,
+            groupedResults || { all: { title: 'All Tasks', count: tasks.length, tasks } },
+            metadata || this.generateMetadata(tasks, groupBy || 'none', 'formatted'),
+          )
+        : undefined;
+
+      // Create enhanced response data
+      const responseData: QueryPerspectiveData = {
+        perspectiveName: rawData.perspectiveName,
+        perspectiveType: rawData.perspectiveType,
+        tasks,
+        filterRules: rawData.filterRules || {},
+        aggregation: rawData.aggregation || '',
+        ...(formattedOutput && { formattedOutput }),
+        ...(groupedResults && { groupedResults }),
+        ...(metadata && { metadata }),
+      };
+
       const response = createSuccessResponseV2(
         'perspectives',
-        { perspectiveName: (raw as { perspectiveName: string }).perspectiveName, perspectiveType: (raw as { perspectiveType: 'builtin' | 'custom' }).perspectiveType, tasks: (raw as { tasks?: PerspectiveTask[] }).tasks || [], filterRules: (raw as { filterRules: Record<string, unknown> }).filterRules, aggregation: (raw as { aggregation: string }).aggregation },
+        responseData,
         undefined,
-        { ...timer.toMetadata(), operation: 'query', total_count: (raw as { count?: number }).count || 0, filter_rules_applied: !!(raw as { filterRules?: Record<string, unknown> }).filterRules },
+        {
+          ...timer.toMetadata(),
+          operation: 'query',
+          total_count: tasks.length,
+          filter_rules_applied: !!(rawData.filterRules),
+          formatting_applied: formatOutput,
+          grouping_applied: groupBy !== 'none',
+          fields_selected: fields ? fields.length : 'all',
+        },
       );
 
       // Cache the result
@@ -242,5 +355,241 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
         timer.toMetadata(),
       );
     }
+  }
+
+  /**
+   * Formats a single task for human-readable display
+   */
+  private formatTask(task: PerspectiveTask): string {
+    const checkbox = task.completed ? '☑' : '☐';
+    const flag = task.flagged ? ' [🚩]' : '';
+    const name = task.name;
+
+    const details: string[] = [];
+
+    // Add due date info
+    if (task.dueDate) {
+      const dueDate = new Date(task.dueDate);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+
+      if (dueDate.toDateString() === today.toDateString()) {
+        details.push('Due: Today');
+      } else if (dueDate.toDateString() === tomorrow.toDateString()) {
+        details.push('Due: Tomorrow');
+      } else if (dueDate < today) {
+        details.push(`Due: ${dueDate.toLocaleDateString()} (Overdue)`);
+      } else {
+        details.push(`Due: ${dueDate.toLocaleDateString()}`);
+      }
+    }
+
+    // Add project info
+    if (task.project) {
+      details.push(`Project: ${task.project}`);
+    }
+
+    // Add tags
+    if (task.tags && task.tags.length > 0) {
+      details.push(`Tags: ${task.tags.join(', ')}`);
+    }
+
+    // Add availability status
+    if (!task.available && !task.completed) {
+      details.push('(Blocked)');
+    }
+
+    const detailsText = details.length > 0 ? ` (${details.join(', ')})` : '';
+
+    return `${checkbox}${flag} ${name}${detailsText}`;
+  }
+
+  /**
+   * Groups tasks based on the specified groupBy parameter
+   */
+  private groupTasks(tasks: PerspectiveTask[], groupBy: string): GroupedPerspectiveResults {
+    const groups: GroupedPerspectiveResults = {};
+
+    for (const task of tasks) {
+      let groupKey: string;
+      let groupTitle: string;
+
+      switch (groupBy) {
+        case 'project':
+          groupKey = task.project || 'no-project';
+          groupTitle = task.project || '📝 Inbox';
+          break;
+
+        case 'tag':
+          if (task.tags && task.tags.length > 0) {
+            // Group by first tag
+            groupKey = task.tags[0];
+            groupTitle = `🏷 ${task.tags[0]}`;
+          } else {
+            groupKey = 'no-tags';
+            groupTitle = '🏷 No Tags';
+          }
+          break;
+
+        case 'dueDate':
+          if (task.dueDate) {
+            const dueDate = new Date(task.dueDate);
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+
+            if (dueDate < today) {
+              groupKey = 'overdue';
+              groupTitle = '⚠️ Overdue';
+            } else if (dueDate.toDateString() === today.toDateString()) {
+              groupKey = 'today';
+              groupTitle = '📅 Today';
+            } else if (dueDate.toDateString() === tomorrow.toDateString()) {
+              groupKey = 'tomorrow';
+              groupTitle = '📅 Tomorrow';
+            } else {
+              groupKey = 'future';
+              groupTitle = '📅 Future';
+            }
+          } else {
+            groupKey = 'no-due-date';
+            groupTitle = '📅 No Due Date';
+          }
+          break;
+
+        case 'status':
+          if (task.completed) {
+            groupKey = 'completed';
+            groupTitle = '✅ Completed';
+          } else if (!task.available) {
+            groupKey = 'blocked';
+            groupTitle = '🚫 Blocked';
+          } else if (task.flagged) {
+            groupKey = 'flagged';
+            groupTitle = '🚩 Flagged';
+          } else {
+            groupKey = 'available';
+            groupTitle = '✅ Available';
+          }
+          break;
+
+        default:
+          groupKey = 'all';
+          groupTitle = 'All Tasks';
+          break;
+      }
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          title: groupTitle,
+          count: 0,
+          tasks: [],
+        };
+      }
+
+      groups[groupKey].tasks.push(task);
+      groups[groupKey].count++;
+    }
+
+    return groups;
+  }
+
+  /**
+   * Generates metadata about the tasks
+   */
+  private generateMetadata(tasks: PerspectiveTask[], groupBy: string, formatting: 'raw' | 'formatted'): PerspectiveMetadata {
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.completed).length;
+    const flaggedTasks = tasks.filter(t => t.flagged).length;
+    const availableTasks = tasks.filter(t => t.available && !t.completed).length;
+
+    // Calculate overdue tasks
+    const today = new Date();
+    const overdueTasks = tasks.filter(t => {
+      if (!t.dueDate || t.completed) return false;
+      const dueDate = new Date(t.dueDate);
+      return dueDate < today;
+    }).length;
+
+    return {
+      totalTasks,
+      completedTasks,
+      flaggedTasks,
+      overdueTasks,
+      availableTasks,
+      grouping: groupBy,
+      formatting,
+    };
+  }
+
+  /**
+   * Creates formatted output from grouped tasks
+   */
+  private createFormattedOutput(
+    perspectiveName: string,
+    groupedResults: GroupedPerspectiveResults,
+    metadata: PerspectiveMetadata,
+  ): string {
+    const lines: string[] = [];
+
+    // Header
+    lines.push(`📋 ${perspectiveName} Perspective (${metadata.totalTasks} tasks)`);
+    lines.push('');
+
+    // Summary
+    if (metadata.totalTasks > 0) {
+      const summary: string[] = [];
+      if (metadata.availableTasks > 0) summary.push(`${metadata.availableTasks} available`);
+      if (metadata.completedTasks > 0) summary.push(`${metadata.completedTasks} completed`);
+      if (metadata.flaggedTasks > 0) summary.push(`${metadata.flaggedTasks} flagged`);
+      if (metadata.overdueTasks > 0) summary.push(`${metadata.overdueTasks} overdue`);
+
+      if (summary.length > 0) {
+        lines.push(`📊 Summary: ${summary.join(', ')}`);
+        lines.push('');
+      }
+    }
+
+    // Groups
+    const sortedGroups = Object.entries(groupedResults).sort(([, a], [, b]) => {
+      // Sort by priority: overdue, today, flagged, then alphabetical
+      const priorityOrder = ['overdue', 'today', 'flagged', 'available', 'blocked', 'completed'];
+      const aIndex = priorityOrder.indexOf(a.title.toLowerCase());
+      const bIndex = priorityOrder.indexOf(b.title.toLowerCase());
+
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.title.localeCompare(b.title);
+    });
+
+    for (const [, group] of sortedGroups) {
+      if (group.tasks.length === 0) continue;
+
+      lines.push(`📂 ${group.title} (${group.count} tasks)`);
+
+      // Sort tasks within group: flagged first, then by due date, then alphabetical
+      const sortedTasks = group.tasks.sort((a, b) => {
+        if (a.flagged && !b.flagged) return -1;
+        if (!a.flagged && b.flagged) return 1;
+
+        if (a.dueDate && b.dueDate) {
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        }
+        if (a.dueDate && !b.dueDate) return -1;
+        if (!a.dueDate && b.dueDate) return 1;
+
+        return a.name.localeCompare(b.name);
+      });
+
+      for (const task of sortedTasks) {
+        lines.push(`  ${this.formatTask(task)}`);
+      }
+
+      lines.push('');
+    }
+
+    return lines.join('\n').trim();
   }
 }
