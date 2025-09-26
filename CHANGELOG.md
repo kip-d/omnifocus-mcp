@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full `CacheWarmer` class pre-populating projects, tags, tasks, and perspectives
   - Integrated into server startup sequence
   - **IMPACT**: Eliminates 1-3 second cold start delays on first queries
-- **Perspective Views Enhancement** (commit xxxxxxx)
+- **Perspective Views Enhancement** (commit bd27069)
   - Enhanced PerspectivesToolV2 with rich formatting, grouping, field selection, and metadata
   - Added 5 new parameters: `formatOutput`, `groupBy`, `fields[]`, `includeMetadata`
   - Rich formatted output with visual indicators (checkboxes, flags, due dates)
