@@ -4,7 +4,7 @@
 
 ## Task Operations (2 tools)
 
-**tasks** `mode*` `limit*:"25"` `details*:"false"` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`
+**tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`
 - Modes: all|search|overdue|today|upcoming|available|blocked|flagged
 - Returns: summary→insights, then data
 

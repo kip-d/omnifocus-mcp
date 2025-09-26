@@ -3,7 +3,7 @@
 ## Task Operations (2 tools)
 
 ### tasks - Query/Search Tasks
-**Parameters:** `mode*` `limit*:"25"` `details*:"false"` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`
+**Parameters:** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`
 - **Modes:** all | search | overdue | today | upcoming | available | blocked | flagged
 - **Returns:** Summary insights first, then task data
 - **Performance:** <1 second for most queries

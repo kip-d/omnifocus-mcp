@@ -3,7 +3,7 @@
 ## Syntax: tool(req*,opt?:"default") []=array
 
 ### Tasks (2)
-- tasks(mode*,limit*:25,details*:false,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
+- tasks(mode*,limit*:25,details*:false,fastSearch*:true,fields[]?,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
 - manage_task(operation*:create|update|complete|delete,taskId?,name?,...all_task_fields)
 
 ### Projects (1)

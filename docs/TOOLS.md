@@ -81,6 +81,8 @@ tags({ operation: 'active' })  // Skip empty tags
 - `completed` (boolean): Filter by completion status (default: false)
 - `limit` (number): Maximum tasks to return (default: 25)
 - `details` (boolean): Include full task details (default: false for performance)
+- `fastSearch` (boolean): Enable fast search mode for performance (default: true)
+- `fields` (string[]): Select specific fields to return for performance optimization (optional)
 - `project` (string): Filter by project ID
 - `tags` (string[]): Filter by tags
 
@@ -123,6 +125,20 @@ Today's tasks:
   "arguments": {
     "mode": "today",
     "details": true
+  }
+}
+```
+
+Performance-optimized query with field selection:
+```javascript
+{
+  "tool": "tasks",
+  "arguments": {
+    "mode": "upcoming",
+    "limit": 10,
+    "fastSearch": true,
+    "fields": ["id", "name", "dueDate", "flagged", "project"],
+    "daysAhead": 7
   }
 }
 ```

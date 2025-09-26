@@ -40,6 +40,8 @@ Query OmniFocus tasks with various modes and filters. Returns a summary first fo
 | `mode` | string | **Yes** | Query mode (see modes below) |
 | `limit` | string | **Yes** | Maximum tasks to return (default: "25") |
 | `details` | string | **Yes** | Include full details (default: "false") |
+| `fastSearch` | string | **Yes** | Fast search mode for performance (default: "true") |
+| `fields` | string[] | No | Select specific fields to return for performance optimization |
 | `search` | string | No | Search text for task names (search mode only) |
 | `project` | string | No | Filter by project name or ID |
 | `tags` | string[] | No | Filter by tag names |
@@ -58,13 +60,46 @@ Query OmniFocus tasks with various modes and filters. Returns a summary first fo
 - **`blocked`** - Tasks waiting on other tasks
 - **`flagged`** - High priority flagged tasks
 
-#### Example Request
+#### Available Fields (for performance optimization)
 
+When using the `fields` parameter, you can select specific fields to return:
+- **`id`** - Task identifier
+- **`name`** - Task title
+- **`completed`** - Completion status
+- **`flagged`** - Flagged status
+- **`blocked`** - Blocked status
+- **`available`** - Available status
+- **`estimatedMinutes`** - Time estimate
+- **`dueDate`** - Due date
+- **`deferDate`** - Defer date
+- **`completionDate`** - Completion date
+- **`note`** - Task description
+- **`projectId`** - Project identifier
+- **`project`** - Project name
+- **`tags`** - Associated tags
+
+If `fields` is not specified, all fields are returned. Using field selection can significantly improve performance and reduce response size.
+
+#### Example Requests
+
+**Basic query:**
 ```json
 {
   "mode": "overdue",
   "limit": "10",
-  "details": "false"
+  "details": "false",
+  "fastSearch": "true"
+}
+```
+
+**With field selection for performance:**
+```json
+{
+  "mode": "today",
+  "limit": "25",
+  "details": "false",
+  "fastSearch": "true",
+  "fields": ["id", "name", "dueDate", "flagged", "project"]
 }
 ```
 
