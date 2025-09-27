@@ -129,23 +129,27 @@ export const UPDATE_PROJECT_SCRIPT = `
       }
     }
     
+    const projectPayload = {
+      id: targetProject.id(),
+      name: targetProject.name(),
+      note: targetProject.note(),
+      dueDate: targetProject.dueDate() ? targetProject.dueDate().toISOString() : null,
+      deferDate: targetProject.deferDate() ? targetProject.deferDate().toISOString() : null,
+      flagged: targetProject.flagged()
+    };
+
     if (changes.length === 0) {
       return JSON.stringify({
         success: true,
-        message: "No changes made"
+        message: "No changes made",
+        project: projectPayload,
+        changes: []
       });
     }
-    
+
     return JSON.stringify({
       success: true,
-      project: {
-        id: targetProject.id(),
-        name: targetProject.name(),
-        note: targetProject.note(),
-        dueDate: targetProject.dueDate() ? targetProject.dueDate().toISOString() : null,
-        deferDate: targetProject.deferDate() ? targetProject.deferDate().toISOString() : null,
-        flagged: targetProject.flagged()
-      },
+      project: projectPayload,
       changes: changes,
       message: "Project updated successfully"
     });
@@ -273,39 +277,36 @@ export function createUpdateProjectScript(projectId: string, updates: any): stri
         }
       }
       
-      if (changes.length === 0) {
-        return JSON.stringify({
-          success: true,
-          data: { 
-            success: true,
-            message: "No changes made" 
-          }
-        });
-      }
-      
+    const projectPayload = {
+      id: targetProject.id(),
+      name: targetProject.name(),
+      note: targetProject.note(),
+      dueDate: targetProject.dueDate() ? targetProject.dueDate().toISOString() : null,
+      deferDate: targetProject.deferDate() ? targetProject.deferDate().toISOString() : null,
+      flagged: targetProject.flagged()
+    };
+
+    if (changes.length === 0) {
       return JSON.stringify({
         success: true,
-        data: {
-          success: true,
-          message: "Project updated successfully",
-          changes: changes,
-          // Store project data in details for tool consumption
-          project: {
-            id: targetProject.id(),
-            name: targetProject.name(),
-            note: targetProject.note(),
-            dueDate: targetProject.dueDate() ? targetProject.dueDate().toISOString() : null,
-            deferDate: targetProject.deferDate() ? targetProject.deferDate().toISOString() : null,
-            flagged: targetProject.flagged()
-          }
-        }
+        message: "No changes made",
+        project: projectPayload,
+        changes: []
       });
+    }
+
+    return JSON.stringify({
+      success: true,
+      message: "Project updated successfully",
+      project: projectPayload,
+      changes: changes
+    });
     } catch (error) {
       return formatError(error, 'update_project');
     }
   }
   
   // Execute with safe parameter passing
-  updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
+  return updateProject(${JSON.stringify(projectId)}, ${JSON.stringify(updates)});
   `;
 }
