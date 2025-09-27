@@ -870,18 +870,21 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - **Problem**: CI has been broken since cache warming introduction (commit 9d1677b) - Linux GitHub runners can't run OmniFocus operations
 - **Current Status**: ✅ Fixed CI with environment detection to disable cache warming in Linux environments
 - **Solution**: Set up dedicated Mac mini as self-hosted GitHub Actions runner for full OmniFocus integration testing
-- **Implementation**:
+- **Implementation Guide**: See [`docs/SELF_HOSTED_CI_MAC.md`](./SELF_HOSTED_CI_MAC.md) for complete setup instructions
+- **Key Components**:
   - Mac mini with OmniFocus 4 installed and automation permissions granted
-  - GitHub Actions self-hosted runner configuration
-  - Secure network setup for CI access
-  - Test matrix: Unit tests (Linux) + Integration tests (Mac mini) + Full tests (Mac mini with OmniFocus)
+  - GitHub Actions self-hosted runner with labels: `self-hosted`, `macos`, `omnifocus`
+  - Tailscale for secure remote access and management
+  - Dedicated `ci-runner` user account (non-admin) for security
+  - Manual workflow triggers to avoid untrusted PR execution
 - **Benefits**:
   - Full CI coverage including cache warming, permission checking, and actual OmniFocus operations
   - Real integration testing instead of simulation
   - Catch OmniFocus-specific issues before merging
   - Support for testing Mac-specific features and edge cases
-- **Dependencies**: Mac mini hardware, network setup, OmniFocus license
+- **Dependencies**: Mac mini hardware, Tailscale account, OmniFocus license, test database
 - **Validation**: CI pipeline runs all tests on both Linux (unit/lint/build) and macOS (full integration)
+- **Security**: Manual workflow dispatch only, test database isolation, non-admin runner user
 
 ### Research Spikes (Timeboxed 1-2 weeks each)
 
