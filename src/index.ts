@@ -67,8 +67,10 @@ async function runServer() {
   registerPrompts(server);
 
   // Warm cache with frequently accessed data (non-blocking)
+  // Disable cache warming in CI environments (Linux, no OmniFocus)
+  const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
   const cacheWarmer = new CacheWarmer(cacheManager, {
-    enabled: true,
+    enabled: !isCIEnvironment,
     timeout: 5000, // 5 second timeout to prevent startup delays
     categories: {
       projects: true,
@@ -85,9 +87,13 @@ async function runServer() {
   });
 
   // Warm cache in background - don't block server startup
-  cacheWarmer.warmCache().catch(error => {
-    logger.warn('Cache warming failed:', error);
-  });
+  if (isCIEnvironment) {
+    logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
+  } else {
+    cacheWarmer.warmCache().catch(error => {
+      logger.warn('Cache warming failed:', error);
+    });
+  }
 
   const transport = new StdioServerTransport();
 

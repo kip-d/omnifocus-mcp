@@ -345,6 +345,7 @@ logger.info('Tool execution started', {
 ### 📈 Infrastructure Improvements (Lower Priority)
 | Improvement | User Impact | Technical Complexity | Implementation Time |
 |------------|-------------|---------------------|-------------------|
+| **Mac mini CI Runner** | **High** | **Medium** | **1-2 days** |
 | Usage Analytics | Medium | Low | 2-4 hours |
 | Structured Logging | Medium | Low | 2-3 hours |
 
@@ -864,6 +865,23 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - **Files**: `src/tools/perspectives/PerspectivesToolV2.ts` with 5 new parameters and comprehensive output formatting
 - **Validation**: ✅ 18 unit tests passing, all enhanced features tested and working
 - **Impact**: Full perspective system access with human-readable output and performance optimization
+
+#### 9. Mac mini CI Runner Setup (1-2 days)
+- **Problem**: CI has been broken since cache warming introduction (commit 9d1677b) - Linux GitHub runners can't run OmniFocus operations
+- **Current Status**: ✅ Fixed CI with environment detection to disable cache warming in Linux environments
+- **Solution**: Set up dedicated Mac mini as self-hosted GitHub Actions runner for full OmniFocus integration testing
+- **Implementation**:
+  - Mac mini with OmniFocus 4 installed and automation permissions granted
+  - GitHub Actions self-hosted runner configuration
+  - Secure network setup for CI access
+  - Test matrix: Unit tests (Linux) + Integration tests (Mac mini) + Full tests (Mac mini with OmniFocus)
+- **Benefits**:
+  - Full CI coverage including cache warming, permission checking, and actual OmniFocus operations
+  - Real integration testing instead of simulation
+  - Catch OmniFocus-specific issues before merging
+  - Support for testing Mac-specific features and edge cases
+- **Dependencies**: Mac mini hardware, network setup, OmniFocus license
+- **Validation**: CI pipeline runs all tests on both Linux (unit/lint/build) and macOS (full integration)
 
 ### Research Spikes (Timeboxed 1-2 weeks each)
 
