@@ -52,7 +52,7 @@ export class CacheWarmer {
         projects: true,
         tags: true,
         tasks: true,
-        perspectives: false, // Lower priority, may be slow
+        perspectives: true, // Fast operation (~340ms), valuable with enhanced PerspectivesToolV2
         ...strategy.categories,
       },
       taskWarmingOptions: {
