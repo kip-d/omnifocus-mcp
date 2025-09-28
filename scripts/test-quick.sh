@@ -28,8 +28,8 @@ npm run test:integration > /dev/null || (echo -e "${RED}❌ Integration tests fa
 echo -e "${YELLOW}⏳ Core tools${NC}"
 node test-single-tool-proper.js tasks '{"mode":"today","limit":"3","details":"true"}' > /dev/null || (echo -e "${RED}❌ Tasks tool failed${NC}" && exit 1)
 
-# Real LLM - key improvement test
+# Real LLM - key improvement test (M2 MacBook Air: ~30-60s expected)
 echo -e "${YELLOW}⏳ Real LLM (overdue query)${NC}"
-env ENABLE_REAL_LLM_TESTS=true npx vitest tests/integration/real-llm-integration.test.ts --run --testTimeout=30000 -t "should understand.*overdue" --reporter=basic > /dev/null || (echo -e "${RED}❌ Real LLM test failed${NC}" && exit 1)
+env ENABLE_REAL_LLM_TESTS=true npx vitest tests/integration/real-llm-integration.test.ts --run --testTimeout=120000 -t "should understand.*overdue" --reporter=basic > /dev/null || (echo -e "${RED}❌ Real LLM test failed${NC}" && exit 1)
 
 echo -e "${GREEN}✅ Quick tests passed! Ready for development.${NC}"

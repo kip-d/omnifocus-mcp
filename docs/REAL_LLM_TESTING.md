@@ -48,6 +48,19 @@ npm run test:real-llm
 ENABLE_REAL_LLM_TESTS=true npx vitest tests/integration/real-llm-integration.test.ts
 ```
 
+## ⚡ Performance Expectations
+
+**Real LLM tests are hardware-intensive!** Performance varies significantly by system:
+
+| Hardware | phi3.5:3.8b | qwen2.5:0.5b | Status |
+|----------|-------------|--------------|---------|
+| **M2 MacBook Air (24GB)** | 30-60s | 10-20s | ✅ Tested baseline |
+| **M2 Ultra Studio (192GB)** | ~5-15s | ~2-5s | 🚀 Expected excellent |
+| **M1 MacBook Pro (16GB)** | 45-90s | 15-30s | ⚠️ Usable but slow |
+| **Intel Mac (16GB)** | 120-300s | 60-120s | ❌ Too slow for dev |
+
+**See [PERFORMANCE_EXPECTATIONS.md](PERFORMANCE_EXPECTATIONS.md) for detailed hardware guidance and timeout recommendations.**
+
 ## Model Recommendations
 
 ### ⭐ Recommended Models

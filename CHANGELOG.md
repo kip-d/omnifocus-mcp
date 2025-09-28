@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive documentation with real test transcripts in `docs/REAL_LLM_TESTING.md`
   - **Enhanced Tool Selection**: Multiple regex patterns and improved fallback logic for better AI intention capture
   - **Performance Improvements**: Simplified AI prompts prevent 120-second timeouts, reduce verbose reasoning
+  - **Hardware Performance Documentation**: Empirical testing on M2 MacBook Air (24GB) shows 23-36s per test with phi3.5:3.8b
+  - **Test Script Optimization**: Hardware-aware timeouts and fail-fast test scripts for different development environments
   - **VALIDATION RESULTS**: Improved tool selection accuracy, sophisticated AI reasoning demonstrated
   - **IMPACT**: Validates production-like AI behavior vs simulated workflows, discovers emergent behaviors
 

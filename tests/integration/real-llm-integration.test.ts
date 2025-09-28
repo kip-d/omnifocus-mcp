@@ -138,7 +138,7 @@ Important: When calling tools, use the exact parameter names and format specifie
 All string parameters should be properly quoted. Boolean values should be true/false.`;
   }
 
-  async askLLM(userQuery: string, model: string = 'phi3.5:3.8b'): Promise<{
+  async askLLM(userQuery: string, model: string = process.env.REAL_LLM_MODEL || 'phi3.5:3.8b'): Promise<{
     response: string;
     toolCalls: Array<{ tool: string; args: any; result: any }>;
     reasoning: string[];

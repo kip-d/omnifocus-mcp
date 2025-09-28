@@ -13,10 +13,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Test timing
-FAST_TIMEOUT=30000
-MEDIUM_TIMEOUT=45000
-SLOW_TIMEOUT=60000
+# Test timing (M2 MacBook Air 24GB baseline)
+FAST_TIMEOUT=60000    # qwen2.5:0.5b ~10-20s, buffer for safety
+MEDIUM_TIMEOUT=90000  # Mixed workloads
+SLOW_TIMEOUT=120000   # phi3.5:3.8b ~30-60s, buffer for safety
 
 echo -e "${BLUE}🧪 OmniFocus MCP Comprehensive Test Suite${NC}"
 echo "======================================="
