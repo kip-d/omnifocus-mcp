@@ -25,6 +25,8 @@
     "test:all": "npm run test && npm run test:integration",
     "test:quick": "vitest tests/unit --run --reporter=verbose",
     "test:quick:safe": "VITEST_SAFE=1 vitest tests/unit --run --reporter=verbose --exclude tests/unit/integration.test.ts --exclude tests/unit/test-data-management.test.ts",
+    "test:comprehensive": "./scripts/test-comprehensive.sh",
+    "test:dev": "./scripts/test-quick.sh",
     "cleanup:test-data": "node scripts/cleanup-test-data.js",
     "lint": "eslint src --ext .ts",
     "lint:strict": "eslint src --ext .ts --config .eslintrc.mcp.json",
