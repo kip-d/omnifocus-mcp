@@ -19,6 +19,7 @@
     "test": "vitest tests/unit",
     "test:integration": "node tests/integration/test-as-claude-desktop.js",
     "test:llm-simulation": "ENABLE_LLM_SIMULATION_TESTS=true vitest tests/integration/llm-assistant-simulation.test.ts --run",
+    "test:real-llm": "ENABLE_REAL_LLM_TESTS=true vitest tests/integration/real-llm-integration.test.ts --run",
     "test:performance": "vitest tests/performance --run",
     "test:coverage": "vitest tests/unit --coverage --run",
     "test:all": "npm run test && npm run test:integration",
@@ -30,6 +31,7 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
+    "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
     "ci:local": "./scripts/ci-local.sh"
   },
   "keywords": [
@@ -56,6 +58,7 @@
     "chai": "^5.2.0",
     "eslint": "^9.29.0",
     "globals": "^16.3.0",
+    "ollama": "^0.6.0",
     "tsx": "^4.20.4",
     "vitest": "^3.2.4",
     "zod-to-json-schema": "^3.23.3"

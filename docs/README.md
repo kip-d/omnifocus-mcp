@@ -26,6 +26,7 @@
 - **[jxa-test-utilities.js](jxa-test-utilities.js)** - Consolidated test utilities for API exploration
 - **[cucumber-testing-guide.md](cucumber-testing-guide.md)** - BDD testing approach
 - **[claude-desktop-test-checklist.md](claude-desktop-test-checklist.md)** - Testing checklist
+- **[REAL_LLM_TESTING.md](REAL_LLM_TESTING.md)** - Real AI testing with Ollama bridge
 
 ### Performance & Issues
 - **[PERFORMANCE_ISSUE.md](PERFORMANCE_ISSUE.md)** - Performance analysis and solutions
