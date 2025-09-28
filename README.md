@@ -178,9 +178,23 @@ See `/docs/TROUBLESHOOTING.md` for solutions.
 
 ## Documentation
 
-- `/docs/TOOLS.md` - Complete tool reference
-- `/docs/TROUBLESHOOTING.md` - Common issues and solutions
-- `/docs/PERMISSIONS.md` - macOS permissions setup
+### 📚 Core Documentation
+- **[`/docs/`](docs/)** - Complete reference guides and API documentation
+  - [`API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) - AI-optimized API reference
+  - [`TOOLS.md`](docs/TOOLS.md) - Complete tool reference with examples
+  - [`TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - Common issues and solutions
+  - [`PERMISSIONS.md`](docs/PERMISSIONS.md) - macOS permissions setup
+
+### 🧪 Testing & Utilities
+- **[`/scripts/`](scripts/)** - Utility scripts and testing tools
+- **[`/tests/`](tests/)** - Unit and integration test suites
+
+### 📋 Ready-to-Use Prompts
+- **[`/prompts/`](prompts/)** - Copy/paste prompts for testing and workflows
+- **[Built-in MCP Prompts](src/prompts/)** - Programmatic prompts (access via Claude "+" button)
+
+### 📦 Archive
+- **[`/.archive/`](.archive/)** - Historical files and development artifacts preserved for reference
 
 ## License
 
