@@ -1,5 +1,6 @@
 import { CacheEntry, CacheConfig, CacheCategory, CacheStats } from './types.js';
 import { createLogger } from '../utils/logger.js';
+import { createHash } from 'crypto';
 
 const logger = createLogger('cache');
 
@@ -10,6 +11,7 @@ export class CacheManager {
     misses: 0,
     evictions: 0,
     size: 0,
+    checksumFailures: 0,
   };
 
   private config: CacheConfig = {
@@ -30,6 +32,22 @@ export class CacheManager {
     setInterval(() => this.cleanup(), 60 * 1000); // Every minute
   }
 
+  /**
+   * Calculate SHA-256 checksum for data integrity validation
+   */
+  private calculateChecksum(data: unknown): string {
+    const serialized = JSON.stringify(data);
+    return createHash('sha256').update(serialized).digest('hex');
+  }
+
+  /**
+   * Validate data integrity using checksum
+   */
+  private validateChecksum(data: unknown, expectedChecksum: string): boolean {
+    const actualChecksum = this.calculateChecksum(data);
+    return actualChecksum === expectedChecksum;
+  }
+
   public get<T>(category: CacheCategory, key: string): T | null {
     const fullKey = `${category}:${key}`;
     const entry = this.cache.get(fullKey);
@@ -48,6 +66,15 @@ export class CacheManager {
       return null;
     }
 
+    // Validate data integrity if checksum is present
+    if (entry.checksum && !this.validateChecksum(entry.data, entry.checksum)) {
+      this.cache.delete(fullKey);
+      this.stats.checksumFailures++;
+      this.stats.misses++;
+      logger.warn(`Cache checksum validation failed for ${fullKey} - data may be corrupted`);
+      return null;
+    }
+
     this.stats.hits++;
     logger.debug(`Cache hit for ${fullKey}`);
     return entry.data as T;
@@ -57,15 +84,17 @@ export class CacheManager {
     const fullKey = `${category}:${key}`;
     const ttl = this.config[category].ttl;
     const expiresAt = Date.now() + ttl;
+    const checksum = this.calculateChecksum(data);
 
     this.cache.set(fullKey, {
       data,
       expiresAt,
       key: fullKey,
+      checksum,
     });
 
     this.stats.size = this.cache.size;
-    logger.debug(`Cache set for ${fullKey}, expires in ${ttl}ms`);
+    logger.debug(`Cache set for ${fullKey} with checksum ${checksum.substring(0, 8)}..., expires in ${ttl}ms`);
   }
 
   public invalidate(category?: CacheCategory, key?: string): void {
@@ -98,8 +127,14 @@ export class CacheManager {
     this.stats.size = this.cache.size;
   }
 
-  public getStats(): CacheStats {
-    return { ...this.stats };
+  public getStats(): CacheStats & { checksumFailureRate: number } {
+    const total = this.stats.hits + this.stats.misses;
+    const checksumFailureRate = total > 0 ? (this.stats.checksumFailures / total) * 100 : 0;
+
+    return {
+      ...this.stats,
+      checksumFailureRate: Math.round(checksumFailureRate * 100) / 100, // Round to 2 decimal places
+    };
   }
 
   public clear(category?: keyof CacheConfig): void {
@@ -210,5 +245,26 @@ export class CacheManager {
         this.invalidateTaskQueries(['today', 'upcoming', 'overdue']);
         break;
     }
+  }
+
+
+  /**
+   * Validate all cached entries and report corruption
+   */
+  public validateAllEntries(): { total: number; corrupted: number; details: string[] } {
+    const details: string[] = [];
+    let corrupted = 0;
+    let total = 0;
+
+    for (const [fullKey, entry] of this.cache) {
+      total++;
+      if (entry.checksum && !this.validateChecksum(entry.data, entry.checksum)) {
+        corrupted++;
+        details.push(`${fullKey}: checksum mismatch`);
+        logger.warn(`Cache validation found corrupted entry: ${fullKey}`);
+      }
+    }
+
+    return { total, corrupted, details };
   }
 }

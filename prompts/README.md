@@ -2,6 +2,11 @@
 
 This directory contains ready-to-use prompts for testing and using the OmniFocus MCP server with Claude Desktop.
 
+**📚 Related Documentation:**
+- **[Main README](../README.md)** - Installation, setup, and overview
+- **[Technical Prompts](../src/prompts/README.md)** - Programmatic prompt architecture
+- **[API Documentation](../docs/)** - Complete tool references and guides
+
 ## Available Prompts
 
 ### 🧪 Testing & Verification

@@ -176,12 +176,19 @@ describe('CacheManager', () => {
   describe('cache statistics', () => {
     it('should track hits and misses correctly', () => {
       const initialStats = cache.getStats();
-      expect(initialStats).toEqual({ hits: 0, misses: 0, evictions: 0, size: 0 });
-      
+      expect(initialStats).toEqual({
+        hits: 0,
+        misses: 0,
+        evictions: 0,
+        size: 0,
+        checksumFailures: 0,
+        checksumFailureRate: 0
+      });
+
       // Miss
       cache.get('tasks', 'nonexistent');
       expect(cache.getStats().misses).toBe(1);
-      
+
       // Set and hit
       cache.set('tasks', 'test', 'value');
       cache.get('tasks', 'test');
@@ -212,6 +219,33 @@ describe('CacheManager', () => {
       
       cache.invalidate('tasks', 'task1');
       expect(cache.getStats().size).toBe(1);
+    });
+
+    it('should validate data integrity with checksums', () => {
+      // Set some data
+      cache.set('tasks', 'test', { id: 1, name: 'Test Task' });
+
+      // Should work normally initially
+      const data = cache.get('tasks', 'test');
+      expect(data).toEqual({ id: 1, name: 'Test Task' });
+      expect(cache.getStats().hits).toBe(1);
+      expect(cache.getStats().checksumFailures).toBe(0);
+
+      // For this test, we can't easily simulate data corruption without
+      // accessing private methods, but we can verify the stats structure
+      expect(cache.getStats().checksumFailureRate).toBe(0);
+    });
+
+    it('should provide cache validation methods', () => {
+      // Set some test data
+      cache.set('tasks', 'task1', 'value1');
+      cache.set('projects', 'project1', 'value2');
+
+      // Validate all entries
+      const validation = cache.validateAllEntries();
+      expect(validation.total).toBe(2);
+      expect(validation.corrupted).toBe(0);
+      expect(validation.details).toEqual([]);
     });
   });
 

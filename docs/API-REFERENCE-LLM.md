@@ -2,6 +2,10 @@
 
 **15 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture**
 
+**📖 Related Resources:**
+- **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily GTD workflows
+- **[Main Documentation](../README.md)** - Installation, setup, and complete overview
+
 ## Task Operations (2 tools)
 
 **tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`

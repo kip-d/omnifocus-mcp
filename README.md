@@ -56,6 +56,11 @@ Nine pre-built prompts for common workflows:
 
 Access via Claude Desktop: "+" button → "Add from omnifocus"
 
+**📖 Comprehensive Documentation:**
+- **[User Prompts Guide](./prompts/README.md)** - Ready-to-use prompts for testing and daily workflows
+- **[Technical Prompts Reference](./src/prompts/README.md)** - Programmatic prompt architecture and development
+- **[Testing & Validation Prompts](./prompts/)** - Complete test suites and verification workflows
+
 ## Usage Examples
 
 ### Query Tasks

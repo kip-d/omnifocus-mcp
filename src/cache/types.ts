@@ -2,6 +2,7 @@ export interface CacheEntry<T> {
   data: T;
   expiresAt: number;
   key: string;
+  checksum?: string; // SHA-256 hash for data integrity validation
 }
 
 export interface CacheConfig {
@@ -20,4 +21,5 @@ export interface CacheStats {
   misses: number;
   evictions: number;
   size: number;
+  checksumFailures: number; // Count of checksum validation failures
 }

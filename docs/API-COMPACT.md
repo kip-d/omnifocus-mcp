@@ -1,5 +1,7 @@
 # OmniFocus MCP v2.1.0 (15 Tools - Ultra-Compact)
 
+**📖 More Resources:** [User Prompts & Workflows](../prompts/README.md) | [Full API Reference](./API-REFERENCE-LLM.md)
+
 ## Syntax: tool(req*,opt?:"default") []=array
 
 ### Tasks (2)

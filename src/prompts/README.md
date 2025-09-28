@@ -2,6 +2,11 @@
 
 This directory contains TypeScript-based prompt classes that are integrated directly into the OmniFocus MCP server. These prompts are available through the MCP protocol and can be called programmatically by Claude or other MCP clients.
 
+**📚 Related Documentation:**
+- **[Main README](../../README.md)** - Installation, setup, and overview
+- **[User Prompts Guide](../../prompts/README.md)** - Ready-to-use prompts and workflows
+- **[API Documentation](../../docs/)** - Tool references and implementation guides
+
 ## Architecture
 
 ### Prompt Structure
