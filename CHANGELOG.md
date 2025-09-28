@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚀 Recent Optimizations (September 27, 2025)
+
+#### Added
+- **Perspectives in Cache Warming** (commit e9619f0)
+  - Enabled perspectives caching by default in cache warming system
+  - Performance testing showed perspectives list completes in ~340ms (very fast)
+  - Eliminates cold start delays for enhanced PerspectivesToolV2 operations
+  - Fixed inconsistency where CHANGELOG claimed perspectives were cached but they were disabled
+  - **IMPACT**: Better user experience for perspective queries, leverages recent PerspectivesToolV2 enhancements
+
 ### 🎉 Major Foundation Improvements (September 2025)
 
 #### Added

@@ -840,11 +840,12 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - **Validation**: ✅ Unit tests verify payload shaping and performance optimization
 - **Impact**: Significant payload reduction and script-level optimization
 
-#### ✅ 5. Cache Warming System (1-2 hours → 4 hours) - COMPLETED
+#### ✅ 5. Cache Warming System (1-2 hours → 4 hours) - COMPLETED + OPTIMIZED
 - **Implementation**: Full `CacheWarmer` class pre-populating projects, tags, tasks, and perspectives
 - **Files**: `src/cache/CacheWarmer.ts`, integrated into server startup sequence
 - **Validation**: ✅ Integration tested, eliminates 1-3 second cold start delays
 - **Impact**: Eliminates cold start delays, improves first-query performance
+- **🚀 Sept 27 Optimization**: Enabled perspectives caching by default (~340ms, high value for enhanced PerspectivesToolV2)
 
 #### 6. Cross-reference Prompts Documentation (2 hours)
 - **Quick win**: Improve discoverability
