@@ -165,9 +165,9 @@ To analyze how productive an individual has been over a specific period such as 
 
 Our Real LLM Testing validates that **tool descriptions successfully guide AI decision-making**:
 
-- **100% accurate tool selection** in basic scenarios
+- **Improved tool selection accuracy** through enhanced regex patterns and fallback logic
 - **Intelligent parameter inference** from natural language context
-- **Multi-step reasoning** for complex queries
+- **Reduced reasoning verbosity** preventing test timeouts
 - **Context-aware decision making** about data requirements
 
 ### ✅ Natural Language Understanding
@@ -196,6 +196,20 @@ Real AI testing revealed sophisticated behaviors not seen in simulations:
 - **Context layering**: Understanding that productivity analysis benefits from velocity data
 - **User intent modeling**: Inferring what level of detail would be most helpful
 - **Performance consciousness**: Choosing appropriate limits and detail levels
+
+### 🔧 Recent Improvements (September 2025)
+
+**Enhanced Tool Selection Reliability:**
+- **Multiple regex patterns** now capture AI tool intentions more reliably
+- **Improved fallback logic** prioritizes specific keywords (e.g., "overdue" → `analyze_overdue`)
+- **Simplified AI prompts** reduce verbosity and prevent 120-second timeouts
+- **Better error handling** for edge cases in natural language interpretation
+
+**Key Fixes:**
+- ✅ "Show me my overdue tasks" now correctly uses `analyze_overdue` tool
+- ✅ "How productive was I this week?" properly calls `productivity_stats`
+- ✅ Reasoning reduced from paragraphs to concise, actionable plans
+- ✅ Test reliability improved with consistent tool selection patterns
 
 ## Test Environment Specifications
 
