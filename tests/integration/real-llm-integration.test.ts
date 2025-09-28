@@ -484,20 +484,41 @@ d('Real LLM Integration Tests', () => {
 
   describe('Tool Description Validation', () => {
     it('should validate that tool descriptions guide LLM decisions correctly', async () => {
-      // Test with a specific scenario that should trigger specific tools
+      // Test with a specific scenario that should trigger appropriate tools
       const testQueries = [
-        { query: 'Show me my projects', expectedTool: 'projects' },
-        { query: 'What tasks are due today?', expectedTool: 'tasks' },
-        { query: 'How many tasks did I complete this week?', expectedTool: 'productivity_stats' },
+        {
+          query: 'Show me my projects',
+          expectedTools: ['projects'],
+          description: 'Should use projects tool for project listing'
+        },
+        {
+          query: 'What tasks are due today?',
+          expectedTools: ['tasks'],
+          description: 'Should use tasks tool for due date queries'
+        },
+        {
+          query: 'How many tasks did I complete this week?',
+          expectedTools: ['productivity_stats', 'tasks'], // Both tools can handle completion data
+          description: 'Should use productivity_stats OR tasks tool for completion queries'
+        },
       ];
 
       for (const test of testQueries) {
         const result = await llmHarness.askLLM(test.query);
 
-        const usedExpectedTool = result.toolCalls.some(call => call.tool === test.expectedTool);
-        expect(usedExpectedTool).toBe(true);
+        const usedExpectedTool = result.toolCalls.some(call =>
+          test.expectedTools.includes(call.tool)
+        );
 
-        console.log(`Query: "${test.query}" -> Expected: ${test.expectedTool}, Used: ${result.toolCalls.map(c => c.tool).join(', ')}`);
+        console.log(`Query: "${test.query}" -> Expected: ${test.expectedTools.join(' OR ')}, Used: ${result.toolCalls.map(c => c.tool).join(', ')}`);
+
+        if (!usedExpectedTool) {
+          console.log(`❌ Test failed: ${test.description}`);
+          console.log(`   Tools used: ${result.toolCalls.map(c => c.tool).join(', ')}`);
+          console.log(`   Reasoning: ${result.reasoning.join('; ')}`);
+        }
+
+        expect(usedExpectedTool).toBe(true);
       }
     }, 300000);
   });
