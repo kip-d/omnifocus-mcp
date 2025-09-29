@@ -28,6 +28,10 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       set: vi.fn(),
       clear: vi.fn(),
       invalidate: vi.fn(),
+      invalidateProject: vi.fn(),
+      invalidateTag: vi.fn(),
+      invalidateForTaskChange: vi.fn(),
+      invalidateTaskQueries: vi.fn(),
     };
     
     mockOmniAutomation = {
@@ -101,7 +105,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       expect(result.success).toBe(true);
       expect(result.data.project.id).toBe('proj-123');
       expect(result.data.project.name).toBe('Test project');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects'); // Create still invalidates all projects
     });
 
     it('should create a complex project with all options', async () => {
@@ -176,7 +180,7 @@ describe('ProjectsToolV2 CRUD Operations', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.name).toBe('Updated Name');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-123');
     });
 
     it('should validate required parameters', async () => {
@@ -211,8 +215,8 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       expect(result.success).toBe(true);
       expect(result.data.project.id).toBe('proj-123');
       expect(result.data.project.tasksCompleted).toBe(5);
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-123');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
     it('should complete a project with all tasks', async () => {
@@ -254,8 +258,8 @@ describe('ProjectsToolV2 CRUD Operations', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.deleted).toBe(true);
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-123');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
     it('should handle permission denied and use URL scheme fallback', async () => {

@@ -111,10 +111,37 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
         );
       }
 
-      // Step 6: Invalidate cache after successful creations
+      // Step 6: Smart cache invalidation after successful batch creations
       if (resolver.getCreatedCount() > 0) {
-        this.cache.invalidate('tasks');
+        // Invalidate projects cache (batch may create/modify projects)
         this.cache.invalidate('projects');
+
+        // Collect unique project IDs and tags from created items
+        const projectIds = new Set<string>();
+        const tags = new Set<string>();
+
+        for (const item of args.items) {
+          if (item.type === 'project' && results.find(r => r.tempId === item.tempId)?.success) {
+            // Created project - invalidate its specific cache later
+            const realId = resolver.getRealId(item.tempId);
+            if (realId) projectIds.add(realId);
+          }
+          if (item.tags) {
+            item.tags.forEach(tag => tags.add(tag));
+          }
+        }
+
+        // Invalidate affected project caches
+        projectIds.forEach(id => this.cache.invalidateProject(id));
+
+        // Invalidate affected tag caches
+        tags.forEach(tag => this.cache.invalidateTag(tag));
+
+        // Invalidate task queries that might be affected
+        this.cache.invalidateTaskQueries(['today', 'inbox']);
+
+        // Always invalidate analytics
+        this.cache.invalidate('analytics');
       }
 
       // Step 7: Build response

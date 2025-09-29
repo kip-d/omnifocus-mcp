@@ -436,8 +436,8 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       );
     }
 
-    // Invalidate cache
-    this.cache.invalidate('projects');
+    // Smart cache invalidation - specific project update
+    this.cache.invalidateProject(args.projectId);
 
     const updated = result.data;
     return createSuccessResponseV2(
@@ -481,9 +481,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       );
     }
 
-    // Invalidate cache
-    this.cache.invalidate('projects');
-    this.cache.invalidate('tasks'); // Completing project affects tasks too
+    // Smart cache invalidation - completing project affects its tasks
+    this.cache.invalidateProject(args.projectId!);
+    this.cache.invalidate('analytics'); // Affects completion stats
 
     return createSuccessResponseV2(
       'projects',
@@ -523,9 +523,9 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       );
     }
 
-    // Invalidate cache
-    this.cache.invalidate('projects');
-    this.cache.invalidate('tasks');
+    // Smart cache invalidation - deleting project affects its tasks
+    this.cache.invalidateProject(args.projectId!);
+    this.cache.invalidate('analytics'); // Affects project stats
 
     return createSuccessResponseV2(
       'projects',

@@ -18,6 +18,10 @@ describe('ProjectsToolV2', () => {
       clear: vi.fn(),
       clearPattern: vi.fn(),
       invalidate: vi.fn(),
+      invalidateProject: vi.fn(),
+      invalidateTag: vi.fn(),
+      invalidateForTaskChange: vi.fn(),
+      invalidateTaskQueries: vi.fn(),
     } as any;
     
     tool = new ProjectsToolV2(mockCache);
@@ -246,7 +250,7 @@ describe('ProjectsToolV2', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.name).toBe('Updated Name');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
     });
 
     it('should validate required projectId for update', async () => {
@@ -301,7 +305,8 @@ describe('ProjectsToolV2', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.status).toBe('done');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
     it('should validate required projectId for complete', async () => {
@@ -337,7 +342,8 @@ describe('ProjectsToolV2', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.deleted).toBe(true);
-      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
     it('should validate required projectId for delete', async () => {

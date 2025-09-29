@@ -289,9 +289,14 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       // Parse result
       const parsedResult = result.data;
 
-      // Invalidate tag cache after modification
-      this.cache.invalidate('tags');
-      this.cache.invalidate('tasks'); // Tasks cache may be affected by tag changes
+      // Smart cache invalidation for tag changes
+      this.cache.invalidateTag(tagName);
+      if (action === 'rename' && newName) {
+        this.cache.invalidateTag(newName); // Also invalidate new tag name
+      }
+      if (action === 'merge' && targetTag) {
+        this.cache.invalidateTag(targetTag); // Invalidate merge target too
+      }
 
       return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
 

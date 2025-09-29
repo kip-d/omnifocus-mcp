@@ -28,6 +28,10 @@ describe('TagsToolV2', () => {
       set: vi.fn(),
       clear: vi.fn(),
       invalidate: vi.fn(),
+      invalidateProject: vi.fn(),
+      invalidateTag: vi.fn(),
+      invalidateForTaskChange: vi.fn(),
+      invalidateTaskQueries: vi.fn(),
     };
     
     mockOmniAutomation = {
@@ -154,8 +158,7 @@ describe('TagsToolV2', () => {
       expect(result.success).toBe(true);
       expect(result.data.action).toBe('create');
       expect(result.data.tagName).toBe('NewTag');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('tags');
-      expect(mockCache.invalidate).toHaveBeenCalledWith('tasks');
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('NewTag');
     });
 
     it('should rename a tag', async () => {
