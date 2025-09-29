@@ -436,16 +436,19 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
           if (task.dueDate) {
             const dueDate = new Date(task.dueDate);
             const today = new Date();
+            today.setHours(0, 0, 0, 0); // Start of today
             const tomorrow = new Date(today);
             tomorrow.setDate(today.getDate() + 1);
+            const dueDateStart = new Date(dueDate);
+            dueDateStart.setHours(0, 0, 0, 0); // Start of due date
 
-            if (dueDate < today) {
+            if (dueDateStart.getTime() < today.getTime()) {
               groupKey = 'overdue';
               groupTitle = '⚠️ Overdue';
-            } else if (dueDate.toDateString() === today.toDateString()) {
+            } else if (dueDateStart.getTime() === today.getTime()) {
               groupKey = 'today';
               groupTitle = '📅 Today';
-            } else if (dueDate.toDateString() === tomorrow.toDateString()) {
+            } else if (dueDateStart.getTime() === tomorrow.getTime()) {
               groupKey = 'tomorrow';
               groupTitle = '📅 Tomorrow';
             } else {
