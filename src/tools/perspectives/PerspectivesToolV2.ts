@@ -509,10 +509,12 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
     // Calculate overdue tasks
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
     const overdueTasks = tasks.filter(t => {
       if (!t.dueDate || t.completed) return false;
       const dueDate = new Date(t.dueDate);
-      return dueDate < today;
+      dueDate.setHours(0, 0, 0, 0); // Start of due date
+      return dueDate.getTime() < today.getTime();
     }).length;
 
     return {

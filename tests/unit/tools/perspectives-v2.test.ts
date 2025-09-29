@@ -189,7 +189,11 @@ describe('PerspectivesToolV2', () => {
           name: 'Important meeting',
           flagged: true,
           completed: false,
-          dueDate: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+          dueDate: (() => {
+            const today = new Date();
+            today.setHours(14, 0, 0, 0); // 2 PM today (guaranteed to be today)
+            return today.toISOString();
+          })(),
           deferDate: null,
           project: 'Work Project',
           projectId: 'proj1',
@@ -213,7 +217,12 @@ describe('PerspectivesToolV2', () => {
           name: 'Review report',
           flagged: false,
           completed: false,
-          dueDate: new Date(Date.now() - 86400000).toISOString(), // Yesterday (overdue)
+          dueDate: (() => {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(14, 0, 0, 0); // 2 PM yesterday (guaranteed overdue)
+            return yesterday.toISOString();
+          })(),
           deferDate: null,
           project: 'Work Project',
           projectId: 'proj1',
