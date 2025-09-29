@@ -11,7 +11,7 @@ class FakeServer {
 }
 
 describe('tools/index registerTools', () => {
-  it('registers list and call handlers and exposes 15 tools', async () => {
+  it('registers list and call handlers and exposes 16 tools', async () => {
     const server = new FakeServer() as any;
     const cache = new CacheManager();
 
@@ -22,11 +22,12 @@ describe('tools/index registerTools', () => {
     expect(listHandler).toBeTypeOf('function');
     const list = await listHandler({});
     expect(Array.isArray(list.tools)).toBe(true);
-    expect(list.tools.length).toBe(15);
+    expect(list.tools.length).toBe(16);
     const names = list.tools.map((t: any) => t.name);
     expect(names).toContain('system');
     expect(names).toContain('tasks');
     expect(names).toContain('manage_task');
+    expect(names).toContain('batch_create');
 
     // Call unknown tool → McpError
     const callHandler = server.handlers.get(CallToolRequestSchema) as Function;
