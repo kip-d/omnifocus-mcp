@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "omnifocus": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "/Users/kip/src/omnifocus-mcp"
+    }
+  }
+}

@@ -14,6 +14,9 @@ import {
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
 import { ManageTaskTool } from './tasks/ManageTaskTool.js';
 
+// Batch operations
+import { BatchCreateTool } from './batch/BatchCreateTool.js';
+
 // Project operations - Already consolidated
 import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
 
@@ -69,13 +72,16 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
 }
 
 export function registerTools(server: Server, cache: CacheManager): void {
-  logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (15 tools, reduced from 22)');
+  logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (16 tools, reduced from 22)');
 
   // All tools are now consolidated for optimal LLM usage
   const tools: Tool[] = [
     // Task operations (2 tools)
     new QueryTasksToolV2(cache),        // 'tasks' - Query/search tasks
     new ManageTaskTool(cache),          // 'manage_task' - Create/update/complete/delete tasks
+
+    // Batch operations (1 tool)
+    new BatchCreateTool(cache),         // 'batch_create' - Create multiple projects/tasks with hierarchies
 
     // Project operations (1 tool)
     new ProjectsToolV2(cache),           // 'projects' - All project operations

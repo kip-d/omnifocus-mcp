@@ -73,7 +73,7 @@ Nine pre-built prompts for common workflows:
 **📚 Prompt Documentation:**
 - **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing and workflows
 - **[Programmatic Prompts](src/prompts/README.md)** - Built-in MCP prompts (TypeScript-based)
-- **[Prompt Discovery CLI](#)** - Coming soon: `npm run prompts:list` command
+- **[Prompt Discovery CLI](docs/PROMPT_DISCOVERY.md)** - `npm run prompts:list` command for unified prompt discovery
 
 ### Two Ways to Use Prompts
 

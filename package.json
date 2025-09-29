@@ -34,6 +34,7 @@
     "typecheck": "tsc --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
     "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
+    "prompts:list": "npx tsx scripts/list-prompts.ts",
     "ci:local": "./scripts/ci-local.sh"
   },
   "keywords": [

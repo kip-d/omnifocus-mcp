@@ -35,7 +35,7 @@ This directory contains TypeScript-based prompt classes that are integrated dire
 | `eisenhower_matrix_inbox` | Prioritize by urgency/importance | "Use the eisenhower_matrix_inbox prompt" |
 | `quick_reference` | Essential commands | "Use the quick_reference prompt" |
 
-**🚀 Coming Soon:** `npm run prompts:list` CLI command for prompt discovery
+**🎉 Available Now:** [`npm run prompts:list`](../../docs/PROMPT_DISCOVERY.md) CLI command for prompt discovery
 
 #### GTD Workflow Prompts (`gtd/`)
 - **`gtd_principles`** (`GTDPrinciplesPrompt.ts`) - Core GTD methodology and principles guide
@@ -139,4 +139,4 @@ Potential improvements identified in the **[Improvement Roadmap](../../docs/IMPR
 - **Dynamic prompt composition** - Combine multiple prompts for complex scenarios
 - **Usage analytics** - Track which prompts are most valuable
 
-**⚙️ Next Up:** The prompt discovery CLI tool is currently planned for implementation to bridge the gap between manual and programmatic approaches.
+**✅ Implemented:** The [`npm run prompts:list`](../../docs/PROMPT_DISCOVERY.md) CLI tool bridges the gap between manual and programmatic approaches with unified discovery, validation, and multiple output formats.
