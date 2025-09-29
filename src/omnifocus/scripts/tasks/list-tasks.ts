@@ -33,8 +33,11 @@ export const LIST_TASKS_SCRIPT = `
     const tasks = [];
     const tagBridgeCache = Object.create(null);
 
-    // Check if we should skip recurring analysis (default to false for backwards compatibility)
-    const skipRecurringAnalysis = filter.skipAnalysis === true;
+    // Check if we should skip recurring analysis
+    // Uses filter.skipAnalysis if provided, otherwise uses HELPER_CONFIG.skipAnalysis
+    const skipRecurringAnalysis = filter.skipAnalysis !== undefined
+      ? filter.skipAnalysis
+      : (typeof HELPER_CONFIG !== 'undefined' ? HELPER_CONFIG.skipAnalysis : true);
 
     // Field selection helper
     function shouldIncludeField(fieldName) {

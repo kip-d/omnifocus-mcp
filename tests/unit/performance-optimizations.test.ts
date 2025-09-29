@@ -6,7 +6,9 @@ describe('Performance Optimization Tests', () => {
   describe('list_tasks skipAnalysis parameter', () => {
     it('should include skipAnalysis parameter in script', () => {
       expect(LIST_TASKS_SCRIPT).toContain('filter.skipAnalysis');
-      expect(LIST_TASKS_SCRIPT).toContain('const skipRecurringAnalysis = filter.skipAnalysis === true');
+      // New context-aware implementation checks filter then falls back to HELPER_CONFIG
+      expect(LIST_TASKS_SCRIPT).toContain('filter.skipAnalysis');
+      expect(LIST_TASKS_SCRIPT).toContain('HELPER_CONFIG');
     });
 
     it('should skip recurring task analysis when skipAnalysis is true', () => {

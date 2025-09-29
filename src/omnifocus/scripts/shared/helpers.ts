@@ -4,6 +4,7 @@
  */
 
 import { REPEAT_HELPERS } from './repeat-helpers.js';
+import { HelperContext, generateHelperConfig } from './helper-context.js';
 
 export const SAFE_UTILITIES = `
   // Safe utility functions for OmniFocus automation
@@ -438,9 +439,11 @@ export const ERROR_HANDLING = `
 
 /**
  * Get all helpers combined
+ * @param context Configuration options for helper behavior
  */
-export function getAllHelpers(): string {
+export function getAllHelpers(context?: HelperContext): string {
   return [
+    generateHelperConfig(context),
     SAFE_UTILITIES,
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
@@ -451,9 +454,11 @@ export function getAllHelpers(): string {
 
 /**
  * Get all helpers with bridge support
+ * @param context Configuration options for helper behavior
  */
-export function getAllHelpersWithBridge(): string {
+export function getAllHelpersWithBridge(context?: HelperContext): string {
   return [
+    generateHelperConfig(context),
     SAFE_UTILITIES,
     PROJECT_VALIDATION,
     TASK_SERIALIZATION,
@@ -466,9 +471,13 @@ export function getAllHelpersWithBridge(): string {
 /**
  * CORE HELPERS: Essential functions used by almost every script (~50 lines)
  * Basic error handling and safe getters
+ * @param context Configuration options for helper behavior
  */
-export function getCoreHelpers(): string {
+export function getCoreHelpers(context?: HelperContext): string {
+  const config = generateHelperConfig(context);
   return `
+  ${config}
+
   // Core safe utility functions for OmniFocus automation
   function safeGet(getter, defaultValue = null) {
     try {
@@ -841,8 +850,8 @@ export function getTaskStatusHelpers(): string {
  * Get minimal helpers for scripts that need smaller payloads
  * Only includes the most essential utility functions
  */
-export function getMinimalHelpers(): string {
-  return getCoreHelpers();
+export function getMinimalHelpers(context?: HelperContext): string {
+  return `${generateHelperConfig(context)}\n${getCoreHelpers(context)}`;
 }
 
 /**
@@ -903,9 +912,10 @@ export function getListHelpers(): string {
  * For scripts that need complex task status analysis (blocked/available/next)
  * Uses direct API methods for 40-80% performance improvement in status checks
  */
-export function getFullStatusHelpers(): string {
+export function getFullStatusHelpers(context?: HelperContext): string {
   return [
-    getCoreHelpers(),
+    generateHelperConfig(context),
+    getCoreHelpers(context),
     getDateHelpers(),
     getTaskHelpers(),
     getProjectHelpers(),
@@ -918,9 +928,10 @@ export function getFullStatusHelpers(): string {
  * Recurrence helpers: Basic + repeat logic (~330 lines)
  * For scripts dealing with recurring tasks
  */
-export function getRecurrenceHelpers(): string {
+export function getRecurrenceHelpers(context?: HelperContext): string {
   return [
-    getCoreHelpers(),
+    generateHelperConfig(context),
+    getCoreHelpers(context),
     getDateHelpers(),
     getTaskHelpers(),
     REPEAT_HELPERS,
@@ -932,9 +943,13 @@ export function getRecurrenceHelpers(): string {
  * Includes: convertToRRULE, convertToOmniMethod, prepareRepetitionRuleData,
  *           applyRepetitionRuleViaBridge, applyDeferAnother
  * Excludes heavy repeat rule extraction/analysis to keep scripts small.
+ * @param context Configuration options for helper behavior
  */
-export function getRecurrenceApplyHelpers(): string {
+export function getRecurrenceApplyHelpers(context?: HelperContext): string {
+  const config = generateHelperConfig(context);
   return `
+  ${config}
+
   function convertToRRULE(rule) {
     if (!rule || !rule.unit || !rule.steps) return '';
     const u = rule.unit;
