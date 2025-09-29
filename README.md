@@ -15,6 +15,23 @@ A Model Context Protocol (MCP) server that provides programmatic access to OmniF
 - **Data Export**: Export data in JSON, CSV, or Markdown formats
 - **Performance**: Optimized queries handle 2000+ tasks in under 1 second
 
+## 🧭 Navigation Guide
+
+**For New Users:**
+1. **[Quick Start](#quick-start)** - Installation and setup
+2. **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing
+3. **[Built-in Prompts](#built-in-prompts)** - Overview of available workflows
+
+**For Advanced Users:**
+- **[Programmatic Prompts](src/prompts/README.md)** - TypeScript-based MCP prompts
+- **[API Documentation](docs/API-REFERENCE-LLM.md)** - Complete tool reference
+- **[Performance Benchmarks](docs/PERFORMANCE_EXPECTATIONS.md)** - Hardware requirements
+
+**For Developers:**
+- **[Architecture Documentation](docs/ARCHITECTURE.md)** - Technical implementation
+- **[Testing Framework](docs/REAL_LLM_TESTING.md)** - AI model integration
+- **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Future enhancements
+
 ## Quick Start
 
 ### Prerequisites
@@ -52,6 +69,18 @@ For AI assistants and developers:
 
 Nine pre-built prompts for common workflows:
 - **GTD Workflows**: Inbox processing, weekly review, methodology guide
+
+**📚 Prompt Documentation:**
+- **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing and workflows
+- **[Programmatic Prompts](src/prompts/README.md)** - Built-in MCP prompts (TypeScript-based)
+- **[Prompt Discovery CLI](#)** - Coming soon: `npm run prompts:list` command
+
+### Two Ways to Use Prompts
+
+| Approach | Best For | Usage |
+|----------|----------|-------|
+| **Manual Templates** ([`/prompts/`](prompts/)) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
+| **MCP Prompts** ([`/src/prompts/`](src/prompts/)) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
 - **Reference Guides**: Quick reference, troubleshooting, best practices
 
 Access via Claude Desktop: "+" button → "Add from omnifocus"
@@ -190,8 +219,9 @@ See `/docs/TROUBLESHOOTING.md` for solutions.
 - **[`/tests/`](tests/)** - Unit and integration test suites
 
 ### 📋 Ready-to-Use Prompts
-- **[`/prompts/`](prompts/)** - Copy/paste prompts for testing and workflows
-- **[Built-in MCP Prompts](src/prompts/)** - Programmatic prompts (access via Claude "+" button)
+- **[Manual Templates (`/prompts/`)](prompts/README.md)** - Copy/paste prompts for testing and workflows
+- **[Programmatic MCP Prompts (`/src/prompts/`)](src/prompts/README.md)** - Built-in prompts (access via Claude "+" button or natural language)
+- **[Cross-Reference Guide](#built-in-prompts)** - Compare manual vs programmatic approaches
 
 ### 📦 Archive
 - **[`/.archive/`](.archive/)** - Historical files and development artifacts preserved for reference

@@ -4,8 +4,10 @@ This directory contains TypeScript-based prompt classes that are integrated dire
 
 **📚 Related Documentation:**
 - **[Main README](../../README.md)** - Installation, setup, and overview
-- **[User Prompts Guide](../../prompts/README.md)** - Ready-to-use prompts and workflows
+- **[Manual Templates](../../prompts/README.md)** - Copy/paste prompts for testing and workflows
 - **[API Documentation](../../docs/)** - Tool references and implementation guides
+- **[Improvement Roadmap](../../docs/IMPROVEMENT_ROADMAP.md)** - Future enhancements including prompt discovery CLI
+- **[Real LLM Testing](../../docs/REAL_LLM_TESTING.md)** - How to test prompts with actual AI models
 
 ## Architecture
 
@@ -15,6 +17,25 @@ This directory contains TypeScript-based prompt classes that are integrated dire
 - **Categories**: Organized by functionality (GTD workflows, reference materials)
 
 ### Available Prompts
+
+#### 🔍 Quick Discovery
+
+**All MCP prompts can be accessed by asking Claude:**
+```
+"Use the [prompt_name] prompt"
+"Show me the [prompt_name] prompt"
+"List available prompts"
+```
+
+| Prompt Name | Purpose | Usage Example |
+|-------------|---------|---------------|
+| `gtd_principles` | Learn GTD methodology | "Show me the gtd_principles prompt" |
+| `gtd_weekly_review` | Complete weekly review | "Use the gtd_weekly_review prompt" |
+| `gtd_process_inbox` | Process inbox items | "Use the gtd_process_inbox prompt" |
+| `eisenhower_matrix_inbox` | Prioritize by urgency/importance | "Use the eisenhower_matrix_inbox prompt" |
+| `quick_reference` | Essential commands | "Use the quick_reference prompt" |
+
+**🚀 Coming Soon:** `npm run prompts:list` CLI command for prompt discovery
 
 #### GTD Workflow Prompts (`gtd/`)
 - **`gtd_principles`** (`GTDPrinciplesPrompt.ts`) - Core GTD methodology and principles guide
@@ -69,18 +90,19 @@ export class MyCustomPrompt extends BasePrompt {
 
 ## 🔗 Manual Template Alternatives
 
-For users who prefer copy/paste templates or need offline access, see the **[`/prompts/` directory](../../prompts/)** which contains:
+For users who prefer copy/paste templates or need offline access, see the **[Manual Templates Documentation](../../prompts/README.md)** which contains:
 
-- **Manual Templates**: Ready-to-copy Markdown files
-- **Testing Prompts**: Comprehensive validation workflows
-- **Daily Use Templates**: GTD workflows and productivity patterns
+- **[Manual Templates](../../prompts/)**: Ready-to-copy Markdown files
+- **[Testing Prompts](../../prompts/test-v2-comprehensive.md)**: Comprehensive validation workflows
+- **[Daily Use Templates](../../prompts/daily-gtd-workflow.md)**: GTD workflows and productivity patterns
+- **[Feature Testing](../../prompts/v2-features-test.md)**: V2-specific functionality validation
 
 ### Choosing Between Approaches
 
 | Approach | Best For | Usage |
 |----------|----------|-------|
-| **MCP Prompts** (this directory) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
-| **Manual Templates** (`/prompts/`) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
+| **[MCP Prompts](.)** (this directory) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
+| **[Manual Templates](../../prompts/)** (copy/paste) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
 
 Both approaches:
 - Use the same underlying V2 tools
@@ -111,8 +133,10 @@ Prompt functionality is tested through:
 
 ## Future Enhancements
 
-Potential improvements identified in the roadmap:
-- **Prompt discovery CLI** - List available MCP prompts via command line
+Potential improvements identified in the **[Improvement Roadmap](../../docs/IMPROVEMENT_ROADMAP.md)**:
+- **[Prompt discovery CLI](../../docs/IMPROVEMENT_ROADMAP.md#prompt-discovery-cli-tool)** - List available MCP prompts via command line (`npm run prompts:list`)
 - **Template generation** - Auto-generate manual templates from TypeScript prompts
 - **Dynamic prompt composition** - Combine multiple prompts for complex scenarios
 - **Usage analytics** - Track which prompts are most valuable
+
+**⚙️ Next Up:** The prompt discovery CLI tool is currently planned for implementation to bridge the gap between manual and programmatic approaches.

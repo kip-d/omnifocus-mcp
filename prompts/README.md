@@ -4,10 +4,30 @@ This directory contains ready-to-use prompts for testing and using the OmniFocus
 
 **📚 Related Documentation:**
 - **[Main README](../README.md)** - Installation, setup, and overview
-- **[Technical Prompts](../src/prompts/README.md)** - Programmatic prompt architecture
+- **[Programmatic Prompts](../src/prompts/README.md)** - Built-in MCP prompts (TypeScript-based)
 - **[API Documentation](../docs/)** - Complete tool references and guides
+- **[Performance Docs](../docs/PERFORMANCE_EXPECTATIONS.md)** - Hardware requirements and benchmarks
+- **[Real LLM Testing](../docs/REAL_LLM_TESTING.md)** - AI model integration and testing
 
 ## Available Prompts
+
+### 🔍 Quick Discovery
+
+**Need help choosing? Here's a quick guide:**
+
+| I want to... | Use This Prompt | Type |
+|--------------|----------------|------|
+| Test if everything works | [test-v2-comprehensive.md](./test-v2-comprehensive.md) | Manual Template |
+| Check V2 new features | [v2-features-test.md](./v2-features-test.md) | Manual Template |
+| Start daily GTD routine | [daily-gtd-workflow.md](./daily-gtd-workflow.md) | Manual Template |
+| Do a weekly review | Ask Claude: "Use the gtd_weekly_review prompt" | MCP Prompt |
+| Process my inbox | Ask Claude: "Use the gtd_process_inbox prompt" | MCP Prompt |
+| Learn GTD principles | Ask Claude: "Show me the gtd_principles prompt" | MCP Prompt |
+| Get quick commands reference | Ask Claude: "Use the quick_reference prompt" | MCP Prompt |
+
+**🆚 Manual Templates vs MCP Prompts:**
+- **Manual Templates** (below): Copy/paste entire content → More customizable
+- **[MCP Prompts](../src/prompts/)**: Ask Claude to use them → More integrated
 
 ### 🧪 Testing & Verification
 
@@ -105,7 +125,9 @@ When creating your own prompts:
 
 ## 🔗 MCP Programmatic Prompts
 
-In addition to these manual copy/paste templates, the OmniFocus MCP server includes **built-in programmatic prompts** that you can call directly through the MCP protocol.
+In addition to these manual copy/paste templates, the OmniFocus MCP server includes **[built-in programmatic prompts](../src/prompts/README.md)** that you can call directly through the MCP protocol.
+
+**➡️ See the [Programmatic Prompts Documentation](../src/prompts/README.md) for complete technical details.**
 
 ### Available MCP Prompts
 
@@ -133,8 +155,8 @@ You can access these prompts by asking Claude to "use the [prompt_name] prompt":
 
 | Approach | Best For | Usage |
 |----------|----------|-------|
-| **Manual Templates** (this directory) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
-| **MCP Prompts** (`src/prompts/`) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
+| **[Manual Templates](.)** (this directory) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
+| **[MCP Prompts](../src/prompts/)** (programmatic) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
 
 Both approaches use the same underlying V2 tools and provide similar functionality through different interfaces.
 
