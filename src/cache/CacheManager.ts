@@ -247,6 +247,102 @@ export class CacheManager {
     }
   }
 
+  /**
+   * Smart invalidation: Invalidate only cache entries affected by a specific project
+   * @param projectId The project ID that was modified
+   */
+  public invalidateProject(projectId: string): void {
+    let count = 0;
+    for (const [cacheKey] of this.cache) {
+      // Invalidate:
+      // - Specific project queries: tasks:project:abc123
+      // - Project list queries that might include this project
+      // - Task queries that filter by this project
+      if (
+        cacheKey.startsWith('tasks:') && cacheKey.includes(`project:${projectId}`) ||
+        cacheKey.startsWith('tasks:') && cacheKey.includes(`projectId:${projectId}`) ||
+        cacheKey.startsWith('projects:') ||  // Project lists need refresh
+        cacheKey === `projects:${projectId}`  // Specific project cache
+      ) {
+        this.cache.delete(cacheKey);
+        count++;
+      }
+    }
+
+    this.stats.evictions += count;
+    this.stats.size = this.cache.size;
+    logger.debug(`Invalidated ${count} cache entries for project ${projectId}`);
+  }
+
+  /**
+   * Smart invalidation: Invalidate only cache entries affected by a specific tag
+   * @param tagName The tag name that was modified
+   */
+  public invalidateTag(tagName: string): void {
+    let count = 0;
+    for (const [cacheKey] of this.cache) {
+      // Invalidate:
+      // - Tag queries: tags:*
+      // - Task queries filtered by this tag: tasks:tag:work
+      if (
+        cacheKey.startsWith('tags:') ||
+        (cacheKey.startsWith('tasks:') && cacheKey.includes(`tag:${tagName}`)) ||
+        (cacheKey.startsWith('tasks:') && cacheKey.includes(`tags:${tagName}`))
+      ) {
+        this.cache.delete(cacheKey);
+        count++;
+      }
+    }
+
+    this.stats.evictions += count;
+    this.stats.size = this.cache.size;
+    logger.debug(`Invalidated ${count} cache entries for tag ${tagName}`);
+  }
+
+  /**
+   * Smart invalidation: Invalidate based on what changed in a task operation
+   * @param context Information about what changed
+   */
+  public invalidateForTaskChange(context: {
+    operation: 'create' | 'update' | 'complete' | 'delete';
+    projectId?: string;
+    tags?: string[];
+    affectsToday?: boolean;
+    affectsOverdue?: boolean;
+  }): void {
+    const patterns: ('today' | 'overdue' | 'upcoming' | 'inbox' | 'all')[] = [];
+
+    // Determine which query patterns are affected
+    if (context.affectsToday) patterns.push('today');
+    if (context.affectsOverdue) patterns.push('overdue');
+    if (context.operation === 'create' && !context.projectId) patterns.push('inbox');
+
+    // For updates/deletes, we need to be more conservative
+    if (context.operation === 'update' || context.operation === 'delete') {
+      patterns.push('upcoming'); // Might affect upcoming queries
+    }
+
+    // Invalidate affected task queries
+    if (patterns.length > 0) {
+      this.invalidateTaskQueries(patterns);
+    }
+
+    // Invalidate project-specific caches
+    if (context.projectId) {
+      this.invalidateProject(context.projectId);
+    }
+
+    // Invalidate tag-specific caches
+    if (context.tags && context.tags.length > 0) {
+      context.tags.forEach(tag => this.invalidateTag(tag));
+    }
+
+    // Always invalidate analytics for any task change
+    this.invalidate('analytics');
+
+    logger.debug(`Smart invalidation for ${context.operation}: ${patterns.length} patterns, project: ${context.projectId}, tags: ${context.tags?.length || 0}`);
+  }
+
 
   /**
    * Validate all cached entries and report corruption

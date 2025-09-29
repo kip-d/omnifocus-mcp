@@ -354,11 +354,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             }
           }
 
-          // Invalidate caches after successful task creation
-          this.cache.invalidate('tasks');
-          this.cache.invalidate('analytics');
-          if (createArgs.projectId !== undefined) this.cache.invalidate('projects');
-          if (Array.isArray(createArgs.tags) && createArgs.tags.length > 0) this.cache.invalidate('tags');
+          // Smart cache invalidation after successful task creation
+          this.cache.invalidateForTaskChange({
+            operation: 'create',
+            projectId: createArgs.projectId,
+            tags: Array.isArray(createArgs.tags) ? createArgs.tags : undefined,
+            affectsToday: createArgs.dueDate ? this.isDueToday(createArgs.dueDate) : false,
+            affectsOverdue: false, // New tasks can't be overdue
+          });
 
           console.error('[MANAGE_TASK_DEBUG] About to return success response with parsedResult:', JSON.stringify(parsedCreateResult, null, 2));
 
@@ -463,15 +466,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           }
           const parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
 
-          // Invalidate caches after successful update
-          this.cache.invalidate('tasks');
-          // Invalidate analytics when dates/flags may affect summaries
-          if (safeUpdates.dueDate !== undefined || safeUpdates.deferDate !== undefined || safeUpdates.clearDueDate || safeUpdates.clearDeferDate || safeUpdates.flagged !== undefined) {
-            this.cache.invalidate('analytics');
-          }
-          // Invalidate related collections when relationships changed
-          if (safeUpdates.projectId !== undefined) this.cache.invalidate('projects');
-          if (safeUpdates.tags !== undefined) this.cache.invalidate('tags');
+          // Smart cache invalidation after successful update
+          this.cache.invalidateForTaskChange({
+            operation: 'update',
+            projectId: typeof safeUpdates.projectId === 'string' ? safeUpdates.projectId : undefined,
+            tags: Array.isArray(safeUpdates.tags) ? safeUpdates.tags : undefined,
+            affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueToday(safeUpdates.dueDate) : false,
+            affectsOverdue: false, // Updates don't automatically make things overdue
+          });
 
           this.logger.info(`Updated task: ${taskId}`);
 
@@ -557,9 +559,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
             const parsedCompleteResult = (completeResult as { data?: unknown }).data;
 
-            // Invalidate cache after successful completion
-            this.cache.invalidate('tasks');
-            this.cache.invalidate('analytics');
+            // Smart cache invalidation after task completion
+            this.cache.invalidateForTaskChange({
+              operation: 'complete',
+              affectsToday: true, // Completing tasks affects today's view
+              affectsOverdue: true, // And overdue view
+            });
 
             result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, { ...timer.toMetadata(), completed_id: taskId, method: 'jxa', input_params: { taskId: taskId } });
           } catch (jxaError: unknown) {
@@ -608,9 +613,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
             const parsedDeleteResult = (deleteResult as { data?: unknown }).data;
 
-            // Invalidate caches after successful deletion
-            this.cache.invalidate('tasks');
-            this.cache.invalidate('analytics');
+            // Smart cache invalidation after task deletion
+            // Note: We don't know the task's details, so be conservative
+            this.cache.invalidateForTaskChange({
+              operation: 'delete',
+              affectsToday: true,
+              affectsOverdue: true,
+            });
+            // Also invalidate projects and tags since we don't know which were affected
             this.cache.invalidate('projects');
             this.cache.invalidate('tags');
 
@@ -659,6 +669,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
       const errorResult = this.handleError(error);
       console.error('[MANAGE_TASK_DEBUG] Error result:', JSON.stringify(errorResult, null, 2));
       return this.formatForCLI(errorResult, operation, 'error');
+    }
+  }
+
+  /**
+   * Check if a date is due today (within next 3 days as per OmniFocus "today" perspective)
+   */
+  private isDueToday(dueDateStr: string): boolean {
+    try {
+      const dueDate = new Date(dueDateStr);
+      const now = new Date();
+      const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
+      return dueDate <= threeDaysFromNow;
+    } catch {
+      return false;
     }
   }
 

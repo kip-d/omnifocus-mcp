@@ -80,21 +80,20 @@ await Promise.all([
 - `batch_update_tasks` - Update multiple tasks with different changes
 - `batch_move_tasks` - Move multiple tasks between projects efficiently
 
-#### Query Result Pagination
+#### ❌ Query Result Pagination (NOT RECOMMENDED - September 2025)
 **Problem**: Large datasets (2000+ tasks) cause timeouts and memory issues
-**Solution**: Implement cursor-based pagination with configurable page sizes
-**Impact**: Handle unlimited dataset sizes reliably
-**Implementation**:
-```typescript
-{
-  "tool": "tasks",
-  "arguments": {
-    "limit": 50,
-    "cursor": "eyJpZCI6InRhc2stMTIzIiwidGltZSI6MTY5NDA0MDAwMH0=",
-    "mode": "all"
-  }
-}
-```
+**Analysis**: Traditional pagination doesn't fit MCP's stateless model
+**Why not practical**:
+- MCP tools are stateless - no session to track cursor position
+- Each page requires new LLM decision (expensive for local LLMs)
+- LLM must accumulate all pages in context (defeats memory savings)
+- Offset-based pagination inefficient in OmniFocus
+
+**Better alternatives (already implemented)**:
+- Use filtered modes: `mode: "today"`, `mode: "available"`, `mode: "flagged"`
+- Field selection to reduce payload: `fields: ["id", "name", "dueDate"]`
+- Increase `limit` with field selection for larger result sets
+- Smart cache invalidation (next priority)
 
 #### Smart Cache Invalidation
 **Problem**: Cache clears everything on any write operation
