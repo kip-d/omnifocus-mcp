@@ -155,8 +155,11 @@ if (result.note && result.note.includes("recreated")) {
 
 ### MCP-Specific Issues
 
-#### "No prompts available" in Claude Desktop
-**Known limitation**: Claude Desktop doesn't support MCP Prompts yet. Use manual workflows from [GTD-WORKFLOW-MANUAL.md](GTD-WORKFLOW-MANUAL.md).
+#### "No prompts available" in MCP client
+**Solution**:
+- **Claude Desktop**: Click "+" button → "Add from omnifocus" to access MCP prompts
+- **ChatGPT/Other clients**: Check if your client version supports MCP prompts
+- **Fallback**: Use manual workflows from [GTD-WORKFLOW-MANUAL.md](GTD-WORKFLOW-MANUAL.md)
 
 #### Progress indicators not showing
 **MCP limitation**: MCP is request-response only. No streaming or progress updates possible.

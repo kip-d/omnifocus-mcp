@@ -20,7 +20,8 @@
 
 ### Setup & Configuration
 - **[PERMISSIONS.md](PERMISSIONS.md)** - Required macOS permissions
-- **[claude-desktop-config.md](claude-desktop-config.md)** - Claude Desktop configuration
+- **[claude-desktop-config.md](claude-desktop-config.md)** - Claude Desktop-specific configuration notes
+- **[PRIVACY_AND_LOGGING.md](PRIVACY_AND_LOGGING.md)** - Privacy-safe logging and log locations for all clients
 
 ### Testing
 - **[jxa-test-utilities.js](jxa-test-utilities.js)** - Consolidated test utilities for API exploration

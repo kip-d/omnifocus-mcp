@@ -1,6 +1,11 @@
 # GTD Workflows with OmniFocus MCP Server
 
-While the MCP server implements GTD workflow prompts, Claude Desktop does not yet support the MCP Prompts capability. Until Claude Desktop adds prompt support, you can manually implement these workflows using the available tools.
+The MCP server includes built-in GTD workflow prompts that you can use with MCP clients.
+
+**Using Built-in Prompts:**
+- **Claude Desktop**: Click "+" button → "Add from omnifocus" → Select a GTD prompt
+- **ChatGPT Desktop**: Check if your version supports MCP prompts
+- **Manual workflow**: Follow the tool-based workflows below if your client doesn't support prompts yet
 
 ## Weekly Review Workflow
 

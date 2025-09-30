@@ -46,7 +46,9 @@ npm install
 npm run build
 ```
 
-### Claude Desktop Setup
+### MCP Client Setup
+
+**Claude Desktop:**
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
@@ -58,6 +60,22 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
+**ChatGPT Desktop:**
+Add to ChatGPT's MCP configuration:
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "command": "node",
+      "args": ["/path/to/omnifocus-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+**Other MCP Clients:**
+Configure according to your client's MCP server setup documentation. All clients use the same server configuration format.
 
 ## API Documentation
 
@@ -79,11 +97,14 @@ Nine pre-built prompts for common workflows:
 
 | Approach | Best For | Usage |
 |----------|----------|-------|
-| **Manual Templates** ([`/prompts/`](prompts/)) | Beginners, customization, offline use | Copy/paste entire prompt into Claude |
-| **MCP Prompts** ([`/src/prompts/`](src/prompts/)) | Advanced users, integrated workflows | Ask Claude to "use the [prompt_name] prompt" |
+| **Manual Templates** ([`/prompts/`](prompts/)) | Beginners, customization, offline use | Copy/paste entire prompt into your AI assistant |
+| **MCP Prompts** ([`/src/prompts/`](src/prompts/)) | Advanced users, integrated workflows | Ask your assistant to "use the [prompt_name] prompt" |
 - **Reference Guides**: Quick reference, troubleshooting, best practices
 
-Access via Claude Desktop: "+" button → "Add from omnifocus"
+**Accessing MCP Prompts:**
+- Claude Desktop: "+" button → "Add from omnifocus"
+- ChatGPT Desktop: Via prompt selector (if supported)
+- Other clients: See your client's documentation for MCP prompt access
 
 **📖 Comprehensive Documentation:**
 - **[User Prompts Guide](./prompts/README.md)** - Ready-to-use prompts for testing and daily workflows
