@@ -85,8 +85,11 @@ Log location depends on which MCP client you're using:
 
 **ChatGPT Desktop:**
 ```bash
-# Logs written to stderr, check your terminal/console output
-# Or if configured, check: ~/Library/Logs/
+# By default, logs are written to stderr/stdout
+# - If you launch ChatGPT Desktop from Terminal, check the terminal output
+# - If launched from Finder, logs go into the macOS unified log
+#   (view via Console.app or `log stream --process ChatGPT`)
+# - No ~/Library/Logs/ChatGPT directory is created unless you configure it
 ```
 
 **Custom MCP Clients:**
