@@ -1,18 +1,18 @@
 # OmniFocus MCP Server - Improvement Roadmap
 
 *Generated: September 19, 2025*
-*Updated: September 29, 2025*
-*Status: Phases 1, 2, & 3 COMPLETED - Major foundation improvements and high-value features implemented*
+*Updated: September 30, 2025*
+*Status: Phases 1, 2, 3, & 4 COMPLETED - Major foundation improvements and high-value features implemented*
 
 ## 🎉 Progress Summary
 
 **✅ COMPLETED (September 2025):**
 - **Phase 1 Foundation (7 hours)**: Enhanced error categorization, structured logging with correlation IDs, performance metrics collection
-- **Phase 2 Quick Optimizations (7 hours)**: Field selection system, cache warming implementation
+- **Phase 2 Quick Optimizations (9 hours)**: Field selection system, cache warming implementation, cache validation with checksums
 - **Phase 3 High-Value Features (18 hours)**: Perspective Views enhancement, cross-reference documentation, prompt discovery CLI, bulk operations, usage analytics, Real LLM testing with Ollama
-- **Phase 4 Batch Operations (6 hours)**: Enhanced batch operations with temporary IDs, dependency graph, atomic operations with rollback
+- **Phase 4 Batch Operations & Enhancements (20 hours)**: Enhanced batch operations with temporary IDs, dependency graph, atomic operations with rollback, helper context types, database export enhancement
 - **Quality Improvements**: JavaScript syntax fixes, TypeScript safety enhancements, unit test fixes
-- **Total Progress**: 13 major roadmap items completed, ~38 hours of implementation
+- **Total Progress**: 17 major roadmap items completed, ~54 hours of implementation
 
 **🚀 IMPACT ACHIEVED:**
 - Eliminated 1-3 second cold start delays with cache warming
@@ -26,6 +26,9 @@
 - Cross-referenced manual and programmatic prompt systems
 - Real LLM integration testing with Ollama (558 lines, 6 test suites, validated on M2 Air 24GB, M4 Pro mini 64GB, M2 Ultra Studio 192GB)
 - **Enhanced batch operations with temporary IDs**: ~95% reduction in execution time for local LLMs (10 items: 30-60s → ~500ms)
+- **Helper Context Types**: Improved helper function APIs with proper context configuration
+- **Cache Validation**: SHA-256 checksum validation prevents data corruption
+- **Database Export Enhancement**: Complete database dumps with optimization and multiple formats
 
 This document outlines potential improvements to enhance the OmniFocus MCP server's performance, usability, and feature completeness. Each improvement includes implementation approach and impact assessment.
 
@@ -47,11 +50,11 @@ await Promise.all([
 ]);
 ```
 
-#### ✅ Batch Operation Tools (COMPLETED - September 29, 2025)
+#### ✅ Enhanced Batch Operations with Temporary IDs (COMPLETED - September 29, 2025)
 **Problem**: Creating/updating multiple items requires separate API calls
 **Solution**: Single tools that handle multiple operations atomically with hierarchical support
 **Impact**: ~95% reduction in execution time for local LLMs (10 items: 30-60s → ~500ms)
-**Status**: ✅ Implemented `batch_create` tool with:
+**Status**: ✅ COMPLETED - Implemented `batch_create` tool with:
 - ✅ Temporary ID system for parent-child references
 - ✅ Dependency graph with circular dependency detection
 - ✅ Topological sorting for correct creation order
@@ -60,6 +63,7 @@ await Promise.all([
 - ✅ Comprehensive error handling and validation
 - ✅ Integration tests (9 test cases)
 - ✅ Full documentation (docs/BATCH_OPERATIONS.md)
+- ✅ Files: `src/tools/batch/BatchCreateTool.ts`, `dependency-graph.ts`, `tempid-resolver.ts`
 
 **Example Usage**:
 ```typescript
@@ -76,7 +80,7 @@ await Promise.all([
 }
 ```
 
-**Future Enhancements**:
+**Future Enhancements** (Optional):
 - `batch_update_tasks` - Update multiple tasks with different changes
 - `batch_move_tasks` - Move multiple tasks between projects efficiently
 
@@ -95,10 +99,22 @@ await Promise.all([
 - Increase `limit` with field selection for larger result sets
 - Smart cache invalidation (next priority)
 
-#### Smart Cache Invalidation
+#### ✅ Cache Validation with Checksums (COMPLETED - September 27-28, 2025)
+**Problem**: Cache corruption could lead to stale or invalid data
+**Solution**: SHA-256 checksum validation for all cached data
+**Impact**: Prevents data corruption issues, ensures cache reliability
+**Status**: ✅ COMPLETED
+- ✅ Implemented SHA-256 checksum validation for all cached data
+- ✅ Corruption detection and reporting mechanisms
+- ✅ Enhanced `CacheStats` with `checksumFailures` tracking
+- ✅ New `validateAllEntries()` method for cache integrity checks
+- ✅ Commit: d4145e0
+
+#### Smart Cache Invalidation (Granular Keys)
 **Problem**: Cache clears everything on any write operation
 **Solution**: Granular cache keys that only invalidate affected data
 **Impact**: Better cache hit rates, faster subsequent queries
+**Status**: NOT STARTED
 **Implementation**:
 - Project-specific cache keys: `tasks:project:abc123`
 - Tag-specific cache keys: `tasks:tag:work`
@@ -147,11 +163,23 @@ logger.info('Tool execution started', {
 - Identify performance bottlenecks in real usage
 - Export analytics via dedicated tool
 
-#### Auto-Recovery Mechanisms
+#### ⚠️ Auto-Recovery Mechanisms (DEFERRED - Data Collection Phase)
 **Problem**: Transient failures require manual retry
 **Solution**: Intelligent retry with exponential backoff
-**Impact**: Better reliability, fewer user-visible failures
-**Implementation**:
+**Decision**: Deferred in favor of privacy-safe error metrics logging (commit 7976490)
+**Rationale**: Need empirical data to determine if auto-recovery is necessary
+**Status**: ⚠️ DEFERRED - Logging implemented for data collection
+**Current Implementation**:
+- ✅ Privacy-safe error metrics logging (`docs/PRIVACY_AND_LOGGING.md`)
+- ✅ Error categorization with recoverable vs. permanent classification
+- ✅ Correlation IDs for request tracing
+- ✅ `[ERROR_METRIC]` logs contain no user data
+**Next Steps**:
+- Analyze error metrics from production usage
+- Calculate recoverable error percentage
+- If > 10% recoverable errors → implement auto-recovery
+- Otherwise → current error handling is sufficient
+**Planned Implementation** (if data warrants):
 - Detect recoverable vs. permanent failures
 - Retry with backoff for script timeouts, permission errors
 - Circuit breaker pattern for repeated failures
@@ -241,22 +269,19 @@ logger.info('Tool execution started', {
 
 ### 4. Integration & Extensibility
 
-#### Webhook Support
+#### ❌ Webhook Support (DISCARDED - Not Recommended)
 **Problem**: No way to react to OmniFocus changes in external systems
-**Solution**: Configurable webhooks for task/project state changes
-**Impact**: Enable real-time integrations with other tools
-**Implementation**:
-```typescript
-// Webhook configuration tool
-{
-  "tool": "configure_webhook",
-  "arguments": {
-    "url": "https://api.example.com/omnifocus-updates",
-    "events": ["task.completed", "project.created"],
-    "filter": { "tags": ["work"] }
-  }
-}
-```
+**Why Discarded**: OmniFocus has no native change notification API
+**Technical Reality**:
+- Would require continuous polling to detect changes (inefficient, resource-heavy)
+- Snapshot comparison to detect what changed (complex, error-prone)
+- Managing webhook infrastructure (registrations, delivery, retries)
+- OmniFocus isn't designed for real-time integrations
+**Better Alternatives**:
+- Use MCP tools directly from automation scripts
+- Schedule periodic queries with existing tools
+- Use OmniFocus's built-in automation features
+**Decision**: ❌ DISCARDED - No native API support makes this impractical
 
 #### Template System
 **Problem**: Repetitive project/task creation
@@ -268,20 +293,35 @@ logger.info('Tool execution started', {
 - Template library with common GTD patterns
 - Custom template creation and sharing
 
-#### Plugin Architecture
+#### ❌ Plugin Architecture (DISCARDED - Over-Engineering)
 **Problem**: Specific workflow needs require core changes
-**Solution**: Plugin system for custom tools and behaviors
-**Impact**: Extensibility without core modifications
-**Implementation**:
-- Plugin registration and discovery
-- Sandboxed execution environment
-- Plugin lifecycle management
-- Standard plugin interfaces for common patterns
+**Why Discarded**: MCP servers are already plugin-like components
+**Technical Reality**:
+- MCP servers are already plugins in the larger MCP ecosystem
+- Adding plugins to a plugin is over-engineering
+- Tool registration system is already straightforward (just add new tool files)
+- Sandboxing in Node.js requires significant complexity
+- Security concerns with untrusted code execution
+- No demonstrated user demand for third-party extensions
+**Better Alternatives**:
+- Fork the repo for custom modifications
+- Submit PRs for generally useful features
+- Create separate MCP servers for specialized workflows
+- Use existing tool composition via prompts
+**Decision**: ❌ DISCARDED - Adds complexity without clear user benefit
 
-#### Import/Export Improvements
+#### ✅ Database Export Enhancement (COMPLETED - September 2025)
 **Problem**: Limited format support for data exchange and no complete database export
-**Solution**: Enhanced import/export with multiple formats including complete database dumps
+**Solution**: Enhanced export with multiple formats including complete database dumps
 **Impact**: Better integration with other productivity tools, backup/migration capabilities
+**Status**: ✅ COMPLETED
+- ✅ File: `src/tools/export/ExportTool.ts`
+- ✅ Supports: tasks, projects, and complete database dumps
+- ✅ Formats: JSON, CSV, Markdown
+- ✅ Field selection and filtering for performance
+- ✅ Task export with comprehensive filters
+- ✅ Project export with statistics
+- ✅ Bulk export to directory
 **Implementation**:
 - **Complete Database Export** (inspired by themotionmachine):
 ```typescript
@@ -299,39 +339,53 @@ logger.info('Tool execution started', {
   }
 }
 ```
-- JSON/YAML export with full metadata
-- CSV import/export for spreadsheet compatibility
-- Markdown export for documentation
+- ✅ JSON/CSV/Markdown export with full metadata
+- ✅ Field selection for performance optimization
+- ✅ Task filtering (search, project, tags, flagged, completed, available)
+- ✅ Project export with statistics
+- ✅ Complete database dumps to directory
+**Future Enhancements** (Optional):
+- Import capabilities: CSV, JSON, plain text with smart parsing
 - iCal export for calendar integration
-- **Performance optimization**: Large database handling with streaming export
-- *Import formats: CSV, JSON, plain text with smart parsing*
+- YAML format support
+- Streaming export for very large databases (>10k items)
 
 ## 🔧 Quick Wins (Same-day implementation)
 
 ### ✅ 1. Error Message Enhancement - COMPLETED
 - **Effort**: 2-3 hours
 - **Files**: All tool error handling, `src/utils/error-taxonomy.ts`
-- **Status**: Comprehensive error categorization with 11 error types and recovery guidance
+- **Status**: ✅ Comprehensive error categorization with 11 error types and recovery guidance
 
 ### ✅ 2. Cache Warming - COMPLETED
 - **Effort**: 1-2 hours (extended to 4 hours with optimizations)
 - **Files**: `src/cache/CacheWarmer.ts`, server startup sequence
-- **Status**: Full cache warming for projects, tags, tasks, and perspectives
+- **Status**: ✅ Full cache warming for projects, tags, tasks, and perspectives
 
-### ✅ 3. Basic Usage Analytics - COMPLETED
+### ✅ 3. Cache Validation with Checksums - COMPLETED
+- **Effort**: 2-3 hours
+- **Files**: `src/cache/CacheManager.ts`, `src/cache/types.ts`
+- **Status**: ✅ SHA-256 checksum validation, corruption detection, integrity checks
+
+### ✅ 4. Basic Usage Analytics - COMPLETED
 - **Effort**: 2-4 hours
 - **Files**: `src/tools/base.ts`, `src/utils/metrics.ts`, system tool
-- **Status**: Comprehensive metrics collection and export via system tool
+- **Status**: ✅ Comprehensive metrics collection and export via system tool
 
-### ✅ 4. Simple Batch Operations - COMPLETED
+### ✅ 5. Simple Batch Operations - COMPLETED
 - **Effort**: 4-6 hours
 - **Files**: `src/tools/tasks/ManageTaskTool.ts`
-- **Status**: bulk_complete and bulk_delete operations with taskIds and criteria-based selection
+- **Status**: ✅ bulk_complete and bulk_delete operations with taskIds and criteria-based selection
 
-### ✅ 5. Structured Logging - COMPLETED
+### ✅ 6. Structured Logging - COMPLETED
 - **Effort**: 2-3 hours
 - **Files**: `src/utils/logger.ts`, all tools
-- **Status**: Full correlation ID tracking across all tool executions
+- **Status**: ✅ Full correlation ID tracking across all tool executions
+
+### ✅ 7. Helper Context Types - COMPLETED
+- **Effort**: 2 hours
+- **Files**: `src/omnifocus/scripts/shared/helper-context.ts`, `docs/HELPER_CONTEXT.md`
+- **Status**: ✅ Improved helper function APIs with proper context configuration
 
 ## 📋 Implementation Priority Matrix
 
@@ -346,8 +400,9 @@ logger.info('Tool execution started', {
 | ✅ Field Selection | High | Low | COMPLETED |
 | ✅ Structured Logging | Medium | Low | COMPLETED |
 | ✅ Usage Analytics | Medium | Low | COMPLETED |
-| **Helper Context Types** | **Medium** | **Low** | **2 hours remaining** |
-| **Cache Validation (checksums)** | **Medium** | **Low** | **2-3 hours** |
+| ✅ Helper Context Types | Medium | Low | COMPLETED |
+| ✅ Cache Validation (checksums) | Medium | Low | COMPLETED |
+| **Smart Cache Invalidation (granular keys)** | **Medium** | **Low** | **2-3 hours** |
 
 ### ⚡ High-Value Medium Effort (4-8 hours)
 | Improvement | User Impact | Technical Complexity | Status |
@@ -356,30 +411,30 @@ logger.info('Tool execution started', {
 | ✅ Perspective Views | High | Medium | COMPLETED |
 | ✅ Prompt Discovery CLI | Medium | Medium | COMPLETED |
 | ✅ Real LLM Testing | High | Medium | COMPLETED (558 lines, 6 test suites) |
-| **Enhanced Batch Ops (temp IDs)** | **High** | **Medium** | **6-8 hours** |
-| **Auto-Recovery Mechanisms** | **High** | **Medium** | **6-8 hours** |
-| **Database Export Enhancement** | **Medium** | **Medium** | **6-8 hours** |
+| ✅ Enhanced Batch Ops (temp IDs) | High | Medium | COMPLETED |
+| ✅ Database Export Enhancement | Medium | Medium | COMPLETED |
+| ⚠️ Auto-Recovery Mechanisms | High | Medium | DEFERRED (data collection) |
 
 ### 📈 Infrastructure Improvements (Lower Priority)
 | Improvement | User Impact | Technical Complexity | Status |
 |------------|-------------|---------------------|--------|
 | ✅ Usage Analytics | Medium | Low | COMPLETED |
 | ✅ Structured Logging | Medium | Low | COMPLETED |
-| **Mac mini CI Runner** | **High** | **Medium** | **1-2 days (documented, not deployed)** |
+| 📋 Mac mini CI Runner | Medium | Medium | DOCUMENTED (optional, Linux CI working) |
 
 ### 🚀 Major Features (1-3 days)
 | Improvement | User Impact | Technical Complexity | Implementation Time |
 |------------|-------------|---------------------|-------------------|
 | Advanced Search | High | High | 1-2 days |
-| Webhook Support | Medium | High | 1-2 days |
 | Workflow Automation | High | High | 2-3 days |
-| Plugin Architecture | Low | High | 3-5 days |
+| ❌ Webhook Support | N/A | N/A | DISCARDED |
+| ❌ Plugin Architecture | N/A | N/A | DISCARDED |
 
 ### High-Value Additions from Analysis
-- **themotionmachine insights**: ✅ Field Selection (COMPLETED), ✅ Basic Batch Operations (COMPLETED), ✅ Perspective Views (COMPLETED), Cache Validation (remaining), Database Export Enhancement (remaining)
+- **themotionmachine insights**: ✅ Field Selection (COMPLETED), ✅ Basic Batch Operations (COMPLETED), ✅ Perspective Views (COMPLETED), ✅ Cache Validation (COMPLETED), ✅ Database Export Enhancement (COMPLETED)
 - **Ollama integration**: ✅ Real LLM testing fully implemented (COMPLETED) - 558 lines, 6 test suites, comprehensive validation on 3 hardware configurations
-- **PR #23 extracted concepts**: ✅ Enhanced Error Categorization (COMPLETED), ✅ Performance Metrics Collection (COMPLETED), Helper Context Types (remaining)
-- **Prompts architecture analysis**: ✅ Cross-reference documentation (COMPLETED), ✅ Prompt discovery CLI (COMPLETED), Template generation (not yet implemented)
+- **PR #23 extracted concepts**: ✅ Enhanced Error Categorization (COMPLETED), ✅ Performance Metrics Collection (COMPLETED), ✅ Helper Context Types (COMPLETED)
+- **Prompts architecture analysis**: ✅ Cross-reference documentation (COMPLETED), ✅ Prompt discovery CLI (COMPLETED), Template generation (optional future enhancement)
 
 ## 🧪 Advanced Testing & Validation
 
@@ -856,20 +911,16 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 
 ### 🔍 What's Left? (High-Value Remaining Items)
 
-**Quick Wins (4-5 hours total):**
-- Helper Context Types (2 hours) - Improve helper function APIs with proper context
-- Cache Validation with checksums (2-3 hours) - Granular cache invalidation
+**Quick Wins (2-3 hours total):**
+- Smart Cache Invalidation with granular keys (2-3 hours) - Project/tag/time-based cache keys for better hit rates
 
-**Medium Effort (12-16 hours total):**
-- Enhanced Batch Operations with temporary IDs (6-8 hours) - Complex hierarchical creation in single atomic operation
-- Auto-Recovery Mechanisms (6-8 hours) - Intelligent retry with exponential backoff
-- Database Export Enhancement (6-8 hours) - Complete database dumps with optimization
+**Optional Enhancements (Data-Driven):**
+- Auto-Recovery Mechanisms (6-8 hours) - Implement if error metrics show >10% recoverable errors
+- Mac mini CI Runner deployment (1-2 days) - Deploy self-hosted runner using existing documentation
 
-**Major Features (4-9 days):**
+**Major Features (3-5 days):**
 - Advanced Search Capabilities (1-2 days) - Hybrid natural language + field-based querying
-- Workflow Automation bundles (2-3 days) - Composite tools for complex workflows
-- Webhook Support (1-2 days) - React to OmniFocus changes in external systems
-- Plugin Architecture (3-5 days) - Extensibility without core modifications
+- Workflow Automation bundles (2-3 days) - Composite tools for complex workflows (prompts exist, need tools)
 
 ### ✅ Phase 1: Foundation (COMPLETED) - Prerequisites for Everything Else
 
@@ -953,24 +1004,30 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - **Models**: phi3.5:3.8b (primary), qwen2.5:0.5b (fast), llama3.2:1b/3b (optional)
 - **Impact**: Validates genuine AI reasoning vs simulations, discovers emergent tool usage patterns, ensures tool descriptions guide LLM decisions correctly
 
-#### 13. Mac mini CI Runner Setup (1-2 days) - DOCUMENTED BUT NOT DEPLOYED
-- **Problem**: CI has been broken since cache warming introduction (commit 9d1677b) - Linux GitHub runners can't run OmniFocus operations
-- **Current Status**: ✅ Fixed CI with environment detection to disable cache warming in Linux environments
-- **Solution**: Set up dedicated Mac mini as self-hosted GitHub Actions runner for full OmniFocus integration testing (documented but not deployed)
+#### 📋 Mac mini CI Runner Setup (1-2 days) - DOCUMENTED (OPTIONAL ENHANCEMENT)
+- **Problem**: CI was broken after cache warming introduction (commit 9d1677b) - Linux GitHub runners can't run OmniFocus operations
+- **Solution Implemented**: ✅ Fixed CI with environment detection to disable cache warming in Linux environments (commit 532efbc)
+- **Current Status**: 📋 DOCUMENTED BUT NOT DEPLOYED - Linux CI now working, Mac CI is optional enhancement
 - **Implementation Guide**: See [`docs/SELF_HOSTED_CI_MAC.md`](./SELF_HOSTED_CI_MAC.md) for complete setup instructions
+- **GitHub Workflow**: `.github/workflows/ci.yml` configured for both Linux and macOS runners
 - **Key Components**:
   - Mac mini with OmniFocus 4 installed and automation permissions granted
   - GitHub Actions self-hosted runner with labels: `self-hosted`, `macos`, `omnifocus`
   - Tailscale for secure remote access and management
   - Dedicated `ci-runner` user account (non-admin) for security
   - Manual workflow triggers to avoid untrusted PR execution
-- **Benefits**:
+- **Benefits of Deployment**:
   - Full CI coverage including cache warming, permission checking, and actual OmniFocus operations
   - Real integration testing instead of simulation
   - Catch OmniFocus-specific issues before merging
   - Support for testing Mac-specific features and edge cases
+- **Why Optional**:
+  - Linux CI validates TypeScript, linting, unit tests, and build
+  - Cache warming gracefully disabled on Linux
+  - Integration tests can be run locally on macOS with `npm run test:integration`
+  - Mac CI provides additional confidence but isn't blocking development
 - **Dependencies**: Mac mini hardware, Tailscale account, OmniFocus license, test database
-- **Validation**: CI pipeline runs all tests on both Linux (unit/lint/build) and macOS (full integration)
+- **Validation**: CI pipeline runs all tests on both Linux (unit/lint/build) and optionally macOS (full integration)
 - **Security**: Manual workflow dispatch only, test database isolation, non-admin runner user
 
 ### Research Spikes (Timeboxed 1-2 weeks each)
@@ -985,18 +1042,19 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - **Exit Criteria**: Pilot run with small model, capture pros/cons
 - **Decision Point**: Add to CI if resource footprint acceptable
 
-### Deferred Items (Revisit Q1 2026)
-- **Plugin Architecture**: High cost, requires untrusted code execution
-- **Complete Database Export**: Exceeds MCP payload limits
-- **Webhook Support**: OmniFocus lacks real-time event APIs
-- **Workflow Automation Bundles**: Wait for stable batch operations
+### Discarded Items (Not Recommended)
+- **❌ Plugin Architecture**: Over-engineering - MCP servers are already plugins, no user demand
+- **❌ Webhook Support**: OmniFocus lacks change notification API, would require inefficient polling
+- **✅ Complete Database Export**: Actually implemented! See ExportTool with type="all"
+- **✅ Workflow Automation Bundles**: Prompts exist, tool implementation remains viable major feature
 
 ## 📊 Success Metrics for Implementation
 
-### ✅ Phase Completion Criteria - ALL PHASES COMPLETED
+### ✅ Phase Completion Criteria - ALL PHASES 1-4 COMPLETED
 - **Phase 1**: ✅ All error responses use taxonomy, 100% of tool calls have correlation IDs
-- **Phase 2**: ✅ 20%+ reduction in average response payload size (field selection implemented)
+- **Phase 2**: ✅ 20%+ reduction in average response payload size (field selection implemented), cache validation with checksums
 - **Phase 3**: ✅ Batch operations handle bulk complete/delete with criteria, perspectives return rich formatted output
+- **Phase 4**: ✅ Enhanced batch operations with temporary IDs and atomic rollback, helper context types, database export enhancement
 
 ### Overall Success Indicators - ACHIEVED
 - **Performance**: ✅ Query response time <500ms p95 (cache warming eliminates cold starts)
@@ -1018,15 +1076,22 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 
 ## 🎉 Roadmap Status Summary
 
-**Phases 1, 2, and 3 are COMPLETE** as of September 29, 2025!
+**Phases 1, 2, 3, and 4 are COMPLETE** as of September 30, 2025!
 
-- ✅ **12 major features implemented** (~32 hours of work)
-- ✅ **All Quick Wins completed** except Helper Context Types and Cache Validation
-- ✅ **Foundation solid**: Error handling, logging, metrics, caching all production-ready
-- ✅ **High-value features delivered**: Perspectives, batch operations, analytics, prompt discovery, Real LLM testing
+- ✅ **17 major features implemented** (~54 hours of work)
+- ✅ **ALL Quick Wins completed** except Smart Cache Invalidation (granular keys)
+- ✅ **Foundation solid**: Error handling, logging, metrics, caching, validation all production-ready
+- ✅ **High-value features delivered**: Perspectives, batch operations with temp IDs, analytics, prompt discovery, Real LLM testing, database export
 - ✅ **Testing excellence**: Real AI validation with Ollama on 3 hardware configurations
+- ✅ **Quality improvements**: Helper context types, cache validation, comprehensive error metrics
 
-**Next Steps**: Focus on remaining medium-effort enhancements (Enhanced Batch Ops with temp IDs, Auto-Recovery, Database Export) or proceed to major features based on user feedback.
+**What's Left:**
+- **Quick Wins**: Smart Cache Invalidation with granular keys (~2-3 hours)
+- **Optional Enhancements**: Auto-Recovery (data-driven decision), Mac mini CI deployment
+- **Major Features**: Advanced Search (1-2 days), Workflow Automation tools (2-3 days)
+- **Discarded Ideas**: Webhooks (no native API), Plugin Architecture (over-engineering)
+
+**Next Steps**: Focus on remaining major features (Advanced Search, Workflow Automation) or polish smart cache invalidation based on user feedback.
 
 ---
 
