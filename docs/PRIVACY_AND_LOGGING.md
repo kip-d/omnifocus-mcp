@@ -69,17 +69,51 @@ LOG_LEVEL=debug  # Include user data (redacted)
   - Even though redacted, verify before sharing
   - Check for any `[REDACTED]` markers
 
+### Finding Your MCP Server Logs
+
+Log location depends on which MCP client you're using:
+
+**Claude Desktop (macOS):**
+```bash
+~/Library/Logs/Claude/mcp*.log
+```
+
+**Claude Code:**
+```bash
+~/Library/Logs/claude-code/*.log
+```
+
+**ChatGPT Desktop:**
+```bash
+# Logs written to stderr, check your terminal/console output
+# Or if configured, check: ~/Library/Logs/
+```
+
+**Custom MCP Clients:**
+- Logs go to `stderr` by default
+- Check your client's documentation for log location
+
 ### Extracting Error Metrics Only
 
 To share **only error statistics** (completely privacy-safe):
 
+**For Claude Desktop:**
 ```bash
-# macOS/Linux
-grep ERROR_METRIC ~/Library/Logs/claude-code/*.log | jq .
+grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | jq .
 
 # Or count error types:
-grep ERROR_METRIC ~/Library/Logs/claude-code/*.log | \
+grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | \
   jq -r '.errorType' | sort | uniq -c
+```
+
+**For Claude Code:**
+```bash
+grep ERROR_METRIC ~/Library/Logs/claude-code/*.log | jq .
+```
+
+**For any client (if you know the log file):**
+```bash
+grep ERROR_METRIC /path/to/your/logs/*.log | jq .
 ```
 
 Example output:
@@ -96,14 +130,22 @@ This shows **what went wrong** without any personal information.
 To measure if auto-recovery would help:
 
 ```bash
+# Replace LOG_PATH with your client's log location from above
+
 # Total errors
-grep ERROR_METRIC ~/Library/Logs/*.log | wc -l
+grep ERROR_METRIC $LOG_PATH/*.log | wc -l
 
 # Recoverable errors
-grep ERROR_METRIC ~/Library/Logs/*.log | jq 'select(.recoverable == true)' | wc -l
+grep ERROR_METRIC $LOG_PATH/*.log | jq 'select(.recoverable == true)' | wc -l
 
 # Calculate percentage
 # If recoverable% > 10% → auto-recovery would help significantly
+```
+
+**Example for Claude Desktop users:**
+```bash
+LOG_PATH=~/Library/Logs/Claude
+grep ERROR_METRIC $LOG_PATH/mcp*.log | wc -l
 ```
 
 ## Implementation Details
