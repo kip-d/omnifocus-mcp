@@ -393,7 +393,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           const { minimalResponse = false, ...updates } = allParams;
 
           // Debug logging: Log all received parameters
-          this.logger.info('UpdateTaskTool received parameters:', {
+          this.logger.debug('UpdateTaskTool received parameters:', {
             taskId,
             updates: {
               ...updates,
@@ -427,8 +427,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             break;
           }
 
-          // Log what we're sending to the script
-          this.logger.info('Sending to JXA script:', {
+          // Log what we're sending to the script (debug only - contains user data)
+          this.logger.debug('Sending to JXA script:', {
             taskId,
             safeUpdates,
             safeUpdatesKeys: Object.keys(safeUpdates),
@@ -689,10 +689,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
   private sanitizeUpdates(updates: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
 
-    this.logger.info('Sanitizing updates:', {
-      rawUpdates: updates,
-      keys: Object.keys(updates),
-    });
+    // Only log keys, not values (privacy-safe)
+    this.logger.info('Sanitizing updates with keys:', Object.keys(updates));
 
     // Handle string fields
     if (typeof updates.name === 'string') {

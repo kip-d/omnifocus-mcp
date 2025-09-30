@@ -143,6 +143,18 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
         : undefined;
       const finalMessage = errArg ? `${message} ${errArg}` : message;
       logWithContext('error', finalMessage, useStructuredLogging ? args : [], undefined);
+
+      // Log error metrics for telemetry (privacy-safe - no user data)
+      if (typeof args[0] === 'object' && args[0] !== null && 'errorType' in args[0]) {
+        const errorData = args[0] as { errorType?: string; recoverable?: boolean };
+        stderr.write(`[ERROR_METRIC] ${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          context,
+          errorType: errorData.errorType,
+          recoverable: errorData.recoverable,
+          correlationId: initialContext?.correlationId,
+        })}\n`);
+      }
     },
     debug: (message: string, ...args: unknown[]) => {
       logWithContext('debug', message, args, undefined);
