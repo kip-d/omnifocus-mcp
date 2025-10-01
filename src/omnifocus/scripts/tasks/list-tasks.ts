@@ -642,81 +642,251 @@ export const LIST_TASKS_SCRIPT = `
     return taskObj;
   }
 
+  // Helper function to apply string operator
+  function matchesStringOperator(value, searchValue, operator) {
+    if (!value || !searchValue) return false;
+    const valueLower = String(value).toLowerCase();
+    const searchLower = String(searchValue).toLowerCase();
+
+    switch (operator) {
+      case 'CONTAINS':
+        return valueLower.includes(searchLower);
+      case 'STARTS_WITH':
+        return valueLower.indexOf(searchLower) === 0;
+      case 'ENDS_WITH':
+        return valueLower.lastIndexOf(searchLower) === valueLower.length - searchLower.length;
+      case 'EQUALS':
+        return valueLower === searchLower;
+      case 'NOT_EQUALS':
+        return valueLower !== searchLower;
+      default:
+        return valueLower.includes(searchLower); // Default to CONTAINS
+    }
+  }
+
+  // Helper function to apply date/number operator
+  function matchesComparisonOperator(taskValue, filterValue, operator) {
+    if (taskValue === null || taskValue === undefined) return false;
+    if (filterValue === null || filterValue === undefined) return false;
+
+    // Convert to numbers for comparison
+    const taskNum = taskValue instanceof Date ? taskValue.getTime() : Number(taskValue);
+    const filterNum = filterValue instanceof Date ? filterValue.getTime() : Number(filterValue);
+
+    switch (operator) {
+      case '>':
+        return taskNum > filterNum;
+      case '>=':
+        return taskNum >= filterNum;
+      case '<':
+        return taskNum < filterNum;
+      case '<=':
+        return taskNum <= filterNum;
+      case 'EQUALS':
+        return taskNum === filterNum;
+      default:
+        return taskNum <= filterNum; // Default to <=
+    }
+  }
+
   function matchesFilters(task, filter) {
     // Basic property filters (cheapest checks first)
     if (filter.completed !== undefined && isTaskEffectivelyCompleted(task) !== filter.completed) return false;
     if (filter.flagged !== undefined && task.flagged() !== filter.flagged) return false;
     if (filter.inInbox !== undefined && task.inInbox() !== filter.inInbox) return false;
-    
-    // Project filter (medium cost) - supports both name and ID
+
+    // Project filter with operator support
     if (filter.project !== undefined || filter.projectId !== undefined) {
       const project = safeGetProject(task);
-      
-      // Check by project name
+
+      // Check by project name (with operator support)
       if (filter.project !== undefined) {
         if ((filter.project === null || filter.project === '') && project !== null) return false;
-        if (filter.project !== null && filter.project !== '' && (!project || project.name !== filter.project)) return false;
+        if (filter.project !== null && filter.project !== '') {
+          if (!project) return false;
+
+          // Apply operator if specified
+          const operator = filter.projectOperator || 'EQUALS';
+          if (!matchesStringOperator(project.name, filter.project, operator)) return false;
+        }
       }
-      
-      // Check by project ID
+
+      // Check by project ID (with operator support)
       if (filter.projectId !== undefined) {
         if (filter.projectId === null && project !== null) return false;
-        if (filter.projectId !== null && (!project || project.id !== filter.projectId)) return false;
+        if (filter.projectId !== null) {
+          if (!project) return false;
+
+          // Apply operator if specified
+          const operator = filter.projectIdOperator || 'EQUALS';
+          if (!matchesStringOperator(project.id, filter.projectId, operator)) return false;
+        }
       }
     }
-    
-    // Date filters (medium cost)
-    if (filter.dueBefore || filter.dueAfter) {
-      if (!safeDateFilter(task, () => task.dueDate(), filter.dueBefore, filter.dueAfter)) return false;
+
+    // Date filters with operator support
+    if (filter.dueBefore || filter.dueAfter || filter.dueDateOperator) {
+      const dueDate = safeGet(() => task.dueDate());
+
+      if (filter.dueDateOperator && (filter.dueBefore || filter.dueAfter)) {
+        // Operator-based date comparison
+        const filterDate = filter.dueBefore || filter.dueAfter;
+        const operator = filter.dueDateOperator;
+
+        if (operator === 'BETWEEN' && filter.dueBefore && filter.dueAfter) {
+          // Between range
+          if (!dueDate) return false;
+          const dueLower = new Date(filter.dueAfter);
+          const dueUpper = new Date(filter.dueBefore);
+          if (dueDate < dueLower || dueDate > dueUpper) return false;
+        } else {
+          // Single operator comparison
+          if (!matchesComparisonOperator(dueDate, new Date(filterDate), operator)) return false;
+        }
+      } else {
+        // Legacy date filter (backward compatibility)
+        if (!safeDateFilter(task, () => task.dueDate(), filter.dueBefore, filter.dueAfter)) return false;
+      }
     }
-    
-    if (filter.deferBefore || filter.deferAfter) {
-      if (!safeDateFilter(task, () => task.deferDate(), filter.deferBefore, filter.deferAfter)) return false;
+
+    if (filter.deferBefore || filter.deferAfter || filter.deferDateOperator) {
+      const deferDate = safeGet(() => task.deferDate());
+
+      if (filter.deferDateOperator && (filter.deferBefore || filter.deferAfter)) {
+        // Operator-based date comparison
+        const filterDate = filter.deferBefore || filter.deferAfter;
+        const operator = filter.deferDateOperator;
+
+        if (operator === 'BETWEEN' && filter.deferBefore && filter.deferAfter) {
+          // Between range
+          if (!deferDate) return false;
+          const deferLower = new Date(filter.deferAfter);
+          const deferUpper = new Date(filter.deferBefore);
+          if (deferDate < deferLower || deferDate > deferUpper) return false;
+        } else {
+          // Single operator comparison
+          if (!matchesComparisonOperator(deferDate, new Date(filterDate), operator)) return false;
+        }
+      } else {
+        // Legacy date filter (backward compatibility)
+        if (!safeDateFilter(task, () => task.deferDate(), filter.deferBefore, filter.deferAfter)) return false;
+      }
     }
-    
-    // Search filter (expensive - only run if needed)
+
+    // Estimated minutes filter with operator support
+    if (filter.estimatedMinutes !== undefined) {
+      const taskMinutes = safeGetEstimatedMinutes(task);
+      const operator = filter.estimatedMinutesOperator || 'EQUALS';
+
+      if (operator === 'BETWEEN' && filter.estimatedMinutesUpperBound !== undefined) {
+        // Between range
+        if (taskMinutes === null) return false;
+        if (taskMinutes < filter.estimatedMinutes || taskMinutes > filter.estimatedMinutesUpperBound) return false;
+      } else {
+        // Single operator comparison
+        if (!matchesComparisonOperator(taskMinutes, filter.estimatedMinutes, operator)) return false;
+      }
+    }
+
+    // Search filter with operator support
     if (filter.search) {
-      const searchTerm = filter.search.toLowerCase();
+      const searchTerm = filter.search;
+      const operator = filter.searchOperator || 'CONTAINS';
       const name = safeGet(() => task.name(), '') || '';
 
-      // Quick check if name contains search term
-      if (!name.toLowerCase().includes(searchTerm)) {
+      // Quick check if name matches with operator
+      if (!matchesStringOperator(name, searchTerm, operator)) {
         // Only get note if name doesn't match and not in fast search mode
         if (filter.fastSearch) {
           return false; // Fast search mode: only search names
         } else {
           const note = safeGet(() => task.note(), '') || '';
-          if (!note.toLowerCase().includes(searchTerm)) return false;
+          if (!matchesStringOperator(note, searchTerm, operator)) return false;
         }
       }
     }
-    
-    // Tags filter (most expensive - only run if needed)
+
+    // Tags filter with operator support (OR, AND, NOT_IN)
     if (filter.tags && filter.tags.length > 0) {
-      if (!passesTagFilter(task, filter.tags)) return false;
+      const operator = filter.tagsOperator || 'AND'; // Default to AND for backward compatibility
+
+      if (operator === 'OR') {
+        // OR logic: task must have at least one of the specified tags
+        const taskTags = safeGetTags(task);
+        const taskTagsLower = taskTags.map(tag => tag.toLowerCase());
+        const hasAnyTag = filter.tags.some(filterTag =>
+          taskTagsLower.includes(filterTag.toLowerCase())
+        );
+
+        if (!hasAnyTag) {
+          // Try bridge lookup as fallback
+          const taskId = safeGet(() => task.id());
+          if (taskId && tagBridgeCache[taskId]) {
+            const cachedTagsLower = tagBridgeCache[taskId].map(tag => tag.toLowerCase());
+            const hasCachedTag = filter.tags.some(filterTag =>
+              cachedTagsLower.includes(filterTag.toLowerCase())
+            );
+            if (!hasCachedTag) return false;
+          } else {
+            return false;
+          }
+        }
+      } else if (operator === 'NOT_IN') {
+        // NOT_IN logic: task must not have any of the specified tags
+        const taskTags = safeGetTags(task);
+        const taskTagsLower = taskTags.map(tag => tag.toLowerCase());
+        const hasExcludedTag = filter.tags.some(filterTag =>
+          taskTagsLower.includes(filterTag.toLowerCase())
+        );
+
+        if (hasExcludedTag) return false;
+
+        // Check cache as well
+        const taskId = safeGet(() => task.id());
+        if (taskId && tagBridgeCache[taskId]) {
+          const cachedTagsLower = tagBridgeCache[taskId].map(tag => tag.toLowerCase());
+          const hasCachedExcluded = filter.tags.some(filterTag =>
+            cachedTagsLower.includes(filterTag.toLowerCase())
+          );
+          if (hasCachedExcluded) return false;
+        }
+      } else {
+        // AND logic (default): use existing passesTagFilter for backward compatibility
+        if (!passesTagFilter(task, filter.tags)) return false;
+      }
     }
-    
+
+    // Task status filter with operator support (IN for multiple statuses)
+    if (filter.taskStatus !== undefined) {
+      const taskStatus = getTaskStatus(task);
+      const operator = filter.taskStatusOperator || 'EQUALS';
+
+      if (operator === 'IN' && Array.isArray(filter.taskStatus)) {
+        // IN logic: status must be one of the specified values
+        if (!filter.taskStatus.includes(taskStatus)) return false;
+      } else {
+        // Single value comparison (backward compatibility)
+        const compareValue = Array.isArray(filter.taskStatus) ? filter.taskStatus[0] : filter.taskStatus;
+        if (taskStatus !== compareValue) return false;
+      }
+    }
+
     // Available filter (legacy - use available property filter below)
     if (filter.available) {
       if (isTaskEffectivelyCompleted(task) || task.dropped()) return false;
       const deferDate = safeGet(() => task.deferDate());
       if (deferDate && deferDate > new Date()) return false;
     }
-    
+
     // Advanced status filters
-    if (filter.taskStatus !== undefined) {
-      const taskStatus = getTaskStatus(task);
-      if (taskStatus !== filter.taskStatus) return false;
-    }
-    
     if (filter.blocked !== undefined) {
       if (isTaskBlocked(task) !== filter.blocked) return false;
     }
-    
+
     if (filter.next !== undefined) {
       if (isTaskNext(task) !== filter.next) return false;
     }
-    
+
     return true;
   }
 
