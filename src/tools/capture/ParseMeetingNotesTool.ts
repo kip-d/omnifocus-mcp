@@ -130,22 +130,22 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
         ? this.formatPreview(extracted, args)
         : this.formatBatchReady(extracted, args);
 
-      return createSuccessResponseV2(
+      return Promise.resolve(createSuccessResponseV2(
         'parse_meeting_notes',
         result,
         undefined,
         timer.toMetadata(),
-      ) as unknown;
+      ) as unknown);
     } catch (error) {
       this.logger.error('Parse meeting notes failed', { error });
-      return createErrorResponseV2(
+      return Promise.resolve(createErrorResponseV2(
         'parse_meeting_notes',
         'PARSE_ERROR',
         error instanceof Error ? error.message : 'Failed to parse meeting notes',
         'Check that the input text contains actionable items',
         undefined,
         timer.toMetadata(),
-      ) as unknown;
+      ) as unknown);
     }
   }
 
