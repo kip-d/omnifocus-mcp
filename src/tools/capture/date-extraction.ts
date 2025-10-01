@@ -244,18 +244,18 @@ function parseSpecificDate(dateStr: string): Date | undefined {
     return new Date(
       year ? parseInt(year) : currentYear,
       parseInt(month) - 1,
-      parseInt(day)
+      parseInt(day),
     );
   }
 
   // Month name format: "October 15", "Oct 15"
   const monthNames = [
     'january', 'february', 'march', 'april', 'may', 'june',
-    'july', 'august', 'september', 'october', 'november', 'december'
+    'july', 'august', 'september', 'october', 'november', 'december',
   ];
   const monthAbbr = [
     'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-    'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+    'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
   ];
 
   for (let i = 0; i < monthNames.length; i++) {

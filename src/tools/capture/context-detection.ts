@@ -257,7 +257,7 @@ export function explainTagSuggestion(tag: string, text: string): string {
   const locationContext = LOCATION_CONTEXTS.find(c => c.tag === tag);
   if (locationContext) {
     const matchedKeyword = locationContext.keywords.find(k =>
-      new RegExp(`\\b${k}\\b`, 'i').test(textLower)
+      new RegExp(`\\b${k}\\b`, 'i').test(textLower),
     );
     return matchedKeyword
       ? `Contains "${matchedKeyword}" which suggests ${tag} context`
@@ -268,7 +268,7 @@ export function explainTagSuggestion(tag: string, text: string): string {
   const timeContext = TIME_CONTEXTS.find(c => c.tag === tag);
   if (timeContext) {
     const matchedKeyword = timeContext.keywords.find(k =>
-      new RegExp(`\\b${k}\\b`, 'i').test(textLower)
+      new RegExp(`\\b${k}\\b`, 'i').test(textLower),
     );
     return matchedKeyword
       ? `"${matchedKeyword}" typically takes ${tag.replace('@', '')}`
@@ -279,7 +279,7 @@ export function explainTagSuggestion(tag: string, text: string): string {
   const energyContext = ENERGY_CONTEXTS.find(c => c.tag === tag);
   if (energyContext) {
     const matchedKeyword = energyContext.keywords.find(k =>
-      new RegExp(`\\b${k}\\b`, 'i').test(textLower)
+      new RegExp(`\\b${k}\\b`, 'i').test(textLower),
     );
     return matchedKeyword
       ? `"${matchedKeyword}" requires ${tag.replace('@', '').replace('-', ' ')}`
@@ -290,7 +290,7 @@ export function explainTagSuggestion(tag: string, text: string): string {
   const priorityContext = PRIORITY_CONTEXTS.find(c => c.tag === tag);
   if (priorityContext) {
     const matchedKeyword = priorityContext.keywords.find(k =>
-      new RegExp(`\\b${k}\\b`, 'i').test(textLower)
+      new RegExp(`\\b${k}\\b`, 'i').test(textLower),
     );
     return matchedKeyword
       ? `Contains "${matchedKeyword}" indicating ${tag.replace('@', '')} priority`
@@ -307,5 +307,5 @@ export function explainTagSuggestion(tag: string, text: string): string {
     return `Needs discussion with ${name}`;
   }
 
-  return `Suggested based on task content`;
+  return 'Suggested based on task content';
 }

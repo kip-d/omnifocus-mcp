@@ -134,7 +134,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
         'parse_meeting_notes',
         result,
         undefined,
-        timer.toMetadata()
+        timer.toMetadata(),
       ) as unknown;
     } catch (error) {
       this.logger.error('Parse meeting notes failed', { error });
@@ -144,7 +144,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
         error instanceof Error ? error.message : 'Failed to parse meeting notes',
         'Check that the input text contains actionable items',
         undefined,
-        timer.toMetadata()
+        timer.toMetadata(),
       ) as unknown;
     }
   }
@@ -286,7 +286,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     line: string,
     args: ParseMeetingNotesArgs,
     taskId: number,
-    isUnderProject = false
+    isUnderProject = false,
   ): ExtractedTask | null {
     // Remove common bullet points and numbering
     let cleaned = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
@@ -305,7 +305,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     ];
 
     const hasActionVerb = actionVerbs.some(verb =>
-      new RegExp(`\\b${verb}\\b`, 'i').test(cleaned)
+      new RegExp(`\\b${verb}\\b`, 'i').test(cleaned),
     );
 
     // If no action verb and not under a project, skip
@@ -467,7 +467,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
   private calculateConfidence(
     name: string,
     tags: string[],
-    dates: { dueDate?: string; deferDate?: string }
+    dates: { dueDate?: string; deferDate?: string },
   ): 'high' | 'medium' | 'low' {
     let score = 0;
 
