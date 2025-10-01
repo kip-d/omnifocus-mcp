@@ -851,7 +851,8 @@ export function getTaskStatusHelpers(): string {
  * Only includes the most essential utility functions
  */
 export function getMinimalHelpers(context?: HelperContext): string {
-  return `${generateHelperConfig(context)}\n${getCoreHelpers(context)}`;
+  // getCoreHelpers already includes generateHelperConfig, so don't duplicate it
+  return getCoreHelpers(context);
 }
 
 /**
