@@ -127,10 +127,10 @@ jobs:
           TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 10s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
           echo "Registered tools: $TOOL_COUNT"
 
-          if [ "$TOOL_COUNT" -eq "16" ]; then
-            echo "✅ All 16 tools registered correctly"
+          if [ "$TOOL_COUNT" -eq "17" ]; then
+            echo "✅ All 17 tools registered correctly"
           else
-            echo "❌ Expected 16 tools, got $TOOL_COUNT"
+            echo "❌ Expected 17 tools, got $TOOL_COUNT"
             exit 1
           fi
 
