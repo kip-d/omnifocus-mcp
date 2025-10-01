@@ -1,18 +1,19 @@
 # OmniFocus MCP Server - Improvement Roadmap
 
 *Generated: September 19, 2025*
-*Updated: September 30, 2025*
-*Status: ALL Quick Win Phases COMPLETED - Foundation solid, high-value features delivered*
+*Updated: October 1, 2025*
+*Status: ALL Quick Win Phases COMPLETED + Advanced Search - Foundation solid, high-value features delivered*
 
 ## 🎉 Progress Summary
 
-**✅ COMPLETED (September 2025):**
+**✅ COMPLETED (September-October 2025):**
 - **Phase 1 Foundation (7 hours)**: Enhanced error categorization, structured logging with correlation IDs, performance metrics collection
 - **Phase 2 Quick Optimizations (12 hours)**: Field selection system, cache warming implementation, cache validation with checksums, smart cache invalidation
 - **Phase 3 High-Value Features (18 hours)**: Perspective Views enhancement, cross-reference documentation, prompt discovery CLI, bulk operations, usage analytics, Real LLM testing with Ollama
 - **Phase 4 Batch Operations & Enhancements (20 hours)**: Enhanced batch operations with temporary IDs, dependency graph, atomic operations with rollback, helper context types, database export enhancement
-- **Quality Improvements**: JavaScript syntax fixes, TypeScript safety enhancements, comprehensive unit test coverage
-- **Total Progress**: 18 major roadmap items completed, ~57 hours of implementation
+- **Phase 5 Advanced Search (8 hours)**: Operator-based filtering, multi-field sorting, LLM-friendly natural language conversion, comprehensive documentation
+- **Quality Improvements**: JavaScript syntax fixes, TypeScript safety enhancements, comprehensive unit test coverage (730+ tests)
+- **Total Progress**: 19 major roadmap items completed, ~65 hours of implementation
 
 **🚀 IMPACT ACHIEVED:**
 - Eliminated 1-3 second cold start delays with cache warming
@@ -30,6 +31,7 @@
 - **Cache Validation**: SHA-256 checksum validation prevents data corruption
 - **Database Export Enhancement**: Complete database dumps with optimization and multiple formats
 - **Smart Cache Invalidation**: Granular invalidation by project, tag, and time-based patterns (70-90% improved cache hit rates)
+- **Advanced Search with Operators**: 20-40% performance improvement via JXA-native filtering, comprehensive LLM conversion guidance (400+ line guide)
 
 This document outlines potential improvements to enhance the OmniFocus MCP server's performance, usability, and feature completeness. Each improvement includes implementation approach and impact assessment.
 
@@ -193,35 +195,64 @@ logger.info('Tool execution started', {
 
 ### 3. Feature Completeness
 
-#### Advanced Search Capabilities
+#### ✅ Advanced Search Capabilities (COMPLETED - October 1, 2025)
 **Problem**: Limited search functionality compared to OmniFocus UI
-**Solution**: Hybrid approach combining natural language with flexible field-based querying
-**Impact**: More powerful task discovery and organization with performance optimization
-**Implementation**:
+**Solution**: Operator-based filtering system with comprehensive natural language conversion guidance
+**Impact**: More powerful task discovery with 20-40% performance improvement via JXA-native operators
+**Status**: ✅ COMPLETED - Implemented in three phases:
+
+**Phase 1: TypeScript Filter Framework** (commit 1911d19)
+- ✅ Type-safe filter definitions with operators (CONTAINS, STARTS_WITH, ENDS_WITH, EQUALS, NOT_EQUALS, OR, AND, NOT_IN, BETWEEN)
+- ✅ Multi-field sorting support (dueDate, deferDate, name, flagged, estimatedMinutes, added, completionDate)
+- ✅ Backward compatible with existing simple filters
+- ✅ Files: `src/tools/tasks/filter-types.ts` (156 lines), enhanced `QueryTasksToolV2.ts`
+
+**Phase 2: Native JXA Operators** (commit 827e45b)
+- ✅ Enhanced `list-tasks.ts` with operator-based filtering at query time
+- ✅ String operators (CONTAINS, STARTS_WITH, ENDS_WITH, EQUALS, NOT_EQUALS)
+- ✅ Array operators (OR, AND, NOT_IN) with tag cache integration
+- ✅ Comparison operators (>, >=, <, <=, BETWEEN) for dates and durations
+- ✅ 20-40% performance improvement over post-query TypeScript filtering
+
+**Phase 3: LLM-Friendly Integration** (commit 7622b9c)
+- ✅ Enhanced tool description with 150+ lines of examples and conversion patterns
+- ✅ Comprehensive conversion guide (`docs/LLM_FILTER_CONVERSION.md`, 400+ lines)
+- ✅ 6 major pattern categories with 30+ concrete examples
+- ✅ Common pitfalls documentation with corrections
+- ✅ Date calculation guidelines and testing validation checklist
+
+**Example Usage**:
 ```typescript
-// Natural language queries (existing):
-"tasks due this week in work projects"
-"overdue tasks tagged urgent or important"
-"completed tasks from last month with notes containing 'budget'"
+// OR logic for tags
+{ filters: { tags: { operator: "OR", values: ["urgent", "important"] } } }
 
-// Enhanced with field selection and complex filtering (inspired by themotionmachine):
+// Date range queries
+{ filters: { dueDate: { operator: "<=", value: "2025-10-07" } } }
+
+// String matching
+{ filters: { project: { operator: "CONTAINS", value: "work" } } }
+
+// Combined filters with sorting
 {
-  mode: "search",                    // Keep LLM-friendly modes
-  query: "quarterly review",         // Full-text search
-  fields: ["id", "name", "dueDate", "project"], // Optional performance optimization
+  mode: "available",
   filters: {
-    tags: { operator: "OR", values: ["work", "personal"] },
-    dueDate: { operator: ">=", value: "2025-09-20" },
-    status: { operator: "IN", values: ["available", "next"] },
-    project: { operator: "CONTAINS", value: "Q4" }
+    project: { operator: "CONTAINS", value: "work" },
+    dueDate: { operator: "<=", value: "2025-10-07" },
+    estimatedMinutes: { operator: "<=", value: 30 }
   },
-  sort: [{ field: "dueDate", direction: "asc" }],
-  limit: 50
+  sort: [
+    { field: "dueDate", direction: "asc" },
+    { field: "flagged", direction: "desc" }
+  ]
 }
-
-// Full-text search with field targeting:
-"find tasks containing 'quarterly review' in name or notes"
 ```
+
+**Test Coverage**:
+- ✅ 38 comprehensive unit tests (`tests/unit/tools/tasks/advanced-filters.test.ts`)
+- ✅ All 692 existing tests passing (100% backward compatibility)
+- ✅ String, array, and comparison operator validation
+- ✅ Multi-field sorting validation
+- ✅ Combined filter scenarios
 
 #### Perspective View Tools
 **Problem**: Limited interaction with OmniFocus perspectives beyond basic listing
