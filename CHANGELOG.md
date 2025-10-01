@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎉 Smart Capture Feature (October 1, 2025)
+
+#### Added
+- **🤖 Smart Capture - Parse Meeting Notes Tool** (commits d6abf03-a05278c)
+  - New `parse_meeting_notes` tool extracts action items from unstructured text
+  - Automatically detects tasks, projects, assignees, due dates, and context tags
+  - Two output modes: `preview` (user review) or `batch_ready` (direct creation)
+  - Intelligent task detection with action verb recognition
+  - Natural language date extraction ("by Friday", "next Tuesday")
+  - Context tag suggestions (@computer, @phone, @errands, etc.)
+  - Duration estimation based on keywords (quick=15min, call=30min, etc.)
+  - Project detection from headers and multi-step items
+  - Assignee detection ("John to...", "Waiting for Sarah")
+  - Confidence scoring for extracted items
+  - **Use Cases**: Meeting notes, email action items, voice transcripts
+  - **IMPACT**: Dramatically speeds up task capture from unstructured sources
+
+#### Fixed
+- **Critical Server Hang Bug** (commit 3b0be51)
+  - Fixed duplicate `const HELPER_CONFIG` declaration in `getMinimalHelpers()`
+  - Bug caused JXA syntax error during cache warming, breaking all tool calls
+  - Server would hang when Claude Desktop tried to invoke any tool
+  - **Root Cause**: `getMinimalHelpers()` called `generateHelperConfig()` before calling `getCoreHelpers()`, but `getCoreHelpers()` already includes `generateHelperConfig()`
+  - **IMPACT**: Restored full server functionality in Claude Desktop
+
+#### Improved
+- **Code Quality**: All 713 tests passing with zero lint errors/warnings
+- **Type Safety**: Fixed TypeScript errors in non-async method return types
+- **CI/CD**: Updated GitHub Actions workflow for 17-tool count (was 16)
+- **Documentation**: Added smart capture examples to README and API docs
+
 ### 🚀 Latest Achievements (September 27-28, 2025)
 
 #### Added

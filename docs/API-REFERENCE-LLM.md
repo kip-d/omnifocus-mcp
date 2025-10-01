@@ -142,18 +142,19 @@
 ## Key Patterns (v2.1.0 Consolidated Architecture)
 
 - **Operation-based routing**: Most tools use `operation` parameter for multiple functions
-- **Tool consolidation**: 16 tools (reduced from 22) for 27% better context efficiency
+- **Tool consolidation**: 17 tools (reduced from 22) for optimal context efficiency
 - **Summary-first**: Analytics return insights before data
-- **Dates**: YYYY-MM-DD gets smart defaults (due→5pm, defer→8am)  
+- **Dates**: YYYY-MM-DD gets smart defaults (due→5pm, defer→8am)
 - **Performance**: fastMode/namesOnly for speed, consolidated tools reduce overhead
 - **Minimal response**: Set minimalResponse:true for bulk ops
+- **Smart Capture**: parse_meeting_notes extracts tasks from unstructured text
 
-## Migration from v2.0 to v2.1.0
+## Migration from v2.1.0 to v2.2.0
 
+- **New feature**: Added `parse_meeting_notes` tool for extracting action items from unstructured text
 - **No breaking changes**: All existing tool calls work identically
-- **Same 16 tools**: Tool count remains the same, but internal consolidation improves performance
-- **Enhanced error handling**: Better error messages with operation context
-- **Improved caching**: More efficient caching across consolidated operations
+- **Same architecture**: Self-contained consolidated tools with smart capture addition
+- **Enhanced capabilities**: Can now process meeting notes, emails, and voice transcripts
 
 ## Migration from v1 (Historical)
 

@@ -180,11 +180,34 @@ Nine pre-built prompts for common workflows:
 }
 ```
 
+### Smart Capture - Parse Meeting Notes
+```javascript
+// Extract action items from meeting notes
+{
+  "tool": "parse_meeting_notes",
+  "arguments": {
+    "input": "Meeting Notes:\n- Send proposal to client by Friday\n- Call Sarah about budget\n- Review Q4 metrics",
+    "returnFormat": "preview",
+    "suggestTags": true,
+    "suggestDueDates": true
+  }
+}
+
+// Returns structured tasks with:
+// - Extracted task names
+// - Detected due dates ("by Friday")
+// - Context tags (@phone, @computer, etc.)
+// - Project suggestions
+// - Confidence scores
+```
+
 ## Available Tools
 
 **Core Operations**:
 - `tasks` - Query tasks with modes (today, overdue, search, flagged, etc.)
 - `manage_task` - Create, update, complete, delete tasks
+- `batch_create` - Create multiple projects and tasks in a single operation
+- `parse_meeting_notes` - Extract action items from meeting notes, transcripts, or unstructured text
 - `projects` - Project operations (list, create, update, stats)
 - `folders` - Folder management and organization
 - `tags` - Tag operations including hierarchy management
