@@ -1,12 +1,14 @@
-# OmniFocus MCP v2.1.0 (15 Tools - Ultra-Compact)
+# OmniFocus MCP v2.2.0 (17 Tools - Ultra-Compact)
 
 **📖 More Resources:** [User Prompts & Workflows](../prompts/README.md) | [Full API Reference](./API-REFERENCE-LLM.md)
 
 ## Syntax: tool(req*,opt?:"default") []=array
 
-### Tasks (2)
+### Tasks (4)
 - tasks(mode*,limit*:25,details*:false,fastSearch*:true,fields[]?,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
 - manage_task(operation*:create|update|complete|delete,taskId?,name?,...all_task_fields)
+- batch_create(items*[],createSequentially*:true,atomicOperation*:false,returnMapping*:true,stopOnError*:true)
+- parse_meeting_notes(input*,extractMode*:both,suggestProjects*:true,suggestTags*:true,suggestDueDates*:true,suggestEstimates*:true,returnFormat*:preview,groupByProject*:true,existingProjects[]?,defaultProject?)
 
 ### Projects (1)
 - projects(operation*:list|create|update|complete|delete|review|active|stats,limit*,details*,...)
@@ -30,11 +32,12 @@
 - system(operation*:version|diagnostics,testScript?)
 
 ## Notes
-- **v2.1.0**: 15 consolidated tools (reduced from 22 in v2.0)
+- **v2.2.0**: 17 consolidated tools (15 core + 2 capture tools)
+- **Smart Capture**: parse_meeting_notes extracts tasks from unstructured text (meeting notes, emails, transcripts)
 - **Operation-based routing**: Most tools use `operation` parameter
 - All params→strings via MCP
-- Summary returned first  
+- Summary returned first
 - null/""/​"null"→inbox
 - Dates:"YYYY-MM-DD HH:mm"|"YYYY-MM-DD"(due→5pm,defer→8am)
 - RepeatRule:{unit,steps,method,weekdays[]?,positions?}
-- **Performance**: 30% tool reduction for better context efficiency
+- **Performance**: Optimized for context efficiency with consolidated tools
