@@ -98,8 +98,8 @@ const PRIORITY_CONTEXTS: ContextPattern[] = [
  */
 const PEOPLE_PATTERNS = [
   {
-    // Pattern: "waiting for X" or "waiting on X"
-    pattern: /waiting\s+(?:for|on)\s+(\w+)/i,
+    // Pattern: "waiting for X" or "waiting on X" - handle possessive forms
+    pattern: /waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i,
     tagFormat: (name: string) => `@waiting-for-${name.toLowerCase()}`,
   },
   {

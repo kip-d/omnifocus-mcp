@@ -86,6 +86,17 @@ function findDeferDate(text: string): string | undefined {
     }
   }
 
+  // Pattern: "follow up [with X]" - treat as defer date with natural language date
+  if (/\bfollow up\b/i.test(text)) {
+    const followUpMatch = text.match(/follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
+    if (followUpMatch) {
+      const parsed = parseRelativeDate(followUpMatch[1]);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
   return undefined;
 }
 

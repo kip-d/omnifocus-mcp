@@ -189,7 +189,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
 
       // Extract task from line
       if (args.extractMode !== 'projects') {
-        const task = this.extractTask(trimmed, args, taskCounter);
+        const task = this.extractTask(trimmed, args, taskCounter, currentProject !== null);
         if (task) {
           if (currentProject) {
             // Add as subtask to current project
@@ -220,8 +220,9 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
    */
   private isNonActionable(line: string): boolean {
     const nonActionablePatterns = [
-      /^(meeting|agenda|notes|action items?|discussion|attendees?):/i,
+      /^(meeting|agenda|action items?|discussion|attendees?|standalone task):/i,
       /^(date|time|location):/i,
+      /^meeting\s+notes:/i,  // "Meeting Notes:"
       /^#+\s/,  // Markdown headers
       /^\*+\s/, // Bullet points without content
       /^-+\s*$/, // Dividers
@@ -252,6 +253,17 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       }
     }
 
+    // Check for simple header with colon (e.g., "Project Alpha:")
+    if (/^[A-Z]/.test(line) && /^(.+?):\s*$/.test(line)) {
+      const match = line.match(/^(.+?):\s*$/);
+      if (match) {
+        return {
+          name: match[1].trim(),
+          confidence: 'medium',
+        };
+      }
+    }
+
     // Check for phrases that indicate multi-step work
     if (/(then|after that|followed by|next step)/i.test(line)) {
       // Extract project name from beginning of line
@@ -273,7 +285,8 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
   private extractTask(
     line: string,
     args: ParseMeetingNotesArgs,
-    taskId: number
+    taskId: number,
+    isUnderProject = false
   ): ExtractedTask | null {
     // Remove common bullet points and numbering
     let cleaned = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
@@ -283,18 +296,25 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       return null;
     }
 
-    // Look for action verbs
+    // Look for action verbs (be more lenient for tasks under a project)
     const actionVerbs = [
       'send', 'call', 'email', 'review', 'update', 'create', 'write', 'schedule',
       'discuss', 'follow up', 'check', 'prepare', 'organize', 'plan', 'research',
       'contact', 'complete', 'finish', 'implement', 'test', 'deploy', 'ask',
+      'buy', 'purchase', 'get', 'pick up', 'drop off', 'waiting', 'task',
     ];
 
     const hasActionVerb = actionVerbs.some(verb =>
       new RegExp(`\\b${verb}\\b`, 'i').test(cleaned)
     );
 
-    if (!hasActionVerb) {
+    // If no action verb and not under a project, skip
+    if (!hasActionVerb && !isUnderProject) {
+      return null;
+    }
+
+    // If under a project but still seems like a header, skip
+    if (isUnderProject && !hasActionVerb && cleaned.length < 3) {
       return null;
     }
 
@@ -323,9 +343,16 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       : undefined;
 
     // Match to existing project if provided
-    const projectMatch = args.existingProjects
-      ? this.matchToProject(cleaned, args.existingProjects)
-      : { project: args.defaultProject || null, match: 'none' as const };
+    let projectMatch: { project: string | null; match: 'exact' | 'partial' | 'none' };
+    if (args.existingProjects) {
+      projectMatch = this.matchToProject(cleaned, args.existingProjects);
+      // Use default project if no match found
+      if (projectMatch.match === 'none' && args.defaultProject) {
+        projectMatch = { project: args.defaultProject, match: 'none' };
+      }
+    } else {
+      projectMatch = { project: args.defaultProject || null, match: 'none' };
+    }
 
     return {
       tempId: `task_${taskId}`,
@@ -368,10 +395,10 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       tags.push(`@${assigneeMatch[1].toLowerCase()}`);
     }
 
-    // Pattern: "Waiting for/on Sarah"
-    const waitingMatch = text.match(/waiting\s+(for|on)\s+(\w+)/i);
+    // Pattern: "Waiting for/on Sarah" - handle possessive forms
+    const waitingMatch = text.match(/waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i);
     if (waitingMatch) {
-      tags.push(`@waiting-for-${waitingMatch[2].toLowerCase()}`);
+      tags.push(`@waiting-for-${waitingMatch[1].toLowerCase()}`);
     }
 
     // Pattern: "Ask/Check with/Discuss with Bob"
@@ -388,13 +415,13 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
    */
   private estimateDuration(text: string): number | undefined {
     const durationHints = [
-      { pattern: /\bquick\b|\bbrief\b|\bshort\b/i, minutes: 15 },
+      { pattern: /\bdeep work\b|\bfocus\b/i, minutes: 180 },
+      { pattern: /\bplan\b|\banalyze\b|\bresearch\b/i, minutes: 120 },
+      { pattern: /\bwrite\b|\bcreate\b|\bdesign\b/i, minutes: 90 },
+      { pattern: /\bmeeting\b|\bdiscuss\b/i, minutes: 60 },
       { pattern: /\bcall\b|\bphone\b/i, minutes: 30 },
       { pattern: /\breview\b|\bcheck\b/i, minutes: 30 },
-      { pattern: /\bmeeting\b|\bdiscuss\b/i, minutes: 60 },
-      { pattern: /\bwrite\b|\bcreate\b|\bdesign\b/i, minutes: 90 },
-      { pattern: /\bplan\b|\banalyze\b|\bresearch\b/i, minutes: 120 },
-      { pattern: /\bdeep work\b|\bfocus\b/i, minutes: 180 },
+      { pattern: /\bquick\b|\bbrief\b|\bshort\b/i, minutes: 15 },
     ];
 
     for (const hint of durationHints) {
@@ -422,10 +449,11 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       }
     }
 
-    // Check for partial match (keywords)
+    // Check for partial match (keywords, excluding common words)
+    const commonWords = ['project', 'task', 'the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in'];
     for (const project of existingProjects) {
-      const keywords = project.toLowerCase().split(/\s+/);
-      if (keywords.some(keyword => textLower.includes(keyword))) {
+      const keywords = project.toLowerCase().split(/\s+/).filter(k => !commonWords.includes(k) && k.length > 2);
+      if (keywords.length > 0 && keywords.some(keyword => textLower.includes(keyword))) {
         return { project, match: 'partial' };
       }
     }

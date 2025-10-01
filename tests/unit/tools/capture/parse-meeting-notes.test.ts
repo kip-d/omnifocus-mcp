@@ -440,12 +440,9 @@ Project A:
     it('should reject input that is too short', async () => {
       const input = 'x';
 
-      const result = await tool.execute({
+      await expect(tool.execute({
         input,
-      }) as any;
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      })).rejects.toThrow('Invalid parameters');
     });
 
     it('should handle empty action items gracefully', async () => {
