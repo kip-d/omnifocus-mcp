@@ -21,6 +21,14 @@ import {
 } from '../../utils/response-format-v2.js';
 import { OmniFocusTask } from '../response-types.js';
 import { TasksResponseV2 } from '../response-types-v2.js';
+import {
+  QueryFilters,
+  SortOption,
+  isStringFilter,
+  isArrayFilter,
+  isDateFilter,
+  isNumberFilter,
+} from './filter-types.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -85,13 +93,22 @@ const QueryTasksToolSchemaV2 = z.object({
     'project',
     'tags',
   ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, completionDate, note, projectId, project, tags'),
+
+  // Advanced filtering (optional - for complex queries)
+  filters: z.any().optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
+
+  // Sorting options (optional)
+  sort: z.array(z.object({
+    field: z.enum(['dueDate', 'deferDate', 'name', 'flagged', 'estimatedMinutes', 'added', 'completionDate']),
+    direction: z.enum(['asc', 'desc']),
+  })).optional().describe('Sort results by one or more fields. Example: [{ field: "dueDate", direction: "asc" }, { field: "flagged", direction: "desc" }]. Applied after filtering.'),
 });
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
 export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
-  description = 'Query OmniFocus tasks with various modes. Common usage: mode="search" with search="meeting" to find tasks, mode="today" for current tasks, mode="overdue" for past due items. Always returns a summary first for quick answers, then detailed task data.';
+  description = 'Query OmniFocus tasks with various modes and optional advanced filtering. Common usage: mode="search" with search="meeting" to find tasks, mode="today" for current tasks, mode="overdue" for past due items. For complex queries, use "filters" parameter with operators (OR/AND for tags, date comparisons, string matching). Natural language examples: "tasks due this week in work projects" → filters: {dueDate: {operator:"<=", value:"2025-10-07"}, project: {operator:"CONTAINS", value:"work"}}. "tasks tagged urgent or important" → filters: {tags: {operator:"OR", values:["urgent","important"]}}. Always returns a summary first for quick answers, then detailed task data.';
   schema = QueryTasksToolSchemaV2;
 
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {
@@ -246,11 +263,167 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Ensure search mode has search term
-    if (normalized.mode === 'search' && !normalized.search) {
-      throw new Error('Search mode requires a search term');
+    if (normalized.mode === 'search' && !normalized.search && !normalized.filters) {
+      throw new Error('Search mode requires a search term or filters');
     }
 
     return normalized;
+  }
+
+  /**
+   * Process advanced filters into format that can be passed to JXA script
+   *
+   * Converts operator-based filters into filter structure that list-tasks.ts can understand.
+   * Simple filters (project, tags, completed) take precedence for backward compatibility.
+   */
+  private processAdvancedFilters(args: QueryTasksArgsV2): Record<string, unknown> {
+    const filter: Record<string, unknown> = {};
+
+    // Start with simple filters (backward compatibility - these take precedence)
+    if (args.completed !== undefined) filter.completed = args.completed;
+    if (args.project) filter.project = args.project;
+    if (args.tags && Array.isArray(args.tags)) filter.tags = args.tags;
+    if (args.search) filter.search = args.search;
+    if (args.dueBy) filter.dueBefore = args.dueBy;
+    if (args.fastSearch) filter.fastSearch = args.fastSearch;
+
+    // If no advanced filters provided, return simple filters
+    if (!args.filters) {
+      return filter;
+    }
+
+    // Process advanced filters
+    const advancedFilters = args.filters as QueryFilters;
+
+    // String filters (project, projectId, search)
+    if (advancedFilters.project && !filter.project) {
+      if (isStringFilter(advancedFilters.project)) {
+        filter.project = advancedFilters.project.value;
+        filter.projectOperator = advancedFilters.project.operator;
+      }
+    }
+
+    if (advancedFilters.projectId && !filter.projectId) {
+      if (isStringFilter(advancedFilters.projectId)) {
+        filter.projectId = advancedFilters.projectId.value;
+        filter.projectIdOperator = advancedFilters.projectId.operator;
+      }
+    }
+
+    if (advancedFilters.search && !filter.search) {
+      if (isStringFilter(advancedFilters.search)) {
+        filter.search = advancedFilters.search.value;
+        filter.searchOperator = advancedFilters.search.operator;
+      }
+    }
+
+    // Array filters (tags, taskStatus)
+    if (advancedFilters.tags && !filter.tags) {
+      if (isArrayFilter(advancedFilters.tags)) {
+        filter.tags = advancedFilters.tags.values;
+        filter.tagsOperator = advancedFilters.tags.operator;
+      }
+    }
+
+    if (advancedFilters.taskStatus) {
+      if (isArrayFilter(advancedFilters.taskStatus)) {
+        filter.taskStatus = advancedFilters.taskStatus.values;
+        filter.taskStatusOperator = advancedFilters.taskStatus.operator;
+      }
+    }
+
+    // Boolean filters
+    if (advancedFilters.flagged !== undefined && filter.flagged === undefined) {
+      filter.flagged = advancedFilters.flagged;
+    }
+    if (advancedFilters.available !== undefined && filter.available === undefined) {
+      filter.available = advancedFilters.available;
+    }
+    if (advancedFilters.blocked !== undefined && filter.blocked === undefined) {
+      filter.blocked = advancedFilters.blocked;
+    }
+    if (advancedFilters.inInbox !== undefined && filter.inInbox === undefined) {
+      filter.inInbox = advancedFilters.inInbox;
+    }
+    if (advancedFilters.completed !== undefined && filter.completed === undefined) {
+      filter.completed = advancedFilters.completed;
+    }
+
+    // Date filters
+    if (advancedFilters.dueDate && !filter.dueBefore && !filter.dueAfter) {
+      if (isDateFilter(advancedFilters.dueDate)) {
+        const normalizedDate = normalizeDateInput(advancedFilters.dueDate.value, 'due');
+        if (normalizedDate) {
+          const isoDate = normalizedDate.toISOString();
+          switch (advancedFilters.dueDate.operator) {
+            case '<':
+            case '<=':
+              filter.dueBefore = isoDate;
+              filter.dueDateOperator = advancedFilters.dueDate.operator;
+              break;
+            case '>':
+            case '>=':
+              filter.dueAfter = isoDate;
+              filter.dueDateOperator = advancedFilters.dueDate.operator;
+              break;
+            case 'BETWEEN':
+              filter.dueBefore = isoDate;
+              if (advancedFilters.dueDate.upperBound) {
+                const upperDate = normalizeDateInput(advancedFilters.dueDate.upperBound, 'due');
+                if (upperDate) {
+                  filter.dueAfter = upperDate.toISOString();
+                }
+              }
+              filter.dueDateOperator = 'BETWEEN';
+              break;
+          }
+        }
+      }
+    }
+
+    if (advancedFilters.deferDate && !filter.deferBefore && !filter.deferAfter) {
+      if (isDateFilter(advancedFilters.deferDate)) {
+        const normalizedDate = normalizeDateInput(advancedFilters.deferDate.value, 'defer');
+        if (normalizedDate) {
+          const isoDate = normalizedDate.toISOString();
+          switch (advancedFilters.deferDate.operator) {
+            case '<':
+            case '<=':
+              filter.deferBefore = isoDate;
+              filter.deferDateOperator = advancedFilters.deferDate.operator;
+              break;
+            case '>':
+            case '>=':
+              filter.deferAfter = isoDate;
+              filter.deferDateOperator = advancedFilters.deferDate.operator;
+              break;
+            case 'BETWEEN':
+              filter.deferBefore = isoDate;
+              if (advancedFilters.deferDate.upperBound) {
+                const upperDate = normalizeDateInput(advancedFilters.deferDate.upperBound, 'defer');
+                if (upperDate) {
+                  filter.deferAfter = upperDate.toISOString();
+                }
+              }
+              filter.deferDateOperator = 'BETWEEN';
+              break;
+          }
+        }
+      }
+    }
+
+    // Number filters (estimatedMinutes)
+    if (advancedFilters.estimatedMinutes) {
+      if (isNumberFilter(advancedFilters.estimatedMinutes)) {
+        filter.estimatedMinutes = advancedFilters.estimatedMinutes.value;
+        filter.estimatedMinutesOperator = advancedFilters.estimatedMinutes.operator;
+        if (advancedFilters.estimatedMinutes.upperBound !== undefined) {
+          filter.estimatedMinutesUpperBound = advancedFilters.estimatedMinutes.upperBound;
+        }
+      }
+    }
+
+    return filter;
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -420,26 +593,23 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   }
 
   private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    if (!args.search) {
+    if (!args.search && !args.filters) {
       return createErrorResponseV2(
         'tasks',
         'MISSING_PARAMETER',
         'Search term is required for search mode',
-        'Add a search parameter with the text to find',
+        'Add a search parameter with the text to find, or use filters',
         { provided_args: args },
         timer.toMetadata(),
       );
     }
 
+    // Process advanced filters (includes simple filters for backward compatibility)
     const filter = {
-      search: args.search,
-      completed: args.completed || false,
+      ...this.processAdvancedFilters(args),
       limit: args.limit,
       includeDetails: args.details,
-      project: args.project, // Pass as project name, not ID
-      tags: args.tags,
       skipAnalysis: !args.details, // Skip expensive analysis if not needed
-      fastSearch: args.fastSearch, // Only search task names for better performance
     };
 
     // Generate cache key for search with consistent tag ordering
@@ -449,7 +619,9 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     // Check cache
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
-      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
+      // Apply sorting if requested (cache may not have sorted results)
+      const sortedTasks = this.sortTasks(cached?.tasks || [], args.sort);
+      const projectedTasks = this.projectFields(sortedTasks, args.fields);
       return createTaskResponseV2(
         'tasks',
         projectedTasks,
@@ -458,6 +630,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
           from_cache: true,
           mode: 'search',
           search_term: args.search,
+          sort_applied: args.sort ? true : false,
         },
       );
     }
@@ -483,10 +656,13 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
 
-    // Cache search results
-    this.cache.set('tasks', cacheKey, { tasks });
+    // Apply sorting if requested
+    const sortedTasks = this.sortTasks(tasks, args.sort);
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
+    // Cache search results (sorted)
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
+
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
     return createTaskResponseV2(
       'tasks',
       projectedTasks,
@@ -495,18 +671,19 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         from_cache: false,
         mode: 'search',
         search_term: args.search,
+        sort_applied: args.sort ? true : false,
       },
     );
   }
 
   private async handleAvailableTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Process advanced filters (includes simple filters for backward compatibility)
     const filter = {
+      ...this.processAdvancedFilters(args),
       completed: false,
       available: true,
       limit: args.limit,
       includeDetails: args.details,
-      project: args.project, // Pass as project name, not ID
-      tags: args.tags,
       skipAnalysis: false, // Need analysis for accurate availability
     };
 
@@ -545,24 +722,27 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
-    this.cache.set('tasks', cacheKey, { tasks });
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
+    // Apply sorting if requested
+    const sortedTasks = this.sortTasks(tasks, args.sort);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
+
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
     return createTaskResponseV2(
       'tasks',
       projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'available' },
+      { ...timer.toMetadata(), from_cache: false, mode: 'available', sort_applied: args.sort ? true : false },
     );
   }
 
   private async handleBlockedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Process advanced filters (includes simple filters for backward compatibility)
     const filter = {
+      ...this.processAdvancedFilters(args),
       completed: false,
       blocked: true,
       limit: args.limit,
       includeDetails: args.details,
-      project: args.project, // Pass as project name, not ID
-      tags: args.tags,
       skipAnalysis: false, // Need analysis for blocking detection
     };
 
@@ -601,13 +781,16 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
 
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
-    this.cache.set('tasks', cacheKey, { tasks });
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
+    // Apply sorting if requested
+    const sortedTasks = this.sortTasks(tasks, args.sort);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
+
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
     return createTaskResponseV2(
       'tasks',
       projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'blocked' },
+      { ...timer.toMetadata(), from_cache: false, mode: 'blocked', sort_applied: args.sort ? true : false },
     );
   }
 
@@ -657,31 +840,12 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   }
 
   private async handleAllTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    const filter: {
-      completed?: boolean;
-      limit?: number;
-      includeDetails?: boolean;
-      project?: string;
-      tags?: string[];
-      dueBefore?: string;
-      [key: string]: unknown;
-    } = {
-      completed: args.completed,
+    // Process advanced filters (includes simple filters for backward compatibility)
+    const filter = {
+      ...this.processAdvancedFilters(args),
       limit: args.limit,
       includeDetails: args.details,
-      project: args.project, // Pass as project name, not ID
-      tags: args.tags,
     };
-
-    // Add date filter if provided
-    if (args.dueBy) {
-      filter.dueBefore = args.dueBy;
-    }
-
-    // Clean undefined values
-    Object.keys(filter).forEach(key => {
-      if (filter[key] === undefined) delete filter[key];
-    });
 
     // Execute query
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
@@ -710,7 +874,10 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
+    // Apply sorting if requested
+    const sortedTasks = this.sortTasks(tasks, args.sort);
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
+
     return createTaskResponseV2(
       'tasks',
       projectedTasks,
@@ -719,6 +886,7 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
         from_cache: false,
         mode: 'all',
         filters_applied: filter,
+        sort_applied: args.sort ? true : false,
       },
     );
   }
@@ -741,11 +909,12 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
     }
 
     // Gather data from multiple sources for intelligent suggestions
+    // Process advanced filters (includes simple filters for backward compatibility)
     const filter = {
+      ...this.processAdvancedFilters(args),
       completed: false,
       limit: Math.min(args.limit * 2, 100), // Get more for analysis
       includeDetails: args.details,
-      tags: args.tags, // Include tag filtering for smart suggestions
     };
 
     // Execute comprehensive query
@@ -883,6 +1052,59 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
       });
 
       return projectedTask as OmniFocusTask;
+    });
+  }
+
+  /**
+   * Sort tasks based on provided sort options
+   *
+   * Applies multi-level sorting in the order specified.
+   * Applied after filtering in TypeScript (post-query) for simplicity.
+   */
+  private sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): OmniFocusTask[] {
+    if (!sortOptions || sortOptions.length === 0) {
+      return tasks;
+    }
+
+    return [...tasks].sort((a, b) => {
+      for (const option of sortOptions) {
+        // Safely access the field value
+        const aValue = (a as unknown as Record<string, unknown>)[option.field];
+        const bValue = (b as unknown as Record<string, unknown>)[option.field];
+
+        // Handle null/undefined values (push to end)
+        if (aValue === null || aValue === undefined) {
+          if (bValue === null || bValue === undefined) continue;
+          return 1; // a goes after b
+        }
+        if (bValue === null || bValue === undefined) {
+          return -1; // a goes before b
+        }
+
+        // Compare values based on type
+        let comparison = 0;
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          comparison = aValue.localeCompare(bValue, undefined, { sensitivity: 'base' });
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          comparison = aValue - bValue;
+        } else if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
+          comparison = aValue === bValue ? 0 : aValue ? -1 : 1; // true before false
+        } else if (aValue instanceof Date && bValue instanceof Date) {
+          comparison = aValue.getTime() - bValue.getTime();
+        } else {
+          // Fallback to string comparison
+          comparison = String(aValue).localeCompare(String(bValue));
+        }
+
+        // Apply direction
+        if (comparison !== 0) {
+          return option.direction === 'desc' ? -comparison : comparison;
+        }
+
+        // If equal, continue to next sort option
+      }
+
+      return 0; // All sort fields are equal
     });
   }
 

@@ -8,9 +8,44 @@
 
 ## Task Operations (2 tools)
 
-**tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"`
-- Modes: all|search|overdue|today|upcoming|available|blocked|flagged
+**tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"` `filters?` `sort[]?`
+- Modes: all|search|overdue|today|upcoming|available|blocked|flagged|smart_suggest
+- Advanced: `filters` (operator-based), `sort` (multi-field)
 - Returns: summary→insights, then data
+
+**Advanced Filtering Examples:**
+```javascript
+// OR logic for tags: "tasks tagged urgent OR important"
+{ filters: { tags: { operator: "OR", values: ["urgent", "important"] } } }
+
+// Date range: "tasks due this week"
+{ filters: { dueDate: { operator: "<=", value: "2025-10-07" } } }
+
+// String matching: "tasks in projects containing 'work'"
+{ filters: { project: { operator: "CONTAINS", value: "work" } } }
+
+// Combined filters: "available tasks in work projects due this week"
+{
+  mode: "available",
+  filters: {
+    project: { operator: "CONTAINS", value: "work" },
+    dueDate: { operator: "<=", value: "2025-10-07" }
+  }
+}
+
+// Sorting: "tasks by due date, then priority"
+{
+  sort: [
+    { field: "dueDate", direction: "asc" },
+    { field: "flagged", direction: "desc" }
+  ]
+}
+```
+
+**Filter Operators:**
+- String: CONTAINS, STARTS_WITH, ENDS_WITH, EQUALS, NOT_EQUALS
+- Array: OR, AND, NOT_IN, IN
+- Date/Number: >, >=, <, <=, BETWEEN
 
 **manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
 - Ops: create(name*)|update(taskId*)|complete(taskId*)|delete(taskId*)
