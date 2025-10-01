@@ -17,6 +17,9 @@ import { ManageTaskTool } from './tasks/ManageTaskTool.js';
 // Batch operations
 import { BatchCreateTool } from './batch/BatchCreateTool.js';
 
+// Capture operations
+import { ParseMeetingNotesTool } from './capture/ParseMeetingNotesTool.js';
+
 // Project operations - Already consolidated
 import { ProjectsToolV2 } from './projects/ProjectsToolV2.js';
 
@@ -72,7 +75,7 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
 }
 
 export function registerTools(server: Server, cache: CacheManager): void {
-  logger.info('OmniFocus MCP v2.0.0 - CONSOLIDATED tool set (16 tools, reduced from 22)');
+  logger.info('OmniFocus MCP v2.2.0 - CONSOLIDATED tool set (17 tools + Smart Capture)');
 
   // All tools are now consolidated for optimal LLM usage
   const tools: Tool[] = [
@@ -82,6 +85,9 @@ export function registerTools(server: Server, cache: CacheManager): void {
 
     // Batch operations (1 tool)
     new BatchCreateTool(cache),         // 'batch_create' - Create multiple projects/tasks with hierarchies
+
+    // Capture operations (1 tool)
+    new ParseMeetingNotesTool(cache),   // 'parse_meeting_notes' - Extract action items from text
 
     // Project operations (1 tool)
     new ProjectsToolV2(cache),           // 'projects' - All project operations
