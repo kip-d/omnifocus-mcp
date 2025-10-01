@@ -1,10 +1,44 @@
 # OmniFocus MCP v2.1.0 Quick Reference (LLM-Optimized)
 
-**15 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture**
+**17 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
 
 **📖 Related Resources:**
 - **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily GTD workflows
+- **[Smart Capture Guide](SMART_CAPTURE.md)** - Extract action items from meeting notes
 - **[Main Documentation](../README.md)** - Installation, setup, and complete overview
+
+## Smart Capture (1 tool)
+
+**parse_meeting_notes** `input*` `extractMode:"both"` `suggestProjects:true` `suggestTags:true` `suggestDueDates:true` `suggestEstimates:true` `returnFormat:"preview"` `groupByProject:true` `existingProjects[]?` `defaultProject?`
+- Extract action items from meeting notes, transcripts, or unstructured text
+- Auto-suggests context tags (@computer, @phone, @15min, @urgent, etc.)
+- Parses natural language dates ("by Friday" → YYYY-MM-DD)
+- Estimates task duration from keywords
+- Detects projects vs single tasks
+- Output formats: `preview` (for review) or `batch_ready` (for batch_create)
+
+**Examples:**
+```javascript
+// Extract and preview
+{
+  input: "Meeting notes: Send proposal by Friday. Call Sarah tomorrow.",
+  returnFormat: "preview"
+}
+
+// Direct to batch_create format
+{
+  input: "Website redesign: wireframes, development, testing",
+  returnFormat: "batch_ready",
+  suggestTags: true
+}
+
+// Match to existing projects
+{
+  input: "Update Client Onboarding docs",
+  existingProjects: ["Client Onboarding"],
+  defaultProject: "Miscellaneous"
+}
+```
 
 ## Task Operations (2 tools)
 
