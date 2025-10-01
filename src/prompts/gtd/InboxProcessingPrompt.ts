@@ -47,7 +47,7 @@ export class InboxProcessingPrompt extends BasePrompt {
           role: 'assistant',
           content: {
             type: 'text',
-            text: `I'll help you quickly process your inbox. Let me get your inbox items.`,
+            text: 'I\'ll help you quickly process your inbox. Let me get your inbox items.',
           },
         },
         {
