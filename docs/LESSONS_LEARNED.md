@@ -1027,7 +1027,7 @@ process.stdin.on('end', async () => {
 
 **Time Cost:** 1 day of systematic debugging to identify and fix the root cause.
 
-**Impact:** Restored functionality to 73% of the MCP toolset (11 out of 15 tools).
+**Impact:** Restored functionality to 69% of the MCP toolset (11 out of 16 tools).
 
 ---
 
@@ -1169,7 +1169,7 @@ const MINIMAL_TAG_BRIDGE = `
 ### Critical Lessons
 
 **1. Stability Without Functionality is Meaningless**
-- Having 15/15 tools "working" meant nothing if core features were unreliable
+- Having 16/16 tools "working" meant nothing if core features were unreliable
 - Tag assignment is fundamental to GTD - must work correctly
 
 **2. Context Matters More Than Syntax**

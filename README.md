@@ -55,27 +55,47 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "omnifocus": {
       "command": "node",
-      "args": ["/path/to/omnifocus-mcp/dist/index.js"]
+      "args": ["/absolute/path/to/omnifocus-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+**Claude Code:**
+Add to your VS Code settings (`.vscode/settings.json` or User Settings):
+```json
+{
+  "claudeCode.mcpServers": {
+    "omnifocus": {
+      "command": "node",
+      "args": ["/absolute/path/to/omnifocus-mcp/dist/index.js"]
     }
   }
 }
 ```
 
 **ChatGPT Desktop:**
-Add to ChatGPT's MCP configuration:
+Local stdio MCP servers are not yet supported. ChatGPT Desktop currently only supports remote MCP servers. Configuration instructions will be added once local server support is available.
+
+**Other MCP Clients with Local Server Support:**
+- **Cursor**: Configure via Settings > MCP or create `.cursor/mcp.json`
+- **Windsurf**: Configure via MCP settings
+- **Cline** (VS Code extension): `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- **Zed**: Configure via MCP settings
+
+All clients use the same basic configuration structure:
 ```json
 {
   "mcpServers": {
     "omnifocus": {
       "command": "node",
-      "args": ["/path/to/omnifocus-mcp/dist/index.js"]
+      "args": ["/absolute/path/to/omnifocus-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-**Other MCP Clients:**
-Configure according to your client's MCP server setup documentation. All clients use the same server configuration format.
+Refer to your client's documentation for specific configuration format and file location.
 
 ## API Documentation
 
@@ -103,7 +123,7 @@ Nine pre-built prompts for common workflows:
 
 **Accessing MCP Prompts:**
 - Claude Desktop: "+" button → "Add from omnifocus"
-- ChatGPT Desktop: Via prompt selector (if supported)
+- Claude Code: Access via natural language ("use the gtd_process_inbox prompt")
 - Other clients: See your client's documentation for MCP prompt access
 
 **📖 Comprehensive Documentation:**

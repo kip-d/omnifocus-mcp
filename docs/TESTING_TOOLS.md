@@ -6,7 +6,7 @@ This document describes the comprehensive testing toolkit developed for debuggin
 ## Testing Kit Components
 
 ### 1. Emergency Diagnostic (`emergency-diagnostic.js`)
-**Purpose**: Quick diagnostic tool to test all 15 tools and identify which are working.
+**Purpose**: Quick diagnostic tool to test all 16 tools and identify which are working.
 
 ```bash
 node emergency-diagnostic.js
@@ -30,7 +30,7 @@ Testing all tools...
 ✅ projects: 12ms - SUCCESS
 ...
 
-Summary: 2/15 tools working
+Summary: 2/16 tools working
 ```
 
 ### 2. Single Tool Tester (`test-single-tool.js`)
@@ -67,7 +67,7 @@ node test-suite-comprehensive.js
 ```
 
 **Features**:
-- Tests all 15 tools with appropriate parameters
+- Tests all 16 tools with appropriate parameters
 - Shows pass/fail summary
 - Reports which tools are producing output vs executing silently
 - Identifies systematic issues (like the current 90% failure rate)

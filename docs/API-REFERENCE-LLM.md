@@ -73,7 +73,7 @@
 ## Key Patterns (v2.1.0 Consolidated Architecture)
 
 - **Operation-based routing**: Most tools use `operation` parameter for multiple functions
-- **Tool consolidation**: 15 tools (reduced from 22) for 30% better context efficiency
+- **Tool consolidation**: 16 tools (reduced from 22) for 27% better context efficiency
 - **Summary-first**: Analytics return insights before data
 - **Dates**: YYYY-MM-DD gets smart defaults (due→5pm, defer→8am)  
 - **Performance**: fastMode/namesOnly for speed, consolidated tools reduce overhead
@@ -82,7 +82,7 @@
 ## Migration from v2.0 to v2.1.0
 
 - **No breaking changes**: All existing tool calls work identically
-- **Same 15 tools**: Tool count remains the same, but internal consolidation improves performance
+- **Same 16 tools**: Tool count remains the same, but internal consolidation improves performance
 - **Enhanced error handling**: Better error messages with operation context
 - **Improved caching**: More efficient caching across consolidated operations
 

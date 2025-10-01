@@ -1,6 +1,6 @@
 # OmniFocus MCP API Reference v2.1.0
 
-This document provides comprehensive documentation for all 15 tools in the OmniFocus MCP server v2.1.0 (Self-Contained Architecture).
+This document provides comprehensive documentation for all 16 tools in the OmniFocus MCP server v2.1.0 (Self-Contained Architecture).
 
 ## Table of Contents
 
