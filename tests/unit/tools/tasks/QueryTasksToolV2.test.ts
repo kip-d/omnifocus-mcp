@@ -38,8 +38,9 @@ describe('QueryTasksToolV2', () => {
     it('should have correct name and description', () => {
       expect(tool.name).toBe('tasks');
       expect(tool.description).toContain('Query OmniFocus tasks');
-      expect(tool.description).toContain('mode="search"');
-      expect(tool.description).toContain('mode="today"');
+      expect(tool.description).toContain('MODES:');
+      expect(tool.description).toContain('ADVANCED QUERIES');
+      expect(tool.description).toContain('CONVERSION PATTERN');
     });
   });
 

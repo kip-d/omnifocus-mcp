@@ -108,7 +108,50 @@ type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
 export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
-  description = 'Query OmniFocus tasks with various modes and optional advanced filtering. Common usage: mode="search" with search="meeting" to find tasks, mode="today" for current tasks, mode="overdue" for past due items. For complex queries, use "filters" parameter with operators (OR/AND for tags, date comparisons, string matching). Natural language examples: "tasks due this week in work projects" → filters: {dueDate: {operator:"<=", value:"2025-10-07"}, project: {operator:"CONTAINS", value:"work"}}. "tasks tagged urgent or important" → filters: {tags: {operator:"OR", values:["urgent","important"]}}. Always returns a summary first for quick answers, then detailed task data.';
+  description = `Query OmniFocus tasks with modes and advanced filtering. Returns summary first, then detailed data.
+
+MODES: all, search, overdue, today, upcoming, available, blocked, flagged, smart_suggest
+
+SIMPLE QUERIES (use basic parameters):
+- "What's due today?" → mode: "today"
+- "Show me overdue tasks" → mode: "overdue"
+- "Find meeting tasks" → mode: "search", search: "meeting"
+- "Tasks in Project X" → mode: "all", project: "Project X"
+
+ADVANCED QUERIES (use filters parameter for complex logic):
+
+TAG LOGIC:
+- "urgent OR important" → filters: {tags: {operator: "OR", values: ["urgent", "important"]}}
+- "urgent AND work" → filters: {tags: {operator: "AND", values: ["urgent", "work"]}}
+- "not waiting" → filters: {tags: {operator: "NOT_IN", values: ["waiting"]}}
+
+PROJECT MATCHING:
+- "in work projects" → filters: {project: {operator: "CONTAINS", value: "work"}}
+- "starts with Home" → filters: {project: {operator: "STARTS_WITH", value: "Home"}}
+- "exactly Project X" → filters: {project: {operator: "EQUALS", value: "Project X"}}
+
+DATE QUERIES:
+- "due this week" → filters: {dueDate: {operator: "<=", value: "2025-10-07"}}
+- "due after Monday" → filters: {dueDate: {operator: ">", value: "2025-10-06"}}
+- "due between dates" → filters: {dueDate: {operator: "BETWEEN", value: "2025-10-01", upperBound: "2025-10-07"}}
+
+DURATION:
+- "quick wins under 30 min" → filters: {estimatedMinutes: {operator: "<=", value: 30}}
+- "tasks taking 15-30 min" → filters: {estimatedMinutes: {operator: "BETWEEN", value: 15, upperBound: 30}}
+
+COMBINED FILTERS (AND logic between different filter types):
+- "work tasks due this week" → filters: {project: {operator: "CONTAINS", value: "work"}, dueDate: {operator: "<=", value: "2025-10-07"}}
+- "urgent OR important AND available" → mode: "available", filters: {tags: {operator: "OR", values: ["urgent", "important"]}}
+
+SORTING (add sort parameter):
+- "by due date" → sort: [{field: "dueDate", direction: "asc"}]
+- "by priority then date" → sort: [{field: "flagged", direction: "desc"}, {field: "dueDate", direction: "asc"}]
+
+CONVERSION PATTERN: When user asks in natural language, identify:
+1. Mode (today/overdue/all/search/etc.)
+2. Filter operators needed (OR/AND/CONTAINS/etc.)
+3. Sort requirements
+4. Combine into structured query`;
   schema = QueryTasksToolSchemaV2;
 
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {
