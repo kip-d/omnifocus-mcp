@@ -112,7 +112,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
 
   schema = ParseMeetingNotesSchema;
 
-  async executeValidated(args: ParseMeetingNotesArgs): Promise<unknown> {
+  executeValidated(args: ParseMeetingNotesArgs): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     try {

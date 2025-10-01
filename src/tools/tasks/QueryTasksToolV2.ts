@@ -1135,8 +1135,26 @@ CONVERSION PATTERN: When user asks in natural language, identify:
         } else if (aValue instanceof Date && bValue instanceof Date) {
           comparison = aValue.getTime() - bValue.getTime();
         } else {
-          // Fallback to string comparison
-          comparison = String(aValue).localeCompare(String(bValue));
+          // Fallback: convert to string for comparison
+          // For objects, use JSON serialization to avoid [object Object]
+          let aStr: string;
+          let bStr: string;
+
+          if (typeof aValue === 'object' && aValue !== null) {
+            aStr = JSON.stringify(aValue);
+          } else {
+            // Cast to primitive to satisfy linter - we've already handled objects
+            aStr = String(aValue as string | number | boolean);
+          }
+
+          if (typeof bValue === 'object' && bValue !== null) {
+            bStr = JSON.stringify(bValue);
+          } else {
+            // Cast to primitive to satisfy linter - we've already handled objects
+            bStr = String(bValue as string | number | boolean);
+          }
+
+          comparison = aStr.localeCompare(bStr);
         }
 
         // Apply direction
