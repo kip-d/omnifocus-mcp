@@ -1,4 +1,4 @@
-import { getAnalyticsHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized overdue analysis script using direct OmniFocus API methods
@@ -15,7 +15,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - OPTIMIZED: Uses analytics helpers (~130 lines vs 551 lines - 76% reduction)
  */
 export const ANALYZE_OVERDUE_SCRIPT = `
-  ${getAnalyticsHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const options = {{options}};

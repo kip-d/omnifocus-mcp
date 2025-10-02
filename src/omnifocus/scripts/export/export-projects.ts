@@ -1,4 +1,4 @@
-import { getSerializationHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export projects from OmniFocus in various formats
@@ -11,7 +11,7 @@ import { getSerializationHelpers } from '../shared/helpers.js';
  * - Proper CSV formatting with flattened stats
  */
 export const EXPORT_PROJECTS_SCRIPT = `
-  ${getSerializationHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const format = {{format}};

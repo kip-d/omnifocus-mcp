@@ -1,4 +1,4 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new folder in OmniFocus
@@ -11,7 +11,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  */
 export const CREATE_FOLDER_SCRIPT = `
   // CREATE_FOLDER
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const name = {{name}};

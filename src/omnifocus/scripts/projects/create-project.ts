@@ -1,4 +1,4 @@
-import { getCoreHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to create a new project in OmniFocus
@@ -13,8 +13,8 @@ import { getCoreHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js'
  * - Proper error handling and validation
  */
 export const CREATE_PROJECT_SCRIPT = `
-  ${getCoreHelpers()}
-  ${getRecurrenceApplyHelpers()}
+  ${getUnifiedHelpers()}
+  
   
   (() => {
     const name = {{name}};

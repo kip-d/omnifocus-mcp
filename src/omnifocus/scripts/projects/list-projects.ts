@@ -1,4 +1,4 @@
-import { getListHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all projects in OmniFocus with filtering and statistics
@@ -12,7 +12,7 @@ import { getListHelpers } from '../shared/helpers.js';
  * - OPTIMIZED: Uses list helpers (~310 lines vs 551 lines - 44% reduction)
  */
 export const LIST_PROJECTS_SCRIPT = `
-  ${getListHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const filter = {{filter}};

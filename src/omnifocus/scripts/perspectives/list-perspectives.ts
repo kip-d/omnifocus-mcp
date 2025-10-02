@@ -1,11 +1,11 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list all available perspectives in OmniFocus
  * Uses direct JXA access to perspective objects
  */
 export const LIST_PERSPECTIVES_SCRIPT = `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

@@ -441,7 +441,12 @@ export const ERROR_HANDLING = `
  * Get all helpers combined
  * @param context Configuration options for helper behavior
  */
+/**
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
+ */
 export function getAllHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getAllHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     generateHelperConfig(context),
     SAFE_UTILITIES,
@@ -455,8 +460,11 @@ export function getAllHelpers(context?: HelperContext): string {
 /**
  * Get all helpers with bridge support
  * @param context Configuration options for helper behavior
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getAllHelpersWithBridge(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getAllHelpersWithBridge() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     generateHelperConfig(context),
     SAFE_UTILITIES,
@@ -472,8 +480,11 @@ export function getAllHelpersWithBridge(context?: HelperContext): string {
  * CORE HELPERS: Essential functions used by almost every script (~50 lines)
  * Basic error handling and safe getters
  * @param context Configuration options for helper behavior
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getCoreHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getCoreHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   const config = generateHelperConfig(context);
   return `
   ${config}
@@ -558,11 +569,12 @@ export function getTaskHelpers(): string {
       // Try bridge first for better reliability after tag modifications
       if (app && app.evaluateJavascript) {
         const taskId = task.id();
-        const script = '(() => { const t = Task.byIdentifier("' + taskId + '"); return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]"; })()';
+        // ✅ Fixed: Use JSON.stringify for proper escaping of taskId
+        const script = \`(() => { const t = Task.byIdentifier(\${JSON.stringify(taskId)}); return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]"; })()\`;
         const result = app.evaluateJavascript(script);
         return JSON.parse(result);
       }
-      
+
       // Fallback to JXA
       return safeGetTags(task);
     } catch (e) {
@@ -850,7 +862,12 @@ export function getTaskStatusHelpers(): string {
  * Get minimal helpers for scripts that need smaller payloads
  * Only includes the most essential utility functions
  */
+/**
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
+ */
 export function getMinimalHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getMinimalHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   // getCoreHelpers already includes generateHelperConfig, so don't duplicate it
   return getCoreHelpers(context);
 }
@@ -877,8 +894,11 @@ export function getSerializationHelpers(): string {
 /**
  * Basic script helpers: Core + dates + basic task props (~130 lines)
  * For simple scripts that just need safe getters and basic task data
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getBasicHelpers(): string {
+  console.warn('[DEPRECATED] getBasicHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     getCoreHelpers(),
     getDateHelpers(),
@@ -889,16 +909,22 @@ export function getBasicHelpers(): string {
 /**
  * Analytics helpers: Core + dates + basic task props (~130 lines)
  * For analytics scripts that need minimal overhead
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getAnalyticsHelpers(): string {
+  console.warn('[DEPRECATED] getAnalyticsHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return getBasicHelpers(); // Same as basic for now
 }
 
 /**
  * List helpers: Basic + project helpers + serialization (~310 lines)
  * For list/query scripts that need full task details
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getListHelpers(): string {
+  console.warn('[DEPRECATED] getListHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     getCoreHelpers(),
     getDateHelpers(),
@@ -912,11 +938,13 @@ export function getListHelpers(): string {
  * OPTIMIZED Full status helpers: Basic + all status logic + validation (~280 lines vs 380 lines)
  * For scripts that need complex task status analysis (blocked/available/next)
  * Uses direct API methods for 40-80% performance improvement in status checks
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getFullStatusHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getFullStatusHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
-    generateHelperConfig(context),
-    getCoreHelpers(context),
+    getCoreHelpers(context), // Already includes generateHelperConfig
     getDateHelpers(),
     getTaskHelpers(),
     getProjectHelpers(),
@@ -928,8 +956,11 @@ export function getFullStatusHelpers(context?: HelperContext): string {
 /**
  * Recurrence helpers: Basic + repeat logic (~330 lines)
  * For scripts dealing with recurring tasks
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getRecurrenceHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getRecurrenceHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     generateHelperConfig(context),
     getCoreHelpers(context),
@@ -940,17 +971,10 @@ export function getRecurrenceHelpers(context?: HelperContext): string {
 }
 
 /**
- * Minimal recurrence helpers for creation/update only (~150 lines)
- * Includes: convertToRRULE, convertToOmniMethod, prepareRepetitionRuleData,
- *           applyRepetitionRuleViaBridge, applyDeferAnother
- * Excludes heavy repeat rule extraction/analysis to keep scripts small.
- * @param context Configuration options for helper behavior
+ * Recurrence apply functions - just the functions without config
+ * For composing with other helpers that already include config
  */
-export function getRecurrenceApplyHelpers(context?: HelperContext): string {
-  const config = generateHelperConfig(context);
-  return `
-  ${config}
-
+export const RECURRENCE_APPLY_FUNCTIONS = `
   function convertToRRULE(rule) {
     if (!rule || !rule.unit || !rule.steps) return '';
     const u = rule.unit;
@@ -1024,14 +1048,34 @@ export function getRecurrenceApplyHelpers(context?: HelperContext): string {
     if (u === 'minute') ms = n * 60 * 1000; else if (u === 'hour') ms = n * 3600000; else if (u === 'day') ms = n * 86400000; else if (u === 'week') ms = n * 604800000; else if (u === 'month') ms = n * 2592000000; else if (u === 'year') ms = n * 31536000000;
     if (ms > 0) task.deferDate = new Date(task.dueDate().getTime() - ms);
   }
+`;
+
+/**
+ * Minimal recurrence helpers for creation/update only (~150 lines)
+ * Includes: convertToRRULE, convertToOmniMethod, prepareRepetitionRuleData,
+ *           applyRepetitionRuleViaBridge, applyDeferAnother
+ * Excludes heavy repeat rule extraction/analysis to keep scripts small.
+ * @param context Configuration options for helper behavior
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
+ */
+export function getRecurrenceApplyHelpers(context?: HelperContext): string {
+  console.warn('[DEPRECATED] getRecurrenceApplyHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
+  const config = generateHelperConfig(context);
+  return `
+  ${config}
+${RECURRENCE_APPLY_FUNCTIONS}
   `;
 }
 
 /**
  * OPTIMIZED TAG HELPERS: Direct count APIs for analytics (~120 lines)
  * Uses discovered tag count methods for 60-90% performance improvement
+ * @deprecated Since v2.2.0 - Use getUnifiedHelpers() instead
+ * This function will be removed in v2.3.0
  */
 export function getTagHelpers(): string {
+  console.warn('[DEPRECATED] getTagHelpers() is deprecated. Use getUnifiedHelpers() instead. Will be removed in v2.3.0');
   return [
     getCoreHelpers(),
     getTaskHelpers(), // Includes safeGetTags
@@ -1095,3 +1139,56 @@ export function getTagHelpers(): string {
  * Legacy export for backward compatibility
  */
 export const SAFE_UTILITIES_SCRIPT = SAFE_UTILITIES;
+
+/**
+ * ===========================================================================
+ * UNIFIED HELPER BUNDLE - SIMPLIFIED ARCHITECTURE (v2.2+)
+ * ===========================================================================
+ *
+ * This bundle includes ALL helper functions needed by any script.
+ *
+ * WHY: Empirical testing shows JXA supports 523KB scripts. Our largest bundle
+ * is ~50KB (10% of limit). The complexity of fragmenting helpers (18 functions,
+ * composition rules, duplicate config risks) far outweighs a 20-30KB size increase.
+ *
+ * BENEFITS:
+ * - Zero composition complexity
+ * - Impossible to duplicate HELPER_CONFIG
+ * - All functions always available
+ * - Consistent across all scripts
+ * - Safe to refactor without breaking composition
+ *
+ * SIZE: ~50KB (well under 523KB JXA limit)
+ *
+ * See docs/HELPER_ARCHITECTURE_SIMPLIFICATION.md for full rationale.
+ */
+export function getUnifiedHelpers(context?: HelperContext): string {
+  return [
+    '// ===== UNIFIED OMNIFOCUS HELPERS =====',
+    '// Generated: ' + new Date().toISOString(),
+    '',
+    generateHelperConfig(context),
+    '',
+    '// ----- Safe Utilities -----',
+    SAFE_UTILITIES,
+    '',
+    '// ----- Project Validation -----',
+    PROJECT_VALIDATION,
+    '',
+    '// ----- Error Handling -----',
+    ERROR_HANDLING,
+    '',
+    '// ----- Task Serialization -----',
+    TASK_SERIALIZATION,
+    '',
+    '// ----- Recurrence Functions -----',
+    RECURRENCE_APPLY_FUNCTIONS,
+    '',
+    '// ===== END HELPERS =====',
+  ].join('\n');
+}
+
+/**
+ * Alias for semantic clarity - this is THE helper bundle to use
+ */
+export const OMNIFOCUS_HELPERS = getUnifiedHelpers;

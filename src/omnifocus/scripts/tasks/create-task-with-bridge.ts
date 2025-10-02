@@ -3,11 +3,11 @@
  * BRIDGE VERSION: Uses OmniJS bridge for reliable tag assignment
  */
 
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 
 export const CREATE_TASK_SCRIPT = `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
 
   // Minimal error formatting

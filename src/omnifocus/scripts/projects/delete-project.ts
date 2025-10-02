@@ -1,4 +1,4 @@
-import { getBasicHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a project from OmniFocus
@@ -10,7 +10,7 @@ import { getBasicHelpers } from '../shared/helpers.js';
  * - Detailed reporting of deleted/orphaned tasks
  */
 export const DELETE_PROJECT_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
   // Parameter declarations

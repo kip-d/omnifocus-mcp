@@ -1,4 +1,4 @@
-import { getAnalyticsHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to calculate task velocity and throughput metrics in OmniFocus
@@ -11,7 +11,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - Projections for future throughput
  */
 export const TASK_VELOCITY_SCRIPT = `
-  ${getAnalyticsHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const options = {{options}};

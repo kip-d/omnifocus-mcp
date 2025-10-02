@@ -1,4 +1,4 @@
-import { getAnalyticsHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Optimized productivity statistics script using direct OmniFocus API methods
@@ -15,7 +15,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - Lower memory usage
  */
 export const PRODUCTIVITY_STATS_SCRIPT = `
-  ${getAnalyticsHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const options = {{options}};

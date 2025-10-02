@@ -1,44 +1,17 @@
 /**
  * Script to create a new task in OmniFocus
- * WORKING VERSION: Added back essential helper functions for full functionality
+ *
+ * SIMPLIFIED ARCHITECTURE (v2.2+): Uses unified helper bundle
+ * All helpers included once - no composition complexity
  */
 
-import { getMinimalHelpers, getRecurrenceApplyHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 
 export const CREATE_TASK_SCRIPT = `
-  ${getMinimalHelpers()}
-  ${getRecurrenceApplyHelpers()}
+  ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
-  
-  // Minimal error formatting
-  function formatError(error, context = '') {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: context
-    });
-  }
-  
-  // Basic project validation
-  function validateProject(projectId, doc) {
-    if (!projectId) return { valid: true, project: null };
-    
-    const projects = doc.flattenedProjects();
-    for (let i = 0; i < projects.length; i++) {
-      try { 
-        if (projects[i].id() === projectId) { 
-          return { valid: true, project: projects[i] }; 
-        } 
-      } catch (e) {}
-    }
-    
-    return { 
-      valid: false, 
-      error: 'Project not found: ' + projectId 
-    };
-  }
-  
+
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();

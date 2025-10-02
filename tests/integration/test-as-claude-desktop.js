@@ -34,18 +34,39 @@ const cleanup = (code = 0) => {
   if (cleanupDone) return;
   cleanupDone = true;
 
+  // Remove the unexpected exit listener since we're now handling exit ourselves
+  server.removeAllListeners('exit');
+
+  // Close stdin to signal graceful shutdown per MCP spec
   try {
     server.stdin.end();
   } catch (e) {}
 
-  server.kill('SIGTERM');
+  // Wait for server to exit gracefully (it will wait for pending operations)
+  const gracefulExitTimeout = setTimeout(() => {
+    console.log('⚠️  Server did not exit gracefully within 5s, sending SIGTERM...');
+    server.kill('SIGTERM');
 
-  setTimeout(() => {
-    if (!server.killed) {
-      server.kill('SIGKILL');
+    // Last resort: force kill after another 2s
+    setTimeout(() => {
+      if (!server.killed) {
+        console.log('⚠️  Server did not respond to SIGTERM, sending SIGKILL...');
+        server.kill('SIGKILL');
+      }
+      process.exit(code);
+    }, 2000);
+  }, 5000);
+
+  // If server exits naturally, clear the timeout and exit
+  server.once('exit', (exitCode) => {
+    clearTimeout(gracefulExitTimeout);
+    if (exitCode === 0) {
+      process.exit(code);
+    } else {
+      console.error(`⚠️  Server exited with code ${exitCode}`);
+      process.exit(code || exitCode);
     }
-    process.exit(code);
-  }, 750);
+  });
 };
 
 const parsePayload = (response) => {
@@ -325,6 +346,8 @@ server.on('error', (err) => {
   failAndExit(`Server process error: ${err.message}`);
 });
 
+// Handle unexpected server exits during the test
+// (Normal exit after cleanup is handled in the cleanup function)
 server.on('exit', (code) => {
   if (!cleanupDone) {
     failAndExit(`Server exited unexpectedly with code ${code}`);

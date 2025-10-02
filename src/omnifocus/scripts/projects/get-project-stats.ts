@@ -1,4 +1,4 @@
-import { getAnalyticsHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to get accurate project statistics including available rates
@@ -15,7 +15,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - Focuses on project-level metrics that OmniFocus tracks accurately
  */
 export const GET_PROJECT_STATS_SCRIPT = `
-  ${getAnalyticsHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const options = {{options}};

@@ -1,4 +1,4 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to list folders in OmniFocus with hierarchy information
@@ -12,7 +12,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  */
 export function createListFoldersScript(options: any): string {
   return `
-    ${getMinimalHelpers()}
+    ${getUnifiedHelpers()}
     
     (() => {
     

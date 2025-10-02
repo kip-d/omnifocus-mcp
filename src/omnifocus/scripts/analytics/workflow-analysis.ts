@@ -1,4 +1,4 @@
-import { getAnalyticsHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script for deep workflow analysis across the complete OmniFocus dataset
@@ -12,7 +12,7 @@ import { getAnalyticsHelpers } from '../shared/helpers.js';
  * - Project health assessment
  */
 export const WORKFLOW_ANALYSIS_SCRIPT = `
-  ${getAnalyticsHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const options = {{options}};

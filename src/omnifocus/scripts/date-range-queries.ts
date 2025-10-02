@@ -3,13 +3,13 @@
  * v1.15.0 - Achieves 67-91% better JavaScript filtering performance
  */
 
-import { getBasicHelpers } from './shared/helpers.js';
+import { getUnifiedHelpers } from './shared/helpers.js';
 
 /**
  * Get upcoming tasks - ULTRA-OPTIMIZED with faster JavaScript filtering
  */
 export const GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
@@ -116,7 +116,7 @@ export const GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
  * Get overdue tasks - ULTRA-OPTIMIZED with faster JavaScript filtering
  */
 export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const app = Application('OmniFocus');
@@ -209,7 +209,7 @@ export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
  * Get tasks in date range - ULTRA-OPTIMIZED with faster JavaScript filtering
  */
 export const GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const app = Application('OmniFocus');

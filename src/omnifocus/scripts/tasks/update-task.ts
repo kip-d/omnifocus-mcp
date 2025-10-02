@@ -1,18 +1,13 @@
-import { getRecurrenceApplyHelpers, getValidationHelpers, getCoreHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
  *
- * OPTIMIZED FOR SIZE: Uses minimal helpers to stay under 19KB script limit
- * - Basic property updates (name, note, flags, dates, etc.)
- * - Project reassignment (using moveTasks() bridge for ID preservation)
- * - Tag updates with comprehensive error handling
- * - Claude Desktop numeric ID bug detection
+ * SIMPLIFIED ARCHITECTURE (v2.2+): Uses unified helper bundle
+ * All helpers included once - no composition complexity
  */
 export const UPDATE_TASK_SCRIPT = `
-  ${getCoreHelpers()}
-  ${getValidationHelpers()}
-  ${getRecurrenceApplyHelpers()}
+  ${getUnifiedHelpers()}
   
   // Minimal bridge helper for task movement
   function __formatBridgeScript(template, params) {
@@ -499,9 +494,7 @@ export const UPDATE_TASK_SCRIPT = `
  */
 export function createUpdateTaskScript(taskId: string, updates: any): string {
   return `
-  ${getCoreHelpers()}
-  ${getValidationHelpers()}
-  ${getRecurrenceApplyHelpers()}
+  ${getUnifiedHelpers()}
   
   // Minimal bridge helper for task movement
   function __formatBridgeScript(template, params) {

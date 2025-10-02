@@ -1,4 +1,4 @@
-import { getBasicHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Ultra-fast optimized script for today's agenda
@@ -6,8 +6,7 @@ import { getBasicHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
  * Single-pass algorithm for maximum performance
  */
 export const TODAYS_AGENDA_SCRIPT = `
-  ${getBasicHelpers()}
-  ${getTaskStatusHelpers()}
+  ${getUnifiedHelpers()}
 
   // Helper function for safe completed check
   function safeIsCompleted(task) {

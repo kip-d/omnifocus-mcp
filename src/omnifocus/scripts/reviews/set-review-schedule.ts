@@ -1,4 +1,4 @@
-import { getBasicHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to set review schedules for multiple projects
@@ -10,7 +10,7 @@ import { getBasicHelpers } from '../shared/helpers.js';
  * - Detailed reporting of changes made
  */
 export const SET_REVIEW_SCHEDULE_SCRIPT = `
-  ${getBasicHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const projectIds = {{projectIds}};

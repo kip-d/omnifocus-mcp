@@ -1,4 +1,4 @@
-import { getCoreHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to delete a folder in OmniFocus
@@ -14,7 +14,7 @@ import { getCoreHelpers } from '../shared/helpers.js';
  */
 export const DELETE_FOLDER_SCRIPT = `
   // DELETE_FOLDER
-  ${getCoreHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
     const folderId = {{folderId}};

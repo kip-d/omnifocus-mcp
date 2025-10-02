@@ -1,4 +1,4 @@
-import { getCoreHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to analyze recurring tasks in OmniFocus
@@ -12,7 +12,7 @@ import { getCoreHelpers } from '../shared/helpers.js';
  * - Frequency summarization
  */
 export const ANALYZE_RECURRING_TASKS_SCRIPT = `
-  ${getCoreHelpers()}
+  ${getUnifiedHelpers()}
   
   function fetchRepeatRuleViaBridge(taskId) {
     try {

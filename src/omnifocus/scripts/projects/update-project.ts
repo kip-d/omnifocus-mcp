@@ -1,4 +1,4 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * LIGHTWEIGHT Script to update core project properties in OmniFocus
@@ -14,7 +14,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  * - ❌ completedByChildren, singleton: Removed to save space
  */
 export const UPDATE_PROJECT_SCRIPT = `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
   
   (() => {
   const projectId = {{projectId}};
@@ -161,7 +161,7 @@ export const UPDATE_PROJECT_SCRIPT = `
  */
 export function createUpdateProjectScript(projectId: string, updates: any): string {
   return `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
   
   function updateProject(projectId, updates) {
     try {
