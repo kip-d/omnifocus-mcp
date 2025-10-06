@@ -145,11 +145,33 @@ export class CacheWarmer {
         .replace('{{upcomingDays}}', '7');
 
       const omni = new OmniAutomation();
+
+      interface TaskCacheMetadata {
+        overdueCount: number;
+        dueTodayCount: number;
+        flaggedCount: number;
+        processedCount: number;
+        totalTasks: number;
+        optimizationUsed: string;
+      }
+
+      interface CachedTask {
+        id: string;
+        name: string;
+        flagged: boolean;
+        project: string | null;
+        projectId: string | null;
+        note: string | null;
+        dueDate?: string;
+        daysOverdue?: number;
+        reason?: string;
+      }
+
       const result = await omni.execute<{
         ok: boolean;
-        today: { tasks: any[]; metadata: any };
-        overdue: { tasks: any[]; metadata: any };
-        upcoming: { tasks: any[]; metadata: any };
+        today: { tasks: CachedTask[]; metadata: TaskCacheMetadata };
+        overdue: { tasks: CachedTask[]; metadata: TaskCacheMetadata };
+        upcoming: { tasks: CachedTask[]; metadata: TaskCacheMetadata };
         performance: { totalTime: number; tasksProcessed: number; bucketsPopulated: number };
       }>(script);
 
@@ -160,13 +182,13 @@ export class CacheWarmer {
       // Populate all three caches with results
       await Promise.all([
         // Today's tasks cache
-        this.warmSingleOperation('tasks', 'tasks_today_25_false', async () => result.today),
+        this.warmSingleOperation('tasks', 'tasks_today_25_false', () => Promise.resolve(result.today)),
 
         // Overdue tasks cache (completed defaults to undefined)
-        this.warmSingleOperation('tasks', 'tasks_overdue_25_undefined', async () => result.overdue),
+        this.warmSingleOperation('tasks', 'tasks_overdue_25_undefined', () => Promise.resolve(result.overdue)),
 
         // Upcoming tasks cache
-        this.warmSingleOperation('tasks', 'tasks_upcoming_7_25', async () => result.upcoming),
+        this.warmSingleOperation('tasks', 'tasks_upcoming_7_25', () => Promise.resolve(result.upcoming)),
       ]);
 
       const duration = Date.now() - startTime;
