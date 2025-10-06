@@ -21,9 +21,10 @@
 - **Best-in-class:** M4 Pro delivers exceptional performance across all workloads
 
 ### M2 MacBook Air Performance (24GB, 8 cores) ✅
-- **Cold cache:** 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
+- **Cold cache:** 41.8-220.9s for task queries, 0.5s for tags (fully-optimized), 11.5-94.6s for analytics
 - **Warm cache:** ✅ **NOW WORKING!** Task queries in 0-2ms (20,900-220,900x faster)
 - **Cache warming:** Takes ~12s with OmniJS bridge optimization (93% faster than original 184s JXA)
+- **Latest:** Tags fully-optimized to 0.5s (26.7x faster than hybrid approach)
 
 ### Critical Findings
 
@@ -110,7 +111,7 @@ Performance measurements from automated benchmark script (`npm run benchmark`):
 | Project statistics | **11.5s** | With task counts |
 | Tags (names only) | **1.9s** | Ultra-fast mode |
 | Tags (fast mode) | **3.7s** | Basic info + counts |
-| Tags (with usage stats) | **12.7s** | ✅ **OmniJS bridge** (was ~72s before optimization) |
+| Tags (with usage stats) | **~0.5s** | ✅ **Fully optimized OmniJS bridge** (475ms, was 12.7s hybrid, 72s pure JXA) |
 | Productivity stats (week) | **94.6s** | GTD health metrics |
 | Task velocity (7 days) | **17.8s** | Completion trends |
 
@@ -123,7 +124,7 @@ Performance measurements from automated benchmark script (`npm run benchmark`):
 | Project statistics | **6.7s** | 11.5s | 1.7x faster |
 | Tags (names only) | **1.7s** | 1.9s | ~same |
 | Tags (fast mode) | **3.2s** | 3.7s | ~same |
-| Tags (with usage stats) | **~12s** | 12.7s | ✅ **OmniJS bridge** (5.7x faster than old JXA) |
+| Tags (with usage stats) | **~0.5s** | 0.5s | ✅ **Fully optimized OmniJS bridge** (26.7x faster than hybrid, 151.5x faster than pure JXA) |
 | Productivity stats | **73.4s** | 94.6s | 1.3x faster |
 | Task velocity | **17.5s** | 17.8s | ~same |
 
@@ -762,45 +763,65 @@ const omniJsScript = `
 - **Speedup:** 1.1-5.5x faster
 - **File:** `src/omnifocus/scripts/analytics/productivity-stats.ts:137-239`
 
-#### Tags Parent Hierarchy Optimization
+#### Tags Full Optimization - Single OmniJS Bridge (October 6, 2025)
 
-**Problem:** Getting parent tag information added 113ms overhead (227ms total vs 114ms fast mode) due to iterative JXA property access.
+**Problem:** Original hybrid approach still had JXA pre-processing and post-processing overhead, taking 12.7s on M2 Air despite OmniJS bridge for usage stats.
 
-**Solution:** Use OmniJS bridge to fetch all tag properties (id, name, parent) in a single operation.
+**Solution:** Fully-optimized OmniJS bridge retrieves ALL data in a single call: tag properties + usage stats + parent hierarchy. Eliminates ALL JXA post-processing.
 
 **Implementation:**
 ```typescript
-const omniJsTagScript = `
+const omniJsScript = `
   (() => {
-    const tagDataList = [];
+    const tagDataMap = {};
+    const tagUsageByName = {};
 
+    // Get all tag data with properties (replaces JXA loops)
     flattenedTags.forEach(tag => {
-      const tagData = {
+      tagDataMap[tag.name] = {
         id: tag.id.primaryKey,
-        name: tag.name
+        name: tag.name,
+        parentId: tag.parent ? tag.parent.id.primaryKey : null,
+        parentName: tag.parent ? tag.parent.name : null
       };
-
-      // Get parent info if it exists
-      const parent = tag.parent;
-      if (parent) {
-        tagData.parentId = parent.id.primaryKey;
-        tagData.parentName = parent.name;
-      }
-
-      tagDataList.push(tagData);
+      tagUsageByName[tag.name] = { total: 0, active: 0, completed: 0 };
     });
 
-    return JSON.stringify(tagDataList);
+    // Count usage if requested
+    if (includeUsageStats) {
+      flattenedTasks.forEach(task => {
+        task.tags.forEach(tag => {
+          tagUsageByName[tag.name].total++;
+          // ... count active/completed
+        });
+      });
+    }
+
+    // Build array with all data
+    const tagsArray = [];
+    for (const tagName in tagDataMap) {
+      tagsArray.push({
+        id: tagDataMap[tagName].id,
+        name: tagDataMap[tagName].name,
+        usage: tagUsageByName[tagName],
+        parentId: tagDataMap[tagName].parentId,
+        parentName: tagDataMap[tagName].parentName
+      });
+    }
+
+    return JSON.stringify(tagsArray);
   })()
 `;
 ```
 
-**Results (M4 Pro Mac Mini):**
-- **Before (JXA):** 227ms (fast mode: 114ms + parent overhead: 113ms)
-- **After (OmniJS bridge):** 109ms (fast mode: 104ms + parent overhead: 5ms)
-- **Parent overhead reduced:** 113ms → 5ms (**22.6x faster for hierarchy!**)
-- **Overall speedup:** 2.1x faster
-- **File:** `src/omnifocus/scripts/tags/list-tags.ts:89-145`
+**Results (M2 MacBook Air):**
+- **Before (hybrid OmniJS bridge):** 12.7s (separate bridges for properties and usage)
+- **After (fully-optimized single bridge):** 0.5s (475ms)
+- **Speedup:** **26.7x faster** (96.3% improvement)
+- **vs Pure JXA:** **151.5x faster** (72s → 0.5s)
+- **File:** `src/omnifocus/scripts/tags/list-tags.ts:85-177`
+
+**Key Improvement:** Single bridge call eliminated 5-7 seconds of JXA post-processing that was still present in hybrid approach. This is the most dramatic optimization achieved in the entire project.
 
 #### Task Velocity Optimization - Accuracy over Speed
 
