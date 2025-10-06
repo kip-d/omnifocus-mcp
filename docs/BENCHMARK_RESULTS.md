@@ -21,10 +21,10 @@
 - **Best-in-class:** M4 Pro delivers exceptional performance across all workloads
 
 ### M2 MacBook Air Performance (24GB, 8 cores) ✅
-- **Cold cache:** 41.8-220.9s for task queries, 0.5s for tags (fully-optimized), 11.5-94.6s for analytics
-- **Warm cache:** ✅ **NOW WORKING!** Task queries in 0-2ms (20,900-220,900x faster)
-- **Cache warming:** Takes ~12s with OmniJS bridge optimization (93% faster than original 184s JXA)
-- **Latest:** Tags fully-optimized to 0.5s (26.7x faster than hybrid approach)
+- **Cold cache:** 41.8-183s for task queries, **0.3s for tags** (fully-optimized ✅), **2.8s for productivity stats** (OmniJS bridge ✅)
+- **Warm cache:** ✅ **NOW WORKING!** Task queries in 1-3ms (13,964-183,100x faster)
+- **Cache warming:** 52.6s measured (⚠️ needs investigation despite fast components)
+- **Latest optimizations:** Tags 72s → 0.3s (239x faster), Productivity stats 94.6s → 2.8s (33.6x faster)
 
 ### Critical Findings
 
@@ -111,29 +111,34 @@ Performance measurements from automated benchmark script (`npm run benchmark`):
 | Project statistics | **11.5s** | With task counts |
 | Tags (names only) | **1.9s** | Ultra-fast mode |
 | Tags (fast mode) | **3.7s** | Basic info + counts |
-| Tags (with usage stats) | **~0.5s** | ✅ **Fully optimized OmniJS bridge** (475ms, was 12.7s hybrid, 72s pure JXA) |
-| Productivity stats (week) | **94.6s** | GTD health metrics |
-| Task velocity (7 days) | **17.8s** | Completion trends |
+| Tags (with usage stats) | **~0.3s** | ✅ **Fully optimized OmniJS bridge** (319ms, was 12.7s hybrid, 72s pure JXA) |
+| Productivity stats (week) | **2.8s** | ✅ **OmniJS bridge optimized** (was 94.6s with JXA) |
+| Task velocity (7 days) | **53.2s** | ✅ **All tasks analyzed** (was 17.8s with 500-task limit) |
 
 #### Task Queries - Warm Cache (BENCHMARK_MODE=warm) - ✅ NOW WORKING!
 | Operation | Measured Time | vs Cold Cache | Cache Effectiveness |
 |-----------|---------------|---------------|---------------------|
-| Today's tasks (limit 25) | **2ms** | 41.8s | ✅ **20,900x faster** |
+| Today's tasks (limit 25) | **3ms** | 41.9s | ✅ **13,964x faster** |
 | Overdue tasks (limit 25) | **1ms** | 59.5s | ✅ **59,500x faster** |
-| Upcoming tasks (7 days, limit 25) | **0ms** | 220.9s | ✅ **Instant** (220,900x+) |
-| Project statistics | **6.7s** | 11.5s | 1.7x faster |
-| Tags (names only) | **1.7s** | 1.9s | ~same |
-| Tags (fast mode) | **3.2s** | 3.7s | ~same |
-| Tags (with usage stats) | **~0.5s** | 0.5s | ✅ **Fully optimized OmniJS bridge** (26.7x faster than hybrid, 151.5x faster than pure JXA) |
-| Productivity stats | **73.4s** | 94.6s | 1.3x faster |
-| Task velocity | **17.5s** | 17.8s | ~same |
+| Upcoming tasks (7 days, limit 25) | **1ms** | 183.1s | ✅ **183,100x faster** |
+| Project statistics | **6.8s** | 11.5s | 1.7x faster |
+| Tags (names only) | **1.7s** | 1.8s | ~same |
+| Tags (fast mode) | **3.2s** | 3.2s | ~same |
+| Tags (with usage stats) | **~0.4s** | 0.3s | ✅ **Fully optimized OmniJS bridge** (39.8x faster than hybrid, 225x faster than pure JXA) |
+| Productivity stats | **4.7s** | 2.8s | ✅ **OmniJS bridge optimized** (20x faster than old 94.6s) |
+| Task velocity | **53.1s** | 53.2s | ~same (now analyzes all tasks) |
 
-**Cache Warming Time:** ~12 seconds (using OmniJS bridge for both task caches and tag usage stats)
+**Cache Warming Time:** ~52.6 seconds (measured October 6, 2025)
 
-**Previous:** 54 seconds (tags with usage stats was the bottleneck at ~72s)
-**Now:** ~12 seconds (tags optimized to ~12s, runs in parallel with task caches at 2.4s)
+**Evolution:**
+- **Pure JXA:** 184s (original implementation)
+- **Hybrid OmniJS bridge:** 54s (partial optimization)
+- **With tags optimization:** Expected ~2-3s based on component speeds
+- **Measured:** 52.6s ⚠️ (investigation needed - tags now 0.3s but overall slow)
 
-**✅ CACHE WARMING NOW WORKS!** After fixing cache key mismatches, TTL issues, and optimizing tags with OmniJS bridge, cache warming provides extraordinary performance gains on M2 MacBook Air - identical to M2 Ultra! OmniJS bridge optimizations reduced cache warming time by 93% (from 184s → 54s → 12s).
+**⚠️ Cache Warming Investigation:** Despite tags optimization to 0.3s and analytics to 2.8s, cache warming measures 52.6s. Components individually are fast, but something in cache warming flow is slow. Requires investigation.
+
+**✅ COMPONENT OPTIMIZATIONS WORK!** Tags (72s → 0.3s, 239x faster), Productivity stats (94.6s → 2.8s, 33.6x faster), and cache warming provides extraordinary performance gains for task queries (13,964-183,100x speedup).
 
 **Performance Analysis - "Upcoming Tasks" Query:**
 The 221-second duration for upcoming tasks is **expected behavior** given database characteristics:
@@ -816,12 +821,12 @@ const omniJsScript = `
 
 **Results (M2 MacBook Air):**
 - **Before (hybrid OmniJS bridge):** 12.7s (separate bridges for properties and usage)
-- **After (fully-optimized single bridge):** 0.5s (475ms)
-- **Speedup:** **26.7x faster** (96.3% improvement)
-- **vs Pure JXA:** **151.5x faster** (72s → 0.5s)
+- **After (fully-optimized single bridge):** 0.3s (319ms measured October 6, 2025)
+- **Speedup:** **39.8x faster** (97.5% improvement)
+- **vs Pure JXA:** **225x faster** (72s → 0.3s)
 - **File:** `src/omnifocus/scripts/tags/list-tags.ts:85-177`
 
-**Key Improvement:** Single bridge call eliminated 5-7 seconds of JXA post-processing that was still present in hybrid approach. This is the most dramatic optimization achieved in the entire project.
+**Key Improvement:** Single bridge call eliminated 5-7 seconds of JXA post-processing that was still present in hybrid approach. Combined with analytics optimizations, represents the most dramatic performance transformation in the entire project.
 
 #### Task Velocity Optimization - Accuracy over Speed
 

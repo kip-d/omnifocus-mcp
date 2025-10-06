@@ -117,6 +117,11 @@ export class CacheWarmer {
     const successCount = results.filter(r => r.success).length;
     const totalCount = results.length;
 
+    // Log individual operation timings for debugging
+    results.forEach(result => {
+      logger.info(`  • ${result.operation}: ${result.duration}ms ${result.success ? '✓' : '✗'}`);
+    });
+
     logger.info(`Cache warming completed: ${successCount}/${totalCount} operations succeeded in ${totalTime}ms`);
 
     return {
@@ -231,9 +236,9 @@ export class CacheWarmer {
           return result.success ? result.data : null;
         }),
 
-        // Review-ready projects
+        // Review-ready projects (without stats for faster cache warming)
         this.warmSingleOperation('projects', 'projects_review', async () => {
-          const result = await projectsTool.execute({ operation: 'review' });
+          const result = await projectsTool.execute({ operation: 'review', details: false });
           return result.success ? result.data : null;
         }),
       ]);
@@ -277,6 +282,7 @@ export class CacheWarmer {
             operation: 'list',
             sortBy: 'usage',
             includeUsageStats: true,
+            fastMode: false, // Must explicitly disable fastMode to get usage stats
           });
           if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
             return result.success ? result.data : null;

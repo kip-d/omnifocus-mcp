@@ -114,7 +114,7 @@ export const LIST_TAGS_SCRIPT = `
             });
 
             // OmniJS: Count usage if requested
-            const includeUsageStats = options.includeUsageStats === true;
+            const includeUsageStats = \${options.includeUsageStats === true};
             if (includeUsageStats) {
               flattenedTasks.forEach(task => {
                 const taskTags = task.tags || [];
