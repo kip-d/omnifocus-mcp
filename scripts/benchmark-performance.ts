@@ -27,17 +27,41 @@ const times: Record<string, number[]> = {};
 let benchmarkStartTime = 0;
 const results: BenchmarkResult[] = [];
 
-// Spawn server once with cache warming disabled for benchmark
-const noCacheWarmingMode = process.env.NO_CACHE_WARMING === 'true';
+// Spawn server once - with or without cache warming based on BENCHMARK_MODE env var
+// BENCHMARK_MODE=cold - No cache warming (measures cold-start performance)
+// BENCHMARK_MODE=warm - With cache warming (measures production performance)
+const benchmarkMode = process.env.BENCHMARK_MODE || 'cold';
+const enableCacheWarming = benchmarkMode === 'warm';
+
 const server = spawn('node', ['dist/index.js'], {
-  stdio: ['pipe', 'pipe', 'inherit'],  // Match test-as-claude-desktop.js pattern
-  env: { ...process.env, NO_CACHE_WARMING: 'true' },  // Disable cache warming for clean benchmark
+  stdio: ['pipe', 'pipe', 'pipe'],  // Pipe stderr so we can detect cache warming completion
+  env: {
+    ...process.env,
+    NO_CACHE_WARMING: enableCacheWarming ? 'false' : 'true',
+    OMNIFOCUS_SCRIPT_TIMEOUT: '240000',  // 240 second (4 minute) timeout (vs default 120s)
+  },
 });
 
 const rl = createInterface({
   input: server.stdout,
   crlfDelay: Infinity,
 });
+
+// Track cache warming completion
+let cacheWarmingComplete = !enableCacheWarming; // If disabled, consider it "complete"
+if (server.stderr) {
+  server.stderr.on('data', (data) => {
+    const output = data.toString();
+    // Forward stderr to console in debug mode
+    if (process.env.DEBUG) {
+      process.stderr.write(output);
+    }
+    if (output.includes('Cache warming completed')) {
+      cacheWarmingComplete = true;
+      console.log('  ✓ Cache warming completed, starting benchmarks...\n');
+    }
+  });
+}
 
 const sendRequest = (method: string, params: Record<string, unknown> = {}) => {
   const request = {
@@ -147,13 +171,29 @@ rl.on('line', (line) => {
       console.log('OmniFocus MCP Performance Benchmarks');
       console.log('=====================================\n');
       console.log(getSystemInfo());
-      console.log('\nNote: Cache warming DISABLED for this run.');
-      console.log('This measures cold-start performance.\n');
-      console.log('Running benchmarks...\n');
 
-      // Start first test
-      process.stdout.write('  Running: Today\'s tasks... ');
-      sendToolCall('tasks', { mode: 'today', limit: '25', details: 'false' });
+      if (enableCacheWarming) {
+        console.log('\nMode: WARMED CACHE (production performance)');
+        console.log('Waiting for cache warming to complete...\n');
+
+        // Poll for cache warming completion
+        const checkInterval = setInterval(() => {
+          if (cacheWarmingComplete) {
+            clearInterval(checkInterval);
+            console.log('Running benchmarks...\n');
+            process.stdout.write('  Running: Today\'s tasks... ');
+            sendToolCall('tasks', { mode: 'today', limit: '25', details: 'false' });
+          }
+        }, 500);
+      } else {
+        console.log('\nMode: COLD CACHE (first-run performance)');
+        console.log('Cache warming disabled for this run.\n');
+        console.log('Running benchmarks...\n');
+
+        // Start first test immediately
+        process.stdout.write('  Running: Today\'s tasks... ');
+        sendToolCall('tasks', { mode: 'today', limit: '25', details: 'false' });
+      }
       break;
     }
 
@@ -287,8 +327,8 @@ sendRequest('initialize', {
   },
 });
 
-// Timeout (generous for cache warming)
+// Timeout (generous for cold cache queries - 10 tests * 180s max each = 30 minutes)
 setTimeout(() => {
-  console.error('\n❌ Benchmark timed out after 180 seconds');
+  console.error('\n❌ Benchmark timed out after 30 minutes');
   cleanup(1);
-}, 180000);
+}, 1800000);

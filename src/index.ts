@@ -72,7 +72,7 @@ async function runServer() {
   const benchmarkMode = process.env.NO_CACHE_WARMING === 'true';
   const cacheWarmer = new CacheWarmer(cacheManager, {
     enabled: !isCIEnvironment && !benchmarkMode,
-    timeout: 90000, // 90 second timeout - first runs are legitimately slow on large databases
+    timeout: 240000, // 240 second (4 minute) timeout - matches OMNIFOCUS_SCRIPT_TIMEOUT for benchmarking
     categories: {
       projects: true,
       tags: true,
