@@ -234,9 +234,9 @@ export class CacheWarmer {
 
       const tasksTool = new QueryTasksToolV2(this.cache);
 
-      // Today's agenda with default parameters
+      // Today's agenda with default parameters (must match actual usage)
       await this.warmSingleOperation('tasks', 'tasks_today_25_false', async () => {
-        const result = await tasksTool.execute({ mode: 'today', limit: 25 });
+        const result = await tasksTool.execute({ mode: 'today', limit: 25, details: false });
         return result.success ? result.data : null;
       });
 
@@ -263,8 +263,8 @@ export class CacheWarmer {
 
       const tasksTool = new QueryTasksToolV2(this.cache);
 
-      // Overdue tasks with default parameters
-      await this.warmSingleOperation('tasks', 'tasks_overdue_25_false', async () => {
+      // Overdue tasks with default parameters (must match actual usage - completed defaults to undefined)
+      await this.warmSingleOperation('tasks', 'tasks_overdue_25_undefined', async () => {
         const result = await tasksTool.execute({ mode: 'overdue', limit: 25 });
         return result.success ? result.data : null;
       });
@@ -292,9 +292,9 @@ export class CacheWarmer {
 
       const tasksTool = new QueryTasksToolV2(this.cache);
 
-      // Upcoming tasks (7 days ahead with default limit)
+      // Upcoming tasks (7 days ahead with default limit) - must match actual usage
       await this.warmSingleOperation('tasks', 'tasks_upcoming_7_25', async () => {
-        const result = await tasksTool.execute({ mode: 'upcoming', days: 7, limit: 25 });
+        const result = await tasksTool.execute({ mode: 'upcoming', daysAhead: 7, limit: 25 });
         return result.success ? result.data : null;
       });
 
@@ -321,8 +321,8 @@ export class CacheWarmer {
 
       const tasksTool = new QueryTasksToolV2(this.cache);
 
-      // Flagged tasks with default parameters
-      await this.warmSingleOperation('tasks', 'tasks_flagged_25_false', async () => {
+      // Flagged tasks with default parameters (must match actual usage - completed defaults to undefined)
+      await this.warmSingleOperation('tasks', 'tasks_flagged_25_undefined', async () => {
         const result = await tasksTool.execute({ mode: 'flagged', limit: 25 });
         return result.success ? result.data : null;
       });

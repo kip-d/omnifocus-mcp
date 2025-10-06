@@ -15,7 +15,7 @@ export class CacheManager {
   };
 
   private config: CacheConfig = {
-    tasks: { ttl: 30 * 1000 },        // 30 seconds - GTD inbox processing needs frequent updates
+    tasks: { ttl: 300 * 1000 },       // 5 minutes - long enough for cache warming + usage, short enough for GTD workflow
     projects: { ttl: 300 * 1000 },    // 5 minutes - weekly review and project reorganization
     folders: { ttl: 600 * 1000 },     // 10 minutes - folders change less frequently
     analytics: { ttl: 3600 * 1000 },  // 1 hour - expensive computations
