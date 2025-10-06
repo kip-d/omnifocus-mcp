@@ -67,11 +67,12 @@ async function runServer() {
   registerPrompts(server);
 
   // Warm cache with frequently accessed data (non-blocking)
-  // Disable cache warming in CI environments (Linux, no OmniFocus)
+  // Disable cache warming in CI environments (Linux, no OmniFocus) or benchmark mode
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
+  const benchmarkMode = process.env.NO_CACHE_WARMING === 'true';
   const cacheWarmer = new CacheWarmer(cacheManager, {
-    enabled: !isCIEnvironment,
-    timeout: 5000, // 5 second timeout to prevent startup delays
+    enabled: !isCIEnvironment && !benchmarkMode,
+    timeout: 90000, // 90 second timeout - first runs are legitimately slow on large databases
     categories: {
       projects: true,
       tags: true,
@@ -89,6 +90,8 @@ async function runServer() {
   // Warm cache in background - don't block server startup
   if (isCIEnvironment) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
+  } else if (benchmarkMode) {
+    logger.info('Cache warming disabled for benchmark mode');
   } else {
     cacheWarmer.warmCache().catch(error => {
       logger.warn('Cache warming failed:', error);

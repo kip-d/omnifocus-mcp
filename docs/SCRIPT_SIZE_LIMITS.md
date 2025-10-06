@@ -1,5 +1,6 @@
 # Script Size Limits - Empirical Findings
 
+**Last Updated:** 2025-10-05 (v2.2.0)
 **Status:** ✅ **EMPIRICALLY VERIFIED** (September 2025)
 **Methodology:** Binary search testing with 1KB tolerance
 **Test Environment:** macOS 14.5.0, OmniFocus 4.6.1, Node.js piping via osascript

@@ -1,5 +1,7 @@
 # Performance Expectations for Real LLM Testing
 
+**Last Updated:** 2025-10-05 (v2.2.0)
+
 ## Hardware Performance Baseline
 
 ### Current Test Environment

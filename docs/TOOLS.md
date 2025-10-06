@@ -1,8 +1,10 @@
 # OmniFocus MCP Tools Documentation
 
+**Last Updated:** 2025-10-05 (v2.2.0)
+
 This document provides comprehensive documentation for all available tools in the OmniFocus MCP Server.
 
-## 📢 Important: v2.1.0 Self-Contained Architecture
+## 📢 Important: v2.2.0 Unified Helper Architecture
 
 **This documentation reflects the v2.1.0 self-contained tool architecture.** All consolidated tools now directly implement their operations without delegation, providing better performance and maintainability.
 

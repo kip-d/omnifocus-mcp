@@ -1,5 +1,7 @@
 # OmniFocus MCP Architecture Guide
 
+**Last Updated:** 2025-10-05 (v2.2.0)
+
 ## Executive Summary
 
 The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combines JXA (JavaScript for Automation) with targeted OmniJS bridge operations to achieve optimal performance and functionality.
@@ -64,7 +66,7 @@ Operation needed?
 ### Pattern 1: Pure JXA
 ```typescript
 export const SIMPLE_OPERATION_SCRIPT = `
-  ${getCoreHelpers()}
+  ${getUnifiedHelpers()}
 
   (() => {
     const app = Application('OmniFocus');
@@ -85,7 +87,7 @@ export const SIMPLE_OPERATION_SCRIPT = `
 ### Pattern 2: JXA + Bridge
 ```typescript
 export const COMPLEX_OPERATION_SCRIPT = `
-  ${getCoreHelpers()}
+  ${getUnifiedHelpers()}
   ${getBridgeOperations()}
 
   (() => {
@@ -110,10 +112,10 @@ export const COMPLEX_OPERATION_SCRIPT = `
 
 ## Helper System Organization
 
-### Current Structure
+### Current Structure (v2.2.0+)
 ```
 src/omnifocus/scripts/shared/
-├── helpers.ts              # Main helper functions (18 different helper sets)
+├── helpers.ts              # Unified helper system (single getUnifiedHelpers function)
 ├── bridge-helpers.ts       # evaluateJavascript templates and operations
 ├── minimal-tag-bridge.ts   # Specialized tag bridge operations
 └── repeat-helpers.ts       # Repetition rule helpers
@@ -121,18 +123,17 @@ src/omnifocus/scripts/shared/
 
 ### Helper Function Selection Guide
 
-**By Size (when size matters):**
-- **getMinimalHelpers()** - Basic utilities (~3KB)
-- **getBasicHelpers()** - Standard operations (~5KB)
-- **getCoreHelpers()** - Essential utilities (~8KB)
-- **getAllHelpers()** - Complete suite (~30KB, **safe to use freely**)
+**Primary (v2.2.0+):**
+- **getUnifiedHelpers()** - Complete unified helper suite (~16.37KB, only 3.1% of JXA limit)
+  - Includes all utilities needed for any operation
+  - Eliminates composition complexity
+  - Used in all 34 scripts across the codebase
 
-**By Domain (when functionality matters):**
-- **getAnalyticsHelpers()** - Date parsing, completions, patterns
-- **getRecurrenceApplyHelpers()** - Repetition rule application
-- **getValidationHelpers()** - Input validation and Claude Desktop bug detection
-- **getFullStatusHelpers()** - Complete task status serialization
-- **getSerializationHelpers()** - Data formatting and JSON serialization
+**Deprecated (v2.2.0+, removal in v2.3.0):**
+- ~~getAllHelpers()~~ - Use `getUnifiedHelpers()` instead
+- ~~getCoreHelpers()~~ - Use `getUnifiedHelpers()` instead
+- ~~getMinimalHelpers()~~ - Use `getUnifiedHelpers()` instead
+- All other specialized helpers deprecated in favor of unified approach
 
 **For Bridge Operations:**
 - **getBridgeOperations()** - From bridge-helpers.ts, evaluateJavascript templates

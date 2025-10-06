@@ -35,6 +35,7 @@
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
     "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
     "prompts:list": "npx tsx scripts/list-prompts.ts",
+    "benchmark": "npm run build && npx tsx scripts/benchmark-performance.ts",
     "ci:local": "./scripts/ci-local.sh"
   },
   "keywords": [

@@ -1,4 +1,6 @@
-# OmniFocus MCP v2.1.0 Quick Reference (LLM-Optimized)
+# OmniFocus MCP v2.2.0 Quick Reference (LLM-Optimized)
+
+**Last Updated:** 2025-10-05
 
 **17 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
 
