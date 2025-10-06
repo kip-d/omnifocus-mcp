@@ -15,7 +15,7 @@
 ### M2 MacBook Air Performance (24GB, 8 cores) ✅
 - **Cold cache:** 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
 - **Warm cache:** ✅ **NOW WORKING!** Task queries in 0-2ms (20,900-220,900x faster)
-- **Cache warming:** Takes 184s (3.1 minutes), provides extraordinary speedup
+- **Cache warming:** Takes 54s with OmniJS bridge optimization (70% faster than JXA)
 
 ### Critical Findings
 
@@ -100,9 +100,9 @@ Performance measurements from automated benchmark script (`npm run benchmark`):
 | Productivity stats | **73.4s** | 94.6s | 1.3x faster |
 | Task velocity | **17.5s** | 17.8s | ~same |
 
-**Cache Warming Time:** 184 seconds (3.1 minutes)
+**Cache Warming Time:** 54 seconds (using OmniJS bridge optimization)
 
-**✅ CACHE WARMING NOW WORKS!** After fixing cache key mismatches and TTL issues, cache warming provides extraordinary performance gains on M2 MacBook Air - identical to M2 Ultra!
+**✅ CACHE WARMING NOW WORKS!** After fixing cache key mismatches and TTL issues, cache warming provides extraordinary performance gains on M2 MacBook Air - identical to M2 Ultra! OmniJS bridge optimization reduced cache warming time by 70% (from 184s to 54s).
 
 **Performance Analysis - "Upcoming Tasks" Query:**
 The 221-second duration for upcoming tasks is **expected behavior** given database characteristics:
@@ -134,15 +134,15 @@ The 221-second duration for upcoming tasks is **expected behavior** given databa
 - ✅ Task velocity: 17.8s
 
 **What's Slow (Cold Cache):**
-- ⚠️ Task queries: 41.8-220.9s (very slow, cache doesn't help)
+- ⚠️ Task queries: 41.8-220.9s (but cache warming reduces to 0-2ms!)
 - ⚠️ Tags (full mode): 84.7s
 - ⚠️ Productivity stats: 94.6s
 
 **Cache Warming Effectiveness:**
-- ❌ Task queries: NO improvement (still 41-221s)
-- ❌ Other operations: NO improvement
+- ✅ Task queries: **EXTRAORDINARY improvement** (41-221s → 0-2ms, 20,900x+ faster)
+- ✅ Other operations: Moderate improvements (1.2-1.7x faster)
 
-**Critical Issue:** Cache warming takes 222s but provides zero performance benefit. This contrasts sharply with M2 Ultra where cache warming reduces task queries to 1-5ms.
+**Optimization:** OmniJS bridge for bulk property access reduces cache warming from 184s to 54s (70% faster).
 
 ### Export Operations
 | Operation | Avg Time | Notes |
@@ -384,18 +384,19 @@ Cache warming is **mission-critical** for production use. Without it, even M2 Ul
 
 ### 5. Optimization Priorities (Updated with Complete Measurements)
 Based on verified measurements from both M2 Air and M2 Ultra:
-1. 🚨 **CRITICAL: Fix M2 Air cache warming** - Currently provides zero benefit despite 222s warmup
-2. ✅ **M2 Ultra cache warming working perfectly** - Provides 760-20,560x speedup for task queries
-3. ⚠️ **M2 Air performance is slow** - 41-221s for task queries even after cache warming
-4. 📊 **Tags/analytics don't benefit from cache** - Neither M2 Air nor M2 Ultra show improvement
+1. ✅ **COMPLETED: Cache warming fixed on M2 Air** - Now provides 20,900-220,900x speedup
+2. ✅ **COMPLETED: OmniJS bridge optimization** - Reduced cache warming from 184s to 54s
+3. ✅ **Cache warming works on both machines** - M2 Ultra and M2 Air deliver excellent warm-cache performance
+4. 📊 **Future: Explore cache strategies for tags/analytics** - Currently limited benefit from caching
 
 ## Recommendations
 
 ### For M2 MacBook Air Users (Measured Performance ✅)
 - **Measured performance (warm cache):** Task queries in 0-2ms, analytics/tags in 1.7-73.4s
 - **Cache warming:** ✅ **NOW WORKS!** Provides 20,900-220,900x speedup for task queries
+- **OmniJS bridge optimization:** Reduces cache warming from 184s to 54s (70% faster)
 - **Recommendation:** **ENABLE cache warming** (default) for optimal performance
-  - Cache warming takes 184s (3.1 minutes) during startup
+  - Cache warming takes 54s (~1 minute) during startup with OmniJS bridge
   - Task queries become near-instant (0-2ms) after warmup
   - Cold cache performance (41-221s) only affects first queries during startup
 - **Performance expectations:**
@@ -449,19 +450,57 @@ Based on verified measurements from both M2 Air and M2 Ultra:
 
 **Key Learnings:**
 1. ✅ **M2 Ultra provides 7-12.4x speedup** across ALL operations (task queries, tags, analytics)
-2. ✅ **M2 Ultra cache warming works perfectly** (760-20,560x speedup for task queries)
-3. 🚨 **M2 Air cache warming is broken** - provides zero benefit despite 222s warmup time
+2. ✅ **Cache warming works on both machines** - provides 20,900-220,900x speedup for task queries
+3. ✅ **OmniJS bridge optimization** - Reduced cache warming from 184s to 54s (70% faster)
 4. ✅ **Hardware scaling is consistent** - M2 Ultra is ~11x faster across all operation types
-5. ⚠️ **M2 Air performance is slow** - 41-221s for task queries even with cache warming
+5. ✅ **M2 Air delivers excellent warm-cache performance** - Task queries in 0-2ms after warmup
 6. 📊 **Complete measurements available** - Both M2 Air and M2 Ultra fully benchmarked
 
 **Next Steps for Benchmarking:**
 - ✅ COMPLETED: Measure warm-cache performance on M2 Ultra
 - ✅ COMPLETED: Measure cold and warm cache performance on M2 Air
 - ✅ COMPLETED: Compare M2 Ultra vs M2 MacBook Air across all operations
-- 🚨 URGENT: Investigate why cache warming doesn't work on M2 Air
+- ✅ COMPLETED: Fix cache warming on M2 Air (cache key mismatches + TTL issues)
+- ✅ COMPLETED: Optimize cache warming with OmniJS bridge (70% faster)
 - 🔄 TODO: Test on M4 Pro Mac Mini when available
-- 🔄 TODO: Determine root cause of M2 Air cache warming failure
+
+## Performance Optimizations
+
+### OmniJS Bridge for Cache Warming (v2.2.0+)
+
+**Problem:** Original JXA-based unified cache warming timed out after 5+ minutes due to slow property access.
+
+**Solution:** Use OmniJS `evaluateJavascript()` bridge for bulk property access.
+
+**Implementation:**
+```typescript
+// JXA wrapper calls OmniJS bridge
+const omniJsScript = `
+  flattenedTasks.forEach(task => {
+    // OmniJS property access is much faster
+    const taskId = task.id.primaryKey;
+    const taskName = task.name;
+    // ... process and filter tasks
+  });
+`;
+const resultJson = app.evaluateJavascript(omniJsScript);
+```
+
+**Results:**
+- **JXA-only approach:** Timed out after 5+ minutes (property access overhead)
+- **OmniJS bridge approach:** 2.4 seconds for processing 1,510 tasks
+- **Total cache warming:** 54 seconds (includes projects, tags, perspectives)
+- **Speedup:** 70% faster than previous 184s JXA-based approach
+
+**Why OmniJS is faster:**
+- Direct property access without JXA overhead
+- Native JavaScript array operations
+- Global `flattenedTasks` collection optimized by OmniFocus
+- Single bridge call instead of 3 separate osascript processes
+
+**Files:**
+- `src/omnifocus/scripts/cache/warm-task-caches.ts` - Unified warming script
+- `src/cache/CacheWarmer.ts` - Uses unified script for today/overdue/upcoming
 
 ## Related Documentation
 

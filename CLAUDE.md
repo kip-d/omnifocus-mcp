@@ -9,24 +9,70 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 **Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
 
+## 🚨 MANDATORY: Pre-Implementation Checklist
+
+**BEFORE writing ANY new script or optimization, complete ALL steps:**
+
+□ **Step 1: Classify the operation**
+  - How many items will be processed? (>100 = bulk operation)
+  - Does it create/update tasks with tags? (REQUIRES bridge)
+  - Does it need repetition rules? (REQUIRES bridge)
+
+□ **Step 2: Search for existing patterns**
+  ```bash
+  # Search for similar operations
+  grep -r "evaluateJavascript" src/omnifocus/scripts/ --include="*.ts"
+  grep -r "flattenedTasks" src/omnifocus/scripts/ --include="*.ts"
+  grep -r "forEach" src/omnifocus/scripts/ --include="*.ts"
+  ```
+
+□ **Step 3: Review the decision tree below**
+  - Match your operation to the tree
+  - If bulk operation (>100 items) → CHECK EXISTING BRIDGE PATTERNS FIRST
+
+□ **Step 4: Find reference implementation**
+  - Perspectives: `src/omnifocus/scripts/perspectives/query-perspective.ts`
+  - Bulk operations: `src/omnifocus/scripts/perspectives/query-perspective.ts` (lines 14-36)
+  - Tag operations: Search for bridge patterns in codebase
+
+□ **Step 5: Test your assumption**
+  - If optimizing, MEASURE the current bottleneck first
+  - Don't assume - profile to find what's actually slow
+
 ## 🚨 JavaScript Execution Decision Tree
 
-**Always start with Pure JXA, then add bridge only when needed:**
+**CRITICAL: Count your items FIRST, then choose approach:**
 
 ```
-Operation needed?
+How many items will you process?
+├── < 10 items → Pure JXA (simple, direct)
+├── 10-100 items → Pure JXA (acceptable performance)
+└── > 100 items → STOP! Search for bridge pattern first
+    └── Check: src/omnifocus/scripts/perspectives/query-perspective.ts
+
+Operation type?
 ├── Reading data (tasks, projects, tags)
-│   ├── Simple queries → Pure JXA
-│   └── Complex filters or bulk → JXA + Bridge (if needed)
+│   ├── Simple query (<100 items) → Pure JXA
+│   ├── Bulk query (>100 items) → OmniJS Bridge for property access
+│   │   └── Example: perspectives/query-perspective.ts lines 14-36
+│   └── Complex filters → OmniJS Bridge if performance issues
 ├── Creating/Updating tasks
 │   ├── Without tags → Pure JXA
 │   ├── With tags → JXA + Bridge (REQUIRED)
 │   └── With repetition → JXA + Bridge (REQUIRED)
 ├── Task movement/organization
-│   ├── Simple property changes → Pure JXA
-│   └── Project movement/hierarchy → JXA + Bridge
-└── Bulk operations (>100 items) → JXA + Bridge
+│   ├── Single task → Pure JXA
+│   └── Bulk movement (>10 tasks) → JXA + Bridge
+└── Property access on ALL tasks (flattenedTasks)
+    └── ALWAYS use OmniJS Bridge (JXA property access is slow)
 ```
+
+**Performance Reality Check:**
+- JXA property access: ~1-2ms per item (slow for bulk)
+- OmniJS property access: ~0.001ms per item (fast for bulk)
+- Crossover point: ~50-100 items
+
+**When in doubt:** Grep for similar patterns before implementing!
 
 **Bridge is REQUIRED for:**
 - ✅ Tag assignment during task creation (JXA limitation)
@@ -34,9 +80,49 @@ Operation needed?
 - ✅ Task movement between projects (preserves IDs)
 
 **Bridge provides PERFORMANCE boost for:**
-- Bulk operations (100+ items)
-- Perspective queries
-- Complex data transformations
+- ✅ Bulk operations (100+ items)
+- ✅ Perspective queries
+- ✅ Complex data transformations
+- ✅ Multiple property access per item (flattenedTasks iteration)
+
+## 📚 Pattern Library - Where to Find Examples
+
+**Before implementing, CHECK THESE FILES for similar patterns:**
+
+### Bulk Operations (>100 items)
+**Example:** `src/omnifocus/scripts/perspectives/query-perspective.ts`
+```typescript
+// Lines 14-36: Inbox perspective processing
+const inboxScript = `
+  inbox.forEach(task => {
+    // OmniJS: Direct property access
+    results.push({
+      id: task.id.primaryKey,
+      name: task.name,
+    });
+  });
+`;
+const result = app.evaluateJavascript(inboxScript);
+```
+
+**Real-world example:** `src/omnifocus/scripts/cache/warm-task-caches.ts`
+- Processes 1,510 tasks in 2.4 seconds using OmniJS bridge
+- JXA version timed out after 5+ minutes
+- 125x faster with bridge for bulk property access
+
+### Tag Operations
+**Search command:** `grep -r "evaluateJavascript.*tags" src/`
+
+### Task Creation with Complexity
+**Search command:** `grep -r "create-task-with-bridge" src/`
+
+### 🚨 RED FLAGS - Research Required
+If you see these in your plan, STOP and search for patterns:
+- ⚠️ Processing >100 items
+- ⚠️ Iterating through flattenedTasks/flattenedProjects
+- ⚠️ Multiple property accesses per item (id, name, date, project, etc.)
+- ⚠️ "This seems slow in JXA"
+- ⚠️ Timeout issues with existing scripts
 
 ## Critical: V2 Architecture
 - **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
@@ -274,6 +360,25 @@ node tests/integration/test-as-claude-desktop.js  # Simulate Claude Desktop
 npx @modelcontextprotocol/inspector dist/index.js  # Interactive testing
 ```
 
+### Before You Implement - Run These First
+
+```bash
+# Find similar operations in codebase
+grep -r "your_operation_name" src/omnifocus/scripts/ --include="*.ts"
+
+# Find all bridge usage patterns
+grep -r "evaluateJavascript" src/omnifocus/scripts/ --include="*.ts" -B2 -A10
+
+# Find bulk operation patterns
+grep -r "forEach.*task\|flattenedTasks" src/omnifocus/scripts/ --include="*.ts" -l
+
+# Count how many items you'll process (example)
+grep -c "task.id" src/omnifocus/scripts/your-script.ts
+
+# Profile existing script (if optimizing)
+time node -e "import('./dist/omnifocus/scripts/your-script.js').then(m => console.log(m.YOUR_SCRIPT.length))"
+```
+
 ### Testing Pattern
 **✅ ALL TOOLS NOW WORK WITH PROPER MCP CALLS**
 
@@ -402,6 +507,36 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 - The "line 145 truncation" issue no longer reproduces
 
 **For Development:** Both CLI testing and Claude Desktop can be used for all operations. The regression documented in earlier versions has been resolved.
+
+## 🚨 Common Mistakes & How to Avoid Them
+
+### Mistake 1: "I'll optimize by reducing API calls"
+**Wrong focus:** Reducing osascript calls from 3→1
+**Actual bottleneck:** JXA property access overhead (1000+ calls)
+**How to avoid:** Profile FIRST, then optimize the actual slow part
+**Example:** Cache warming - flattenedTasks() was fast (160ms), property access was slow (5+ min)
+
+### Mistake 2: "I'll just write the code directly"
+**Missing step:** Search for existing patterns
+**Result:** Reinvent the wheel, miss better approach
+**How to avoid:** Run grep commands from checklist above BEFORE implementing
+
+### Mistake 3: "Bulk operations = multiple queries"
+**Wrong assumption:** Bulk means many API calls
+**Reality:** Bulk means processing many items (use bridge!)
+**How to avoid:** Count items, not API calls. >100 items = bulk operation.
+
+### Mistake 4: "JXA is fine for everything"
+**Missing context:** JXA property access has overhead (~1-2ms per item)
+**Reality:** Bridge is 1000x faster for bulk property access (~0.001ms per item)
+**How to avoid:** Check decision tree when processing >100 items
+**Proof:** Cache warming - JXA timed out (5+ min), bridge completed in 2.4s (125x faster)
+
+### Mistake 5: "I optimized it, it should be faster"
+**Wrong approach:** Implement optimization without measuring
+**Missing step:** Profile to identify actual bottleneck
+**How to avoid:** Always test/profile BEFORE and AFTER optimization
+**Tools:** `time node script.js`, add timing instrumentation, check logs
 
 ## Known Limitations & Workarounds
 

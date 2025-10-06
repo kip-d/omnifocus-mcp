@@ -11,6 +11,8 @@ import { ProjectsToolV2 } from '../tools/projects/ProjectsToolV2.js';
 import { TagsToolV2 } from '../tools/tags/TagsToolV2.js';
 import { QueryTasksToolV2 } from '../tools/tasks/QueryTasksToolV2.js';
 import { PerspectivesToolV2 } from '../tools/perspectives/PerspectivesToolV2.js';
+import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
+import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 
 const logger = createLogger('cache-warmer');
 
@@ -93,15 +95,11 @@ export class CacheWarmer {
 
     // Warm common task queries - medium to high priority
     if (categories.tasks) {
-      if (taskWarmingOptions.today) {
-        operations.push(this.warmTodaysTasks());
+      // Use unified OmniJS bridge warming for today, overdue, and upcoming (faster bulk property access)
+      if (taskWarmingOptions.today || taskWarmingOptions.overdue || taskWarmingOptions.upcoming) {
+        operations.push(this.warmAllTaskCaches());
       }
-      if (taskWarmingOptions.overdue) {
-        operations.push(this.warmOverdueTasks());
-      }
-      if (taskWarmingOptions.upcoming) {
-        operations.push(this.warmUpcomingTasks());
-      }
+      // Flagged tasks still use separate query (different pattern)
       if (taskWarmingOptions.flagged) {
         operations.push(this.warmFlaggedTasks());
       }
@@ -128,6 +126,60 @@ export class CacheWarmer {
       successCount,
       totalCount,
     };
+  }
+
+  /**
+   * Warm all task caches in one unified operation using OmniJS bridge
+   * Optimization: OmniJS property access is much faster than JXA for bulk operations
+   */
+  private async warmAllTaskCaches(): Promise<WarmingResult> {
+    const operation = 'tasks_unified';
+    const startTime = Date.now();
+
+    try {
+      logger.debug('Warming all task caches (today, overdue, upcoming) using OmniJS bridge...');
+
+      // Execute unified cache warming script via OmniJS bridge
+      const script = WARM_TASK_CACHES_SCRIPT
+        .replace('{{limit}}', '25')
+        .replace('{{upcomingDays}}', '7');
+
+      const omni = new OmniAutomation();
+      const result = await omni.execute<{
+        ok: boolean;
+        today: { tasks: any[]; metadata: any };
+        overdue: { tasks: any[]; metadata: any };
+        upcoming: { tasks: any[]; metadata: any };
+        performance: { totalTime: number; tasksProcessed: number; bucketsPopulated: number };
+      }>(script);
+
+      if (!result.ok) {
+        throw new Error('Unified cache warming failed');
+      }
+
+      // Populate all three caches with results
+      await Promise.all([
+        // Today's tasks cache
+        this.warmSingleOperation('tasks', 'tasks_today_25_false', async () => result.today),
+
+        // Overdue tasks cache (completed defaults to undefined)
+        this.warmSingleOperation('tasks', 'tasks_overdue_25_undefined', async () => result.overdue),
+
+        // Upcoming tasks cache
+        this.warmSingleOperation('tasks', 'tasks_upcoming_7_25', async () => result.upcoming),
+      ]);
+
+      const duration = Date.now() - startTime;
+      logger.debug(
+        `All task caches warmed in ${duration}ms using OmniJS bridge (processed ${result.performance.tasksProcessed} tasks)`,
+      );
+
+      return { operation, success: true, duration };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.warn(`Failed to warm task caches: ${error instanceof Error ? error.message : String(error)}`);
+      return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   /**
@@ -218,93 +270,6 @@ export class CacheWarmer {
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.warn(`Failed to warm tags cache: ${error instanceof Error ? error.message : String(error)}`);
-      return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
-
-  /**
-   * Warm today's tasks cache
-   */
-  private async warmTodaysTasks(): Promise<WarmingResult> {
-    const operation = 'tasks_today';
-    const startTime = Date.now();
-
-    try {
-      logger.debug('Warming today\'s tasks cache...');
-
-      const tasksTool = new QueryTasksToolV2(this.cache);
-
-      // Today's agenda with default parameters (must match actual usage)
-      await this.warmSingleOperation('tasks', 'tasks_today_25_false', async () => {
-        const result = await tasksTool.execute({ mode: 'today', limit: 25, details: false });
-        return result.success ? result.data : null;
-      });
-
-      const duration = Date.now() - startTime;
-      logger.debug(`Today's tasks cache warmed in ${duration}ms`);
-
-      return { operation, success: true, duration };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm today's tasks cache: ${error instanceof Error ? error.message : String(error)}`);
-      return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
-
-  /**
-   * Warm overdue tasks cache
-   */
-  private async warmOverdueTasks(): Promise<WarmingResult> {
-    const operation = 'tasks_overdue';
-    const startTime = Date.now();
-
-    try {
-      logger.debug('Warming overdue tasks cache...');
-
-      const tasksTool = new QueryTasksToolV2(this.cache);
-
-      // Overdue tasks with default parameters (must match actual usage - completed defaults to undefined)
-      await this.warmSingleOperation('tasks', 'tasks_overdue_25_undefined', async () => {
-        const result = await tasksTool.execute({ mode: 'overdue', limit: 25 });
-        return result.success ? result.data : null;
-      });
-
-      const duration = Date.now() - startTime;
-      logger.debug(`Overdue tasks cache warmed in ${duration}ms`);
-
-      return { operation, success: true, duration };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm overdue tasks cache: ${error instanceof Error ? error.message : String(error)}`);
-      return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
-
-  /**
-   * Warm upcoming tasks cache
-   */
-  private async warmUpcomingTasks(): Promise<WarmingResult> {
-    const operation = 'tasks_upcoming';
-    const startTime = Date.now();
-
-    try {
-      logger.debug('Warming upcoming tasks cache...');
-
-      const tasksTool = new QueryTasksToolV2(this.cache);
-
-      // Upcoming tasks (7 days ahead with default limit) - must match actual usage
-      await this.warmSingleOperation('tasks', 'tasks_upcoming_7_25', async () => {
-        const result = await tasksTool.execute({ mode: 'upcoming', daysAhead: 7, limit: 25 });
-        return result.success ? result.data : null;
-      });
-
-      const duration = Date.now() - startTime;
-      logger.debug(`Upcoming tasks cache warmed in ${duration}ms`);
-
-      return { operation, success: true, duration };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.warn(`Failed to warm upcoming tasks cache: ${error instanceof Error ? error.message : String(error)}`);
       return { operation, success: false, duration, error: error instanceof Error ? error.message : String(error) };
     }
   }
