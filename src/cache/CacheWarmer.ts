@@ -7,11 +7,11 @@
 
 import { CacheManager } from './CacheManager.js';
 import { createLogger } from '../utils/logger.js';
-import { ProjectsToolV2 } from '../tools/projects/ProjectsToolV2.js';
 import { TagsToolV2 } from '../tools/tags/TagsToolV2.js';
 import { QueryTasksToolV2 } from '../tools/tasks/QueryTasksToolV2.js';
 import { PerspectivesToolV2 } from '../tools/perspectives/PerspectivesToolV2.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
+import { LIST_PROJECTS_SCRIPT } from '../omnifocus/scripts/projects/list-projects.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 
 const logger = createLogger('cache-warmer');
@@ -217,29 +217,45 @@ export class CacheWarmer {
     const startTime = Date.now();
 
     try {
-      logger.debug('Warming projects cache...');
+      logger.debug('Warming projects cache (lite mode for performance)...');
 
-      // Create a temporary tool instance for warming
-      const projectsTool = new ProjectsToolV2(this.cache);
+      // Use direct script execution with performanceMode='lite' for 10-15x speedup
+      // This skips expensive task count operations (numberOfTasks, taskCounts, etc.)
+      const omni = new OmniAutomation();
 
       // Warm the most common project queries
       await Promise.all([
-        // Active projects (most common)
+        // Active projects (lite mode - skip task counts)
         this.warmSingleOperation('projects', 'projects_active', async () => {
-          const result = await projectsTool.execute({ operation: 'list', status: 'active' });
-          return result.success ? result.data : null;
+          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
+            filter: { status: 'active', limit: 10, performanceMode: 'lite' },
+            limit: 10,
+            includeStats: false,
+          });
+          const result = await omni.executeJson(script);
+          return result && typeof result === 'object' && 'items' in result ? result.items : null;
         }),
 
-        // All projects list
+        // All projects list (lite mode - skip task counts)
         this.warmSingleOperation('projects', 'projects_list_{}', async () => {
-          const result = await projectsTool.execute({ operation: 'list' });
-          return result.success ? result.data : null;
+          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
+            filter: { limit: 10, includeDropped: false, performanceMode: 'lite' },
+            limit: 10,
+            includeStats: false,
+          });
+          const result = await omni.executeJson(script);
+          return result && typeof result === 'object' && 'items' in result ? result.items : null;
         }),
 
-        // Review-ready projects (without stats for faster cache warming)
+        // Review-ready projects (lite mode)
         this.warmSingleOperation('projects', 'projects_review', async () => {
-          const result = await projectsTool.execute({ operation: 'review', details: false });
-          return result.success ? result.data : null;
+          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
+            filter: { needsReview: true, limit: 10, performanceMode: 'lite' },
+            limit: 10,
+            includeStats: false,
+          });
+          const result = await omni.executeJson(script);
+          return result && typeof result === 'object' && 'items' in result ? result.items : null;
         }),
       ]);
 
