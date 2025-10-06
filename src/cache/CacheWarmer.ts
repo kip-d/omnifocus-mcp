@@ -224,12 +224,13 @@ export class CacheWarmer {
       const omni = new OmniAutomation();
 
       // Warm the most common project queries
+      // Use limit: 200 (max) to ensure cache hits on most queries (default limit is 50)
       await Promise.all([
         // Active projects (lite mode - skip task counts)
         this.warmSingleOperation('projects', 'projects_active', async () => {
           const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { status: 'active', limit: 10, performanceMode: 'lite' },
-            limit: 10,
+            filter: { status: 'active', limit: 200, performanceMode: 'lite' },
+            limit: 200,
             includeStats: false,
           });
           const result = await omni.executeJson(script);
@@ -239,8 +240,8 @@ export class CacheWarmer {
         // All projects list (lite mode - skip task counts)
         this.warmSingleOperation('projects', 'projects_list_{}', async () => {
           const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { limit: 10, includeDropped: false, performanceMode: 'lite' },
-            limit: 10,
+            filter: { limit: 200, includeDropped: false, performanceMode: 'lite' },
+            limit: 200,
             includeStats: false,
           });
           const result = await omni.executeJson(script);
@@ -250,8 +251,8 @@ export class CacheWarmer {
         // Review-ready projects (lite mode)
         this.warmSingleOperation('projects', 'projects_review', async () => {
           const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { needsReview: true, limit: 10, performanceMode: 'lite' },
-            limit: 10,
+            filter: { needsReview: true, limit: 200, performanceMode: 'lite' },
+            limit: 200,
             includeStats: false,
           });
           const result = await omni.executeJson(script);
