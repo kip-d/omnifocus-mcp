@@ -88,14 +88,21 @@ async function runServer() {
   });
 
   // Warm cache in background - don't block server startup
+  // Track as pending operation to prevent premature exit during warming
   if (isCIEnvironment) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
   } else if (benchmarkMode) {
     logger.info('Cache warming disabled for benchmark mode');
   } else {
-    cacheWarmer.warmCache().catch(error => {
-      logger.warn('Cache warming failed:', error);
-    });
+    const warmingPromise = cacheWarmer
+      .warmCache()
+      .catch(error => {
+        logger.warn('Cache warming failed:', error);
+      })
+      .finally(() => {
+        pendingOperations.delete(warmingPromise);
+      });
+    pendingOperations.add(warmingPromise);
   }
 
   const transport = new StdioServerTransport();

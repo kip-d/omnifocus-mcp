@@ -30,37 +30,40 @@ function startMCPServer(): Promise<void> {
 
     mcpProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString();
-      console.log('[SERVER]', output.trim());
+      // Only show JSON-RPC responses
+      if (output.trim().startsWith('{')) {
+        console.log('[JSON-RPC]', output.trim());
+      }
+    });
 
-      // Look for cache warming completion
+    mcpProcess.stderr.on('data', (data: Buffer) => {
+      const output = data.toString();
+
+      // Look for cache warming completion in stderr (where logs actually go)
       if (output.includes('Cache warming completed')) {
         const match = output.match(/(\d+)\/(\d+) operations succeeded in (\d+)ms/);
         if (match) {
           const [, successCount, totalCount, totalTime] = match;
           console.log(`\n✓ Cache warming: ${successCount}/${totalCount} operations in ${totalTime}ms\n`);
         }
-      }
-
-      // Look for individual operation timings
-      if (output.includes('cache warmed in')) {
-        const match = output.match(/(\w+) cache warmed in (\d+)ms/);
-        if (match) {
-          const [, operation, duration] = match;
-          console.log(`  → ${operation}: ${duration}ms`);
+        if (!serverReady) {
+          serverReady = true;
+          const totalDuration = performance.now() - startTime;
+          console.log(`✓ Server startup complete in ${totalDuration.toFixed(0)}ms\n`);
+          resolve();
         }
       }
 
-      if (output.includes('Server ready') && !serverReady) {
-        serverReady = true;
-        const totalDuration = performance.now() - startTime;
-        console.log(`\n✓ Server ready in ${totalDuration.toFixed(0)}ms\n`);
-        resolve();
+      // Look for individual operation timings
+      if (output.includes('cache warmed in') || output.includes('ms ✓') || output.includes('ms ✗')) {
+        const match = output.match(/•\s+(\w+):\s+(\d+)ms\s+(✓|✗)/);
+        if (match) {
+          const [, operation, duration, status] = match;
+          console.log(`  → ${operation}: ${duration}ms ${status}`);
+        }
       }
-    });
 
-    mcpProcess.stderr.on('data', (data: Buffer) => {
-      const output = data.toString();
-      // Only show warnings/errors
+      // Show warnings/errors
       if (output.includes('WARN') || output.includes('ERROR')) {
         console.error('[WARN/ERROR]', output.trim());
       }
@@ -85,10 +88,10 @@ function startMCPServer(): Promise<void> {
 
     setTimeout(() => {
       if (!serverReady) {
-        console.error('\n✗ Server startup timeout after 60s');
+        console.error('\n✗ Server startup timeout after 300s');
         reject(new Error('Server startup timeout'));
       }
-    }, 60000);
+    }, 300000); // 5 minute timeout to allow for cache warming (server has 240s timeout)
   });
 }
 
