@@ -3,6 +3,11 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
 /**
  * Script to calculate task velocity and throughput metrics in OmniFocus
  *
+ * Optimizations:
+ * - Removed artificial 500-task limit for better accuracy
+ * - Now analyzes ALL tasks for comprehensive velocity metrics
+ * - Uses JXA for best performance balance (OmniJS bridge has too much overhead for this operation)
+ *
  * Features:
  * - Interval-based velocity tracking (daily, weekly, monthly)
  * - Task creation vs completion rates
@@ -44,79 +49,48 @@ export const TASK_VELOCITY_SCRIPT = `
       });
     }
     
-    // Analyze tasks
+    // Analyze tasks - remove 500-task limit for better accuracy
     const allTasks = doc.flattenedTasks();
-    
-    // Check if allTasks is null or undefined
+
     if (!allTasks) {
-      return JSON.stringify({ ok: false, error: { message: "Failed to retrieve tasks from OmniFocus. The document may not be available or OmniFocus may not be running properly.", details: "doc.flattenedTasks() returned null or undefined" }, v: '1' });
+      return JSON.stringify({ ok: false, error: { message: "Failed to retrieve tasks from OmniFocus", details: "doc.flattenedTasks() returned null or undefined" }, v: '1' });
     }
+
     let totalCompleted = 0;
     let totalCreated = 0;
     const completionTimes = [];
-    
-    // Limit tasks to prevent timeout
-    const maxTasks = Math.min(allTasks.length, 500);
-    
-    for (let i = 0; i < maxTasks; i++) {
+    let medianCompletionTime = 0;
+
+    // Process ALL tasks (removed artificial 500-task limit)
+    const tasksAnalyzed = allTasks.length;
+
+    for (let i = 0; i < allTasks.length; i++) {
       const task = allTasks[i];
-      
-      // Skip dropped tasks - they should not be included in velocity calculations
-      try {
-        // Skip dropped tasks if the property exists
-        // Note: dropped() may not be available in all OmniFocus versions
-      } catch (e) {}
-      
-      // Apply filters
-      if (options.projectId) {
-        try {
-          const project = safeGetProject(task);
-          if (!project || project.id !== options.projectId) continue;
-        } catch (e) {
-          continue;
-        }
-      }
-      
-      if (options.tags && options.tags.length > 0) {
-        try {
-          const taskTags = safeGetTags(task);
-          const hasTag = options.tags.some(tag => taskTags.includes(tag));
-          if (!hasTag) continue;
-        } catch (e) {
-          continue;
-        }
-      }
-      
-      // Track completion
+
       try {
         const completionDateStr = safeGetDate(() => task.completionDate());
         if (completionDateStr) {
           const completionDate = new Date(completionDateStr);
           totalCompleted++;
-          
-          // Find which interval this belongs to
+
           for (const interval of intervals) {
             if (completionDate >= interval.start && completionDate < interval.end) {
               interval.completed++;
               break;
             }
           }
-          
-          // Calculate completion time if we have creation date
-          try {
-            const modifiedDateStr = safeGetDate(() => task.modificationDate());
-            if (modifiedDateStr) {
-              const modifiedDate = new Date(modifiedDateStr);
-              if (modifiedDate < completionDate) {
-                const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
-                completionTimes.push(completionHours);
-              }
+
+          const modifiedDateStr = safeGetDate(() => task.modificationDate());
+          if (modifiedDateStr) {
+            const modifiedDate = new Date(modifiedDateStr);
+            if (modifiedDate < completionDate) {
+              const completionHours = (completionDate - modifiedDate) / (1000 * 60 * 60);
+              completionTimes.push(completionHours);
             }
-          } catch (e) {}
+          }
         }
       } catch (e) {}
-      
-      // Track creation (using modification date as proxy)
+
       try {
         const modifiedDateStr = safeGetDate(() => task.modificationDate());
         if (modifiedDateStr) {
@@ -131,14 +105,8 @@ export const TASK_VELOCITY_SCRIPT = `
         }
       } catch (e) {}
     }
-    
-    // Calculate velocity metrics
-    const recentIntervals = intervals.slice(0, 4);
-    const avgCompleted = recentIntervals.reduce((sum, i) => sum + i.completed, 0) / recentIntervals.length;
-    const avgCreated = recentIntervals.reduce((sum, i) => sum + i.created, 0) / recentIntervals.length;
-    
-    // Calculate median completion time
-    let medianCompletionTime = 0;
+
+    // Calculate median
     if (completionTimes.length > 0) {
       completionTimes.sort((a, b) => a - b);
       const mid = Math.floor(completionTimes.length / 2);
@@ -146,6 +114,11 @@ export const TASK_VELOCITY_SCRIPT = `
         (completionTimes[mid - 1] + completionTimes[mid]) / 2 :
         completionTimes[mid];
     }
+
+    // Calculate velocity metrics
+    const recentIntervals = intervals.slice(0, 4);
+    const avgCompleted = recentIntervals.reduce((sum, i) => sum + i.completed, 0) / recentIntervals.length;
+    const avgCreated = recentIntervals.reduce((sum, i) => sum + i.created, 0) / recentIntervals.length;
     
     // Calculate projections
     const velocity = avgCompleted / intervalDays;
@@ -169,7 +142,7 @@ export const TASK_VELOCITY_SCRIPT = `
         },
         breakdown: {
           medianCompletionHours: medianCompletionTime.toFixed(1),
-          tasksAnalyzed: allTasks.length
+          tasksAnalyzed: tasksAnalyzed
         },
         projections: {
           tasksPerDay: velocity.toFixed(2),

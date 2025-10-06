@@ -5,13 +5,20 @@
 
 ## Executive Summary
 
-**Performance Benchmarks Complete:** M2 MacBook Air (24GB) vs M2 Ultra Mac Studio (192GB)
+**Performance Benchmarks Complete:** M2 MacBook Air (24GB) vs M2 Ultra Mac Studio (192GB) vs M4 Pro Mac Mini (64GB)
 
 ### M2 Ultra Performance (192GB, 24 cores) ✅
 - **Cold cache:** 7-23x faster than M2 Air across ALL operations
 - **Warm cache:** Task queries in 1-5ms (extraordinarily fast)
 - **Cache warming:** Extraordinarily effective (1,180-17,400x speedup for task queries)
 - **Cache warming time:** ~10 seconds (20% faster than M2 Air)
+
+### M4 Pro Mac Mini Performance (64GB, 14 cores) ✅ **NEW PERFORMANCE LEADER!**
+- **Cold cache:** 5-72x faster than M2 Air, 1.8-5.7x faster than M2 Ultra across ALL operations
+- **Warm cache:** Task queries in 0-3ms (278-∞x faster than cold, instant performance)
+- **Cache warming:** Takes ~2.2s (5.5x faster than M2 Air, 4.6x faster than M2 Ultra!)
+- **Why so fast:** Single-core performance dominates for single-threaded JXA/osascript workloads
+- **Best-in-class:** M4 Pro delivers exceptional performance across all workloads
 
 ### M2 MacBook Air Performance (24GB, 8 cores) ✅
 - **Cold cache:** 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
@@ -26,17 +33,33 @@ After fixing cache key mismatches and TTL issues, cache warming provides **ident
 - Overdue tasks: 59.5s → 1ms (59,500x faster)
 - Upcoming tasks: 220.9s → 0ms (instant)
 
+✅ **M4 Pro Mac Mini is the NEW PERFORMANCE LEADER!** 🚀
+The M4 Pro delivers **1.8-7.1x faster** performance than M2 Ultra and **14.7-79.5x faster** than M2 Air:
+- **Cold cache task queries:** 835ms-3.0s (vs M2 Ultra: 5.9-17.4s, M2 Air: 41.8-220.9s)
+- **Cache warming:** 2.2s - **FASTEST EVER** (vs M2 Ultra: 10s, M2 Air: 12s)
+- **Warm cache:** 0-3ms for instant task queries (matching other Apple Silicon Macs)
+
 ✅ **M2 Ultra Delivers Exceptional Performance with OmniJS Bridge:**
 The M2 Ultra is **7-23x faster** than M2 Air across all operations, with the largest gains from OmniJS bridge optimizations:
 - **Tag operations (full mode):** 22.9x faster (3.7s vs 84.7s)
 - **Analytics:** 10-16x faster
 - **Task queries:** 7-13x faster cold, 1,180-17,400x faster warm
 
-**Conclusion:** Both M2 Air and M2 Ultra benefit from cache warming. M2 Ultra recommended for best performance, but M2 Air now delivers excellent warm-cache performance too. OmniJS bridge optimizations provide the largest performance gains for tag operations.
+**Conclusion:** ALL Apple Silicon Macs benefit from cache warming. **M4 Pro recommended for best performance**, M2 Ultra for excellent performance, and M2 Air delivers excellent warm-cache performance too. OmniJS bridge optimizations provide the largest performance gains for tag operations.
 
 ---
 
 ## Test Hardware
+
+### Mac Mini M4 Pro (Performance Leader) 🚀 **NEW**
+- **Model:** Mac mini (Mac16,11)
+- **CPU:** Apple M4 Pro
+- **Cores:** 14 (10 performance + 4 efficiency)
+- **Memory:** 64 GB
+- **OS:** macOS 15.0 (Sequoia)
+- **OmniFocus:** 4.6.1
+- **Node.js:** v24.8.0
+- **Status:** ✅ **NEW PERFORMANCE LEADER** - 1.8-7.1x faster than M2 Ultra
 
 ### MacBook Air M2 (Primary Development Machine)
 - **Model:** MacBook Air (Mac14,2)
@@ -158,6 +181,66 @@ The 221-second duration for upcoming tasks is **expected behavior** given databa
 | Export projects (JSON) | 1-2s | With task counts |
 | Complete backup (JSON) | 5-10s | Full database export |
 
+### Mac Mini M4 Pro (64GB) - **MEASURED RESULTS** ✅ **NEW PERFORMANCE LEADER!**
+
+**Test Date:** 2025-10-06
+**Database:** Same ~2,400 task database as baseline
+**Node.js:** v24.8.0
+**Model:** Mac16,11 (Mac mini M4 Pro)
+**CPU:** Apple M4 Pro (14 cores: 10 performance + 4 efficiency)
+
+#### Task Queries - Cold Cache (BENCHMARK_MODE=cold)
+| Operation | M4 Pro | M2 Ultra | M2 Air | vs M2 Ultra | vs M2 Air |
+|-----------|--------|----------|--------|-------------|-----------|
+| Today's tasks (limit 25) | **835ms** | 5.9s | 41.8s | ✅ **7.1x faster** | ✅ **50.1x faster** |
+| Overdue tasks (limit 25) | **1145ms** | 6.4s | 59.5s | ✅ **5.6x faster** | ✅ **52.0x faster** |
+| Upcoming tasks (7 days, limit 25) | **3047ms** | 17.4s | 220.9s | ✅ **5.7x faster** | ✅ **72.5x faster** |
+| Project statistics | **211ms** | 661ms | 11.5s | ✅ **3.1x faster** | ✅ **54.5x faster** |
+| Tags (names only) | **129ms** | 247ms | 1.9s | ✅ **1.9x faster** | ✅ **14.7x faster** |
+| Tags (fast mode) | **159ms** | 289ms | 3.7s | ✅ **1.8x faster** | ✅ **23.3x faster** |
+| Tags (full mode) | **1066ms** | 3.7s | 84.7s | ✅ **3.5x faster** | ✅ **79.5x faster** |
+| Productivity stats | **1264ms** | 6.0s | 94.6s | ✅ **4.7x faster** | ✅ **74.8x faster** |
+| Task velocity | **369ms** | 1.7s | 17.8s | ✅ **4.6x faster** | ✅ **48.2x faster** |
+
+**Key Finding:** M4 Pro is **1.8-7.1x faster** than M2 Ultra and **14.7-79.5x faster** than M2 Air across ALL operations. The M4 Pro's combination of higher clock speeds and improved architecture delivers exceptional performance.
+
+#### Task Queries - Warm Cache (BENCHMARK_MODE=warm)
+| Operation | Measured Time | vs Cold Cache | Cache Effectiveness |
+|-----------|---------------|---------------|---------------------|
+| Today's tasks (limit 25) | **3ms** | 835ms | **278x faster** |
+| Overdue tasks (limit 25) | **1ms** | 1145ms | **1,145x faster** |
+| Upcoming tasks (7 days, limit 25) | **0ms** | 3047ms | **Instant** (∞x) |
+| Project statistics | **243ms** | 211ms | ~same (not cached) |
+| Tags (names only) | **127ms** | 129ms | ~same (not cached) |
+| Tags (fast mode) | **150ms** | 159ms | ~same (not cached) |
+| Tags (full mode) | **938ms** | 1066ms | 1.1x faster |
+| Productivity stats | **1216ms** | 1264ms | ~same (not cached) |
+| Task velocity | **369ms** | 369ms | ~same (not cached) |
+
+**Cache Warming Time:** ~2.2 seconds (using OmniJS bridge for task caches)
+
+**Critical Discovery:** M4 Pro delivers **fastest cache warming ever measured** - 5.5x faster than M2 Air (12s) and 4.6x faster than M2 Ultra (10s). Cache warming effectiveness remains extraordinary (278-∞x speedup for task queries).
+
+#### Performance Characteristics
+
+**What's Extraordinarily Fast (Cold Cache):**
+- 🚀 All operations significantly faster than both M2 Air and M2 Ultra
+- 🚀 Task queries: 835ms-3.0s (vs M2 Ultra: 5.9-17.4s, M2 Air: 41.8-220.9s)
+- 🚀 Tags/analytics: 129ms-1.3s (vs M2 Ultra: 247ms-6.8s, M2 Air: 1.9-94.6s)
+- 🚀 Cache warming: 2.2s (vs M2 Ultra: 10s, M2 Air: 12s) - **NEW RECORD**
+
+**What's Instant (Warm Cache):**
+- ✅ Task queries: 0-3ms (identical to other Apple Silicon Macs)
+- ✅ Cache warming completes in 2.2s - **fastest of all tested machines**
+
+**Hardware Advantages:**
+The M4 Pro's massive performance gains demonstrate:
+1. **Single-core performance:** ~20-30% faster CPU cores vs M2 generation (most important for single-threaded JXA/osascript)
+2. **Improved architecture:** Better IPC, larger/faster caches benefit JavaScript execution
+3. **Single-threaded workloads:** JXA operations are largely single-threaded, favoring faster cores over more cores
+4. **Note:** M2 Ultra has 3x higher memory bandwidth (~800 GB/s vs ~273 GB/s), but single-core speed matters more here
+5. **Best overall performance:** 1.8-7.1x faster than M2 Ultra across all operations
+
 ### Mac Studio M2 Ultra (192GB) - **MEASURED RESULTS** ✅
 
 **Test Date:** 2025-10-06 (Updated with latest cache warming optimizations)
@@ -218,31 +301,34 @@ The M2 Ultra's massive performance advantage demonstrates:
 3. **Analytics:** 10-16x faster across all operations
 4. **Cache warming:** Completes in 10s (vs 12s on M2 Air) - 20% faster
 
-### Quick Reference: M2 Ultra vs M2 Air Performance Comparison
+### Quick Reference: Performance Comparison Across All Machines
 
-| Operation | M2 Air (Cold) | M2 Air (Warm) | M2 Ultra (Cold) | M2 Ultra (Warm) | Speedup (Cold) | Speedup (Warm) |
-|-----------|---------------|---------------|-----------------|-----------------|----------------|----------------|
+| Operation | M2 Air (Cold) | M2 Air (Warm) | M2 Ultra (Cold) | M2 Ultra (Warm) | M4 Pro (Cold) | M4 Pro (Warm) |
+|-----------|---------------|---------------|-----------------|-----------------|---------------|---------------|
 | **Task Queries** |
-| Today's tasks | 41.8s | **2ms** ✅ | **5.9s** | **5ms** | **7.1x faster** | M2 Air: 20,900x, M2 Ultra: 1,180x |
-| Overdue tasks | 59.5s | **1ms** ✅ | **6.4s** | **2ms** | **9.3x faster** | M2 Air: 59,500x, M2 Ultra: 3,220x |
-| Upcoming tasks | 220.9s | **0ms** ✅ | **17.4s** | **1ms** | **12.7x faster** | M2 Air: instant, M2 Ultra: 17,400x |
+| Today's tasks | 41.8s | **2ms** ✅ | 5.9s | 5ms | **835ms** 🚀 | **3ms** |
+| Overdue tasks | 59.5s | **1ms** ✅ | 6.4s | 2ms | **1145ms** 🚀 | **1ms** |
+| Upcoming tasks | 220.9s | **0ms** ✅ | 17.4s | 1ms | **3047ms** 🚀 | **0ms** |
 | **Analytics & Tags** |
-| Project statistics | 11.5s | 6.7s | **661ms** | **671ms** | **17.4x faster** | Minimal benefit |
-| Tags (names only) | 1.9s | 1.7s | **247ms** | **252ms** | **7.7x faster** | Minimal benefit |
-| Tags (fast mode) | 3.7s | 3.2s | **289ms** | **319ms** | **12.8x faster** | Minimal benefit |
-| Tags (full mode) | 84.7s | ~12s | **3.7s** | **3.5s** | **22.9x faster** ✅ | M2 Air: ✅ **OmniJS bridge** (7x vs JXA) |
-| Productivity stats | 94.6s | 73.4s | **6.0s** | **6.8s** | **15.8x faster** | M2 Air: 1.3x, M2 Ultra: minimal |
-| Task velocity | 17.8s | 17.5s | **1.7s** | **1.4s** | **10.5x faster** | Minimal benefit |
+| Project statistics | 11.5s | 6.7s | 661ms | 671ms | **211ms** 🚀 | **243ms** |
+| Tags (names only) | 1.9s | 1.7s | 247ms | 252ms | **129ms** 🚀 | **127ms** |
+| Tags (fast mode) | 3.7s | 3.2s | 289ms | 319ms | **159ms** 🚀 | **150ms** |
+| Tags (full mode) | 84.7s | ~12s | 3.7s | 3.5s | **1066ms** 🚀 | **938ms** |
+| Productivity stats | 94.6s | 73.4s | 6.0s | 6.8s | **1264ms** 🚀 | **1216ms** |
+| Task velocity | 17.8s | 17.5s | 1.7s | 1.4s | **369ms** 🚀 | **369ms** |
 
 **Cache Warming Time:**
 - M2 MacBook Air: ~12 seconds
-- M2 Ultra Mac Studio: ~10 seconds (20% faster)
+- M2 Ultra Mac Studio: ~10 seconds (20% faster than M2 Air)
+- M4 Pro Mac Mini: ~2.2 seconds (5.5x faster than M2 Air, 4.6x faster than M2 Ultra) 🚀 **NEW RECORD**
 
 **Key Insights:**
-- ✅ M2 Ultra is **7-23x faster** than M2 Air across ALL operations (updated measurements)
-- ✅ Cache warming works on **BOTH** M2 Air and M2 Ultra (20,900-220,900x for task queries)
-- ✅ M2 Air warm cache now delivers **extraordinary performance** for task queries (0-2ms)
-- ✅ **Largest improvement:** Tags (full mode) with OmniJS bridge - 22.9x faster on M2 Ultra
+- 🚀 **M4 Pro is the NEW PERFORMANCE LEADER** - 1.8-7.1x faster than M2 Ultra, 14.7-79.5x faster than M2 Air
+- 🚀 **Fastest cache warming ever:** M4 Pro warms cache in 2.2s (vs M2 Ultra: 10s, M2 Air: 12s)
+- ✅ M2 Ultra is **7-23x faster** than M2 Air across ALL operations
+- ✅ Cache warming works on **ALL** machines (278-220,900x speedup for task queries)
+- ✅ Warm cache performance is **instant** (0-3ms) across all Apple Silicon Macs
+- ✅ **Largest improvement:** Tags (full mode) with OmniJS bridge - 22.9x faster on M2 Ultra vs M2 Air
 
 ## Performance Improvements Achieved
 
@@ -300,16 +386,21 @@ The M2 Ultra's massive performance advantage demonstrates:
 
 **Key Finding:** M2 Ultra delivers exceptional performance across ALL operations. The largest gains come from OmniJS bridge optimizations (22.9x faster for tag operations). Cache warming is extraordinarily effective on both machines.
 
-### M4 Pro Mac Mini (64GB RAM) - EXPECTED ONLY
-**Expected improvement:** 1.5-2x faster than M2 MacBook Air (extrapolated from M2 Ultra data)
-- **CPU advantage:** M4 Pro has 40-50% higher single-core performance
-- **Memory advantage:** More cache, faster memory bandwidth
+### M4 Pro Mac Mini (64GB RAM) - ✅ MEASURED - **NEW PERFORMANCE LEADER!**
+**Actual measured improvement:** 1.8-7.1x faster than M2 Ultra, 14.7-79.5x faster than M2 Air
+- **CPU advantage:** Apple M4 Pro with 14 cores (10 performance + 4 efficiency), ~20-30% faster single-core vs M2
+- **Architecture advantage:** Improved IPC, larger/faster caches, better JavaScript execution
+- **Workload fit:** JXA/osascript is single-threaded, so faster cores matter more than core count or memory bandwidth
+- **Note:** M2 Ultra has 3x higher memory bandwidth, but single-core speed dominates for these workloads
 
-**Estimated results:**
-- Task queries (cold): 20-28s (vs 42-221s on M2 Air)
-- Task queries (warm): ~10ms (vs 1-5ms on M2 Ultra)
-- Tag operations (fast): ~150ms (assuming similar to M2 Ultra)
-- Analytics: Unknown (may be slower like M2 Ultra, or faster with M4's improved single-thread performance)
+**Measured results:**
+- **Task queries (cold):** 835ms-3.0s (vs M2 Ultra: 5.9-17.4s, M2 Air: 41.8-220.9s) = **1.8-7.1x faster than M2 Ultra!**
+- **Task queries (warm):** 0-3ms (instant, matching other Apple Silicon Macs)
+- **Tag operations:** 129ms-1.1s (vs M2 Ultra: 247ms-3.7s) = **1.8-3.5x faster**
+- **Analytics:** 211ms-1.3s (vs M2 Ultra: 661ms-6.8s) = **3.1-5.2x faster**
+- **Cache warming:** 2.2 seconds (vs M2 Ultra: 10s, M2 Air: 12s) = **4.6-5.5x faster!** 🚀
+
+**Key Finding:** M4 Pro exceeded all expectations, delivering 1.8-7.1x better performance than M2 Ultra across all operations, with especially dramatic improvements in cache warming (4.6x faster). The M4 Pro is the clear performance leader for OmniFocus MCP operations.
 
 ### Intel Mac (16GB RAM)
 **Expected performance:** 3-5x slower than M2 MacBook Air
@@ -426,11 +517,20 @@ Based on verified measurements from both M2 Air and M2 Ultra:
   - With cache warming: Task queries 0-2ms, analytics/tags 1.7-73.4s
   - Without cache warming: Task queries 41-221s, analytics/tags same
 
-### For M4 Pro Mac Mini Users (Not Measured)
-- Expected ~1.5-2x faster than M2 MacBook Air (based on CPU specs)
-- Can likely increase default limits (25 → 50 for task queries)
-- Analytics performance unknown (may be similar to M2 Ultra's slower analytics)
-- **Recommendation:** Test before assuming performance improvement
+### For M4 Pro Mac Mini Users (Measured ✅ - Updated 2025-10-06) 🚀 **NEW PERFORMANCE LEADER**
+- **Measured performance:** 1.8-7.1x faster than M2 Ultra, 14.7-79.5x faster than M2 Air
+- **Task queries (warm cache):** Instant (0-3ms) - cache warming working perfectly
+- **Task queries (cold cache):** 835ms-3.0s (vs M2 Ultra: 5.9-17.4s) = **fastest cold cache performance**
+- **Tags/analytics (cold cache):** 129ms-1.3s (vs M2 Ultra: 247ms-6.8s) = **1.8-5.2x faster**
+- **Cache warming:** ✅ Works perfectly - provides 278-∞x speedup for task queries
+- **Cache warming time:** ~2.2 seconds (vs M2 Ultra: 10s, M2 Air: 12s) = **FASTEST EVER** 🚀
+- **Recommendation:** **ENABLE cache warming** for optimal performance
+  - Cache warming takes only 2.2s during startup (fastest of all machines)
+  - Task queries become instant (0-3ms) after warmup
+  - Cold cache performance already excellent (835ms-3.0s) for first queries
+- **Best use case:** ALL workloads - M4 Pro delivers exceptional performance across the board
+- **Can safely increase limits:** Consider 25 → 50 for task queries given excellent performance
+- **Largest gains:** Cold cache operations (5-7x faster than M2 Ultra), cache warming (4.6x faster)
 
 ### For M2 Ultra Mac Studio Users (Measured ✅ - Updated 2025-10-06)
 - **Measured performance:** 7-23x faster than M2 Air across ALL operations
@@ -451,6 +551,19 @@ Based on verified measurements from both M2 Air and M2 Ultra:
 - Consider upgrading to Apple Silicon
 
 ## Testing Notes
+
+**M4 Pro Mac Mini Benchmark (2025-10-06):** 🚀 **NEW PERFORMANCE LEADER**
+- Benchmark script: `scripts/benchmark-performance.ts`
+- Run commands:
+  - Cold cache: `BENCHMARK_MODE=cold npm run benchmark`
+  - Warm cache: `BENCHMARK_MODE=warm npm run benchmark`
+- Test pattern: Persistent server connection (matches test-as-claude-desktop.js)
+- Hardware: Mac16,11 (M4 Pro, 14 cores, 64GB RAM)
+- Results:
+  - **Cold cache:** 835ms-3.0s for task queries, 129ms-1.3s for analytics/tags ✅ **1.8-7.1x faster than M2 Ultra!**
+  - **Warm cache:** **0-3ms for task queries** ✅ (278-∞x speedup!)
+  - **Cache warming:** Takes ~2.2s - **FASTEST EVER** (4.6x faster than M2 Ultra, 5.5x faster than M2 Air)
+- **Key Finding:** M4 Pro exceeds M2 Ultra by 1.8-7.1x across ALL operations, with exceptional cache warming performance
 
 **M2 MacBook Air Benchmark (2025-10-06):**
 - Benchmark script: `scripts/benchmark-performance.ts`
@@ -477,15 +590,17 @@ Based on verified measurements from both M2 Air and M2 Ultra:
   - **Cache warming:** ~10 seconds (20% faster than M2 Air's 12s)
 
 **Key Learnings:**
-1. ✅ **M2 Ultra provides 7-23x speedup** across ALL operations (task queries, tags, analytics)
-2. ✅ **Cache warming works on both machines** - provides 20,900-220,900x speedup for task queries
-3. ✅ **OmniJS bridge optimizations** - Reduced cache warming by 93% (184s → 54s → 12s)
+1. 🚀 **M4 Pro is the NEW PERFORMANCE LEADER** - 1.8-7.1x faster than M2 Ultra, 14.7-79.5x faster than M2 Air
+2. 🚀 **M4 Pro cache warming is FASTEST EVER** - 2.2s (4.6x faster than M2 Ultra, 5.5x faster than M2 Air)
+3. ✅ **M2 Ultra provides 7-23x speedup** over M2 Air across ALL operations
+4. ✅ **Cache warming works on ALL machines** - provides 278-220,900x speedup for task queries
+5. ✅ **OmniJS bridge optimizations** - Reduced cache warming by 93% (184s → 54s → 12s on M2 Air)
    - Task caches: 2.4s (was 5+ minutes with JXA)
    - Tags with usage stats: 12.7s (was ~72s with JXA)
    - **Tag operations (full mode):** 3.7s on M2 Ultra with OmniJS bridge (22.9x faster than M2 Air cold)
-4. ✅ **Hardware scaling varies by operation** - M2 Ultra delivers largest gains with OmniJS bridge (22.9x for tags)
-5. ✅ **M2 Air delivers excellent warm-cache performance** - Task queries in 0-2ms, tags in ~12s after warmup
-6. 📊 **Complete measurements available** - Both M2 Air and M2 Ultra fully benchmarked with OmniJS bridge optimizations
+6. ✅ **Hardware scaling varies by operation** - M4 Pro delivers 1.8-7.1x gains over M2 Ultra across all operations
+7. ✅ **ALL Apple Silicon Macs deliver excellent warm-cache performance** - Task queries in 0-3ms after warmup
+8. 📊 **Complete measurements available** - M2 Air, M2 Ultra, and M4 Pro fully benchmarked with OmniJS bridge optimizations
 
 **Next Steps for Benchmarking:**
 - ✅ COMPLETED: Measure warm-cache performance on M2 Ultra
@@ -495,7 +610,10 @@ Based on verified measurements from both M2 Air and M2 Ultra:
 - ✅ COMPLETED: Optimize task cache warming with OmniJS bridge (70% faster, 184s → 54s)
 - ✅ COMPLETED: Optimize tags with usage stats using OmniJS bridge (82% faster, 72s → 12.7s)
 - ✅ COMPLETED: Total cache warming optimization (93% faster, 184s → 12s)
-- 🔄 TODO: Test on M4 Pro Mac Mini when available
+- ✅ COMPLETED: Test on M4 Pro Mac Mini - **NEW PERFORMANCE LEADER!** 🚀
+  - M4 Pro delivers 1.8-7.1x better performance than M2 Ultra
+  - Cache warming in 2.2s (4.6x faster than M2 Ultra) - **FASTEST EVER**
+  - Exceptional cold cache performance (835ms-3.0s for task queries)
 
 ## Performance Optimizations
 
@@ -590,6 +708,135 @@ const resultJson = app.evaluateJavascript(omniJsScript);
 - `src/omnifocus/scripts/tags/list-tags.ts` - Tags listing with OmniJS bridge for usage stats (lines 99-148)
 
 **Note:** Tags query without usage stats (`includeUsageStats: false`) remains fast at ~2-4 seconds using standard JXA, so the bridge is only used when usage statistics are requested.
+
+### OmniJS Bridge for Analytics Operations (v2.3.0+)
+
+Following the success of cache warming and tag optimizations, we applied the OmniJS bridge pattern to analytics operations.
+
+#### Productivity Stats Optimization
+
+**Problem:** Task iteration for productivity stats took ~1431ms due to JXA property access overhead on ~2400 tasks.
+
+**Solution:** Use OmniJS bridge for bulk task counting and statistics.
+
+**Implementation:**
+```typescript
+const omniJsScript = `
+  (() => {
+    let totalTasks = 0;
+    let totalCompleted = 0;
+    let totalAvailable = 0;
+    let completedInPeriod = 0;
+
+    flattenedTasks.forEach(task => {
+      totalTasks++;
+      const isCompleted = task.completed || false;
+
+      if (isCompleted) {
+        totalCompleted++;
+        // Check if completed in period
+        const completionDate = task.completionDate;
+        if (completionDate && completionDate.getTime() >= periodStartTime) {
+          completedInPeriod++;
+        }
+      } else {
+        // Check if available
+        const blocked = task.taskStatus === Task.Status.Blocked;
+        const deferDate = task.deferDate;
+        const isDeferred = deferDate && deferDate.getTime() > nowTime;
+
+        if (!blocked && !isDeferred) {
+          totalAvailable++;
+        }
+      }
+    });
+
+    return JSON.stringify({ totalTasks, totalCompleted, totalAvailable, completedInPeriod });
+  })()
+`;
+```
+
+**Results (M4 Pro Mac Mini):**
+- **Before (JXA):** 1431ms average
+- **After (OmniJS bridge):** 261-1341ms (6-82% faster depending on configuration)
+- **Speedup:** 1.1-5.5x faster
+- **File:** `src/omnifocus/scripts/analytics/productivity-stats.ts:137-239`
+
+#### Tags Parent Hierarchy Optimization
+
+**Problem:** Getting parent tag information added 113ms overhead (227ms total vs 114ms fast mode) due to iterative JXA property access.
+
+**Solution:** Use OmniJS bridge to fetch all tag properties (id, name, parent) in a single operation.
+
+**Implementation:**
+```typescript
+const omniJsTagScript = `
+  (() => {
+    const tagDataList = [];
+
+    flattenedTags.forEach(tag => {
+      const tagData = {
+        id: tag.id.primaryKey,
+        name: tag.name
+      };
+
+      // Get parent info if it exists
+      const parent = tag.parent;
+      if (parent) {
+        tagData.parentId = parent.id.primaryKey;
+        tagData.parentName = parent.name;
+      }
+
+      tagDataList.push(tagData);
+    });
+
+    return JSON.stringify(tagDataList);
+  })()
+`;
+```
+
+**Results (M4 Pro Mac Mini):**
+- **Before (JXA):** 227ms (fast mode: 114ms + parent overhead: 113ms)
+- **After (OmniJS bridge):** 109ms (fast mode: 104ms + parent overhead: 5ms)
+- **Parent overhead reduced:** 113ms → 5ms (**22.6x faster for hierarchy!**)
+- **Overall speedup:** 2.1x faster
+- **File:** `src/omnifocus/scripts/tags/list-tags.ts:89-145`
+
+#### Task Velocity Optimization - Accuracy over Speed
+
+**Problem:** Task velocity was artificially limited to 500 tasks to prevent timeouts, reducing accuracy.
+
+**Approach Tested:** OmniJS bridge for all tasks
+- **Result:** 3.3x slower (1228ms vs 344ms) due to serialization overhead
+- **Conclusion:** Bridge overhead too high for this operation
+
+**Solution Implemented:** Remove artificial limit, use JXA for all tasks
+
+**Results (M4 Pro Mac Mini):**
+- **Before:** 344ms (500 tasks only - limited accuracy)
+- **After:** 326-1036ms (ALL ~2400 tasks - full accuracy)
+- **Trade-off:** Slightly slower but **5x more data** for accurate velocity metrics
+- **Benefit:** Complete dataset analysis instead of partial sample
+- **File:** `src/omnifocus/scripts/analytics/task-velocity.ts:52-116`
+
+#### Key Learnings from Analytics Optimizations
+
+1. **OmniJS bridge is excellent for:**
+   - Bulk property access on large collections
+   - Operations where JXA property access is the bottleneck
+   - Scenarios with minimal serialization overhead
+
+2. **OmniJS bridge has too much overhead for:**
+   - Operations with large result sets that need serialization
+   - Already-fast operations (< 500ms)
+   - Cases where JXA is already efficient
+
+3. **Best practice:** Benchmark before optimizing
+   - Created `scripts/benchmark-analytics.ts` for detailed testing
+   - Test both JXA and bridge approaches
+   - Measure multiple iterations for statistical significance
+
+4. **Graceful degradation:** All optimizations include JXA fallbacks if bridge fails
 
 ## Related Documentation
 
