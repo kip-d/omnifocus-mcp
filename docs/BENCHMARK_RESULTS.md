@@ -1,25 +1,31 @@
 # Performance Benchmark Results
 
-**Last Updated:** 2025-10-05
+**Last Updated:** 2025-10-06
 **Version:** v2.2.0
 
 ## Executive Summary
 
-**M2 Ultra Mac Studio (192GB) - Measured Performance:**
+**Performance Benchmarks Complete:** M2 MacBook Air (24GB) vs M2 Ultra Mac Studio (192GB)
 
-✅ **Task Query Performance (Verified):**
-- **Warm cache:** 1-5ms (extraordinarily fast)
-- **Cold cache:** 11x faster than M2 MacBook Air (3.8-20.6s vs 42-221s)
-- **Cache warming effectiveness:** 760-20,560x speedup
+### M2 Ultra Performance (192GB, 24 cores) ✅
+- **Cold cache:** 7-12.4x faster than M2 Air across ALL operations
+- **Warm cache:** Task queries in 1-5ms (extraordinarily fast)
+- **Cache warming:** Extraordinarily effective (760-20,560x speedup for task queries)
 
-📊 **Tag & Analytics Performance (Needs M2 Air Baseline):**
-- **Tags (full mode):** 7.3s (cold), 8.1s (warm)
-- **Analytics:** 7.6-8.4s
-- **⚠️ Cannot compare to M2 Air** - baseline numbers were estimates, not measurements
+### M2 MacBook Air Performance (24GB, 8 cores) ✅
+- **Cold cache:** 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
+- **Warm cache:** ❌ **NO IMPROVEMENT** - cache warming provides zero benefit (investigation needed)
+- **Cache warming:** Takes 222s (3.7 minutes) but produces no speedup
 
-**Key Insight:** M2 Ultra excels at task queries with exceptional cache effectiveness. Tag/analytics performance needs M2 Air measurements for valid comparison.
+### Critical Findings
 
-**Next Step:** Run automated benchmarks on M2 MacBook Air to establish proper baseline for tag/analytics operations.
+🚨 **Cache Warming Issue on M2 Air:**
+Cache warming takes 222s but provides **zero performance benefit** on M2 MacBook Air. Warm cache queries take just as long as cold cache (41-221s). This contrasts sharply with M2 Ultra where cache warming reduces queries to 1-5ms. **Investigation required.**
+
+✅ **M2 Ultra Delivers Exceptional Performance:**
+The M2 Ultra is **7-12.4x faster** than M2 Air across all operations (task queries, tags, analytics), far exceeding the expected 2-3x improvement. Cache warming is extraordinarily effective on M2 Ultra.
+
+**Conclusion:** M2 Ultra highly recommended for this workload. M2 Air cache warming needs investigation as it currently provides no benefit despite 222s warmup time.
 
 ---
 
@@ -59,14 +65,41 @@ Performance measurements from automated benchmark script (`npm run benchmark`):
 
 ## Performance Results
 
-### MacBook Air M2 (24GB) - Cold Cache Only
+### MacBook Air M2 (24GB) - **MEASURED RESULTS** ✅
 
-#### Task Queries (Cold Cache, No Warming)
+**Test Date:** 2025-10-06
+**Database:** ~2,400 tasks, ~150 projects, ~106 tags
+**Node.js:** v24.9.0
+
+#### Task Queries - Cold Cache (BENCHMARK_MODE=cold)
 | Operation | Measured Time | Notes |
 |-----------|---------------|-------|
-| Today's tasks (limit 25) | ~42s | First run, cold cache |
-| Overdue tasks (limit 25) | ~60s | First run, cold cache |
-| Upcoming tasks (7 days, limit 25) | **221s** | **Performance sensitive to data distribution** |
+| Today's tasks (limit 25) | **41.8s** | First run, cold cache |
+| Overdue tasks (limit 25) | **59.5s** | First run, cold cache |
+| Upcoming tasks (7 days, limit 25) | **220.9s** | **Performance sensitive to data distribution** |
+| Project statistics | **11.5s** | With task counts |
+| Tags (names only) | **1.9s** | Ultra-fast mode |
+| Tags (fast mode) | **3.7s** | Basic info + counts |
+| Tags (full mode) | **84.7s** | Complete hierarchy + stats |
+| Productivity stats (week) | **94.6s** | GTD health metrics |
+| Task velocity (7 days) | **17.8s** | Completion trends |
+
+#### Task Queries - Warm Cache (BENCHMARK_MODE=warm)
+| Operation | Measured Time | vs Cold Cache | Cache Effectiveness |
+|-----------|---------------|---------------|---------------------|
+| Today's tasks (limit 25) | **41.8s** | 41.8s | ❌ **No improvement** |
+| Overdue tasks (limit 25) | **60.2s** | 59.5s | ❌ **No improvement** |
+| Upcoming tasks (7 days, limit 25) | **221.4s** | 220.9s | ❌ **No improvement** |
+| Project statistics | **11.5s** | 11.5s | ~same (not cached) |
+| Tags (names only) | **1.9s** | 1.9s | ~same |
+| Tags (fast mode) | **3.7s** | 3.7s | ~same |
+| Tags (full mode) | **86.3s** | 84.7s | ~same |
+| Productivity stats | **94.8s** | 94.6s | ~same |
+| Task velocity | **19.0s** | 17.8s | ~same |
+
+**Cache Warming Time:** 222 seconds (3.7 minutes)
+
+**🚨 CRITICAL FINDING:** Cache warming provides **NO performance benefit** on M2 MacBook Air! Warm cache queries take just as long as cold cache queries (41-221s). This is completely different from M2 Ultra where cache warming provides 760-20,560x speedup (down to 1-5ms). Investigation needed.
 
 **Performance Analysis - "Upcoming Tasks" Query:**
 The 221-second duration for upcoming tasks is **expected behavior** given database characteristics:
@@ -89,36 +122,24 @@ The 221-second duration for upcoming tasks is **expected behavior** given databa
 3. Regular database maintenance to archive/complete old tasks
 4. Cache warming partially mitigates this (subsequent queries are faster)
 
-#### Project Operations (M2 MacBook Air - Not Benchmarked)
-| Operation | Avg Time | Notes |
-|-----------|----------|-------|
-| List projects (lite mode) | <500ms | Fast project overview |
-| Project statistics | 1-2s | With task counts |
-| Create project | <500ms | Including tags |
-| Update project | <500ms | Property changes |
+#### Performance Characteristics (M2 MacBook Air)
 
-#### Tag Operations (M2 MacBook Air - ⚠️ ESTIMATES ONLY, NOT MEASURED)
-| Operation | Estimated Time | Notes |
-|-----------|----------------|-------|
-| Tags (names only) | ~130ms | Estimate - needs verification |
-| Tags (fast mode) | ~270ms | Estimate - needs verification |
-| Tags (full mode) | ~700ms | Estimate - needs verification |
+**What's Fast (Cold Cache):**
+- ✅ Tags (names only): 1.9s
+- ✅ Tags (fast mode): 3.7s
+- ✅ Project statistics: 11.5s
+- ✅ Task velocity: 17.8s
 
-**⚠️ WARNING:** These numbers were never measured with automated benchmarks. They are casual estimates and should not be used for hardware comparisons.
+**What's Slow (Cold Cache):**
+- ⚠️ Task queries: 41.8-220.9s (very slow, cache doesn't help)
+- ⚠️ Tags (full mode): 84.7s
+- ⚠️ Productivity stats: 94.6s
 
-**Action Required:** Run `npm run benchmark` on M2 MacBook Air to get actual measurements.
+**Cache Warming Effectiveness:**
+- ❌ Task queries: NO improvement (still 41-221s)
+- ❌ Other operations: NO improvement
 
-#### Analytics Tools (M2 MacBook Air - ⚠️ ESTIMATES ONLY, NOT MEASURED)
-| Operation | Estimated Time | Notes |
-|-----------|----------------|-------|
-| Productivity stats (week) | 2-3s | Estimate - needs verification |
-| Task velocity (7 days) | 2-3s | Estimate - needs verification |
-| Overdue analysis | 2-3s | Estimate - needs verification |
-| Workflow analysis | 3-5s | Estimate - needs verification |
-
-**⚠️ WARNING:** These numbers were never measured with automated benchmarks. They are casual estimates and should not be used for hardware comparisons.
-
-**Action Required:** Run `npm run benchmark` on M2 MacBook Air to get actual measurements.
+**Critical Issue:** Cache warming takes 222s but provides zero performance benefit. This contrasts sharply with M2 Ultra where cache warming reduces task queries to 1-5ms.
 
 ### Export Operations
 | Operation | Avg Time | Notes |
@@ -134,19 +155,19 @@ The 221-second duration for upcoming tasks is **expected behavior** given databa
 **Node.js:** v24.9.0
 
 #### Task Queries - Cold Cache (BENCHMARK_MODE=cold)
-| Operation | M2 Ultra | vs M2 Air | Comparison Valid? |
-|-----------|----------|-----------|-------------------|
-| Today's tasks (limit 25) | **3.8s** | 42s | ✅ **11.0x faster** |
-| Overdue tasks (limit 25) | **5.5s** | 60s | ✅ **10.9x faster** |
-| Upcoming tasks (7 days, limit 25) | **20.6s** | 221s | ✅ **10.7x faster** |
-| Project statistics | 1.1s | ~2s (estimate) | ⚠️ Need M2 Air measurement |
-| Tags (names only) | 271ms | ~130ms (estimate) | ❌ Invalid - M2 Air not measured |
-| Tags (fast mode) | 364ms | ~270ms (estimate) | ❌ Invalid - M2 Air not measured |
-| Tags (full mode) | 7.3s | ~700ms (estimate) | ❌ Invalid - M2 Air not measured |
-| Productivity stats | 7.6s | 2-3s (estimate) | ❌ Invalid - M2 Air not measured |
-| Task velocity | 1.6s | 2-3s (estimate) | ⚠️ Need M2 Air measurement |
+| Operation | M2 Ultra | M2 Air | Comparison |
+|-----------|----------|--------|------------|
+| Today's tasks (limit 25) | **3.8s** | 41.8s | ✅ **11.0x faster** |
+| Overdue tasks (limit 25) | **5.5s** | 59.5s | ✅ **10.8x faster** |
+| Upcoming tasks (7 days, limit 25) | **20.6s** | 220.9s | ✅ **10.7x faster** |
+| Project statistics | **1.1s** | 11.5s | ✅ **10.5x faster** |
+| Tags (names only) | **271ms** | 1.9s | ✅ **7.0x faster** |
+| Tags (fast mode) | **364ms** | 3.7s | ✅ **10.2x faster** |
+| Tags (full mode) | **7.3s** | 84.7s | ✅ **11.6x faster** |
+| Productivity stats | **7.6s** | 94.6s | ✅ **12.4x faster** |
+| Task velocity | **1.6s** | 17.8s | ✅ **11.1x faster** |
 
-**Key Finding:** M2 Ultra is **~11x faster** for cold-cache task queries (verified measurements), far exceeding the expected 2-3x improvement. Tag and analytics comparisons are invalid because M2 Air baseline numbers were estimates, not measurements.
+**Key Finding:** M2 Ultra is **7-12.4x faster** across ALL operations (verified measurements), far exceeding the expected 2-3x improvement. The M2 Ultra delivers consistent ~11x speedup across task queries, tags, and analytics.
 
 #### Task Queries - Warm Cache (BENCHMARK_MODE=warm)
 | Operation | Measured Time | vs Cold Cache | Cache Effectiveness |
@@ -186,26 +207,24 @@ The M2 Ultra's massive performance advantage for task queries (11x faster than M
 
 ### Quick Reference: M2 Ultra vs M2 Air Performance Comparison
 
-| Operation | M2 Air (Cold) | M2 Ultra (Cold) | M2 Ultra (Warm) | Valid Comparison? |
-|-----------|---------------|-----------------|-----------------|-------------------|
-| **Task Queries (✅ Verified M2 Air Measurements)** |
-| Today's tasks | 42s | 3.8s | **5ms** | ✅ **11x faster** (cold), **8,400x** (warm) |
-| Overdue tasks | 60s | 5.5s | **2ms** | ✅ **10.9x faster** (cold), **30,000x** (warm) |
-| Upcoming tasks | 221s | 20.6s | **1ms** | ✅ **10.7x faster** (cold), **221,000x** (warm) |
-| **Analytics & Tags (❌ M2 Air Estimates Only - NOT MEASURED)** |
-| Tags (full mode) | ~700ms (est.) | 7.3s | 8.1s | ❌ **Invalid** - need M2 Air measurement |
-| Productivity stats | 2-3s (est.) | 7.6s | 8.4s | ❌ **Invalid** - need M2 Air measurement |
-| Task velocity | 2-3s (est.) | 1.6s | 1.7s | ❌ **Invalid** - need M2 Air measurement |
-| Tags (names only) | ~130ms (est.) | 271ms | 240ms | ❌ **Invalid** - need M2 Air measurement |
-| Tags (fast mode) | ~270ms (est.) | 364ms | 319ms | ❌ **Invalid** - need M2 Air measurement |
-| **Other Operations (⚠️ M2 Air Estimates)** |
-| Project statistics | ~2s (est.) | 1.1s | 1.2s | ⚠️ **Need verification** |
+| Operation | M2 Air (Cold) | M2 Air (Warm) | M2 Ultra (Cold) | M2 Ultra (Warm) | Speedup (Cold) | Cache Benefit |
+|-----------|---------------|---------------|-----------------|-----------------|----------------|---------------|
+| **Task Queries** |
+| Today's tasks | 41.8s | 41.8s ❌ | 3.8s | **5ms** | **11.0x faster** | M2 Ultra: 760x, M2 Air: none |
+| Overdue tasks | 59.5s | 60.2s ❌ | 5.5s | **2ms** | **10.8x faster** | M2 Ultra: 2,745x, M2 Air: none |
+| Upcoming tasks | 220.9s | 221.4s ❌ | 20.6s | **1ms** | **10.7x faster** | M2 Ultra: 20,560x, M2 Air: none |
+| **Analytics & Tags** |
+| Project statistics | 11.5s | 11.5s | 1.1s | 1.2s | **10.5x faster** | Neither benefits |
+| Tags (names only) | 1.9s | 1.9s | 271ms | 240ms | **7.0x faster** | Minimal benefit |
+| Tags (fast mode) | 3.7s | 3.7s | 364ms | 319ms | **10.2x faster** | Minimal benefit |
+| Tags (full mode) | 84.7s | 86.3s | 7.3s | 8.1s | **11.6x faster** | Neither benefits |
+| Productivity stats | 94.6s | 94.8s | 7.6s | 8.4s | **12.4x faster** | Neither benefits |
+| Task velocity | 17.8s | 19.0s | 1.6s | 1.7s | **11.1x faster** | Neither benefits |
 
-**Legend:**
-- ✅ Valid comparison (both measured)
-- ❌ Invalid comparison (M2 Air estimate only)
-- ⚠️ Needs verification (M2 Air estimate, likely close)
-- **(est.)** = Estimate, not measured with automated benchmark
+**Key Insights:**
+- ✅ M2 Ultra is **7-12.4x faster** than M2 Air across ALL operations
+- 🚨 Cache warming works on M2 Ultra (760-20,560x for task queries) but **NOT on M2 Air**
+- ⚠️ M2 Air warm cache shows **no improvement** over cold cache (investigation needed)
 
 ## Performance Improvements Achieved
 
@@ -327,42 +346,48 @@ This demonstrates that task query performance scales exceptionally well with CPU
 
 Cache warming is **mission-critical** for production use. Without it, even M2 Ultra takes 3.8-20.6s for first queries.
 
-### 3. M2 Air Baseline Measurements Needed ⚠️
-**Critical Discovery:** Original M2 Air tag/analytics numbers were estimates, not measurements:
-- Tags (full mode): ~700ms was estimate (NOT measured)
-- Productivity stats: 2-3s was estimate (NOT measured)
-- Analytics: 2-3s was estimate (NOT measured)
+### 3. M2 Air Cache Warming Broken 🚨
+**Critical Discovery:** Cache warming provides **zero performance benefit** on M2 MacBook Air:
+- Cache warming time: 222 seconds (3.7 minutes)
+- Post-warmup performance: **Identical to cold cache** (41-221s for task queries)
+- M2 Ultra comparison: Cache warming reduces queries to 1-5ms (760-20,560x speedup)
 
-**Invalid Conclusions Retracted:**
-- ❌ "M2 Ultra is 10x slower for tags" - based on unverified M2 Air estimate
-- ❌ "M2 Ultra underperforms at analytics" - based on unverified M2 Air estimate
+**Root Cause:** Unknown - requires investigation. Cache warming completes successfully but queries afterward show no improvement.
 
-**Action Required:** Run automated benchmarks on M2 Air to establish proper baseline.
+**Impact:** M2 Air users get no benefit from cache warming despite 222s startup delay.
 
-### 4. Hardware Scaling is Operation-Specific
-**Critical Insight:** Performance improvements vary significantly by operation type:
-- ✅ **Task queries:** 11x faster on M2 Ultra (scales exceptionally well with cores/memory)
-- 📊 **Analytics/tags:** Unknown until M2 Air measurements available
+**Action Required:** Investigate why cache warming works on M2 Ultra but not M2 Air.
 
-**M2 Ultra Measured Performance:**
-- Tags (full mode): 7.3s (cold), 8.1s (warm)
-- Productivity stats: 7.6s (cold), 8.4s (warm)
-- Task velocity: 1.6s (cold), 1.7s (warm)
+### 4. M2 Ultra Delivers Consistent 7-12.4x Speedup
+**Critical Insight:** M2 Ultra outperforms M2 Air across ALL operations (with actual measurements):
+- ✅ **Task queries:** 10.7-11.0x faster (3.8-20.6s vs 41.8-220.9s)
+- ✅ **Tags:** 7.0-11.6x faster (271ms-7.3s vs 1.9-84.7s)
+- ✅ **Analytics:** 10.5-12.4x faster (1.1-7.6s vs 11.5-94.6s)
 
-### 5. Optimization Priorities (Updated with M2 Ultra Data)
-Based on verified measurements:
-1. ✅ **Cache warming is working** - Provides 760-20,560x speedup for task queries
-2. 📊 **Get M2 Air baseline** - Run benchmarks to enable valid hardware comparisons
-3. 🔄 **Investigate cache strategy** - Why do tags/analytics not benefit from cache warming?
+**M2 Ultra Performance Summary:**
+- Cold cache task queries: 3.8-20.6s (vs M2 Air: 41.8-220.9s)
+- Warm cache task queries: 1-5ms (vs M2 Air: still 41.8-220.9s - cache broken)
+- Tags/analytics: 271ms-7.6s (vs M2 Air: 1.9-94.6s)
+
+**Conclusion:** M2 Ultra delivers exceptional performance across all operation types, not just task queries.
+
+### 5. Optimization Priorities (Updated with Complete Measurements)
+Based on verified measurements from both M2 Air and M2 Ultra:
+1. 🚨 **CRITICAL: Fix M2 Air cache warming** - Currently provides zero benefit despite 222s warmup
+2. ✅ **M2 Ultra cache warming working perfectly** - Provides 760-20,560x speedup for task queries
+3. ⚠️ **M2 Air performance is slow** - 41-221s for task queries even after cache warming
+4. 📊 **Tags/analytics don't benefit from cache** - Neither M2 Air nor M2 Ultra show improvement
 
 ## Recommendations
 
-### For M2 MacBook Air Users (Current Baseline)
-- Default settings work well for databases up to 5,000 tasks
-- No optimization needed for typical GTD workflows
-- **Expected performance (cold cache):** 42-221s for task queries
-- **Expected performance (warm cache):** Unknown (not measured)
-- **Recommendation:** Enable cache warming for production use
+### For M2 MacBook Air Users (Measured Performance ✅)
+- **Measured performance:** 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
+- **Cache warming:** ❌ Broken - provides no benefit despite 222s warmup time
+- **Recommendation:** **DISABLE cache warming** (NO_CACHE_WARMING=true) until fixed
+  - Cache warming adds 222s startup delay with zero performance benefit
+  - Cold cache performance is identical to warm cache (41.8-220.9s)
+- **Workaround:** Use M2 Ultra if performance is critical
+- **Performance expectations:** Task queries are slow (41-221s), tags/analytics are moderate (1.9-94.6s)
 
 ### For M4 Pro Mac Mini Users (Not Measured)
 - Expected ~1.5-2x faster than M2 MacBook Air (based on CPU specs)
@@ -371,12 +396,13 @@ Based on verified measurements:
 - **Recommendation:** Test before assuming performance improvement
 
 ### For M2 Ultra Mac Studio Users (Measured ✅)
-- **Task queries:** Extraordinarily fast with cache warming (1-5ms)
-- **Cold cache:** 11x faster than M2 MacBook Air (3.8-20.6s vs 42-221s)
-- **Analytics/tags:** 7-8s (needs M2 Air comparison to assess)
-- **Best use case:** Frequent task queries with cache warming enabled
-- **Recommendation:** Enable cache warming for optimal performance
-- **Note:** Tag/analytics performance relative to M2 Air unknown until baseline measurements available
+- **Measured performance:** 7-12.4x faster than M2 Air across ALL operations
+- **Task queries (warm cache):** Extraordinarily fast (1-5ms) - cache warming working perfectly
+- **Task queries (cold cache):** 3.8-20.6s (vs M2 Air: 41.8-220.9s)
+- **Analytics/tags (cold cache):** 271ms-7.6s (vs M2 Air: 1.9-94.6s)
+- **Cache warming:** ✅ Works perfectly - provides 760-20,560x speedup for task queries
+- **Recommendation:** **ENABLE cache warming** for optimal performance
+- **Best use case:** All workloads - M2 Ultra delivers exceptional performance across the board
 
 ### For Intel Mac Users
 - Recommend lower default limits (25 → 10)
@@ -388,10 +414,14 @@ Based on verified measurements:
 
 **M2 MacBook Air Benchmark (2025-10-06):**
 - Benchmark script: `scripts/benchmark-performance.ts`
-- Run command: `npm run benchmark` (cold cache only)
+- Run commands:
+  - Cold cache: `BENCHMARK_MODE=cold npm run benchmark`
+  - Warm cache: `BENCHMARK_MODE=warm npm run benchmark`
 - Test pattern: Persistent server connection (matches test-as-claude-desktop.js)
-- Cache state: Cold (NO_CACHE_WARMING=true)
-- Results: Cold-cache queries are 40-221s, confirming cache warming is essential
+- Results:
+  - Cold cache: 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
+  - Warm cache: **IDENTICAL to cold cache** (41.8-221.4s for task queries)
+  - Cache warming: Takes 222s but provides **zero benefit**
 
 **M2 Ultra Mac Studio Benchmark (2025-10-05):**
 - Same benchmark script: `scripts/benchmark-performance.ts`
@@ -400,23 +430,25 @@ Based on verified measurements:
   - Warm cache: `BENCHMARK_MODE=warm npm run benchmark`
 - Test pattern: Same persistent server connection
 - Results:
-  - **Cold cache:** 3.8-20.6s for task queries (11x faster than M2 Air!)
-  - **Warm cache:** 1-5ms for task queries (extraordinarily fast!)
-  - **Analytics/tags:** Unexpectedly slow (2.5-10x slower than M2 Air)
+  - **Cold cache:** 3.8-20.6s for task queries, 271ms-7.6s for analytics/tags (7-12.4x faster than M2 Air!)
+  - **Warm cache:** 1-5ms for task queries (extraordinarily fast!), analytics/tags unchanged
+  - **Consistent speedup:** M2 Ultra is 7-12.4x faster across ALL operations
 
 **Key Learnings:**
-1. M2 Ultra provides **11x speedup** for cold-cache task queries (far exceeding expected 2-3x)
-2. Cache warming is **extraordinarily effective** (760-20,560x speedup for task queries)
-3. Analytics and tag operations are **slower on M2 Ultra** (unexpected bottleneck)
-4. Hardware scaling is **operation-specific**, not uniform across all operations
-5. Cache warming is **mission-critical** for production use (reduces 20s queries to 1-5ms)
+1. ✅ **M2 Ultra provides 7-12.4x speedup** across ALL operations (task queries, tags, analytics)
+2. ✅ **M2 Ultra cache warming works perfectly** (760-20,560x speedup for task queries)
+3. 🚨 **M2 Air cache warming is broken** - provides zero benefit despite 222s warmup time
+4. ✅ **Hardware scaling is consistent** - M2 Ultra is ~11x faster across all operation types
+5. ⚠️ **M2 Air performance is slow** - 41-221s for task queries even with cache warming
+6. 📊 **Complete measurements available** - Both M2 Air and M2 Ultra fully benchmarked
 
 **Next Steps for Benchmarking:**
 - ✅ COMPLETED: Measure warm-cache performance on M2 Ultra
-- ✅ COMPLETED: Compare M2 Ultra vs M2 MacBook Air
-- 🔄 TODO: Investigate why analytics/tags are slower on M2 Ultra
+- ✅ COMPLETED: Measure cold and warm cache performance on M2 Air
+- ✅ COMPLETED: Compare M2 Ultra vs M2 MacBook Air across all operations
+- 🚨 URGENT: Investigate why cache warming doesn't work on M2 Air
 - 🔄 TODO: Test on M4 Pro Mac Mini when available
-- 🔄 TODO: Profile single-thread vs multi-thread performance characteristics
+- 🔄 TODO: Determine root cause of M2 Air cache warming failure
 
 ## Related Documentation
 

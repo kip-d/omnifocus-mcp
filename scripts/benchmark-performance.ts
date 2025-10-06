@@ -47,8 +47,11 @@ const rl = createInterface({
   crlfDelay: Infinity,
 });
 
-// Track cache warming completion
+// Track cache warming completion and timing
 let cacheWarmingComplete = !enableCacheWarming; // If disabled, consider it "complete"
+let cacheWarmingStartTime = 0;
+let cacheWarmingDuration = 0;
+
 if (server.stderr) {
   server.stderr.on('data', (data) => {
     const output = data.toString();
@@ -56,9 +59,17 @@ if (server.stderr) {
     if (process.env.DEBUG) {
       process.stderr.write(output);
     }
+
+    // Track cache warming start
+    if (output.includes('Starting cache warming')) {
+      cacheWarmingStartTime = performance.now();
+    }
+
+    // Track cache warming completion
     if (output.includes('Cache warming completed')) {
+      cacheWarmingDuration = performance.now() - cacheWarmingStartTime;
       cacheWarmingComplete = true;
-      console.log('  ✓ Cache warming completed, starting benchmarks...\n');
+      console.log(`  ✓ Cache warming completed in ${cacheWarmingDuration.toFixed(0)}ms\n`);
     }
   });
 }
@@ -152,6 +163,11 @@ const displayResults = () => {
     const improvement = ((avgFull - avgFast) / avgFull) * 100;
 
     console.log(`Tags (fast vs full): ${improvement.toFixed(1)}% faster (${avgFull.toFixed(0)}ms → ${avgFast.toFixed(0)}ms)`);
+  }
+
+  // Cache warming info
+  if (enableCacheWarming && cacheWarmingDuration > 0) {
+    console.log(`\nCache warming: ${cacheWarmingDuration.toFixed(0)}ms (${(cacheWarmingDuration / 1000).toFixed(1)}s)`);
   }
 
   console.log('\n📊 Benchmark complete!');
