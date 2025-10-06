@@ -380,10 +380,10 @@ Cache warming is **mission-critical** for production use. Without it, even M2 Ul
 
 **M2 Ultra Performance Summary:**
 - Cold cache task queries: 3.8-20.6s (vs M2 Air: 41.8-220.9s)
-- Warm cache task queries: 1-5ms (vs M2 Air: still 41.8-220.9s - cache broken)
-- Tags/analytics: 271ms-7.6s (vs M2 Air: 1.9-94.6s)
+- Warm cache task queries: 1-5ms (vs M2 Air: 0-2ms ✅ **cache fixed!**)
+- Tags/analytics: 271ms-7.6s (vs M2 Air: 1.9-94.6s, tags now 12.7s with OmniJS bridge)
 
-**Conclusion:** M2 Ultra delivers exceptional performance across all operation types, not just task queries.
+**Conclusion:** Both M2 Ultra and M2 Air deliver exceptional warm-cache performance for task queries (0-5ms). M2 Ultra is 7-12.4x faster for cold-cache operations across all operation types.
 
 ### 5. Optimization Priorities (Updated with Complete Measurements)
 Based on verified measurements from both M2 Air and M2 Ultra:
@@ -441,8 +441,8 @@ Based on verified measurements from both M2 Air and M2 Ultra:
 - Test pattern: Persistent server connection (matches test-as-claude-desktop.js)
 - Results:
   - Cold cache: 41.8-220.9s for task queries, 11.5-94.6s for analytics/tags
-  - Warm cache: **IDENTICAL to cold cache** (41.8-221.4s for task queries)
-  - Cache warming: Takes 222s but provides **zero benefit**
+  - Warm cache: **0-2ms for task queries** ✅ (20,900-220,900x speedup!)
+  - Cache warming: Takes ~12s with OmniJS bridge optimizations (93% faster than original 184s)
 
 **M2 Ultra Mac Studio Benchmark (2025-10-05):**
 - Same benchmark script: `scripts/benchmark-performance.ts`
@@ -500,8 +500,10 @@ const resultJson = app.evaluateJavascript(omniJsScript);
 **Results:**
 - **JXA-only approach:** Timed out after 5+ minutes (property access overhead)
 - **OmniJS bridge approach:** 2.4 seconds for processing 1,510 tasks
-- **Total cache warming:** 54 seconds (includes projects, tags, perspectives)
-- **Speedup:** 70% faster than previous 184s JXA-based approach
+- **Total cache warming (with task optimization only):** 54 seconds (includes projects, tags with JXA, perspectives)
+- **Speedup (task optimization only):** 70% faster than previous 184s JXA-based approach
+- **Total cache warming (with task + tags optimization):** ~12 seconds (tags also uses OmniJS bridge)
+- **Final speedup:** 93% faster than original 184s (184s → 54s → 12s)
 
 **Why OmniJS is faster:**
 - Direct property access without JXA overhead

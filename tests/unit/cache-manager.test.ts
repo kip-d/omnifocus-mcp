@@ -125,13 +125,13 @@ describe('CacheManager', () => {
   describe('TTL expiration', () => {
     it('should expire entries after TTL', () => {
       cache.set('tasks', 'test', 'value');
-      
+
       // Should be available immediately
       expect(cache.get('tasks', 'test')).toBe('value');
-      
-      // Advance time beyond tasks TTL (60 seconds)
-      mockDate.mockReturnValue(1000000 + 61000);
-      
+
+      // Advance time beyond tasks TTL (300 seconds = 5 minutes)
+      mockDate.mockReturnValue(1000000 + 301000);
+
       // Should be expired
       expect(cache.get('tasks', 'test')).toBeNull();
     });
@@ -140,35 +140,29 @@ describe('CacheManager', () => {
       cache.set('tasks', 'test', 'task value');
       cache.set('projects', 'test', 'project value');
       cache.set('analytics', 'test', 'analytics value');
-      
-      // Advance time by 2 minutes - tasks should expire, others should remain
-      mockDate.mockReturnValue(1000000 + 120000);
-      
+
+      // Advance time by 6 minutes - tasks and projects should expire (5 min TTL), analytics should remain (1 hour TTL)
+      mockDate.mockReturnValue(1000000 + 360000);
+
       expect(cache.get('tasks', 'test')).toBeNull();
-      expect(cache.get('projects', 'test')).toBe('project value');
-      expect(cache.get('analytics', 'test')).toBe('analytics value');
-      
-      // Advance time by 11 minutes - projects should expire, analytics should remain
-      mockDate.mockReturnValue(1000000 + 660000);
-      
       expect(cache.get('projects', 'test')).toBeNull();
       expect(cache.get('analytics', 'test')).toBe('analytics value');
-      
-      // Advance time by 61 minutes - analytics should expire
+
+      // Advance time by 61 minutes - analytics should expire (1 hour TTL)
       mockDate.mockReturnValue(1000000 + 3660000);
-      
+
       expect(cache.get('analytics', 'test')).toBeNull();
     });
 
     it('should update TTL on each access', () => {
       cache.set('tasks', 'test', 'value');
-      
-      // Advance time but still within TTL
-      mockDate.mockReturnValue(1000000 + 30000);
+
+      // Advance time but still within TTL (200s < 300s)
+      mockDate.mockReturnValue(1000000 + 200000);
       expect(cache.get('tasks', 'test')).toBe('value');
-      
-      // Advance time beyond original TTL but not beyond TTL from last access
-      mockDate.mockReturnValue(1000000 + 70000);
+
+      // Advance time beyond original TTL (350s > 300s from original set)
+      mockDate.mockReturnValue(1000000 + 350000);
       expect(cache.get('tasks', 'test')).toBeNull(); // Should be expired since TTL is fixed on set
     });
   });
@@ -198,11 +192,11 @@ describe('CacheManager', () => {
 
     it('should track evictions correctly', () => {
       cache.set('tasks', 'test', 'value');
-      
-      // Expire the entry
-      mockDate.mockReturnValue(1000000 + 61000);
+
+      // Expire the entry (beyond 300s TTL)
+      mockDate.mockReturnValue(1000000 + 301000);
       cache.get('tasks', 'test'); // This should trigger eviction
-      
+
       const stats = cache.getStats();
       expect(stats.evictions).toBe(1);
       expect(stats.misses).toBe(1);
@@ -344,13 +338,13 @@ describe('CacheManager', () => {
 
     it('should call fetcher if cached value is expired', async () => {
       cache.set('tasks', 'test', 'old value');
-      
-      // Expire the cache
-      mockDate.mockReturnValue(1000000 + 61000);
-      
+
+      // Expire the cache (beyond 300s TTL)
+      mockDate.mockReturnValue(1000000 + 301000);
+
       const fetcher = vi.fn().mockResolvedValue('new value');
       const result = await cache.warm('tasks', 'test', fetcher);
-      
+
       expect(result).toBe('new value');
       expect(fetcher).toHaveBeenCalled();
       expect(cache.get('tasks', 'test')).toBe('new value');
@@ -362,16 +356,16 @@ describe('CacheManager', () => {
       // This tests cleanup behavior indirectly through the get method
       // which already checks expiration and cleans up expired entries
       cache.set('tasks', 'test', 'value');
-      
+
       // Should be available immediately
       expect(cache.get('tasks', 'test')).toBe('value');
-      
-      // Expire the entry by advancing mock date
-      mockDate.mockReturnValue(1000000 + 61000);
-      
+
+      // Expire the entry by advancing mock date (beyond 300s TTL)
+      mockDate.mockReturnValue(1000000 + 301000);
+
       // Accessing expired entry should return null and clean it up
       expect(cache.get('tasks', 'test')).toBeNull();
-      
+
       // Stats should show the eviction
       const stats = cache.getStats();
       expect(stats.evictions).toBeGreaterThan(0);
@@ -393,20 +387,20 @@ describe('CacheManager', () => {
     it('should handle multiple expired entries', () => {
       cache.set('tasks', 'test1', 'value1');
       cache.set('tasks', 'test2', 'value2');
-      cache.set('projects', 'proj1', 'projValue');
-      
+      cache.set('analytics', 'analytics1', 'analyticsValue');
+
       const initialStats = cache.getStats();
       expect(initialStats.size).toBe(3);
-      
-      // Expire tasks (60s TTL) but not projects (600s TTL)
-      mockDate.mockReturnValue(1000000 + 61000);
-      
+
+      // Expire tasks (300s TTL) but not analytics (3600s TTL)
+      mockDate.mockReturnValue(1000000 + 301000);
+
       // Access expired tasks - should clean them up
       expect(cache.get('tasks', 'test1')).toBeNull();
       expect(cache.get('tasks', 'test2')).toBeNull();
-      
-      // Project should still be available
-      expect(cache.get('projects', 'proj1')).toBe('projValue');
+
+      // Analytics should still be available
+      expect(cache.get('analytics', 'analytics1')).toBe('analyticsValue');
       
       const finalStats = cache.getStats();
       // The size is not updated in get() method when deleting expired entries
