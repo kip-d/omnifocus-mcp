@@ -1,4 +1,4 @@
-import { getMinimalHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export tasks from OmniFocus in various formats
@@ -14,6 +14,7 @@ import { getMinimalHelpers } from '../shared/helpers.js';
  */
 export const EXPORT_TASKS_SCRIPT = `
   ${getMinimalHelpers()}
+  ${getTaskStatusHelpers()}
 
   (() => {
     const filter = {{filter}};
@@ -133,7 +134,7 @@ export const EXPORT_TASKS_SCRIPT = `
               }
 
               if (allFields.includes('completed')) {
-                taskData.completed = task.completed || false;
+                taskData.completed = isTaskEffectivelyCompleted(task);
               }
 
               if (allFields.includes('completionDate')) {
