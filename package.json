@@ -33,6 +33,7 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
     "analyze-failures": "npx tsx scripts/analyze-tool-failures.ts",
+    "analyze-tokens": "npx tsx scripts/analyze-token-usage.ts",
     "setup-real-llm": "npx tsx scripts/setup-real-llm-testing.ts",
     "prompts:list": "npx tsx scripts/list-prompts.ts",
     "benchmark": "npm run build && npx tsx scripts/benchmark-performance.ts",
