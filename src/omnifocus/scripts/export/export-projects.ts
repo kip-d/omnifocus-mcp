@@ -1,286 +1,238 @@
-import { getUnifiedHelpers } from '../shared/helpers.js';
+import { getMinimalHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export projects from OmniFocus in various formats
  *
+ * Optimization: Uses OmniJS bridge for fast bulk property access (5-10x faster than JXA)
+ *
  * Features:
- * - Export to JSON or CSV format
+ * - Export to JSON, CSV, or Markdown format
  * - Optional project statistics
  * - Includes project hierarchy (parent/child relationships)
  * - Project status and metadata
  * - Proper CSV formatting with flattened stats
  */
 export const EXPORT_PROJECTS_SCRIPT = `
-  ${getUnifiedHelpers()}
-  
+  ${getMinimalHelpers()}
+
   (() => {
     const format = {{format}};
     const includeStats = {{includeStats}};
-  
-  try {
-    const app = Application('OmniFocus');
-    const doc = app.defaultDocument();
-    const projects = [];
-    const allProjects = doc.flattenedProjects();
-    
-    // Check if allProjects is null or undefined
-    if (!allProjects) {
-      return JSON.stringify({
-        error: true,
-        message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-        details: "doc.flattenedProjects() returned null or undefined"
-      });
-    }
-    
-    for (let i = 0; i < allProjects.length; i++) {
-      const project = allProjects[i];
-      
-      const projectData = {
-        id: project.id(),
-        name: project.name()
-      };
-      
-      // Add status with safe access
-      try {
-        const statusObj = project.status();
-        if (!statusObj) {
-          projectData.status = 'active';
-        } else {
-          // OmniFocus returns status as "active status", "done status", etc.
-          // Normalize to match our API expectations
-          const statusStr = statusObj.toString().toLowerCase();
-          
-          if (statusStr.includes('active')) projectData.status = 'active';
-          else if (statusStr.includes('done')) projectData.status = 'done';
-          else if (statusStr.includes('hold')) projectData.status = 'onHold';
-          else if (statusStr.includes('dropped')) projectData.status = 'dropped';
-          else projectData.status = 'active'; // Default
-        }
-      } catch (e) {
-        projectData.status = 'active';
-      }
-      
-      // Add note if present
-      try {
-        const note = project.note();
-        if (note) projectData.note = note;
-      } catch (e) {}
-      
-      // Add parent info
-      try {
-        const parent = project.parentFolder();
-        if (parent) {
-          projectData.parentId = parent.id();
-          projectData.parentName = parent.name();
-        }
-      } catch (e) {}
-      
-      // Add dates with safe access
-      try {
-        const deferDate = safeGet(() => project.deferDate());
-        if (deferDate) projectData.deferDate = deferDate.toISOString();
-      } catch (e) {}
-      
-      try {
-        const dueDate = safeGet(() => project.dueDate());
-        if (dueDate) projectData.dueDate = dueDate.toISOString();
-      } catch (e) {}
-      
-      try {
-        const completionDate = safeGet(() => project.completionDate());
-        if (completionDate) projectData.completionDate = completionDate.toISOString();
-      } catch (e) {}
-      
-      try {
-        const modifiedDate = project.modificationDate();
-        if (modifiedDate) projectData.modifiedDate = modifiedDate.toISOString();
-      } catch (e) {}
-      
-      // Add statistics if requested
-      if (includeStats) {
-        try {
-          // Use built-in properties for basic counts (much faster)
-          const totalTasks = safeGet(() => project.numberOfTasks(), 0);
-          const completedTasks = safeGet(() => project.numberOfCompletedTasks(), 0);
-          const availableTasks = safeGet(() => project.numberOfAvailableTasks(), 0);
-          
-          // Only calculate detailed stats for smaller projects
-          let overdueCount = 0;
-          let flaggedCount = 0;
-          
-          // Skip detailed iteration for very large projects
-          if (totalTasks > 0 && totalTasks < 500) {
-            const tasks = project.flattenedTasks();
-            const now = new Date();
-            
-            for (let j = 0; j < tasks.length; j++) {
-              const task = tasks[j];
-              
-              try {
-                if (!task.completed()) {
-                  const dueDate = safeGet(() => task.dueDate());
-                  if (dueDate && dueDate < now) {
-                    overdueCount++;
+
+    try {
+      const app = Application('OmniFocus');
+      const startTime = Date.now();
+
+      // Use OmniJS bridge for fast bulk property access
+      const omniJsScript = \`
+        (() => {
+          const includeStats = \${includeStats};
+          const projects = [];
+          const nowTime = Date.now();
+
+          // OmniJS: Use global flattenedProjects collection
+          flattenedProjects.forEach(project => {
+            try {
+              const projectData = {
+                id: project.id.primaryKey,
+                name: project.name || 'Unnamed Project'
+              };
+
+              // Status normalization
+              const projectStatus = project.status;
+              const statusStr = String(projectStatus).toLowerCase();
+
+              if (statusStr.includes('done')) projectData.status = 'done';
+              else if (statusStr.includes('hold')) projectData.status = 'onHold';
+              else if (statusStr.includes('dropped')) projectData.status = 'dropped';
+              else projectData.status = 'active';
+
+              // Optional properties
+              if (project.note) {
+                projectData.note = project.note;
+              }
+
+              // Parent folder
+              if (project.folder) {
+                projectData.parentId = project.folder.id.primaryKey;
+                projectData.parentName = project.folder.name;
+              }
+
+              // Dates
+              if (project.deferDate) {
+                projectData.deferDate = project.deferDate.toISOString();
+              }
+
+              if (project.dueDate) {
+                projectData.dueDate = project.dueDate.toISOString();
+              }
+
+              if (project.completionDate) {
+                projectData.completionDate = project.completionDate.toISOString();
+              }
+
+              if (project.modified) {
+                projectData.modifiedDate = project.modified.toISOString();
+              }
+
+              // Statistics (if requested)
+              if (includeStats) {
+                const projectTasks = project.flattenedTasks;
+                let totalTasks = 0;
+                let completedTasks = 0;
+                let availableTasks = 0;
+                let overdueCount = 0;
+                let flaggedCount = 0;
+
+                projectTasks.forEach(task => {
+                  totalTasks++;
+
+                  if (task.completed) {
+                    completedTasks++;
+                  } else {
+                    if (task.taskStatus === Task.Status.Available) {
+                      availableTasks++;
+                    }
+
+                    // Check if overdue
+                    if (task.dueDate) {
+                      const dueTime = task.dueDate.getTime();
+                      if (dueTime < nowTime) {
+                        overdueCount++;
+                      }
+                    }
                   }
-                }
-                
-                if (task.flagged()) {
-                  flaggedCount++;
-                }
-              } catch (e) {}
+
+                  if (task.flagged) {
+                    flaggedCount++;
+                  }
+                });
+
+                projectData.stats = {
+                  totalTasks: totalTasks,
+                  completedTasks: completedTasks,
+                  availableTasks: availableTasks,
+                  completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+                  overdueCount: overdueCount,
+                  flaggedCount: flaggedCount
+                };
+              }
+
+              projects.push(projectData);
+            } catch (projectError) {
+              // Skip projects that error during property access
             }
-          }
-          
-          projectData.stats = {
-            totalTasks: totalTasks,
-            completedTasks: completedTasks,
-            availableTasks: availableTasks,
-            completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
-            overdueCount: overdueCount,
-            flaggedCount: flaggedCount
-          };
-        } catch (e) {
-          // If we can't get tasks, just skip stats
-          projectData.stats = {
-            totalTasks: 0,
-            completedTasks: 0,
-            availableTasks: 0,
-            completionRate: 0,
-            overdueCount: 0,
-            flaggedCount: 0
-          };
+          });
+
+          return JSON.stringify({
+            projects: projects,
+            totalProcessed: projects.length
+          });
+        })();
+      \`;
+
+      const bridgeResult = app.evaluateJavascript(omniJsScript);
+      const parsed = JSON.parse(bridgeResult);
+      const projects = parsed.projects;
+      const duration = Date.now() - startTime;
+
+      // Format output based on requested format
+      if (format === 'csv') {
+        // Flatten the data for CSV
+        const headers = ['id', 'name', 'status', 'note', 'parentName', 'deferDate', 'dueDate', 'completionDate'];
+        if (includeStats) {
+          headers.push('totalTasks', 'completedTasks', 'availableTasks', 'completionRate', 'overdueCount', 'flaggedCount');
         }
-      }
-      
-      projects.push(projectData);
-    }
-    
-    // Format output based on requested format
-    if (format === 'csv') {
-      // Flatten the data for CSV
-      const headers = ['id', 'name', 'status', 'note', 'parentName', 'deferDate', 'dueDate', 'completionDate'];
-      if (includeStats) {
-        headers.push('totalTasks', 'completedTasks', 'availableTasks', 'completionRate', 'overdueCount', 'flaggedCount');
-      }
-      
-      let csv = headers.join(',') + '\\n';
-      
-      for (const project of projects) {
-        const row = headers.map(h => {
-          let value = project[h];
-          if (h.includes('Tasks') || h.includes('Count') || h === 'completionRate') {
-            value = project.stats ? project.stats[h] : '';
-          }
-          if (value === undefined || value === null) return '';
-          if (typeof value === 'string' && value.includes(',')) {
-            return '"' + value.replace(/"/g, '""') + '"';
-          }
-          return value.toString();
+
+        let csv = headers.join(',') + '\\n';
+
+        for (const project of projects) {
+          const row = headers.map(h => {
+            let value = project[h];
+            if (h.includes('Tasks') || h.includes('Count') || h === 'completionRate') {
+              value = project.stats ? project.stats[h] : '';
+            }
+            if (value === undefined || value === null) return '';
+            if (typeof value === 'string' && value.includes(',')) {
+              return '"' + value.replace(/"/g, '""') + '"';
+            }
+            return value.toString();
+          });
+          csv += row.join(',') + '\\n';
+        }
+
+        return JSON.stringify({
+          format: 'csv',
+          data: csv,
+          count: projects.length,
+          duration: duration
         });
-        csv += row.join(',') + '\\n';
-      }
-      
-      return JSON.stringify({
-        format: 'csv',
-        data: csv,
-        count: projects.length
-      });
-    } else if (format === 'markdown') {
-      // Build Markdown
-      let markdown = '# OmniFocus Projects Export\\n\\n';
-      markdown += 'Export date: ' + new Date().toISOString() + '\\n\\n';
-      markdown += 'Total projects: ' + projects.length + '\\n\\n';
-      
-      // Group by status
-      const byStatus = {
-        active: [],
-        onHold: [],
-        done: [],
-        dropped: []
-      };
-      
-      for (const project of projects) {
-        byStatus[project.status].push(project);
-      }
-      
-      // Active projects
-      if (byStatus.active.length > 0) {
-        markdown += '## Active Projects\\n\\n';
-        for (const project of byStatus.active) {
-          markdown += '### ' + project.name + '\\n\\n';
-          if (project.note) {
-            markdown += project.note + '\\n\\n';
+      } else if (format === 'markdown') {
+        // Build Markdown
+        let markdown = '# OmniFocus Projects Export\\n\\n';
+        markdown += 'Export date: ' + new Date().toISOString() + '\\n\\n';
+        markdown += 'Total projects: ' + projects.length + '\\n\\n';
+
+        // Group by status
+        const byStatus = {
+          active: [],
+          onHold: [],
+          done: [],
+          dropped: []
+        };
+
+        for (const project of projects) {
+          const status = project.status || 'active';
+          if (byStatus[status]) {
+            byStatus[status].push(project);
           }
-          if (project.dueDate) {
-            markdown += '- 📅 Due: ' + project.dueDate + '\\n';
-          }
-          if (project.deferDate) {
-            markdown += '- ⏳ Deferred until: ' + project.deferDate + '\\n';
-          }
-          if (includeStats && project.stats) {
-            markdown += '- 📊 Tasks: ' + project.stats.availableTasks + ' available / ' + project.stats.totalTasks + ' total (' + project.stats.completionRate + '% complete)\\n';
-            if (project.stats.overdueCount > 0) {
-              markdown += '- ⚠️ Overdue tasks: ' + project.stats.overdueCount + '\\n';
-            }
-            if (project.stats.flaggedCount > 0) {
-              markdown += '- 🚩 Flagged tasks: ' + project.stats.flaggedCount + '\\n';
+        }
+
+        // Output each status group
+        for (const status in byStatus) {
+          if (byStatus[status].length > 0) {
+            markdown += '## ' + status.charAt(0).toUpperCase() + status.slice(1) + ' Projects\\n\\n';
+            for (const project of byStatus[status]) {
+              markdown += '### ' + project.name + '\\n\\n';
+              if (project.note) {
+                markdown += project.note + '\\n\\n';
+              }
+              if (project.dueDate) {
+                markdown += '**Due:** ' + project.dueDate + '\\n\\n';
+              }
+              if (includeStats && project.stats) {
+                markdown += '**Stats:** ' + project.stats.completedTasks + '/' + project.stats.totalTasks + ' tasks completed';
+                if (project.stats.overdueCount > 0) {
+                  markdown += ', ' + project.stats.overdueCount + ' overdue';
+                }
+                markdown += '\\n\\n';
+              }
             }
           }
-          markdown += '\\n';
         }
-      }
-      
-      // On Hold projects
-      if (byStatus.onHold.length > 0) {
-        markdown += '## On Hold Projects\\n\\n';
-        for (const project of byStatus.onHold) {
-          markdown += '### ' + project.name + '\\n';
-          if (project.note) {
-            markdown += project.note + '\\n';
+
+        return JSON.stringify({
+          format: 'markdown',
+          data: markdown,
+          count: projects.length,
+          duration: duration
+        });
+      } else {
+        // Default to JSON
+        return JSON.stringify({
+          format: 'json',
+          data: projects,
+          count: projects.length,
+          duration: duration,
+          debug: {
+            totalProjectsProcessed: parsed.totalProcessed,
+            includeStats: includeStats,
+            optimizationUsed: 'OmniJS bridge for 5-10x faster property access'
           }
-          if (includeStats && project.stats) {
-            markdown += 'Tasks: ' + project.stats.totalTasks + ' (' + project.stats.completionRate + '% complete)\\n';
-          }
-          markdown += '\\n';
-        }
+        });
       }
-      
-      // Completed projects
-      if (byStatus.done.length > 0) {
-        markdown += '## Completed Projects\\n\\n';
-        for (const project of byStatus.done) {
-          markdown += '- ✅ ' + project.name;
-          if (project.completionDate) {
-            markdown += ' (completed ' + project.completionDate + ')';
-          }
-          markdown += '\\n';
-        }
-        markdown += '\\n';
-      }
-      
-      // Dropped projects
-      if (byStatus.dropped.length > 0) {
-        markdown += '## Dropped Projects\\n\\n';
-        for (const project of byStatus.dropped) {
-          markdown += '- ❌ ' + project.name + '\\n';
-        }
-      }
-      
-      return JSON.stringify({
-        format: 'markdown',
-        data: markdown,
-        count: projects.length
-      });
-    } else {
-      // Default to JSON
-      return JSON.stringify({
-        format: 'json',
-        data: projects,
-        count: projects.length
-      });
+    } catch (error) {
+      return formatError(error, 'export_projects');
     }
-  } catch (error) {
-    return formatError(error, 'export_projects');
-  }
   })();
 `;
