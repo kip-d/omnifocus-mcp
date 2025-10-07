@@ -3,9 +3,9 @@ import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags
 
 describe('Tag Operations Fix Verification', () => {
   it('should use correct property access without parentheses', () => {
-    // Verify tag properties use method calls with safe getters
-    expect(LIST_TAGS_SCRIPT).toContain('safeGet(() => tag.id())');
-    expect(LIST_TAGS_SCRIPT).toContain('safeGet(() => tag.name())');
+    // Verify tag properties use method calls with safe getters (with or without default values)
+    expect(LIST_TAGS_SCRIPT).toMatch(/safeGet\(\(\) => tag\.id\(\)/);
+    expect(LIST_TAGS_SCRIPT).toMatch(/safeGet\(\(\) => tag\.name\(\)/);
     expect(LIST_TAGS_SCRIPT).toContain('safeGetTags(task)');
   });
   

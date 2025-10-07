@@ -11,7 +11,7 @@ import { TagsToolV2 } from '../tools/tags/TagsToolV2.js';
 import { QueryTasksToolV2 } from '../tools/tasks/QueryTasksToolV2.js';
 import { PerspectivesToolV2 } from '../tools/perspectives/PerspectivesToolV2.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
-import { LIST_PROJECTS_SCRIPT } from '../omnifocus/scripts/projects/list-projects.js';
+import { WARM_PROJECTS_CACHE_SCRIPT } from '../omnifocus/scripts/cache/warm-projects-cache.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 
 const logger = createLogger('cache-warmer');
@@ -210,58 +210,64 @@ export class CacheWarmer {
   }
 
   /**
-   * Warm projects cache with active projects list
+   * Warm projects cache using OmniJS bridge for 10-100x speedup
    */
   private async warmProjects(): Promise<WarmingResult> {
     const operation = 'projects';
     const startTime = Date.now();
 
     try {
-      logger.debug('Warming projects cache (lite mode for performance)...');
+      logger.debug('Warming projects cache using OmniJS bridge...');
 
-      // Use direct script execution with performanceMode='lite' for 10-15x speedup
-      // This skips expensive task count operations (numberOfTasks, taskCounts, etc.)
       const omni = new OmniAutomation();
 
-      // Warm the most common project queries
-      // Use limit: 200 (max) to ensure cache hits on most queries (default limit is 50)
-      await Promise.all([
-        // Active projects (lite mode - skip task counts)
-        this.warmSingleOperation('projects', 'projects_active', async () => {
-          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { status: 'active', limit: 200, performanceMode: 'lite' },
-            limit: 200,
-            includeStats: false,
-          });
-          const result = await omni.executeJson(script);
-          return result && typeof result === 'object' && 'items' in result ? result.items : null;
-        }),
+      // Warm active projects using OmniJS bridge (10-100x faster than JXA)
+      await this.warmSingleOperation('projects', 'projects_active', async () => {
+        const script = WARM_PROJECTS_CACHE_SCRIPT.replace('{{filterStatus}}', 'active').replace('{{limit}}', '200');
 
-        // All projects list (lite mode - skip task counts)
-        this.warmSingleOperation('projects', 'projects_list_{}', async () => {
-          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { limit: 200, includeDropped: false, performanceMode: 'lite' },
-            limit: 200,
-            includeStats: false,
-          });
-          const result = await omni.executeJson(script);
-          return result && typeof result === 'object' && 'items' in result ? result.items : null;
-        }),
+        interface CachedProject {
+          id: string;
+          name: string;
+          status: string;
+          flagged: boolean;
+          sequential: boolean;
+          note?: string;
+          folder?: string;
+          dueDate?: string;
+          deferDate?: string;
+          lastReviewDate?: string;
+          nextReviewDate?: string;
+          reviewInterval?: {
+            unit: string;
+            steps: number;
+            fixed: boolean;
+          };
+          reviewIntervalDetails?: {
+            unit: string;
+            steps: number;
+          };
+        }
 
-        // Review-ready projects (lite mode)
-        this.warmSingleOperation('projects', 'projects_review', async () => {
-          const script = omni.buildScript(LIST_PROJECTS_SCRIPT, {
-            filter: { needsReview: true, limit: 200, performanceMode: 'lite' },
-            limit: 200,
-            includeStats: false,
-          });
-          const result = await omni.executeJson(script);
-          return result && typeof result === 'object' && 'items' in result ? result.items : null;
-        }),
-      ]);
+        const result = await omni.execute<{
+          ok: boolean;
+          projects: CachedProject[];
+          metadata: { processedCount: number; returnedCount: number; optimizationUsed: string };
+          performance: { totalTime: number };
+        }>(script);
+
+        if (!result.ok) {
+          throw new Error('OmniJS bridge project query failed');
+        }
+
+        logger.debug(
+          `OmniJS bridge: processed ${result.metadata.processedCount} projects, returned ${result.metadata.returnedCount} in ${result.performance.totalTime}ms`,
+        );
+
+        return result.projects;
+      });
 
       const duration = Date.now() - startTime;
-      logger.debug(`Projects cache warmed in ${duration}ms`);
+      logger.debug(`Projects cache warmed in ${duration}ms using OmniJS bridge`);
 
       return { operation, success: true, duration };
     } catch (error) {
@@ -283,30 +289,24 @@ export class CacheWarmer {
 
       const tagsTool = new TagsToolV2(this.cache);
 
-      await Promise.all([
-        // Active tags (most common for filtering)
-        this.warmSingleOperation('tags', 'active_tags', async () => {
-          const result = await tagsTool.execute({ operation: 'list', active: true });
-          if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
-            return result.success ? result.data : null;
-          }
-          return null;
-        }),
-
-        // All tags with usage stats
-        this.warmSingleOperation('tags', 'list:usage:false:true:false:false', async () => {
-          const result = await tagsTool.execute({
-            operation: 'list',
-            sortBy: 'usage',
-            includeUsageStats: true,
-            fastMode: false, // Must explicitly disable fastMode to get usage stats
-          });
-          if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
-            return result.success ? result.data : null;
-          }
-          return null;
-        }),
-      ]);
+      // Only warm the main tags list (full mode with OmniJS bridge)
+      // Note: fastMode=false uses OmniJS bridge (10x faster), fastMode=true uses slow JXA
+      // Skip active tags warming - uses slow JXA, will be cached on first request
+      await this.warmSingleOperation('tags', 'list:name:true:false:false:false:false', async () => {
+        const result = await tagsTool.execute({
+          operation: 'list',
+          sortBy: 'name',
+          includeEmpty: true,
+          includeUsageStats: false, // Skip expensive task counting during cache warming
+          includeTaskCounts: false,
+          fastMode: false, // Full mode uses OmniJS bridge (fastMode=true is ironically slower)
+          namesOnly: false,
+        });
+        if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+          return result.success ? result.data : null;
+        }
+        return null;
+      });
 
       const duration = Date.now() - startTime;
       logger.debug(`Tags cache warmed in ${duration}ms`);
