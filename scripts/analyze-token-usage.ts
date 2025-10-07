@@ -5,22 +5,94 @@
  * Analyzes current database size and estimates token usage under different compression approaches
  */
 
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
 
-class TokenAnalyzer {
-  constructor() {
-    this.server = null;
-    this.messageId = 0;
-    this.pendingRequests = new Map();
-    
-    // Actual database sizes from user
-    this.actualTaskCount = 1158;
-    this.actualProjectCount = 124;
-    this.actualTagCount = 50;
-  }
+interface MCPResponse {
+  id?: number;
+  result?: {
+    content: Array<{
+      type: string;
+      text: string;
+    }>;
+  };
+  jsonrpc: string;
+}
 
-  async startServer() {
+interface TokenEstimate {
+  tokens: number;
+  chars: number;
+  kilobytes: string;
+}
+
+interface EstimateResult {
+  actualTokens: number;
+  chars: number;
+  kilobytes: string;
+  contextUsage: number;
+}
+
+interface NoteItem {
+  type: 'task' | 'project';
+  id: string;
+  name: string;
+  noteLength: number;
+  tokens: number;
+}
+
+interface Task {
+  id: string;
+  name: string;
+  note?: string;
+  flagged?: boolean;
+  dueDate?: string;
+  deferDate?: string;
+  estimatedMinutes?: number;
+  tags?: string[];
+  project?: string;
+  projectId?: string;
+  inInbox?: boolean;
+  completed?: boolean;
+  taskStatus?: string;
+  blocked?: boolean;
+  next?: boolean;
+  available?: boolean;
+  recurringStatus?: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  note?: string;
+  status?: string;
+  folder?: string;
+  dueDate?: string;
+  flagged?: boolean;
+  sequential?: boolean;
+  nextReviewDate?: string;
+  reviewInterval?: number;
+  completedByChildren?: boolean;
+  singleton?: boolean;
+}
+
+interface Tag {
+  id: string;
+  name: string;
+  parentId?: string;
+  parentName?: string;
+}
+
+class TokenAnalyzer {
+  private server: ChildProcess | null = null;
+  private messageId: number = 0;
+  private pendingRequests: Map<number, (value: MCPResponse) => void> = new Map();
+
+  // Actual database sizes from user
+  private actualTaskCount: number = 1158;
+  private actualProjectCount: number = 124;
+  private actualTagCount: number = 50;
+
+  async startServer(): Promise<void> {
     console.log('🚀 Starting MCP server for analysis...');
     
     this.server = spawn('node', ['./dist/index.js'], {
@@ -50,7 +122,7 @@ class TokenAnalyzer {
     console.log('✅ MCP server connected');
   }
 
-  async callTool(method, params = {}, timeout = 300000) {
+  async callTool(method: string, params: any = {}, timeout: number = 300000): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
       const requestId = ++this.messageId;
       this.pendingRequests.set(requestId, resolve);
@@ -71,11 +143,11 @@ class TokenAnalyzer {
     });
   }
 
-  async delay(ms) {
+  async delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async analyzeDatabase() {
+  async analyzeDatabase(): Promise<void> {
     try {
       // Initialize connection
       await this.callTool('initialize', {
@@ -160,7 +232,7 @@ class TokenAnalyzer {
     }
   }
 
-  analyzeTokenUsage(systemInfo, taskCounts, projectCounts, tagCounts) {
+  analyzeTokenUsage(systemInfo: MCPResponse, taskCounts: MCPResponse, projectCounts: MCPResponse, tagCounts: MCPResponse): void {
     console.log('🔍 Database Overview:');
 
     // Parse responses to get actual data
@@ -200,7 +272,7 @@ class TokenAnalyzer {
     this.analyzeFullData(tasksData, projectsData, tagsData);
   }
 
-  analyzeFullData(tasksData, projectsData, tagsData) {
+  analyzeFullData(tasksData: any, projectsData: any, tagsData: any): void {
     console.log('\n🔢 Full Database Token Usage Analysis:\n');
 
     // Get actual full data (export tools return data in different format)
@@ -257,7 +329,7 @@ class TokenAnalyzer {
     console.log('🚀 Consider implementing query-based export for immediate AI assistance.');
   }
 
-  estimateRawExport(tasks, projects, tags) {
+  estimateRawExport(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Raw export includes all fields, notes, metadata
     const fullData = {
       tasks: tasks.map(t => ({
@@ -311,7 +383,7 @@ class TokenAnalyzer {
     };
   }
 
-  estimateSmartSummary(tasks, projects, tags) {
+  estimateSmartSummary(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Smart summary focuses on key insights and patterns
     const summary = {
       system_summary: {
@@ -344,7 +416,7 @@ class TokenAnalyzer {
     };
   }
 
-  estimateHierarchical(tasks, projects, tags) {
+  estimateHierarchical(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Hierarchical compression preserves relationships but flattens structure
     const hierarchical = {
       projects: projects.map(p => ({
@@ -376,7 +448,7 @@ class TokenAnalyzer {
     };
   }
 
-  estimateQueryBased(tasks, projects, tags) {
+  estimateQueryBased(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Query-based focuses on specific analysis needs
     const queryResults = {
       query: "overdue_and_blocked_analysis",
@@ -415,7 +487,7 @@ class TokenAnalyzer {
     };
   }
 
-  estimateTokens(text) {
+  estimateTokens(text: string): TokenEstimate {
     // More accurate token estimation for JSON/code:
     // - Average ~3.5 characters per token for JSON (more structured than prose)
     // - Account for whitespace, punctuation, special chars
@@ -429,7 +501,7 @@ class TokenAnalyzer {
     };
   }
 
-  provideRecommendations(raw, smart, hierarchical, query) {
+  provideRecommendations(raw: EstimateResult, smart: EstimateResult, hierarchical: EstimateResult, query: EstimateResult): void {
     console.log('\n💡 Recommendations:\n');
 
     if (raw.contextUsage > 100) {
@@ -472,7 +544,7 @@ class TokenAnalyzer {
     }
   }
 
-  analyzeNoteSizes(tasks, projects) {
+  analyzeNoteSizes(tasks: Task[], projects: Project[]): void {
     console.log('\n📝 Note Size Analysis:\n');
 
     // Analyze task notes
@@ -589,7 +661,7 @@ class TokenAnalyzer {
     }
   }
 
-  async stop() {
+  async stop(): Promise<void> {
     if (this.server && !this.server.killed) {
       this.server.kill();
       await this.delay(100);
