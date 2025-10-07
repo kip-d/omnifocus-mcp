@@ -103,13 +103,14 @@ class TokenAnalyzer {
       console.log('✅ System info received');
 
       // Get task data (full database using export tool)
-      console.log('📋 Getting task data using export_tasks tool (this may take several minutes for 1,316+ actions)...');
+      console.log('📋 Getting task data using export tool (this may take several minutes for 1,500+ actions)...');
       const taskCounts = await this.callTool('tools/call', {
-        name: 'export_tasks',
-        arguments: { 
+        name: 'export',
+        arguments: {
+          type: 'tasks',
           format: 'json',
           filter: {
-            limit: 2000 // Override default 1000 limit to get all 1,316+ actions
+            limit: 2000 // Override default 1000 limit to get all actions
           },
           fields: ['id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'completionDate', 'flagged', 'estimated', 'created', 'modified']
         }
@@ -117,27 +118,39 @@ class TokenAnalyzer {
       console.log('✅ Task data received');
 
       // Get project data (full database using export tool)
-      console.log('📁 Getting project data using export_projects tool (this may take a minute for 124+ projects)...');
+      console.log('📁 Getting project data using export tool (this may take a minute for 130+ projects)...');
       const projectCounts = await this.callTool('tools/call', {
-        name: 'export_projects',
-        arguments: { 
+        name: 'export',
+        arguments: {
+          type: 'projects',
           format: 'json',
           includeStats: true
         }
       });
       console.log('✅ Project data received');
 
-      // Skip tags for now due to script errors
-      console.log('🏷️  Skipping tags due to script errors...');
-      const tagCounts = { result: { content: [{ text: '{"success":true,"data":{"items":[]}}' }] } };
-      console.log('✅ Using placeholder tag data');
+      // Get tag data
+      console.log('🏷️  Getting tag data...');
+      const tagCounts = await this.callTool('tools/call', {
+        name: 'tags',
+        arguments: {
+          operation: 'list',
+          sortBy: 'name',
+          includeEmpty: 'true',
+          includeUsageStats: 'false',
+          includeTaskCounts: 'true',
+          fastMode: 'false',
+          namesOnly: 'false'
+        }
+      });
+      console.log('✅ Tag data received');
 
-      // Debug: Log raw responses
-      console.log('\n🔍 Raw Response Analysis:');
-      console.log('System Info:', JSON.stringify(systemInfo, null, 2));
-      console.log('Task Counts:', JSON.stringify(taskCounts, null, 2));
-      console.log('Project Counts:', JSON.stringify(projectCounts, null, 2));
-      console.log('Tag Counts:', JSON.stringify(tagCounts, null, 2));
+      // Debug: Log raw responses (commented out - too verbose)
+      // console.log('\n🔍 Raw Response Analysis:');
+      // console.log('System Info:', JSON.stringify(systemInfo, null, 2));
+      // console.log('Task Counts:', JSON.stringify(taskCounts, null, 2));
+      // console.log('Project Counts:', JSON.stringify(projectCounts, null, 2));
+      // console.log('Tag Counts:', JSON.stringify(tagCounts, null, 2));
 
       // Analyze the data
       this.analyzeTokenUsage(systemInfo, taskCounts, projectCounts, tagCounts);
@@ -149,29 +162,39 @@ class TokenAnalyzer {
 
   analyzeTokenUsage(systemInfo, taskCounts, projectCounts, tagCounts) {
     console.log('🔍 Database Overview:');
-    
+
     // Parse responses to get actual data
     let systemData, tasksData, projectsData, tagsData;
-    
+
     try {
       systemData = JSON.parse(systemInfo.result.content[0].text);
       tasksData = JSON.parse(taskCounts.result.content[0].text);
       projectsData = JSON.parse(projectCounts.result.content[0].text);
       tagsData = JSON.parse(tagCounts.result.content[0].text);
     } catch (e) {
-      console.log('⚠️  Could not parse some responses, using summary data');
+      console.log('⚠️  Could not parse some responses:', e.message);
+      console.log('\nDEBUG - systemInfo type:', typeof systemInfo);
+      console.log('DEBUG - taskCounts type:', typeof taskCounts);
+      console.log('DEBUG - projectCounts type:', typeof projectCounts);
       return;
     }
 
-    // Export tools return data in different format
-    const taskCount = tasksData.data?.data?.length || tasksData.data?.tasks?.length || 0;
-    const projectCount = projectsData.data?.data?.length || projectsData.data?.projects?.length || 0;
-    const tagCount = tagsData.data?.items?.length || 0;
+    // NEW FORMAT: Export tools now return { success: true, data: { format, data, count, duration } }
+    const taskArray = tasksData.data?.data || [];
+    const projectArray = projectsData.data?.data || [];
+    const tagArray = tagsData.data?.items || [];
 
-    console.log(`  📋 Tasks: ${taskCount}`);
-    console.log(`  📁 Projects: ${projectCount}`);
-    console.log(`  🏷️  Tags: ${tagCount}`);
-    console.log(`  💾 Database: ${systemData.data?.database?.name || 'Unknown'}`);
+    console.log(`  📋 Tasks: ${taskArray.length} (${tasksData.data?.count || 'unknown'} total)`);
+    console.log(`  📁 Projects: ${projectArray.length}`);
+    console.log(`  🏷️  Tags: ${tagArray.length}`);
+    console.log(`  💾 Server: ${systemData.data?.name || 'Unknown'} v${systemData.data?.version || '?'}`);
+
+    if (tasksData.data?.duration) {
+      console.log(`  ⏱️  Task export took: ${tasksData.data.duration}ms`);
+    }
+    if (projectsData.data?.duration) {
+      console.log(`  ⏱️  Project export took: ${projectsData.data.duration}ms`);
+    }
 
     // Analyze the full database data for accurate token counts
     this.analyzeFullData(tasksData, projectsData, tagsData);
@@ -198,26 +221,33 @@ class TokenAnalyzer {
     // Approach 1: Raw Export (current format)
     const rawExport = this.estimateRawExport(allTasks, allProjects, allTags);
     console.log('📄 Approach 1: Raw Export (Current Format)');
-    console.log(`   Actual tokens: ${rawExport.actualTokens.toLocaleString()}`);
-    console.log(`   Context usage: ${rawExport.contextUsage}% of 200k context`);
+    console.log(`   Tokens: ${rawExport.actualTokens.toLocaleString()}`);
+    console.log(`   Size: ${rawExport.kilobytes} KB (${rawExport.chars.toLocaleString()} chars)`);
+    console.log(`   Context: ${rawExport.contextUsage}% of 200k window`);
 
     // Approach 2: Smart Summarization
     const smartSummary = this.estimateSmartSummary(allTasks, allProjects, allTags);
     console.log('\n🧠 Approach 2: Smart Summarization');
-    console.log(`   Actual tokens: ${smartSummary.actualTokens.toLocaleString()}`);
-    console.log(`   Context usage: ${smartSummary.contextUsage}% of 200k context`);
+    console.log(`   Tokens: ${smartSummary.actualTokens.toLocaleString()}`);
+    console.log(`   Size: ${smartSummary.kilobytes} KB (${smartSummary.chars.toLocaleString()} chars)`);
+    console.log(`   Context: ${smartSummary.contextUsage}% of 200k window`);
 
     // Approach 3: Hierarchical Compression
     const hierarchical = this.estimateHierarchical(allTasks, allProjects, allTags);
     console.log('\n🏗️  Approach 3: Hierarchical Compression');
-    console.log(`   Actual tokens: ${hierarchical.actualTokens.toLocaleString()}`);
-    console.log(`   Context usage: ${hierarchical.contextUsage}% of 200k context`);
+    console.log(`   Tokens: ${hierarchical.actualTokens.toLocaleString()}`);
+    console.log(`   Size: ${hierarchical.kilobytes} KB (${hierarchical.chars.toLocaleString()} chars)`);
+    console.log(`   Context: ${hierarchical.contextUsage}% of 200k window`);
 
     // Approach 4: Query-Based Export
     const queryBased = this.estimateQueryBased(allTasks, allProjects, allTags);
     console.log('\n🔍 Approach 4: Query-Based Export');
-    console.log(`   Actual tokens: ${queryBased.actualTokens.toLocaleString()}`);
-    console.log(`   Context usage: ${queryBased.contextUsage}% of 200k context`);
+    console.log(`   Tokens: ${queryBased.actualTokens.toLocaleString()}`);
+    console.log(`   Size: ${queryBased.kilobytes} KB (${queryBased.chars.toLocaleString()} chars)`);
+    console.log(`   Context: ${queryBased.contextUsage}% of 200k window`);
+
+    // Note size analysis
+    this.analyzeNoteSizes(allTasks, allProjects);
 
     // Recommendations
     this.provideRecommendations(rawExport, smartSummary, hierarchical, queryBased);
@@ -271,11 +301,13 @@ class TokenAnalyzer {
     };
 
     const fullJson = JSON.stringify(fullData, null, 2);
-    const actualTokens = this.estimateTokens(fullJson);
-    
+    const estimate = this.estimateTokens(fullJson);
+
     return {
-      actualTokens,
-      contextUsage: Math.round((actualTokens / 200000) * 100)
+      actualTokens: estimate.tokens,
+      chars: estimate.chars,
+      kilobytes: estimate.kilobytes,
+      contextUsage: Math.round((estimate.tokens / 200000) * 100)
     };
   }
 
@@ -302,11 +334,13 @@ class TokenAnalyzer {
     };
 
     const fullJson = JSON.stringify(summary, null, 2);
-    const actualTokens = this.estimateTokens(fullJson);
-    
+    const estimate = this.estimateTokens(fullJson);
+
     return {
-      actualTokens,
-      contextUsage: Math.round((actualTokens / 200000) * 100)
+      actualTokens: estimate.tokens,
+      chars: estimate.chars,
+      kilobytes: estimate.kilobytes,
+      contextUsage: Math.round((estimate.tokens / 200000) * 100)
     };
   }
 
@@ -332,11 +366,13 @@ class TokenAnalyzer {
     };
 
     const fullJson = JSON.stringify(hierarchical, null, 2);
-    const actualTokens = this.estimateTokens(fullJson);
-    
+    const estimate = this.estimateTokens(fullJson);
+
     return {
-      actualTokens,
-      contextUsage: Math.round((actualTokens / 200000) * 100)
+      actualTokens: estimate.tokens,
+      chars: estimate.chars,
+      kilobytes: estimate.kilobytes,
+      contextUsage: Math.round((estimate.tokens / 200000) * 100)
     };
   }
 
@@ -369,18 +405,28 @@ class TokenAnalyzer {
     };
 
     const fullJson = JSON.stringify(queryResults, null, 2);
-    const actualTokens = this.estimateTokens(fullJson);
-    
+    const estimate = this.estimateTokens(fullJson);
+
     return {
-      actualTokens,
-      contextUsage: Math.round((actualTokens / 200000) * 100)
+      actualTokens: estimate.tokens,
+      chars: estimate.chars,
+      kilobytes: estimate.kilobytes,
+      contextUsage: Math.round((estimate.tokens / 200000) * 100)
     };
   }
 
   estimateTokens(text) {
-    // Rough estimation: 1 token ≈ 4 characters for English text
-    // This is a simplified approximation
-    return Math.round(text.length / 4);
+    // More accurate token estimation for JSON/code:
+    // - Average ~3.5 characters per token for JSON (more structured than prose)
+    // - Account for whitespace, punctuation, special chars
+    const chars = text.length;
+    const tokens = Math.round(chars / 3.5);
+
+    return {
+      tokens,
+      chars,
+      kilobytes: (chars / 1024).toFixed(2)
+    };
   }
 
   provideRecommendations(raw, smart, hierarchical, query) {
@@ -423,6 +469,123 @@ class TokenAnalyzer {
       console.log('   Hierarchical compression - preserves relationships');
     } else {
       console.log('   Raw export - full fidelity, but uses most context');
+    }
+  }
+
+  analyzeNoteSizes(tasks, projects) {
+    console.log('\n📝 Note Size Analysis:\n');
+
+    // Analyze task notes
+    const tasksWithNotes = tasks.filter(t => t.note && t.note.length > 0);
+    const taskNoteChars = tasksWithNotes.reduce((sum, t) => sum + t.note.length, 0);
+    const taskNoteTokens = Math.round(taskNoteChars / 3.5);
+
+    // Analyze project notes
+    const projectsWithNotes = projects.filter(p => p.note && p.note.length > 0);
+    const projectNoteChars = projectsWithNotes.reduce((sum, p) => sum + p.note.length, 0);
+    const projectNoteTokens = Math.round(projectNoteChars / 3.5);
+
+    // Total note impact
+    const totalNoteChars = taskNoteChars + projectNoteChars;
+    const totalNoteTokens = taskNoteTokens + projectNoteTokens;
+    const totalNoteKB = (totalNoteChars / 1024).toFixed(2);
+
+    console.log('📊 Overall Note Statistics:');
+    console.log(`   Total note size: ${totalNoteKB} KB (${totalNoteChars.toLocaleString()} chars)`);
+    console.log(`   Estimated tokens: ${totalNoteTokens.toLocaleString()}`);
+    console.log(`   Tasks with notes: ${tasksWithNotes.length} of ${tasks.length} (${Math.round(tasksWithNotes.length/tasks.length*100)}%)`);
+    console.log(`   Projects with notes: ${projectsWithNotes.length} of ${projects.length} (${Math.round(projectsWithNotes.length/projects.length*100)}%)`);
+
+    // Pareto Analysis: Combine tasks and projects, find 80% threshold
+    const allItems = [
+      ...tasksWithNotes.map(t => ({
+        type: 'task',
+        id: t.id,
+        name: t.name,
+        noteLength: t.note.length,
+        tokens: Math.round(t.note.length / 3.5)
+      })),
+      ...projectsWithNotes.map(p => ({
+        type: 'project',
+        id: p.id,
+        name: p.name,
+        noteLength: p.note.length,
+        tokens: Math.round(p.note.length / 3.5)
+      }))
+    ].sort((a, b) => b.noteLength - a.noteLength);
+
+    // Calculate cumulative percentage and find 80% threshold
+    const target80Percent = totalNoteTokens * 0.80;
+    let cumulativeTokens = 0;
+    let paretoIndex = 0;
+
+    for (let i = 0; i < allItems.length; i++) {
+      cumulativeTokens += allItems[i].tokens;
+      if (cumulativeTokens >= target80Percent) {
+        paretoIndex = i;
+        break;
+      }
+    }
+
+    const paretoItems = allItems.slice(0, paretoIndex + 1);
+    const paretoTokens = paretoItems.reduce((sum, item) => sum + item.tokens, 0);
+    const paretoPercentage = Math.round(paretoTokens / totalNoteTokens * 100);
+
+    console.log('\n🎯 Pareto Analysis (80/20 Rule):');
+    console.log(`   Optimizing ${paretoItems.length} items would reduce notes by ${paretoPercentage}%`);
+    console.log(`   These ${paretoItems.length} items contain ${paretoTokens.toLocaleString()} tokens of ${totalNoteTokens.toLocaleString()} total`);
+    console.log(`   That's ${Math.round(paretoItems.length / allItems.length * 100)}% of items with notes, covering ${paretoPercentage}% of note size`);
+
+    console.log('\n📊 Optimization Priority List (Biggest Wins First):\n');
+
+    let runningTotal = 0;
+    paretoItems.forEach((item, i) => {
+      runningTotal += item.tokens;
+      const percentOfTotal = Math.round(runningTotal / totalNoteTokens * 100);
+      const icon = item.type === 'task' ? '📋' : '📁';
+
+      console.log(`   ${i + 1}. ${icon} "${item.name.substring(0, 60)}${item.name.length > 60 ? '...' : ''}"`);
+      console.log(`      Size: ${(item.noteLength / 1024).toFixed(2)} KB (${item.tokens.toLocaleString()} tokens)`);
+      console.log(`      Cumulative: ${percentOfTotal}% of all notes`);
+
+      // Add visual progress bar
+      const barLength = 50;
+      const filledLength = Math.round(percentOfTotal / 100 * barLength);
+      const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+      console.log(`      Progress: [${bar}] ${percentOfTotal}%\n`);
+    });
+
+    // Calculate potential savings
+    const potentialSavingsTokens = paretoTokens;
+    const potentialSavingsKB = paretoItems.reduce((sum, item) => sum + item.noteLength, 0) / 1024;
+    const newTotalTokens = 211638 - potentialSavingsTokens; // Current total - note savings
+    const newContextUsage = Math.round(newTotalTokens / 200000 * 100);
+
+    console.log('💰 Potential Savings:');
+    console.log(`   If you optimize these ${paretoItems.length} items:`);
+    console.log(`   - Save: ~${potentialSavingsTokens.toLocaleString()} tokens (${potentialSavingsKB.toFixed(2)} KB)`);
+    console.log(`   - Database would shrink to: ~${newTotalTokens.toLocaleString()} tokens`);
+    console.log(`   - Context window usage: ${newContextUsage}% (${newContextUsage > 100 ? '❌ still too large' : '✅ would fit!'})`);
+
+    // Recommendations based on note sizes
+    console.log('\n💡 Note Optimization Recommendations:');
+    if (totalNoteTokens > 50000) {
+      console.log(`   ⚠️  Notes consume ${totalNoteTokens.toLocaleString()} tokens (${Math.round(totalNoteTokens/211638*100)}% of total database)`);
+      console.log('   💡 Consider moving reference material to external links (Obsidian, wiki, etc.)');
+    }
+
+    const bloatedTasks = tasksWithNotes.filter(t => t.note.length > 500).length;
+    const bloatedProjects = projectsWithNotes.filter(p => p.note.length > 1000).length;
+
+    if (bloatedTasks > 0) {
+      console.log(`   📋 ${bloatedTasks} tasks have notes >500 chars (consider external references)`);
+    }
+    if (bloatedProjects > 0) {
+      console.log(`   📁 ${bloatedProjects} projects have notes >1000 chars (consider external references)`);
+    }
+
+    if (totalNoteTokens < 20000 && bloatedTasks === 0 && bloatedProjects === 0) {
+      console.log('   ✅ Note usage is reasonable - no optimization needed');
     }
   }
 
