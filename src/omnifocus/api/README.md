@@ -6,13 +6,15 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 
 - **Current**: `OmniFocus.d.ts` (symlink to latest version)
 - **Latest Version**: OmniFocus 4.8.3
-- **Previous Version**: OmniFocus 4.6.1 (archived as `OmniFocus-4.6.1-d.ts`)
+- **Previous Version**: OmniFocus 4.6.1 (archived in `versions/`)
 
-## Version Files
+## File Structure
 
 - `OmniFocus.d.ts` - Symlink to the current version (always points to latest)
-- `OmniFocus-4.8.3-d.ts` - TypeScript definitions for OmniFocus 4.8.3
-- `OmniFocus-4.6.1-d.ts` - TypeScript definitions for OmniFocus 4.6.1 (archived)
+- `OmniFocus-4.8.3-d.ts` - Official TypeScript definitions for OmniFocus 4.8.3
+- `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
+- `versions/` - Archived previous versions (excluded from TypeScript compilation)
+  - `OmniFocus-4.6.1-d.ts` - TypeScript definitions for OmniFocus 4.6.1
 
 ## Usage
 
@@ -32,6 +34,33 @@ These definitions provide type information for all OmniFocus automation objects 
 3. Some methods in these definitions may behave differently in JXA context
 4. Always test automation scripts in OmniFocus before relying on them
 5. Version-specific features (like Anchor Dates in 4.8+) are only available in corresponding versions
+
+## Undocumented API Extensions
+
+The `OmniFocus-extensions.d.ts` file contains properties not included in the official API export but accessible via JXA.
+
+**Verified on OmniFocus 4.8.3** (October 2025) - All 14 properties tested ✅
+
+### Project Extensions (4 properties)
+- `effectiveStatus: Project.Status` - Effective status considering parent folders
+- `singletonActionHolder: boolean` - Whether project contains singleton actions
+- `nextTask: Task | null` - Next actionable child task in this project
+- `defaultSingletonActionHolder: boolean` - Whether this is the default singleton action holder
+
+### Tag Extensions (2 properties)
+- `availableTaskCount: number` - Number of available tasks with this tag or descendants
+- `remainingTaskCount: number` - Number of incomplete tasks with this tag or descendants
+
+### Task Extensions (8 properties)
+- `numberOfTasks: number` - Total number of direct child tasks
+- `numberOfAvailableTasks: number` - Number of available direct child tasks
+- `numberOfCompletedTasks: number` - Number of completed direct child tasks
+- `next: boolean` - Whether this is the next actionable task in its project
+- `blocked: boolean` - Whether task has blocking dependencies
+- `effectivelyCompleted: boolean` - Whether task or its container is completed
+- `effectivelyDropped: boolean` - Whether task or its container is dropped
+
+**Testing:** Run `node test-extensions.js` to verify these properties on your OmniFocus version.
 
 ## How to Regenerate API Definitions
 

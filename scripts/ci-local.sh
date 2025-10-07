@@ -42,8 +42,10 @@ print_success "TypeScript type checking passed"
 # Step 3: Lint check (with reasonable threshold)
 print_step "Lint check (error count threshold)"
 LINT_OUTPUT=$(npm run lint 2>&1 || true)
-ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 || echo "0")
-TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 || 0)
+ERROR_COUNT=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ errors" | cut -d' ' -f1 2>/dev/null || echo "0")
+# Ensure ERROR_COUNT is a number
+ERROR_COUNT=${ERROR_COUNT:-0}
+TOTAL_PROBLEMS=$(echo "$LINT_OUTPUT" | grep -o "[0-9]\+ problems" | head -1 | cut -d' ' -f1 2>/dev/null || echo "0")
 
 echo "Lint errors: $ERROR_COUNT"
 echo "Total problems: $TOTAL_PROBLEMS"
@@ -74,10 +76,10 @@ print_step "Tool registration verification"
 TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 10s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
 echo "Registered tools: $TOOL_COUNT"
 
-if [ "$TOOL_COUNT" -eq "15" ]; then
-    print_success "All 15 tools registered correctly"
+if [ "$TOOL_COUNT" -eq "17" ]; then
+    print_success "All 17 tools registered correctly"
 else
-    print_error "Expected 15 tools, got $TOOL_COUNT"
+    print_error "Expected 17 tools, got $TOOL_COUNT"
     exit 1
 fi
 
