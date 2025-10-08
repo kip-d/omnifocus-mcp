@@ -17,20 +17,16 @@ A Model Context Protocol (MCP) server that provides programmatic access to OmniF
 
 ## 🧭 Navigation Guide
 
-**For New Users:**
-1. **[Quick Start](#quick-start)** - Installation and setup
-2. **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing
-3. **[Built-in Prompts](#built-in-prompts)** - Overview of available workflows
-
-**For Advanced Users:**
-- **[Programmatic Prompts](src/prompts/README.md)** - TypeScript-based MCP prompts
-- **[API Documentation](docs/API-REFERENCE-LLM.md)** - Complete tool reference
-- **[Performance Benchmarks](docs/PERFORMANCE_EXPECTATIONS.md)** - Hardware requirements
+**For End Users:**
+- 📘 **[Getting Started Guide](docs/GETTING_STARTED.md)** - Your first conversation with Claude + natural language examples
+- 🔧 **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix common issues
+- 📋 **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing workflows
 
 **For Developers:**
-- **[Architecture Documentation](docs/ARCHITECTURE.md)** - Technical implementation
-- **[Testing Framework](docs/REAL_LLM_TESTING.md)** - AI model integration
-- **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Future enhancements
+- 💻 **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - API examples, tool call formats, integration patterns
+- 🏗️ **[Architecture Documentation](docs/ARCHITECTURE.md)** - Technical implementation details
+- 🧪 **[Testing Framework](docs/REAL_LLM_TESTING.md)** - Real LLM integration testing with Ollama
+- 🗺️ **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Completed features and future plans
 
 ## Quick Start
 
@@ -97,11 +93,15 @@ All clients use the same basic configuration structure:
 
 Refer to your client's documentation for specific configuration format and file location.
 
-## API Documentation
+## Documentation
 
-For AI assistants and developers:
-- [`docs/API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) - Complete reference (~900 tokens)
-- [`docs/API-COMPACT.md`](docs/API-COMPACT.md) - Essential commands (~400 tokens)
+**For End Users:**
+- [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) - Your first conversation and natural language examples
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - Common issues and solutions
+
+**For Developers:**
+- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) - Complete tool reference with JSON examples
+- [`docs/API-REFERENCE-V2.md`](docs/API-REFERENCE-V2.md) - Detailed API specification
 
 ## Built-in Prompts
 
@@ -131,75 +131,28 @@ Nine pre-built prompts for common workflows:
 - **[Technical Prompts Reference](./src/prompts/README.md)** - Programmatic prompt architecture and development
 - **[Testing & Validation Prompts](./prompts/)** - Complete test suites and verification workflows
 
-## Usage Examples
+## Usage
 
-### Query Tasks
-```javascript
-// Get today's tasks
-{ "tool": "tasks", "arguments": { "mode": "today" } }
+### For End Users: Just Talk Naturally
 
-// Search tasks
-{ "tool": "tasks", "arguments": { "mode": "search", "query": "budget" } }
-```
+Once set up, simply open your AI assistant and ask questions in plain English:
 
-### Manage Tasks
-```javascript
-// Create task
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "create",
-    "name": "Review Q4 budget",
-    "dueDate": "2024-01-15 17:00",
-    "tags": ["work", "urgent"]
-  }
-}
+- "What do I need to do today?"
+- "Show me everything that's overdue"
+- "Add 'Call dentist' to my inbox"
+- "I just finished a meeting, here are my notes..." *(captures tasks automatically)*
+- "Help me plan my afternoon"
 
-// Update task
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "update",
-    "taskId": "abc123",
-    "flagged": true
-  }
-}
-```
+**See the [Getting Started Guide](docs/GETTING_STARTED.md) for your first conversation and more examples.**
 
-### Project Operations
-```javascript
-// Create project
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "create",
-    "name": "Website Redesign",
-    "sequential": true,
-    "folder": "Work"
-  }
-}
-```
+### For Developers: Programmatic Access
 
-### Smart Capture - Parse Meeting Notes
-```javascript
-// Extract action items from meeting notes
-{
-  "tool": "parse_meeting_notes",
-  "arguments": {
-    "input": "Meeting Notes:\n- Send proposal to client by Friday\n- Call Sarah about budget\n- Review Q4 metrics",
-    "returnFormat": "preview",
-    "suggestTags": true,
-    "suggestDueDates": true
-  }
-}
-
-// Returns structured tasks with:
-// - Extracted task names
-// - Detected due dates ("by Friday")
-// - Context tags (@phone, @computer, etc.)
-// - Project suggestions
-// - Confidence scores
-```
+If you're integrating this server into your own tools, see the [Developer Guide](docs/DEVELOPER_GUIDE.md) for:
+- JSON tool call formats
+- API parameter reference
+- Return value schemas
+- Testing patterns
+- Integration examples
 
 ## Available Tools
 
@@ -269,26 +222,17 @@ Supports complex recurrence patterns:
 
 See `/docs/TROUBLESHOOTING.md` for solutions.
 
-## Documentation
+## Additional Resources
 
-### 📚 Core Documentation
-- **[`/docs/`](docs/)** - Complete reference guides and API documentation
-  - [`API-REFERENCE-LLM.md`](docs/API-REFERENCE-LLM.md) - AI-optimized API reference
-  - [`TOOLS.md`](docs/TOOLS.md) - Complete tool reference with examples
-  - [`TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - Common issues and solutions
-  - [`PERMISSIONS.md`](docs/PERMISSIONS.md) - macOS permissions setup
-
-### 🧪 Testing & Utilities
+### For Contributors & Advanced Users
 - **[`/scripts/`](scripts/)** - Utility scripts and testing tools
-- **[`/tests/`](tests/)** - Unit and integration test suites
+- **[`/tests/`](tests/)** - Unit and integration test suites (740+ tests)
+- **[Performance Benchmarks](docs/BENCHMARK_RESULTS.md)** - Real-world performance data
+- **[Architecture Deep Dive](docs/ARCHITECTURE.md)** - JXA + Bridge implementation
+- **[Lessons Learned](docs/LESSONS_LEARNED.md)** - Hard-won insights from development
 
-### 📋 Ready-to-Use Prompts
-- **[Manual Templates (`/prompts/`)](prompts/README.md)** - Copy/paste prompts for testing and workflows
-- **[Programmatic MCP Prompts (`/src/prompts/`)](src/prompts/README.md)** - Built-in prompts (access via Claude "+" button or natural language)
-- **[Cross-Reference Guide](#built-in-prompts)** - Compare manual vs programmatic approaches
-
-### 📦 Archive
-- **[`/.archive/`](.archive/)** - Historical files and development artifacts preserved for reference
+### Archive
+- **[Historical Documentation](.archive/)** - Preserved development artifacts and deprecated features
 
 ## License
 

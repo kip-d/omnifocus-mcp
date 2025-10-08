@@ -59,20 +59,15 @@ List 50 tasks with full details
 1. **Single-step operations** - Tags during creation, not after
 2. **Natural language** - "What's due today?" instead of tool names
 3. **Smart summaries** - Key insights before raw data
-4. **Faster queries** - 95% performance improvement
-5. **Richer features** - Perspectives, reparenting, complex repeats
-6. **Unified interface** - Fewer tools, more capabilities
-
-### What's Preserved:
-- All V1 tools still available with `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true`
-- Backward compatibility maintained
-- No breaking changes for existing workflows
+4. **Faster queries** - 95% performance improvement with cache warming
+5. **Richer features** - Perspectives, reparenting, complex repeats, smart capture
+6. **Unified interface** - Fewer tools, more capabilities (17 core tools)
 
 ## Quick Health Check
 
 Run this quick check to ensure V2 is working optimally:
 
-1. How many tools are available? (Should be ~20-25 without legacy)
+1. How many tools are available? (Should be 18: 17 core tools + smart capture)
 2. Create a task with tags - did they apply immediately?
 3. Query today's tasks - did you get a summary first?
 4. Check productivity stats - are they cached (note "from_cache" in response)?
@@ -80,9 +75,8 @@ Run this quick check to ensure V2 is working optimally:
 ## Troubleshooting
 
 If something doesn't work:
-1. Check version: "Show me the MCP server version" (should be 2.0.0-beta.4+)
+1. Check version: "Show me the MCP server version" (should be 2.2.0)
 2. Run diagnostics: "Run OmniFocus diagnostics"
 3. Check tool list: "List all available tools"
-4. Verify no legacy: Ensure OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS is not set
 
 All tests passing? Your V2 tools are ready for production use! 🎉

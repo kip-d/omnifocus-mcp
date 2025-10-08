@@ -86,7 +86,7 @@ If any tests fail, try these diagnostic commands:
 - All V2 tools should respond with a summary section first
 - Tags should be assigned during task creation (not requiring a separate update)
 - Repeat rules should work immediately
-- Task reparenting should work via the update_task tool
+- Task reparenting should work via the manage_task tool
 
 This comprehensive test covers:
 - ✅ All CRUD operations (Create, Read, Update, Delete)
