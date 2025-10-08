@@ -8,10 +8,10 @@
 **Performance Benchmarks Complete:** M2 MacBook Air (24GB) vs M2 Ultra Mac Studio (192GB) vs M4 Pro Mac Mini (64GB)
 
 ### M2 Ultra Performance (192GB, 24 cores)
-- **Cold cache:** 7-23x faster than M2 Air across operations
-- **Warm cache:** Task queries in 1-5ms
-- **Cache warming:** 1,180-17,400x speedup for task queries
-- **Cache warming time:** 10 seconds
+- **Cold cache:** 1.3-11.0x faster than M2 Air across operations
+- **Warm cache:** Task queries in 1-6ms
+- **Cache warming:** 682-17,638x speedup for task queries
+- **Cache warming time:** 5.1 seconds
 
 ### M4 Pro Mac Mini Performance (64GB, 14 cores)
 - **Cold cache:** 17-25x faster than M2 Air across operations
@@ -39,12 +39,13 @@ Cache warming provides significant speedup on all Apple Silicon Macs:
 - Warm cache: 0-2ms for task queries
 
 **M2 Ultra Mac Studio:**
-- Cold cache: 7-23x faster than M2 Air across operations
-- Tag operations (full mode): 22.9x faster (3.7s vs 84.7s on M2 Air)
-- Analytics: 10-16x faster than M2 Air
-- Task queries: 7-13x faster cold, 1,180-17,400x faster warm
+- Cold cache: 1.3-11.0x faster than M2 Air across operations
+- Tag operations (full mode): 1.3x faster (3.4s vs 4.5s on M2 Air)
+- Analytics: 1.1-11.0x faster than M2 Air
+- Task queries: 10.1-10.7x faster cold, 682-17,638x faster warm
+- Cache warming: 5.1 seconds
 
-**Conclusion:** All Apple Silicon Macs benefit from cache warming. OmniJS bridge optimizations provide the largest performance gains for tag operations.
+**Conclusion:** All Apple Silicon Macs benefit from cache warming. OmniJS bridge optimizations provide significant performance improvements.
 
 ---
 
@@ -252,90 +253,80 @@ The 180-second duration for upcoming tasks is **expected behavior** given databa
 
 ### Mac Studio M2 Ultra (192GB) - **MEASURED RESULTS** ✅
 
-**Test Date:** 2025-10-06 (Updated with latest cache warming optimizations)
+**Test Date:** 2025-10-07 (Updated with latest cache warming optimizations)
 **Database:** Same ~2,400 task database as M2 MacBook Air baseline
 **Node.js:** v24.9.0
 
 #### Task Queries - Cold Cache (BENCHMARK_MODE=cold)
 | Operation | M2 Ultra | M2 Air | Comparison |
 |-----------|----------|--------|------------|
-| Today's tasks (limit 25) | **5.9s** | 41.8s | ✅ **7.1x faster** |
-| Overdue tasks (limit 25) | **6.4s** | 59.5s | ✅ **9.3x faster** |
-| Upcoming tasks (7 days, limit 25) | **17.4s** | 220.9s | ✅ **12.7x faster** |
-| Project statistics | **661ms** | 11.5s | ✅ **17.4x faster** |
-| Tags (names only) | **247ms** | 1.9s | ✅ **7.7x faster** |
-| Tags (fast mode) | **289ms** | 3.7s | ✅ **12.8x faster** |
-| Tags (full mode) | **3.7s** | 84.7s | ✅ **22.9x faster** (with OmniJS bridge) |
-| Productivity stats | **6.0s** | 94.6s | ✅ **15.8x faster** |
-| Task velocity | **1.7s** | 17.8s | ✅ **10.5x faster** |
-
-**Key Finding:** M2 Ultra is **7-23x faster** across ALL operations (verified measurements), with the largest gains in tag operations (22.9x) thanks to OmniJS bridge optimizations. The M2 Ultra delivers consistent performance improvements across task queries, tags, and analytics.
+| Today's tasks (limit 25) | **4.1s** | 41.4s | **10.1x faster** |
+| Overdue tasks (limit 25) | **5.5s** | 58.9s | **10.7x faster** |
+| Upcoming tasks (7 days, limit 25) | **17.6s** | 180.3s | **10.2x faster** |
+| Project statistics | **684ms** | 6.9s | **10.1x faster** |
+| Tags (names only) | **273ms** | 1.7s | **6.2x faster** |
+| Tags (fast mode) | **336ms** | 3.3s | **9.8x faster** |
+| Tags (full mode) | **3.4s** | 4.5s | **1.3x faster** |
+| Productivity stats | **3.5s** | 3.8s | **1.1x faster** |
+| Task velocity | **4.2s** | 46.2s | **11.0x faster** |
 
 #### Task Queries - Warm Cache (BENCHMARK_MODE=warm)
 | Operation | Measured Time | vs Cold Cache | Cache Effectiveness |
 |-----------|---------------|---------------|---------------------|
-| Today's tasks (limit 25) | **5ms** | 5.9s | **1,180x faster** |
-| Overdue tasks (limit 25) | **2ms** | 6.4s | **3,220x faster** |
-| Upcoming tasks (7 days, limit 25) | **1ms** | 17.4s | **17,400x faster** |
-| Project statistics | **671ms** | 661ms | ~same (not cached) |
-| Tags (names only) | **252ms** | 247ms | ~same (not cached) |
-| Tags (fast mode) | **319ms** | 289ms | ~same (not cached) |
-| Tags (full mode) | **3.5s** | 3.7s | ~same (not cached) |
-| Productivity stats | **6.8s** | 6.0s | ~same (not cached) |
-| Task velocity | **1.4s** | 1.7s | ~same (not cached) |
+| Today's tasks (limit 25) | **6ms** | 4.1s | **682x faster** |
+| Overdue tasks (limit 25) | **2ms** | 5.5s | **2,758x faster** |
+| Upcoming tasks (7 days, limit 25) | **1ms** | 17.6s | **17,638x faster** |
+| Project statistics | **619ms** | 684ms | **1.1x faster** |
+| Tags (names only) | **239ms** | 273ms | **1.1x faster** |
+| Tags (fast mode) | **314ms** | 336ms | **1.1x faster** |
+| Tags (full mode) | **3.4s** | 3.4s | ~same (not cached) |
+| Productivity stats | **3.3s** | 3.5s | **1.1x faster** |
+| Task velocity | **4.1s** | 4.2s | ~same (not cached) |
 
-**Cache Warming Time:** ~10 seconds (using OmniJS bridge for task caches)
-
-**Critical Discovery:** Cache warming is **extraordinarily effective** for task queries (1,180-17,400x speedup), but has minimal impact on analytics and tag operations. This confirms caching strategy is optimized for task queries.
+**Cache Warming Time:** 5.1 seconds (using OmniJS bridge for task caches)
 
 #### Performance Characteristics
 
-**What's Fast (Cold Cache):**
-- ✅ All operations are significantly faster than M2 Air (7-23x)
-- ✅ Project statistics: 661ms (17.4x faster)
-- ✅ Tags (full mode): 3.7s with OmniJS bridge (22.9x faster)
-- ✅ Task queries: 5.9-17.4s (7-13x faster than M2 Air)
+**Cold Cache Performance:**
+- Task queries: 4.1-17.6s (10.1-10.7x faster than M2 Air)
+- Tags: 273ms-3.4s (1.3-9.8x faster than M2 Air)
+- Analytics: 684ms-4.2s (1.1-11.0x faster than M2 Air)
 
-**What's Extraordinarily Fast (Warm Cache):**
-- 🚀 Task queries: 1-5ms (1,180-17,400x speedup with cache warming)
+**Warm Cache Performance:**
+- Task queries: 1-6ms (682-17,638x faster than cold)
+- Tags: 239ms-3.4s (minimal caching benefit)
+- Analytics: 619ms-4.1s (minimal caching benefit)
 
-**What's Not Cached:**
-- Analytics/tags: No significant improvement with cache warming (as designed)
-- Project statistics: ~same performance (not cached)
-
-**Hardware Scaling Insights:**
-The M2 Ultra's massive performance advantage demonstrates:
-1. **Task queries:** 7-13x faster cold, 1,180-17,400x faster warm (cache warming extraordinarily effective)
-2. **Tag operations:** 23x faster with OmniJS bridge optimizations (largest improvement)
-3. **Analytics:** 10-16x faster across all operations
-4. **Cache warming:** Completes in 10s (vs 12s on M2 Air) - 20% faster
+**Cache Warming:**
+- Time: 5.1 seconds
+- Improvement from previous: 49% faster (10s → 5.1s)
 
 ### Quick Reference: Performance Comparison Across All Machines
 
 | Operation | M2 Air (Cold) | M2 Air (Warm) | M2 Ultra (Cold) | M2 Ultra (Warm) | M4 Pro (Cold) | M4 Pro (Warm) |
 |-----------|---------------|---------------|-----------------|-----------------|---------------|---------------|
 | **Task Queries** |
-| Today's tasks | 41.4s | 7ms | 5.9s | 5ms | 2451ms | 2ms |
-| Overdue tasks | 58.9s | 2ms | 6.4s | 2ms | 3111ms | 1ms |
-| Upcoming tasks | 180.3s | 1ms | 17.4s | 1ms | 8821ms | 0ms |
+| Today's tasks | 41.4s | 7ms | 4.1s | 6ms | 2451ms | 2ms |
+| Overdue tasks | 58.9s | 2ms | 5.5s | 2ms | 3111ms | 1ms |
+| Upcoming tasks | 180.3s | 1ms | 17.6s | 1ms | 8821ms | 0ms |
 | **Analytics & Tags** |
-| Project statistics | 6.9s | 7.1s | 661ms | 671ms | 372ms | 423ms |
-| Tags (names only) | 1.7s | 1.7s | 247ms | 252ms | 182ms | 214ms |
-| Tags (fast mode) | 3.3s | 3.3s | 289ms | 319ms | 253ms | 307ms |
-| Tags (full mode) | 4.5s | 1.8s | 3.7s | 3.5s | 3777ms | 3731ms |
-| Productivity stats | 3.8s | 1.9s | 6.0s | 6.8s | 3619ms | 3605ms |
-| Task velocity | 46.2s | 46.4s | 1.7s | 1.4s | 2293ms | 3067ms |
+| Project statistics | 6.9s | 7.1s | 684ms | 619ms | 372ms | 423ms |
+| Tags (names only) | 1.7s | 1.7s | 273ms | 239ms | 182ms | 214ms |
+| Tags (fast mode) | 3.3s | 3.3s | 336ms | 314ms | 253ms | 307ms |
+| Tags (full mode) | 4.5s | 1.8s | 3.4s | 3.4s | 3777ms | 3731ms |
+| Productivity stats | 3.8s | 1.9s | 3.5s | 3.3s | 3619ms | 3605ms |
+| Task velocity | 46.2s | 46.4s | 4.2s | 4.1s | 2293ms | 3067ms |
 
 **Cache Warming Time:**
 - M2 MacBook Air: ~2.4-4.7 seconds (with full OmniJS bridge for projects + tags)
-- M2 Ultra Mac Studio: ~10 seconds
+- M2 Ultra Mac Studio: 5.1 seconds
 - M4 Pro Mac Mini: ~5.9 seconds
 
 **Key Insights:**
-- M4 Pro cold cache: 2-2.4x faster than M2 Ultra, 17-25x faster than M2 Air
-- M2 Ultra cold cache: 7-23x faster than M2 Air
+- M4 Pro cold cache: 1.7-2.2x faster than M2 Ultra, 17-25x faster than M2 Air
+- M2 Ultra cold cache: 1.3-11.0x faster than M2 Air
 - Cache warming: 5,900-180,300x speedup for task queries on M2 Air
-- Warm cache performance: 1-7ms for task queries on M2 Air, 0-2ms on M4 Pro/M2 Ultra
+- Warm cache performance: 1-7ms for task queries on M2 Air, 0-2ms on M4 Pro, 1-6ms on M2 Ultra
 
 ## Performance Improvements Achieved
 
@@ -380,18 +371,16 @@ The M2 Ultra's massive performance advantage demonstrates:
 ## Hardware Performance Comparison
 
 ### M2 Ultra Mac Studio (192GB RAM)
-**Measured improvement:** 7-23x faster across operations
-- **CPU advantage:** 2x M2 Max cores (24 CPU cores total) - Verified
-- **Memory advantage:** Unified memory bandwidth 2x higher - Verified
+**Measured improvement:** 1.3-11.0x faster across operations
+- **CPU advantage:** 2x M2 Max cores (24 CPU cores total)
+- **Memory advantage:** Unified memory bandwidth 2x higher
 
 **Measured results (with OmniJS bridge optimizations):**
-- **Task queries (cold cache):** 5.9-17.4s (vs M2 Air 41.8-220.9s) = 7-13x faster
-- **Task queries (warm cache):** 1-5ms = 1,180-17,400x vs cold
-- **Tag operations (full mode):** 3.7s (vs M2 Air 84.7s) = 22.9x faster
-- **Analytics:** 6.0-6.8s (vs M2 Air 94.6s) = 10-16x faster
-- **Cache warming:** 10s (vs M2 Air 2.4s)
-
-**Key Finding:** M2 Ultra delivers consistent performance improvements across all operations. Largest gains from OmniJS bridge optimizations for tag operations (22.9x). Cache warming provides significant speedup on both machines.
+- **Task queries (cold cache):** 4.1-17.6s (vs M2 Air 41.4-180.3s) = 10.1-10.7x faster
+- **Task queries (warm cache):** 1-6ms = 682-17,638x vs cold
+- **Tag operations (full mode):** 3.4s (vs M2 Air 4.5s) = 1.3x faster
+- **Analytics:** 684ms-4.2s (vs M2 Air 3.8-46.2s) = 1.1-11.0x faster
+- **Cache warming:** 5.1s (vs M2 Air 2.4-4.7s)
 
 ### M4 Pro Mac Mini (64GB RAM)
 **Measured improvement:** 2-2.4x faster than M2 Ultra, 17-25x faster than M2 Air
@@ -449,20 +438,18 @@ The M2 Ultra's massive performance advantage demonstrates:
 
 ### 1. M2 Ultra Performance with OmniJS Bridge
 M2 Ultra (192GB, 24 cores) performance vs M2 MacBook Air (24GB, 8 cores):
-- **Cold cache task queries:** 7-10x faster (5.9-17.4s vs 41-180s)
-- **Warm cache task queries:** 1-5ms (vs 1-7ms on M2 Air)
-- **Tag operations (full mode):** 1.2x faster (3.7s vs 4.5s) - OmniJS bridge benefits both machines
-- **Analytics:** 6.2-27.2x faster (661ms-6.8s vs 3.8-46.2s)
-
-**Largest Performance Gain:** Analytics operations, particularly task velocity (27.2x faster).
+- **Cold cache task queries:** 10.1-10.7x faster (4.1-17.6s vs 41.4-180.3s)
+- **Warm cache task queries:** 1-6ms (vs 1-7ms on M2 Air)
+- **Tag operations (full mode):** 1.3x faster (3.4s vs 4.5s)
+- **Analytics:** 1.1-11.0x faster (684ms-4.2s vs 3.8-46.2s)
 
 ### 2. Cache Warming Effectiveness
-Cache warming provides 1,180-17,400x speedup for task queries on M2 Ultra:
-- Today's tasks: 5.9s → 5ms (1,180x faster)
-- Overdue tasks: 6.4s → 2ms (3,220x faster)
-- Upcoming tasks: 17.4s → 1ms (17,400x faster)
+Cache warming provides 682-17,638x speedup for task queries on M2 Ultra:
+- Today's tasks: 4.1s → 6ms (682x faster)
+- Overdue tasks: 5.5s → 2ms (2,758x faster)
+- Upcoming tasks: 17.6s → 1ms (17,638x faster)
 
-Cache warming is recommended for production use. Without it, even M2 Ultra takes 5.9-17.4s for first queries. Cache warming completes in ~10 seconds on M2 Ultra.
+Cache warming is recommended for production use. Without it, M2 Ultra takes 4.1-17.6s for first queries. Cache warming completes in 5.1 seconds on M2 Ultra.
 
 ### 3. M2 Air Cache Warming Resolution
 Cache warming now works on M2 MacBook Air.
@@ -486,17 +473,15 @@ Cache warming now works on M2 MacBook Air.
 
 ### 4. M2 Ultra Performance Summary
 M2 Ultra outperforms M2 Air across operations:
-- **Task queries:** 7-10x faster (5.9-17.4s vs 41-180s)
-- **Tags:** 1.2-4.6x faster (247ms-3.7s vs 1.7-4.5s) - OmniJS bridge benefits both machines
-- **Analytics:** 6.2-27.2x faster (661ms-6.8s vs 3.8-46.2s)
+- **Task queries:** 10.1-10.7x faster (4.1-17.6s vs 41.4-180.3s)
+- **Tags:** 1.3-6.2x faster (273ms-3.4s vs 1.7-4.5s)
+- **Analytics:** 1.1-11.0x faster (684ms-4.2s vs 3.8-46.2s)
 
-**M2 Ultra Performance (Updated 2025-10-06):**
-- Cold cache task queries: 5.9-17.4s (vs M2 Air: 41-180s)
-- Warm cache task queries: 1-5ms (vs M2 Air: 1-7ms)
-- Tags/analytics: 247ms-6.8s (vs M2 Air: 1.7-46.2s)
-- Cache warming: 10s (vs M2 Air: 2.4-4.7s)
-
-**Summary:** Both M2 Ultra and M2 Air deliver excellent warm-cache performance for task queries (1-7ms). M2 Ultra is 7-23x faster for cold-cache operations, with largest gains from OmniJS bridge optimizations for tag operations (22.9x).
+**M2 Ultra Performance (Updated 2025-10-07):**
+- Cold cache task queries: 4.1-17.6s (vs M2 Air: 41.4-180.3s)
+- Warm cache task queries: 1-6ms (vs M2 Air: 1-7ms)
+- Tags/analytics: 273ms-4.2s (vs M2 Air: 1.7-46.2s)
+- Cache warming: 5.1s (vs M2 Air: 2.4-4.7s)
 
 ### 5. Optimization Status
 Based on verified measurements from both M2 Air and M2 Ultra:
@@ -535,16 +520,15 @@ Based on verified measurements from both M2 Air and M2 Ultra:
 - **Limits:** Default limits (25) appropriate for most use cases
 
 ### For M2 Ultra Mac Studio Users
-- **Cold cache performance:** 7-23x faster than M2 Air across operations
-- **Warm cache:** Task queries in 1-5ms
-- **Task queries (cold cache):** 5.9-17.4s (7-13x faster than M2 Air)
-- **Tags (full mode, cold cache):** 3.7s (22.9x faster than M2 Air with OmniJS bridge)
-- **Analytics (cold cache):** 6.0-6.8s (10-16x faster than M2 Air)
-- **Cache warming:** 1,180-17,400x speedup for task queries
-- **Cache warming time:** 10 seconds
+- **Cold cache performance:** 1.3-11.0x faster than M2 Air across operations
+- **Warm cache:** Task queries in 1-6ms
+- **Task queries (cold cache):** 4.1-17.6s (10.1-10.7x faster than M2 Air)
+- **Tags (full mode, cold cache):** 3.4s (1.3x faster than M2 Air)
+- **Analytics (cold cache):** 684ms-4.2s (1.1-11.0x faster than M2 Air)
+- **Cache warming:** 682-17,638x speedup for task queries
+- **Cache warming time:** 5.1 seconds
 - **Recommendation:** Enable cache warming (default)
 - **Use case:** General purpose - consistent performance across operations
-- **Notable gains:** Tag operations with OmniJS bridge (22.9x faster than M2 Air)
 
 ### For Intel Mac Users
 - Recommend lower default limits (25 → 10)
