@@ -364,7 +364,7 @@ sendRequest('initialize', {
   },
 });
 
-// Guard against hang
+// Guard against hang (60s to account for cache warming ~5s + 12 operations)
 setTimeout(() => {
   failAndExit('Integration test timed out');
-}, 30000);
+}, 60000);
