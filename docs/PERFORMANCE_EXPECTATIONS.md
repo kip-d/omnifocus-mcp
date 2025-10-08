@@ -236,7 +236,7 @@ Expected M2 Ultra results:
 
 #### System Performance Analysis
 - **Quick test script**: **33.35 seconds** (comprehensive integration testing)
-- **Cache warming**: **~2.7 seconds** (9 operations: projects, tags, tasks, perspectives)
+- **Cache warming**: **5.1 seconds** (updated October 7, 2025 - standalone cache warming operation)
 - **Memory usage**: Excellent - 192GB allows massive model headroom
 - **Model loading**: Near-instantaneous switching between models
 

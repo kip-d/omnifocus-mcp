@@ -273,3 +273,9 @@ Typical performance with a 2000+ task database:
 | Get active tags | ~400ms | Tags with tasks |
 | Productivity stats | ~3s | First run, then cached |
 | Create single task | ~200ms | Including validation |
+
+**For detailed hardware-specific performance benchmarks**, see [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md) which includes:
+- M2 MacBook Air (24GB), M2 Ultra Mac Studio (192GB), and M4 Pro Mac Mini (64GB) comparisons
+- Cold cache vs warm cache performance measurements
+- Cache warming times and effectiveness
+- Updated October 2025 with empirical test results

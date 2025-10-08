@@ -1,7 +1,7 @@
 # OmniFocus MCP Server - Improvement Roadmap
 
 *Generated: September 19, 2025*
-*Updated: October 1, 2025*
+*Updated: October 8, 2025*
 *Status: ALL Quick Win Phases COMPLETED + Advanced Search + Smart Capture - Foundation solid, high-value features delivered*
 
 ## 🎉 Progress Summary
@@ -1152,10 +1152,10 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 **What's Left:**
 - **Quick Wins**: ✅ ALL COMPLETED!
 - **Optional Enhancements**: Auto-Recovery (data-driven decision), Mac mini CI deployment
-- **Major Features**: Advanced Search (1-2 days), Workflow Automation tools (2-3 days)
+- **Major Features**: Workflow Automation tools (2-3 days)
 - **Discarded Ideas**: Webhooks (no native API), Plugin Architecture (over-engineering)
 
-**Next Steps**: Focus on major features (Advanced Search, Workflow Automation) based on user needs and feedback.
+**Next Steps**: Focus on Workflow Automation tools based on user needs and feedback.
 
 ---
 
