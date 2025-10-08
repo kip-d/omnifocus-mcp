@@ -57,7 +57,7 @@ Cache warming provides significant speedup on all Apple Silicon Macs:
 - **Cores:** 14 (10 performance + 4 efficiency)
 - **Memory:** 64 GB
 - **OS:** macOS 15.0 (Sequoia)
-- **OmniFocus:** 4.6.1
+- **OmniFocus:** 4.8.3
 - **Node.js:** v24.8.0
 - **Status:** ✅ **NEW PERFORMANCE LEADER** - 1.8-7.1x faster than M2 Ultra
 
@@ -67,7 +67,7 @@ Cache warming provides significant speedup on all Apple Silicon Macs:
 - **Cores:** 8 (4 performance + 4 efficiency)
 - **Memory:** 24 GB
 - **OS:** macOS 15.0 (Sequoia)
-- **OmniFocus:** 4.6.1
+- **OmniFocus:** 4.8.3
 - **Node.js:** v22.x
 
 ### Mac Studio M2 Ultra (Performance Testing Machine) ✅
@@ -76,7 +76,7 @@ Cache warming provides significant speedup on all Apple Silicon Macs:
 - **Cores:** 24 (16 performance + 8 efficiency)
 - **Memory:** 192 GB
 - **OS:** macOS 15.0 (Sequoia)
-- **OmniFocus:** 4.6.1
+- **OmniFocus:** 4.8.3
 - **Node.js:** v24.9.0
 
 ## Benchmark Methodology
