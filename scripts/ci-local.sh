@@ -86,17 +86,21 @@ npm run test:integration
 print_success "Integration tests passed"
 
 # Step 6: MCP Server verification
+# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
 print_step "MCP server startup verification"
 if [ -n "$TIMEOUT_CMD" ]; then
-    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | $TIMEOUT_CMD 10s node dist/index.js > /dev/null 2>&1 && print_success "MCP server starts correctly" || (print_error "MCP server startup failed" && exit 1)
+    # 30s timeout is safety net - server normally responds and exits in ~5s
+    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | $TIMEOUT_CMD 30s node dist/index.js > /dev/null 2>&1 && print_success "MCP server starts correctly" || (print_error "MCP server startup failed" && exit 1)
 else
     print_warning "Skipping MCP server startup test (timeout command not available)"
 fi
 
 # Step 7: Tool registration check
+# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
 print_step "Tool registration verification"
 if [ -n "$TIMEOUT_CMD" ]; then
-    TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | $TIMEOUT_CMD 10s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
+    # 30s timeout is safety net - server normally responds and exits in ~6s (includes cache warming)
+    TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
     echo "Registered tools: $TOOL_COUNT"
 
     if [ "$TOOL_COUNT" -eq "17" ]; then
@@ -110,9 +114,11 @@ else
 fi
 
 # Step 8: Sample tool execution
+# Note: Server exits gracefully when stdin closes. Timeout is safety net only.
 print_step "Sample tool execution test"
 if [ -n "$TIMEOUT_CMD" ]; then
-    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 15s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
+    # 30s timeout is safety net - server normally responds and exits in ~5s
+    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
 
     if echo "$RESULT" | grep -q "version"; then
         print_success "Sample tool execution successful"

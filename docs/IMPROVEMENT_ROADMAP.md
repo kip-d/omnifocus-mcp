@@ -982,8 +982,7 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 - Auto-Recovery Mechanisms (6-8 hours) - Implement if error metrics show >10% recoverable errors
 - Mac mini CI Runner deployment (1-2 days) - Deploy self-hosted runner using existing documentation
 
-**Major Features (3-5 days):**
-- Advanced Search Capabilities (1-2 days) - Hybrid natural language + field-based querying
+**Major Features (2-3 days):**
 - Workflow Automation bundles (2-3 days) - Composite tools for complex workflows (prompts exist, need tools)
 
 ### ✅ Phase 1: Foundation (COMPLETED) - Prerequisites for Everything Else
