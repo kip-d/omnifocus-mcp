@@ -29,6 +29,24 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# Cross-platform timeout command
+# Use gtimeout (from coreutils) on macOS, timeout on Linux
+if command -v gtimeout &> /dev/null; then
+    TIMEOUT_CMD="gtimeout"
+elif command -v timeout &> /dev/null; then
+    TIMEOUT_CMD="timeout"
+else
+    # Fallback: Install coreutils on macOS or skip timeout tests
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        print_warning "timeout command not found. Install with: brew install coreutils"
+        print_warning "Skipping timeout-based tests..."
+        TIMEOUT_CMD=""
+    else
+        print_error "timeout command not found. Please install coreutils."
+        exit 1
+    fi
+fi
+
 # Step 1: TypeScript compilation
 print_step "TypeScript compilation check"
 npm run build
@@ -69,30 +87,42 @@ print_success "Integration tests passed"
 
 # Step 6: MCP Server verification
 print_step "MCP server startup verification"
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | timeout 10s node dist/index.js > /dev/null 2>&1 && print_success "MCP server starts correctly" || (print_error "MCP server startup failed" && exit 1)
+if [ -n "$TIMEOUT_CMD" ]; then
+    echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | $TIMEOUT_CMD 10s node dist/index.js > /dev/null 2>&1 && print_success "MCP server starts correctly" || (print_error "MCP server startup failed" && exit 1)
+else
+    print_warning "Skipping MCP server startup test (timeout command not available)"
+fi
 
 # Step 7: Tool registration check
 print_step "Tool registration verification"
-TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 10s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
-echo "Registered tools: $TOOL_COUNT"
+if [ -n "$TIMEOUT_CMD" ]; then
+    TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | $TIMEOUT_CMD 10s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
+    echo "Registered tools: $TOOL_COUNT"
 
-if [ "$TOOL_COUNT" -eq "17" ]; then
-    print_success "All 17 tools registered correctly"
+    if [ "$TOOL_COUNT" -eq "17" ]; then
+        print_success "All 17 tools registered correctly"
+    else
+        print_error "Expected 17 tools, got $TOOL_COUNT"
+        exit 1
+    fi
 else
-    print_error "Expected 17 tools, got $TOOL_COUNT"
-    exit 1
+    print_warning "Skipping tool registration test (timeout command not available)"
 fi
 
 # Step 8: Sample tool execution
 print_step "Sample tool execution test"
-RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | timeout 15s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
+if [ -n "$TIMEOUT_CMD" ]; then
+    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 15s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
 
-if echo "$RESULT" | grep -q "version"; then
-    print_success "Sample tool execution successful"
+    if echo "$RESULT" | grep -q "version"; then
+        print_success "Sample tool execution successful"
+    else
+        print_error "Sample tool execution failed"
+        echo "Result: $RESULT"
+        exit 1
+    fi
 else
-    print_error "Sample tool execution failed"
-    echo "Result: $RESULT"
-    exit 1
+    print_warning "Skipping sample tool execution test (timeout command not available)"
 fi
 
 echo -e "\n${GREEN}🎉 All CI checks passed!${NC}"
@@ -103,7 +133,11 @@ echo "- Type checking: ✅"
 echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
 echo "- Unit tests: ✅"
 echo "- Integration tests: ✅"
-echo "- MCP server startup: ✅"
-echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
-echo "- Sample tool execution: ✅"
+if [ -n "$TIMEOUT_CMD" ]; then
+    echo "- MCP server startup: ✅"
+    echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
+    echo "- Sample tool execution: ✅"
+else
+    echo "- MCP server tests: ⚠️ (skipped - install coreutils for timeout command)"
+fi
 echo -e "\n${GREEN}Ready for production! 🚀${NC}"
