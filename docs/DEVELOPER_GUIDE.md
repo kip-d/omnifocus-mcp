@@ -21,6 +21,26 @@ All examples use JSON format for programmatic tool calls. These are what the MCP
 ### Query Tasks
 
 ```javascript
+// Get inbox tasks (not assigned to any project)
+{
+  "tool": "tasks",
+  "arguments": {
+    "mode": "inbox",
+    "limit": "25",
+    "details": "false"
+  }
+}
+
+// Alternative: Filter for inbox using project: null
+{
+  "tool": "tasks",
+  "arguments": {
+    "mode": "all",
+    "project": "null",  // or null or ""
+    "limit": "25"
+  }
+}
+
 // Get today's tasks
 {
   "tool": "tasks",

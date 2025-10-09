@@ -35,6 +35,7 @@ const QueryTasksToolSchemaV2 = z.object({
   // Primary mode selector
   mode: z.enum([
     'all',           // List all tasks (with optional filters)
+    'inbox',         // Tasks in inbox (not assigned to any project)
     'search',        // Text search in task names
     'overdue',       // Tasks past their due date
     'today',         // Today perspective: Due soon (≤3 days) OR flagged
@@ -44,7 +45,7 @@ const QueryTasksToolSchemaV2 = z.object({
     'flagged',       // High priority tasks
     'smart_suggest', // AI-powered suggestions for "what should I work on?"
   ]).default('all')
-    .describe('Query mode: "all" = all tasks with optional filters, "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
+    .describe('Query mode: "all" = all tasks with optional filters, "inbox" = tasks in inbox (not assigned to any project), "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
 
   // Common filters (work with most modes)
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
@@ -110,13 +111,15 @@ export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, Ta
   name = 'tasks';
   description = `Query OmniFocus tasks with modes and advanced filtering. Returns summary first, then detailed data.
 
-MODES: all, search, overdue, today, upcoming, available, blocked, flagged, smart_suggest
+MODES: all, inbox, search, overdue, today, upcoming, available, blocked, flagged, smart_suggest
 
 SIMPLE QUERIES (use basic parameters):
+- "What's in my inbox?" → mode: "inbox"
 - "What's due today?" → mode: "today"
 - "Show me overdue tasks" → mode: "overdue"
 - "Find meeting tasks" → mode: "search", search: "meeting"
 - "Tasks in Project X" → mode: "all", project: "Project X"
+- "Inbox tasks only" → mode: "all", project: null  (or use mode: "inbox")
 
 ADVANCED QUERIES (use filters parameter for complex logic):
 
@@ -163,6 +166,8 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 
       // Route to appropriate handler based on mode
       switch (normalizedArgs.mode) {
+        case 'inbox':
+          return this.handleInboxTasks(normalizedArgs, timer);
         case 'overdue':
           return this.handleOverdueTasks(normalizedArgs, timer);
         case 'upcoming':
@@ -324,7 +329,15 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 
     // Start with simple filters (backward compatibility - these take precedence)
     if (args.completed !== undefined) filter.completed = args.completed;
-    if (args.project) filter.project = args.project;
+    if (args.project !== undefined) {
+      // Special handling: Convert "null" string or empty string to null for inbox filtering
+      // This allows both mode: "inbox" and project: null to work correctly
+      if (args.project === "null" || args.project === "") {
+        filter.project = null;
+      } else {
+        filter.project = args.project;
+      }
+    }
     if (args.tags && Array.isArray(args.tags)) filter.tags = args.tags;
     if (args.search) filter.search = args.search;
     if (args.dueBy) filter.dueBefore = args.dueBy;
@@ -879,6 +892,60 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       'tasks',
       projectedTasks,
       { ...timer.toMetadata(), from_cache: false, mode: 'flagged' },
+    );
+  }
+
+  private async handleInboxTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Inbox mode: tasks not assigned to any project
+    // Use filter.project = null to get tasks without projects
+    const filter = {
+      ...this.processAdvancedFilters(args),
+      project: null,  // Override to null to ensure inbox filtering
+      limit: args.limit,
+      includeDetails: args.details,
+    };
+
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+      filter,
+      fields: args.fields || [],
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      // Check for specific error types first
+      const specificError = this.getSpecificErrorResponse(result, 'inbox', timer);
+      if (specificError) {
+        return specificError;
+      }
+
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to get inbox tasks',
+        'Check that OmniFocus is running and accessible',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
+
+    // Apply sorting if requested
+    const sortedTasks = this.sortTasks(tasks, args.sort);
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
+
+    return createTaskResponseV2(
+      'tasks',
+      projectedTasks,
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'inbox',
+        filters_applied: filter,
+        sort_applied: args.sort ? true : false,
+      },
     );
   }
 
