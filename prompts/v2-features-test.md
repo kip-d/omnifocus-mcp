@@ -79,4 +79,19 @@ If something doesn't work:
 2. Run diagnostics: "Run OmniFocus diagnostics"
 3. Check tool list: "List all available tools"
 
+## 🧹 Cleanup (Run After Tests Complete)
+
+After testing is complete, clean up the test data:
+
+### Delete Test Tasks
+Search for and delete these test tasks:
+- "V2 Tag Test"
+- "Team Standup" (recurring task)
+- Any inbox tasks you moved during the reparenting test
+
+You can search for tasks containing "V2" or "Test" to find them quickly, then delete them in bulk.
+
+### Verify Cleanup
+Confirm no test tasks remain in your OmniFocus.
+
 All tests passing? Your V2 tools are ready for production use! 🎉

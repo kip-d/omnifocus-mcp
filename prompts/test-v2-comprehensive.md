@@ -96,4 +96,30 @@ This comprehensive test covers:
 - ✅ Export functionality
 - ✅ Batch operations
 
+## 🧹 Cleanup (Run After Tests Complete)
+
+After all tests are done, clean up the test data:
+
+### 1. Delete Test Tasks
+Search for tasks containing "V2" in their names and delete all of them:
+- "Test V2 Integration {{timestamp}}" (may already be completed)
+- "Weekly V2 Test {{timestamp}}" (recurring task)
+- "V2 Parent Task {{timestamp}}"
+- "V2 Child Task"
+
+### 2. Delete Test Project
+Search for and delete the project "V2 Test Project {{timestamp}}" (may already be completed)
+
+### 3. Delete Test Tags
+Delete these test tags if they were created:
+- "v2-test-{{timestamp}}"
+- "test" (only if it was created during testing - check if it existed before)
+- "v2-verify" (only if it was created during testing - check if it existed before)
+
+### 4. Verify Cleanup
+Confirm that:
+- No tasks with "V2" in the name remain in your OmniFocus
+- The test project is removed
+- Test tags are removed
+
 If all tests pass, your V2 tools are working perfectly!
