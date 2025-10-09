@@ -165,12 +165,12 @@ export const UPDATE_TASK_SCRIPT = `
       try {
         // Handle various ways to specify "move to inbox"
         // Including the string "null" which Claude Desktop sometimes sends
-        if (updates.projectId === "" || 
-            updates.projectId === null || 
+        if (updates.projectId === "" ||
+            updates.projectId === null ||
             updates.projectId === "null") {
-          // Move to inbox using moveTasks with doc.inboxTasks.beginning
+          // Move to inbox by setting assignedContainer to null
           // This is the correct way to move a task to inbox in JXA
-          app.moveTasks([task], {to: doc.inboxTasks.beginning});
+          task.assignedContainer = null;
         } else {
           // Validate project exists
           const validation = validateProject(updates.projectId, doc);
@@ -656,7 +656,7 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
       // Project assignment (simplified)
       if (updates.projectId !== undefined) {
         if (updates.projectId === null || updates.projectId === "" || updates.projectId === "null") {
-          task.assignedContainer = doc.inboxTasks;
+          task.assignedContainer = null;  // Setting to null moves task to inbox
           changes.push("Moved to inbox");
         } else {
           const projects = doc.flattenedProjects();
