@@ -3,10 +3,11 @@ import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
+import type { TagsResponseV2, TagOperationResponseV2, TagsDataV2, TagOperationDataV2 } from '../response-types-v2.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
@@ -67,12 +68,12 @@ const TagsToolSchema = z.object({
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
 
-export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
+export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | TagOperationResponseV2> {
   name = 'tags';
   description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
 
-  async executeValidated(args: TagsToolInput): Promise<StandardResponseV2<unknown>> {
+  async executeValidated(args: TagsToolInput): Promise<TagsResponseV2 | TagOperationResponseV2> {
     const { operation } = args;
 
     switch (operation) {
@@ -92,12 +93,12 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
             undefined,
             { operation },
             timer.toMetadata(),
-          );
+          ) as TagsResponseV2;
         }
     }
   }
 
-  private async listTags(args: TagsToolInput): Promise<StandardResponseV2<unknown>> {
+  private async listTags(args: TagsToolInput): Promise<TagsResponseV2> {
     const timer = new OperationTimerV2();
 
     try {
@@ -115,7 +116,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tag list');
-        return cached as StandardResponseV2<unknown>; // Keep identity to satisfy test equality; cached object may already be a formatted response
+        return cached as TagsResponseV2; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
       // Use consolidated script that handles all optimization modes internally
@@ -154,18 +155,18 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         (parsedResult as { tags?: unknown[]; items?: unknown[] }).tags || (parsedResult as { tags?: unknown[]; items?: unknown[] }).items || [],
         'other',
         { ...timer.toMetadata(), total: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'list', mode: 'unified', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
-      );
+      ) as TagsResponseV2;
 
       // Cache the result
       this.cache.set('tags', cacheKey, response);
       return response;
 
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<TagsDataV2>(error);
     }
   }
 
-  private async getActiveTags(): Promise<StandardResponseV2<unknown>> {
+  private async getActiveTags(): Promise<TagsResponseV2> {
     const timer = new OperationTimerV2();
 
     try {
@@ -174,7 +175,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached active tags');
-        return cached as StandardResponseV2<unknown>;
+        return cached as TagsResponseV2;
       }
 
       // Execute script
@@ -201,18 +202,18 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
         (parsedResult as { tags?: unknown[]; items?: unknown[] }).tags || (parsedResult as { tags?: unknown[]; items?: unknown[] }).items || [],
         'other',
         { ...timer.toMetadata(), count: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
-      );
+      ) as TagsResponseV2;
 
       // Cache the result (30 second TTL for active tags)
       this.cache.set('tags', cacheKey, response);
       return response;
 
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<TagsDataV2>(error);
     }
   }
 
-  private async manageTags(args: TagsToolInput): Promise<StandardResponseV2<unknown>> {
+  private async manageTags(args: TagsToolInput): Promise<TagOperationResponseV2> {
     const timer = new OperationTimerV2();
 
     try {
@@ -301,7 +302,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema> {
       return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
 
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<TagOperationDataV2>(error);
     }
   }
 }

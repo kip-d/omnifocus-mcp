@@ -115,83 +115,42 @@ export const CREATE_TASK_SCRIPT = `
       let tagResult = null;
       if (taskData.tags && taskData.tags.length > 0) {
         try {
-          const flatTags = doc.flattenedTags();
-          const tagsToAdd = [];
-          const appliedTags = [];
+          // Use bridge for tag assignment (required for OmniFocus 4.x)
+          const bridgeResult = bridgeSetTags(app, taskId, taskData.tags);
 
-          // Find or create tags
-          for (let i = 0; i < taskData.tags.length; i++) {
-            const tagName = taskData.tags[i];
-            let tag = null;
-
-            // Find existing tag
-            for (let j = 0; j < flatTags.length; j++) {
-              if (flatTags[j].name() === tagName) {
-                tag = flatTags[j];
-                break;
-              }
-            }
-
-            // Create new tag if not found
-            if (!tag) {
-              tag = app.Tag({ name: tagName });
-              doc.tags.push(tag);
-            }
-
-            tagsToAdd.push(tag);
-            appliedTags.push(tagName);
+          if (bridgeResult && bridgeResult.success) {
+            tagResult = {
+              success: true,
+              tagsAdded: bridgeResult.tags || [],
+              tagsCreated: [],
+              totalTags: bridgeResult.tags ? bridgeResult.tags.length : 0,
+              verified: bridgeResult.tags ? bridgeResult.tags.length : 0,
+              verifiedTags: bridgeResult.tags || []
+            };
+            console.log('Successfully added ' + tagResult.totalTags + ' tags via bridge');
+          } else {
+            console.log('Warning: Bridge tag assignment failed:', bridgeResult ? bridgeResult.error : 'unknown error');
+            tagResult = {
+              success: false,
+              tagsAdded: [],
+              tagsCreated: [],
+              totalTags: 0,
+              verified: 0,
+              verifiedTags: []
+            };
           }
-
-          // Apply tags using fallback strategy
-          if (tagsToAdd.length > 0) {
-            try {
-              // First attempt: addTags with array
-              task.addTags(tagsToAdd);
-            } catch (addTagsError) {
-              try {
-                // Second attempt: set tags property directly
-                task.tags = tagsToAdd;
-              } catch (setTagsError) {
-                // Third attempt: individual addTag calls
-                for (const tag of tagsToAdd) {
-                  try {
-                    task.addTag(tag);
-                  } catch (e) {
-                    // Skip individual tag errors but continue
-                  }
-                }
-              }
-            }
-          }
-
-          // Give OmniFocus a moment to update indexes (no save to avoid user workflow disruption)
-          try {
-            delay(0.5);
-          } catch (e) {
-            // Delay is safe and non-disruptive
-          }
-
-          // Verify tags were actually applied by re-querying
-          let verifiedTags = [];
-          try {
-            verifiedTags = safeGetTags(task);
-          } catch (verifyError) {
-            console.log('Warning: Could not verify tag application');
-          }
-
-          tagResult = {
-            success: true,
-            tagsAdded: appliedTags,
-            tagsCreated: [],
-            totalTags: appliedTags.length,
-            verified: verifiedTags.length,
-            verifiedTags: verifiedTags
-          };
-          console.log('Successfully added ' + appliedTags.length + ' tags to task, verified: ' + verifiedTags.length);
 
         } catch (tagError) {
           console.log('Warning: Error adding tags:', tagError.message);
           // Continue without tags rather than failing task creation
+          tagResult = {
+            success: false,
+            tagsAdded: [],
+            tagsCreated: [],
+            totalTags: 0,
+            verified: 0,
+            verifiedTags: []
+          };
         }
       }
       
@@ -204,7 +163,7 @@ export const CREATE_TASK_SCRIPT = `
         dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
         deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
         estimatedMinutes: task.estimatedMinutes() || null,
-        tags: tagResult && tagResult.success ? tagResult.tagsAdded : [],
+        tags: tagResult && tagResult.success ? tagResult.verifiedTags : [],
         project: task.containingProject() ? task.containingProject().name() : null,
         projectId: task.containingProject() ? task.containingProject().id() : null,
         inInbox: task.inInbox(),

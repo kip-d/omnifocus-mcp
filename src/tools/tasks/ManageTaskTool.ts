@@ -18,6 +18,7 @@ import {
   formatErrorWithRecovery,
   invalidDateError,
 } from '../../utils/error-messages.js';
+import type { TaskOperationResponseV2, TaskOperationDataV2 } from '../response-types-v2.js';
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
@@ -158,7 +159,7 @@ type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
  * Combines create, update, complete, and delete into a single tool
  * with operation-based routing
  */
-export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
+export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperationResponseV2> {
   name = 'manage_task';
   description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).';
   schema = ManageTaskSchema;
@@ -167,7 +168,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     super(cache);
   }
 
-  async executeValidated(args: ManageTaskInput): Promise<unknown> {
+  async executeValidated(args: ManageTaskInput): Promise<TaskOperationResponseV2> {
     const timer = new OperationTimerV2();
     const { operation, taskId, ...params } = args;
 
@@ -183,7 +184,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           undefined,
           { operation },
           timer.toMetadata(),
-        );
+        ) as TaskOperationResponseV2;
         return this.formatForCLI(error, operation, 'error');
       }
 
@@ -195,12 +196,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           undefined,
           { operation },
           timer.toMetadata(),
-        );
+        ) as TaskOperationResponseV2;
         return this.formatForCLI(error, operation, 'error');
       }
 
       // Route to appropriate tool based on operation
-      let result: unknown;
+      let result: TaskOperationResponseV2;
       console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);
 
       switch (operation) {
@@ -271,7 +272,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             createResult = (scriptResult as ScriptExecutionResult).data;
           } catch (e) {
             console.error('[MANAGE_TASK_DEBUG] Script execution threw error:', e);
-            return this.handleError(e);
+            return this.handleErrorV2<TaskOperationDataV2>(e);
           }
 
           console.error('[MANAGE_TASK_DEBUG] Processing result:', JSON.stringify(createResult, null, 2));
@@ -367,7 +368,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
           result = createSuccessResponseV2(
             'manage_task',
-            { task: parsedCreateResult as CreateTaskResponse },
+            { task: parsedCreateResult as CreateTaskResponse, operation: 'create' as const },
             undefined,
             {
               ...timer.toMetadata(),
@@ -381,7 +382,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
                 has_repeat_rule: !!repeatRuleForUpdate,
               },
             },
-          );
+          ) as unknown as TaskOperationResponseV2;
 
           console.error('[MANAGE_TASK_DEBUG] Final create success response:', JSON.stringify(result, null, 2));
           break;
@@ -487,7 +488,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               fields_updated: Object.keys(safeUpdates),
             };
 
-            result = baseResponse;
+            result = baseResponse as unknown as TaskOperationResponseV2;
             break;
           }
 
@@ -518,7 +519,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
                 has_project_change: safeUpdates.projectId !== undefined,
               },
             },
-          );
+          ) as TaskOperationResponseV2;
           break;
         }
 
@@ -566,7 +567,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               affectsOverdue: true, // And overdue view
             });
 
-            result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, { ...timer.toMetadata(), completed_id: taskId, method: 'jxa', input_params: { taskId: taskId } });
+            result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, { ...timer.toMetadata(), completed_id: taskId, method: 'jxa', input_params: { taskId: taskId } }) as TaskOperationResponseV2;
           } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
@@ -579,7 +580,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               // Note: URL scheme fallback would be implemented here if needed
               return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
             }
-            return this.handleError(jxaError);
+            return this.handleErrorV2<TaskOperationDataV2>(jxaError);
           }
           break;
         }
@@ -625,7 +626,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             this.cache.invalidate('tags');
 
             this.logger.info(`Deleted task via JXA: ${taskId}`);
-            result = createSuccessResponseV2('manage_task', { task: parsedDeleteResult }, undefined, { ...timer.toMetadata(), deleted_id: taskId, method: 'jxa', input_params: { taskId: taskId } });
+            result = createSuccessResponseV2('manage_task', { task: parsedDeleteResult }, undefined, { ...timer.toMetadata(), deleted_id: taskId, method: 'jxa', input_params: { taskId: taskId } }) as TaskOperationResponseV2;
           } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
             if ((jxaError as Error).message &&
@@ -635,7 +636,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
               // Note: URL scheme fallback would be implemented here if needed
               return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
             }
-            return this.handleError(jxaError);
+            return this.handleErrorV2<TaskOperationDataV2>(jxaError);
           }
           break;
         }
@@ -653,7 +654,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             undefined,
             { operation },
             timer.toMetadata(),
-          );
+          ) as TaskOperationResponseV2;
           return this.formatForCLI(error, operation, 'error');
         }
       }
@@ -666,7 +667,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
 
     } catch (error) {
       console.error('[MANAGE_TASK_DEBUG] ERROR caught in executeValidated:', error);
-      const errorResult = this.handleError(error);
+      const errorResult = this.handleErrorV2<TaskOperationDataV2>(error);
       console.error('[MANAGE_TASK_DEBUG] Error result:', JSON.stringify(errorResult, null, 2));
       return this.formatForCLI(errorResult, operation, 'error');
     }
@@ -854,7 +855,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
    * Format response for CLI testing when MCP_CLI_TESTING environment variable is set
    * This makes responses easier to parse in bash scripts
    */
-  private formatForCLI(result: unknown, operation: string, type: 'success' | 'error'): unknown {
+  private formatForCLI<T>(result: T, operation: string, type: 'success' | 'error'): T {
     // Only modify output if in CLI testing mode
     if (!process.env.MCP_CLI_TESTING) {
       return result;
@@ -959,7 +960,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
     operation: 'bulk_complete' | 'bulk_delete',
     args: ManageTaskInput,
     timer: OperationTimerV2,
-  ): Promise<unknown> {
+  ): Promise<TaskOperationResponseV2> {
     const { taskIds, bulkCriteria } = args;
 
     // Validate that we have either taskIds or criteria
@@ -971,7 +972,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
         'Provide an array of task IDs or search criteria to identify tasks',
         { operation },
         timer.toMetadata(),
-      );
+      ) as TaskOperationResponseV2;
       return this.formatForCLI(error, operation, 'error');
     }
 
@@ -1000,7 +1001,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             'Check the search criteria and ensure OmniFocus is running',
             result.details,
             timer.toMetadata(),
-          );
+          ) as TaskOperationResponseV2;
           return this.formatForCLI(error, operation, 'error');
         }
 
@@ -1016,7 +1017,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
             'Try adjusting the search criteria',
             { criteria: bulkCriteria },
             timer.toMetadata(),
-          );
+          ) as TaskOperationResponseV2;
           return this.formatForCLI(error, operation, 'error');
         }
       } catch (searchError) {
@@ -1027,7 +1028,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
           'Check the search criteria and ensure OmniFocus is running',
           searchError,
           timer.toMetadata(),
-        );
+        ) as TaskOperationResponseV2;
         return this.formatForCLI(error, operation, 'error');
       }
     }
@@ -1040,7 +1041,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema> {
         'Provide task IDs or search criteria',
         { operation },
         timer.toMetadata(),
-      );
+      ) as TaskOperationResponseV2;
       return this.formatForCLI(error, operation, 'error');
     }
 

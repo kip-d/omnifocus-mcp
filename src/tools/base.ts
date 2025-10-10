@@ -6,7 +6,7 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
-import { createErrorResponseV2, OperationTimerV2 } from '../utils/response-format-v2.js';
+import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../utils/response-format-v2.js';
 import {
   ScriptErrorType,
   CategorizedScriptError,
@@ -733,8 +733,7 @@ export abstract class BaseTool<
   /**
    * V2 error handler: enhanced categorization with V2 response format
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected handleErrorV2(error: unknown): any {
+  protected handleErrorV2<T = unknown>(error: unknown): StandardResponseV2<T> {
     this.logger.error(`Error in ${this.name}:`, error);
     const timer = new OperationTimerV2();
 
@@ -756,7 +755,7 @@ export abstract class BaseTool<
       categorizedError.originalError.details as Record<string, unknown> : {};
 
     // Return enhanced V2 error response with categorization
-    return createErrorResponseV2(
+    return createErrorResponseV2<T>(
       this.name,
       categorizedError.errorType,
       categorizedError.message,

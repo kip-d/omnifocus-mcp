@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { createAnalyticsResponseV2 } from '../../utils/response-format-v2.js';
 import { createLogger } from '../../utils/logger.js';
+import type { PatternAnalysisResponseV2, PatternAnalysisDataV2 } from '../response-types-v2.js';
 
 // Schema for pattern analysis request
 const PatternAnalysisSchema = z.object({
@@ -185,14 +186,14 @@ interface DormantProject {
   available_tasks?: number;
 }
 
-export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema> {
+export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema, PatternAnalysisResponseV2> {
   name = 'analyze_patterns';
   description = 'Analyze patterns across entire OmniFocus database for insights and improvements';
   schema = PatternAnalysisSchema;
 
   protected logger = createLogger('PatternAnalysisToolV2');
 
-  protected async executeValidated(params: PatternAnalysisParams): Promise<unknown> {
+  protected async executeValidated(params: PatternAnalysisParams): Promise<PatternAnalysisResponseV2> {
     const startTime = Date.now();
 
     try {
@@ -298,7 +299,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
 
     } catch (error) {
       this.logger.error('Analysis failed', { error });
-      throw error;
+      return this.handleErrorV2<PatternAnalysisDataV2>(error);
     }
   }
 

@@ -123,13 +123,15 @@ describe('PatternAnalysisToolV2', () => {
     expect(keys).toContain('deadline_health');
   });
 
-  it('throws on missing data from OmniAutomation (handled upstream by BaseTool)', async () => {
+  it('returns error response on missing data from OmniAutomation (handled upstream by BaseTool)', async () => {
     mockOmni.executeJson.mockResolvedValue(null);
 
-    await expect(tool.executeValidated({
+    const result = await tool.executeValidated({
       patterns: ['duplicates'],
       options: {},
-    } as any)).rejects.toBeTruthy();
+    } as any);
+
+    expect(result.success).toBe(false);
   });
 });
 

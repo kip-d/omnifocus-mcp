@@ -4,10 +4,58 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 ## 📚 CRITICAL: Read Architecture Documentation First!
 **Before making ANY changes, consult these essential documents:**
+- `/docs/PATTERNS.md` - **START HERE** - Quick symptom lookup and common solutions
 - `/docs/ARCHITECTURE.md` - Unified JavaScript execution patterns and decision tree
 - `/docs/LESSONS_LEARNED.md` - Hard-won insights that will save you from repeating costly mistakes
 
 **Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
+
+## 🔍 Quick Symptom → Documentation Index
+
+**Having an issue? Find the solution instantly:**
+
+| Symptom | Go To | Quick Fix |
+|---------|-------|-----------|
+| Tags not saving/empty | PATTERNS.md → "Tags Not Working" | Use `bridgeSetTags()` (line 120 below) |
+| Script timeout (25+ seconds) | PATTERNS.md → "Performance Issues" | Never use `.where()/.whose()` |
+| Dates wrong time | PATTERNS.md → "Date Handling" | Use `YYYY-MM-DD HH:mm` not ISO+Z |
+| MCP test hangs | PATTERNS.md → "MCP Testing" | Stdin close = correct behavior |
+| "Script too large" error | LESSONS_LEARNED.md → "Script Size" | Limits are 523KB - check syntax |
+| Function not found | Search `src/omnifocus/scripts/shared/` | Use existing helpers |
+| Integration test timeout | PATTERNS.md → "Integration Tests" | 60s requests, 90s tests |
+
+**Not listed? Search PATTERNS.md for keywords before debugging!**
+
+## 🚨 BEFORE DEBUGGING - MANDATORY CHECKLIST
+
+**When encountering ANY issue, complete these steps IN ORDER:**
+
+□ **Step 1: Search PATTERNS.md**
+  - Open `/docs/PATTERNS.md` and search for symptom keywords
+  - Example: "tags not working" → direct solution with code location
+
+□ **Step 2: Search existing documentation**
+  ```bash
+  grep -r "keyword" docs/  # Search all documentation
+  grep -r "function_name" src/omnifocus/scripts/shared/  # Find helpers
+  ```
+
+□ **Step 3: Check for existing helper functions**
+  - `src/omnifocus/scripts/shared/helpers.ts` - Core utilities
+  - `src/omnifocus/scripts/shared/bridge-helpers.ts` - Bridge operations
+  - `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Tag operations
+
+□ **Step 4: Verify current implementation**
+  - Read the existing code in the file you're modifying
+  - Check what helpers are already included (e.g., `getMinimalTagBridge()`)
+  - Don't reinvent - use what's already there!
+
+□ **Step 5: ONLY THEN - Begin implementation**
+  - Follow the patterns found in documentation
+  - Use existing helper functions
+  - Test with the documented approach
+
+**This checklist saves 30+ minutes per issue by avoiding rediscovery of documented solutions.**
 
 ## 🚨 MANDATORY: Pre-Implementation Checklist
 
@@ -84,6 +132,46 @@ Operation type?
 - ✅ Perspective queries
 - ✅ Complex data transformations
 - ✅ Multiple property access per item (flattenedTasks iteration)
+
+### 🏷️ Tag Operations - COMPLETE EXAMPLE
+
+**CRITICAL: Tag assignment in OmniFocus 4.x ONLY works via bridge.**
+
+❌ **DON'T: Use JXA methods (fail silently)**
+```javascript
+// These methods DO NOT WORK in OmniFocus 4.x
+task.addTags(tags);           // Fails silently
+task.tags = tags;             // Fails silently
+task.addTag(tag);            // Fails silently
+
+// JXA tag retrieval has timing issues
+const tags = task.tags();    // May return [] immediately after creation
+```
+
+✅ **DO: Use bridge for assignment AND retrieval**
+```javascript
+// Tag assignment - use bridgeSetTags()
+const bridgeResult = bridgeSetTags(app, taskId, tagNames);
+// Returns: {success: true, tags: ["tag1", "tag2"]}
+
+// Tag retrieval - use bridge for reliability
+const script = `(() => {
+  const t = Task.byIdentifier(${JSON.stringify(taskId)});
+  return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]";
+})()`;
+const tagNames = JSON.parse(app.evaluateJavascript(script));
+```
+
+**Location of helper function:**
+- Function: `bridgeSetTags(app, taskId, tagNames)`
+- File: `src/omnifocus/scripts/shared/minimal-tag-bridge.ts:41`
+- Already included in: `CREATE_TASK_SCRIPT` via `getMinimalTagBridge()`
+
+**Why bridge is required:**
+- JXA's `task.addTags()` doesn't persist to OmniFocus database
+- JXA's `task.tags()` has caching/timing issues
+- OmniJS bridge uses proper API that immediately persists
+- Tags appear in UI and queries immediately after bridge assignment
 
 ## 📚 Pattern Library - Where to Find Examples
 

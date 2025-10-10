@@ -12,7 +12,32 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  */
 export const LIST_TASKS_SCRIPT = `
   ${getUnifiedHelpers()}
-  
+
+  // Bridge-aware tag getter for reliable tag retrieval
+  function safeGetTagsWithBridge(task, app) {
+    try {
+      // Try bridge first for better reliability
+      if (app && app.evaluateJavascript) {
+        const taskId = task.id();
+        const script = \`(() => { const t = Task.byIdentifier(\${JSON.stringify(taskId)}); return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]"; })()\`;
+        const result = app.evaluateJavascript(script);
+        return JSON.parse(result);
+      }
+
+      // Fallback to JXA
+      const tags = task.tags();
+      if (!tags) return [];
+      const tagNames = [];
+      for (let i = 0; i < tags.length; i++) {
+        const tagName = safeGet(() => tags[i].name());
+        if (tagName) tagNames.push(tagName);
+      }
+      return tagNames;
+    } catch (e) {
+      return [];
+    }
+  }
+
   // Minimal repeat rule extractor (to avoid massive 321-line REPEAT_HELPERS)
   function extractRepeatRuleInfo(repetitionRule) {
     if (!repetitionRule) return null;
@@ -26,8 +51,9 @@ export const LIST_TASKS_SCRIPT = `
       return { _source: 'error', _error: e.toString() };
     }
   }
-  
+
   (() => {
+    const app = Application('OmniFocus');
     const filter = {{filter}};
     const fields = {{fields}};
     const tasks = [];
@@ -518,7 +544,7 @@ export const LIST_TASKS_SCRIPT = `
       if (cachedTags) {
         taskObj.tags = cachedTags;
       } else {
-        const tags = safeGetTags(task);
+        const tags = safeGetTagsWithBridge(task, app);
         taskObj.tags = tags;
         if (taskId && !(taskId in tagBridgeCache)) {
           tagBridgeCache[taskId] = tags;

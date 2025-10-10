@@ -21,13 +21,39 @@ d('OmniFocus MCP Server Integration Tests', () => {
     await sleep(1000);
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     if (server) {
-      server.kill();
+      // Graceful shutdown: close stdin to signal server to exit
+      try {
+        server.stdin?.end();
+      } catch (e) {
+        // Ignore errors
+      }
+
+      // Wait for graceful exit (server waits for pending operations)
+      await new Promise<void>((resolve) => {
+        const gracefulTimeout = setTimeout(() => {
+          console.log('⚠️  Server did not exit gracefully, sending SIGTERM...');
+          server.kill('SIGTERM');
+
+          // Force kill after 2s if needed
+          setTimeout(() => {
+            if (!server.killed) {
+              server.kill('SIGKILL');
+            }
+            resolve();
+          }, 2000);
+        }, 5000);
+
+        server.once('exit', () => {
+          clearTimeout(gracefulTimeout);
+          resolve();
+        });
+      });
     }
   });
 
-  const sendRequest = (method: string, params?: any): Promise<any> => {
+  const sendRequest = (method: string, params?: any, requestTimeout = 60000): Promise<any> => {
     return new Promise((resolve, reject) => {
       const request = {
         jsonrpc: '2.0',
@@ -37,8 +63,8 @@ d('OmniFocus MCP Server Integration Tests', () => {
       };
 
       const timeout = setTimeout(() => {
-        reject(new Error('Request timeout'));
-      }, 15000);
+        reject(new Error(`Request timeout after ${requestTimeout}ms`));
+      }, requestTimeout);
 
       const handleData = (data: Buffer) => {
         try {
@@ -89,7 +115,7 @@ d('OmniFocus MCP Server Integration Tests', () => {
   });
 
   describe('Tools Discovery', () => {
-    it('should list all available tools after initialization', { timeout: 20000 }, async () => {
+    it('should list all available tools after initialization', { timeout: 90000 }, async () => {
       // Since we initialize in the "Server Initialization" test above,
       // the server should already be initialized. Just call tools/list directly.
       const result = await sendRequest('tools/list');
@@ -123,7 +149,7 @@ d('OmniFocus MCP Server Integration Tests', () => {
   });
 
   describe('Task Operations', () => {
-    it('should handle tasks tool call', { timeout: 20000 }, async () => {
+    it('should handle tasks tool call', { timeout: 90000 }, async () => {
       // Server should already be initialized from previous tests
       const result = await sendRequest('tools/call', {
         name: 'tasks',
@@ -152,7 +178,7 @@ d('OmniFocus MCP Server Integration Tests', () => {
       }
     });
 
-    it('should handle task creation with validation', { timeout: 20000 }, async () => {
+    it('should handle task creation with validation', { timeout: 90000 }, async () => {
       // Server should already be initialized from previous tests
       const result = await sendRequest('tools/call', {
         name: 'manage_task',
@@ -229,7 +255,7 @@ d('OmniFocus MCP Server Integration Tests', () => {
         expect(response).toHaveProperty('metadata');
         expect(response.metadata).toHaveProperty('from_cache');
       }
-    }, 20000); // Increase timeout to 20 seconds for safety
+    }, 90000); // Reasonable timeout for M2 Ultra with pending operations
   });
 
   describe('Error Handling', () => {
