@@ -16,6 +16,7 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 | Symptom | Go To | Quick Fix |
 |---------|-------|-----------|
+| Tool returns 0s/empty but has data | PATTERNS.md → "Tool Returns Empty/Zero Values" | Test MCP integration first! Compare script vs tool output |
 | Tags not saving/empty | PATTERNS.md → "Tags Not Working" | Use `bridgeSetTags()` (line 120 below) |
 | Script timeout (25+ seconds) | PATTERNS.md → "Performance Issues" | Never use `.where()/.whose()` |
 | Dates wrong time | PATTERNS.md → "Date Handling" | Use `YYYY-MM-DD HH:mm` not ISO+Z |
@@ -228,12 +229,41 @@ If you see these in your plan, STOP and search for patterns:
 This document prevents the Fix → Lint → Build error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per fix and creates better code.
 
 ### 🚨 CRITICAL DEBUGGING RULE: Test MCP Integration First
-**ALWAYS test the actual MCP tool BEFORE debugging internals:**
+
+**⚠️ STOP! Before opening ANY script file to debug, follow this order:**
+
+1. ✅ **Test the full MCP tool call** with actual parameters
+2. ✅ **Check logs** for what the SCRIPT returns (`stdout data received`)
+3. ✅ **Compare** SCRIPT output to TOOL output in response
+4. ✅ **Identify which layer is wrong** (script vs tool wrapper)
+5. ❌ **Do NOT open script files** until you confirm the problem is in the script
+
+**Testing command:**
 ```bash
 npm run build
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{...}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{...}}}' | node dist/index.js 2>&1 | tee debug.log
+
+# Check what script returns
+grep "stdout data received" debug.log
+
+# Check what tool returns
+grep -A 20 '"result":' debug.log
 ```
-**Why:** Tests actual integration, fresh process picks up new code, matches production behavior, reveals real vs. imagined problems. Do NOT debug isolated scripts/components until MCP integration test fails.
+
+**Why this order saves hours:**
+- Scripts might be working perfectly (productivity_stats was!)
+- Tool wrappers might process data wrong (double-unwrapping issue)
+- Debugging the wrong layer wastes time
+- **Real example:** productivity_stats took 7 cycles debugging script when wrapper was the issue
+
+**Cost of not following this rule:**
+- Example: 2 hours wasted fixing script bugs that weren't the problem
+- Added debug logging that broke the script (console.error in JXA)
+- Fixed date logic that was already correct
+- Finally tested MCP integration → found wrapper issue in 5 minutes
+
+**Do NOT debug isolated scripts/components until MCP integration test shows script output is wrong.**
 
 ## 🚨 CRITICAL LESSON: MCP stdin Handling
 
@@ -625,6 +655,40 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 **Missing step:** Profile to identify actual bottleneck
 **How to avoid:** Always test/profile BEFORE and AFTER optimization
 **Tools:** `time node script.js`, add timing instrumentation, check logs
+
+### Mistake 6: "Tool returns wrong data, must be the script"
+**Wrong assumption:** The script logic is broken
+**Missing step:** Test MCP integration to see what script actually returns
+**Reality:** Script might be working perfectly, tool wrapper processes it wrong
+**How to avoid:** ALWAYS run MCP integration test before opening script files
+
+**Real example: productivity_stats bug hunt**
+- User reported: Tool returns all 0s (totalTasks: 0, completedTasks: 0)
+- I debugged: Opened productivity-stats.ts script file immediately
+- Found bugs: Missing date upper bound, period not normalized to midnight
+- Fixed bugs: Commit e88c50e - script logic improved
+- Still broken: User still sees 0s
+- Added logging: console.error() debug statements → broke the script!
+- User suggested: "Run the test yourself"
+- **Finally tested MCP integration:** Script returns completedInPeriod: 95 ✓, tool returns 0 ✗
+- **Root cause found:** Tool wrapper double-unwrapping issue in ProductivityStatsToolV2.ts
+- **Fix applied:** Commit 84c01cc - unwrap both layers, works perfectly
+
+**Cost of not following the rule:**
+- 7 debugging cycles instead of 1
+- 2 hours wasted debugging the wrong layer
+- Fixed 2 real bugs that weren't causing the issue
+- Broke the script with console.error() (doesn't exist in JXA)
+- Required user to suggest testing myself
+
+**What I should have done:**
+1. Run MCP integration test FIRST (5 minutes)
+2. Compare script output (95) vs tool output (0)
+3. Identify: Wrapper issue, not script issue
+4. Fix: ProductivityStatsToolV2.ts unwrapping logic
+5. Total time: 10 minutes vs 2 hours
+
+**Lesson:** See PATTERNS.md → "Tool Returns Empty/Zero Values" for diagnostic commands
 
 ## Known Limitations & Workarounds
 

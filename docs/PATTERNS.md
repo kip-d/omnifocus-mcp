@@ -188,6 +188,88 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ---
 
+## 📊 Tool Returns Empty/Zero Values But Logs Show Data?
+
+**Symptoms:**
+- Tool returns `totalTasks: 0, completedTasks: 0` but user has data
+- Logs show `stdout data received: {"completedInPeriod":95}` but tool returns 0
+- Script output looks correct but tool response is empty/zeros
+- User reports "no data" but database has records
+
+**Critical Rule: TEST MCP INTEGRATION FIRST!**
+
+**Diagnostic Command:**
+```bash
+# Run full MCP test and compare script output vs tool response
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{}}}' | node dist/index.js 2>&1 | tee debug.log
+
+# Check what script returns
+grep "stdout data received" debug.log
+
+# Check what tool returns
+grep -A 20 '"result":' debug.log
+```
+
+**Solution:**
+
+If script returns correct data but tool returns zeros → **Response wrapping issue**
+
+**Common Causes:**
+
+1. **Double-wrapping**:
+   - Script returns: `{ok: true, data: {summary: {completedTasks: 95}}}`
+   - execJson wraps: `{success: true, data: {ok: true, data: {summary: {completedTasks: 95}}}}`
+   - Tool only unwraps once: Looks for `summary` at wrong level
+   - Result: Falls back to empty data
+
+2. **Under-unwrapping**:
+   - Tool checks `if ('summary' in result)` at wrong nesting level
+   - Script structure changed but tool unwrapping didn't update
+
+3. **Error detection failure**:
+   - `isScriptError()` doesn't catch wrapped errors
+   - Tool thinks it succeeded but falls back to default empty values
+
+**Fix Pattern:**
+```typescript
+// Unwrap ALL layers to reach actual data
+let actualData: unknown;
+
+// First unwrap: execJson wrapper {success: true, data: ...}
+if (result && typeof result === 'object' && 'data' in result) {
+  actualData = (result as {data: unknown}).data;
+}
+
+// Second unwrap: script wrapper {ok: true, v: "1", data: ...}
+if (actualData && typeof actualData === 'object' && 'ok' in actualData && 'data' in actualData) {
+  actualData = (actualData as {ok: boolean, data: unknown}).data;  // NOW you have real data!
+}
+
+// NOW check for expected fields
+if (actualData && typeof actualData === 'object' && 'summary' in actualData) {
+  // Use the data
+}
+```
+
+**Real Example:**
+- File: `src/tools/analytics/ProductivityStatsToolV2.ts:87-105`
+- Commit: `84c01cc`
+- Issue: productivity_stats returned all 0s despite 95 completed tasks
+- Root cause: Script returned correct data, tool only unwrapped one layer
+- Cost: 7 debugging cycles debugging script before testing MCP integration
+- Lesson: **ALWAYS test MCP integration BEFORE opening script files**
+
+**Prevention:**
+1. Run MCP integration test FIRST (not last!)
+2. Check logs: Compare script output to tool response
+3. If script output is correct → problem is in tool wrapper
+4. If script output is wrong → problem is in script logic
+5. **Don't debug scripts until you confirm script output is wrong**
+
+---
+
 ## 🎯 General Debugging Workflow
 
 **BEFORE starting any debugging:**
