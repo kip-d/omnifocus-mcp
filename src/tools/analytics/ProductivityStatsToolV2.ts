@@ -85,17 +85,20 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       }
 
       // Handle the script result - it returns {ok: true, data: {summary, projectStats, tagStats, insights}}
+      // But execJson wraps it again as {success: true, data: {ok: true, data: {...}}}
       let actualData: unknown;
+
       if (result && typeof result === 'object' && result !== null) {
-        if ('ok' in result && 'data' in result) {
-          // Script success format: {ok: true, data: {...}}
-          actualData = (result as {ok: boolean, data: unknown}).data;
-        } else if ('data' in result) {
-          // Standard wrapper: {data: {...}}
+        // First unwrap: execJson wrapper {success: true, data: ...}
+        if ('data' in result) {
           actualData = (result as {data: unknown}).data;
         } else {
-          // Direct data
           actualData = result;
+        }
+
+        // Second unwrap: script wrapper {ok: true, v: "1", data: ...}
+        if (actualData && typeof actualData === 'object' && actualData !== null && 'ok' in actualData && 'data' in actualData) {
+          actualData = (actualData as {ok: boolean, data: unknown}).data;
         }
       } else {
         actualData = result;
