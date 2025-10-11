@@ -7,6 +7,7 @@ import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import * as path from 'path';
 import { CacheManager } from '../../cache/CacheManager.js';
+import { ExportResponseV2, ExportDataV2 } from '../response-types-v2.js';
 
 // Consolidated export schema
 const ExportSchema = z.object({
@@ -63,7 +64,7 @@ type ExportInput = z.infer<typeof ExportSchema>;
  * Consolidated tool for all export operations
  * Combines task export, project export, and bulk export into a single tool
  */
-export class ExportTool extends BaseTool<typeof ExportSchema> {
+export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> {
   name = 'export';
   description = 'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
   schema = ExportSchema;
@@ -72,7 +73,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
     super(cache);
   }
 
-  async executeValidated(args: ExportInput): Promise<unknown> {
+  async executeValidated(args: ExportInput): Promise<ExportResponseV2> {
     const timer = new OperationTimerV2();
     const { type, format = 'json', ...params } = args;
 
@@ -124,7 +125,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<ExportDataV2>(error);
     }
   }
 
@@ -133,7 +134,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
     format: string;
     filter: Record<string, unknown>;
     fields?: string[];
-  }, timer: OperationTimerV2): Promise<unknown> {
+  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
     const { format = 'json', filter = {}, fields } = args;
 
     try {
@@ -161,7 +162,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           );
         }
         const result = sr.data as { format: string; data: unknown; count: number };
-        return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+        return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'tasks' as const, data: result.data as string | object, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
       }
 
       const result = raw as {
@@ -182,9 +183,9 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         );
       }
 
-      return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+      return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'tasks' as const, data: result.data as string | object, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<ExportDataV2>(error);
     }
   }
 
@@ -192,7 +193,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
   private async handleProjectExport(args: {
     format: string;
     includeStats: boolean;
-  }, timer: OperationTimerV2): Promise<unknown> {
+  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
     const { format = 'json', includeStats = false } = args;
 
     try {
@@ -219,9 +220,9 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         );
       }
 
-      return createSuccessResponseV2('export', { format: result.format, data: result.data, count: result.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+      return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'projects' as const, data: result.data as string | object, count: result.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<ExportDataV2>(error);
     }
   }
 
@@ -231,7 +232,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
     format: string;
     includeCompleted: boolean;
     includeProjectStats: boolean;
-  }, timer: OperationTimerV2): Promise<unknown> {
+  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
     const { outputDirectory, format = 'json', includeCompleted = true, includeProjectStats = true } = args;
 
     try {
@@ -354,7 +355,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
         totalExported += tagCount;
       }
 
-      return createSuccessResponseV2('export', { exports, summary: { totalExported, export_date: new Date().toISOString() } }, undefined, { ...timer.toMetadata(), operation: 'all' });
+      return createSuccessResponseV2('export', { format: format as 'json' | 'csv' | 'markdown', exportType: 'bulk' as const, data: exports, count: totalExported, exports, summary: { totalExported, export_date: new Date().toISOString() } }, undefined, { ...timer.toMetadata(), operation: 'all' });
     } catch (error) {
       // Provide specific recovery information for file system errors
       if (error instanceof Error) {
@@ -410,7 +411,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema> {
           );
         }
       }
-      return this.handleError(error);
+      return this.handleErrorV2<ExportDataV2>(error);
     }
   }
 }

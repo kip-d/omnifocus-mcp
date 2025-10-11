@@ -8,13 +8,14 @@ import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, O
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';
+import { ReviewsResponseV2, ReviewsDataV2 } from '../response-types-v2.js';
 
-export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
+export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, ReviewsResponseV2> {
   name = 'manage_reviews';
   description = 'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
   schema = ManageReviewsSchema;
 
-  async executeValidated(args: ManageReviewsInput): Promise<StandardResponseV2<unknown>> {
+  async executeValidated(args: ManageReviewsInput): Promise<ReviewsResponseV2> {
     const timer = new OperationTimerV2();
 
     try {
@@ -23,16 +24,16 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
 
       switch (normalizedArgs.operation) {
         case 'list_for_review':
-          return this.listForReview(normalizedArgs, timer);
+          return this.listForReview(normalizedArgs, timer) as Promise<ReviewsResponseV2>;
 
         case 'mark_reviewed':
-          return this.markReviewed(normalizedArgs, timer);
+          return this.markReviewed(normalizedArgs, timer) as Promise<ReviewsResponseV2>;
 
         case 'set_schedule':
-          return this.setSchedule(normalizedArgs, timer);
+          return this.setSchedule(normalizedArgs, timer) as Promise<ReviewsResponseV2>;
 
         case 'clear_schedule':
-          return this.clearSchedule(normalizedArgs, timer);
+          return this.clearSchedule(normalizedArgs, timer) as Promise<ReviewsResponseV2>;
 
         default:
           // TypeScript should prevent this, but just in case
@@ -46,7 +47,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema> {
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<ReviewsDataV2>(error);
     }
   }
 

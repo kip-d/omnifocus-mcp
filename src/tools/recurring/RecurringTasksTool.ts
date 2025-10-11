@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { ANALYZE_RECURRING_TASKS_SCRIPT, GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
+import { RecurringTasksResponseV2, RecurringTasksDataV2, RecurringTaskV2 } from '../response-types-v2.js';
 
 // Consolidated recurring tasks schema
 const RecurringTasksSchema = z.object({
@@ -39,7 +40,7 @@ type RecurringTasksInput = z.infer<typeof RecurringTasksSchema>;
  * Consolidated tool for recurring task analysis
  * Combines detailed analysis and pattern recognition into a single tool
  */
-export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
+export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, RecurringTasksResponseV2> {
   name = 'recurring_tasks';
   description = 'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
   schema = RecurringTasksSchema;
@@ -48,7 +49,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
     super(cache);
   }
 
-  async executeValidated(args: RecurringTasksInput): Promise<StandardResponseV2<unknown>> {
+  async executeValidated(args: RecurringTasksInput): Promise<RecurringTasksResponseV2> {
     const timer = new OperationTimerV2();
     const { operation, ...params } = args;
 
@@ -68,7 +69,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
           const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
           if (cachedAnalysis) {
-            return cachedAnalysis as StandardResponseV2<unknown>;
+            return cachedAnalysis as RecurringTasksResponseV2;
           }
 
           // Execute analysis script
@@ -97,8 +98,8 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const analyzeResponse = createSuccessResponseV2(
             'recurring_tasks',
             {
-              tasks: analyzeResult.tasks,
-              summary: analyzeResult.summary,
+              recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
+              summary: analyzeResult.summary as { totalRecurring: number; byFrequency?: Record<string, number> },
             },
             undefined,
             {
@@ -127,7 +128,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
           const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
           if (cachedPatterns) {
-            return cachedPatterns as StandardResponseV2<unknown>;
+            return cachedPatterns as RecurringTasksResponseV2;
           }
 
           // Execute pattern analysis script
@@ -184,8 +185,12 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           const patternsResponse = createSuccessResponseV2(
             'recurring_tasks',
             {
-              totalRecurring: patternsResult.totalRecurring,
-              patterns: patternsResult.patterns || [],
+              recurringTasks: [] as RecurringTaskV2[],
+              summary: {
+                totalRecurring: patternsResult.totalRecurring,
+                byFrequency: {} as Record<string, number>,
+              },
+              patterns: {} as Record<string, RecurringTaskV2[]>,
               byProject: patternsResult.byProject || [],
               mostCommon: patternsResult.mostCommon,
               insights,
@@ -216,7 +221,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema> {
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<RecurringTasksDataV2>(error);
     }
   }
 }
