@@ -18,3 +18,4 @@ coverage-summary.txt
 # Archive directory for old files
 archive/
 .archive/
+.aider*
