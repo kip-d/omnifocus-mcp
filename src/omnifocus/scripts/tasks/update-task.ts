@@ -1,4 +1,5 @@
 import { getUnifiedHelpers } from '../shared/helpers.js';
+import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 
 /**
  * Script to update an existing task in OmniFocus
@@ -8,6 +9,7 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  */
 export const UPDATE_TASK_SCRIPT = `
   ${getUnifiedHelpers()}
+  ${getMinimalTagBridge()}
   
   // Minimal bridge helper for task movement
   function __formatBridgeScript(template, params) {
@@ -336,82 +338,22 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     
-    // Update tags with error handling
+    // Update tags using OmniJS bridge for reliability (required for OmniFocus 4.x)
+    let tagUpdateResult = null;
     if (updates.tags !== undefined) {
       try {
-        // Get current tags
-        const currentTags = task.tags();
-        
-        // Remove all existing tags
-        if (currentTags && currentTags.length > 0) {
-          task.removeTags(currentTags);
-        }
-        
-        // Add new tags
-        if (updates.tags && updates.tags.length > 0) {
-          const existingTags = doc.flattenedTags();
-          const tagsToAdd = [];
-          
-          for (const tagName of updates.tags) {
-            if (typeof tagName !== 'string' || tagName.trim() === '') {
-              // Skip invalid tag name
-              continue;
-            }
-            
-            let found = false;
-            for (let i = 0; i < existingTags.length; i++) {
-              if (existingTags[i].name() === tagName) {
-                tagsToAdd.push(existingTags[i]);
-                found = true;
-                break;
-              }
-            }
-            
-            if (!found) {
-              try {
-                // Create new tag using make
-                const newTag = app.make({
-                  new: 'tag',
-                  withProperties: { name: tagName },
-                  at: doc.tags
-                });
-                tagsToAdd.push(newTag);
-              } catch (makeError) {
-                // If make fails, try alternate syntax
-                try {
-                  const newTag = app.Tag({name: tagName});
-                  doc.tags.push(newTag);
-                  tagsToAdd.push(newTag);
-                } catch (tagError) {
-                  // Skip tag creation error - tag won't be added
-                }
-              }
-            }
-          }
-          
-          if (tagsToAdd.length > 0) {
-            // Try using addTags with array instead of individual calls
-            try {
-              task.addTags(tagsToAdd);
-            } catch (addTagsError) {
-              // If addTags fails, try setting tags property directly
-              try {
-                task.tags = tagsToAdd;
-              } catch (setTagsError) {
-                // Last resort: try individual calls
-                for (const tag of tagsToAdd) {
-                  try {
-                    task.addTag(tag);
-                  } catch (e) {
-                    // Skip individual tag errors
-                  }
-                }
-              }
-            }
-          }
+        // Use bridge for tag assignment (JXA methods don't work reliably)
+        const bridgeResult = bridgeSetTags(app, taskId, updates.tags);
+
+        if (!bridgeResult || !bridgeResult.success) {
+          console.log('Warning: Failed to update tags:', bridgeResult ? bridgeResult.error : 'unknown error');
+          // Continue without failing the entire update
+        } else {
+          console.log('Successfully updated ' + (bridgeResult.tags ? bridgeResult.tags.length : 0) + ' tags via bridge');
+          tagUpdateResult = bridgeResult; // Store for response
         }
       } catch (tagError) {
-        // Skip tag update errors
+        console.log('Warning: Error updating tags:', tagError.message);
         // Don't fail the entire update for tag errors
       }
     }
@@ -454,18 +396,13 @@ export const UPDATE_TASK_SCRIPT = `
     if (updates.clearRepeatRule) response.changes.repeatRule = null;
     if (updates.repeatRule !== undefined) response.changes.repeatRule = updates.repeatRule;
     if (updates.tags !== undefined) {
-      response.changes.tags = updates.tags;
-      // Verify if tags were actually applied
-      const actualTagsAfter = safeGetTags(task);
-      const requestedTags = updates.tags || [];
-      
-      // Check if all requested tags were applied
-      const missingTags = requestedTags.filter(tag => !actualTagsAfter.includes(tag));
-      
-      if (missingTags.length > 0) {
-        // Tags were requested but not all were applied
-        response.warning = "Some or all tags could not be applied. OmniFocus JXA has limitations with tag assignment. Missing tags: " + missingTags.join(", ");
-        response.actualTags = actualTagsAfter;
+      // Use bridge result for accurate tag reporting
+      if (tagUpdateResult && tagUpdateResult.success) {
+        response.changes.tags = tagUpdateResult.tags || [];
+        // Tags successfully applied via bridge
+      } else {
+        response.changes.tags = updates.tags;
+        response.warning = "Tags update was requested but may not have been applied successfully";
       }
     }
     if (updates.projectId !== undefined) {
@@ -495,7 +432,8 @@ export const UPDATE_TASK_SCRIPT = `
 export function createUpdateTaskScript(taskId: string, updates: any): string {
   return `
   ${getUnifiedHelpers()}
-  
+  ${getMinimalTagBridge()}
+
   // Minimal bridge helper for task movement
   function __formatBridgeScript(template, params) {
     let script = template;
@@ -677,17 +615,17 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
         }
       }
       
-      // Tag updates (simplified using bridge helpers)
+      // Tag updates (using bridge for reliability - required for OmniFocus 4.x)
       if (updates.tags !== undefined && Array.isArray(updates.tags)) {
         try {
-          const tagResult = updateTaskTags(task, updates.tags);
-          if (tagResult.success) {
-            changes.push("Tags updated");
+          const bridgeResult = bridgeSetTags(app, taskId, updates.tags);
+          if (bridgeResult && bridgeResult.success) {
+            changes.push("Tags updated: " + bridgeResult.tags.join(", "));
           } else {
-            changes.push("Warning: " + tagResult.message);
+            changes.push("Warning: Failed to update tags via bridge");
           }
         } catch (tagError) {
-          changes.push("Warning: Tag update failed");
+          changes.push("Warning: Tag update failed - " + tagError.message);
         }
       }
       
