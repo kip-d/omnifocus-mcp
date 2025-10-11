@@ -9,6 +9,7 @@ import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, Stand
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
+import { FoldersDataV2 } from '../response-types-v2.js';
 
 // Consolidated folders schema
 const FoldersSchema = z.object({
@@ -312,7 +313,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           this.cache.invalidate('folders');
 
           const createdFolder = createResult.data as { id?: string; [key: string]: unknown };
-          return createSuccessResponseV2('folders', { folder: createdFolder }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: createdFolder?.id });
+          return createSuccessResponseV2('folders', { folder: { ...createdFolder, operation: 'create' } }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: createdFolder?.id });
         }
 
         case 'update': {
@@ -527,7 +528,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           );
       }
     } catch (error) {
-      return this.handleError(error);
+      return this.handleErrorV2<FoldersDataV2>(error);
     }
   }
 
