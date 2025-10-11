@@ -40,15 +40,19 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
           break;
         case 'week':
           periodStart.setDate(now.getDate() - 7);
+          periodStart.setHours(0, 0, 0, 0);
           break;
         case 'month':
           periodStart.setMonth(now.getMonth() - 1);
+          periodStart.setHours(0, 0, 0, 0);
           break;
         case 'quarter':
           periodStart.setMonth(now.getMonth() - 3);
+          periodStart.setHours(0, 0, 0, 0);
           break;
         case 'year':
           periodStart.setFullYear(now.getFullYear() - 1);
+          periodStart.setHours(0, 0, 0, 0);
           break;
       }
       
@@ -169,7 +173,8 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
                 const completionDate = task.completionDate;
                 if (completionDate) {
                   const completionTime = completionDate.getTime();
-                  if (completionTime >= periodStartTime) {
+                  // Count tasks completed within the period (>= start AND <= now)
+                  if (completionTime >= periodStartTime && completionTime <= nowTime) {
                     completedInPeriod++;
                   }
                 }
@@ -218,7 +223,8 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
               const completionDateStr = safeGetDate(() => task.completionDate());
               if (completionDateStr) {
                 const completionDate = new Date(completionDateStr);
-                if (completionDate >= periodStart) {
+                // Count tasks completed within the period (>= start AND <= now)
+                if (completionDate >= periodStart && completionDate <= now) {
                   completedInPeriod++;
                 }
               }
