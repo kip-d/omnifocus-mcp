@@ -1,4 +1,4 @@
-import { getMinimalHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
+import { getUnifiedHelpers } from '../shared/helpers.js';
 
 /**
  * Script to export tasks from OmniFocus in various formats
@@ -13,8 +13,7 @@ import { getMinimalHelpers, getTaskStatusHelpers } from '../shared/helpers.js';
  * - Proper CSV escaping for complex data
  */
 export const EXPORT_TASKS_SCRIPT = `
-  ${getMinimalHelpers()}
-  ${getTaskStatusHelpers()}
+  ${getUnifiedHelpers()}
 
   (() => {
     const filter = {{filter}};

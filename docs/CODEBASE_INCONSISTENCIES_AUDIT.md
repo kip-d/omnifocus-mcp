@@ -134,22 +134,21 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
 - Most scripts use `getUnifiedHelpers()` ✓
 - Consistent across task, project, folder scripts ✓
 
-**⚠️ DEPRECATED USAGE:**
+**✅ FIXED (October 11, 2025 - Phase 3):**
 ```typescript
-// Still using deprecated helpers:
-src/omnifocus/scripts/export/export-projects.ts:  getMinimalHelpers()
-src/omnifocus/scripts/export/export-tasks.ts:     getMinimalHelpers()
+// Previously using deprecated helpers:
+src/omnifocus/scripts/export/export-projects.ts:  getMinimalHelpers()  // ✅ FIXED
+src/omnifocus/scripts/export/export-tasks.ts:     getMinimalHelpers()  // ✅ FIXED
+
+// Now using unified helpers:
+src/omnifocus/scripts/export/export-projects.ts:  getUnifiedHelpers()
+src/omnifocus/scripts/export/export-tasks.ts:     getUnifiedHelpers()
 ```
 
-### Impact
-- Minor - deprecated functions still work
-- Will need update before v2.3.0 (when they're removed)
-- Inconsistent with rest of codebase
-
-### Fix Required
-Replace `getMinimalHelpers()` with `getUnifiedHelpers()` in:
-1. `export-projects.ts`
-2. `export-tasks.ts`
+### Impact (RESOLVED)
+- ✅ No deprecated helper usage in export scripts
+- ✅ Consistent with documented best practices
+- ✅ All tests passing (713/713)
 
 ---
 
