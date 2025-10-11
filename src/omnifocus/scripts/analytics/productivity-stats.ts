@@ -151,6 +151,11 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         const periodStartTime = periodStart.getTime();
         const nowTime = now.getTime();
 
+        // DEBUG: Log period boundaries
+        console.error('[PRODUCTIVITY_STATS_DEBUG] Period:', options.period);
+        console.error('[PRODUCTIVITY_STATS_DEBUG] Period start:', new Date(periodStartTime).toISOString());
+        console.error('[PRODUCTIVITY_STATS_DEBUG] Period end (now):', new Date(nowTime).toISOString());
+
         const omniJsScript = \`
           (() => {
             const periodStartTime = \${periodStartTime};
@@ -160,6 +165,7 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
             let totalCompleted = 0;
             let totalAvailable = 0;
             let completedInPeriod = 0;
+            let sampleDates = [];
 
             flattenedTasks.forEach(task => {
               totalTasks++;
@@ -173,6 +179,16 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
                 const completionDate = task.completionDate;
                 if (completionDate) {
                   const completionTime = completionDate.getTime();
+
+                  // Collect first 5 sample dates for debugging
+                  if (sampleDates.length < 5) {
+                    sampleDates.push({
+                      time: completionTime,
+                      date: completionDate.toISOString ? completionDate.toISOString() : completionDate.toString(),
+                      inPeriod: (completionTime >= periodStartTime && completionTime <= nowTime)
+                    });
+                  }
+
                   // Count tasks completed within the period (>= start AND <= now)
                   if (completionTime >= periodStartTime && completionTime <= nowTime) {
                     completedInPeriod++;
@@ -194,7 +210,8 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
               totalTasks,
               totalCompleted,
               totalAvailable,
-              completedInPeriod
+              completedInPeriod,
+              sampleDates
             });
           })()
         \`;
@@ -202,14 +219,26 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
         const resultJson = app.evaluateJavascript(omniJsScript);
         const counts = JSON.parse(resultJson);
 
+        // DEBUG: Log what OmniJS bridge found
+        console.error('[PRODUCTIVITY_STATS_DEBUG] OmniJS Bridge Results:');
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Total tasks:', counts.totalTasks);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Total completed:', counts.totalCompleted);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Completed in period:', counts.completedInPeriod);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Sample dates:', JSON.stringify(counts.sampleDates, null, 2));
+
         totalTasks = counts.totalTasks;
         totalCompleted = counts.totalCompleted;
         totalAvailable = counts.totalAvailable;
         completedInPeriod = counts.completedInPeriod;
 
       } catch (bridgeError) {
+        // DEBUG: Log if bridge fails
+        console.error('[PRODUCTIVITY_STATS_DEBUG] OmniJS Bridge FAILED, using JXA fallback:', bridgeError);
         // Fall back to JXA if bridge fails
         const allTasks = doc.flattenedTasks();
+        const jxaSampleDates = [];
+
+        console.error('[PRODUCTIVITY_STATS_DEBUG] JXA Fallback - Total tasks to process:', allTasks.length);
 
         for (let i = 0; i < allTasks.length; i++) {
           const task = allTasks[i];
@@ -223,6 +252,21 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
               const completionDateStr = safeGetDate(() => task.completionDate());
               if (completionDateStr) {
                 const completionDate = new Date(completionDateStr);
+
+                // Collect first 5 sample dates for debugging
+                if (jxaSampleDates.length < 5) {
+                  jxaSampleDates.push({
+                    dateStr: completionDateStr,
+                    parsed: completionDate.toISOString(),
+                    time: completionDate.getTime(),
+                    periodStart: periodStart.getTime(),
+                    now: now.getTime(),
+                    checkStart: completionDate >= periodStart,
+                    checkEnd: completionDate <= now,
+                    inPeriod: (completionDate >= periodStart && completionDate <= now)
+                  });
+                }
+
                 // Count tasks completed within the period (>= start AND <= now)
                 if (completionDate >= periodStart && completionDate <= now) {
                   completedInPeriod++;
@@ -244,8 +288,15 @@ export const PRODUCTIVITY_STATS_SCRIPT = `
             continue;
           }
         }
+
+        // DEBUG: Log JXA fallback results
+        console.error('[PRODUCTIVITY_STATS_DEBUG] JXA Fallback Results:');
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Total tasks:', totalTasks);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Total completed:', totalCompleted);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Completed in period:', completedInPeriod);
+        console.error('[PRODUCTIVITY_STATS_DEBUG]   Sample dates:', JSON.stringify(jxaSampleDates, null, 2));
       }
-      
+
       // Calculate project-level statistics for project stats section
       let totalProjects = Object.keys(projectStats).length;
       let activeProjects = 0;
