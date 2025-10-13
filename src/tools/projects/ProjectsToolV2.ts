@@ -6,7 +6,7 @@ import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/comple
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
 import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
-import { isScriptSuccess, isScriptError, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -576,7 +576,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -633,7 +633,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -681,7 +681,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       },
     });
 
-    const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
