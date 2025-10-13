@@ -48,8 +48,13 @@ export class MCPTestClient {
       env: { ...process.env, NODE_ENV: 'test' }
     });
 
+    // Critical Issue #2: Defensive checks for stdio pipes
+    if (!this.server.stdout || !this.server.stdin) {
+      throw new Error('Server process does not have required stdio pipes');
+    }
+
     const rl = createInterface({
-      input: this.server.stdout!,
+      input: this.server.stdout,
       crlfDelay: Infinity
     });
 
@@ -57,8 +62,9 @@ export class MCPTestClient {
       try {
         const response: MCPResponse = JSON.parse(line);
         this.handleResponse(response);
-      } catch (e) {
-        // Ignore non-JSON output
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        // Ignore non-JSON output (logging lines, etc.)
       }
     });
 
@@ -84,7 +90,10 @@ export class MCPTestClient {
     }
 
     // Send initialized notification
-    this.server.stdin!.write(JSON.stringify({
+    if (!this.server.stdin) {
+      throw new Error('Server stdin not available for notifications');
+    }
+    this.server.stdin.write(JSON.stringify({
       jsonrpc: '2.0',
       method: 'notifications/initialized'
     }) + '\n');
@@ -94,17 +103,41 @@ export class MCPTestClient {
 
   async sendRequest(request: MCPRequest, timeout: number = 60000): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
-      const requestId = request.id!;
+      // Critical Issue #3: Request ID validation
+      if (request.id === undefined) {
+        reject(new Error('Request must have an id for sendRequest'));
+        return;
+      }
+      const requestId = request.id;
+
+      // Critical Issue #2: Defensive checks for stdio pipes
+      if (!this.server || !this.server.stdin) {
+        reject(new Error('Server or server stdin not available'));
+        return;
+      }
+
+      // Critical Issue #5: Store timeout handle for cleanup
+      const cleanup = () => {
+        this.pendingRequests.delete(requestId);
+      };
 
       this.pendingRequests.set(requestId, resolve);
-      this.server!.stdin!.write(JSON.stringify(request) + '\n');
+      this.server.stdin.write(JSON.stringify(request) + '\n');
 
-      setTimeout(() => {
+      const timeoutHandle = setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
+          cleanup();
           reject(new Error(`Request ${requestId} timed out after ${timeout}ms`));
         }
       }, timeout);
+
+      // Ensure timeout is cleared on success
+      const originalResolve = resolve;
+      this.pendingRequests.set(requestId, (response: MCPResponse) => {
+        clearTimeout(timeoutHandle);
+        cleanup();
+        originalResolve(response);
+      });
     });
   }
 
@@ -137,8 +170,13 @@ export class MCPTestClient {
 
     const response = await this.sendRequest(request);
 
+    // Critical Issue #4: Preserve error details in thrown errors
     if (response.error) {
-      throw new Error(`Tool error: ${response.error.message}`);
+      const error: any = new Error(`Tool error: ${response.error.message}`);
+      error.code = response.error.code;
+      error.data = response.error.data;
+      error.mcpError = response.error;
+      throw error;
     }
 
     // Support both 'text' and 'json' content types from MCP
@@ -148,7 +186,8 @@ export class MCPTestClient {
       if (first.type === 'json') return first.json;
       if (first.type === 'text') return JSON.parse(first.text);
       return response.result;
-    } catch (e) {
+    } catch (error: unknown) {
+      // Critical Issue #1: Proper error typing
       return response.result;
     }
   }
@@ -198,8 +237,10 @@ export class MCPTestClient {
       try {
         await this.callTool('manage_task', { operation: 'delete', taskId: taskId });
         this.cleanupMetrics.operations++;
-      } catch (e) {
-        console.log(`  ⚠️  Could not delete task ${taskId}: ${e}`);
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`  ⚠️  Could not delete task ${taskId}: ${message}`);
       }
     }
 
@@ -208,8 +249,10 @@ export class MCPTestClient {
       try {
         await this.callTool('projects', { operation: 'delete', projectId: projectId });
         this.cleanupMetrics.operations++;
-      } catch (e) {
-        console.log(`  ⚠️  Could not delete project ${projectId}: ${e}`);
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
       }
     }
 
@@ -234,8 +277,10 @@ export class MCPTestClient {
       try {
         await this.callTool('manage_task', { operation: 'delete', taskId: taskId });
         this.cleanupMetrics.operations++;
-      } catch (e) {
-        console.log(`  ⚠️  Could not delete task ${taskId}: ${e}`);
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`  ⚠️  Could not delete task ${taskId}: ${message}`);
       }
     }
 
@@ -244,8 +289,10 @@ export class MCPTestClient {
       try {
         await this.callTool('projects', { operation: 'delete', projectId: projectId });
         this.cleanupMetrics.operations++;
-      } catch (e) {
-        console.log(`  ⚠️  Could not delete project ${projectId}: ${e}`);
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
       }
     }
 
@@ -261,12 +308,16 @@ export class MCPTestClient {
         try {
           await this.callTool('manage_task', { operation: 'delete', taskId: task.id });
           this.cleanupMetrics.operations++;
-        } catch (e) {
-          console.log(`  ⚠️  Could not delete task ${task.id}: ${e}`);
+        } catch (error: unknown) {
+          // Critical Issue #1: Proper error typing
+          const message = error instanceof Error ? error.message : String(error);
+          console.log(`  ⚠️  Could not delete task ${task.id}: ${message}`);
         }
       }
-    } catch (e) {
-      console.log(`  ⚠️  Could not clean up tasks by tag: ${e}`);
+    } catch (error: unknown) {
+      // Critical Issue #1: Proper error typing
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`  ⚠️  Could not clean up tasks by tag: ${message}`);
     }
 
     // Clean up any remaining test projects by tag
@@ -281,13 +332,17 @@ export class MCPTestClient {
           try {
             await this.callTool('projects', { operation: 'delete', projectId: project.id });
             this.cleanupMetrics.operations++;
-          } catch (e) {
-            console.log(`  ⚠️  Could not delete project ${project.id}: ${e}`);
+          } catch (error: unknown) {
+            // Critical Issue #1: Proper error typing
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`  ⚠️  Could not delete project ${project.id}: ${message}`);
           }
         }
       }
-    } catch (e) {
-      console.log(`  ⚠️  Could not clean up projects by tag: ${e}`);
+    } catch (error: unknown) {
+      // Critical Issue #1: Proper error typing
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`  ⚠️  Could not clean up projects by tag: ${message}`);
     }
 
     // Reset tracking arrays
@@ -303,27 +358,37 @@ export class MCPTestClient {
     if (this.server && !this.server.killed) {
       try {
         this.server.stdin?.end();
-      } catch (e) {
-        // Ignore errors
+      } catch (error: unknown) {
+        // Critical Issue #1: Proper error typing
+        // Ignore errors during stdin close
       }
 
       await new Promise<void>((resolve) => {
         const gracefulTimeout = setTimeout(() => {
           console.log('⚠️  Server did not exit gracefully, sending SIGTERM...');
-          this.server!.kill('SIGTERM');
+          if (this.server && !this.server.killed) {
+            this.server.kill('SIGTERM');
 
-          setTimeout(() => {
-            if (!this.server!.killed) {
-              this.server!.kill('SIGKILL');
-            }
+            setTimeout(() => {
+              if (this.server && !this.server.killed) {
+                this.server.kill('SIGKILL');
+              }
+              resolve();
+            }, 2000);
+          } else {
             resolve();
-          }, 2000);
+          }
         }, 5000);
 
-        this.server!.once('exit', () => {
+        if (this.server) {
+          this.server.once('exit', () => {
+            clearTimeout(gracefulTimeout);
+            resolve();
+          });
+        } else {
           clearTimeout(gracefulTimeout);
           resolve();
-        });
+        }
       });
     }
   }
