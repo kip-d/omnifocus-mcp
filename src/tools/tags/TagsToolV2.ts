@@ -6,7 +6,7 @@ import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js'
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
-import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import type { TagsResponseV2, TagOperationResponseV2, TagsDataV2, TagOperationDataV2 } from '../response-types-v2.js';
 
 // Consolidated schema for all tag operations
@@ -134,7 +134,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
       });
 
       this.logger.debug('Executing consolidated list tags script');
-      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+      const result = await this.execJson(script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -181,7 +181,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
       // Execute script
       const script = this.omniAutomation.buildScript(GET_ACTIVE_TAGS_SCRIPT, {});
       this.logger.debug('Executing get active tags script');
-      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+      const result = await this.execJson(script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -274,7 +274,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         parentTagName,
         parentTagId,
       });
-      const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
+      const result = await this.execJson(script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -288,7 +288,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
       }
 
       // Parse result
-      const parsedResult = result.data;
+      const parsedResult = result.data as { success: boolean; message?: string; data?: unknown };
 
       // Smart cache invalidation for tag changes
       this.cache.invalidateTag(tagName);
