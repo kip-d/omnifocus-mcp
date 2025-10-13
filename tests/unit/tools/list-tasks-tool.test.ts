@@ -167,7 +167,7 @@ describe('QueryTasksToolV2', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('EXECUTION_ERROR');
+      expect(result.error.code).toBe('MISSING_PARAMETER');
       expect(result.error.message).toContain('Search mode requires a search term');
     });
   });

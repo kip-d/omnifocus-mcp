@@ -161,6 +161,18 @@ CONVERSION PATTERN: When user asks in natural language, identify:
     const timer = new OperationTimerV2();
 
     try {
+      // Validate search mode requirements early
+      if (args.mode === 'search' && !args.search && !args.filters) {
+        return createErrorResponseV2(
+          'tasks',
+          'MISSING_PARAMETER',
+          'Search mode requires a search term or filters',
+          'Add a search parameter with the text to find, or use filters',
+          { provided_args: args },
+          timer.toMetadata(),
+        );
+      }
+
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
 
@@ -310,10 +322,7 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       normalized.search = normalizeStringInput(normalized.search) || undefined;
     }
 
-    // Ensure search mode has search term
-    if (normalized.mode === 'search' && !normalized.search && !normalized.filters) {
-      throw new Error('Search mode requires a search term or filters');
-    }
+    // Note: Search mode validation now happens in executeValidated before normalization
 
     return normalized;
   }

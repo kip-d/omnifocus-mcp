@@ -81,6 +81,28 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const timer = new OperationTimerV2();
 
     try {
+      // Validate required fields early
+      if (['update', 'complete', 'delete'].includes(args.operation) && !args.projectId) {
+        return createErrorResponseV2(
+          'projects',
+          'MISSING_PARAMETER',
+          `Operation "${args.operation}" requires projectId parameter`,
+          'Use operation:"list" first to find the project ID',
+          { provided_args: args },
+          timer.toMetadata(),
+        ) as unknown as ProjectsResponseV2;
+      }
+      if (args.operation === 'create' && !args.name) {
+        return createErrorResponseV2(
+          'projects',
+          'MISSING_PARAMETER',
+          'Create operation requires name parameter',
+          'Add a name parameter with the project name',
+          { provided_args: args },
+          timer.toMetadata(),
+        ) as unknown as ProjectOperationResponseV2;
+      }
+
       // Normalize inputs
       const normalizedArgs = this.normalizeInputs(args);
 
@@ -214,13 +236,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       normalized.projectId = normalizeStringInput(normalized.projectId) || undefined;
     }
 
-    // Validate required fields for operations
-    if (['update', 'complete', 'delete'].includes(normalized.operation) && !normalized.projectId) {
-      throw new Error(`Operation "${normalized.operation}" requires projectId parameter`);
-    }
-    if (normalized.operation === 'create' && !normalized.name) {
-      throw new Error('Create operation requires name parameter');
-    }
+    // Note: Required field validation now happens in executeValidated before normalization
 
     return normalized;
   }
