@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createAnalyticsResponseV2 } from '../../utils/response-format.js';
+import { createAnalyticsResponseV2, createErrorResponseV2 } from '../../utils/response-format.js';
 import { createLogger } from '../../utils/logger.js';
 import type { PatternAnalysisResponseV2, PatternAnalysisDataV2 } from '../response-types-v2.js';
 
@@ -236,11 +236,25 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       const slimData = await this.fetchSlimmedData(options);
 
       if (!slimData) {
-        throw new Error('Failed to fetch data from OmniFocus - received null response');
+        return createErrorResponseV2(
+          this.name,
+          'EXECUTION_ERROR',
+          'Failed to fetch data from OmniFocus - received null response',
+          'Check that OmniFocus is running and accessible',
+          undefined,
+          { query_time_ms: Date.now() - startTime }
+        );
       }
 
       if (!slimData.tasks || !slimData.projects) {
-        throw new Error('Failed to fetch complete data from OmniFocus - missing tasks or projects');
+        return createErrorResponseV2(
+          this.name,
+          'EXECUTION_ERROR',
+          'Failed to fetch complete data from OmniFocus - missing tasks or projects',
+          'Check that OmniFocus database has tasks and projects',
+          undefined,
+          { query_time_ms: Date.now() - startTime }
+        );
       }
 
       // Run requested pattern analyses
@@ -427,7 +441,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     const result = await this.omniAutomation.execute(taskScript);
 
     if (!result) {
-      throw new Error('OmniAutomation execution returned no result');
+      return { tasks: [], projects: [], tags: [] };
     }
 
     // OmniAutomation.execute may return already parsed object or string
