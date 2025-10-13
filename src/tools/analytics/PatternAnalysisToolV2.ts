@@ -8,6 +8,7 @@ import { BaseTool } from '../base.js';
 import { createAnalyticsResponseV2, createErrorResponseV2 } from '../../utils/response-format.js';
 import { createLogger } from '../../utils/logger.js';
 import type { PatternAnalysisResponseV2, PatternAnalysisDataV2 } from '../response-types-v2.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 
 // Schema for pattern analysis request
 const PatternAnalysisSchema = z.object({
@@ -438,13 +439,25 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       return JSON.stringify({ tasks, projects, tags });
     })()`;  // Execute the IIFE immediately
 
-    const result = await this.omniAutomation.execute(taskScript);
+    const scriptResult = await this.execJson(taskScript);
 
+    if (isScriptError(scriptResult)) {
+      this.logger.error('fetchSlimmedData failed', { error: scriptResult.error });
+      return { tasks: [], projects: [], tags: [] };
+    }
+
+    if (!isScriptSuccess(scriptResult)) {
+      this.logger.error('fetchSlimmedData returned unexpected format', { result: scriptResult });
+      return { tasks: [], projects: [], tags: [] };
+    }
+
+    // The script returns the data directly (already parsed JSON)
+    const result = scriptResult.data;
     if (!result) {
       return { tasks: [], projects: [], tags: [] };
     }
 
-    // OmniAutomation.execute may return already parsed object or string
+    // Result can be either already parsed or a string
     if (typeof result === 'string') {
       // JSON parsing of OmniAutomation result string is untyped
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return
