@@ -1,0 +1,2 @@
+src/index.ts:  process.stdin.on('end', () => {
+src/index.ts:  process.stdin.on('close', () => {

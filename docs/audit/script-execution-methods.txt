@@ -1,0 +1,73 @@
+src/tools/base.ts:// Type for raw data structure from OmniFocus scripts (used in execJson)
+src/tools/base.ts:   * Centralizes the logic from individual tool execJson helpers
+src/tools/base.ts:  protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
+src/tools/base.ts:      const omni = this.omniAutomation as { executeJson?: (script: string) => Promise<unknown>; execute?: (script: string) => Promise<unknown> };
+src/tools/base.ts:      const res = typeof omni.executeJson === 'function'
+src/tools/base.ts:        ? await omni.executeJson(script)
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const data = await this.omniAutomation.executeTyped(script, TodayPayloadSchema);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/QueryTasksToolV2.ts:    const result = await this.execJson(script);
+src/tools/tasks/ManageTaskTool.ts:            const scriptResult = await this.execJson(script);
+src/tools/tasks/ManageTaskTool.ts:            this.logger.debug('execJson returned result', { scriptResult });
+src/tools/tasks/ManageTaskTool.ts:              const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+src/tools/tasks/ManageTaskTool.ts:          const updateResult = await this.execJson(updateScript);
+src/tools/tasks/ManageTaskTool.ts:              executeJson?: (script: string) => Promise<unknown>;
+src/tools/tasks/ManageTaskTool.ts:            // Use flexible executeJson without strict schema to support unit mocks
+src/tools/tasks/ManageTaskTool.ts:            const res = typeof anyOmniComplete.executeJson === 'function' ? await anyOmniComplete.executeJson(completeScript) : await anyOmniComplete.execute!(completeScript);
+src/tools/tasks/ManageTaskTool.ts:              executeJson?: (script: string) => Promise<unknown>;
+src/tools/tasks/ManageTaskTool.ts:            const res = typeof anyOmniDelete.executeJson === 'function' ? await anyOmniDelete.executeJson(deleteScript) : await anyOmniDelete.execute!(deleteScript);
+src/tools/tasks/ManageTaskTool.ts:        const result = await this.execJson(script);
+src/tools/tasks/ManageTaskTool.ts:          const result = await this.execJson(script);
+src/tools/tasks/ManageTaskTool.ts:          const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.execJson(script);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+src/tools/projects/ProjectsToolV2.ts:    const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
+src/tools/perspectives/PerspectivesToolV2.ts:      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+src/tools/tags/TagsToolV2.ts:      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+src/tools/tags/TagsToolV2.ts:      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+src/tools/tags/TagsToolV2.ts:      const result = await this.omniAutomation.executeJson(script, SimpleOperationResultSchema);
+src/tools/batch/BatchCreateTool.ts:    const result = await this.execJson(script);
+src/tools/batch/BatchCreateTool.ts:    const result = await this.execJson(script);
+src/tools/batch/BatchCreateTool.ts:        await this.execJson(script);
+src/tools/folders/FoldersTool.ts:          const listResult = await this.execJson(script);
+src/tools/folders/FoldersTool.ts:          const getResult = await this.execJson(getScript);
+src/tools/folders/FoldersTool.ts:          const searchResult = await this.execJson(searchScript);
+src/tools/folders/FoldersTool.ts:          const projectsResult = await this.execJson(projectsScript);
+src/tools/folders/FoldersTool.ts:          const createResult = await this.execJson(createScript);
+src/tools/folders/FoldersTool.ts:          const updateResult = await this.execJson(updateScript);
+src/tools/folders/FoldersTool.ts:          const deleteResult = await this.execJson(deleteScript);
+src/tools/folders/FoldersTool.ts:          const moveResult = await this.execJson(moveScript);
+src/tools/folders/FoldersTool.ts:          const statusResult = await this.execJson(statusScript);
+src/tools/export/ExportTool.ts:        executeJson?: (script: string) => Promise<unknown>;
+src/tools/export/ExportTool.ts:      const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute!(script);
+src/tools/export/ExportTool.ts:      const result = await this.omniAutomation.execute(script) as {
+src/tools/export/ExportTool.ts:        executeJson?: (script: string) => Promise<unknown>;
+src/tools/export/ExportTool.ts:      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute!(taskScript);
+src/tools/export/ExportTool.ts:      const projectResult = await this.omniAutomation.execute(projectScript) as {
+src/tools/recurring/RecurringTasksTool.ts:          const analyzeResult = await this.omniAutomation.execute(analyzeScript) as {
+src/tools/recurring/RecurringTasksTool.ts:          const patternsResult = await this.omniAutomation.execute(patternsScript) as {
+src/tools/analytics/WorkflowAnalysisTool.ts:      const result = await this.execJson<WorkflowAnalysisData>(script);
+src/tools/analytics/ProductivityStatsToolV2.ts:      // Execute optimized script (tests provide simple mock shapes via executeJson)
+src/tools/analytics/ProductivityStatsToolV2.ts:      const result = await this.execJson<ProductivityStatsData>(script);
+src/tools/analytics/ProductivityStatsToolV2.ts:      // But execJson wraps it again as {success: true, data: {ok: true, data: {...}}}
+src/tools/analytics/ProductivityStatsToolV2.ts:        // First unwrap: execJson wrapper {success: true, data: ...}
+src/tools/analytics/TaskVelocityToolV2.ts:      const result = await this.execJson<VelocityDataUnion>(script);
+src/tools/analytics/OverdueAnalysisToolV2.ts:      // Execute script (tests provide simplified shapes via executeJson)
+src/tools/analytics/OverdueAnalysisToolV2.ts:      const result = await this.execJson<OverdueDataUnion>(script);
+src/tools/analytics/PatternAnalysisToolV2.ts:    const result = await this.omniAutomation.execute(taskScript);
+src/tools/reviews/ManageReviewsTool.ts:    const result = await this.execJson<ReviewListData>(script);
+src/tools/reviews/ManageReviewsTool.ts:    const result = await this.execJson(script);
+src/tools/reviews/ManageReviewsTool.ts:    const result = await this.execJson(script);
+src/tools/reviews/ManageReviewsTool.ts:    const result = await this.execJson(script);

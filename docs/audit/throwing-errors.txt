@@ -1,0 +1,18 @@
+src/tools/base.ts:        throw new McpError(
+src/tools/base.ts:      throw new McpError(
+src/tools/base.ts:      throw new McpError(
+src/tools/base.ts:    throw new McpError(
+src/tools/tasks/QueryTasksToolV2.ts:      throw new Error('Search mode requires a search term or filters');
+src/tools/projects/ProjectsToolV2.ts:      throw new Error(`Operation "${normalized.operation}" requires projectId parameter`);
+src/tools/projects/ProjectsToolV2.ts:      throw new Error('Create operation requires name parameter');
+src/tools/batch/dependency-graph.ts:        throw new DependencyGraphError(
+src/tools/batch/dependency-graph.ts:          throw new DependencyGraphError(
+src/tools/batch/dependency-graph.ts:        throw new DependencyGraphError(
+src/tools/batch/dependency-graph.ts:        throw new DependencyGraphError(
+src/tools/batch/tempid-resolver.ts:      throw new Error(`Temporary ID already registered: ${tempId}`);
+src/tools/batch/tempid-resolver.ts:      throw new Error(`Unknown temporary ID: ${tempId}`);
+src/tools/batch/tempid-resolver.ts:      throw new Error(`Unknown temporary ID: ${tempId}`);
+src/tools/index.ts:      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+src/tools/analytics/PatternAnalysisToolV2.ts:        throw new Error('Failed to fetch data from OmniFocus - received null response');
+src/tools/analytics/PatternAnalysisToolV2.ts:        throw new Error('Failed to fetch complete data from OmniFocus - missing tasks or projects');
+src/tools/analytics/PatternAnalysisToolV2.ts:      throw new Error('OmniAutomation execution returned no result');
