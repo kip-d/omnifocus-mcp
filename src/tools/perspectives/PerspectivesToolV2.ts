@@ -4,7 +4,7 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
 import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives/query-perspective.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
-import { isScriptSuccess, ListResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all perspective operations
 const PerspectivesToolSchema = z.object({
@@ -142,7 +142,7 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
 
     try {
       const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
-      const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+      const result = await this.execJson(script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
