@@ -609,33 +609,26 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       limit: args.limit,
     };
 
-    // Use the optimized today's agenda script (now returns typed envelope)
+    // Use the optimized today's agenda script
     const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
       options,
       fields: args.fields || [],
     });
-    const TodayPayloadSchema = z.object({
-      tasks: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        reason: z.string().optional(),
-        daysOverdue: z.number().optional(),
-        dueDate: z.string().optional(),
-        flagged: z.boolean().optional(),
-        note: z.string().optional(),
-        project: z.string().optional(),
-        projectId: z.string().optional(),
-        tags: z.array(z.string()).optional(),
-      })),
-      overdueCount: z.number(),
-      dueTodayCount: z.number(),
-      flaggedCount: z.number(),
-      processedCount: z.number().optional(),
-      totalTasks: z.number().optional(),
-      optimizationUsed: z.string().optional(),
-    });
 
-    const data = await this.omniAutomation.executeTyped(script, TodayPayloadSchema);
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        result.error,
+        'Check if OmniFocus is running and not blocked by dialogs',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks: unknown[]; overdueCount: number; dueTodayCount: number; flaggedCount: number; processedCount?: number; totalTasks?: number; optimizationUsed?: string };
 
     const todayTasks = this.parseTasks(data.tasks);
 
