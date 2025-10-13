@@ -332,7 +332,7 @@ CONVERSION PATTERN: When user asks in natural language, identify:
     if (args.project !== undefined) {
       // Special handling: Convert "null" string or empty string to null for inbox filtering
       // This allows both mode: "inbox" and project: null to work correctly
-      if (args.project === "null" || args.project === "") {
+      if (args.project === 'null' || args.project === '') {
         filter.project = null;
       } else {
         filter.project = args.project;
