@@ -243,7 +243,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           'Failed to fetch data from OmniFocus - received null response',
           'Check that OmniFocus is running and accessible',
           undefined,
-          { query_time_ms: Date.now() - startTime }
+          { query_time_ms: Date.now() - startTime },
         );
       }
 
@@ -254,7 +254,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           'Failed to fetch complete data from OmniFocus - missing tasks or projects',
           'Check that OmniFocus database has tasks and projects',
           undefined,
-          { query_time_ms: Date.now() - startTime }
+          { query_time_ms: Date.now() - startTime },
         );
       }
 
