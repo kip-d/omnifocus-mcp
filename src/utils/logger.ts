@@ -191,12 +191,3 @@ export function createCorrelatedLogger(
   });
 }
 
-/**
- * Extract correlation ID from logger if available
- */
-export function getCorrelationId(_logger: Logger): string | undefined {
-  // This is a simple way to access correlation ID from logger
-  // In a real implementation, you might want a more sophisticated approach
-  // For now, return undefined as correlation ID is managed internally
-  return undefined;
-}

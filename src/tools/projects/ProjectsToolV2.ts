@@ -1,12 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import {
-  LIST_PROJECTS_SCRIPT,
-  CREATE_PROJECT_SCRIPT,
-  COMPLETE_PROJECT_SCRIPT,
-  DELETE_PROJECT_SCRIPT,
-  GET_PROJECT_STATS_SCRIPT,
-} from '../../omnifocus/scripts/projects.js';
+import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects/list-projects.js';
+import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
+import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
+import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
+import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
 import { isScriptSuccess, isScriptError, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
 import {

@@ -9,21 +9,6 @@ export interface ErrorWithRecovery {
 }
 
 /**
- * Generate a helpful "entity not found" error message with recovery steps
- */
-export function entityNotFoundError(entityType: string, id: string, listToolName: string): ErrorWithRecovery {
-  return {
-    message: `${entityType} with ID '${id}' not found.`,
-    recovery: [
-      `Use '${listToolName}' tool to see available ${entityType.toLowerCase()}s`,
-      'The item may have been deleted or completed',
-      'If recently created, wait a moment for sync to complete',
-      'Verify the ID is correct and still exists',
-    ],
-  };
-}
-
-/**
  * Generate a helpful "invalid date format" error message
  */
 export function invalidDateError(fieldName: string, value: string): ErrorWithRecovery {
