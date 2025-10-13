@@ -295,7 +295,8 @@ class TestDataManager {
   }
 }
 
-const RUN_SERVER_TESTS = process.env.ENABLE_UNIT_SERVER === 'true';
+// Auto-enable server tests on macOS with OmniFocus (can be disabled with DISABLE_UNIT_SERVER=true)
+const RUN_SERVER_TESTS = process.env.DISABLE_UNIT_SERVER !== 'true' && process.platform === 'darwin';
 const d = RUN_SERVER_TESTS ? describe : describe.skip;
 
 d('Test Data Management', () => {
