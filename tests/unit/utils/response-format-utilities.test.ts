@@ -8,7 +8,7 @@ import {
   OperationTimerV2,
   generateTaskSummary,
   generateProjectSummary,
-} from '../../../src/utils/response-format-v2';
+} from '../../../src/utils/response-format';
 
 describe('Response Format Utilities', () => {
   describe('OperationTimerV2', () => {

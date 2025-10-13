@@ -5,12 +5,7 @@ import {
   mergeHelperContext,
   generateHelperConfig,
 } from '../../src/omnifocus/scripts/shared/helper-context.js';
-import {
-  getAllHelpers,
-  getMinimalHelpers,
-  getCoreHelpers,
-  getFullStatusHelpers,
-} from '../../src/omnifocus/scripts/shared/helpers.js';
+import { getUnifiedHelpers } from '../../src/omnifocus/scripts/shared/helpers.js';
 
 describe('HelperContext', () => {
   describe('mergeHelperContext', () => {
@@ -64,43 +59,43 @@ describe('HelperContext', () => {
   });
 
   describe('Helper Functions with Context', () => {
-    it('getAllHelpers should include HELPER_CONFIG', () => {
-      const helpers = getAllHelpers();
+    it('getUnifiedHelpers should include HELPER_CONFIG', () => {
+      const helpers = getUnifiedHelpers();
       expect(helpers).toContain('const HELPER_CONFIG = {');
       expect(helpers).toContain('skipAnalysis: true');
     });
 
-    it('getAllHelpers should accept custom context', () => {
-      const helpers = getAllHelpers({ skipAnalysis: false, timeout: 60000 });
+    it('getUnifiedHelpers should accept custom context', () => {
+      const helpers = getUnifiedHelpers({ skipAnalysis: false, timeout: 60000 });
       expect(helpers).toContain('skipAnalysis: false');
       expect(helpers).toContain('timeout: 60000');
     });
 
-    it('getMinimalHelpers should include HELPER_CONFIG', () => {
-      const helpers = getMinimalHelpers();
+    it('getUnifiedHelpers should include HELPER_CONFIG', () => {
+      const helpers = getUnifiedHelpers();
       expect(helpers).toContain('const HELPER_CONFIG = {');
     });
 
-    it('getCoreHelpers should include HELPER_CONFIG', () => {
-      const helpers = getCoreHelpers();
+    it('getUnifiedHelpers should include HELPER_CONFIG', () => {
+      const helpers = getUnifiedHelpers();
       expect(helpers).toContain('const HELPER_CONFIG = {');
       expect(helpers).toContain('function safeGet(');
     });
 
-    it('getFullStatusHelpers should include HELPER_CONFIG', () => {
-      const helpers = getFullStatusHelpers();
+    it('getUnifiedHelpers should include HELPER_CONFIG', () => {
+      const helpers = getUnifiedHelpers();
       expect(helpers).toContain('const HELPER_CONFIG = {');
     });
 
     it('helper functions should work without context (backwards compatible)', () => {
-      expect(() => getAllHelpers()).not.toThrow();
-      expect(() => getMinimalHelpers()).not.toThrow();
-      expect(() => getCoreHelpers()).not.toThrow();
-      expect(() => getFullStatusHelpers()).not.toThrow();
+      expect(() => getUnifiedHelpers()).not.toThrow();
+      expect(() => getUnifiedHelpers()).not.toThrow();
+      expect(() => getUnifiedHelpers()).not.toThrow();
+      expect(() => getUnifiedHelpers()).not.toThrow();
     });
 
     it('should generate valid JavaScript (no syntax errors)', () => {
-      const helpers = getAllHelpers({ performanceTracking: true });
+      const helpers = getUnifiedHelpers({ performanceTracking: true });
       // Should not have unresolved template literal syntax
       expect(helpers).not.toMatch(/\$\{[^}]+\}/);
       // Should have valid HELPER_CONFIG object

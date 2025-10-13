@@ -9,7 +9,7 @@ import { BaseTool } from '../base.js';
 import { BatchCreateSchema, BatchCreateInput, BatchItem } from './batch-schemas.js';
 import { TempIdResolver } from './tempid-resolver.js';
 import { DependencyGraph, DependencyGraphError } from './dependency-graph.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { CREATE_PROJECT_SCRIPT, DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects.js';
 import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks/create-task-with-bridge.js';
 import { DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';

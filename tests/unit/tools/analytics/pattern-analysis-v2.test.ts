@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PatternAnalysisToolV2 } from '../../../../src/tools/analytics/PatternAnalysisToolV2.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
+import { applyTestShims } from '../../../../src/test-utils/omni-automation-shims.js';
 
 // Mocks
 vi.mock('../../../../src/cache/CacheManager.js', () => ({
@@ -33,7 +34,10 @@ describe('PatternAnalysisToolV2', () => {
     };
     mockOmni = {
       executeJson: vi.fn(),
+      execute: vi.fn(),
     };
+    // Apply test shims to add execute, executeTyped, and vi.fn wrapping
+    applyTestShims(mockOmni);
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmni);
     tool = new PatternAnalysisToolV2(mockCache as any);
@@ -75,7 +79,8 @@ describe('PatternAnalysisToolV2', () => {
   }
 
   it('analyzes selected patterns and returns analytics response', async () => {
-    mockOmni.executeJson.mockResolvedValue(sampleData());
+    // Mock execute() to return raw JSON string (PatternAnalysisToolV2 uses execute, not executeJson)
+    mockOmni.execute.mockResolvedValue(JSON.stringify(sampleData()));
 
     const result: any = await tool.executeValidated({
       patterns: ['duplicates', 'tag_audit', 'deadline_health', 'waiting_for', 'review_gaps', 'next_actions'],
@@ -103,8 +108,8 @@ describe('PatternAnalysisToolV2', () => {
 
   it('expands patterns=all and parses stringified options (including double-encoded JSON)', async () => {
     const data = sampleData();
-    // Return a JSON string to exercise string parsing branch in fetchSlimmedData
-    mockOmni.executeJson.mockResolvedValue(JSON.stringify(data));
+    // Mock execute() to return raw JSON string (PatternAnalysisToolV2 uses execute, not executeJson)
+    mockOmni.execute.mockResolvedValue(JSON.stringify(data));
 
     const stringified = JSON.stringify({ similarity_threshold: '0.75', include_completed: 'true', max_tasks: '2000' });
     const doubleEncoded = JSON.stringify(stringified);

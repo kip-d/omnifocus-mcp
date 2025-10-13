@@ -4,6 +4,7 @@ import { TaskVelocityToolV2 as TaskVelocityTool } from '../../../src/tools/analy
 import { OverdueAnalysisToolV2 as OverdueAnalysisTool } from '../../../src/tools/analytics/OverdueAnalysisToolV2.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
+import { applyTestShims } from '../../../src/test-utils/omni-automation-shims.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js', () => ({
@@ -39,6 +40,10 @@ describe('Analytics Tools', () => {
       buildScript: vi.fn(),
       executeJson: vi.fn(),
     };
+
+    // Apply test shims to add execute, executeTyped, and vi.fn wrapping
+    applyTestShims(mockOmniAutomation);
+
 
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);

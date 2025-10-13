@@ -3,7 +3,7 @@ import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess, ListResultSchema, SimpleOperationResultSchema } from '../../omnifocus/script-result-types.js';

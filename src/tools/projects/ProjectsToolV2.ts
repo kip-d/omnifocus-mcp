@@ -16,7 +16,7 @@ import {
   OperationTimerV2,
   normalizeBooleanInput,
   normalizeStringInput,
-} from '../../utils/response-format-v2.js';
+} from '../../utils/response-format.js';
 import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 

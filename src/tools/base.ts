@@ -5,8 +5,7 @@ import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
 // import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { createErrorResponse, OperationTimer, StandardResponse } from '../utils/response-format.js';
-import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../utils/response-format-v2.js';
+import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../utils/response-format.js';
 import {
   ScriptErrorType,
   CategorizedScriptError,
@@ -24,18 +23,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { ScriptResult, createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
 
-// Type definitions for shim logic
-type ExecuteFn = (script: string) => Promise<unknown>;
-
-interface GlobalWithVitest {
-  vi?: {
-    // Vitest integration requires any types for generic function mocking
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fn: <T extends (...args: any[]) => any>(fn: T) => T;
-  };
-}
-
-// Type for raw data structure from OmniFocus scripts
+// Type for raw data structure from OmniFocus scripts (used in execJson)
 interface RawOmniFocusData {
   projects?: unknown[];
   tasks?: unknown[];
@@ -64,7 +52,6 @@ export abstract class BaseTool<
   constructor(cache: CacheManager, private correlationId?: string) {
     this.cache = cache;
     this._omniAutomation = new OmniAutomation();
-    this.applyExecuteJsonShim(this._omniAutomation);
 
     // Create logger with correlation context if available
     if (correlationId) {
@@ -327,8 +314,8 @@ export abstract class BaseTool<
         parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
       });
 
-      // Handle other errors - return standardized error response
-      return this.handleError(error) as TResponse;
+      // Handle other errors - return standardized V2 error response
+      return this.handleErrorV2<TResponse>(error) as TResponse;
     }
   }
 
@@ -414,174 +401,13 @@ export abstract class BaseTool<
     return new ctor(this.cache, correlationId);
   }
 
-  /**
-   * Provide a fallback executeJson when tests inject a mock with only `execute`.
-   * Note: This method contains intentional `any` types for test framework compatibility.
-   * ESLint exceptions are applied to preserve Vitest mocking functionality.
-   */
-  protected applyExecuteJsonShim(anyOmni: OmniAutomation): void {
-    if (!anyOmni) return;
-
-    // Capture originals (may be undefined) - keep as any for test shim compatibility
-    const origExecute: ExecuteFn | undefined = typeof anyOmni.execute === 'function' ? anyOmni.execute.bind(anyOmni) : undefined;
-    // Dynamic method injection requires any types for runtime flexibility
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const origExecuteJson: any = typeof anyOmni.executeJson === 'function' ? anyOmni.executeJson.bind(anyOmni) : undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const origExecuteTyped: any = typeof anyOmni.executeTyped === 'function' ? anyOmni.executeTyped.bind(anyOmni) : undefined;
-
-    // Helper: wrap in vi.fn if available (so tests can assert calls)
-    // Vitest spy wrapper requires any types for generic function compatibility
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const wrapSpy = <F extends (...args: any[]) => any>(fn: F): F => {
-      const g = globalThis as GlobalWithVitest;
-      if (g.vi && typeof g.vi.fn === 'function') {
-        return g.vi.fn(fn);
-      }
-      return fn;
-    };
-
-    // Ensure executeJson exists (fallback to execute)
-    if (!origExecuteJson && origExecute) {
-      anyOmni.executeJson = wrapSpy(async (script: string, schema?: z.ZodTypeAny) => {
-        let raw = await origExecute(script);
-        if (typeof raw === 'string') {
-          try { raw = JSON.parse(raw); } catch { /* leave as string */ }
-        }
-        if (schema && typeof schema.safeParse === 'function') {
-          let candidate = raw;
-          let parsed = schema.safeParse(candidate);
-          if (!parsed.success && raw && typeof raw === 'object') {
-            const obj = raw as RawOmniFocusData;
-            if (Array.isArray(obj.projects) || Array.isArray(obj.tasks) || Array.isArray(obj.tags) || Array.isArray(obj.perspectives)) {
-              candidate = {
-                items: Array.isArray(obj.projects)
-                  ? obj.projects
-                  : Array.isArray(obj.tasks)
-                    ? obj.tasks
-                    : Array.isArray(obj.tags)
-                      ? obj.tags
-                      : obj.perspectives,
-                summary: obj.summary,
-                metadata: obj.metadata ?? (typeof obj.count === 'number' ? { count: obj.count } : undefined),
-              };
-              parsed = schema.safeParse(candidate);
-            }
-          }
-          // Dynamic data transformation result - any type required for flexible API compatibility
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          if (parsed.success) return { success: true, data: parsed.data };
-          let errMsg = 'Script result validation failed';
-          const rawData = raw as RawOmniFocusData;
-          if (rawData.error && typeof rawData.message === 'string') {
-            errMsg = rawData.message;
-          }
-          if (raw == null) errMsg = 'NULL_RESULT';
-          return { success: false, error: errMsg, details: { errors: parsed.error.issues } };
-        }
-        return { success: true, data: raw };
-      });
-    }
-
-    // Ensure execute exists (fallback to executeJson)
-    if (!origExecute && (origExecuteJson || origExecuteTyped)) {
-      anyOmni.execute = wrapSpy(async (script: string) => {
-        if (typeof anyOmni.executeJson === 'function') {
-          const res = await anyOmni.executeJson(script);
-          if (res && res.success) return res.data;
-          return { error: true, message: res?.error ?? 'Script failed', details: res?.details };
-        }
-        if (typeof anyOmni.executeTyped === 'function') {
-          // No schema: accept anything - any type required for dynamic execution
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const data = await anyOmni.executeTyped(script, z.any());
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          return data;
-        }
-        return null;
-      });
-    }
-
-    // Ensure executeTyped exists (fallback to executeJson or execute)
-    if (!origExecuteTyped) {
-      if (typeof anyOmni.executeJson === 'function') {
-        anyOmni.executeTyped = wrapSpy(async (script: string, dataSchema: z.ZodTypeAny) => {
-          const res = await anyOmni.executeJson(script);
-          if (!res || !res.success) throw new Error(res?.error ?? 'Script execution failed');
-          // Dynamic schema parsing for test compatibility
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          return dataSchema && typeof dataSchema.parse === 'function' ? dataSchema.parse(res.data) : res.data;
-        });
-      } else if (typeof anyOmni.execute === 'function') {
-        anyOmni.executeTyped = wrapSpy(async (script: string, dataSchema: z.ZodTypeAny) => {
-          let raw = await anyOmni.execute(script);
-          if (typeof raw === 'string') {
-            try { raw = JSON.parse(raw); } catch { /* ignore */ }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          return dataSchema && typeof dataSchema.parse === 'function' ? dataSchema.parse(raw) : raw;
-        });
-      }
-    }
-
-    // Normalize existing executeJson to return ScriptResult when tests return raw data
-    // Note: Complex shim logic below requires any types for dynamic test compatibility
-    if (origExecuteJson) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const prev = origExecuteJson;
-      anyOmni.executeJson = wrapSpy(async (script: string, schema?: z.ZodTypeAny) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-        const maybe = await prev(script, schema);
-        if (maybe && typeof maybe === 'object' && 'success' in maybe) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          return maybe;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        let raw = maybe;
-        if (typeof raw === 'string') {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          try { raw = JSON.parse(raw); } catch { /* ignore */ }
-        }
-        if (schema && typeof schema.safeParse === 'function') {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          let candidate = raw;
-          let parsed = schema.safeParse(candidate);
-          if (!parsed.success && raw && typeof raw === 'object') {
-            const obj = raw as RawOmniFocusData;
-            if (Array.isArray(obj.projects) || Array.isArray(obj.tasks) || Array.isArray(obj.tags) || Array.isArray(obj.perspectives)) {
-              candidate = {
-                items: Array.isArray(obj.projects)
-                  ? obj.projects
-                  : Array.isArray(obj.tasks)
-                    ? obj.tasks
-                    : Array.isArray(obj.tags)
-                      ? obj.tags
-                      : obj.perspectives,
-                summary: obj.summary,
-                metadata: obj.metadata ?? (typeof obj.count === 'number' ? { count: obj.count } : undefined),
-              };
-              parsed = schema.safeParse(candidate);
-            }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          if (parsed.success) return { success: true, data: parsed.data };
-          return { success: false, error: 'Script result validation failed', details: { errors: parsed.error.issues } };
-        }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        return { success: true, data: raw };
-      });
-    }
-  }
 
   get omniAutomation(): OmniAutomation {
-    // Always ensure shim exists when accessed
-    this.applyExecuteJsonShim(this._omniAutomation);
     return this._omniAutomation;
   }
 
   set omniAutomation(value: OmniAutomation) {
     this._omniAutomation = value;
-    this.applyExecuteJsonShim(this._omniAutomation);
   }
 
   /**
@@ -685,50 +511,6 @@ export abstract class BaseTool<
     }
   }
 
-  /**
-   * Handle errors consistently across all tools with enhanced categorization
-   * Returns a standardized error response instead of throwing
-   */
-  protected handleError(error: unknown): StandardResponse<unknown> {
-    this.logger.error(`Error in ${this.name}:`, error);
-    const timer = new OperationTimer();
-
-    // Categorize the error using the enhanced taxonomy
-    const categorizedError = categorizeError(error, this.name);
-
-    // Log the failure with categorization information
-    this.logToolFailure(
-      {},
-      categorizedError.errorType,
-      categorizedError.message,
-      undefined,
-      categorizedError,
-    );
-
-    // Merge original error details with enhanced categorization
-    const originalErrorDetails = categorizedError.originalError && typeof categorizedError.originalError === 'object' &&
-      'details' in categorizedError.originalError && categorizedError.originalError.details ?
-      categorizedError.originalError.details as Record<string, unknown> : {};
-
-    // Return enhanced error response with categorization
-    return createErrorResponse(
-      this.name,
-      categorizedError.errorType,
-      categorizedError.message,
-      {
-        ...originalErrorDetails, // Preserve original error details (script, stderr, etc.)
-        errorType: categorizedError.errorType,
-        severity: getErrorSeverity(categorizedError.errorType),
-        recoverable: isRecoverableError(categorizedError.errorType),
-        actionable: categorizedError.actionable,
-        recovery: categorizedError.recovery,
-        context: categorizedError.context,
-        formatted: getErrorMessage(categorizedError),
-        originalError: categorizedError.originalError,
-      },
-      timer.toMetadata(),
-    );
-  }
 
   /**
    * V2 error handler: enhanced categorization with V2 response format

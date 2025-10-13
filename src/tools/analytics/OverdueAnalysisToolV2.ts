@@ -6,7 +6,7 @@ import {
   createErrorResponseV2,
   OperationTimerV2,
   StandardResponseV2,
-} from '../../utils/response-format-v2.js';
+} from '../../utils/response-format.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisDataV2 } from '../response-types-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';

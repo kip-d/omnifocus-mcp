@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createErrorResponseV2, createSuccessResponseV2 } from '../../../src/utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2 } from '../../../src/utils/response-format.js';
 
 describe('Error Response Format Tests', () => {
   it('creates V2 error responses with correct structure', () => {

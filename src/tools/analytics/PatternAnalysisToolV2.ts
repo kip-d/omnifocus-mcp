@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createAnalyticsResponseV2 } from '../../utils/response-format-v2.js';
+import { createAnalyticsResponseV2 } from '../../utils/response-format.js';
 import { createLogger } from '../../utils/logger.js';
 import type { PatternAnalysisResponseV2, PatternAnalysisDataV2 } from '../response-types-v2.js';
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProjectsToolV2 } from '../../../src/tools/projects/ProjectsToolV2.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
+import { applyTestShims } from '../../../src/test-utils/omni-automation-shims.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js');
@@ -39,6 +40,10 @@ describe('ProjectsToolV2 CRUD Operations', () => {
       executeJson: vi.fn(),
       executeViaUrlScheme: vi.fn(),
     };
+
+    // Apply test shims to add execute, executeTyped, and vi.fn wrapping
+    applyTestShims(mockOmniAutomation);
+
 
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);

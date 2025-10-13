@@ -343,10 +343,10 @@ describe('BaseTool', () => {
   describe('handleError', () => {
     it('should handle permission errors', async () => {
       const result = await errorTestTool.execute({ errorType: 'permission' });
-      
+
       expect(result).toMatchObject({
         success: false,
-        data: null,
+        data: expect.anything(), // V2 format returns {} instead of null
         error: {
           code: 'PERMISSION_DENIED',
           message: expect.stringContaining('Permission denied'),
@@ -669,9 +669,20 @@ describe('BaseTool', () => {
     it('should include formatted error message', async () => {
       const result = await errorTestTool.execute({ errorType: 'permission' });
 
-      expect(result.error?.details?.formatted).toContain('Permission denied');
-      expect(result.error?.details?.formatted).toContain('Quick fix: Grant automation permissions in System Settings');
-      expect(result.error?.details?.formatted).toContain('How to resolve:');
+      // V2 format puts formatted message in suggestion field, not details.formatted
+      expect(result.error?.suggestion).toBeDefined();
+      expect(typeof result.error?.suggestion).toBe('string');
+      const suggestion = result.error?.suggestion as string;
+      expect(suggestion).toContain('Permission denied');
+      expect(suggestion).toContain('Quick fix');
+      expect(suggestion).toContain('How to resolve');
+
+      // Details should have the individual categorization fields
+      expect(result.error?.details?.errorType).toBeDefined();
+      expect(result.error?.details?.severity).toBeDefined();
+      expect(result.error?.details?.recoverable).toBeDefined();
+      expect(result.error?.details?.actionable).toBeDefined();
+      expect(result.error?.details?.recovery).toBeDefined();
     });
 
     it('should log error with categorization information', async () => {

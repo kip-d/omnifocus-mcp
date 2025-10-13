@@ -5,7 +5,7 @@
 
 import type {
   StandardResponseV2,
-} from '../utils/response-format-v2.js';
+} from '../utils/response-format.js';
 
 // Task-related types
 export interface TaskV2 {

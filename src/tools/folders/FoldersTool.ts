@@ -5,7 +5,7 @@ import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-fol
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';

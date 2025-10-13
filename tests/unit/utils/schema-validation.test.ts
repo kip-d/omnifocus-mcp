@@ -3,7 +3,7 @@ import {
   normalizeDateInput,
   normalizeBooleanInput,
   normalizeStringInput,
-} from '../../../src/utils/response-format-v2';
+} from '../../../src/utils/response-format';
 
 describe('Schema Validation Helpers', () => {
   describe('normalizeDateInput', () => {

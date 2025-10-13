@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { detectContextTags } from './context-detection.js';
 import { extractDates } from './date-extraction.js';

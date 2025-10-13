@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
-import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';

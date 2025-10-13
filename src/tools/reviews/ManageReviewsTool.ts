@@ -4,7 +4,7 @@ import {
   MARK_PROJECT_REVIEWED_SCRIPT,
   SET_REVIEW_SCHEDULE_SCRIPT,
 } from '../../omnifocus/scripts/reviews.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format-v2.js';
+import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { ANALYZE_RECURRING_TASKS_SCRIPT, GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { RecurringTasksResponseV2, RecurringTasksDataV2, RecurringTaskV2 } from '../response-types-v2.js';

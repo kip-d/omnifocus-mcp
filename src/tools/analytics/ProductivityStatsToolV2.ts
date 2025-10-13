@@ -6,7 +6,7 @@ import {
   createErrorResponseV2,
   OperationTimerV2,
   StandardResponseV2,
-} from '../../utils/response-format-v2.js';
+} from '../../utils/response-format.js';
 import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ProductivityStatsData } from '../../omnifocus/script-response-types.js';

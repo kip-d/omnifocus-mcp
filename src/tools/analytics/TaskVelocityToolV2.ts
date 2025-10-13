@@ -6,7 +6,7 @@ import {
   createErrorResponseV2,
   OperationTimerV2,
   StandardResponseV2,
-} from '../../utils/response-format-v2.js';
+} from '../../utils/response-format.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { TaskVelocityData } from '../../omnifocus/script-response-types.js';
