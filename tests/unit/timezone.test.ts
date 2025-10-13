@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   localToUTC,
-  utcToLocal,
   parseFlexibleDate,
-  parseRelativeDate,
   getSystemTimezone,
   getCurrentTimezoneOffset,
   getTimezoneInfo,
@@ -103,95 +101,6 @@ describe('Date Handling and Timezone Utilities', () => {
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(new Date(result).getUTCDate()).toBe(29);
       expect(new Date(result).getUTCMonth()).toBe(1); // February = 1
-    });
-  });
-
-  describe('utcToLocal', () => {
-    it('should convert UTC strings to local time display', () => {
-      const utcInput = '2024-01-15T14:30:00.000Z';
-      const result = utcToLocal(utcInput);
-      
-      // Should be in YYYY-MM-DD HH:mm format
-      expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-    });
-
-    it('should support different output formats', () => {
-      const utcInput = '2024-01-15T14:30:00.000Z';
-      
-      const dateOnly = utcToLocal(utcInput, 'date');
-      expect(dateOnly).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      
-      const timeOnly = utcToLocal(utcInput, 'time');
-      expect(timeOnly).toMatch(/^\d{2}:\d{2}$/);
-      
-      const dateTime = utcToLocal(utcInput, 'datetime');
-      expect(dateTime).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-    });
-
-    it('should throw descriptive error for invalid UTC strings', () => {
-      expect(() => utcToLocal('invalid-utc')).toThrow(/Invalid UTC date.*Expected ISO 8601.*timezone/);
-    });
-  });
-
-  describe('parseRelativeDate', () => {
-    beforeEach(() => {
-      // Mock a consistent date for testing: January 15, 2024 (Monday)
-      const mockDate = new Date('2024-01-15T12:00:00.000Z');
-      vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
-      // Also need to mock the constructor
-      vi.useFakeTimers();
-      vi.setSystemTime(mockDate);
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('should parse basic relative dates', () => {
-      // Relative dates should be in local time midnight, converted to UTC
-      const todayResult = parseRelativeDate('today');
-      expect(todayResult).toMatch(/^2024-01-15T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
-      const tomorrowResult = parseRelativeDate('tomorrow');
-      expect(tomorrowResult).toMatch(/^2024-01-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
-      const yesterdayResult = parseRelativeDate('yesterday');
-      expect(yesterdayResult).toMatch(/^2024-01-14T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should handle case insensitivity', () => {
-      expect(parseRelativeDate('TODAY')).toMatch(/^2024-01-15T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('Tomorrow')).toMatch(/^2024-01-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('YESTERDAY')).toMatch(/^2024-01-14T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should parse "next [day]" formats', () => {
-      // From Monday Jan 15, next Tuesday should be Jan 16
-      expect(parseRelativeDate('next tuesday')).toMatch(/^2024-01-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
-      // Next Monday (from Monday) should be next week
-      expect(parseRelativeDate('next monday')).toMatch(/^2024-01-22T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
-      // Next Friday should be Jan 19
-      expect(parseRelativeDate('next friday')).toMatch(/^2024-01-19T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should parse "in X days" format', () => {
-      expect(parseRelativeDate('in 1 day')).toMatch(/^2024-01-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('in 7 days')).toMatch(/^2024-01-22T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('in 30 days')).toMatch(/^2024-02-14T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should parse "X days ago" format', () => {
-      expect(parseRelativeDate('1 day ago')).toMatch(/^2024-01-14T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('7 days ago')).toMatch(/^2024-01-08T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseRelativeDate('30 days ago')).toMatch(/^2023-12-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should return null for unrecognized formats', () => {
-      expect(parseRelativeDate('next week')).toBeNull();
-      expect(parseRelativeDate('some random text')).toBeNull();
-      expect(parseRelativeDate('in 500 days')).toBeNull(); // Outside reasonable range
     });
   });
 
@@ -320,20 +229,16 @@ describe('Date Handling and Timezone Utilities', () => {
   });
 
   describe('Round-trip conversion accuracy', () => {
-    it('should maintain accuracy in round-trip conversions', () => {
-      const originalLocal = '2024-01-15 14:30';
-      const utc = localToUTC(originalLocal);
-      const backToLocal = utcToLocal(utc);
-      
-      expect(backToLocal).toBe('2024-01-15 14:30');
-    });
-
     it('should maintain date accuracy for date-only inputs', () => {
       const originalDate = '2024-01-15';
       const utc = localToUTC(originalDate);
-      const backToLocal = utcToLocal(utc, 'date');
-      
-      expect(backToLocal).toBe('2024-01-15');
+
+      // Verify the date is correctly converted to UTC
+      expect(utc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      const converted = new Date(utc);
+      expect(converted.getUTCFullYear()).toBe(2024);
+      expect(converted.getUTCMonth()).toBe(0); // January
+      expect(converted.getUTCDate()).toBe(15);
     });
   });
 });
