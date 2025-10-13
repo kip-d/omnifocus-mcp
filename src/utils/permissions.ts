@@ -112,21 +112,3 @@ export class PermissionChecker {
   }
 }
 
-/**
- * Convenience function to check permissions
- */
-export async function checkOmniFocusPermissions(): Promise<PermissionStatus> {
-  return PermissionChecker.getInstance().checkPermissions();
-}
-
-/**
- * Create a permission error response for MCP tools
- */
-export function createPermissionErrorResponse(status: PermissionStatus): Record<string, unknown> {
-  return {
-    error: true,
-    message: status.error || 'Permission denied',
-    instructions: status.instructions,
-    code: 'PERMISSION_DENIED',
-  };
-}
