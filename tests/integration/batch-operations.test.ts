@@ -1,5 +1,8 @@
 /**
  * Integration tests for batch operations
+ *
+ * These tests require real OmniFocus access and must be run with:
+ * VITEST_ALLOW_JXA=1 npx vitest tests/integration/batch-operations.test.ts
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -7,7 +10,15 @@ import { BatchCreateTool } from '../../src/tools/batch/BatchCreateTool.js';
 import { CacheManager } from '../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../src/omnifocus/OmniAutomation.js';
 
-describe('Batch Operations Integration', () => {
+// Only run on macOS with OmniFocus and real JXA enabled
+const RUN_INTEGRATION_TESTS =
+  process.env.DISABLE_INTEGRATION_TESTS !== 'true' &&
+  process.platform === 'darwin' &&
+  process.env.VITEST_ALLOW_JXA === '1';
+
+const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
+
+d('Batch Operations Integration', () => {
   let tool: BatchCreateTool;
   let cache: CacheManager;
   const createdIds: Array<{ id: string; type: 'project' | 'task' }> = [];
@@ -63,7 +74,7 @@ describe('Batch Operations Integration', () => {
   });
 
   it('should create a simple project', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj1',
@@ -78,21 +89,23 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    expect(result).toHaveProperty('success', true);
-    expect(result).toHaveProperty('data');
-    const data = (result as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
-    expect(data.success).toBe(true);
-    expect(data.created).toBe(1);
-    expect(data.results[0].realId).toBeTruthy();
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('success', true);
+    expect(response).toHaveProperty('data');
+    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+
+    expect(result.success).toBe(true);
+    expect(result.created).toBe(1);
+    expect(result.results[0].realId).toBeTruthy();
 
     // Track for cleanup
-    if (data.results[0].realId) {
-      createdIds.push({ id: data.results[0].realId, type: 'project' });
+    if (result.results[0].realId) {
+      createdIds.push({ id: result.results[0].realId, type: 'project' });
     }
   }, 30000);
 
   it('should create project with task', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj2',
@@ -114,13 +127,14 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    expect(result).toHaveProperty('success', true);
-    const data = (result as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
-    expect(data.created).toBe(2);
-    expect(data.results).toHaveLength(2);
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('success', true);
+    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+    expect(result.created).toBe(2);
+    expect(result.results).toHaveLength(2);
 
     // Track for cleanup (tasks first, then project)
-    for (const item of data.results.reverse()) {
+    for (const item of result.results.reverse()) {
       if (item.realId) {
         createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
       }
@@ -128,7 +142,7 @@ describe('Batch Operations Integration', () => {
   }, 30000);
 
   it('should create nested tasks (task with subtask)', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj3',
@@ -154,12 +168,13 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    expect(result).toHaveProperty('success', true);
-    const data = (result as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
-    expect(data.created).toBe(3);
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('success', true);
+    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+    expect(result.created).toBe(3);
 
     // Track for cleanup
-    for (const item of data.results.reverse()) {
+    for (const item of result.results.reverse()) {
       if (item.realId) {
         createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
       }
@@ -210,7 +225,7 @@ describe('Batch Operations Integration', () => {
   }, 30000);
 
   it('should return tempId to realId mapping', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj6',
@@ -224,18 +239,19 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    expect(result).toHaveProperty('data.mapping');
-    const data = (result as { data: { mapping: Record<string, string>; results: Array<{ realId: string }> } }).data;
-    expect(data.mapping).toHaveProperty('proj6');
-    expect(data.mapping.proj6).toBeTruthy();
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('data.mapping');
+    const result = (response as { data: { mapping: Record<string, string>; results: Array<{ realId: string }> } }).data;
+    expect(result.mapping).toHaveProperty('proj6');
+    expect(result.mapping.proj6).toBeTruthy();
 
-    if (data.results[0].realId) {
-      createdIds.push({ id: data.results[0].realId, type: 'project' });
+    if (result.results[0].realId) {
+      createdIds.push({ id: result.results[0].realId, type: 'project' });
     }
   }, 30000);
 
   it('should stop on error when configured', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj7',
@@ -260,13 +276,15 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    const data = (result as { data: { created: number; failed: number; results: Array<{ realId: string | null; type: string }> } }).data;
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('data');
+    const result = (response as { data: { created: number; failed: number; results: Array<{ realId: string | null; type: string }> } }).data;
     // Should have validation error before creating anything
-    expect(data.created).toBeLessThan(3);
-    expect(data.failed).toBeGreaterThan(0);
+    expect(result.created).toBeLessThan(3);
+    expect(result.failed).toBeGreaterThan(0);
 
     // Cleanup any created items
-    for (const item of data.results.reverse()) {
+    for (const item of result.results.reverse()) {
       if (item.realId) {
         createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
       }
@@ -274,7 +292,7 @@ describe('Batch Operations Integration', () => {
   }, 30000);
 
   it('should validate circular dependencies', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'task5',
@@ -296,13 +314,13 @@ describe('Batch Operations Integration', () => {
     });
 
     // Should return error for circular dependency
-    expect(result).toHaveProperty('success', false);
-    const data = result as { error?: string; code?: string };
-    expect(data.code).toBe('VALIDATION_ERROR');
+    expect(response).toHaveProperty('success', false);
+    const errorResponse = response as { error?: string; code?: string };
+    expect(errorResponse.code).toBe('VALIDATION_ERROR');
   }, 30000);
 
   it('should handle tasks with dates and metadata', async () => {
-    const result = await tool.execute({
+    const response = await tool.execute({
       items: [
         {
           tempId: 'proj9',
@@ -328,12 +346,13 @@ describe('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    expect(result).toHaveProperty('success', true);
-    const data = (result as { data: { created: number; results: Array<{ realId: string; type: string }> } }).data;
-    expect(data.created).toBe(2);
+    // Tool returns wrapped response format
+    expect(response).toHaveProperty('success', true);
+    const result = (response as { data: { created: number; results: Array<{ realId: string; type: string }> } }).data;
+    expect(result.created).toBe(2);
 
     // Cleanup
-    for (const item of data.results.reverse()) {
+    for (const item of result.results.reverse()) {
       if (item.realId) {
         createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
       }
