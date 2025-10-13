@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PermissionChecker, checkOmniFocusPermissions, createPermissionErrorResponse } from '../../../src/utils/permissions.js';
+import { PermissionChecker } from '../../../src/utils/permissions.js';
 
 // Mock child_process.execFile
 const execFileMock = vi.fn();
@@ -32,19 +32,19 @@ describe('PermissionChecker', () => {
 
   it('returns hasPermission=true when osascript succeeds and caches result', async () => {
     resolveWith(null);
-    const first = await checkOmniFocusPermissions();
+    const first = await PermissionChecker.getInstance().checkPermissions();
     expect(first.hasPermission).toBe(true);
 
     // cached within TTL; execFile not called again
     const calls = execFileMock.mock.calls.length;
-    const second = await checkOmniFocusPermissions();
+    const second = await PermissionChecker.getInstance().checkPermissions();
     expect(second.hasPermission).toBe(true);
     expect(execFileMock.mock.calls.length).toBe(calls);
   });
 
   it('maps -1743 to permission denied with instructions', async () => {
     resolveWith(new Error('-1743 Not allowed to send Apple events'));
-    const res = await checkOmniFocusPermissions();
+    const res = await PermissionChecker.getInstance().checkPermissions();
     expect(res.hasPermission).toBe(false);
     expect(res.error).toMatch(/Not authorized/i);
     expect(res.instructions).toMatch(/Automation/);
@@ -52,32 +52,27 @@ describe('PermissionChecker', () => {
 
   it('maps -600 / not running to helpful message', async () => {
     resolveWith(new Error('Application OmniFocus isn\'t running (-600)'));
-    const res = await checkOmniFocusPermissions();
+    const res = await PermissionChecker.getInstance().checkPermissions();
     expect(res.hasPermission).toBe(false);
     expect(res.error).toMatch(/not running/i);
   });
 
   it('maps timeout to specific message', async () => {
     resolveWith(new Error('ETIMEDOUT: timeout'));
-    const res = await checkOmniFocusPermissions();
+    const res = await PermissionChecker.getInstance().checkPermissions();
     expect(res.hasPermission).toBe(false);
     expect(res.error).toMatch(/Timed out/i);
   });
 
   it('resetCache forces a recheck', async () => {
     resolveWith(null);
-    await checkOmniFocusPermissions();
+    await PermissionChecker.getInstance().checkPermissions();
     const callsAfterFirst = execFileMock.mock.calls.length;
 
     PermissionChecker.getInstance().resetCache();
     resolveWith(null);
-    await checkOmniFocusPermissions();
+    await PermissionChecker.getInstance().checkPermissions();
     expect(execFileMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
-  });
-
-  it('createPermissionErrorResponse builds standard error shape', () => {
-    const err = createPermissionErrorResponse({ hasPermission: false, error: 'x', instructions: 'y' });
-    expect(err).toMatchObject({ error: true, code: 'PERMISSION_DENIED' });
   });
 });
 
