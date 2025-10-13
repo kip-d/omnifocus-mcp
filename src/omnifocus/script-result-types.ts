@@ -38,24 +38,6 @@ export function isScriptError<T>(result: ScriptResult<T>): result is ScriptError
 }
 
 /**
- * Zod schema for validating script results from JXA
- * Creates a discriminated union schema for any data type
- */
-export const ScriptResultSchema = <T extends z.ZodType>(dataSchema: T) => z.discriminatedUnion('success', [
-  z.object({
-    success: z.literal(true),
-    data: dataSchema,
-  }),
-  z.object({
-    success: z.literal(false),
-    error: z.string(),
-    context: z.string().optional(),
-    details: z.unknown().optional(),
-    stack: z.string().optional(),
-  }),
-]);
-
-/**
  * Common JXA script result patterns for OmniFocus operations
  * These provide validation for the most frequent script response shapes
  */
@@ -84,33 +66,6 @@ export const TaskResultSchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 
-// For operation results (create, update, delete responses)
-export const OperationResultSchema = z.object({
-  success: z.boolean(),
-  message: z.string().optional(),
-  changes: z.array(z.string()).optional(),
-  warnings: z.array(z.string()).optional(),
-  // Allow arbitrary additional data for specific operations
-}).passthrough();
-
-// Specific schema for project update operations
-export const ProjectUpdateResultSchema = z.object({
-  success: z.boolean(),
-  message: z.string().optional(),
-  changes: z.array(z.string()).optional(),
-  warnings: z.array(z.string()).optional(),
-  project: ProjectResultSchema.optional(),
-});
-
-// Specific schema for task update operations
-export const TaskUpdateResultSchema = z.object({
-  success: z.boolean(),
-  message: z.string().optional(),
-  changes: z.array(z.string()).optional(),
-  warnings: z.array(z.string()).optional(),
-  task: TaskResultSchema.optional(),
-});
-
 // Schema for task/project list results
 export const ListResultSchema = z.object({
   items: z.array(z.unknown()), // Will be tasks or projects
@@ -127,14 +82,6 @@ export const FolderResultSchema = z.object({
   name: z.string(),
   parent: z.string().optional(),
   status: z.string().optional(),
-});
-
-// Schema for folder operations results
-export const FolderOperationResultSchema = z.object({
-  success: z.boolean(),
-  message: z.string().optional(),
-  folder: FolderResultSchema.optional(),
-  changes: z.array(z.string()).optional(),
 });
 
 // Schema for analytics results
@@ -168,22 +115,3 @@ export function createScriptError(
   return { success: false, error, context, details, stack };
 }
 
-/**
- * Type-safe result unwrapping for error boundary patterns
- * Throws if the result is an error, otherwise returns the data
- */
-export function unwrapScriptResult<T>(result: ScriptResult<T>): T {
-  if (isScriptSuccess(result)) {
-    return result.data;
-  }
-
-  const error = new Error(`Script execution failed: ${result.error}`);
-  error.name = 'ScriptExecutionError';
-  if (result.context) {
-    error.message += ` (Context: ${result.context})`;
-  }
-  if (result.stack) {
-    error.stack = result.stack;
-  }
-  throw error;
-}
