@@ -148,8 +148,8 @@ export class OmniAutomation {
     console.error(`[OMNI_AUTOMATION_DEBUG] Script ${(!hasIIFE && !hasAppInit) ? 'wrapped' : 'not wrapped'}, final length: ${wrappedScript.length}`);
 
     // Create promise and track it to prevent premature server exit
-    const executionPromise = await this.createTrackedExecutionPromise<T>(wrappedScript);
-    return executionPromise;
+    // Don't await here - we need to return the SAME promise that's tracked in pendingOperations
+    return this.createTrackedExecutionPromise<T>(wrappedScript);
   }
 
   private async createTrackedExecutionPromise<T>(wrappedScript: string): Promise<T> {
