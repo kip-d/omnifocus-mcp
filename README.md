@@ -222,6 +222,37 @@ Supports complex recurrence patterns:
 
 See `/docs/TROUBLESHOOTING.md` for solutions.
 
+## Testing
+
+The project uses Vitest with separate unit and integration test suites:
+
+### Unit Tests (Fast - ~15-20s)
+```bash
+npm run test:unit
+```
+
+Fast tests with no external dependencies. Use for rapid development cycles.
+
+### Integration Tests (Thorough - ~20-25s)
+```bash
+npm run test:integration
+```
+
+End-to-end tests that require OmniFocus running on macOS. Tests actual MCP protocol and data persistence.
+
+- **Protocol Tests**: MCP server initialization, tool discovery, error handling
+- **Data Lifecycle Tests**: Task/project CRUD operations, tag-based tracking, cleanup verification
+
+**Environment Variables:**
+- `DISABLE_INTEGRATION_TESTS=true` - Skip integration tests entirely
+
+### Complete Test Suite (~35-40s)
+```bash
+npm test
+```
+
+Runs both unit and integration tests.
+
 ## Additional Resources
 
 ### For Contributors & Advanced Users
