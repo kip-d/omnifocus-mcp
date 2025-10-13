@@ -102,59 +102,6 @@ export interface OverdueAnalysisDataV2 {
   }>;
 }
 
-export interface ProductivityStatsDataV2 {
-  period: string;
-  stats: {
-    overview: {
-      totalTasks: number;
-      completedTasks: number;
-      completionRate: number;
-      activeProjects: number;
-      overdueCount: number;
-    };
-    daily: unknown[];
-    weekly: Record<string, unknown>;
-    projectStats: Array<{
-      name: string;
-      completedCount: number;
-      totalCount: number;
-      completionRate: number;
-    }>;
-    tagStats: Array<{
-      name: string;
-      count: number;
-    }>;
-  };
-  insights: Record<string, unknown>;
-  healthScore: number;
-}
-
-export interface TaskVelocityDataV2 {
-  velocity: {
-    period: string;
-    tasksCompleted: number;
-    averagePerDay: number;
-    peakDay: {
-      date: string | null;
-      count: number;
-    };
-    trend: 'increasing' | 'stable' | 'decreasing';
-    predictedCapacity: number;
-  };
-  daily: Array<{
-    date: string;
-    completed: number;
-  }>;
-  patterns: {
-    byDayOfWeek: Record<string, number>;
-    byTimeOfDay: Record<string, number>;
-    byProject: Array<{
-      name: string;
-      completed: number;
-    }>;
-  };
-  insights: string[];
-}
 
 // Task Management Operation types
 export interface TaskOperationDataV2 {
@@ -227,23 +174,11 @@ export interface FoldersDataV2 {
   folders: FolderV2[];
 }
 
-export interface FolderOperationDataV2 {
-  folder: FolderV2;
-  operation: 'create' | 'update' | 'delete' | 'get' | 'search';
-  changes?: Record<string, unknown>;
-}
-
 // Perspective-related types
 export interface PerspectiveV2 {
   id: string;
   name: string;
   builtIn?: boolean;
-}
-
-export interface PerspectivesDataV2 {
-  perspectives: PerspectiveV2[];
-  tasks?: TaskV2[]; // When getting tasks for a specific perspective
-  formatted?: string; // Formatted output for human reading
 }
 
 // Pattern Analysis types
@@ -304,22 +239,7 @@ export interface BatchResultV2 {
   item?: TaskV2 | ProjectV2;
 }
 
-export interface BatchCreateDataV2 {
-  results: BatchResultV2[];
-  summary: {
-    totalProcessed: number;
-    successCount: number;
-    failureCount: number;
-  };
-  idMap?: Record<string, string>; // tempId -> actualId mapping
-}
-
 // System types
-export interface SystemInfoDataV2 {
-  operation: 'version' | 'health' | 'metrics' | 'cache_stats' | 'diagnose';
-  data: Record<string, unknown>;
-}
-
 // Review types
 export interface ReviewV2 {
   projectId: string;
@@ -342,46 +262,3 @@ export interface ReviewsDataV2 {
 
 export type ReviewsResponseV2 = StandardResponseV2<ReviewsDataV2>;
 
-// Workflow Analysis types
-export interface WorkflowDataV2 {
-  analysis: {
-    bottlenecks: Array<{
-      type: string;
-      description: string;
-      severity: 'high' | 'medium' | 'low';
-      affectedItems: number;
-    }>;
-    opportunities: Array<{
-      type: string;
-      description: string;
-      potentialImpact: string;
-    }>;
-    healthMetrics: Record<string, number>;
-  };
-  recommendations: string[];
-}
-
-// Meeting Notes parsing types
-export interface ParsedMeetingNotesDataV2 {
-  actionItems: Array<{
-    name: string;
-    note?: string;
-    project?: string;
-    dueDate?: string;
-    deferDate?: string;
-    tags?: string[];
-    estimatedMinutes?: number;
-    confidence: number;
-  }>;
-  projects?: Array<{
-    name: string;
-    note?: string;
-    tasks?: string[];
-  }>;
-  summary: {
-    totalActionItems: number;
-    totalProjects: number;
-    avgConfidence: number;
-  };
-  batchItems?: unknown[]; // For batch_create compatibility
-}
