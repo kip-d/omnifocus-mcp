@@ -42,30 +42,6 @@ export function isScriptError<T>(result: ScriptResult<T>): result is ScriptError
  * These provide validation for the most frequent script response shapes
  */
 
-// For project operations (create, update, read)
-export const ProjectResultSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  note: z.string().optional(),
-  dueDate: z.string().nullish(),
-  deferDate: z.string().nullish(),
-  flagged: z.boolean().optional(),
-  status: z.string().optional(),
-});
-
-// For task operations (create, update, read)
-export const TaskResultSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  note: z.string().optional(),
-  completed: z.boolean().optional(),
-  dueDate: z.string().nullish(),
-  deferDate: z.string().nullish(),
-  flagged: z.boolean().optional(),
-  projectId: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-});
-
 // Schema for task/project list results
 export const ListResultSchema = z.object({
   items: z.array(z.unknown()), // Will be tasks or projects
@@ -74,14 +50,6 @@ export const ListResultSchema = z.object({
     insights: z.array(z.string()).optional(),
   }).optional(),
   metadata: z.record(z.unknown()).optional(),
-});
-
-// Schema for folder operations
-export const FolderResultSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  parent: z.string().optional(),
-  status: z.string().optional(),
 });
 
 // Schema for analytics results
