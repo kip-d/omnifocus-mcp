@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getAllHelpers } from '../../src/omnifocus/scripts/shared/helpers.js';
+import { getUnifiedHelpers } from '../../src/omnifocus/scripts/shared/helpers.js';
 
 /**
  * Test suite to verify that tasks in completed projects are correctly
@@ -9,12 +9,12 @@ import { getAllHelpers } from '../../src/omnifocus/scripts/shared/helpers.js';
 describe('Completed Project Task Handling', () => {
   describe('Helper Function Tests', () => {
     it('should verify isTaskEffectivelyCompleted function exists in helpers', () => {
-      const helpers = getAllHelpers();
+      const helpers = getUnifiedHelpers();
       expect(helpers).toContain('function isTaskEffectivelyCompleted(task)');
     });
 
     it('should check task completion including parent project status', () => {
-      const helpers = getAllHelpers();
+      const helpers = getUnifiedHelpers();
       
       // Verify the function checks task.completed()
       expect(helpers).toContain('if (task.completed()) return true');
@@ -82,7 +82,7 @@ describe('Completed Project Task Handling', () => {
       // and we want to ensure its tasks are not returned when filtering for incomplete tasks
       
       const mockScript = `
-        ${getAllHelpers()}
+        ${getUnifiedHelpers()}
         
         // Simulate a task in a completed project
         const mockTask = {
@@ -144,7 +144,7 @@ describe('Completed Project Task Handling', () => {
 
   describe('Edge Cases', () => {
     it('should handle tasks without a containing project', () => {
-      const helpers = getAllHelpers();
+      const helpers = getUnifiedHelpers();
       
       // Verify the helper safely handles tasks without projects (inbox tasks)
       expect(helpers).toContain('const container = task.containingProject()');
@@ -152,7 +152,7 @@ describe('Completed Project Task Handling', () => {
     });
 
     it('should handle errors when checking completion status', () => {
-      const helpers = getAllHelpers();
+      const helpers = getUnifiedHelpers();
       
       // Verify error handling in isTaskEffectivelyCompleted
       expect(helpers).toContain('} catch (e) {');
@@ -160,7 +160,7 @@ describe('Completed Project Task Handling', () => {
     });
 
     it('should check both completed() and status === "done" for projects', () => {
-      const helpers = getAllHelpers();
+      const helpers = getUnifiedHelpers();
       
       // Some projects might use completed() method, others might use status property
       expect(helpers).toContain('container.completed && container.completed()');
