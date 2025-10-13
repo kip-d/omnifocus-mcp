@@ -174,13 +174,6 @@ export interface FoldersDataV2 {
   folders: FolderV2[];
 }
 
-// Perspective-related types
-export interface PerspectiveV2 {
-  id: string;
-  name: string;
-  builtIn?: boolean;
-}
-
 // Pattern Analysis types
 export interface PatternFinding {
   type: string;
@@ -228,16 +221,6 @@ export interface RecurringTasksDataV2 {
 }
 
 export type RecurringTasksResponseV2 = StandardResponseV2<RecurringTasksDataV2>;
-
-// Batch operation types
-export interface BatchResultV2 {
-  tempId?: string;
-  actualId?: string;
-  type: 'project' | 'task';
-  success: boolean;
-  error?: string;
-  item?: TaskV2 | ProjectV2;
-}
 
 // System types
 // Review types

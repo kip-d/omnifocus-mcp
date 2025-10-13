@@ -5,24 +5,6 @@
  * while maintaining backward compatibility with simple filters.
  */
 
-/**
- * Filter operators for advanced querying
- */
-export type FilterOperator =
-  | 'OR'         // Any value in array matches
-  | 'AND'        // All values in array match
-  | 'NOT_IN'     // None of the values in array match
-  | 'CONTAINS'   // String contains substring (case-insensitive)
-  | 'STARTS_WITH' // String starts with substring (case-insensitive)
-  | 'ENDS_WITH'  // String ends with substring (case-insensitive)
-  | 'EQUALS'     // Exact match (case-insensitive for strings)
-  | 'NOT_EQUALS' // Not equal to value
-  | '>'          // Greater than (dates/numbers)
-  | '>='         // Greater than or equal (dates/numbers)
-  | '<'          // Less than (dates/numbers)
-  | '<='         // Less than or equal (dates/numbers)
-  | 'IN'         // Value in array (for status fields)
-  | 'BETWEEN';   // Between two values (dates/numbers)
 
 /**
  * String filter with operator
@@ -160,9 +142,3 @@ export function isNumberFilter(filter: unknown): filter is NumberFilter {
   );
 }
 
-/**
- * Type guard for boolean filter
- */
-export function isBooleanFilter(filter: unknown): filter is BooleanFilter {
-  return typeof filter === 'boolean';
-}

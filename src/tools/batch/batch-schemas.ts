@@ -123,5 +123,3 @@ export const BatchCreateSchema = z.object({
 
 export type BatchCreateInput = z.infer<typeof BatchCreateSchema>;
 export type BatchItem = z.infer<typeof BatchItemSchema>;
-export type ProjectBatchItem = z.infer<typeof ProjectBatchItemSchema>;
-export type TaskBatchItem = z.infer<typeof TaskBatchItemSchema>;
