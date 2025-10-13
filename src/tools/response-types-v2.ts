@@ -102,8 +102,6 @@ export interface OverdueAnalysisDataV2 {
   }>;
 }
 
-export type OverdueAnalysisResponseV2 = StandardResponseV2<OverdueAnalysisDataV2>;
-
 export interface ProductivityStatsDataV2 {
   period: string;
   stats: {
@@ -131,8 +129,6 @@ export interface ProductivityStatsDataV2 {
   healthScore: number;
 }
 
-export type ProductivityStatsResponseV2 = StandardResponseV2<ProductivityStatsDataV2>;
-
 export interface TaskVelocityDataV2 {
   velocity: {
     period: string;
@@ -159,8 +155,6 @@ export interface TaskVelocityDataV2 {
   };
   insights: string[];
 }
-
-export type TaskVelocityResponseV2 = StandardResponseV2<TaskVelocityDataV2>;
 
 // Task Management Operation types
 export interface TaskOperationDataV2 {
@@ -239,9 +233,6 @@ export interface FolderOperationDataV2 {
   changes?: Record<string, unknown>;
 }
 
-export type FoldersResponseV2 = StandardResponseV2<FoldersDataV2>;
-export type FolderOperationResponseV2 = StandardResponseV2<FolderOperationDataV2>;
-
 // Perspective-related types
 export interface PerspectiveV2 {
   id: string;
@@ -254,8 +245,6 @@ export interface PerspectivesDataV2 {
   tasks?: TaskV2[]; // When getting tasks for a specific perspective
   formatted?: string; // Formatted output for human reading
 }
-
-export type PerspectivesResponseV2 = StandardResponseV2<PerspectivesDataV2>;
 
 // Pattern Analysis types
 export interface PatternFinding {
@@ -325,15 +314,11 @@ export interface BatchCreateDataV2 {
   idMap?: Record<string, string>; // tempId -> actualId mapping
 }
 
-export type BatchCreateResponseV2 = StandardResponseV2<BatchCreateDataV2>;
-
 // System types
 export interface SystemInfoDataV2 {
   operation: 'version' | 'health' | 'metrics' | 'cache_stats' | 'diagnose';
   data: Record<string, unknown>;
 }
-
-export type SystemResponseV2 = StandardResponseV2<SystemInfoDataV2>;
 
 // Review types
 export interface ReviewV2 {
@@ -376,8 +361,6 @@ export interface WorkflowDataV2 {
   recommendations: string[];
 }
 
-export type WorkflowAnalysisResponseV2 = StandardResponseV2<WorkflowDataV2>;
-
 // Meeting Notes parsing types
 export interface ParsedMeetingNotesDataV2 {
   actionItems: Array<{
@@ -402,5 +385,3 @@ export interface ParsedMeetingNotesDataV2 {
   };
   batchItems?: unknown[]; // For batch_create compatibility
 }
-
-export type ParsedMeetingNotesResponseV2 = StandardResponseV2<ParsedMeetingNotesDataV2>;
