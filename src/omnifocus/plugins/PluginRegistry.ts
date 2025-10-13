@@ -112,5 +112,3 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
   }
 }
 
-// Global registry instance
-export const recurringTaskRegistry = new RecurringTaskPluginRegistry();
