@@ -3,12 +3,18 @@ import {
   LocalDateTimeSchema,
   IdSchema,
 } from './shared-schemas.js';
-import { ReviewIntervalSchema } from './project-schemas.js';
 import { coerceBoolean, coerceNumber } from './coercion-helpers.js';
 
 /**
  * Consolidated tool schemas for better LLM usage
  */
+
+// Review interval schema (extracted from project-schemas.ts)
+export const ReviewIntervalSchema = z.object({
+  unit: z.enum(['day', 'week', 'month', 'year']).describe('Time unit for review interval'),
+  steps: z.number().int().positive().describe('Number of units between reviews'),
+  fixed: z.boolean().optional().default(false).describe('Whether to use fixed scheduling (true) or floating (false)'),
+}).describe('Review interval configuration');
 
 // Base operation schemas for discriminated unions
 const ListForReviewOperation = z.object({
