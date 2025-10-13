@@ -111,10 +111,14 @@ describe('ExportTool (self-contained implementation)', () => {
 
   describe('Project Export', () => {
     it('handles project export with direct script execution', async () => {
-      mockOmni.execute.mockResolvedValue({
-        format: 'json',
-        data: [{ id: 'p1', name: 'Test Project' }],
-        count: 1
+      mockOmni.buildScript.mockReturnValue('mock-script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: true,
+        data: {
+          format: 'json',
+          data: [{ id: 'p1', name: 'Test Project' }],
+          count: 1
+        }
       });
 
       const res: any = await tool.executeValidated({ 
@@ -134,14 +138,15 @@ describe('ExportTool (self-contained implementation)', () => {
     });
 
     it('handles project export failures', async () => {
-      mockOmni.execute.mockResolvedValue({
-        error: true,
-        message: 'Projects export failed'
+      mockOmni.buildScript.mockReturnValue('mock-script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: false,
+        error: 'Projects export failed'
       });
 
       const res: any = await tool.executeValidated({ type: 'projects' } as any);
       expect(res.success).toBe(false);
-      expect(res.error.code).toBe('PROJECT_EXPORT_FAILED');
+      expect(res.error.code).toBe('SCRIPT_ERROR');
     });
   });
 
@@ -155,17 +160,11 @@ describe('ExportTool (self-contained implementation)', () => {
     });
 
     it('handles bulk export with direct implementation', async () => {
-      // Mock task export
+      mockOmni.buildScript.mockReturnValue('mock-script');
+      // Mock both task and project exports with executeJson
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { format: 'json', data: [{ id: 't1' }], count: 1 }
-      });
-      
-      // Mock project export
-      mockOmni.execute.mockResolvedValue({
-        format: 'json',
-        data: [{ id: 'p1' }],
-        count: 1
       });
 
       const res: any = await tool.executeValidated({ 
@@ -238,10 +237,14 @@ describe('ExportTool (self-contained implementation)', () => {
     });
 
     it('builds project export script with correct parameters', async () => {
-      mockOmni.execute.mockResolvedValue({
-        format: 'markdown',
-        data: '# Projects\n## Project 1',
-        count: 1
+      mockOmni.buildScript.mockReturnValue('mock-script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: true,
+        data: {
+          format: 'markdown',
+          data: '# Projects\n## Project 1',
+          count: 1
+        }
       });
 
       await tool.executeValidated({ 
