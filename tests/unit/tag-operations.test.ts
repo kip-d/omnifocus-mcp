@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT, MANAGE_TAGS_SCRIPT } from 'src/omnifocus/scripts/tags';
+import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags.js';
+import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Operations Fix Verification', () => {
   it('should use correct property access without parentheses', () => {

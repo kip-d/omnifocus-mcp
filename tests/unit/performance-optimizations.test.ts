@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LIST_TASKS_SCRIPT, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks.js';
-import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects.js';
+import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
 
 describe('Performance Optimization Tests', () => {
   describe('list_tasks skipAnalysis parameter', () => {
@@ -68,7 +68,7 @@ describe('Performance Optimization Tests', () => {
     });
 
     it('should use Project.byIdentifier for O(1) lookups', async () => {
-      const { UPDATE_PROJECT_SCRIPT } = await import('../../src/omnifocus/scripts/projects.js');
+      const { UPDATE_PROJECT_SCRIPT } = await import('../../src/omnifocus/scripts/projects/update-project.js');
       // Project scripts still use iteration, but could be optimized
       // This is a note for future optimization
       expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   localToUTC,
-  parseFlexibleDate,
   getSystemTimezone,
   getCurrentTimezoneOffset,
   getTimezoneInfo,
@@ -101,44 +100,6 @@ describe('Date Handling and Timezone Utilities', () => {
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(new Date(result).getUTCDate()).toBe(29);
       expect(new Date(result).getUTCMonth()).toBe(1); // February = 1
-    });
-  });
-
-  describe('parseFlexibleDate', () => {
-    beforeEach(() => {
-      const mockDate = new Date('2024-01-15T12:00:00.000Z');
-      vi.useFakeTimers();
-      vi.setSystemTime(mockDate);
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('should return null for empty/null input', () => {
-      expect(parseFlexibleDate(null)).toBeNull();
-      expect(parseFlexibleDate(undefined)).toBeNull();
-      expect(parseFlexibleDate('')).toBeNull();
-    });
-
-    it('should handle ISO format strings', () => {
-      const iso = '2024-01-15T14:30:00.000Z';
-      expect(parseFlexibleDate(iso)).toBe('2024-01-15T14:30:00.000Z');
-    });
-
-    it('should handle relative dates', () => {
-      expect(parseFlexibleDate('tomorrow')).toMatch(/^2024-01-16T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(parseFlexibleDate('next friday')).toMatch(/^2024-01-19T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should handle local date formats', () => {
-      const result = parseFlexibleDate('2024-01-15');
-      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
-
-    it('should return null for invalid dates', () => {
-      expect(parseFlexibleDate('invalid-date')).toBeNull();
-      expect(parseFlexibleDate('2024-13-01')).toBeNull();
     });
   });
 
