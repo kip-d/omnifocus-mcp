@@ -3,8 +3,7 @@ import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format-v2.js';
-import { CreateTaskResponse } from '../types.js';
+import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { localToUTC } from '../../utils/timezone.js';
 import {
   TaskCreationArgs,
@@ -170,9 +169,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
   async executeValidated(args: ManageTaskInput): Promise<TaskOperationResponseV2> {
     const timer = new OperationTimerV2();
-    const { operation, taskId, ...params } = args;
+    const { operation, taskId, ...params} = args;
 
-    console.error(`[MANAGE_TASK_DEBUG] Starting ${operation} operation with args:`, JSON.stringify(args, null, 2));
+    this.logger.debug(`Starting ${operation} operation`, { operation, taskId, params });
 
     try {
       // Validate required parameters based on operation
@@ -202,12 +201,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
       // Route to appropriate tool based on operation
       let result: TaskOperationResponseV2;
-      console.error(`[MANAGE_TASK_DEBUG] Routing to ${operation} tool`);
+      this.logger.debug('Routing to operation handler', { operation });
 
       switch (operation) {
         case 'create': {
           // Direct implementation of task creation
-          console.error('[MANAGE_TASK_DEBUG] Starting create operation with params:', JSON.stringify(params, null, 2));
+          this.logger.debug('Starting create operation', { params });
 
           // Filter out null/undefined values and convert dates
           const createArgs: Partial<TaskCreationArgs> = { name: params.name! };
@@ -222,7 +221,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           if (params.sequential !== undefined) createArgs.sequential = typeof params.sequential === 'string' ? params.sequential === 'true' : params.sequential;
           const repeatRuleForUpdate = this.normalizeRepeatRuleInput(params.repeatRule);
           if (repeatRuleForUpdate) {
-            console.error('[MANAGE_TASK_DEBUG] Normalized repeat rule for creation:', JSON.stringify(repeatRuleForUpdate));
+            this.logger.debug('Normalized repeat rule for creation', { repeatRule: repeatRuleForUpdate });
             createArgs.repeatRule = repeatRuleForUpdate;
           }
 
@@ -250,14 +249,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             );
           }
 
-          console.error('[MANAGE_TASK_DEBUG] Converted task data:', JSON.stringify(convertedTaskData, null, 2));
+          this.logger.debug('Converted task data for script execution', { convertedTaskData });
 
           const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData: convertedTaskData });
           let createResult: unknown;
 
           try {
             const scriptResult = await this.execJson(script);
-            console.error('[MANAGE_TASK_DEBUG] execJson returned:', JSON.stringify(scriptResult, null, 2));
+            this.logger.debug('execJson returned result', { scriptResult });
 
             if (isScriptError(scriptResult)) {
               return createErrorResponseV2(
@@ -271,11 +270,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             }
             createResult = (scriptResult as ScriptExecutionResult).data;
           } catch (e) {
-            console.error('[MANAGE_TASK_DEBUG] Script execution threw error:', e);
+            this.logger.error('Script execution threw error', { error: e });
             return this.handleErrorV2<TaskOperationDataV2>(e);
           }
 
-          console.error('[MANAGE_TASK_DEBUG] Processing result:', JSON.stringify(createResult, null, 2));
+          this.logger.debug('Processing script result', { createResult });
 
           if (createResult && typeof createResult === 'object' && 'error' in createResult && (createResult as { error: unknown }).error) {
             // Enhanced error response with recovery suggestions
@@ -337,14 +336,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           }
 
           const createdTaskId = (parsedCreateResult as { taskId?: string; id?: string }).taskId || (parsedCreateResult as { id?: string }).id || null;
-          console.error('[MANAGE_TASK_DEBUG] Post-create task ID:', createdTaskId);
+          this.logger.debug('Post-create task ID', { createdTaskId });
 
           if (repeatRuleForUpdate && createdTaskId) {
             try {
-              console.error('[MANAGE_TASK_DEBUG] Applying repeat rule via update');
+              this.logger.debug('Applying repeat rule via update');
               const repeatOnlyScript = createUpdateTaskScript(createdTaskId, { repeatRule: repeatRuleForUpdate });
               const repeatUpdateResult = await this.execJson(repeatOnlyScript);
-              console.error('[MANAGE_TASK_DEBUG] Repeat rule update result:', JSON.stringify(repeatUpdateResult, null, 2));
+              this.logger.debug('Repeat rule update result', { repeatUpdateResult });
               if (isScriptError(repeatUpdateResult)) {
                 this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
               } else {
@@ -364,11 +363,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             affectsOverdue: false, // New tasks can't be overdue
           });
 
-          console.error('[MANAGE_TASK_DEBUG] About to return success response with parsedResult:', JSON.stringify(parsedCreateResult, null, 2));
+          this.logger.debug('Returning success response', { parsedCreateResult });
 
           result = createSuccessResponseV2(
             'manage_task',
-            { task: parsedCreateResult as CreateTaskResponse, operation: 'create' as const },
+            { task: parsedCreateResult, operation: 'create' as const },
             undefined,
             {
               ...timer.toMetadata(),
@@ -384,7 +383,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             },
           ) as unknown as TaskOperationResponseV2;
 
-          console.error('[MANAGE_TASK_DEBUG] Final create success response:', JSON.stringify(result, null, 2));
+          this.logger.debug('Final create success response', { result });
           break;
         }
 
@@ -660,15 +659,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       }
 
       // Format result for CLI testing if needed
-      console.error('[MANAGE_TASK_DEBUG] Final result before formatForCLI:', JSON.stringify(result, null, 2));
+      this.logger.debug('Final result before formatForCLI', { result });
       const finalResult = this.formatForCLI(result, operation, 'success');
-      console.error('[MANAGE_TASK_DEBUG] Final result after formatForCLI:', JSON.stringify(finalResult, null, 2));
+      this.logger.debug('Final result after formatForCLI', { finalResult });
       return finalResult;
 
     } catch (error) {
-      console.error('[MANAGE_TASK_DEBUG] ERROR caught in executeValidated:', error);
+      this.logger.error('ERROR caught in executeValidated', { error });
       const errorResult = this.handleErrorV2<TaskOperationDataV2>(error);
-      console.error('[MANAGE_TASK_DEBUG] Error result:', JSON.stringify(errorResult, null, 2));
+      this.logger.debug('Error result', { errorResult });
       return this.formatForCLI(errorResult, operation, 'error');
     }
   }
