@@ -288,28 +288,3 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * Get today's date in YYYY-MM-DD format
- */
-export function getTodayString(): string {
-  return formatDate(new Date());
-}
-
-/**
- * Get tomorrow's date in YYYY-MM-DD format
- */
-export function getTomorrowString(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return formatDate(tomorrow);
-}
-
-/**
- * Add days to a date string
- */
-export function addDays(dateStr: string, days: number): string {
-  const parts = dateStr.split('-');
-  const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-  date.setDate(date.getDate() + days);
-  return formatDate(date);
-}

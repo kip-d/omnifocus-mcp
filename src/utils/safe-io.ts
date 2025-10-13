@@ -26,11 +26,6 @@ export const JxaEnvelopeSchema = z.discriminatedUnion('ok', [
   }),
 ]);
 
-export function isEnvelope(value: unknown): value is JxaEnvelope {
-  const res = JxaEnvelopeSchema.safeParse(value);
-  return res.success;
-}
-
 type LegacyErrorShape = { error: true; message?: unknown; details?: unknown };
 
 function isLegacyErrorShape(val: unknown): val is LegacyErrorShape {
@@ -61,11 +56,6 @@ export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {
   return { ok: true, data: (value ?? null) as JsonValue, v: 'legacy-1' };
 }
 
-export function toError(e: unknown): Error {
-  if (e instanceof Error) return e;
-  return new Error(typeof e === 'string' ? e : safeStringify(e));
-}
-
 export function safeStringify(value: unknown): string {
   try {
     // JSON.stringify replacer function handles unknown values safely
@@ -76,12 +66,3 @@ export function safeStringify(value: unknown): string {
   }
 }
 
-type MinimalLogger = { info: (...args: unknown[]) => void };
-
-export function safeLog(message: string, data?: unknown, logger: MinimalLogger = console) {
-  if (data === undefined) {
-    logger.info(message);
-    return;
-  }
-  logger.info(message, safeStringify(data));
-}
