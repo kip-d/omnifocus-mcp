@@ -97,7 +97,7 @@ describe('PerspectivesToolV2', () => {
       const result = await tool.executeValidated({ operation: 'list' });
 
       expect(result.success).toBe(false);
-      expect(result.error.code).toBe('UNKNOWN_ERROR');
+      expect(result.error.code).toBe('SCRIPT_ERROR');
       expect(result.error.message).toBe('Script failed');
     });
   });

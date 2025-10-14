@@ -1,0 +1,120 @@
+src/cache/CacheWarmer.ts:19 - WarmingStrategy (used in module)
+src/cache/CacheWarmer.ts:431 - WarmingResult (used in module)
+src/cache/CacheWarmer.ts:438 - WarmingResults (used in module)
+src/omnifocus/jxa-types.ts:6 - OmniFocusError
+src/omnifocus/jxa-types.ts:16 - BaseRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:27 - HourlyRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:32 - DailyRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:37 - WeeklyRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:43 - MonthlyRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:51 - YearlyRepetitionRule (used in module)
+src/omnifocus/jxa-types.ts:58 - RepetitionRule
+src/omnifocus/jxa-types.ts:69 - TagHierarchyNode (used in module)
+src/omnifocus/jxa-types.ts:79 - OverduePattern
+src/omnifocus/OmniAutomation.ts:24 - globalPendingOperations (used in module)
+src/omnifocus/script-response-types.ts:7 - TaskData (used in module)
+src/omnifocus/script-response-types.ts:18 - ProjectBottleneck (used in module)
+src/omnifocus/script-response-types.ts:25 - PatternData (used in module)
+src/omnifocus/script-response-types.ts:52 - StatsOverview (used in module)
+src/omnifocus/script-response-types.ts:61 - ProjectStats (used in module)
+src/omnifocus/script-response-types.ts:70 - TagStats (used in module)
+src/omnifocus/script-response-types.ts:88 - VelocityMetrics (used in module)
+src/omnifocus/script-response-types.ts:96 - TrendData (used in module)
+src/omnifocus/script-response-types.ts:103 - PredictionData (used in module)
+src/omnifocus/script-response-types.ts:122 - Pattern (used in module)
+src/omnifocus/script-response-types.ts:130 - Bottleneck (used in module)
+src/omnifocus/script-response-types.ts:152 - ReviewProjectData (used in module)
+src/omnifocus/script-response-types.ts:199 - RepeatRule (used in module)
+src/omnifocus/script-result-types.ts:16 - ScriptSuccess (used in module)
+src/omnifocus/script-result-types.ts:21 - ScriptError (used in module)
+src/tools/response-types-v2.ts:11 - TaskV2 (used in module)
+src/tools/response-types-v2.ts:31 - TasksDataV2 (used in module)
+src/tools/response-types-v2.ts:39 - ProjectV2 (used in module)
+src/tools/response-types-v2.ts:60 - ProjectsDataV2 (used in module)
+src/tools/response-types-v2.ts:65 - ProjectOperationDataV2 (used in module)
+src/tools/response-types-v2.ts:128 - TagV2 (used in module)
+src/tools/response-types-v2.ts:162 - FolderV2 (used in module)
+src/tools/response-types-v2.ts:178 - PatternFinding (used in module)
+src/tools/response-types-v2.ts:227 - ReviewV2 (used in module)
+src/utils/error-taxonomy.ts:47 - createCategorizedError (used in module)
+src/utils/logger.ts:13 - LogContext (used in module)
+src/utils/logger.ts:21 - StructuredLogEntry (used in module)
+src/utils/metrics.ts:25 - AggregatedMetrics (used in module)
+src/utils/metrics.ts:42 - SystemMetrics (used in module)
+src/utils/metrics.ts:63 - MetricsCollector (used in module)
+src/utils/metrics.ts:217 - globalMetricsCollector (used in module)
+src/utils/permissions.ts:6 - PermissionStatus (used in module)
+src/utils/response-format.ts:132 - generateTaskSummary (used in module)
+src/utils/response-format.ts:272 - generateProjectSummary (used in module)
+src/utils/response-format.ts:36 - TaskSummary (used in module)
+src/utils/response-format.ts:59 - ProjectSummary (used in module)
+src/utils/response-format.ts:71 - AnalyticsSummary (used in module)
+src/utils/response-format.ts:85 - StandardMetadataV2 (used in module)
+src/utils/safe-io.ts:3 - JsonValue (used in module)
+src/utils/safe-io.ts:5 - JsonValueSchema (used in module)
+src/utils/safe-io.ts:16 - JxaResultOk (used in module)
+src/utils/safe-io.ts:17 - JxaResultErr (used in module)
+src/utils/safe-io.ts:18 - JxaEnvelope (used in module)
+src/utils/timezone.ts:12 - getSystemTimezone (used in module)
+src/utils/timezone.ts:81 - getCurrentTimezoneOffset (used in module)
+src/utils/timezone.ts:131 - getTimezoneInfo (used in module)
+src/utils/version.ts:6 - VersionInfo (used in module)
+src/omnifocus/api/api-types.ts:14 - OmniFocusTask
+src/omnifocus/api/api-types.ts:15 - OmniFocusProject
+src/omnifocus/api/api-types.ts:16 - OmniFocusTag
+src/omnifocus/api/api-types.ts:17 - OmniFocusDocument
+src/omnifocus/api/api-types.ts:18 - OmniFocusDatabase
+src/omnifocus/api/api-types.ts:19 - OmniFocusObjectIdentifier
+src/omnifocus/api/api-types.ts:22 - SafeGetter (used in module)
+src/omnifocus/api/api-types.ts:25 - TaskWithAnalysis
+src/omnifocus/api/api-types.ts:39 - ScriptResult
+src/omnifocus/api/api-types.ts:49 - SafeAccessors
+src/omnifocus/plugins/PluginRegistry.ts:6 - RecurringTaskPluginRegistry
+src/omnifocus/scripts/date-range-queries.ts:211 - GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT
+src/omnifocus/scripts/perspectives.ts:10 - LIST_PERSPECTIVES_SCRIPT (used in module)
+src/omnifocus/scripts/perspectives.ts:122 - QUERY_PERSPECTIVE_SCRIPT (used in module)
+src/omnifocus/utils/script-size-monitor.ts:62 - analyzeScriptSize (used in module)
+src/omnifocus/utils/script-size-monitor.ts:107 - logScriptSize (used in module)
+src/omnifocus/utils/script-size-monitor.ts:13 - ScriptSizeLimits (used in module)
+src/omnifocus/utils/script-size-monitor.ts:18 - ScriptSizeThresholds (used in module)
+src/omnifocus/utils/script-size-monitor.ts:38 - DEFAULT_THRESHOLDS (used in module)
+src/omnifocus/utils/script-size-monitor.ts:47 - ScriptSizeAnalysis (used in module)
+src/tools/batch/batch-schemas.ts:89 - BatchItemSchema (used in module)
+src/tools/batch/dependency-graph.ts:9 - BatchItemMinimal (used in module)
+src/tools/batch/dependency-graph.ts:18 - BatchItem (used in module)
+src/tools/batch/dependency-graph.ts:20 - DependencyNode (used in module)
+src/tools/batch/tempid-resolver.ts:8 - TempIdMapping (used in module)
+src/tools/schemas/consolidated-schemas.ts:13 - ReviewIntervalSchema (used in module)
+src/tools/schemas/consolidated-schemas.ts:108 - BatchTaskOperationsSchema (used in module)
+src/tools/schemas/consolidated-schemas.ts:116 - BatchTaskOperationsInput
+src/tools/schemas/repeat-schemas.ts:10 - RepeatUnitSchema (used in module)
+src/tools/schemas/repeat-schemas.ts:20 - RepeatMethodSchema (used in module)
+src/tools/schemas/repeat-schemas.ts:29 - WeekdaySchema (used in module)
+src/tools/schemas/repeat-schemas.ts:40 - MonthlyPositionSchema (used in module)
+src/tools/schemas/repeat-schemas.ts:49 - DeferAnotherSchema (used in module)
+src/tools/tasks/filter-types.ts:12 - StringFilter (used in module)
+src/tools/tasks/filter-types.ts:20 - ArrayFilter (used in module)
+src/tools/tasks/filter-types.ts:28 - DateFilter (used in module)
+src/tools/tasks/filter-types.ts:37 - NumberFilter (used in module)
+src/tools/tasks/filter-types.ts:46 - BooleanFilter (used in module)
+src/omnifocus/scripts/projects/update-project.ts:16 - UPDATE_PROJECT_SCRIPT
+src/omnifocus/scripts/shared/bridge-helpers.ts:6 - BRIDGE_HELPERS
+src/omnifocus/scripts/shared/bridge-helpers.ts:169 - BRIDGE_MIGRATION
+src/omnifocus/scripts/shared/bridge-template.ts:30 - formatBridgeScript (used in module)
+src/omnifocus/scripts/shared/bridge-template.ts:160 - executeBridgeTemplate
+src/omnifocus/scripts/shared/bridge-template.ts:6 - BridgeTemplateParams (used in module)
+src/omnifocus/scripts/shared/bridge-template.ts:74 - BridgeTemplates
+src/omnifocus/scripts/shared/helper-context.ts:73 - mergeHelperContext (used in module)
+src/omnifocus/scripts/shared/helper-context.ts:59 - DEFAULT_HELPER_CONTEXT (used in module)
+src/omnifocus/scripts/shared/helpers.ts:8 - SAFE_UTILITIES (used in module)
+src/omnifocus/scripts/shared/helpers.ts:329 - PROJECT_VALIDATION (used in module)
+src/omnifocus/scripts/shared/helpers.ts:365 - TASK_SERIALIZATION (used in module)
+src/omnifocus/scripts/shared/helpers.ts:423 - ERROR_HANDLING (used in module)
+src/omnifocus/scripts/shared/helpers.ts:443 - RECURRENCE_APPLY_FUNCTIONS (used in module)
+src/omnifocus/scripts/shared/minimal-tag-bridge.ts:6 - MINIMAL_TAG_BRIDGE (used in module)
+src/omnifocus/scripts/shared/repeat-helpers.ts:6 - REPEAT_HELPERS
+src/omnifocus/scripts/shared/script-builder.ts:15 - buildParameterDeclarations (used in module)
+src/omnifocus/scripts/shared/script-builder.ts:36 - buildScriptWithParameters
+src/omnifocus/scripts/shared/script-builder.ts:54 - extractExpectedParameters (used in module)
+src/omnifocus/scripts/shared/script-builder.ts:72 - validateScriptParameters
+src/omnifocus/scripts/shared/script-builder.ts:6 - ScriptParameters (used in module)

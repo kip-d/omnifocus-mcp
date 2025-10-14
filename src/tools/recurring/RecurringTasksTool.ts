@@ -5,6 +5,7 @@ import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { RecurringTasksResponseV2, RecurringTasksDataV2, RecurringTaskV2 } from '../response-types-v2.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 
 // Consolidated recurring tasks schema
 const RecurringTasksSchema = z.object({
@@ -76,23 +77,34 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
           const analyzeScript = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, {
             options: analyzeOptions,
           });
-          const analyzeResult = await this.omniAutomation.execute(analyzeScript) as {
-            tasks: unknown[];
-            summary: Record<string, unknown>;
-            error?: boolean;
-            message?: string;
-          };
+          const result = await this.execJson(analyzeScript);
 
-          if (analyzeResult.error) {
+          if (isScriptError(result)) {
             return createErrorResponseV2(
               'recurring_tasks',
               'SCRIPT_ERROR',
-              analyzeResult.message || 'Analysis failed',
-              undefined,
-              {},
+              result.error || 'Analysis failed',
+              'Check error details',
+              result.details,
               timer.toMetadata(),
             );
           }
+
+          if (!isScriptSuccess(result)) {
+            return createErrorResponseV2(
+              'recurring_tasks',
+              'UNEXPECTED_RESULT',
+              'Unexpected script result format',
+              undefined,
+              { result },
+              timer.toMetadata(),
+            );
+          }
+
+          const analyzeResult = result.data as {
+            tasks: unknown[];
+            summary: Record<string, unknown>;
+          };
 
           // Add metadata
           const analyzeResponse = createSuccessResponseV2(
@@ -133,25 +145,36 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
 
           // Execute pattern analysis script
           const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, { options: patternsOptions });
-          const patternsResult = await this.omniAutomation.execute(patternsScript) as {
+          const patternsScriptResult = await this.execJson(patternsScript);
+
+          if (isScriptError(patternsScriptResult)) {
+            return createErrorResponseV2(
+              'recurring_tasks',
+              'SCRIPT_ERROR',
+              patternsScriptResult.error || 'Pattern analysis failed',
+              'Check error details',
+              patternsScriptResult.details,
+              timer.toMetadata(),
+            );
+          }
+
+          if (!isScriptSuccess(patternsScriptResult)) {
+            return createErrorResponseV2(
+              'recurring_tasks',
+              'UNEXPECTED_RESULT',
+              'Unexpected script result format',
+              undefined,
+              { result: patternsScriptResult },
+              timer.toMetadata(),
+            );
+          }
+
+          const patternsResult = patternsScriptResult.data as {
             totalRecurring: number;
             patterns: unknown[];
             byProject: unknown[];
             mostCommon: Record<string, unknown>;
-            error?: boolean;
-            message?: string;
           };
-
-          if (patternsResult.error) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'SCRIPT_ERROR',
-              patternsResult.message || 'Pattern analysis failed',
-              undefined,
-              {},
-              timer.toMetadata(),
-            );
-          }
 
           // Add insights
           const insights: string[] = [];

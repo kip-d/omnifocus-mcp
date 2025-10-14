@@ -8,6 +8,7 @@ import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import * as path from 'path';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ExportResponseV2, ExportDataV2 } from '../response-types-v2.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 
 // Consolidated export schema
 const ExportSchema = z.object({
@@ -201,26 +202,37 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         format,
         includeStats,
       });
-      const result = await this.omniAutomation.execute(script) as {
-        format: string;
-        data: unknown;
-        count: number;
-        error?: boolean;
-        message?: string;
-      };
+      const result = await this.execJson(script);
 
-      if (result.error) {
+      if (isScriptError(result)) {
         return createErrorResponseV2(
           'export',
-          'PROJECT_EXPORT_FAILED',
-          result.message || 'Failed to export projects',
-          undefined,
-          { format, includeStats },
+          'SCRIPT_ERROR',
+          result.error || 'Script error during project export',
+          'Check error details',
+          result.details,
           timer.toMetadata(),
         );
       }
 
-      return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'projects' as const, data: result.data as string | object, count: result.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+      if (isScriptSuccess(result)) {
+        const data = result.data as {
+          format: string;
+          data: unknown;
+          count: number;
+        };
+        return createSuccessResponseV2('export', { format: data.format as 'json' | 'csv' | 'markdown', exportType: 'projects' as const, data: data.data as string | object, count: data.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+      }
+
+      // Fallback for unexpected result format
+      return createErrorResponseV2(
+        'export',
+        'UNEXPECTED_RESULT',
+        'Unexpected script result format',
+        undefined,
+        { result },
+        timer.toMetadata(),
+      );
     } catch (error) {
       return this.handleErrorV2<ExportDataV2>(error);
     }
@@ -303,17 +315,17 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         format,
         includeStats: includeProjectStats,
       });
-      const projectResult = await this.omniAutomation.execute(projectScript) as {
-        error?: boolean;
-        data?: unknown;
-        count?: number;
-      };
+      const projectResult = await this.execJson(projectScript);
 
-      if (projectResult && !projectResult.error) {
+      if (isScriptSuccess(projectResult)) {
+        const data = projectResult.data as {
+          data?: unknown;
+          count?: number;
+        };
         const projectFile = path.join(outputDirectory, `projects.${format}`);
-        const projectCount = projectResult.count || 0;
+        const projectCount = data.count || 0;
 
-        const ppayload = projectResult.data;
+        const ppayload = data.data;
         const pwrite = typeof ppayload === 'string' ? ppayload : JSON.stringify(ppayload, null, 2);
         const fsSync = await import('fs');
         fsSync.writeFileSync(projectFile, pwrite, 'utf-8');
