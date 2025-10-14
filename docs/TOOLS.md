@@ -1,12 +1,12 @@
 # OmniFocus MCP Tools Documentation
 
-**Last Updated:** 2025-10-05 (v2.2.0)
+**Last Updated:** 2025-10-14 (v2.2.0)
 
 This document provides comprehensive documentation for all available tools in the OmniFocus MCP Server.
 
-## 📢 Important: v2.2.0 Unified Helper Architecture
+## 📢 Important: v2.2.0 Unified Architecture
 
-**This documentation reflects the v2.1.0 self-contained tool architecture.** All consolidated tools now directly implement their operations without delegation, providing better performance and maintainability.
+**This documentation reflects the v2.2.0 self-contained tool architecture (18 tools).** All consolidated tools directly implement their operations without delegation, providing better performance and maintainability. Tool consolidation began in v2.0.0 and was refined through v2.1.0 to v2.2.0.
 
 ## 🚀 Quick Tool Selection by Use Case
 
@@ -63,7 +63,7 @@ tags({ operation: 'active' })  // Skip empty tags
 
 ---
 
-## Available Tools (v2.1.0)
+## Available Tools (v2.2.0 - 18 Tools)
 
 ### tasks
 **Self-contained task querying interface.** Direct implementation with 8 query modes.
@@ -498,6 +498,86 @@ Analyze overdue task patterns.
 **Parameters:**
 - `groupBy` (string): "project", "tag", "age"
 - `includeRecurring` (boolean): Include recurring tasks
+
+### workflow_analysis
+Deep analysis of your OmniFocus workflow health and system efficiency. **Use for occasional deep dives into workflow patterns.**
+
+**Purpose:**
+Analyzes how well your GTD system is working rather than just completion metrics. Provides actionable insights about workflow patterns, momentum, bottlenecks, and system optimization opportunities.
+
+**Parameters:**
+- `analysisDepth` (string): Depth of analysis
+  - `"quick"` - Insights only (fastest, ~5-10 seconds)
+  - `"standard"` - Insights + key data (recommended, ~15-30 seconds)
+  - `"deep"` - Insights + full dataset (comprehensive, ~30-60 seconds)
+- `focusAreas` (string[]): Specific areas to analyze (default: productivity, workload, bottlenecks)
+  - `"productivity"` - Task completion patterns and efficiency
+  - `"workload"` - Current load and capacity analysis
+  - `"project_health"` - Project status and progress
+  - `"time_patterns"` - When you work and complete tasks
+  - `"bottlenecks"` - What's blocking progress
+  - `"opportunities"` - Areas for improvement
+- `includeRawData` (boolean): Include raw task/project data for LLM exploration (default: false, increases token usage)
+- `maxInsights` (number): Maximum insights to generate (5-50, default: 15)
+
+**Returns:**
+- Workflow health score (0-100)
+- Key insights about your workflow patterns
+- Detected patterns (e.g., project stagnation, tag usage, scheduling habits)
+- Actionable recommendations for improvement
+- Bottleneck analysis
+- Optional: Raw data for further analysis
+
+**Caching:** 2 hours (deep analysis takes time to compute)
+
+**Examples:**
+
+Quick daily check-in:
+```javascript
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "quick",
+    "focusAreas": ["productivity", "bottlenecks"]
+  }
+}
+```
+
+Weekly deep dive:
+```javascript
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "deep",
+    "focusAreas": ["productivity", "workload", "project_health", "time_patterns", "bottlenecks", "opportunities"],
+    "maxInsights": 25
+  }
+}
+```
+
+Troubleshooting workflow issues:
+```javascript
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "standard",
+    "focusAreas": ["bottlenecks", "project_health"],
+    "includeRawData": true
+  }
+}
+```
+
+**When to Use:**
+- Weekly/monthly GTD reviews
+- When feeling overwhelmed or stuck
+- To identify workflow inefficiencies
+- Before major project planning
+- To optimize your OmniFocus setup
+
+**When NOT to Use:**
+- For simple task completion metrics (use `productivity_stats` instead)
+- For daily task planning (use `tasks` with mode: "today")
+- For quick status checks (use other lighter-weight tools)
 
 ## Tag Management
 

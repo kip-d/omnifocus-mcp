@@ -1,4 +1,4 @@
-# OmniFocus MCP v2.1.0 API Reference (15 Self-Contained Tools)
+# OmniFocus MCP v2.2.0 API Reference (18 Tools)
 
 ## Task Operations (2 tools)
 
@@ -17,6 +17,35 @@
   - `delete`: `taskId*`
 - **Date Format:** "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am)
 - **Special:** projectId:null → inbox, clearDueDate:true → remove date
+
+## Batch Operations (1 tool)
+
+### batch_create - Create Multiple Projects/Tasks in Single Operation
+**Parameters:** `items*[]` `createSequentially:"true"` `atomicOperation:"false"` `returnMapping:"true"` `stopOnError:"true"`
+- **Item Types:** project | task (with hierarchical relationships)
+- **Key Features:**
+  - Temporary IDs for cross-referencing (parentTempId)
+  - Automatic dependency resolution
+  - Single MCP call instead of 10+ sequential calls
+  - Reduced context consumption for local LLMs
+- **Returns:** Mapping of temporary IDs to real OmniFocus IDs
+- **Documentation:** See [BATCH_OPERATIONS.md](./BATCH_OPERATIONS.md) for complete guide
+
+## Smart Capture (1 tool)
+
+### parse_meeting_notes - Extract Action Items from Text
+**Parameters:** `text*` `mode:"extract"` `contextHints?` `defaultProject?` `defaultTags[]?` `returnFormat:"batch"`
+- **Modes:**
+  - `extract`: Parse text and return structured action items
+  - `preview`: Show what would be created without creating
+- **Input Types:** Meeting notes, transcripts, emails, unstructured text
+- **Key Features:**
+  - Automatic task extraction with context awareness
+  - Date/time extraction from natural language
+  - Project/tag inference from context
+  - Output ready for batch_create tool
+- **Returns:** Structured action items in batch-ready format
+- **Documentation:** See [SMART_CAPTURE.md](./SMART_CAPTURE.md) for complete guide
 
 ## Project Operations (1 tool)
 
@@ -87,11 +116,34 @@
 - **Patterns:** duplicates | dormant_projects | tag_audit | deadline_health | waiting_for | estimation_bias | next_actions | review_gaps | all
 - **Returns:** Pattern analysis results and database health insights
 
-### workflow_analysis - Deep Workflow Analysis  
-**Parameters:** `analysisDepth*` `focusAreas*[]` `includeRawData*` `maxInsights*`
-- **Depth:** quick | standard | deep
-- **Focus Areas:** productivity | workload | project_health | time_patterns | bottlenecks | opportunities
-- **Returns:** Workflow health insights and recommendations
+### workflow_analysis - Deep Workflow Analysis
+**Parameters:** `analysisDepth*:"standard"` `focusAreas*:["productivity","workload","bottlenecks"]` `includeRawData*:"false"` `maxInsights*:"15"`
+- **Purpose:** Analyzes GTD system efficiency and workflow health (not just completion metrics)
+- **Analysis Depth:**
+  - `quick` - Insights only (~5-10 seconds)
+  - `standard` - Insights + key data (recommended, ~15-30 seconds)
+  - `deep` - Insights + full dataset (~30-60 seconds)
+- **Focus Areas:** (array, select any combination)
+  - `productivity` - Task completion patterns and efficiency
+  - `workload` - Current load and capacity analysis
+  - `project_health` - Project status and progress
+  - `time_patterns` - When you work and complete tasks
+  - `bottlenecks` - What's blocking progress
+  - `opportunities` - Areas for improvement
+- **Options:**
+  - `includeRawData` - Include raw task/project data for LLM exploration (increases token usage)
+  - `maxInsights` - Maximum insights to generate (5-50, default: 15)
+- **Returns:** Workflow health score, insights, patterns, recommendations, bottlenecks
+- **Cache TTL:** 2 hours (deep analysis is computationally expensive)
+- **Use Cases:** Weekly GTD reviews, workflow troubleshooting, system optimization
+- **Example:**
+  ```javascript
+  {
+    analysisDepth: "standard",
+    focusAreas: ["productivity", "bottlenecks", "project_health"],
+    maxInsights: 20
+  }
+  ```
 
 ## Utilities (4 tools)
 
@@ -128,10 +180,11 @@
 
 ---
 
-## Key Improvements in v2.1.0
+## Key Improvements in v2.2.0
 
-1. **100% Self-contained tools** - No delegation, direct implementation
-2. **Consistent operation-based patterns** across all tools
+1. **18 consolidated tools** - Expanded from v2.1.0 with Smart Capture and Batch Operations
+2. **100% Self-contained tools** - No delegation, direct implementation
+3. **Consistent operation-based patterns** across all tools
 3. **Clear tool naming** (verbs for actions, nouns for queries)
 4. **Summary-first responses** for better UX
 5. **Performance optimized** (<1 second for 95% of operations)

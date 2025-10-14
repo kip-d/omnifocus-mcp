@@ -315,6 +315,140 @@ Create multiple projects and tasks atomically with hierarchical relationships:
 // Returns format compatible with batch_create tool
 ```
 
+### Workflow Analysis
+
+Deep dive into your GTD system health and efficiency:
+
+```javascript
+// Quick daily workflow check
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "quick",
+    "focusAreas": ["productivity", "bottlenecks"],
+    "includeRawData": "false",
+    "maxInsights": "10"
+  }
+}
+// Returns: Quick insights about productivity and current bottlenecks (~5-10 seconds)
+
+// Standard weekly review
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "standard",
+    "focusAreas": ["productivity", "workload", "project_health"],
+    "includeRawData": "false",
+    "maxInsights": "15"
+  }
+}
+// Returns: Comprehensive workflow health report with insights, patterns, and recommendations (~15-30 seconds)
+
+// Deep monthly analysis
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "deep",
+    "focusAreas": ["productivity", "workload", "project_health", "time_patterns", "bottlenecks", "opportunities"],
+    "includeRawData": "false",
+    "maxInsights": "25"
+  }
+}
+// Returns: Full workflow analysis with detailed patterns, bottlenecks, and optimization opportunities (~30-60 seconds)
+
+// Troubleshooting workflow issues (with raw data for LLM analysis)
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "standard",
+    "focusAreas": ["bottlenecks", "project_health"],
+    "includeRawData": "true",
+    "maxInsights": "20"
+  }
+}
+// Returns: Analysis focused on bottlenecks with raw task/project data for deeper investigation
+
+// Targeted productivity analysis
+{
+  "tool": "workflow_analysis",
+  "arguments": {
+    "analysisDepth": "standard",
+    "focusAreas": ["productivity", "time_patterns"],
+    "includeRawData": "false",
+    "maxInsights": "15"
+  }
+}
+// Returns: Insights about when and how you complete tasks, productivity patterns
+```
+
+**Response Structure:**
+```json
+{
+  "success": true,
+  "operation": "workflow_analysis",
+  "title": "Workflow Analysis Results",
+  "summary": [
+    "Workflow health score: 78/100",
+    "Found 12 key patterns in your workflow",
+    "Recommended: Review 3 stagnant projects"
+  ],
+  "data": {
+    "analysis": {
+      "depth": "standard",
+      "focusAreas": ["productivity", "workload", "bottlenecks"],
+      "timestamp": "2025-10-14T12:00:00Z"
+    },
+    "insights": [
+      "You complete most tasks in the morning (80% before 12pm)",
+      "3 projects haven't had activity in 30+ days",
+      "Average task completion time has increased 20% this month"
+    ],
+    "patterns": [
+      {
+        "type": "completion_time",
+        "description": "Morning productivity peak",
+        "impact": "high"
+      },
+      {
+        "type": "project_stagnation",
+        "description": "3 inactive projects",
+        "impact": "medium"
+      }
+    ],
+    "recommendations": [
+      "Schedule complex tasks before noon to leverage peak productivity",
+      "Review or archive stagnant projects to reduce mental overhead"
+    ],
+    "metadata": {
+      "totalTasks": 245,
+      "totalProjects": 18,
+      "score": 78,
+      "dataPoints": 12
+    }
+  },
+  "metadata": {
+    "analysis_depth": "standard",
+    "focus_areas": ["productivity", "workload", "bottlenecks"],
+    "from_cache": false,
+    "execution_time_ms": 18432
+  }
+}
+```
+
+**Use Cases:**
+- **GTD Weekly Review**: Use `standard` depth with all focus areas to review your workflow health
+- **Daily Check-in**: Use `quick` depth focused on productivity and bottlenecks
+- **Troubleshooting**: Use `standard` or `deep` with `includeRawData: true` when you feel stuck
+- **Optimization**: Use `deep` analysis before major planning sessions or quarterly reviews
+- **Pattern Discovery**: Focus on `time_patterns` and `opportunities` to find workflow improvements
+
+**Performance Notes:**
+- Cached for 2 hours (analysis is computationally expensive)
+- `quick` depth: ~5-10 seconds
+- `standard` depth: ~15-30 seconds
+- `deep` depth: ~30-60 seconds
+- `includeRawData: true` increases response size significantly (for LLM analysis)
+
 ### Tag Management
 
 ```javascript

@@ -8,7 +8,7 @@ import {
   generateCorrelationId,
 } from '../utils/logger.js';
 
-// Import v2.0.0 CONSOLIDATED tools (reduced from 22 to 14 tools)
+// Import v2.2.0 CONSOLIDATED tools (18 tools: 17 core + 1 capture)
 
 // Task operations - Consolidated
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
