@@ -35,7 +35,8 @@ export function analyzeDueDateBunching(
   // Group by date
   const dateGroups = new Map<string, Task[]>();
   incompleteTasks.forEach(task => {
-    const dateOnly = task.dueDate!.split('T')[0]; // Extract date part
+    // Extract date portion - handles both ISO (2025-10-20T14:30:00Z) and local (2025-10-20 14:30) formats
+    const dateOnly = task.dueDate!.substring(0, 10); // Always get first 10 chars (YYYY-MM-DD)
     if (!dateGroups.has(dateOnly)) {
       dateGroups.set(dateOnly, []);
     }
