@@ -404,7 +404,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
                 completed: t.completed,
                 project: t.project || 'Inbox',
               })),
-              { threshold: options.bunching_threshold }
+              { threshold: options.bunching_threshold },
             );
             findings.due_date_bunching = {
               type: 'due_date_bunching',

@@ -26,7 +26,7 @@ interface ReviewGapsResult {
 export function analyzeReviewGaps(projects: Project[]): ReviewGapsResult {
   const now = new Date();
   const activeProjects = projects.filter(
-    p => p.status === 'active' || p.status === 'on-hold'
+    p => p.status === 'active' || p.status === 'on-hold',
   );
 
   // Projects never reviewed (no nextReviewDate or lastReviewDate)
@@ -35,7 +35,7 @@ export function analyzeReviewGaps(projects: Project[]): ReviewGapsResult {
     .map(p => ({
       id: p.id,
       name: p.name,
-      status: p.status
+      status: p.status,
     }));
 
   // Projects overdue for review (nextReviewDate in past)
@@ -52,7 +52,7 @@ export function analyzeReviewGaps(projects: Project[]): ReviewGapsResult {
         id: p.id,
         name: p.name,
         daysPastDue,
-        nextReviewDate: p.nextReviewDate!
+        nextReviewDate: p.nextReviewDate!,
       };
     });
 
@@ -76,6 +76,6 @@ export function analyzeReviewGaps(projects: Project[]): ReviewGapsResult {
     projectsNeverReviewed: neverReviewed,
     projectsOverdueForReview: overdueProjects,
     averageReviewInterval,
-    recommendations
+    recommendations,
   };
 }

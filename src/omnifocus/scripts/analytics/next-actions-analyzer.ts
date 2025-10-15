@@ -20,12 +20,12 @@ const ACTION_VERBS = [
   'call', 'email', 'write', 'review', 'send', 'update', 'create',
   'fix', 'test', 'deploy', 'schedule', 'research', 'draft', 'finalize',
   'submit', 'prepare', 'organize', 'order', 'buy', 'read', 'watch',
-  'listen', 'practice', 'clean', 'file', 'backup', 'install', 'configure'
+  'listen', 'practice', 'clean', 'file', 'backup', 'install', 'configure',
 ];
 
 const VAGUE_KEYWORDS = [
   'stuff', 'things', 'maybe', 'ideas', 'misc', 'miscellaneous',
-  'various', 'etc', 'tbd', 'todo'
+  'various', 'etc', 'tbd', 'todo',
 ];
 
 function scoreTaskName(name: string): number {
@@ -83,7 +83,7 @@ export function analyzeNextActions(tasks: Task[]): NextActionsResult {
   const scoredTasks = incompleteTasks.map(task => ({
     task: task.name,
     score: scoreTaskName(task.name),
-    suggestion: ''
+    suggestion: '',
   }));
 
   // Add suggestions for low-scoring tasks
@@ -111,7 +111,7 @@ export function analyzeNextActions(tasks: Task[]): NextActionsResult {
   if (vagueTasks > 0) {
     const percentage = Math.round((vagueTasks / incompleteTasks.length) * 100);
     recommendations.push(
-      `${vagueTasks} task(s) (${percentage}%) have unclear action items. Review examples for improvement suggestions.`
+      `${vagueTasks} task(s) (${percentage}%) have unclear action items. Review examples for improvement suggestions.`,
     );
   }
 
@@ -120,6 +120,6 @@ export function analyzeNextActions(tasks: Task[]): NextActionsResult {
     vagueTasks,
     averageActionabilityScore: averageScore,
     examples: worstExamples,
-    recommendations
+    recommendations,
   };
 }

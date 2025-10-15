@@ -25,7 +25,7 @@ interface DueDateBunchingResult {
 
 export function analyzeDueDateBunching(
   tasks: Task[],
-  options: DueDateBunchingOptions
+  options: DueDateBunchingOptions,
 ): DueDateBunchingResult {
   const { threshold } = options;
 
@@ -51,7 +51,7 @@ export function analyzeDueDateBunching(
       return {
         date,
         taskCount: tasks.length,
-        projects
+        projects,
       };
     })
     .sort((a, b) => b.taskCount - a.taskCount);
@@ -76,7 +76,7 @@ export function analyzeDueDateBunching(
   if (bunchedDates.length > 0) {
     const totalBunched = bunchedDates.reduce((sum, d) => sum + d.taskCount, 0);
     recommendations.push(
-      `${bunchedDates.length} day(s) have excessive task loads (>${threshold} tasks). Consider redistributing ${totalBunched} tasks across more days.`
+      `${bunchedDates.length} day(s) have excessive task loads (>${threshold} tasks). Consider redistributing ${totalBunched} tasks across more days.`,
     );
   }
 
@@ -84,6 +84,6 @@ export function analyzeDueDateBunching(
     bunchedDates,
     averageTasksPerDay,
     peakDay,
-    recommendations
+    recommendations,
   };
 }

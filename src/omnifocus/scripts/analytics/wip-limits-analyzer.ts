@@ -43,11 +43,11 @@ function isTaskAvailable(task: Task): boolean {
 
 export function analyzeWipLimits(
   projects: Project[],
-  options: WipLimitsOptions
+  options: WipLimitsOptions,
 ): WipLimitsResult {
   const { wipLimit } = options;
   const activeProjects = projects.filter(
-    p => p.status === 'active' || p.status === 'on-hold'
+    p => p.status === 'active' || p.status === 'on-hold',
   );
 
   const analyzed = activeProjects.map(project => {
@@ -67,7 +67,7 @@ export function analyzeWipLimits(
       availableTasks,
       limit: wipLimit,
       sequential: project.sequential || false,
-      overLimit: availableTasks > wipLimit
+      overLimit: availableTasks > wipLimit,
     };
   });
 
@@ -81,13 +81,13 @@ export function analyzeWipLimits(
     sequential: p.sequential,
     recommendation: p.sequential
       ? `Sequential project with ${p.availableTasks} available tasks. Consider if all should be unblocked.`
-      : `${p.availableTasks} available tasks exceeds WIP limit of ${p.limit}. Consider deferring some tasks or making project sequential.`
+      : `${p.availableTasks} available tasks exceeds WIP limit of ${p.limit}. Consider deferring some tasks or making project sequential.`,
   }));
 
   const recommendations: string[] = [];
   if (overLimit.length > 0) {
     recommendations.push(
-      `${overLimit.length} project(s) exceed WIP limit of ${wipLimit}. Too many parallel tasks can reduce focus.`
+      `${overLimit.length} project(s) exceed WIP limit of ${wipLimit}. Too many parallel tasks can reduce focus.`,
     );
   }
 
@@ -95,6 +95,6 @@ export function analyzeWipLimits(
     projectsOverWipLimit,
     healthyProjects: healthy.length,
     overloadedProjects: overLimit.length,
-    recommendations
+    recommendations,
   };
 }
