@@ -2,6 +2,26 @@
 
 This document tracks unimplemented pattern analysis features that could be added to enhance the `pattern_analysis` tool.
 
+## Status Update (October 2025)
+
+### ✅ Completed - GTD Power User Suite
+Implemented in v2.3.0:
+- ✅ Review Gaps Analysis (Priority 2) - `review_gaps` pattern
+- ✅ Next Actions Clarity (Priority 3) - `next_actions` pattern
+- ✅ WIP Limits (Priority 6) - `wip_limits` pattern
+- ✅ Due-Date Bunching (Priority 5) - `due_date_bunching` pattern
+
+All four analyzers are now integrated into the `analyze_patterns` tool with configurable options.
+
+### ⏸️ Deferred
+Remaining from original list:
+- Estimation Bias (Priority 1)
+- Tag Entropy & Synonym Detection (Priority 4)
+- Task Dependency Analysis (Priority 7)
+- Context Switching Analysis (Priority 8)
+- Hierarchical Summarization (Priority 9)
+- Vector Embeddings (Priority 10)
+
 ## Near-Term Patterns (From Original Branch)
 
 These patterns were implemented in the `pattern-analysis` branch but not yet ported to v2.0.0:

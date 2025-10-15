@@ -172,6 +172,18 @@ If you're integrating this server into your own tools, see the [Developer Guide]
 - `workflow_analysis` - Deep workflow pattern analysis
 - `analyze_patterns` - Database-wide pattern detection
 
+**GTD Workflow Patterns** (via `analyze_patterns` tool):
+- `review_gaps` - Find projects overdue for weekly review or never reviewed
+- `next_actions` - Analyze task names for actionability (clear action verbs vs vague descriptions)
+- `wip_limits` - Identify projects with too many available tasks (configurable threshold, default: 5)
+- `due_date_bunching` - Detect workload imbalances and deadline clustering (configurable threshold, default: 8 tasks/day)
+
+**Example:**
+```bash
+# Analyze GTD workflow health
+echo '{"patterns": ["review_gaps", "next_actions", "wip_limits", "due_date_bunching"], "options": {"wipLimit": 5, "bunchingThreshold": 8}}' | mcp call analyze_patterns
+```
+
 **Utilities**:
 - `export` - Data export in multiple formats
 - `perspectives` - Query OmniFocus perspectives
