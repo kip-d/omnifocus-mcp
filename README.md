@@ -18,15 +18,18 @@ A Model Context Protocol (MCP) server that provides programmatic access to OmniF
 ## 🧭 Navigation Guide
 
 **For End Users:**
-- 📘 **[Getting Started Guide](docs/GETTING_STARTED.md)** - Your first conversation with Claude + natural language examples
-- 🔧 **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix common issues
+- 📘 **[Getting Started Guide](docs/user/GETTING_STARTED.md)** - Your first conversation with Claude + natural language examples
+- 🔧 **[Troubleshooting](docs/user/TROUBLESHOOTING.md)** - Fix common issues
 - 📋 **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing workflows
+- 🤖 **[Smart Capture](docs/user/SMART_CAPTURE.md)** - Parse meeting notes into tasks
 
 **For Developers:**
-- 💻 **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - API examples, tool call formats, integration patterns
-- 🏗️ **[Architecture Documentation](docs/ARCHITECTURE.md)** - Technical implementation details
-- 🧪 **[Testing Framework](docs/REAL_LLM_TESTING.md)** - Real LLM integration testing with Ollama
+- 💻 **[Developer Guide](docs/dev/DEVELOPER_GUIDE.md)** - API examples, tool call formats, integration patterns
+- 🏗️ **[Architecture Documentation](docs/dev/ARCHITECTURE.md)** - Technical implementation details (START HERE)
+- 📖 **[API Reference](docs/api/README.md)** - Three versions optimized for different use cases
+- 🧪 **[Testing Framework](docs/operational/REAL_LLM_TESTING.md)** - Real LLM integration testing with Ollama
 - 🗺️ **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Completed features and future plans
+- 📚 **[Patterns & Solutions](docs/dev/PATTERNS.md)** - Quick symptom lookup and common solutions
 
 ## Quick Start
 
@@ -96,12 +99,15 @@ Refer to your client's documentation for specific configuration format and file 
 ## Documentation
 
 **For End Users:**
-- [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) - Your first conversation and natural language examples
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [`docs/user/GETTING_STARTED.md`](docs/user/GETTING_STARTED.md) - Your first conversation and natural language examples
+- [`docs/user/TROUBLESHOOTING.md`](docs/user/TROUBLESHOOTING.md) - Common issues and solutions
+- [`docs/user/README.md`](docs/user/README.md) - Complete user documentation index
 
 **For Developers:**
-- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) - Complete tool reference with JSON examples
-- [`docs/API-REFERENCE-V2.md`](docs/API-REFERENCE-V2.md) - Detailed API specification
+- [`docs/dev/DEVELOPER_GUIDE.md`](docs/dev/DEVELOPER_GUIDE.md) - Complete tool reference with JSON examples
+- [`docs/api/API-REFERENCE-V2.md`](docs/api/API-REFERENCE-V2.md) - Detailed API specification
+- [`docs/dev/README.md`](docs/dev/README.md) - Complete developer documentation index
+- [`docs/api/README.md`](docs/api/README.md) - Explanation of the three API reference versions
 
 ## Built-in Prompts
 
@@ -143,11 +149,11 @@ Once set up, simply open your AI assistant and ask questions in plain English:
 - "I just finished a meeting, here are my notes..." *(captures tasks automatically)*
 - "Help me plan my afternoon"
 
-**See the [Getting Started Guide](docs/GETTING_STARTED.md) for your first conversation and more examples.**
+**See the [Getting Started Guide](docs/user/GETTING_STARTED.md) for your first conversation and more examples.**
 
 ### For Developers: Programmatic Access
 
-If you're integrating this server into your own tools, see the [Developer Guide](docs/DEVELOPER_GUIDE.md) for:
+If you're integrating this server into your own tools, see the [Developer Guide](docs/dev/DEVELOPER_GUIDE.md) for:
 - JSON tool call formats
 - API parameter reference
 - Return value schemas
@@ -156,40 +162,49 @@ If you're integrating this server into your own tools, see the [Developer Guide]
 
 ## Available Tools
 
-**Core Operations**:
-- `tasks` - Query tasks with modes (today, overdue, search, flagged, etc.)
-- `manage_task` - Create, update, complete, delete tasks
-- `batch_create` - Create multiple projects and tasks in a single operation
-- `parse_meeting_notes` - Extract action items from meeting notes, transcripts, or unstructured text
-- `projects` - Project operations (list, create, update, stats)
-- `folders` - Folder management and organization
-- `tags` - Tag operations including hierarchy management
+**18 Total Tools** providing complete OmniFocus automation:
 
-**Analytics**:
-- `productivity_stats` - GTD metrics and completion statistics
-- `task_velocity` - Completion trends and velocity analysis
-- `analyze_overdue` - Bottleneck analysis for overdue items
-- `workflow_analysis` - Deep workflow pattern analysis
-- `analyze_patterns` - Database-wide pattern detection
+### Core Operations (7)
+- **`tasks`** - Query tasks with modes (today, overdue, search, flagged, available, blocked, etc.)
+- **`manage_task`** - Create, update, complete, delete tasks with full property support
+- **`batch_create`** - Create multiple projects and tasks in hierarchies with atomic operations
+- **`parse_meeting_notes`** - Extract action items from meeting notes, transcripts, or unstructured text with AI
+- **`projects`** - Project operations (list, create, update, delete, statistics)
+- **`folders`** - Folder management and hierarchical organization
+- **`tags`** - Complete tag operations including hierarchy, nesting, and bulk management
 
-**GTD Workflow Patterns** (via `analyze_patterns` tool):
-- `review_gaps` - Find projects overdue for weekly review or never reviewed
-- `next_actions` - Analyze task names for actionability (clear action verbs vs vague descriptions)
-- `wip_limits` - Identify projects with too many available tasks (configurable threshold, default: 5)
-- `due_date_bunching` - Detect workload imbalances and deadline clustering (configurable threshold, default: 8 tasks/day)
+### Organization & Reviews (3)
+- **`manage_reviews`** - Project review workflow and scheduling
+- **`export`** - Data export in JSON, CSV, or Markdown formats
+- **`recurring_tasks`** - Recurring task analysis and pattern detection
 
-**Example:**
+### Analytics (5)
+- **`productivity_stats`** - GTD health metrics and completion statistics
+- **`task_velocity`** - Completion trends and velocity analysis
+- **`analyze_overdue`** - Bottleneck analysis for overdue and blocked items
+- **`workflow_analysis`** - Deep workflow pattern analysis and insights
+- **`analyze_patterns`** - Database-wide pattern detection with 10 analysis modes
+
+### Pattern Analysis (via `analyze_patterns` tool)
+- **`review_gaps`** - Find projects overdue for weekly review or never reviewed
+- **`next_actions`** - Analyze task names for actionability (clear action verbs vs vague descriptions)
+- **`wip_limits`** - Identify projects with too many available tasks (configurable threshold, default: 5)
+- **`due_date_bunching`** - Detect workload imbalances and deadline clustering (configurable threshold, default: 8/day)
+- Plus 6 additional analysis modes (duplicates, dormant_projects, tag_audit, deadline_health, waiting_for, estimation_bias)
+
+**GTD Workflow Health Example:**
 ```bash
-# Analyze GTD workflow health
-echo '{"patterns": ["review_gaps", "next_actions", "wip_limits", "due_date_bunching"], "options": {"wipLimit": 5, "bunchingThreshold": 8}}' | mcp call analyze_patterns
+# Analyze complete GTD health
+analyze_patterns({
+  patterns: ["review_gaps", "next_actions", "wip_limits", "due_date_bunching"],
+  options: { wipLimit: 5, bunchingThreshold: 8 }
+})
 ```
 
-**Utilities**:
-- `export` - Data export in multiple formats
-- `perspectives` - Query OmniFocus perspectives
-- `recurring_tasks` - Recurring task analysis
-- `manage_reviews` - GTD review workflow
-- `system` - Version and diagnostic info
+### Utilities (3)
+- **`perspectives`** - Query any OmniFocus perspective with rich formatting and metadata
+- **`system`** - Version, diagnostics, and metrics information
+- (Total: 18 tools)
 
 
 ## Recurring Tasks
@@ -232,7 +247,7 @@ Supports complex recurrence patterns:
 - **Parent Assignment**: Cannot move existing tasks into action groups after creation
 - **Sequential Blocking**: Inbox tasks don't show as blocked (requires project context)
 
-See `/docs/TROUBLESHOOTING.md` for solutions.
+See `/docs/user/TROUBLESHOOTING.md` for solutions.
 
 ## Testing
 
@@ -270,9 +285,10 @@ Runs both unit and integration tests.
 ### For Contributors & Advanced Users
 - **[`/scripts/`](scripts/)** - Utility scripts and testing tools
 - **[`/tests/`](tests/)** - Unit and integration test suites (740+ tests)
-- **[Performance Benchmarks](docs/BENCHMARK_RESULTS.md)** - Real-world performance data
-- **[Architecture Deep Dive](docs/ARCHITECTURE.md)** - JXA + Bridge implementation
-- **[Lessons Learned](docs/LESSONS_LEARNED.md)** - Hard-won insights from development
+- **[Performance Benchmarks](docs/dev/BENCHMARK_RESULTS.md)** - Real-world performance data across hardware
+- **[Architecture Deep Dive](docs/dev/ARCHITECTURE.md)** - JXA + OmniJS Bridge implementation
+- **[Lessons Learned](docs/dev/LESSONS_LEARNED.md)** - Hard-won insights from development
+- **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Completed features and future direction
 
 ### Archive
 - **[Historical Documentation](.archive/)** - Preserved development artifacts and deprecated features

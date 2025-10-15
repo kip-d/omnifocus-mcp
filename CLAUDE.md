@@ -4,9 +4,9 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 ## 📚 CRITICAL: Read Architecture Documentation First!
 **Before making ANY changes, consult these essential documents:**
-- `/docs/PATTERNS.md` - **START HERE** - Quick symptom lookup and common solutions
-- `/docs/ARCHITECTURE.md` - Unified JavaScript execution patterns and decision tree
-- `/docs/LESSONS_LEARNED.md` - Hard-won insights that will save you from repeating costly mistakes
+- `/docs/dev/PATTERNS.md` - **START HERE** - Quick symptom lookup and common solutions
+- `/docs/dev/ARCHITECTURE.md` - Unified JavaScript execution patterns and decision tree
+- `/docs/dev/LESSONS_LEARNED.md` - Hard-won insights that will save you from repeating costly mistakes
 
 **Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
 
@@ -16,23 +16,23 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 | Symptom | Go To | Quick Fix |
 |---------|-------|-----------|
-| Tool returns 0s/empty but has data | PATTERNS.md → "Tool Returns Empty/Zero Values" | Test MCP integration first! Compare script vs tool output |
-| Tags not saving/empty | PATTERNS.md → "Tags Not Working" | Use `bridgeSetTags()` (line 120 below) |
-| Script timeout (25+ seconds) | PATTERNS.md → "Performance Issues" | Never use `.where()/.whose()` |
-| Dates wrong time | PATTERNS.md → "Date Handling" | Use `YYYY-MM-DD HH:mm` not ISO+Z |
-| MCP test hangs | PATTERNS.md → "MCP Testing" | Stdin close = correct behavior |
-| "Script too large" error | LESSONS_LEARNED.md → "Script Size" | Limits are 523KB - check syntax |
+| Tool returns 0s/empty but has data | `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values" | Test MCP integration first! Compare script vs tool output |
+| Tags not saving/empty | `/docs/dev/PATTERNS.md` → "Tags Not Working" | Use `bridgeSetTags()` (line 120 below) |
+| Script timeout (25+ seconds) | `/docs/dev/PATTERNS.md` → "Performance Issues" | Never use `.where()/.whose()` |
+| Dates wrong time | `/docs/dev/PATTERNS.md` → "Date Handling" | Use `YYYY-MM-DD HH:mm` not ISO+Z |
+| MCP test hangs | `/docs/dev/PATTERNS.md` → "MCP Testing" | Stdin close = correct behavior |
+| "Script too large" error | `/docs/dev/LESSONS_LEARNED.md` → "Script Size" | Limits are 523KB - check syntax |
 | Function not found | Search `src/omnifocus/scripts/shared/` | Use existing helpers |
-| Integration test timeout | PATTERNS.md → "Integration Tests" | 60s requests, 90s tests |
+| Integration test timeout | `/docs/dev/PATTERNS.md` → "Integration Tests" | 60s requests, 90s tests |
 
-**Not listed? Search PATTERNS.md for keywords before debugging!**
+**Not listed? Search `/docs/dev/PATTERNS.md` for keywords before debugging!**
 
 ## 🚨 BEFORE DEBUGGING - MANDATORY CHECKLIST
 
 **When encountering ANY issue, complete these steps IN ORDER:**
 
 □ **Step 1: Search PATTERNS.md**
-  - Open `/docs/PATTERNS.md` and search for symptom keywords
+  - Open `/docs/dev/PATTERNS.md` and search for symptom keywords
   - Example: "tags not working" → direct solution with code location
 
 □ **Step 2: Search existing documentation**
@@ -225,7 +225,7 @@ If you see these in your plan, STOP and search for patterns:
 - Build before running: `npm run build`
 
 ## 🚨 CRITICAL: Systematic Debugging Workflow
-**Before fixing ANY issues, consult `/docs/DEBUGGING_WORKFLOW.md`**
+**Before fixing ANY issues, consult `/docs/dev/DEBUGGING_WORKFLOW.md`**
 This document prevents the Fix → Lint → Build error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per fix and creates better code.
 
 ### 🚨 CRITICAL DEBUGGING RULE: Test MCP Integration First
@@ -276,7 +276,7 @@ process.stdin.on('end', () => process.exit(0));
 process.stdin.on('close', () => process.exit(0));
 ```
 
-Without this, servers hang forever and violate MCP specification. See `docs/LESSONS_LEARNED.md` for full embarrassing details.
+Without this, servers hang forever and violate MCP specification. See `/docs/dev/LESSONS_LEARNED.md` for full embarrassing details.
 
 ## Documentation Management
 **NEVER delete documentation outright unless there's a clear reason (e.g., contains incorrect/dangerous information).**
@@ -364,7 +364,7 @@ for (let i = 0; i < allTasks.length; i++) {
 - All scripts well within empirical limits
 - No size constraints for planned development
 
-**See `docs/SCRIPT_SIZE_LIMITS.md` for complete empirical testing results.**
+**See `/docs/dev/SCRIPT_SIZE_LIMITS.md` for complete empirical testing results.**
 
 ### CLI Testing - SOLVED ✅
 **Previous misconception:** "CLI testing hangs forever"  
@@ -406,7 +406,7 @@ Operation needed?
 - All scripts MUST start with JXA (`Application('OmniFocus')`)
 - NEVER use pure OmniJS without JXA wrapper
 - Bridge operations use `app.evaluateJavascript(omniJsCode)`
-- See `/docs/ARCHITECTURE.md` for complete implementation patterns
+- See `/docs/dev/ARCHITECTURE.md` for complete implementation patterns
 
 ### Implementation Pattern - UPDATED
 ```typescript
@@ -468,7 +468,7 @@ npm run dev          # Watch mode
 npm test             # Unit tests
 npm run test:integration  # Integration tests
 
-# Direct MCP Testing (Fast debugging - see docs/TESTING_TOOLS.md)
+# Direct MCP Testing (Fast debugging - see docs/operational/TESTING_TOOLS.md)
 node emergency-diagnostic.js  # Test all tools quickly
 node test-single-tool.js <tool_name> [params]  # Detailed single tool testing  
 node test-suite-comprehensive.js  # Full test suite
@@ -688,7 +688,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 4. Fix: ProductivityStatsToolV2.ts unwrapping logic
 5. Total time: 10 minutes vs 2 hours
 
-**Lesson:** See PATTERNS.md → "Tool Returns Empty/Zero Values" for diagnostic commands
+**Lesson:** See `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values" for diagnostic commands
 
 ## Known Limitations & Workarounds
 
