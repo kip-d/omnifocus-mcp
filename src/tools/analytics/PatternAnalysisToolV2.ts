@@ -9,6 +9,10 @@ import { createAnalyticsResponseV2, createErrorResponseV2 } from '../../utils/re
 import { createLogger } from '../../utils/logger.js';
 import type { PatternAnalysisResponseV2, PatternAnalysisDataV2 } from '../response-types-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { analyzeReviewGaps } from '../../omnifocus/scripts/analytics/review-gaps-analyzer.js';
+import { analyzeNextActions } from '../../omnifocus/scripts/analytics/next-actions-analyzer.js';
+import { analyzeWipLimits } from '../../omnifocus/scripts/analytics/wip-limits-analyzer.js';
+import { analyzeDueDateBunching } from '../../omnifocus/scripts/analytics/due-date-bunching-analyzer.js';
 
 // Schema for pattern analysis request
 const PatternAnalysisSchema = z.object({
@@ -21,6 +25,8 @@ const PatternAnalysisSchema = z.object({
     'estimation_bias',
     'next_actions',
     'review_gaps',
+    'wip_limits',
+    'due_date_bunching',
     'all',
   ])).min(1).describe('Which patterns to analyze'),
 
@@ -120,6 +126,26 @@ const PatternAnalysisSchema = z.object({
         z.number(),
         z.string().transform(val => parseInt(val, 10)),
       ]).optional(),
+
+      wipLimit: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10)),
+      ]).optional(),
+
+      wip_limit: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10)),
+      ]).optional(),
+
+      bunchingThreshold: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10)),
+      ]).optional(),
+
+      bunching_threshold: z.union([
+        z.number(),
+        z.string().transform(val => parseInt(val, 10)),
+      ]).optional(),
     }).passthrough(), // Allow unknown fields
   ).default({}).describe('Options object with threshold settings'),
 });
@@ -189,7 +215,7 @@ interface DormantProject {
 
 export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema, PatternAnalysisResponseV2> {
   name = 'analyze_patterns';
-  description = 'Analyze patterns across entire OmniFocus database for insights and improvements';
+  description = 'Analyze patterns across entire OmniFocus database for insights and improvements. Supports: duplicates, dormant projects, tag audits, deadline health, waiting tasks, review gaps, next actions clarity, WIP limits, and due date bunching analysis.';
   schema = PatternAnalysisSchema;
 
   protected logger = createLogger('PatternAnalysisToolV2');
@@ -225,12 +251,22 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           rawOptions.max_tasks ??
           rawOptions.maxTasks ??
           3000,
+
+        wip_limit:
+          rawOptions.wipLimit ??
+          rawOptions.wip_limit ??
+          5,
+
+        bunching_threshold:
+          rawOptions.bunchingThreshold ??
+          rawOptions.bunching_threshold ??
+          8,
       };
 
       // Expand 'all' to include all patterns
       const patterns = params.patterns.includes('all') ?
         ['duplicates', 'dormant_projects', 'tag_audit', 'deadline_health',
-         'waiting_for', 'estimation_bias', 'next_actions', 'review_gaps'] :
+         'waiting_for', 'estimation_bias', 'next_actions', 'review_gaps', 'wip_limits', 'due_date_bunching'] :
         params.patterns;
 
       // Fetch slimmed task data
@@ -284,12 +320,105 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
           case 'estimation_bias':
             findings.estimation_bias = this.analyzeEstimationBias(slimData.tasks);
             break;
-          case 'next_actions':
-            findings.next_actions = this.analyzeNextActions(slimData.tasks);
+          case 'next_actions': {
+            const result = analyzeNextActions(slimData.tasks.map(t => ({
+              id: t.id,
+              name: t.name,
+              completed: t.completed,
+            })));
+            findings.next_actions = {
+              type: 'next_actions',
+              severity: result.vagueTasks > 20 ? 'warning' : 'info',
+              count: result.vagueTasks,
+              items: result.examples,
+              recommendation: result.recommendations.join(' ') || 'Most tasks appear to be clear, actionable next actions.',
+            };
             break;
-          case 'review_gaps':
-            findings.review_gaps = this.analyzeReviewGaps(slimData.projects);
+          }
+          case 'review_gaps': {
+            const result = analyzeReviewGaps(slimData.projects.map(p => ({
+              id: p.id,
+              name: p.name,
+              status: p.status,
+              nextReviewDate: p.nextReviewDate || null,
+              lastReviewDate: p.lastReviewDate || null,
+            })));
+            findings.review_gaps = {
+              type: 'review_gaps',
+              severity: result.projectsNeverReviewed.length > 5 || result.projectsOverdueForReview.length > 3 ? 'warning' : 'info',
+              count: result.projectsNeverReviewed.length + result.projectsOverdueForReview.length,
+              items: {
+                never_reviewed: result.projectsNeverReviewed,
+                overdue: result.projectsOverdueForReview,
+              },
+              recommendation: result.recommendations.join(' ') || 'Project review schedule is mostly up to date.',
+            };
             break;
+          }
+          case 'wip_limits': {
+            // WIP analyzer needs projects with their tasks included
+            // Group tasks by projectId
+            const tasksByProject = new Map<string, typeof slimData.tasks>();
+            for (const task of slimData.tasks) {
+              if (task.projectId) {
+                if (!tasksByProject.has(task.projectId)) {
+                  tasksByProject.set(task.projectId, []);
+                }
+                tasksByProject.get(task.projectId)!.push(task);
+              }
+            }
+
+            // Build project objects with tasks
+            const projectsWithTasks = slimData.projects.map(project => ({
+              id: project.id,
+              name: project.name,
+              status: project.status,
+              sequential: false, // We don't have this info, assume parallel
+              tasks: (tasksByProject.get(project.id) || []).map(task => ({
+                id: task.id,
+                completed: task.completed,
+                blocked: task.status === 'blocked',
+                deferDate: task.deferDate || null,
+              })),
+            }));
+
+            const wipResult = analyzeWipLimits(projectsWithTasks, { wipLimit: options.wip_limit });
+            findings.wip_limits = {
+              type: 'wip_limits',
+              severity: wipResult.overloadedProjects > 5 ? 'warning' : 'info',
+              count: wipResult.overloadedProjects,
+              items: {
+                projects_over_limit: wipResult.projectsOverWipLimit,
+                healthy_projects: wipResult.healthyProjects,
+                overloaded_projects: wipResult.overloadedProjects,
+              },
+              recommendation: wipResult.recommendations.join(' ') || 'All projects within WIP limits.',
+            };
+            break;
+          }
+          case 'due_date_bunching': {
+            const bunchingResult = analyzeDueDateBunching(
+              slimData.tasks.map(t => ({
+                id: t.id,
+                dueDate: t.dueDate || null,
+                completed: t.completed,
+                project: t.project || 'Inbox',
+              })),
+              { threshold: options.bunching_threshold }
+            );
+            findings.due_date_bunching = {
+              type: 'due_date_bunching',
+              severity: bunchingResult.bunchedDates.length > 3 ? 'warning' : 'info',
+              count: bunchingResult.bunchedDates.length,
+              items: {
+                bunched_dates: bunchingResult.bunchedDates,
+                average_tasks_per_day: bunchingResult.averageTasksPerDay,
+                peak_day: bunchingResult.peakDay,
+              },
+              recommendation: bunchingResult.recommendations.join(' ') || 'Deadline distribution looks manageable.',
+            };
+            break;
+          }
         }
       }
 
@@ -966,134 +1095,6 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
       recommendation: findings.patterns.length > 0 ?
         `Estimation patterns suggest: ${findings.patterns.join(', ')}` :
         'Time estimation distribution looks reasonable.',
-    };
-  }
-
-  private analyzeNextActions(tasks: SlimTask[]): PatternFinding {
-    const issues: Array<{
-      id: string;
-      name: string;
-      project?: string;
-      problems: string[];
-    }> = [];
-
-    // Patterns that suggest unclear next actions
-    const vaguePatterns = [
-      /^think about/i, /^consider/i, /^look into/i, /^research/i,
-      /^plan/i, /^figure out/i, /^decide/i, /^work on/i,
-    ];
-
-    const projectTasks = tasks.filter(t => !t.completed && t.projectId);
-
-    for (const task of projectTasks) {
-      const problems: string[] = [];
-
-      // Check for vague action verbs
-      if (vaguePatterns.some(p => p.test(task.name))) {
-        problems.push('vague_action');
-      }
-
-      // Check for tasks that are too long (might be projects)
-      if (task.name.length > 100) {
-        problems.push('too_long');
-      }
-
-      // Check for multiple actions in one task (contains "and")
-      if (/\band\b/i.test(task.name) && !/".*and.*"/.test(task.name)) {
-        problems.push('multiple_actions');
-      }
-
-      // Check for question marks (not actionable)
-      if (task.name.includes('?')) {
-        problems.push('question_not_action');
-      }
-
-      if (problems.length > 0) {
-        issues.push({
-          id: task.id,
-          name: task.name.substring(0, 80),
-          project: task.project,
-          problems,
-        });
-      }
-    }
-
-    const severity = issues.length > 20 ? 'warning' : 'info';
-
-    return {
-      type: 'next_actions',
-      severity,
-      count: issues.length,
-      items: issues.slice(0, 10),
-      recommendation: issues.length > 10 ?
-        `${issues.length} tasks may not be clear next actions. Review and clarify with specific, actionable verbs.` :
-        'Most tasks appear to be clear, actionable next actions.',
-    };
-  }
-
-  private analyzeReviewGaps(projects: ProjectData[]): PatternFinding {
-    const now = new Date();
-    const gaps: Array<{
-      id: string;
-      name: string;
-      issue: 'never_reviewed' | 'overdue_review';
-      task_count?: number;
-      days_overdue?: number;
-      last_review?: string;
-    }> = [];
-
-    for (const project of projects) {
-      // Skip completed/dropped projects
-      if (project.status === 'done' || project.status === 'dropped') continue;
-
-      // Check if project has never been reviewed
-      if (!project.lastReviewDate && !project.nextReviewDate) {
-        gaps.push({
-          id: project.id,
-          name: project.name,
-          issue: 'never_reviewed',
-          task_count: project.taskCount,
-        });
-        continue;
-      }
-
-      // Check if review is overdue
-      if (project.nextReviewDate) {
-        const nextReview = new Date(project.nextReviewDate);
-        const daysOverdue = Math.floor((now.getTime() - nextReview.getTime()) / (24 * 60 * 60 * 1000));
-
-        if (daysOverdue > 0) {
-          gaps.push({
-            id: project.id,
-            name: project.name,
-            issue: 'overdue_review',
-            days_overdue: daysOverdue,
-            last_review: project.lastReviewDate,
-          });
-        }
-      }
-    }
-
-    // Sort by severity
-    gaps.sort((a, b) => {
-      if (a.issue === 'never_reviewed' && b.issue !== 'never_reviewed') return -1;
-      if (b.issue === 'never_reviewed' && a.issue !== 'never_reviewed') return 1;
-      const bDays = 'days_overdue' in b ? (b.days_overdue ?? 0) : 0;
-      const aDays = 'days_overdue' in a ? (a.days_overdue ?? 0) : 0;
-      return bDays - aDays;
-    });
-
-    const severity = gaps.filter(g => g.issue === 'never_reviewed').length > 5 ||
-                     gaps.filter(g => (g.days_overdue ?? 0) > 30).length > 3 ? 'warning' : 'info';
-
-    return {
-      type: 'review_gaps',
-      severity,
-      count: gaps.length,
-      items: gaps.slice(0, 10),
-      recommendation: gaps.length > 5 ?
-        `${gaps.length} projects need review attention. Schedule a weekly review to stay on top of them.` :
-        'Project review schedule is mostly up to date.',
     };
   }
 
