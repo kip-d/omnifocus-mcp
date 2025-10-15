@@ -51,7 +51,17 @@ export function analyzeWipLimits(
   );
 
   const analyzed = activeProjects.map(project => {
-    const availableTasks = project.tasks.filter(isTaskAvailable).length;
+    let availableTasks: number;
+
+    if (project.sequential) {
+      // For sequential projects, only the first available task counts
+      const firstAvailable = project.tasks.find(isTaskAvailable);
+      availableTasks = firstAvailable ? 1 : 0;
+    } else {
+      // For parallel projects, all available tasks count
+      availableTasks = project.tasks.filter(isTaskAvailable).length;
+    }
+
     return {
       project: project.name,
       availableTasks,
