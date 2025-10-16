@@ -80,10 +80,13 @@ print_step "Unit tests"
 npm run test:quick
 print_success "Unit tests passed"
 
-# Step 5: Integration tests
-print_step "MCP Integration tests"
-npm run test:integration
-print_success "Integration tests passed"
+# Step 5: Integration tests (SKIPPED in pre-push hook for speed)
+# Note: Integration tests with real OmniFocus queries run in CI/CD pipeline
+# They're too slow for pre-push checks (120+ seconds) but invaluable in CI
+# Use: npm run test:integration (or npm test) to run manually when needed
+# Pre-push focuses on fast checks: TypeScript, linting, unit tests, MCP startup
+print_step "Integration tests"
+print_warning "Skipping integration tests in pre-push hook (run 'npm test' manually or in CI)"
 
 # Step 6: MCP Server verification
 # Note: Server exits gracefully when stdin closes. Timeout is safety net only.
@@ -138,7 +141,7 @@ echo "- TypeScript compilation: ✅"
 echo "- Type checking: ✅"
 echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
 echo "- Unit tests: ✅"
-echo "- Integration tests: ✅"
+echo "- Integration tests: ⏭️  (skipped in pre-push, run 'npm test' manually)"
 if [ -n "$TIMEOUT_CMD" ]; then
     echo "- MCP server startup: ✅"
     echo "- Tool registration: ✅ ($TOOL_COUNT tools)"
@@ -146,4 +149,5 @@ if [ -n "$TIMEOUT_CMD" ]; then
 else
     echo "- MCP server tests: ⚠️ (skipped - install coreutils for timeout command)"
 fi
-echo -e "\n${GREEN}Ready for production! 🚀${NC}"
+echo -e "\n${BLUE}Note: Run 'npm test' to include full integration tests with real OmniFocus queries${NC}"
+echo -e "${GREEN}Ready for quick push! 🚀${NC}"
