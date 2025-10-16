@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GTD Power User Suite**: 4 new pattern analyzers for workflow health
+  - `review_gaps` - Identifies projects overdue for GTD weekly review
+  - `next_actions` - Analyzes task name clarity and actionability
+  - `wip_limits` - Detects projects with excessive work-in-progress
+  - `due_date_bunching` - Identifies workload imbalances and deadline clustering
+- Configurable options for WIP limits (default: 5) and bunching threshold (default: 8)
+
 ### Code Quality
 - **Unused Code Cleanup (October 13, 2025)** - Removed dead code identified by static analysis
   - Removed 305 of 311 unused exports flagged by ts-prune (6,200+ lines, approximately 20% reduction in codebase size)

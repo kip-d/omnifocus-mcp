@@ -161,6 +161,18 @@ CONVERSION PATTERN: When user asks in natural language, identify:
     const timer = new OperationTimerV2();
 
     try {
+      // Validate search mode requirements early
+      if (args.mode === 'search' && !args.search && !args.filters) {
+        return createErrorResponseV2(
+          'tasks',
+          'MISSING_PARAMETER',
+          'Search mode requires a search term or filters',
+          'Add a search parameter with the text to find, or use filters',
+          { provided_args: args },
+          timer.toMetadata(),
+        );
+      }
+
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
 
@@ -310,10 +322,7 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       normalized.search = normalizeStringInput(normalized.search) || undefined;
     }
 
-    // Ensure search mode has search term
-    if (normalized.mode === 'search' && !normalized.search && !normalized.filters) {
-      throw new Error('Search mode requires a search term or filters');
-    }
+    // Note: Search mode validation now happens in executeValidated before normalization
 
     return normalized;
   }
@@ -600,33 +609,26 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       limit: args.limit,
     };
 
-    // Use the optimized today's agenda script (now returns typed envelope)
+    // Use the optimized today's agenda script
     const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
       options,
       fields: args.fields || [],
     });
-    const TodayPayloadSchema = z.object({
-      tasks: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        reason: z.string().optional(),
-        daysOverdue: z.number().optional(),
-        dueDate: z.string().optional(),
-        flagged: z.boolean().optional(),
-        note: z.string().optional(),
-        project: z.string().optional(),
-        projectId: z.string().optional(),
-        tags: z.array(z.string()).optional(),
-      })),
-      overdueCount: z.number(),
-      dueTodayCount: z.number(),
-      flaggedCount: z.number(),
-      processedCount: z.number().optional(),
-      totalTasks: z.number().optional(),
-      optimizationUsed: z.string().optional(),
-    });
 
-    const data = await this.omniAutomation.executeTyped(script, TodayPayloadSchema);
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        result.error,
+        'Check if OmniFocus is running and not blocked by dialogs',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks: unknown[]; overdueCount: number; dueTodayCount: number; flaggedCount: number; processedCount?: number; totalTasks?: number; optimizationUsed?: string };
 
     const todayTasks = this.parseTasks(data.tasks);
 

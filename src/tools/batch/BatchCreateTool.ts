@@ -329,8 +329,8 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     }
 
     if (isScriptSuccess(result) && result.data) {
-      const data = result.data as { task?: { id: string } };
-      const realId = data.task?.id;
+      const data = result.data as { taskId?: string };
+      const realId = data.taskId;
 
       if (realId) {
         return {

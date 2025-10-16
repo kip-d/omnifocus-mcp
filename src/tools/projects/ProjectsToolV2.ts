@@ -6,7 +6,7 @@ import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/comple
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
 import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
-import { isScriptSuccess, isScriptError, ListResultSchema, AnalyticsResultSchema } from '../../omnifocus/script-result-types.js';
+import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
   createErrorResponseV2,
@@ -81,6 +81,28 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
     const timer = new OperationTimerV2();
 
     try {
+      // Validate required fields early
+      if (['update', 'complete', 'delete'].includes(args.operation) && !args.projectId) {
+        return createErrorResponseV2(
+          'projects',
+          'MISSING_PARAMETER',
+          `Operation "${args.operation}" requires projectId parameter`,
+          'Use operation:"list" first to find the project ID',
+          { provided_args: args },
+          timer.toMetadata(),
+        ) as unknown as ProjectsResponseV2;
+      }
+      if (args.operation === 'create' && !args.name) {
+        return createErrorResponseV2(
+          'projects',
+          'MISSING_PARAMETER',
+          'Create operation requires name parameter',
+          'Add a name parameter with the project name',
+          { provided_args: args },
+          timer.toMetadata(),
+        ) as unknown as ProjectOperationResponseV2;
+      }
+
       // Normalize inputs
       const normalizedArgs = this.normalizeInputs(args);
 
@@ -214,13 +236,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       normalized.projectId = normalizeStringInput(normalized.projectId) || undefined;
     }
 
-    // Validate required fields for operations
-    if (['update', 'complete', 'delete'].includes(normalized.operation) && !normalized.projectId) {
-      throw new Error(`Operation "${normalized.operation}" requires projectId parameter`);
-    }
-    if (normalized.operation === 'create' && !normalized.name) {
-      throw new Error('Create operation requires name parameter');
-    }
+    // Note: Required field validation now happens in executeValidated before normalization
 
     return normalized;
   }
@@ -560,7 +576,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -617,7 +633,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       limit: args.limit || 10,
       includeStats: args.details !== undefined ? args.details : true,
     });
-    const result = await this.omniAutomation.executeJson(script, ListResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -665,7 +681,7 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       },
     });
 
-    const result = await this.omniAutomation.executeJson(script, AnalyticsResultSchema);
+    const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

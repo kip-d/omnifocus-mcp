@@ -22,6 +22,7 @@ d('Batch Operations Integration', () => {
   let tool: BatchCreateTool;
   let cache: CacheManager;
   const createdIds: Array<{ id: string; type: 'project' | 'task' }> = [];
+  const timestamp = Date.now();
 
   beforeAll(() => {
     cache = new CacheManager();
@@ -79,7 +80,7 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj1',
           type: 'project',
-          name: 'Test Batch Project',
+          name: `TestBatch_Simple_${timestamp}`,
           note: 'Integration test project',
         },
       ],
@@ -110,13 +111,13 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj2',
           type: 'project',
-          name: 'Test Project with Tasks',
+          name: `TestBatch_ProjectWithTasks_${timestamp}`,
           note: 'Has child tasks',
         },
         {
           tempId: 'task1',
           type: 'task',
-          name: 'Child Task',
+          name: `TestBatch_ChildTask_${timestamp}`,
           parentTempId: 'proj2',
           dueDate: '2025-10-15',
         },
@@ -147,18 +148,18 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj3',
           type: 'project',
-          name: 'Test Nested Tasks',
+          name: `TestBatch_NestedTasks_${timestamp}`,
         },
         {
           tempId: 'task2',
           type: 'task',
-          name: 'Parent Task',
+          name: `TestBatch_ParentTask_${timestamp}`,
           parentTempId: 'proj3',
         },
         {
           tempId: 'task3',
           type: 'task',
-          name: 'Subtask',
+          name: `TestBatch_Subtask_${timestamp}`,
           parentTempId: 'task2',
         },
       ],
@@ -230,7 +231,7 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj6',
           type: 'project',
-          name: 'Test Mapping Project',
+          name: `TestBatch_Mapping_${timestamp}`,
         },
       ],
       createSequentially: 'true',
@@ -256,18 +257,18 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj7',
           type: 'project',
-          name: 'Valid Project',
+          name: `TestBatch_ValidProject_${timestamp}`,
         },
         {
           tempId: 'task4',
           type: 'task',
-          name: 'Task with missing parent',
+          name: `TestBatch_MissingParent_${timestamp}`,
           parentTempId: 'nonexistent',
         },
         {
           tempId: 'proj8',
           type: 'project',
-          name: 'Should Not Be Created',
+          name: `TestBatch_ShouldNotCreate_${timestamp}`,
         },
       ],
       createSequentially: 'true',
@@ -276,19 +277,11 @@ d('Batch Operations Integration', () => {
       stopOnError: 'true',
     });
 
-    // Tool returns wrapped response format
-    expect(response).toHaveProperty('data');
-    const result = (response as { data: { created: number; failed: number; results: Array<{ realId: string | null; type: string }> } }).data;
-    // Should have validation error before creating anything
-    expect(result.created).toBeLessThan(3);
-    expect(result.failed).toBeGreaterThan(0);
-
-    // Cleanup any created items
-    for (const item of result.results.reverse()) {
-      if (item.realId) {
-        createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
-      }
-    }
+    // Should return error for missing parent
+    expect(response).toHaveProperty('success', false);
+    const errorResponse = response as { error?: { code: string; message: string; details?: unknown } };
+    expect(errorResponse.error?.code).toBe('VALIDATION_ERROR');
+    expect(errorResponse.error?.message).toContain('nonexistent');
   }, 30000);
 
   it('should validate circular dependencies', async () => {
@@ -297,13 +290,13 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'task5',
           type: 'task',
-          name: 'Task A',
+          name: `TestBatch_CircularA_${timestamp}`,
           parentTempId: 'task6',
         },
         {
           tempId: 'task6',
           type: 'task',
-          name: 'Task B',
+          name: `TestBatch_CircularB_${timestamp}`,
           parentTempId: 'task5',
         },
       ],
@@ -315,8 +308,9 @@ d('Batch Operations Integration', () => {
 
     // Should return error for circular dependency
     expect(response).toHaveProperty('success', false);
-    const errorResponse = response as { error?: string; code?: string };
-    expect(errorResponse.code).toBe('VALIDATION_ERROR');
+    const errorResponse = response as { error?: { code: string; message: string } };
+    expect(errorResponse.error?.code).toBe('VALIDATION_ERROR');
+    expect(errorResponse.error?.message).toContain('Circular');
   }, 30000);
 
   it('should handle tasks with dates and metadata', async () => {
@@ -325,12 +319,12 @@ d('Batch Operations Integration', () => {
         {
           tempId: 'proj9',
           type: 'project',
-          name: 'Test Metadata Project',
+          name: `TestBatch_Metadata_${timestamp}`,
         },
         {
           tempId: 'task7',
           type: 'task',
-          name: 'Task with Full Metadata',
+          name: `TestBatch_FullMetadata_${timestamp}`,
           parentTempId: 'proj9',
           dueDate: '2025-10-20 17:00',
           deferDate: '2025-10-10 08:00',
