@@ -8,42 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Code Quality
-- **Unused Code Cleanup (October 13, 2025)** - Major codebase cleanup removing dead code
-  - **98.1% completion**: Removed 305 of 311 unused exports flagged by ts-prune
-  - **6,200+ lines removed**: ~20% reduction in codebase size
-  - **14 files deleted**: V1 schemas archived, barrel files deleted, unused classes removed
-  - **Zero breaking changes**: All 705/705 tests passing, production functionality preserved
+- **Unused Code Cleanup (October 13, 2025)** - Removed dead code identified by static analysis
+  - Removed 305 of 311 unused exports flagged by ts-prune (6,200+ lines, approximately 20% reduction in codebase size)
+  - Archived V1 schema architecture to `.archive/v1-schemas/` (1,428 lines)
+  - Removed unused exports from response-types, helpers, error-messages, and types (496 lines)
+  - Deleted barrel files and utilities from scripts (374 lines)
+  - Removed obsolete classes and plugins (1,209 lines)
+  - Removed deprecated schemas and type exports (200+ lines)
+  - Deleted 14 files total
+  - All 705/705 tests passing with zero breaking changes
 
-  **What was removed:**
-  - Phase 1: V1 schema architecture (1,428 lines archived to `.archive/v1-schemas/`)
-  - Phase 2: Unused exports from active files (496 lines from response-types, helpers, error-messages, types)
-  - Phase 3: Barrel files & utilities (374 lines from scripts/analytics.ts, export.ts, projects.ts, tags.ts)
-  - Phase 4: Classes & plugins (1,209 lines: RobustOmniAutomation, omni-automation-shims, error-codes enum, plugin analyzers)
-  - Phase 5: Schemas & type exports (200+ lines from filter-types, batch-schemas, context-detection, shared-schemas)
-
-  **What remains (23 exports, 1.9%):**
-  - 3 false positives in jxa-types.ts (actually used, ts-prune can't detect string template usage)
-  - 9 api-types.ts documentation types (official OmniFocus 4.6.1 API reference)
-  - 11 script helpers/templates (low priority, some are internal-only or future feature infrastructure)
-
-  **Impact:**
-  - ✅ Faster TypeScript builds (less code to process)
-  - ✅ Clearer codebase (only production code remains)
-  - ✅ Better LLM context efficiency (assistants load less unused code)
-  - ✅ Improved maintainability (reduced cognitive load for developers)
+  **Remaining unused exports (23 total):**
+  - 3 false positives in jxa-types.ts (string template usage not detected by ts-prune)
+  - 9 documentation types from api-types.ts (official OmniFocus 4.6.1 API reference)
+  - 11 script helpers/templates (internal-only or future infrastructure)
 
 ## [2.2.0] - 2025-10-02
 
-### 🎉 Helper System Simplification & Quality Improvements
+### Helper System Simplification & Quality Improvements
 
-This release dramatically simplifies the helper system architecture, fixes security issues, and improves test infrastructure.
+This release simplifies the helper system architecture, fixes security issues, and improves test infrastructure.
 
 #### Added
-- **Unified Helper System** - Radical simplification eliminates 90% of composition complexity
-  - Created `getUnifiedHelpers()` - single comprehensive helper bundle (16.37KB, only 3.1% of 523KB JXA limit)
-  - Migrated all 34 scripts across all categories (tasks, projects, folders, tags, analytics, reviews, recurring, export, perspectives)
-  - Eliminated 18 different helper functions with complex composition rules
-  - **IMPACT**: No more mental overhead about which helpers to combine, entire bug category eliminated
+- **Unified Helper System** - Consolidated helpers into single bundle
+  - Created `getUnifiedHelpers()` - comprehensive helper collection (16.37KB, 3.1% of 523KB JXA limit)
+  - Migrated all 34 scripts across tasks, projects, folders, tags, analytics, reviews, recurring, export, and perspectives
+  - Reduced from 18 different helper functions with varying composition rules to one unified system
 
 - **Edge Case Testing Suite** - Comprehensive escaping validation
   - Added 11 edge case tests covering quotes, newlines, backslashes, emoji, nested objects
@@ -103,30 +93,21 @@ This release dramatically simplifies the helper system architecture, fixes secur
 
 ---
 
-### 🎉 Smart Capture Feature (October 1, 2025)
+### Smart Capture Feature (October 1, 2025)
 
 #### Added
-- **🤖 Smart Capture - Parse Meeting Notes Tool** (commits d6abf03-a05278c)
+- **Smart Capture - Parse Meeting Notes Tool** (commits d6abf03-a05278c)
   - New `parse_meeting_notes` tool extracts action items from unstructured text
-  - Automatically detects tasks, projects, assignees, due dates, and context tags
-  - Two output modes: `preview` (user review) or `batch_ready` (direct creation)
-  - Intelligent task detection with action verb recognition
-  - Natural language date extraction ("by Friday", "next Tuesday")
-  - Context tag suggestions (@computer, @phone, @errands, etc.)
-  - Duration estimation based on keywords (quick=15min, call=30min, etc.)
-  - Project detection from headers and multi-step items
-  - Assignee detection ("John to...", "Waiting for Sarah")
-  - Confidence scoring for extracted items
-  - **Use Cases**: Meeting notes, email action items, voice transcripts
-  - **IMPACT**: Dramatically speeds up task capture from unstructured sources
+  - Supports two output modes: `preview` for user review or `batch_ready` for direct creation
+  - Detects tasks, projects, assignees, due dates, and context tags
+  - Includes action verb recognition, natural language dates, and confidence scoring
+  - Use cases: Meeting notes, email action items, voice transcripts
 
 #### Fixed
-- **Critical Server Hang Bug** (commit 3b0be51)
+- **Server Hang Bug** (commit 3b0be51)
   - Fixed duplicate `const HELPER_CONFIG` declaration in `getMinimalHelpers()`
-  - Bug caused JXA syntax error during cache warming, breaking all tool calls
-  - Server would hang when Claude Desktop tried to invoke any tool
-  - **Root Cause**: `getMinimalHelpers()` called `generateHelperConfig()` before calling `getCoreHelpers()`, but `getCoreHelpers()` already includes `generateHelperConfig()`
-  - **IMPACT**: Restored full server functionality in Claude Desktop
+  - Caused JXA syntax error during cache warming that broke all tool calls
+  - Root cause: `getMinimalHelpers()` called `generateHelperConfig()` before `getCoreHelpers()`, which already includes it
 
 #### Improved
 - **Code Quality**: All 713 tests passing with zero lint errors/warnings
@@ -602,8 +583,8 @@ create_task({
 
 ## [2.0.0-beta.1] - 2025-08-16
 
-### 🎉 Beta Release with Tag Assignment Fix
-This beta release represents a major milestone in the v2.0 development cycle. The most significant achievement is fixing the tag assignment limitation that has plagued the project since inception.
+### Beta Release with Tag Assignment Fix
+This beta release addresses the tag assignment limitation by implementing the evaluateJavascript() bridge pattern.
 
 ### 🏷️ Tag Assignment Finally Works!
 - **Major Breakthrough**: Tags can now be assigned during task creation
@@ -612,11 +593,11 @@ This beta release represents a major milestone in the v2.0 development cycle. Th
 - **Performance Impact**: Only ~50-100ms overhead for bridge operations
 - **Implementation**: `applyTagsViaBridge()` function in create-task.ts
 
-### ⚡ Performance Improvements
-- **95% Faster Queries**: Task queries reduced from 22+ seconds to <1 second for 2000+ tasks
-- **Script Standardization**: All tools now use v3 ultra-optimized scripts (67-91% performance gain)
+### Performance Improvements
+- **Optimized Query Performance**: Task queries for 2000+ tasks improved from 22+ seconds to <1 second
+- **Script Standardization**: All tools now use v3 optimized scripts with improved iteration patterns
 - **Smart Caching**: Enhanced caching strategy with TTL-based invalidation
-- **Early Exit Optimization**: Search operations now exit immediately when limit is reached
+- **Early Exit Optimization**: Search operations exit immediately when limit is reached
 
 ### 🔧 Type Safety Enhancements
 - **Full TypeScript Types**: V2 tools now use `StandardResponseV2<T>` with proper generic types
@@ -659,76 +640,27 @@ This beta release represents a major milestone in the v2.0 development cycle. Th
 
 ## [2.0.0-alpha.1] - 2025-08-14
 
-### 🚨 BREAKING CHANGES - Complete Paradigm Shift
+### Breaking Changes - Architecture Redesign
 
-This is a major version bump that fundamentally changes how the MCP server works. **Not backward compatible with v1.x**.
+This is a major version bump that fundamentally redesigns the tool architecture. **Not backward compatible with v1.x**.
 
-### The Paradigm Shift: From Query Speed to LLM Experience
+### Architecture Changes
 
-After v1.15.0's performance optimizations, we discovered a crucial insight:
-- **Tool execution is only 50% of user experience** (5s out of 10s total)
-- **Shaving 500ms off queries = 5% improvement**
-- **Reducing LLM confusion by 5s = 50% improvement**
+#### Tool Consolidation
+Consolidated from 15+ individual tools to 4 consolidated tools:
+- tasks - Single tool with modes for different query types
+- projects - Unified project operations
+- Other analytics and management tools streamlined
 
-v2.0.0 optimizes for what actually matters: **the complete LLM+User experience**.
+#### Response Format Update
+- Summary-first format with key insights
+- Structured data organization
+- Limited result sets by default (100 → 25)
 
-### Major Changes
-
-#### 1. Tool Consolidation (15+ → 4)
-**Before:** 15+ confusing tools
-```
-list_tasks, query_tasks, get_overdue_tasks, get_upcoming_tasks, 
-todays_agenda, next_actions, blocked_tasks, available_tasks...
-```
-
-**After:** 2 primary tools
-```
-tasks    - Single tool with modes: overdue, today, upcoming, search, etc.
-projects - Single tool with operations: list, create, update, etc.
-```
-
-#### 2. Response Format Revolution
-**Before:** Raw data dump
-```json
-{
-  "tasks": [/* 100 tasks with 20 fields each = 2000 data points */]
-}
-```
-
-**After:** Summary-first with insights
-```json
-{
-  "summary": {
-    "total": 47,
-    "overdue": 5,
-    "key_insight": "5 tasks overdue",
-    "most_urgent": "Tax return (30 days overdue)"
-  },
-  "insights": ["You have 5 overdue tasks", "Next action: 'Review report'"],
-  "data": {
-    "preview": [/* First 5 most relevant */],
-    "items": [/* Limited to 25 by default */]
-  }
-}
-```
-
-#### 3. Natural Language Support
-- Dates: `"tomorrow"`, `"next week"`, `"friday"`
-- Booleans: `"true"/"false"` auto-converted
-- Smart error recovery with suggestions
-
-### Performance Impact
-
-**Total User Experience Time:**
-- v1.x: 15-20 seconds (with retries and confusion)
-- v2.0: 6-8 seconds (first try success)
-- **Improvement: 60-70% faster end-to-end**
-
-### Breaking Changes
-- All tool names changed
-- All parameter schemas changed
-- Response format completely different
-- Default limits reduced (100 → 25)
+#### Natural Language Support
+- Date parsing: "tomorrow", "next week", "friday"
+- Boolean parameter flexibility
+- Improved error messages with suggestions
 
 ### Migration
 See [MIGRATION_GUIDE_V2.md](MIGRATION_GUIDE_V2.md) for detailed migration instructions.
@@ -738,16 +670,16 @@ This is an alpha release to gather feedback on the new architecture. The API may
 
 ## [1.15.0] - 2025-08-11
 
-### JavaScript Filtering Optimization - 67-91% Faster! ⚡
+### JavaScript Filtering Optimization
 
 This release optimizes the JavaScript filtering loop that processes tasks after retrieving them from OmniFocus.
 
 ### Performance Improvements
-The JavaScript filtering that happens after getting all tasks is now **67-91% faster**:
-- **1,000 tasks**: 67.5% improvement (0.19ms → 0.06ms)
-- **2,000 tasks**: 68.6% improvement (0.13ms → 0.04ms)  
-- **5,000 tasks**: 81.8% improvement (0.23ms → 0.04ms)
-- **10,000 tasks**: 91.2% improvement (0.56ms → 0.05ms)
+Improved JavaScript filtering performance through elimination of redundant wrapper functions and timestamp-based comparisons:
+- 1,000 tasks: 0.19ms → 0.06ms
+- 2,000 tasks: 0.13ms → 0.04ms
+- 5,000 tasks: 0.23ms → 0.04ms
+- 10,000 tasks: 0.56ms → 0.05ms
 
 ### Optimizations Applied
 1. **Eliminated safeGet() overhead** - Direct try/catch is 50-60% faster
@@ -775,9 +707,9 @@ try {
 ```
 
 ### Impact
-- The overall query time improvement depends on the ratio of task scanning to other operations
-- For typical queries (50-100 results from 2000+ tasks), this reduces total time by 30-50%
-- Combined with v1.14.0's whose() removal, queries are now **95%+ faster** than v1.13.0
+- Overall query time improvement depends on the ratio of task scanning to other operations
+- For typical queries (50-100 results from 2000+ tasks), combined with v1.14.0's whose() removal, significant performance gains
+- Queries that previously took 20-27 seconds now complete in 2-6 seconds
 
 ## [1.14.1] - 2025-08-11
 
@@ -795,18 +727,18 @@ The schema was incorrectly validating the `days` parameter even when it wasn't n
 
 ## [1.14.0] - 2025-08-11
 
-### Massive Performance Breakthrough - 75-93% Faster! 🚀
+### Performance Optimization - whose() Removal
 
-This release fixes the REAL performance bottleneck: JXA's `whose()` method.
+This release replaces JXA's `whose()` method with manual filtering for improved performance.
 
-### The Discovery
-After extensive testing, we found that JXA's `whose({completed: false})` takes **25 seconds** while manually filtering takes only **3.4 seconds**. The whose() method has been the bottleneck all along!
+### Discovery
+JXA's `whose({completed: false})` was identified as a performance bottleneck. Manual filtering proved significantly faster for large datasets.
 
-### Performance Improvements
-- **Upcoming tasks**: 5.7s (was 27s) - **79% faster**
-- **Overdue tasks**: 2.0s (was 25s) - **92% faster**  
-- **Today's agenda**: 1.8s (was 25s) - **93% faster**
-- **Basic list**: 3-4s (was 25s) - **85% faster**
+### Performance Changes
+- Upcoming tasks: 27s → 5.7s
+- Overdue tasks: 25s → 2.0s
+- Today's agenda: 25s → 1.8s
+- Basic list: 25s → 3-4s
 
 ### Changed
 - Replaced ALL uses of `whose()` with manual filtering
@@ -864,24 +796,15 @@ This release completely reverts the hybrid architecture approach after v1.13.1 t
 
 ## [1.13.1] - 2025-08-11
 
-### Critical Performance Fixes 🔥
+### Performance Fixes
 
-This release fixes catastrophic performance regressions discovered in v1.13.0 user testing.
+This release addresses performance regressions discovered in v1.13.0 user testing.
 
 ### Fixed
-- **Upcoming tasks query**: Fixed 22-second response time regression (was 22x slower than target)
-  - Reverted to smarter hybrid approach: JXA for filtering, Omni Automation for data extraction
-  - Now uses `where()` clause properly in Omni Automation for efficient filtering
-  - Response time: 22s → <1s (95% improvement)
-- **Overdue tasks query**: Fixed 3.4-second response time
-  - Similar hybrid approach fixes applied
-  - Response time: 3.4s → <1s (70% improvement)  
-- **Search performance**: Fixed 7.8-second search queries
-  - Search now uses original JXA implementation (can't be optimized with hybrid)
-  - Response time: 7.8s → 2-3s (60% improvement)
-- **Skip analysis mode**: Fixed counterproductive performance
-  - Was actually slower (1.4s) than normal mode (374ms)
-  - Root cause: Hybrid scripts were iterating ALL tasks without pre-filtering
+- **Upcoming tasks query**: Improved from ~22s to <1s using hybrid JXA/Omni Automation approach
+- **Overdue tasks query**: Improved from ~3.4s to <1s using similar hybrid approach
+- **Search performance**: Improved from ~7.8s to 2-3s using original JXA implementation
+- **Skip analysis mode**: Fixed performance issue where mode was slower (1.4s) than normal (374ms)
 
 ### Technical Details
 - Created `date-range-queries-fixed.ts` with proper hybrid implementation
@@ -896,61 +819,31 @@ This release fixes catastrophic performance regressions discovered in v1.13.0 us
 
 ## [1.13.0] - 2025-08-11
 
-### Major Performance Overhaul 🚀
+### Hybrid Architecture Implementation
 
-This release introduces a revolutionary hybrid approach using the `evaluateJavascript()` bridge to leverage Omni Automation's native API. This results in massive performance improvements across the board.
+This release introduces a hybrid JXA + Omni Automation approach using the `evaluateJavascript()` bridge for improved performance.
 
 ### Migrated to Hybrid Architecture
-- **list_tasks**: 60-83% faster - Core functionality now blazing fast
-- **todays_agenda**: 70-90% faster - Daily views now instantaneous  
-- **export_tasks**: 50-80% faster - Large exports no longer timeout
-- **query_tasks (upcoming/overdue)**: 96% faster - Sub-second response times
+- list_tasks: 2-3s → 0.8-1.2s
+- todays_agenda: 3-5s → 0.5-1s
+- export_tasks: 5-10s → 1-2s
+- upcoming_tasks: 23.7s → 0.75s
 
 ### Technical Improvements
-- **Hybrid Architecture**: JXA wrapper + Omni Automation core
-  - Filtering happens at native speed in Omni Automation
-  - Complex logic remains in JXA for compatibility
-  - Best of both worlds approach
-- **Files Added**:
-  - `list-tasks-hybrid.ts` - Hybrid list tasks implementation
-  - `todays-agenda-hybrid.ts` - Hybrid agenda implementation  
-  - `export-tasks-hybrid.ts` - Hybrid export implementation
-  - `date-range-queries-hybrid.ts` - Hybrid date queries
-- **Migration Plan**: Created comprehensive plan for remaining tools
-
-### Performance Metrics
-| Tool | Before | After | Improvement |
-|------|--------|-------|-------------|
-| list_tasks | 2-3s | 0.8-1.2s | 60-83% |
-| todays_agenda | 3-5s | 0.5-1s | 70-90% |
-| export_tasks | 5-10s | 1-2s | 50-80% |
-| upcoming_tasks | 23.7s | 0.75s | 96% |
-
-### Impact
-- Zero timeout errors even with 2000+ task databases
-- Responsive UI with sub-second queries
-- Future-proof architecture using Omni's preferred API
+- **Hybrid Architecture**: JXA wrapper + Omni Automation core for filtering
+- **New Implementation Files**:
+  - list-tasks-hybrid.ts
+  - todays-agenda-hybrid.ts
+  - export-tasks-hybrid.ts
+  - date-range-queries-hybrid.ts
 
 ## [1.12.1] - 2025-08-11
 
 ### Performance Improvements
-- **List Tasks Query**: Migrated to hybrid approach with massive gains
-  - 60-83% faster across all query types
-  - Complex filtering now happens in Omni Automation (native speed)
-  - Maintains full compatibility with existing filters
-  - File: `list-tasks-hybrid.ts` 
-- **Upcoming Tasks Query**: Massive performance improvement using `evaluateJavascript()` bridge
-  - Reduced from 23.7s to <1s for large databases (96% improvement!)
-  - Now uses hybrid approach: JXA wrapper calls Omni Automation API
-  - Leverages faster `flattenedTasks` iteration in Omni Automation
-  - All queries now complete in under 1 second
-- **Overdue Tasks Query**: Also optimized with hybrid approach
-  - Similar performance gains using `evaluateJavascript()` bridge
-  - Consistent sub-second response times
-- **Blocked Tasks Detection**: Optimized from 9s to <4s (55% improvement)
-  - Added early exit conditions
-  - Cache ID and sequential status to avoid repeated calls
-  - Skip redundant project checks when parent group is checked
+- **List Tasks Query**: Migrated to hybrid JXA/Omni Automation approach (list-tasks-hybrid.ts)
+- **Upcoming Tasks Query**: Reduced from 23.7s to <1s using `evaluateJavascript()` bridge
+- **Overdue Tasks Query**: Optimized with hybrid approach for sub-second response times
+- **Blocked Tasks Detection**: Improved from 9s to <4s with early exit conditions and ID caching
 
 ### Documentation
 - **Sequential Task Blocking**: Clarified that inbox tasks don't show as blocked
