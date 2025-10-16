@@ -241,30 +241,32 @@ export class MCPTestClient {
 
   async quickCleanup(): Promise<void> {
     // Quick cleanup: Delete only tracked IDs (no scan)
+    // OPTIMIZATION: Use bulk_delete for all tasks at once instead of individual deletes
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
     console.log(`🧹 Quick cleanup: deleting ${this.createdTaskIds.length} tasks, ${this.createdProjectIds.length} projects`);
 
-    // Clean up created tasks
-    for (const taskId of this.createdTaskIds) {
+    // Clean up created tasks using optimized bulk_delete
+    if (this.createdTaskIds.length > 0) {
       try {
-        await this.callTool('manage_task', { operation: 'delete', taskId: taskId });
-        this.cleanupMetrics.operations++;
+        const result = await this.callTool('manage_task', {
+          operation: 'bulk_delete',
+          taskIds: this.createdTaskIds
+        });
+        this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`  ⚠️  Could not delete task ${taskId}: ${message}`);
+        console.log(`  ⚠️  Could not bulk delete tasks: ${message}`);
       }
     }
 
-    // Clean up created projects
+    // Clean up created projects (still individual delete as bulk_delete not available for projects)
     for (const projectId of this.createdProjectIds) {
       try {
         await this.callTool('projects', { operation: 'delete', projectId: projectId });
         this.cleanupMetrics.operations++;
       } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
         const message = error instanceof Error ? error.message : String(error);
         console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
       }
@@ -281,30 +283,32 @@ export class MCPTestClient {
 
   async thoroughCleanup(): Promise<void> {
     // Thorough cleanup: Delete tracked IDs + efficient session-based scan
+    // OPTIMIZATION: Use bulk_delete for all tasks at once instead of individual deletes
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
     console.log(`🧹 Thorough cleanup for session: ${this.sessionId}`);
 
-    // Clean up created tasks
-    for (const taskId of this.createdTaskIds) {
+    // Clean up created tasks using optimized bulk_delete
+    if (this.createdTaskIds.length > 0) {
       try {
-        await this.callTool('manage_task', { operation: 'delete', taskId: taskId });
-        this.cleanupMetrics.operations++;
+        const result = await this.callTool('manage_task', {
+          operation: 'bulk_delete',
+          taskIds: this.createdTaskIds
+        });
+        this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`  ⚠️  Could not delete task ${taskId}: ${message}`);
+        console.log(`  ⚠️  Could not bulk delete tasks: ${message}`);
       }
     }
 
-    // Clean up created projects
+    // Clean up created projects (still individual delete as bulk_delete not available for projects)
     for (const projectId of this.createdProjectIds) {
       try {
         await this.callTool('projects', { operation: 'delete', projectId: projectId });
         this.cleanupMetrics.operations++;
       } catch (error: unknown) {
-        // Critical Issue #1: Proper error typing
         const message = error instanceof Error ? error.message : String(error);
         console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
       }

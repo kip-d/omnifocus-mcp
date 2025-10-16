@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT, LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -1048,9 +1048,42 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     const results = [];
     const errors = [];
 
-    for (const taskId of targetTaskIds) {
+    if (operation === 'bulk_delete') {
+      // OPTIMIZATION: Use single-pass bulk delete script instead of looping
+      // This executes one script that iterates flattenedTasks ONCE and deletes all tasks
+      // vs N iterations for N individual deletes (90% performance improvement expected)
       try {
-        if (operation === 'bulk_complete') {
+        const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, { taskIds: targetTaskIds });
+        const result = await this.execJson(script);
+
+        if (isScriptError(result)) {
+          // Script-level error
+          errors.push({ error: result.error || 'Bulk delete failed' });
+        } else if (result.data && typeof result.data === 'object') {
+          const bulkResult = result.data as { deleted?: Array<{ id: string; name: string }>; errors?: Array<{ taskId: string; error: string }> };
+
+          // Process successfully deleted tasks
+          if (Array.isArray(bulkResult.deleted)) {
+            for (const item of bulkResult.deleted) {
+              results.push({ taskId: item.id, status: 'deleted' });
+            }
+          }
+
+          // Process errors from the script
+          if (Array.isArray(bulkResult.errors)) {
+            errors.push(...bulkResult.errors);
+          }
+        }
+
+        // Invalidate task cache after bulk operation
+        this.cache.clear('tasks');
+      } catch (error) {
+        errors.push({ error: String(error) });
+      }
+    } else if (operation === 'bulk_complete') {
+      // Keep existing loop for bulk_complete (optimization not needed here)
+      for (const taskId of targetTaskIds) {
+        try {
           const script = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, { taskId });
           const result = await this.execJson(script);
 
@@ -1059,21 +1092,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           } else {
             results.push({ taskId, status: 'completed' });
           }
-        } else if (operation === 'bulk_delete') {
-          const script = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId });
-          const result = await this.execJson(script);
 
-          if (isScriptError(result)) {
-            errors.push({ taskId, error: result.error });
-          } else {
-            results.push({ taskId, status: 'deleted' });
-          }
+          // Invalidate task cache after each operation
+          this.cache.clear('tasks');
+        } catch (error) {
+          errors.push({ taskId, error: String(error) });
         }
-
-        // Invalidate task cache after each operation
-        this.cache.clear('tasks');
-      } catch (error) {
-        errors.push({ taskId, error: String(error) });
       }
     }
 
