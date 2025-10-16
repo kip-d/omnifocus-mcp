@@ -3,6 +3,17 @@ import { createInterface } from 'readline';
 
 export const TESTING_TAG = 'mcp-test';
 
+/**
+ * Generate a unique session ID for this test run
+ * Used to efficiently find and cleanup only THIS session's test data
+ * Format: mcp-test-session-TIMESTAMP-RANDOM
+ */
+function generateSessionId(): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  return `mcp-test-session-${timestamp}-${random}`;
+}
+
 export interface MCPRequest {
   jsonrpc: '2.0';
   id?: number;
@@ -34,6 +45,7 @@ export class MCPTestClient {
   private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
   private createdTaskIds: string[] = [];
   private createdProjectIds: string[] = [];
+  private sessionId: string = generateSessionId();  // Unique session tag for efficient cleanup
 
   private cleanupMetrics: CleanupMetrics = {
     startTime: 0,
@@ -193,7 +205,8 @@ export class MCPTestClient {
   }
 
   async createTestTask(name: string, properties: any = {}): Promise<any> {
-    const tags = [...(properties.tags || []), TESTING_TAG];
+    // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
+    const tags = [...(properties.tags || []), TESTING_TAG, this.sessionId];
 
     const taskParams = {
       name: name,
@@ -209,7 +222,8 @@ export class MCPTestClient {
   }
 
   async createTestProject(name: string, properties: any = {}): Promise<any> {
-    const tags = [...(properties.tags || []), TESTING_TAG];
+    // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
+    const tags = [...(properties.tags || []), TESTING_TAG, this.sessionId];
 
     const projectParams = {
       operation: 'create',
@@ -266,11 +280,11 @@ export class MCPTestClient {
   }
 
   async thoroughCleanup(): Promise<void> {
-    // Thorough cleanup: Delete tracked IDs + full tag-based scan (paranoid mode)
+    // Thorough cleanup: Delete tracked IDs + efficient session-based scan
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
-    console.log(`🧹 Thorough cleanup with tag: ${TESTING_TAG}`);
+    console.log(`🧹 Thorough cleanup for session: ${this.sessionId}`);
 
     // Clean up created tasks
     for (const taskId of this.createdTaskIds) {
@@ -296,11 +310,11 @@ export class MCPTestClient {
       }
     }
 
-    // Paranoid mode: Full tag-based fallback scan
+    // Efficient cleanup: Search for THIS SESSION'S tag (much faster than searching all tests)
     try {
       const tasks = await this.callTool('tasks', {
         mode: 'all',
-        tags: [TESTING_TAG],
+        tags: [this.sessionId],  // Search only for this session's unique tag
         limit: 100
       });
 
@@ -317,10 +331,10 @@ export class MCPTestClient {
     } catch (error: unknown) {
       // Critical Issue #1: Proper error typing
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ⚠️  Could not clean up tasks by tag: ${message}`);
+      console.log(`  ⚠️  Could not clean up tasks by session tag: ${message}`);
     }
 
-    // Clean up any remaining test projects by tag
+    // Clean up any remaining test projects for THIS SESSION
     try {
       const projects = await this.callTool('projects', {
         operation: 'list',
@@ -328,7 +342,7 @@ export class MCPTestClient {
       });
 
       for (const project of projects.data.projects || []) {
-        if (project.tags && project.tags.includes(TESTING_TAG)) {
+        if (project.tags && project.tags.includes(this.sessionId)) {
           try {
             await this.callTool('projects', { operation: 'delete', projectId: project.id });
             this.cleanupMetrics.operations++;
@@ -342,7 +356,7 @@ export class MCPTestClient {
     } catch (error: unknown) {
       // Critical Issue #1: Proper error typing
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ⚠️  Could not clean up projects by tag: ${message}`);
+      console.log(`  ⚠️  Could not clean up projects by session tag: ${message}`);
     }
 
     // Reset tracking arrays
