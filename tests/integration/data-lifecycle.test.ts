@@ -17,11 +17,11 @@ d('OmniFocus Data Lifecycle Tests', () => {
   afterAll(async () => {
     await client.thoroughCleanup();  // Final paranoid scan
     await client.stop();
-  });
+  });  // Uses global hookTimeout of 5min for integration tests
 
-  afterEach(async () => {
-    await client.quickCleanup();  // Fast ID-based cleanup only
-  });
+  // Note: Skip afterEach cleanup to avoid timeout issues
+  // Each MCP delete call can be 20+ seconds, so 5+ tasks = 100+ second cleanup
+  // Use afterAll (one bulk cleanup) instead of afterEach (per-test cleanup)
 
   it('should create and cleanup test tasks', async () => {
     const result = await client.createTestTask('Sample Test Task');
@@ -98,7 +98,7 @@ d('OmniFocus Data Lifecycle Tests', () => {
     for (const task of foundTasks) {
       expect(task.tags).toContain(TESTING_TAG);
     }
-  });
+  }, 120000);  // Increased timeout - MCP queries can be slow
 
   it('should cleanup all test data after tests', async () => {
     console.log(`\n🔍 Creating test data for cleanup verification`);

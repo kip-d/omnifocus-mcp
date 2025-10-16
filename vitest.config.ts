@@ -1,12 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
+const isIntegrationTest = process.argv.some(arg => arg.includes('tests/integration'));
+
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     setupFiles: ['tests/support/setup-unit.ts'],
-    testTimeout: 30000,        // 30s for most tests
-    hookTimeout: 60000,        // 60s for setup/teardown hooks
+    testTimeout: isIntegrationTest ? 120000 : 30000,     // 2min for integration, 30s for unit
+    hookTimeout: isIntegrationTest ? 300000 : 60000,     // 5min for integration (cleanup accumulates), 1min for unit
     // Sandbox-friendly mode: when VITEST_SAFE=1, use single threaded pool
     ...(process.env.VITEST_SAFE === '1'
       ? { pool: 'threads' as const, maxThreads: 1, minThreads: 1 }

@@ -310,54 +310,9 @@ export class MCPTestClient {
       }
     }
 
-    // Efficient cleanup: Search for THIS SESSION'S tag (much faster than searching all tests)
-    try {
-      const tasks = await this.callTool('tasks', {
-        mode: 'all',
-        tags: [this.sessionId],  // Search only for this session's unique tag
-        limit: 100
-      });
-
-      for (const task of tasks.data.tasks || []) {
-        try {
-          await this.callTool('manage_task', { operation: 'delete', taskId: task.id });
-          this.cleanupMetrics.operations++;
-        } catch (error: unknown) {
-          // Critical Issue #1: Proper error typing
-          const message = error instanceof Error ? error.message : String(error);
-          console.log(`  ⚠️  Could not delete task ${task.id}: ${message}`);
-        }
-      }
-    } catch (error: unknown) {
-      // Critical Issue #1: Proper error typing
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ⚠️  Could not clean up tasks by session tag: ${message}`);
-    }
-
-    // Clean up any remaining test projects for THIS SESSION
-    try {
-      const projects = await this.callTool('projects', {
-        operation: 'list',
-        limit: 100
-      });
-
-      for (const project of projects.data.projects || []) {
-        if (project.tags && project.tags.includes(this.sessionId)) {
-          try {
-            await this.callTool('projects', { operation: 'delete', projectId: project.id });
-            this.cleanupMetrics.operations++;
-          } catch (error: unknown) {
-            // Critical Issue #1: Proper error typing
-            const message = error instanceof Error ? error.message : String(error);
-            console.log(`  ⚠️  Could not delete project ${project.id}: ${message}`);
-          }
-        }
-      }
-    } catch (error: unknown) {
-      // Critical Issue #1: Proper error typing
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ⚠️  Could not clean up projects by session tag: ${message}`);
-    }
+    // Skip tag-based cleanup query entirely (OmniFocus tag queries can timeout with many tasks)
+    // Trust the ID-based cleanup above - we track all created IDs and delete them directly
+    // This eliminates the 60s+ timeout that happens with any tag-based query
 
     // Reset tracking arrays
     this.createdTaskIds = [];
