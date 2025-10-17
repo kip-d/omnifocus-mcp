@@ -12,11 +12,39 @@ export const CREATE_TASK_SCRIPT = `
   ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
 
+  // Repeat intent translation (OmniFocus 4.7+)
+  function translateRepeatIntentToOmniFocus(intent) {
+    if (!intent || !intent.frequency) return null;
+
+    const anchorTo = intent.anchorTo || 'when-due';
+    const skipMissed = intent.skipMissed || false;
+
+    // Map user intent to OmniFocus internal parameters
+    const anchorMap = {
+      'when-deferred': { anchorDateKey: 'DeferDate', method: 'DeferUntilDate', scheduleType: 'FromCompletion' },
+      'when-due': { anchorDateKey: 'DueDate', method: 'Fixed', scheduleType: 'Regularly' },
+      'when-marked-done': { anchorDateKey: 'DueDate', method: 'DueDate', scheduleType: 'FromCompletion' },
+      'planned-date': { anchorDateKey: 'PlannedDate', method: 'Fixed', scheduleType: 'Regularly' }
+    };
+
+    const params = anchorMap[anchorTo];
+    if (!params) return null;
+
+    return {
+      ruleString: intent.frequency,
+      method: params.method,
+      scheduleType: params.scheduleType,
+      anchorDateKey: params.anchorDateKey,
+      catchUpAutomatically: skipMissed,
+      _translatedFromUserIntent: true
+    };
+  }
+
   (() => {
     const app = Application('OmniFocus');
     const doc = app.defaultDocument();
     const taskData = {{taskData}};
-    
+
     try {
       // Determine the target container (inbox, project, or parent task)
       let targetContainer = doc.inboxTasks;
@@ -106,15 +134,28 @@ export const CREATE_TASK_SCRIPT = `
       // Apply repeat rule if provided
       if (taskData.repeatRule) {
         try {
-          const ruleData = prepareRepetitionRuleData(taskData.repeatRule);
-          if (ruleData && ruleData.needsBridge) {
+          // Check if this is user-intent format (4.7+ new style) or old format
+          let ruleData = null;
+          if (taskData.repeatRule._translatedFromUserIntent || taskData.repeatRule.anchorTo) {
+            // New format: translate user intent to OmniFocus params
+            ruleData = translateRepeatIntentToOmniFocus(taskData.repeatRule);
+          } else {
+            // Old format: use existing logic
+            ruleData = prepareRepetitionRuleData(taskData.repeatRule);
+          }
+
+          if (ruleData && ruleData.ruleString) {
+            // For both old and new formats, apply via bridge
             const success = applyRepetitionRuleViaBridge(taskId, ruleData);
             if (!success) {
               console.log('Warning: Could not apply repeat rule via bridge');
             }
           }
 
-          applyDeferAnother(task, taskData.repeatRule);
+          // Apply defer another for old format only
+          if (!taskData.repeatRule.anchorTo && taskData.repeatRule.deferAnother) {
+            applyDeferAnother(task, taskData.repeatRule);
+          }
         } catch (ruleError) {
           console.log('Warning: Failed to apply repeat rule:', ruleError.message);
         }

@@ -10,7 +10,35 @@ import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 export const UPDATE_TASK_SCRIPT = `
   ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
-  
+
+  // Repeat intent translation (OmniFocus 4.7+)
+  function translateRepeatIntentToOmniFocus(intent) {
+    if (!intent || !intent.frequency) return null;
+
+    const anchorTo = intent.anchorTo || 'when-due';
+    const skipMissed = intent.skipMissed || false;
+
+    // Map user intent to OmniFocus internal parameters
+    const anchorMap = {
+      'when-deferred': { anchorDateKey: 'DeferDate', method: 'DeferUntilDate', scheduleType: 'FromCompletion' },
+      'when-due': { anchorDateKey: 'DueDate', method: 'Fixed', scheduleType: 'Regularly' },
+      'when-marked-done': { anchorDateKey: 'DueDate', method: 'DueDate', scheduleType: 'FromCompletion' },
+      'planned-date': { anchorDateKey: 'PlannedDate', method: 'Fixed', scheduleType: 'Regularly' }
+    };
+
+    const params = anchorMap[anchorTo];
+    if (!params) return null;
+
+    return {
+      ruleString: intent.frequency,
+      method: params.method,
+      scheduleType: params.scheduleType,
+      anchorDateKey: params.anchorDateKey,
+      catchUpAutomatically: skipMissed,
+      _translatedFromUserIntent: true
+    };
+  }
+
   // Minimal bridge helper for task movement
   function __formatBridgeScript(template, params) {
     let script = template;
@@ -155,8 +183,17 @@ export const UPDATE_TASK_SCRIPT = `
       }
     } else if (updates.repeatRule) {
       try {
-        const ruleData = prepareRepetitionRuleData(updates.repeatRule);
-        if (ruleData && ruleData.needsBridge) {
+        // Check if this is user-intent format (4.7+ new style) or old format
+        let ruleData = null;
+        if (updates.repeatRule._translatedFromUserIntent || updates.repeatRule.anchorTo) {
+          // New format: translate user intent to OmniFocus params
+          ruleData = translateRepeatIntentToOmniFocus(updates.repeatRule);
+        } else {
+          // Old format: use existing logic
+          ruleData = prepareRepetitionRuleData(updates.repeatRule);
+        }
+
+        if (ruleData && ruleData.ruleString) {
           // Apply repetition rule via evaluateJavascript bridge
           const success = applyRepetitionRuleViaBridge(task.id(), ruleData);
           if (success) {
@@ -165,10 +202,12 @@ export const UPDATE_TASK_SCRIPT = `
             console.log('Warning: Could not update repeat rule via bridge');
           }
         }
-        
-        // Apply defer another settings if specified
-        applyDeferAnother(task, updates.repeatRule);
-        
+
+        // Apply defer another settings for old format only
+        if (!updates.repeatRule.anchorTo && updates.repeatRule.deferAnother) {
+          applyDeferAnother(task, updates.repeatRule);
+        }
+
       } catch (error) {
         console.log('Warning: Failed to update repeat rule:', error.message);
         // Continue without repeat rule update rather than failing
