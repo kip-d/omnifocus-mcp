@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+  <qa_pair>
+    <question>Query all active projects and identify which one has the most overdue review date. What is the project name?</question>
+    <answer>Westgate</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using the projects tool, list all projects and identify how many are completely empty with zero tasks.</question>
+    <answer>4</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Query all tasks assigned to the "Pending Purchase Orders" project and count the total number of tasks in that project.</question>
+    <answer>44</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Among tasks in the "Pending Purchase Orders" project, how many are in an available state (not blocked by dependencies)?</question>
+    <answer>41</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Find all projects with a sequential workflow constraint enabled. Name the first sequential project found.</question>
+    <answer>Blank Order Project</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Query for all overdue tasks and identify how many of them are marked as flagged (high priority).</question>
+    <answer>2</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Group overdue tasks by project and identify which project has the most overdue tasks.</question>
+    <answer>Pending Purchase Orders</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Using task and project queries, what is the name of the highest priority flagged task that is overdue?</question>
+    <answer>Call Kurzweil support regarding the Cyber security course</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Query projects with empty status and find how many projects are currently on hold.</question>
+    <answer>1</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Analyze the projects list and identify the project that has not been modified since earliest date but still contains active tasks. What is its name?</question>
+    <answer>Blank Order Project</answer>
+  </qa_pair>
+</evaluation>
