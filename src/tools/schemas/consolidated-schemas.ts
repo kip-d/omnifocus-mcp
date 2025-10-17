@@ -81,6 +81,7 @@ const UpdateTasksOperation = z.object({
     flagged: z.boolean().optional(),
     dueDate: LocalDateTimeSchema.optional(),
     deferDate: LocalDateTimeSchema.optional(),
+    plannedDate: LocalDateTimeSchema.optional().describe('When the task is planned (OmniFocus 4.7+)'),
     tags: z.array(z.string()).optional(),
     project: z.string().optional(),
     context: z.string().optional(),
