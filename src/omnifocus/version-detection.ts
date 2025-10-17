@@ -3,6 +3,10 @@
  * Lazy evaluation: Only checks version when a feature is requested
  */
 
+import { OmniAutomation } from './OmniAutomation.js';
+import { GET_VERSION_SCRIPT } from './scripts/system/get-version.js';
+import { z } from 'zod';
+
 interface OmniFocusVersion {
   version: string;
   major: number;
@@ -25,6 +29,30 @@ interface VersionInfo {
 // Cached version info (lazy loaded)
 let cachedVersionInfo: VersionInfo | null = null;
 
+// Schema for version script response
+const VersionResponseSchema = z.object({
+  ok: z.boolean(),
+  version: z.string(),
+  v: z.string()
+});
+
+/**
+ * Parse version string like "4.8.4" into components
+ */
+function parseVersion(versionString: string): OmniFocusVersion {
+  const parts = versionString.split('.');
+  const major = parseInt(parts[0] || '4', 10);
+  const minor = parseInt(parts[1] || '6', 10);
+  const patch = parseInt(parts[2] || '1', 10);
+
+  return {
+    version: versionString,
+    major,
+    minor,
+    patch
+  };
+}
+
 /**
  * Check if version is 4.7 or later
  */
@@ -35,16 +63,16 @@ function isVersion47OrLater(version: OmniFocusVersion): boolean {
 }
 
 /**
- * Detect OmniFocus version by testing for API features
+ * Detect OmniFocus version by querying the application
  * Returns cached result if available
  */
-export function getOmniFocusVersion(): VersionInfo {
+export async function getOmniFocusVersion(): Promise<VersionInfo> {
   // Return cached version if available
   if (cachedVersionInfo) {
     return cachedVersionInfo;
   }
 
-  // Try to get version from app
+  // Query OmniFocus for actual version
   let detectedVersion: OmniFocusVersion = {
     version: 'unknown',
     major: 4,
@@ -53,13 +81,15 @@ export function getOmniFocusVersion(): VersionInfo {
   };
 
   try {
-    const app = require('applescript');
-    if (app && typeof app.execString === 'function') {
-      // This would be the ideal way, but we're in JXA context
-      // For now, return safe defaults
+    const omni = new OmniAutomation();
+    const result = await omni.executeJson(GET_VERSION_SCRIPT, VersionResponseSchema);
+
+    if (result.success && result.data.ok && result.data.version) {
+      detectedVersion = parseVersion(result.data.version);
     }
   } catch (e) {
-    // Not in an environment where we can check
+    // If we can't detect version, fall back to safe defaults (4.6.1)
+    console.error('[version-detection] Failed to detect OmniFocus version:', e);
   }
 
   // Determine features based on version
@@ -82,10 +112,10 @@ export function getOmniFocusVersion(): VersionInfo {
  * Check if a specific feature is supported
  * This is the main API for checking version-dependent features
  */
-export function supportsFeature(
+export async function supportsFeature(
   feature: 'plannedDates' | 'mutuallyExclusiveTags' | 'enhancedRepeats'
-): boolean {
-  const versionInfo = getOmniFocusVersion();
+): Promise<boolean> {
+  const versionInfo = await getOmniFocusVersion();
 
   switch (feature) {
     case 'plannedDates':
@@ -102,8 +132,8 @@ export function supportsFeature(
 /**
  * Get version info for logging/debugging
  */
-export function getVersionInfo(): VersionInfo {
-  return getOmniFocusVersion();
+export async function getVersionInfo(): Promise<VersionInfo> {
+  return await getOmniFocusVersion();
 }
 
 /**
