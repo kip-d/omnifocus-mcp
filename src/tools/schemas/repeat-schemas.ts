@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { coerceNumber } from './coercion-helpers.js';
+import { LocalDateTimeSchema } from './date-schemas.js';
 
 /**
  * Comprehensive repeat/recurrence schema definitions for OmniFocus
@@ -91,5 +92,69 @@ export const RepeatRuleSchema = z.object({
   deferAnother: DeferAnotherSchema
     .optional()
     .describe('Defer the task X time before the due date (e.g., defer 3 days before due)'),
+});
+
+/**
+ * LLM-OPTIMIZED REPEAT SCHEMAS (NEW in 4.7+ upgrade)
+ * These schemas expose user-friendly intent keywords that Claude understands
+ * All technical OmniFocus internals are hidden server-side
+ */
+
+// Anchor intent for repeat rules (what date the repeat anchors to)
+export const RepeatAnchorIntentSchema = z.enum([
+  'when-deferred',     // Count from defer date (4.6.1+)
+  'when-due',          // Count from due date (4.6.1+) - DEFAULT
+  'when-marked-done',  // Count from completion (4.7+)
+  'planned-date'       // Count from planned date (4.7+)
+]).default('when-due').describe(
+  'What date to anchor the repeat to: "when-deferred" = count from defer date, "when-due" = count from due date (default), "when-marked-done" = count from completion (OmniFocus 4.7+), "planned-date" = count from planned date (OmniFocus 4.7+)'
+);
+
+// End condition for repeats (when should repeat stop?)
+export const RepeatEndConditionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('never').describe('Never end - repeat forever (default)')
+  }),
+  z.object({
+    type: z.literal('afterDate'),
+    date: LocalDateTimeSchema.describe('Stop repeating after this date')
+  }),
+  z.object({
+    type: z.literal('afterOccurrences'),
+    count: coerceNumber().int().positive().describe('Stop after this many occurrences')
+  })
+]).optional().describe('When should this repeat end? Omit for infinite repeats');
+
+// User-intent-driven repeat schema (for create/update operations)
+// This is what Claude sees and uses
+export const RepeatRuleUserIntentSchema = z.object({
+  frequency: z.string().describe(
+    'Repeat frequency in human-readable format. Examples: "daily", "every 3 days", "weekly on Monday", "monthly on the 15th", "yearly"'
+  ),
+
+  anchorTo: RepeatAnchorIntentSchema,
+
+  skipMissed: z.coerce.boolean().default(false).describe(
+    'Should missed occurrences be skipped (caught up automatically)? Default: false'
+  ),
+
+  endCondition: RepeatEndConditionSchema
+});
+
+// Response schema includes both user-friendly and technical details
+export const RepeatRuleResponseSchema = z.object({
+  frequency: z.string(),
+  anchorTo: z.string(),
+  skipMissed: z.boolean(),
+  endCondition: z.any().optional(),
+
+  // Technical details (for advanced users/debugging)
+  _details: z.object({
+    ruleString: z.string().optional(),
+    method: z.string().optional(),
+    scheduleType: z.string().optional(),
+    anchorDateKey: z.string().optional(),
+    catchUpAutomatically: z.boolean().optional()
+  }).optional().describe('Technical implementation details (for debugging)')
 });
 
