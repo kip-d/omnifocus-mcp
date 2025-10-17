@@ -36,6 +36,14 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     'to avoid expensive sequential operations.';
 
   schema = BatchCreateSchema;
+  meta = {
+    category: 'Task Management' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'moderate' as const,
+    tags: ['mutations', 'write', 'batch', 'create', 'hierarchy'],
+    capabilities: ['batch-create', 'hierarchy', 'projects', 'tasks'],
+  };
 
   async executeValidated(args: BatchCreateInput): Promise<unknown> {
     const timer = new OperationTimerV2();

@@ -65,6 +65,16 @@ export abstract class BaseTool<
   abstract description: string;
   abstract schema: TSchema;
 
+  // Optional meta fields for tool discovery and capability declaration
+  abstract meta?: {
+    category: 'Task Management' | 'Organization' | 'Analytics' | 'Utility' | 'Capture';
+    stability: 'stable' | 'beta' | 'experimental';
+    complexity: 'simple' | 'moderate' | 'complex';
+    performanceClass: 'fast' | 'moderate' | 'slow';
+    tags?: string[];
+    capabilities?: string[];
+  };
+
   /**
    * Get JSON Schema from Zod schema for MCP compatibility
    */

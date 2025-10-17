@@ -14,6 +14,14 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   name = 'manage_reviews';
   description = 'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
   schema = ManageReviewsSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'stable' as const,
+    complexity: 'simple' as const,
+    performanceClass: 'fast' as const,
+    tags: ['mutations', 'write', 'reviews', 'scheduling'],
+    capabilities: ['mark-reviewed', 'list-for-review', 'schedule-review'],
+  };
 
   async executeValidated(args: ManageReviewsInput): Promise<ReviewsResponseV2> {
     const timer = new OperationTimerV2();

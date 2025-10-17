@@ -114,11 +114,18 @@ export function registerTools(server: Server, cache: CacheManager): void {
   // Register handlers
   server.setRequestHandler(ListToolsRequestSchema, () => {
     return {
-      tools: tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      })),
+      tools: tools.map(t => {
+        const toolDef: Record<string, unknown> = {
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        };
+        // Include meta fields if the tool provides them
+        if ('meta' in t && t.meta) {
+          toolDef.meta = (t as Record<string, unknown>).meta;
+        }
+        return toolDef;
+      }),
     };
   });
 

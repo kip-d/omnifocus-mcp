@@ -77,6 +77,14 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
   name = 'tags';
   description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
+  meta = {
+    category: 'Organization' as const,
+    stability: 'stable' as const,
+    complexity: 'simple' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'mutations', 'hierarchy', 'metadata'],
+    capabilities: ['list', 'create', 'delete', 'manage', 'hierarchy'],
+  };
 
   async executeValidated(args: TagsToolInput): Promise<TagsResponseV2 | TagOperationResponseV2> {
     const { operation } = args;

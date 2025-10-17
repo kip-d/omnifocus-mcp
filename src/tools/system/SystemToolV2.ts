@@ -72,6 +72,14 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
   description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, view performance metrics, or get cache statistics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics, operation="cache" for cache statistics.';
   schema = SystemToolSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'stable' as const,
+    complexity: 'simple' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'read-only', 'diagnostics', 'system'],
+    capabilities: ['version', 'diagnostics', 'metrics', 'health-check'],
+  };
 
   private diagnosticOmni: DiagnosticOmniAutomation;
 

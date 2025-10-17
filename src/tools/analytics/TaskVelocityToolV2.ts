@@ -78,6 +78,14 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
   name = 'task_velocity';
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
+  meta = {
+    category: 'Analytics' as const,
+    stability: 'stable' as const,
+    complexity: 'complex' as const,
+    performanceClass: 'moderate' as const,
+    tags: ['analytics', 'read-only', 'trends', 'velocity'],
+    capabilities: ['completion-trends', 'velocity-metrics', 'forecast'],
+  };
 
   async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();

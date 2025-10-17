@@ -116,6 +116,14 @@ export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> 
   name = 'perspectives';
   description = 'Manage OmniFocus perspectives with enhanced viewing capabilities. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective with rich formatting, grouping, and field selection options. Set formatOutput=true for human-readable display with checkboxes and visual indicators.';
   schema = PerspectivesToolSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'read-only', 'perspectives', 'views'],
+    capabilities: ['list', 'query', 'formatting', 'grouping'],
+  };
 
   async executeValidated(args: z.infer<typeof PerspectivesToolSchema>): Promise<PerspectivesResponse> {
     const { operation } = args;

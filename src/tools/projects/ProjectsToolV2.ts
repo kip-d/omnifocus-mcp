@@ -76,6 +76,14 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
   name = 'projects';
   description = 'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
   schema = ProjectsToolSchemaV2;
+  meta = {
+    category: 'Organization' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'mutations', 'organization', 'management'],
+    capabilities: ['list', 'create', 'update', 'complete', 'delete', 'stats'],
+  };
 
   async executeValidated(args: ProjectsArgsV2): Promise<ProjectsResponseV2 | ProjectOperationResponseV2> {
     const timer = new OperationTimerV2();

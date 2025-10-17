@@ -69,6 +69,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
   name = 'export';
   description = 'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
   schema = ExportSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'read-only', 'export', 'data'],
+    capabilities: ['export-json', 'export-csv', 'export-markdown', 'filtering'],
+  };
 
   constructor(cache: CacheManager) {
     super(cache);

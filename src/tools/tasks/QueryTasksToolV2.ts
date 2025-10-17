@@ -157,6 +157,15 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 4. Combine into structured query`;
   schema = QueryTasksToolSchemaV2;
 
+  meta = {
+    category: 'Task Management' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'read-only', 'filtering', 'search'],
+    capabilities: ['search', 'filter', 'sort', 'paginate', 'text-search'],
+  };
+
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {
     const timer = new OperationTimerV2();
 

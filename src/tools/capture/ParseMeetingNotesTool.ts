@@ -111,6 +111,14 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     'Perfect for capturing meeting outcomes, email action items, or voice notes.';
 
   schema = ParseMeetingNotesSchema;
+  meta = {
+    category: 'Capture' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['mutations', 'write', 'capture', 'parsing', 'ai-powered'],
+    capabilities: ['parse-text', 'extract-actions', 'smart-capture'],
+  };
 
   executeValidated(args: ParseMeetingNotesArgs): Promise<unknown> {
     const timer = new OperationTimerV2();

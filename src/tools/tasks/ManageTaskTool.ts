@@ -168,6 +168,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
   name = 'manage_task';
   description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).';
   schema = ManageTaskSchema;
+  meta = {
+    category: 'Task Management' as const,
+    stability: 'stable' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['mutations', 'write', 'create', 'update', 'complete', 'delete'],
+    capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
+  };
 
   constructor(cache: CacheManager) {
     super(cache);

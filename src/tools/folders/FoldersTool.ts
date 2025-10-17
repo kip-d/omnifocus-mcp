@@ -72,6 +72,14 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
   name = 'folders';
   description = 'Query and manage OmniFocus folders. Operations: list (all folders), get (specific folder), search (by name), projects (projects in folder), create, update, delete, move, duplicate, set_status. Consistent with the projects tool pattern.';
   schema = FoldersSchema;
+  meta = {
+    category: 'Organization' as const,
+    stability: 'stable' as const,
+    complexity: 'simple' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'mutations', 'hierarchy', 'organization'],
+    capabilities: ['list', 'create', 'update', 'delete', 'move'],
+  };
 
   constructor(cache: CacheManager) {
     super(cache);

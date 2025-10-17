@@ -45,6 +45,14 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
   name = 'recurring_tasks';
   description = 'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
   schema = RecurringTasksSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'stable' as const,
+    complexity: 'simple' as const,
+    performanceClass: 'fast' as const,
+    tags: ['queries', 'read-only', 'recurring', 'analysis'],
+    capabilities: ['list-recurring', 'analyze-patterns', 'frequency-stats'],
+  };
 
   constructor(cache: CacheManager) {
     super(cache);

@@ -15,6 +15,14 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
   name = 'productivity_stats';
   description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.';
   schema = ProductivityStatsSchemaV2;
+  meta = {
+    category: 'Analytics' as const,
+    stability: 'stable' as const,
+    complexity: 'complex' as const,
+    performanceClass: 'slow' as const,
+    tags: ['analytics', 'read-only', 'metrics', 'health'],
+    capabilities: ['health-metrics', 'completion-rate', 'trends', 'statistics'],
+  };
 
   async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();

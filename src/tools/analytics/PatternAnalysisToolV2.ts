@@ -217,6 +217,14 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
   name = 'analyze_patterns';
   description = 'Analyze patterns across entire OmniFocus database for insights and improvements. Supports: duplicates, dormant projects, tag audits, deadline health, waiting tasks, review gaps, next actions clarity, WIP limits, and due date bunching analysis.';
   schema = PatternAnalysisSchema;
+  meta = {
+    category: 'Analytics' as const,
+    stability: 'stable' as const,
+    complexity: 'complex' as const,
+    performanceClass: 'moderate' as const,
+    tags: ['analytics', 'read-only', 'patterns', 'detection'],
+    capabilities: ['pattern-detection', 'anomalies', 'database-wide-analysis'],
+  };
 
   protected logger = createLogger('PatternAnalysisToolV2');
 
