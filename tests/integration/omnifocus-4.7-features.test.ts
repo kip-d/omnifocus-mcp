@@ -19,7 +19,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
   });
 
   afterEach(async () => {
-    await client.cleanup();
+    await client.quickCleanup();
+    await client.stop();
   });
 
   describe('Planned Dates Feature', () => {
@@ -109,8 +110,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       const parentResponse = await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Priority',
-        tags: ['test', 'tag-hierarchy']
+        tagName: 'Priority'
       });
 
       expect(parentResponse.success).toBe(true);
@@ -122,8 +122,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Status-ME',
-        tags: ['test', 'mutual-excl']
+        tagName: 'Status-ME'
       });
 
       // Set mutual exclusivity
@@ -144,8 +143,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Context-ME',
-        tags: ['test', 'mutual-disable']
+        tagName: 'Context-ME'
       });
 
       // First enable
@@ -172,8 +170,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'ListME-Tag',
-        tags: ['test', 'list-me']
+        tagName: 'ListME-Tag'
       });
 
       await client.callTool('tags', {

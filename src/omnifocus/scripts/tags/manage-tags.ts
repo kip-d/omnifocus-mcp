@@ -513,12 +513,15 @@ export const MANAGE_TAGS_SCRIPT = `
 
       case 'set_mutual_exclusivity':
         // Set mutual exclusivity constraint on tag's children (OmniFocus 4.7+)
+        // MUST use OmniJS bridge - direct JXA property assignment fails
         let tagToUpdate = null;
+        let tagId = null;
 
         // Find the tag
         for (let i = 0; i < allTags.length; i++) {
           if (safeGet(() => allTags[i].name()) === tagName) {
             tagToUpdate = allTags[i];
+            tagId = safeGet(() => allTags[i].id());
             break;
           }
         }
@@ -530,16 +533,42 @@ export const MANAGE_TAGS_SCRIPT = `
           });
         }
 
-        // Set mutual exclusivity property
+        if (!tagId) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to get tag ID for '" + tagName + "'"
+          });
+        }
+
+        // Set mutual exclusivity property using OmniJS bridge
         try {
-          tagToUpdate.childrenAreMutuallyExclusive = mutuallyExclusive === true;
+          const bridgeScript = \`
+            (() => {
+              const tag = Tag.byIdentifier(\${JSON.stringify(tagId)});
+              if (!tag) {
+                return JSON.stringify({ error: true, message: "Tag not found by ID" });
+              }
+              tag.childrenAreMutuallyExclusive = \${mutuallyExclusive === true};
+              return JSON.stringify({ success: true, value: tag.childrenAreMutuallyExclusive });
+            })()
+          \`;
+
+          const bridgeResult = app.evaluateJavascript(bridgeScript);
+          const result = JSON.parse(bridgeResult);
+
+          if (result.error) {
+            return JSON.stringify({
+              error: true,
+              message: "Bridge error: " + result.message
+            });
+          }
 
           return JSON.stringify({
             success: true,
             action: 'set_mutual_exclusivity',
             tagName: tagName,
-            childrenAreMutuallyExclusive: mutuallyExclusive === true,
-            message: "Mutual exclusivity for '" + tagName + "' child tags set to " + (mutuallyExclusive ? "enabled" : "disabled")
+            childrenAreMutuallyExclusive: result.value,
+            message: "Mutual exclusivity for '" + tagName + "' child tags set to " + (result.value ? "enabled" : "disabled")
           });
         } catch (updateError) {
           return JSON.stringify({

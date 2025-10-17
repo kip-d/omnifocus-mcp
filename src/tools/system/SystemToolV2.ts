@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { getVersionInfo } from '../../utils/version.js';
+import { getVersionInfo as getOmniFocusVersionInfo } from '../../omnifocus/version-detection.js';
 import { DiagnosticOmniAutomation } from '../../omnifocus/DiagnosticOmniAutomation.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { getSystemMetrics, getMetricsSummary } from '../../utils/metrics.js';
@@ -106,7 +107,7 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
 
     switch (operation) {
       case 'version':
-        return this.getVersion();
+        return await this.getVersion();
       case 'diagnostics':
         return this.runDiagnostics(args);
       case 'metrics':
@@ -125,26 +126,41 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
     }
   }
 
-  private getVersion(): Promise<StandardResponseV2<VersionInfo>> {
+  private async getVersion(): Promise<StandardResponseV2<VersionInfo>> {
     const timer = new OperationTimerV2();
 
     try {
       const versionInfo = getVersionInfo();
-      return Promise.resolve(createSuccessResponseV2(
+
+      // Get OmniFocus version for metadata
+      let omniFocusVersion = undefined;
+      try {
+        const omniVersion = await getOmniFocusVersionInfo();
+        omniFocusVersion = omniVersion.version?.version;
+      } catch (e) {
+        // Silently fail if OmniFocus version detection not available
+        this.logger.debug('OmniFocus version detection not available', { error: e instanceof Error ? e.message : String(e) });
+      }
+
+      return createSuccessResponseV2(
         'system',
         versionInfo,
         undefined,
-        { ...timer.toMetadata(), operation: 'version' },
-      ));
+        {
+          ...timer.toMetadata(),
+          operation: 'version',
+          omnifocus_version: omniFocusVersion
+        },
+      );
     } catch (error) {
-      return Promise.resolve(createErrorResponseV2(
+      return createErrorResponseV2(
         'system',
         'VERSION_ERROR',
         error instanceof Error ? error.message : 'Failed to get version info',
         undefined,
         { operation: 'version' },
         timer.toMetadata(),
-      ));
+      );
     }
   }
 
