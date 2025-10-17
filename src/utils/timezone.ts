@@ -92,7 +92,7 @@ export function getCurrentTimezoneOffset(): number {
  */
 export function localToUTC(
   localDateStr: string,
-  context: 'due' | 'defer' | 'completion' | 'generic' = 'generic',
+  context: 'due' | 'defer' | 'planned' | 'completion' | 'generic' = 'generic',
   _timezone?: string,
 ): string {
   // Parse the input to determine format

@@ -73,12 +73,25 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
   description = 'Query and manage OmniFocus folders. Operations: list (all folders), get (specific folder), search (by name), projects (projects in folder), create, update, delete, move, duplicate, set_status. Consistent with the projects tool pattern.';
   schema = FoldersSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Organization' as const,
     stability: 'stable' as const,
     complexity: 'simple' as const,
     performanceClass: 'fast' as const,
     tags: ['queries', 'mutations', 'hierarchy', 'organization'],
     capabilities: ['list', 'create', 'update', 'delete', 'move'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 500,
+    maxQueryDuration: 3000, // 3 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Maximum 500 folders per query',
+      'Folders support hierarchy (parent-child nesting)',
+      'Dropped folders cannot be undropped via API',
+      'set_status can apply recursively to all projects in folder',
+    ],
   };
 
   constructor(cache: CacheManager) {

@@ -112,12 +112,27 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
 
   schema = ParseMeetingNotesSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Capture' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
     tags: ['mutations', 'write', 'capture', 'parsing', 'ai-powered'],
     capabilities: ['parse-text', 'extract-actions', 'smart-capture'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 500, // Max items to extract per parse
+    maxQueryDuration: 5000, // 5 seconds - local parsing
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Input limited to 10-50,000 characters (meeting notes/transcripts)',
+      'AI-powered extraction depends on text clarity',
+      'Date extraction works with natural language (e.g., "Friday", "next week")',
+      'Context tag suggestions based on keywords (@computer, @phone, @office)',
+      'Confidence scores: high (clear action items), medium (likely), low (uncertain)',
+      'Requires batch_create to actually create items',
+    ],
   };
 
   executeValidated(args: ParseMeetingNotesArgs): Promise<unknown> {

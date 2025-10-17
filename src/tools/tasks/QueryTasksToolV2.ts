@@ -88,12 +88,14 @@ const QueryTasksToolSchemaV2 = z.object({
     'estimatedMinutes',
     'dueDate',
     'deferDate',
+    'plannedDate',
     'completionDate',
     'note',
     'projectId',
     'project',
     'tags',
-  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, completionDate, note, projectId, project, tags'),
+    'repetitionRule',
+  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule'),
 
   // Advanced filtering (optional - for complex queries)
   filters: z.any().optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
@@ -158,12 +160,24 @@ CONVERSION PATTERN: When user asks in natural language, identify:
   schema = QueryTasksToolSchemaV2;
 
   meta = {
+    // Phase 1: Essential metadata
     category: 'Task Management' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
     tags: ['queries', 'read-only', 'filtering', 'search'],
     capabilities: ['search', 'filter', 'sort', 'paginate', 'text-search'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 200,
+    maxQueryDuration: 5000, // 5 seconds for most queries
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Maximum 200 results per query',
+      'Bulk text search may be slower with 1000+ tasks',
+      'Complex nested filters may timeout on very large databases (10000+ tasks)',
+    ],
   };
 
   async executeValidated(args: QueryTasksArgsV2): Promise<TasksResponseV2> {

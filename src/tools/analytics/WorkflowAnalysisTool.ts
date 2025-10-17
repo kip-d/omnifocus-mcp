@@ -42,12 +42,26 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
   description = 'Deep analysis of your OmniFocus workflow health and system efficiency. Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization. Focuses on how well your GTD system is working rather than completion metrics. Use for occasional deep dives into your workflow patterns.';
   schema = WorkflowAnalysisSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Analytics' as const,
     stability: 'stable' as const,
     complexity: 'complex' as const,
     performanceClass: 'slow' as const,
     tags: ['analytics', 'read-only', 'workflow', 'insights'],
     capabilities: ['workflow-analysis', 'pattern-recognition', 'insights'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: null, // Returns single comprehensive analysis
+    maxQueryDuration: 60000, // 60 seconds - deep analysis
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Deep analysis can take 30-60 seconds (analyzes entire database)',
+      'Focus areas: productivity, workload, project_health, time_patterns, bottlenecks, opportunities',
+      'Raw data inclusion increases response token usage significantly',
+      'Analysis depth: quick (fast, less detail), standard (balanced), deep (comprehensive)',
+      'Results cached for 2 hours to avoid repeated slow analyses',
+    ],
   };
 
   constructor(cache: CacheManager) {

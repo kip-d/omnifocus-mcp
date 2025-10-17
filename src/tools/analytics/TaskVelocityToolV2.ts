@@ -79,12 +79,25 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Analytics' as const,
     stability: 'stable' as const,
     complexity: 'complex' as const,
     performanceClass: 'moderate' as const,
     tags: ['analytics', 'read-only', 'trends', 'velocity'],
     capabilities: ['completion-trends', 'velocity-metrics', 'forecast'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: null, // Returns single aggregated result
+    maxQueryDuration: 30000, // 30 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Analyzes entire OmniFocus database - can take 10-30 seconds',
+      'Requires minimum 10 completed tasks in period for meaningful velocity',
+      'Grouping options: day, week, month, quarter, year',
+      'Forecasts are probabilistic, not guaranteed',
+    ],
   };
 
   async executeValidated(args: z.infer<typeof TaskVelocitySchemaV2>): Promise<StandardResponseV2<unknown>> {

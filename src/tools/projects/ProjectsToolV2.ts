@@ -77,12 +77,24 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
   description = 'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
   schema = ProjectsToolSchemaV2;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Organization' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
     tags: ['queries', 'mutations', 'organization', 'management'],
     capabilities: ['list', 'create', 'update', 'complete', 'delete', 'stats'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 1000,
+    maxQueryDuration: 3000, // 3 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Maximum 1000 projects per query',
+      'Projects cannot be renamed after creation (only available on create)',
+      'Dropped projects cannot be undropped via API',
+    ],
   };
 
   async executeValidated(args: ProjectsArgsV2): Promise<ProjectsResponseV2 | ProjectOperationResponseV2> {

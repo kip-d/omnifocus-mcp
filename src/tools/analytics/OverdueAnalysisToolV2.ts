@@ -85,12 +85,25 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
   description = 'Analyze overdue tasks for patterns and bottlenecks. Returns summary with key findings first, then detailed analysis.';
   schema = OverdueAnalysisSchemaV2;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Analytics' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'moderate' as const,
     tags: ['analytics', 'read-only', 'bottlenecks', 'overdue'],
     capabilities: ['bottleneck-analysis', 'pattern-detection', 'grouping'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: null, // Returns single aggregated analysis
+    maxQueryDuration: 20000, // 20 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Analyzes all overdue tasks in database',
+      'Grouping options: by-project, by-tag, by-duration, by-status',
+      'Requires limit parameter (1-100, default 25)',
+      'includeRecentlyCompleted option adds analysis of late completions',
+    ],
   };
 
   async executeValidated(args: z.infer<typeof OverdueAnalysisSchemaV2>): Promise<StandardResponseV2<unknown>> {

@@ -78,12 +78,26 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
   description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Organization' as const,
     stability: 'stable' as const,
     complexity: 'simple' as const,
     performanceClass: 'fast' as const,
     tags: ['queries', 'mutations', 'hierarchy', 'metadata'],
     capabilities: ['list', 'create', 'delete', 'manage', 'hierarchy'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 1000,
+    maxQueryDuration: 3000, // 3 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Maximum 1000 tags per query',
+      'Tag hierarchy supported (parent-child relationships)',
+      'Tags must have unique names within same parent',
+      'Deleting parent tag also deletes all children',
+      'set_mutual_exclusivity requires OmniFocus 4.7+',
+    ],
   };
 
   async executeValidated(args: TagsToolInput): Promise<TagsResponseV2 | TagOperationResponseV2> {

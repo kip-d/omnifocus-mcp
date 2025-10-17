@@ -46,12 +46,25 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
   description = 'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
   schema = RecurringTasksSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Utility' as const,
     stability: 'stable' as const,
     complexity: 'simple' as const,
     performanceClass: 'fast' as const,
     tags: ['queries', 'read-only', 'recurring', 'analysis'],
     capabilities: ['list-recurring', 'analyze-patterns', 'frequency-stats'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 500, // Max recurring tasks to analyze
+    maxQueryDuration: 5000, // 5 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Maximum 500 recurring tasks per analysis',
+      'Frequency patterns based on completion history',
+      'Requires active recurrence rules (dropped tasks excluded by default)',
+      'Next due date calculated from last due date + recurrence interval',
+    ],
   };
 
   constructor(cache: CacheManager) {

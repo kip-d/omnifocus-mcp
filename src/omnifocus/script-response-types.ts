@@ -170,6 +170,7 @@ export interface TaskCreationArgs {
   parentTaskId?: string;
   dueDate?: string;
   deferDate?: string;
+  plannedDate?: string;
   flagged?: boolean;
   estimatedMinutes?: number;
   tags?: string[];
@@ -185,6 +186,7 @@ export interface TaskUpdateArgs {
   parentTaskId?: string;
   dueDate?: string;
   deferDate?: string;
+  plannedDate?: string;
   flagged?: boolean;
   estimatedMinutes?: number;
   tags?: string[];
@@ -192,6 +194,7 @@ export interface TaskUpdateArgs {
   repeatRule?: RepeatRule;
   clearDueDate?: boolean;
   clearDeferDate?: boolean;
+  clearPlannedDate?: boolean;
   clearEstimatedMinutes?: boolean;
   clearRepeatRule?: boolean;
 }

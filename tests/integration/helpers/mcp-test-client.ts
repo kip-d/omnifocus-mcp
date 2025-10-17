@@ -327,6 +327,12 @@ export class MCPTestClient {
     console.log(`  📊 Thorough cleanup completed in ${this.cleanupMetrics.duration}ms (${this.cleanupMetrics.operations} operations)`);
   }
 
+  async cleanup(): Promise<void> {
+    // Convenience alias for quickCleanup (most common use case)
+    // Called by afterEach() in tests
+    await this.quickCleanup();
+  }
+
   async stop(): Promise<void> {
     if (this.server && !this.server.killed) {
       try {

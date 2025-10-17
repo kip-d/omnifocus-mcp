@@ -15,12 +15,25 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   description = 'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
   schema = ManageReviewsSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Utility' as const,
     stability: 'stable' as const,
     complexity: 'simple' as const,
     performanceClass: 'fast' as const,
     tags: ['mutations', 'write', 'reviews', 'scheduling'],
     capabilities: ['mark-reviewed', 'list-for-review', 'schedule-review'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 500, // Max projects to list for review
+    maxQueryDuration: 3000, // 3 seconds
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Maximum 500 projects per review list',
+      'Review schedule in days (1-365)',
+      'Marking reviewed resets review timer',
+      'Projects without review schedule never appear in review list',
+    ],
   };
 
   async executeValidated(args: ManageReviewsInput): Promise<ReviewsResponseV2> {

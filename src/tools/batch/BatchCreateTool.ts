@@ -37,12 +37,26 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
 
   schema = BatchCreateSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Task Management' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'moderate' as const,
     tags: ['mutations', 'write', 'batch', 'create', 'hierarchy'],
     capabilities: ['batch-create', 'hierarchy', 'projects', 'tasks'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 1000, // Max items to create per batch
+    maxQueryDuration: 30000, // 30 seconds for batch operations
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Maximum 1000 items per batch',
+      'Batch operations may take 10-30 seconds depending on item count',
+      'Atomic operations not fully supported (partial rollback on failure)',
+      'Temporary IDs must be unique within the batch',
+      'Complex hierarchies may require sequential creation',
+    ],
   };
 
   async executeValidated(args: BatchCreateInput): Promise<unknown> {

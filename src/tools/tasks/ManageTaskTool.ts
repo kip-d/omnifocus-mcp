@@ -84,6 +84,20 @@ const ManageTaskSchema = z.object({
     .transform(val => val === '' ? null : val)
     .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
+  plannedDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
+    z.literal(''),
+    z.null(),
+  ])
+    .optional()
+    .nullable()
+    .transform(val => val === '' ? null : val)
+    .describe('Planned date (YYYY-MM-DD or YYYY-MM-DD HH:mm format) - OmniFocus 4.7+'),
+
+  clearPlannedDate: z.boolean()
+    .optional()
+    .describe('Clear the existing planned date'),
+
   flagged: z.union([z.boolean(), z.string()])
     .optional()
     .describe('Whether the task is flagged'),
@@ -169,12 +183,25 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
   description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).';
   schema = ManageTaskSchema;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Task Management' as const,
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
     tags: ['mutations', 'write', 'create', 'update', 'complete', 'delete'],
     capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: 500, // For bulk operations
+    maxQueryDuration: 10000, // 10 seconds for bulk operations
+    requiresPermission: true,
+    requiredCapabilities: ['read', 'write'],
+    limitations: [
+      'Bulk operations limited to 500 items',
+      'Task IDs are immutable after creation',
+      'Moving tasks between projects preserves subtasks',
+      'Tag assignment requires bridge operation (may add ~100ms)',
+    ],
   };
 
   constructor(cache: CacheManager) {
@@ -229,6 +256,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           if (params.parentTaskId) createArgs.parentTaskId = params.parentTaskId;
           if (params.dueDate) createArgs.dueDate = params.dueDate;
           if (params.deferDate) createArgs.deferDate = params.deferDate;
+          if (params.plannedDate) createArgs.plannedDate = params.plannedDate;
           if (params.flagged !== undefined) createArgs.flagged = typeof params.flagged === 'string' ? params.flagged === 'true' : params.flagged;
           if (params.estimatedMinutes !== undefined) createArgs.estimatedMinutes = typeof params.estimatedMinutes === 'string' ? parseInt(params.estimatedMinutes, 10) : params.estimatedMinutes;
           if (params.tags) createArgs.tags = params.tags;
@@ -246,9 +274,10 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               ...createArgs,
               dueDate: createArgs.dueDate ? localToUTC(createArgs.dueDate, 'due') : undefined,
               deferDate: createArgs.deferDate ? localToUTC(createArgs.deferDate, 'defer') : undefined,
+              plannedDate: createArgs.plannedDate ? localToUTC(createArgs.plannedDate, 'planned') : undefined,
             };
           } catch (dateError) {
-            const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : 'dueDate';
+            const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : dateError instanceof Error && dateError.message.includes('planned') ? 'plannedDate' : 'dueDate';
             const errorDetails = invalidDateError(fieldName, createArgs[fieldName] || '');
             return createErrorResponseV2(
               'manage_task',
@@ -381,7 +410,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
           result = createSuccessResponseV2(
             'manage_task',
-            { task: parsedCreateResult, operation: 'create' as const },
+            {
+              task: parsedCreateResult,
+              id: createdTaskId,  // Expose id at top level for convenience
+              name: (parsedCreateResult as Record<string, unknown>).name,  // Expose name at top level
+              operation: 'create' as const
+            },
             undefined,
             {
               ...timer.toMetadata(),
@@ -391,6 +425,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
                 name: createArgs.name,
                 has_project: !!createArgs.projectId,
                 has_due_date: !!createArgs.dueDate,
+                has_planned_date: !!createArgs.plannedDate,
                 has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
                 has_repeat_rule: !!repeatRuleForUpdate,
               },

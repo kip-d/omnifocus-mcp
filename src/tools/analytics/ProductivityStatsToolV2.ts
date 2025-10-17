@@ -16,12 +16,25 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
   description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.';
   schema = ProductivityStatsSchemaV2;
   meta = {
+    // Phase 1: Essential metadata
     category: 'Analytics' as const,
     stability: 'stable' as const,
     complexity: 'complex' as const,
     performanceClass: 'slow' as const,
     tags: ['analytics', 'read-only', 'metrics', 'health'],
     capabilities: ['health-metrics', 'completion-rate', 'trends', 'statistics'],
+
+    // Phase 2: Capability & Performance Documentation
+    maxResults: null, // Returns single aggregated result
+    maxQueryDuration: 60000, // 60 seconds - analyzes entire database
+    requiresPermission: true,
+    requiredCapabilities: ['read'],
+    limitations: [
+      'Analyzes entire OmniFocus database - can take 30-60 seconds',
+      'Performance depends on total task count (1000+ tasks recommended for meaningful metrics)',
+      'Not suitable for real-time dashboards due to analysis time',
+      'Period parameter required (day/week/month/quarter/year)',
+    ],
   };
 
   async executeValidated(args: z.infer<typeof ProductivityStatsSchemaV2>): Promise<StandardResponseV2<unknown>> {
