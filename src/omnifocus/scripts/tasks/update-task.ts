@@ -125,6 +125,19 @@ export const UPDATE_TASK_SCRIPT = `
         // Skip invalid defer date - log error details for debugging
       }
     }
+    if (updates.plannedDate !== undefined) {
+      try {
+        // Handle null values explicitly to clear dates
+        if (updates.plannedDate === null || updates.plannedDate === undefined) {
+          task.plannedDate = null;
+        } else if (updates.plannedDate) {
+          // Handle date strings (OmniFocus 4.7+)
+          task.plannedDate = new Date(updates.plannedDate);
+        }
+      } catch (dateError) {
+        // Skip invalid planned date - log error details for debugging
+      }
+    }
     if (updates.estimatedMinutes !== undefined) {
       task.estimatedMinutes = updates.estimatedMinutes;
     }

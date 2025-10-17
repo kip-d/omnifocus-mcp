@@ -538,6 +538,11 @@ export const LIST_TASKS_SCRIPT = `
       if (deferDate) taskObj.deferDate = deferDate;
     }
 
+    if (shouldIncludeField('plannedDate')) {
+      const plannedDate = safeGetDate(() => task.plannedDate());
+      if (plannedDate) taskObj.plannedDate = plannedDate;
+    }
+
     if (shouldIncludeField('tags')) {
       const taskId = taskObj.id || safeGet(() => task.id());
       const cachedTags = tagBridgeCache[taskId];

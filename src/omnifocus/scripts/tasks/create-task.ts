@@ -80,7 +80,16 @@ export const CREATE_TASK_SCRIPT = `
           console.log('Invalid defer date:', taskData.deferDate, e.message);
         }
       }
-      
+
+      if (taskData.plannedDate) {
+        try {
+          task.plannedDate = new Date(taskData.plannedDate);
+        } catch (e) {
+          // Skip invalid planned date - log error details for debugging
+          console.log('Invalid planned date:', taskData.plannedDate, e.message);
+        }
+      }
+
       // Set estimated minutes if provided
       if (taskData.estimatedMinutes && typeof taskData.estimatedMinutes === 'number') {
         task.estimatedMinutes = taskData.estimatedMinutes;
