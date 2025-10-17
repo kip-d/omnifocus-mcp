@@ -270,6 +270,230 @@ if (actualData && typeof actualData === 'object' && 'summary' in actualData) {
 
 ---
 
+## 🔄 Response Structure Mismatches in Tests?
+
+**Symptoms:**
+- Test expects `response.data.id` but gets `undefined`
+- Test passes in CLI but fails in integration tests
+- `expect(response.data?.task?.taskId).toBeDefined()` fails
+- Response structure doesn't match test expectations
+- Tests work after changes but break mysteriously later
+
+**Critical Rule: TEST MCP RESPONSE STRUCTURE FIRST!**
+
+### Standard V2 Response Structure
+
+**ALL V2 tools follow this pattern:**
+```typescript
+{
+  success: boolean;
+  data?: {
+    // Tool-specific data - STRUCTURE VARIES BY TOOL!
+    // See tool-specific patterns below
+  };
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+  metadata?: {
+    executionTime: number;
+    operation: string;
+    // ... other metadata
+  };
+}
+```
+
+### Tool-Specific Response Structures
+
+**manage_task (create/update operations):**
+```typescript
+{
+  success: true,
+  data: {
+    task: {           // ← Note: nested under 'task'
+      taskId: string,
+      name: string,
+      ...
+    }
+  }
+}
+```
+
+**tasks (query operations):**
+```typescript
+{
+  success: true,
+  data: {
+    tasks: [          // ← Note: array under 'tasks'
+      {taskId, name, ...}
+    ],
+    summary: {
+      total: number,
+      ...
+    }
+  }
+}
+```
+
+**tags (varies by operation):**
+```typescript
+// manage + create action:
+{
+  success: true,
+  data: {
+    tagName: string,        // ← Direct properties, no nesting
+    action: "created",
+    parentTagName: string | null
+  }
+}
+
+// list operation:
+{
+  success: true,
+  data: {
+    items: [          // ← Array under 'items'
+      {name, id, ...}
+    ],
+    summary: {
+      total: number
+    }
+  }
+}
+```
+
+### Diagnostic Workflow
+
+**Step 1: Capture actual response structure**
+```bash
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"manage_task","arguments":{"operation":"create","name":"Test"}}}' | node dist/index.js 2>&1 | grep -A 50 '"result":' | jq '.result.content[0].text | fromjson'
+```
+
+**Step 2: Document in test or tool source**
+```typescript
+// At top of test file or tool implementation
+/**
+ * Response Structure for manage_task create:
+ * {
+ *   success: true,
+ *   data: {
+ *     task: {
+ *       taskId: string,
+ *       name: string,
+ *       ...
+ *     }
+ *   }
+ * }
+ */
+```
+
+**Step 3: Write defensive test assertions**
+```typescript
+// ❌ BAD - Assumes structure, breaks when structure changes
+expect(response.data.id).toBeDefined();
+expect(response.data.name).toBe('Test Task');
+
+// ✅ GOOD - Tests structure exists first, then accesses
+expect(response.success).toBe(true);
+expect(response.data).toBeDefined();
+expect(response.data?.task).toBeDefined();
+expect(response.data?.task?.taskId).toBeDefined();
+expect(response.data?.task?.name).toBe('Test Task');
+```
+
+### Common Failure Patterns
+
+**Pattern 1: Wrong nesting level**
+```typescript
+// Test expects:
+response.data.id
+
+// Actual structure:
+response.data.task.taskId
+
+// Fix: Update test to match actual structure
+expect(response.data?.task?.taskId).toBeDefined();
+```
+
+**Pattern 2: Array vs object confusion**
+```typescript
+// Test expects object:
+response.data.task
+
+// Actual structure is array:
+response.data.tasks[0]
+
+// Fix: Access array correctly
+const task = response.data?.tasks?.[0];
+expect(task?.taskId).toBeDefined();
+```
+
+**Pattern 3: Operation-specific variations**
+```typescript
+// tags tool has different structures per operation:
+// - manage: response.data.tagName
+// - list: response.data.items
+
+// Fix: Know which operation you're testing
+if (operation === 'manage') {
+  expect(response.data?.tagName).toBeDefined();
+} else if (operation === 'list') {
+  expect(response.data?.items).toBeDefined();
+}
+```
+
+### Prevention Checklist
+
+**Before writing ANY integration test:**
+- [ ] Run actual MCP tool call to capture response structure
+- [ ] Document response structure in comment at test top
+- [ ] Test `response.success` first
+- [ ] Test nested structure exists before accessing data
+- [ ] Use optional chaining (`?.`) for all nested property access
+- [ ] Create TypeScript interface for response if writing new tool
+
+**When test fails with "expected X to be defined":**
+- [ ] Print actual response: `console.log(JSON.stringify(response, null, 2))`
+- [ ] Run MCP CLI test to see actual structure
+- [ ] Compare expected structure to actual structure
+- [ ] Update test assertions to match actual structure
+- [ ] Don't assume - verify!
+
+### Real-World Examples
+
+**Example 1: manage_task response structure changed**
+- Original: `response.data.id`
+- Updated to: `response.data.task.taskId`
+- Fix: Update all tests expecting old structure
+- Files affected: `tests/integration/omnifocus-4.7-features.test.ts`
+
+**Example 2: tags tool operation-specific responses**
+- `tags({operation: 'manage', action: 'create'})` → `data.tagName`
+- `tags({operation: 'list'})` → `data.items[]`
+- Lesson: Can't assume consistent structure within same tool
+
+### Quick Diagnostic Commands
+
+```bash
+# Test any tool and pretty-print response
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL","arguments":{}}}' | \
+  node dist/index.js 2>&1 | \
+  grep '"result":' | \
+  jq '.result.content[0].text | fromjson'
+
+# Compare what you expect vs what you get
+echo "Expected: response.data?.task?.taskId"
+echo "Actual: $(echo '...' | node dist/index.js 2>&1 | jq '.result.content[0].text | fromjson | .data | keys')"
+```
+
+**Key Insight:** Response structures are tool-specific and operation-specific. Always test actual structure before writing assertions.
+
+---
+
 ## 🎯 General Debugging Workflow
 
 **BEFORE starting any debugging:**

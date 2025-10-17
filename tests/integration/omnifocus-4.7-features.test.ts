@@ -19,7 +19,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
   });
 
   afterEach(async () => {
-    await client.cleanup();
+    await client.quickCleanup();
+    await client.stop();
   });
 
   describe('Planned Dates Feature', () => {
@@ -32,24 +33,38 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(response.success).toBe(true);
-      expect(response.data?.id).toBeDefined();
-      expect(response.data?.name).toBe('Task with Planned Date');
+      expect(response.data?.task?.taskId).toBeDefined();
+      expect(response.data?.task?.name).toBe('Task with Planned Date');
     });
 
     it('should list tasks with planned date included', async () => {
       // Create task with planned date
-      await client.callTool('manage_task', {
+      const createResp = await client.callTool('manage_task', {
         operation: 'create',
         name: 'Planned Task for Query',
         plannedDate: '2025-11-20 14:00',
         tags: ['test', 'planned-query']
       });
 
-      // Query tasks and verify planned date appears
+      console.log('Created task:', JSON.stringify({
+        success: createResp.success,
+        taskId: createResp.data?.task?.taskId,
+        tags: createResp.data?.task?.tags
+      }, null, 2));
+
+      // Query inbox tasks (task created without project goes to inbox)
       const response = await client.callTool('tasks', {
-        mode: 'all',
-        limit: 50
+        mode: 'inbox'
       });
+
+      console.log('Inbox tasks:', JSON.stringify({
+        success: response.success,
+        count: response.data?.tasks?.length || 0,
+        tasks: (response.data?.tasks || []).map((t: any) => ({
+          name: t.name,
+          tags: t.tags
+        })).slice(0, 5)
+      }, null, 2));
 
       expect(response.success).toBe(true);
       const plannedTasks = (response.data?.tasks || []).filter(
@@ -68,13 +83,13 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
         tags: ['test', 'planned-update']
       });
 
-      const taskId = createResponse.data?.id;
+      const taskId = createResponse.data?.task?.taskId;
       expect(taskId).toBeDefined();
 
       // Update planned date
       const updateResponse = await client.callTool('manage_task', {
         operation: 'update',
-        id: taskId,
+        taskId: taskId,
         plannedDate: '2025-12-01 10:30'
       });
 
@@ -90,12 +105,12 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
         tags: ['test', 'clear-planned']
       });
 
-      const taskId = createResponse.data?.id;
+      const taskId = createResponse.data?.task?.taskId;
 
       // Clear planned date
       const updateResponse = await client.callTool('manage_task', {
         operation: 'update',
-        id: taskId,
+        taskId: taskId,
         plannedDate: null
       });
 
@@ -105,16 +120,16 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
 
   describe('Mutually Exclusive Tags Feature', () => {
     it('should create tag hierarchy', async () => {
-      // Create parent tag
+      // Create parent tag with unique name to avoid conflicts
+      const uniqueTagName = `Priority-${Date.now()}`;
       const parentResponse = await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Priority',
-        tags: ['test', 'tag-hierarchy']
+        tagName: uniqueTagName
       });
 
       expect(parentResponse.success).toBe(true);
-      expect(parentResponse.data?.tagName).toBe('Priority');
+      expect(parentResponse.data?.tagName).toBe(uniqueTagName);
     });
 
     it('should enable mutual exclusivity on tag', async () => {
@@ -122,8 +137,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Status-ME',
-        tags: ['test', 'mutual-excl']
+        tagName: 'Status-ME'
       });
 
       // Set mutual exclusivity
@@ -144,8 +158,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'Context-ME',
-        tags: ['test', 'mutual-disable']
+        tagName: 'Context-ME'
       });
 
       // First enable
@@ -172,8 +185,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       await client.callTool('tags', {
         operation: 'manage',
         action: 'create',
-        tagName: 'ListME-Tag',
-        tags: ['test', 'list-me']
+        tagName: 'ListME-Tag'
       });
 
       await client.callTool('tags', {
@@ -217,8 +229,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(response.success).toBe(true);
-      expect(response.data?.id).toBeDefined();
-      expect(response.data?.name).toBe('Daily Standup');
+      expect(response.data?.task?.taskId).toBeDefined();
+      expect(response.data?.task?.name).toBe('Daily Standup');
     });
 
     it('should support repeat intent with "when-marked-done" anchor', async () => {
@@ -235,7 +247,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(response.success).toBe(true);
-      expect(response.data?.name).toBe('Review Meeting Notes');
+      expect(response.data?.task?.name).toBe('Review Meeting Notes');
     });
 
     it('should create task with end date for repeat rule', async () => {
@@ -302,7 +314,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       // If OmniFocus 4.7+, should succeed
       // If OmniFocus 4.6.1, might fail or degrade gracefully
       if (response.success) {
-        expect(response.data?.id).toBeDefined();
+        expect(response.data?.task?.taskId).toBeDefined();
       } else {
         // Graceful degradation message expected
         expect(response.error?.message).toContain(
@@ -334,8 +346,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(response.success).toBe(true);
-      expect(response.data?.id).toBeDefined();
-      expect(response.data?.name).toBe('Comprehensive 4.7+ Test Task');
+      expect(response.data?.task?.taskId).toBeDefined();
+      expect(response.data?.task?.name).toBe('Comprehensive 4.7+ Test Task');
     });
 
     it('should query tasks with all 4.7+ properties', async () => {
@@ -354,10 +366,9 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
 
       expect(createResponse.success).toBe(true);
 
-      // Query and verify all properties present
+      // Query inbox tasks (task created without project goes to inbox)
       const queryResponse = await client.callTool('tasks', {
-        mode: 'all',
-        limit: 100
+        mode: 'inbox'
       });
 
       expect(queryResponse.success).toBe(true);
