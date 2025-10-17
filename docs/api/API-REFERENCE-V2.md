@@ -11,12 +11,14 @@
 ### manage_task - Create/Update/Complete/Delete Tasks
 **Parameters:** `operation*` + task-specific params
 - **Operations:**
-  - `create`: `name*` `flagged:"false"` `sequential:"false"` `note?` `projectId?` `parentTaskId?` `dueDate?` `deferDate?` `estimatedMinutes?` `tags[]?` `repeatRule?`
+  - `create`: `name*` `flagged:"false"` `sequential:"false"` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?` `deferDate?` `estimatedMinutes?` `tags[]?` `repeatRule?`
   - `update`: `taskId*` + any create params (all optional)
   - `complete`: `taskId*` `completionDate?`
   - `delete`: `taskId*`
 - **Date Format:** "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am)
-- **Special:** projectId:null → inbox, clearDueDate:true → remove date
+- **plannedDate** (OmniFocus 4.7+): When task should be scheduled/planned (e.g., "2025-11-15 09:00")
+- **Special:** projectId:null → inbox, clearDueDate:true → remove date, clearPlannedDate:true → remove planned date
+- **repeatRule** (OmniFocus 4.7+ enhanced): Supports user-friendly intent schema with `frequency`, `anchorTo`, `skipMissed`, and `endCondition` parameters
 
 ## Batch Operations (1 tool)
 
@@ -82,8 +84,9 @@
 - **Operations:**
   - `list`: `sortBy:"name"` `includeEmpty:"true"` `includeUsageStats:"false"` `includeTaskCounts:"false"` `fastMode:"true"` `namesOnly:"false"`
   - `active`: No params - returns tags with incomplete tasks
-  - `manage`: `action*` `tagName*` `newName?` `targetTag?` `parentTagName?` `parentTagId?`
-    - Actions: create | rename | delete | merge | nest | unparent | reparent
+  - `manage`: `action*` `tagName*` `newName?` `targetTag?` `parentTagName?` `parentTagId?` `mutuallyExclusive?`
+    - Actions: create | rename | delete | merge | nest | unparent | reparent | set_mutual_exclusivity
+  - **set_mutual_exclusivity** (OmniFocus 4.7+): Set `mutuallyExclusive: true` to enable or `mutuallyExclusive: false` to disable mutual exclusivity on the tag's children
 - **Performance:** namesOnly (fastest) > fastMode > full stats
 
 ### manage_reviews - Project Review Operations

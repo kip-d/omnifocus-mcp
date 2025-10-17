@@ -6,7 +6,7 @@
 
 ### Tasks (4)
 - tasks(mode*,limit*:25,details*:false,fastSearch*:true,fields[]?,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
-- manage_task(operation*:create|update|complete|delete,taskId?,name?,...all_task_fields)
+- manage_task(operation*:create|update|complete|delete,taskId?,name?,plannedDate?,...all_task_fields)
 - batch_create(items*[],createSequentially*:true,atomicOperation*:false,returnMapping*:true,stopOnError*:true)
 - parse_meeting_notes(input*,extractMode*:both,suggestProjects*:true,suggestTags*:true,suggestDueDates*:true,suggestEstimates*:true,returnFormat*:preview,groupByProject*:true,existingProjects[]?,defaultProject?)
 
@@ -15,7 +15,7 @@
 
 ### Organization (3)
 - folders(operation*:list|get|search|projects|create|update|delete|move|duplicate|set_status,...)
-- tags(operation*:list|active|manage,action?,tagName?,...)
+- tags(operation*:list|active|manage,action?,tagName?,mutuallyExclusive?,...)
 - manage_reviews(operation*:list|mark_reviewed|set_schedule|clear_schedule,projectId?,...)
 
 ### Analytics (5)
@@ -39,5 +39,5 @@
 - Summary returned first
 - null/""/​"null"→inbox
 - Dates:"YYYY-MM-DD HH:mm"|"YYYY-MM-DD"(due→5pm,defer→8am)
-- RepeatRule:{unit,steps,method,weekdays[]?,positions?}
+- RepeatRule(OmniFocus 4.7+ enhanced):{frequency,anchorTo,skipMissed,endCondition} or legacy:{unit,steps,method,weekdays[]?,positions?}
 - **Performance**: Optimized for context efficiency with consolidated tools

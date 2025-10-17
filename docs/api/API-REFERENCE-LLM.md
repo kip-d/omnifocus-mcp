@@ -1,6 +1,6 @@
 # OmniFocus MCP v2.2.0 Quick Reference (LLM-Optimized)
 
-**Last Updated:** 2025-10-05
+**Last Updated:** 2025-10-17
 
 **17 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
 
@@ -83,10 +83,24 @@
 - Array: OR, AND, NOT_IN, IN
 - Date/Number: >, >=, <, <=, BETWEEN
 
-**manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
+**manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
 - Ops: create(name*)|update(taskId*)|complete(taskId*)|delete(taskId*)
 - Dates: "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am)
-- Clear: clearDueDate|clearDeferDate|clearEstimatedMinutes|clearRepeatRule
+- **plannedDate** (OmniFocus 4.7+): When task is planned for scheduling (e.g., "2025-11-15 09:00")
+- **repeatRule** (OmniFocus 4.7+ enhanced): User-friendly intent schema:
+  ```javascript
+  {
+    frequency: 'FREQ=WEEKLY',           // RFC 5545 RRULE frequency
+    anchorTo: 'when-marked-done',       // when-due|when-marked-done|when-deferred|planned-date
+    skipMissed: true,                   // Smart rescheduling
+    endCondition: {
+      type: 'never' | 'afterDate' | 'afterOccurrences',
+      date: '2025-12-31',              // For afterDate
+      count: 10                        // For afterOccurrences
+    }
+  }
+  ```
+- Clear: clearDueDate|clearDeferDate|clearEstimatedMinutes|clearRepeatRule|clearPlannedDate
 
 ## Projects (1 tool)
 
@@ -98,9 +112,10 @@
 **folders** `operation*` `folderId?` `folderName?` `name?` `parentFolderId?` `searchQuery?` `includeProjects?` `includeSubfolders?` `status?` `includeContents?` `duplicateName?`
 - Ops: list|get|search(searchQuery*)|projects|create(name*)|update(folderId*,name*)|delete(folderId*)|move(folderId*,parentFolderId*)|duplicate(folderId*)|set_status(folderId*,status*)
 
-**tags** `operation*` `sortBy:"name"` `includeEmpty:"true"` `includeUsageStats:"false"` `includeTaskCounts:"false"` `fastMode:"true"` `namesOnly:"false"` `action?` `tagName?` `newName?` `targetTag?` `parentTagName?` `parentTagId?`
+**tags** `operation*` `sortBy:"name"` `includeEmpty:"true"` `includeUsageStats:"false"` `includeTaskCounts:"false"` `fastMode:"true"` `namesOnly:"false"` `action?` `tagName?` `newName?` `targetTag?` `parentTagName?` `parentTagId?` `mutuallyExclusive?`
 - Ops: list|active|manage(action*,tagName*)
-- Actions: create|rename(newName*)|delete|merge(targetTag*)|nest|unparent|reparent
+- Actions: create|rename(newName*)|delete|merge(targetTag*)|nest|unparent|reparent|set_mutual_exclusivity(mutuallyExclusive*)
+- **set_mutual_exclusivity** (OmniFocus 4.7+): Set `mutuallyExclusive: true` to enable mutual exclusivity on tag's children, `false` to disable
 
 **manage_reviews** `operation*` `projectId?` `reviewDate?` `reviewInterval?` `nextReviewDate?`
 - Ops: list|mark_reviewed(projectId*)|set_schedule(projectId*,reviewInterval*)|clear_schedule(projectId*)
