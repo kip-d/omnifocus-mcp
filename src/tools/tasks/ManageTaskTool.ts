@@ -18,6 +18,7 @@ import {
   invalidDateError,
 } from '../../utils/error-messages.js';
 import type { TaskOperationResponseV2, TaskOperationDataV2 } from '../response-types-v2.js';
+import { RepeatRuleUserIntentSchema } from '../schemas/repeat-schemas.js';
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
@@ -132,23 +133,28 @@ const ManageTaskSchema = z.object({
     .optional()
     .describe('Return minimal response for bulk operations'),
 
-  // Repeat rule
-  repeatRule: z.object({
-    unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
-    steps: z.union([z.number(), z.string()]),
-    method: z.string(),
-    weekdays: z.array(z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']))
-      .optional(),
-    weekPosition: z.union([z.string(), z.array(z.string())])
-      .optional(),
-    weekday: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
-      .optional(),
-    deferAnother: z.object({
+  // Repeat rule - accepts both old format and new LLM-friendly format (4.7+)
+  repeatRule: z.union([
+    // New LLM-friendly format (OmniFocus 4.7+)
+    RepeatRuleUserIntentSchema,
+    // Old format for backward compatibility
+    z.object({
       unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
-      steps: z.number(),
-    }).optional(),
-  }).optional()
-    .describe('Repeat/recurrence rule for the task'),
+      steps: z.union([z.number(), z.string()]),
+      method: z.string(),
+      weekdays: z.array(z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']))
+        .optional(),
+      weekPosition: z.union([z.string(), z.array(z.string())])
+        .optional(),
+      weekday: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+        .optional(),
+      deferAnother: z.object({
+        unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
+        steps: z.number(),
+      }).optional(),
+    })
+  ]).optional()
+    .describe('Repeat/recurrence rule for the task. New format (4.7+): specify frequency, anchorTo (when-due/when-deferred/when-marked-done/planned-date), and skipMissed. Old format: unit, steps, method, weekdays, etc.'),
 });
 
 type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
