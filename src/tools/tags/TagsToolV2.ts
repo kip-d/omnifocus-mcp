@@ -41,9 +41,9 @@ const TagsToolSchema = z.object({
     .describe('Ultra-fast mode: Return only tag names without IDs or hierarchy (list operation)'),
 
   // Manage operation parameters
-  action: z.enum(['create', 'rename', 'delete', 'merge', 'nest', 'unparent', 'reparent'])
+  action: z.enum(['create', 'rename', 'delete', 'merge', 'nest', 'unparent', 'reparent', 'set_mutual_exclusivity'])
     .optional()
-    .describe('The management action to perform (manage operation)'),
+    .describe('The management action to perform (manage operation). set_mutual_exclusivity: toggle mutual exclusivity constraint on tag children (OmniFocus 4.7+)'),
 
   tagName: TagNameSchema
     .optional()
@@ -64,6 +64,11 @@ const TagsToolSchema = z.object({
   parentTagId: z.string()
     .optional()
     .describe('Parent tag ID for creating nested tags or nest/reparent operations'),
+
+  // Mutual exclusivity operation parameter (OmniFocus 4.7+)
+  mutuallyExclusive: coerceBoolean()
+    .optional()
+    .describe('Set to true to make tag children mutually exclusive, false to disable (set_mutual_exclusivity action, OmniFocus 4.7+)'),
 });
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
@@ -217,7 +222,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
     const timer = new OperationTimerV2();
 
     try {
-      const { action, tagName, newName, targetTag, parentTagName, parentTagId } = args;
+      const { action, tagName, newName, targetTag, parentTagName, parentTagId, mutuallyExclusive } = args;
 
       // Validate required parameters
       if (!action) {
@@ -265,6 +270,17 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         );
       }
 
+      if (action === 'set_mutual_exclusivity' && mutuallyExclusive === undefined) {
+        return createErrorResponseV2(
+          'tags',
+          'MISSING_PARAMETER',
+          'mutuallyExclusive is required for set_mutual_exclusivity action',
+          undefined,
+          { operation: 'manage', action },
+          timer.toMetadata(),
+        );
+      }
+
       // Execute script
       const script = this.omniAutomation.buildScript(MANAGE_TAGS_SCRIPT, {
         action,
@@ -273,6 +289,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         targetTag,
         parentTagName,
         parentTagId,
+        mutuallyExclusive,
       });
       const result = await this.execJson(script);
 

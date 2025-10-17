@@ -20,6 +20,7 @@ export const MANAGE_TAGS_SCRIPT = `
   const targetTag = {{targetTag}};
   const parentTagName = {{parentTagName}};
   const parentTagId = {{parentTagId}};
+  const mutuallyExclusive = {{mutuallyExclusive}};
   
   try {
     const app = Application('OmniFocus');
@@ -435,7 +436,7 @@ export const MANAGE_TAGS_SCRIPT = `
         // Move a tag from one parent to another
         let tagToReparent = null;
         let newParent = null;
-        
+
         // Find the tag to reparent
         for (let i = 0; i < allTags.length; i++) {
           if (safeGet(() => allTags[i].name()) === tagName) {
@@ -443,14 +444,14 @@ export const MANAGE_TAGS_SCRIPT = `
             break;
           }
         }
-        
+
         if (!tagToReparent) {
           return JSON.stringify({
             error: true,
             message: "Tag '" + tagName + "' not found"
           });
         }
-        
+
         // Find the new parent tag (if specified, otherwise move to root)
         if (parentTagName || parentTagId) {
           for (let i = 0; i < allTags.length; i++) {
@@ -463,14 +464,14 @@ export const MANAGE_TAGS_SCRIPT = `
               break;
             }
           }
-          
+
           if (!newParent) {
             return JSON.stringify({
               error: true,
               message: "New parent tag not found: " + (parentTagName || parentTagId)
             });
           }
-          
+
           // Check for circular reference
           if (safeGet(() => tagToReparent.id()) === safeGet(() => newParent.id())) {
             return JSON.stringify({
@@ -479,12 +480,12 @@ export const MANAGE_TAGS_SCRIPT = `
             });
           }
         }
-        
+
         // Move the tag to new parent or root
         try {
           if (newParent) {
             app.move(tagToReparent, { to: newParent.tags });
-            
+
             return JSON.stringify({
               success: true,
               action: 'reparented',
@@ -495,7 +496,7 @@ export const MANAGE_TAGS_SCRIPT = `
             });
           } else {
             app.move(tagToReparent, { to: doc.tags });
-            
+
             return JSON.stringify({
               success: true,
               action: 'reparented',
@@ -509,7 +510,44 @@ export const MANAGE_TAGS_SCRIPT = `
             message: "Failed to reparent tag: " + reparentError.toString()
           });
         }
-        
+
+      case 'set_mutual_exclusivity':
+        // Set mutual exclusivity constraint on tag's children (OmniFocus 4.7+)
+        let tagToUpdate = null;
+
+        // Find the tag
+        for (let i = 0; i < allTags.length; i++) {
+          if (safeGet(() => allTags[i].name()) === tagName) {
+            tagToUpdate = allTags[i];
+            break;
+          }
+        }
+
+        if (!tagToUpdate) {
+          return JSON.stringify({
+            error: true,
+            message: "Tag '" + tagName + "' not found"
+          });
+        }
+
+        // Set mutual exclusivity property
+        try {
+          tagToUpdate.childrenAreMutuallyExclusive = mutuallyExclusive === true;
+
+          return JSON.stringify({
+            success: true,
+            action: 'set_mutual_exclusivity',
+            tagName: tagName,
+            childrenAreMutuallyExclusive: mutuallyExclusive === true,
+            message: "Mutual exclusivity for '" + tagName + "' child tags set to " + (mutuallyExclusive ? "enabled" : "disabled")
+          });
+        } catch (updateError) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to set mutual exclusivity: " + updateError.toString()
+          });
+        }
+
       default:
         return JSON.stringify({
           error: true,

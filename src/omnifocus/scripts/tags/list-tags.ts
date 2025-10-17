@@ -106,7 +106,8 @@ export const LIST_TAGS_SCRIPT = `
                 id: tagId,
                 name: tagName,
                 parentId: parent ? parent.id.primaryKey : null,
-                parentName: parent ? parent.name : null
+                parentName: parent ? parent.name : null,
+                childrenAreMutuallyExclusive: tag.childrenAreMutuallyExclusive || false
               };
 
               // Initialize usage stats
@@ -154,6 +155,11 @@ export const LIST_TAGS_SCRIPT = `
               if (tagData.parentId) {
                 tagInfo.parentId = tagData.parentId;
                 tagInfo.parentName = tagData.parentName;
+              }
+
+              // Add mutual exclusivity info if set
+              if (tagData.childrenAreMutuallyExclusive) {
+                tagInfo.childrenAreMutuallyExclusive = tagData.childrenAreMutuallyExclusive;
               }
 
               tagsArray.push(tagInfo);
