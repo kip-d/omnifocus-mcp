@@ -73,27 +73,6 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
   description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, view performance metrics, or get cache statistics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics, operation="cache" for cache statistics.';
   schema = SystemToolSchema;
-  meta = {
-    // Phase 1: Essential metadata
-    category: 'Utility' as const,
-    stability: 'stable' as const,
-    complexity: 'simple' as const,
-    performanceClass: 'fast' as const,
-    tags: ['queries', 'read-only', 'diagnostics', 'system'],
-    capabilities: ['version', 'diagnostics', 'metrics', 'health-check'],
-
-    // Phase 2: Capability & Performance Documentation
-    maxResults: null, // System tool returns single result object
-    maxQueryDuration: 5000, // 5 seconds
-    requiresPermission: true,
-    requiredCapabilities: ['read'],
-    limitations: [
-      'Version operation returns build and runtime information',
-      'Diagnostics operation tests OmniFocus connection (may add 1-2 seconds)',
-      'Metrics operation shows performance statistics and cache hit rates',
-      'Cache statistics available but minimal overhead',
-    ],
-  };
 
   private diagnosticOmni: DiagnosticOmniAutomation;
 
@@ -107,7 +86,7 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
 
     switch (operation) {
       case 'version':
-        return await this.getVersion();
+        return this.getVersion();
       case 'diagnostics':
         return this.runDiagnostics(args);
       case 'metrics':
@@ -133,14 +112,7 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
       const versionInfo = getVersionInfo();
 
       // Get OmniFocus version for metadata
-      let omniFocusVersion = undefined;
-      try {
-        const omniVersion = await getOmniFocusVersionInfo();
-        omniFocusVersion = omniVersion.version?.version;
-      } catch (e) {
-        // Silently fail if OmniFocus version detection not available
-        this.logger.debug('OmniFocus version detection not available', { error: e instanceof Error ? e.message : String(e) });
-      }
+      const omniFocusVersion = await getOmniFocusVersionInfo();
 
       return createSuccessResponseV2(
         'system',
@@ -149,7 +121,12 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
         {
           ...timer.toMetadata(),
           operation: 'version',
-          omnifocus_version: omniFocusVersion
+          omnifocus_version: omniFocusVersion.version.version,
+          omnifocus_features: {
+            plannedDates: omniFocusVersion.features.hasPlannedDates,
+            mutuallyExclusiveTags: omniFocusVersion.features.hasMutuallyExclusiveTags,
+            enhancedRepeats: omniFocusVersion.features.hasEnhancedRepeats
+          }
         },
       );
     } catch (error) {

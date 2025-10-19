@@ -17,6 +17,8 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 | Symptom | Go To | Quick Fix |
 |---------|-------|-----------|
 | Tool returns 0s/empty but has data | `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values" | Test MCP integration first! Compare script vs tool output |
+| Test expects data.id but gets undefined | `/docs/dev/PATTERNS.md` → "Response Structure Mismatches" | Test MCP response structure first! |
+| Tool works in CLI but test fails | `/docs/dev/PATTERNS.md` → "Response Structure Mismatches" | Compare actual response structure |
 | Tags not saving/empty | `/docs/dev/PATTERNS.md` → "Tags Not Working" | Use `bridgeSetTags()` (line 120 below) |
 | Script timeout (25+ seconds) | `/docs/dev/PATTERNS.md` → "Performance Issues" | Never use `.where()/.whose()` |
 | Dates wrong time | `/docs/dev/PATTERNS.md` → "Date Handling" | Use `YYYY-MM-DD HH:mm` not ISO+Z |
@@ -264,6 +266,40 @@ grep -A 20 '"result":' debug.log
 - Finally tested MCP integration → found wrapper issue in 5 minutes
 
 **Do NOT debug isolated scripts/components until MCP integration test shows script output is wrong.**
+
+### 🚨 CRITICAL: Response Structure Validation Pattern
+
+**Problem:** Tests frequently break due to response structure mismatches (expecting `data.id` but getting `data.task.taskId`).
+
+**Solution: ALWAYS verify actual response structure before writing tests!**
+
+```bash
+# Test actual MCP response structure (30 seconds)
+npm run build
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{}}}' | \
+  node dist/index.js 2>&1 | grep '"result":' | jq '.result.content[0].text | fromjson'
+```
+
+**Standard V2 Response Structure:**
+```typescript
+{
+  success: boolean;
+  data?: {
+    // Structure varies by tool! See PATTERNS.md for tool-specific structures
+  };
+  error?: { code, message, details };
+  metadata?: { executionTime, operation, ... };
+}
+```
+
+**Critical Rules:**
+1. **Test structure BEFORE writing assertions** - Use MCP CLI test to see actual structure
+2. **Use optional chaining (`?.`)** for all nested access
+3. **Test `response.success` first** before accessing data
+4. **Response structure is tool-specific AND operation-specific**
+
+**For complete guide:** See `/docs/dev/PATTERNS.md` → "Response Structure Mismatches"
 
 ## 🚨 CRITICAL LESSON: MCP stdin Handling
 
