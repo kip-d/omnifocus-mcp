@@ -16,15 +16,7 @@ export const LIST_TASKS_SCRIPT = `
   // Bridge-aware tag getter for reliable tag retrieval
   function safeGetTagsWithBridge(task, app) {
     try {
-      // Try bridge first for better reliability
-      if (app && app.evaluateJavascript) {
-        const taskId = task.id();
-        const script = \`(() => { const t = Task.byIdentifier(\${JSON.stringify(taskId)}); return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]"; })()\`;
-        const result = app.evaluateJavascript(script);
-        return JSON.parse(result);
-      }
-
-      // Fallback to JXA
+      // Simple JXA approach - direct property access (fast and reliable)
       const tags = task.tags();
       if (!tags) return [];
       const tagNames = [];
@@ -460,12 +452,8 @@ export const LIST_TASKS_SCRIPT = `
       return true;
     }
 
-    const tagMap = fetchTagsViaBridge([taskId]);
-    if (!tagMap || !tagMap[taskId]) {
-      return false;
-    }
-
-    return requiredTags.every(tag => tagMap[taskId].includes(tag));
+    // Tags should be in cache from buildTaskObject, no bridge fallback needed
+    return false;
   }
 
   // Helper function to build task object
@@ -1006,14 +994,12 @@ export const LIST_TASKS_SCRIPT = `
             const taskObj = buildTaskObject(task, filter, skipRecurringAnalysis);
             tasks.push(taskObj);
             count++;
-            
+
             // Early exit when we have enough results
             if (filter.limit && tasks.length >= filter.limit) {
               break;
             }
           }
-          
-          hydrateTaskTagsViaBridge(tasks);
 
           return JSON.stringify({
             success: true,
@@ -1078,11 +1064,9 @@ export const LIST_TASKS_SCRIPT = `
     }
     
     const endTime = Date.now();
-    
+
     // For performance: estimate has_more based on whether we hit the limit
     const hasMore = count > tasks.length;
-    
-    hydrateTaskTagsViaBridge(tasks);
 
     return JSON.stringify({
       tasks: tasks,

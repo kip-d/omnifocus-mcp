@@ -90,80 +90,130 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
   - If optimizing, MEASURE the current bottleneck first
   - Don't assume - profile to find what's actually slow
 
-## 🚨 JavaScript Execution Decision Tree
+## 🚨 JavaScript Execution Decision Tree (UPDATED - September 2025)
 
-**CRITICAL: Count your items FIRST, then choose approach:**
+**CRITICAL: Both JXA and Bridge have valid use cases. Choose based on CONTEXT, not just item count:**
 
 ```
-How many items will you process?
-├── < 10 items → Pure JXA (simple, direct)
-├── 10-100 items → Pure JXA (acceptable performance)
-└── > 100 items → STOP! Search for bridge pattern first
-    └── Check: src/omnifocus/scripts/perspectives/query-perspective.ts
+HOW WILL YOU USE THE DATA?
+├── Streaming/Processing as collected
+│   └── Use INLINE JXA (per-item, simple, no bottleneck)
+│       ├── Good for: Query responses, real-time processing
+│       ├── Performance: ~1-2ms per item (acceptable in stream)
+│       └── Example: tags during buildTaskObject()
+│
+└── Bulk operation after collection
+    ├── If < 50 items → Bridge can be fast (single call)
+    ├── If 50-100 items → Measure! (bridge script size matters)
+    └── If > 100 items → Prefer streaming/pagination over bulk bridge
+        └── Why: Embedded-ID scripts cause timeouts (Issue #27)
 
-Operation type?
+OPERATION TYPE?
 ├── Reading data (tasks, projects, tags)
-│   ├── Simple query (<100 items) → Pure JXA
-│   ├── Bulk query (>100 items) → OmniJS Bridge for property access
-│   │   └── Example: perspectives/query-perspective.ts lines 14-36
-│   └── Complex filters → OmniJS Bridge if performance issues
+│   ├── During task building → Pure JXA (inline, no overhead)
+│   ├── After bulk collection → CAREFUL with bridge (script size!)
+│   └── Bulk property access without filtering → Use bridge sparingly
+│
 ├── Creating/Updating tasks
 │   ├── Without tags → Pure JXA
-│   ├── With tags → JXA + Bridge (REQUIRED)
+│   ├── With tags → JXA for creation + Bridge for assignment (REQUIRED)
 │   └── With repetition → JXA + Bridge (REQUIRED)
+│
 ├── Task movement/organization
 │   ├── Single task → Pure JXA
-│   └── Bulk movement (>10 tasks) → JXA + Bridge
+│   └── Bulk movement → Consider pagination vs bridge
+│
 └── Property access on ALL tasks (flattenedTasks)
-    └── ALWAYS use OmniJS Bridge (JXA property access is slow)
+    └── Context matters: Use bridge for analysis, JXA for streaming responses
 ```
 
-**Performance Reality Check:**
-- JXA property access: ~1-2ms per item (slow for bulk)
-- OmniJS property access: ~0.001ms per item (fast for bulk)
-- Crossover point: ~50-100 items
+**Performance Reality Check (with lessons from Issue #27):**
+- JXA direct property access: ~1-2ms per item
+- Bridge per-task overhead: More than JXA when streaming
+- Bridge bulk operation (fixed script): Faster for <50 items
+- Bridge with embedded IDs grows as: `base + (ID.length × count)` - becomes problematic fast!
+- Crossover point: Usually around 50-100 items, BUT script size matters more than count
 
-**When in doubt:** Grep for similar patterns before implementing!
+**When in doubt:**
+1. **Measure first!** Profile to find actual bottleneck
+2. **Check context:** Are you streaming results or processing bulk?
+3. **Grep for patterns** before implementing - use existing examples
 
-**Bridge is REQUIRED for:**
+**Bridge is ABSOLUTELY REQUIRED for:**
 - ✅ Tag assignment during task creation (JXA limitation)
 - ✅ Setting repetition rules (complex rule objects)
 - ✅ Task movement between projects (preserves IDs)
 
-**Bridge provides PERFORMANCE boost for:**
-- ✅ Bulk operations (100+ items)
-- ✅ Perspective queries
-- ✅ Complex data transformations
-- ✅ Multiple property access per item (flattenedTasks iteration)
+**Bridge provides REAL PERFORMANCE benefit for:**
+- ✅ Bulk property analysis (calculate statistics on 1000+ items)
+- ✅ Complex data transformations on fixed datasets
+- ✅ Perspective queries that don't embed dynamic IDs
+- ⚠️  NOT good for: Queries with embedded task IDs (script size explosion)
 
-### 🏷️ Tag Operations - COMPLETE EXAMPLE
+### 🏷️ Tag Operations - Complete Guide with Both Approaches
 
-**CRITICAL: Tag assignment in OmniFocus 4.x ONLY works via bridge.**
+**CRITICAL: Tag assignment REQUIRES bridge, but tag retrieval has options based on WHEN you retrieve:**
 
-❌ **DON'T: Use JXA methods (fail silently)**
+#### Tag Assignment (Creation) - BRIDGE REQUIRED
 ```javascript
-// These methods DO NOT WORK in OmniFocus 4.x
-task.addTags(tags);           // Fails silently
-task.tags = tags;             // Fails silently
-task.addTag(tag);            // Fails silently
+// ❌ DON'T: These fail silently
+task.addTags(tags);      // Doesn't persist
+task.tags = tags;        // Doesn't persist
 
-// JXA tag retrieval has timing issues
-const tags = task.tags();    // May return [] immediately after creation
-```
-
-✅ **DO: Use bridge for assignment AND retrieval**
-```javascript
-// Tag assignment - use bridgeSetTags()
+// ✅ DO: Use bridge for assignment
 const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 // Returns: {success: true, tags: ["tag1", "tag2"]}
-
-// Tag retrieval - use bridge for reliability
-const script = `(() => {
-  const t = Task.byIdentifier(${JSON.stringify(taskId)});
-  return t ? JSON.stringify(t.tags.map(tag => tag.name)) : "[]";
-})()`;
-const tagNames = JSON.parse(app.evaluateJavascript(script));
 ```
+
+#### Tag Retrieval - TWO VALID APPROACHES WITH DIFFERENT TRADEOFFS
+
+**APPROACH 1: Inline Retrieval During Task Building (SIMPLE JXA)**
+- **When**: Need tags for tasks as you build them
+- **Performance**: ~1-2ms per task (acceptable for streamed processing)
+- **Implementation**: Direct property access during buildTaskObject
+```javascript
+// ✅ FAST for inline/streamed retrieval
+const tags = task.tags();
+taskData.tags = tags ? tags.map(t => t.name()) : [];
+```
+- **Pros**: No bridge overhead, immediately available, simple code
+- **Cons**: Per-task overhead adds up if processing 1000+ tasks without streaming
+- **Use case**: Query responses where tasks are processed as they're collected
+
+**APPROACH 2: Bulk Retrieval After Collection (BRIDGE)**
+- **When**: Need to retrieve tags for many pre-collected tasks in one operation
+- **Performance**: Single bridge call instead of N calls, but script size grows
+- **Implementation**: Build script with all task IDs embedded
+```javascript
+// ⚠️  PROBLEMATIC if script gets too large
+const ids = [id1, id2, id3, ...];  // Don't embed hundreds of IDs!
+const script = buildBridgeScriptWithIds(ids);
+const tags = app.evaluateJavascript(script);
+```
+- **Pros**: Single network call, can be faster for <50 items
+- **Cons**: Script size grows linearly, causes timeout for 100+ items (Issue #27)
+- **Lesson**: DON'T use this for bulk collection queries - script becomes too large
+
+#### Recommended Pattern: Inline JXA for Query Responses
+```javascript
+// ✅ BEST for general queries
+function buildTaskObject(task, filter, skipAnalysis) {
+  const taskObj = {};
+  // ... other properties ...
+
+  if (shouldIncludeField('tags')) {
+    const tags = task.tags();
+    taskObj.tags = tags ? tags.map(t => t.name()) : [];
+  }
+
+  return taskObj;
+}
+```
+
+**Key Insight from Issue #27**: Don't use "bulk bridge with embedded IDs" for queries. Instead:
+- Use simple JXA during task building (inline)
+- Let streaming/pagination handle volume
+- Cache results to avoid re-fetching
 
 **Location of helper function:**
 - Function: `bridgeSetTags(app, taskId, tagNames)`
