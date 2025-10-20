@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
 
 // Auto-enable on macOS with OmniFocus
@@ -9,13 +10,13 @@ d('MCP Protocol Compliance Tests', () => {
   let client: MCPTestClient;
 
   beforeAll(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+    // Get or create the shared server instance
+    client = await getSharedClient();
   });
 
   afterAll(async () => {
     await client.thoroughCleanup();  // Clean up any test data created
-    await client.stop();
+    // Don't stop server - globalTeardown handles that
   });
 
   describe('Server Initialization', () => {

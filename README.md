@@ -34,7 +34,7 @@ A Model Context Protocol (MCP) server that provides programmatic access to OmniF
 ## Quick Start
 
 ### Prerequisites
-- OmniFocus 4.6+ on macOS
+- OmniFocus 4.7+ on macOS (released August 2025)
 - Node.js 18+
 
 ### Installation

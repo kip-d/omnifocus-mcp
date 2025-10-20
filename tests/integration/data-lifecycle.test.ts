@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient, TESTING_TAG } from './helpers/mcp-test-client.js';
 
 // Auto-enable on macOS with OmniFocus
@@ -9,14 +10,14 @@ d('OmniFocus Data Lifecycle Tests', () => {
   let client: MCPTestClient;
 
   beforeAll(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+    // Get or create the shared server instance
+    client = await getSharedClient();
     await client.thoroughCleanup();  // ONE initial cleanup for clean slate
   });
 
   afterAll(async () => {
     await client.thoroughCleanup();  // Final paranoid scan
-    await client.stop();
+    // Don't stop server - globalTeardown handles that
   });  // Uses global hookTimeout of 5min for integration tests
 
   // Note: Skip afterEach cleanup to avoid timeout issues

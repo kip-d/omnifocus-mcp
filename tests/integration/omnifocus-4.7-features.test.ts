@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
+import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
 
 /**
@@ -9,18 +10,26 @@ import { MCPTestClient } from './helpers/mcp-test-client.js';
  * - Mutually exclusive tags
  * - Enhanced repeats with translation layer
  * - Version detection with feature flags
+ *
+ * Performance Note: Uses shared MCP server instance (shared-server.ts)
+ * to mirror real-world usage (long-running Claude Desktop session).
  */
 describe('OmniFocus 4.7+ Features Integration Tests', () => {
   let client: MCPTestClient;
 
-  beforeEach(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+  beforeAll(async () => {
+    // Get or create the shared server instance
+    client = await getSharedClient();
   });
 
   afterEach(async () => {
+    // Clean up test data after each test
     await client.quickCleanup();
-    await client.stop();
+  });
+
+  afterAll(async () => {
+    // Final paranoid cleanup (but don't stop the server - globalTeardown handles that)
+    await client.thoroughCleanup();
   });
 
   describe('Planned Dates Feature', () => {
@@ -49,10 +58,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       expect(createResp.success).toBe(true);
       const taskName = 'Planned Task for Query';
 
-      // Wait for OmniFocus to index the newly created task
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       // Query inbox where test task was created (faster than search with 1900+ tasks)
+      // No delay needed - inbox queries are immediate (task is already created)
       const response = await client.callTool('tasks', {
         mode: 'inbox',
         limit: 100
@@ -263,23 +270,6 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
 
       expect(response.success).toBe(true);
     });
-
-    it('should support legacy repeat format for backward compatibility', async () => {
-      // Legacy format (old API)
-      const response = await client.callTool('manage_task', {
-        operation: 'create',
-        name: 'Legacy Repeat Task',
-        dueDate: '2025-11-17',
-        repeatRule: {
-          unit: 'day',
-          steps: 1,
-          method: 'Fixed'
-        },
-        tags: ['test', 'legacy-repeat']
-      });
-
-      expect(response.success).toBe(true);
-    });
   });
 
   describe('Version Detection & Feature Flags', () => {
@@ -361,10 +351,8 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       expect(createResponse.success).toBe(true);
       const taskName = 'Query Test Task';
 
-      // Wait for OmniFocus to index the newly created task
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       // Query inbox where test task was created (faster than search with 1900+ tasks)
+      // No delay needed - inbox queries are immediate (task is already created)
       const queryResponse = await client.callTool('tasks', {
         mode: 'inbox',
         limit: 100

@@ -7,6 +7,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['tests/support/setup-unit.ts'],
+    globalSetup: isIntegrationTest ? ['tests/support/setup-integration.ts'] : undefined,
     testTimeout: isIntegrationTest ? 120000 : 30000,     // 2min for integration, 30s for unit
     hookTimeout: isIntegrationTest ? 300000 : 60000,     // 5min for integration (cleanup accumulates), 1min for unit
     // Sandbox-friendly mode: when VITEST_SAFE=1, use single threaded pool
