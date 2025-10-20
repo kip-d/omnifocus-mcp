@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity.js';
+import { TASK_VELOCITY_SCRIPT_V3 } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
@@ -9,69 +9,37 @@ import {
 } from '../../utils/response-format.js';
 import { TaskVelocitySchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
-import { TaskVelocityData } from '../../omnifocus/script-response-types.js';
 
-// Union type to support both production script format and test mock format
-interface TestMockVelocityData {
-  totalCompleted: number;
-  averagePerDay: number;
-  peakDay: { date: string; count: number };
-  trend: 'increasing' | 'stable' | 'decreasing';
-  predictedCapacity: number;
-  dailyData: Array<{ date: string; completed: number }>;
-  dayOfWeekPatterns: Record<string, number>;
-  timeOfDayPatterns: Record<string, number>;
-  projectVelocity: Array<{ name: string; completed: number }>;
-  insights: string[];
-}
-
-type VelocityDataUnion = TaskVelocityData | TestMockVelocityData;
-
-// Type-safe helper functions to extract data from either format
-function isTestMockFormat(data: VelocityDataUnion): data is TestMockVelocityData {
-  return 'totalCompleted' in data;
-}
-
-function getTasksCompleted(data: VelocityDataUnion): number {
-  if (isTestMockFormat(data)) {
-    return data.totalCompleted;
-  }
-  return data.summary?.currentVelocity ?? 0;
-}
-
-function getAveragePerDay(data: VelocityDataUnion): number {
-  if (isTestMockFormat(data)) {
-    return data.averagePerDay;
-  }
-  return data.velocity?.daily ?? 0;
-}
-
-function getPeakDay(data: VelocityDataUnion): { date: string | null; count: number } {
-  if (isTestMockFormat(data)) {
-    return data.peakDay;
-  }
-  return { date: null, count: 0 }; // Production format doesn't have peak day
-}
-
-function getTrend(data: VelocityDataUnion): 'increasing' | 'stable' | 'decreasing' {
-  if (isTestMockFormat(data)) {
-    return data.trend;
-  }
-  return (data.velocity?.trend as 'increasing' | 'stable' | 'decreasing') ?? 'stable';
-}
-
-function getPredictedCapacity(data: VelocityDataUnion): number {
-  if (isTestMockFormat(data)) {
-    return data.predictedCapacity;
-  }
-  return data.predictions?.nextWeek ?? 0;
-}
-
-function getInsights(data: VelocityDataUnion): string[] {
-  if (isTestMockFormat(data)) {
-    return data.insights;
-  }
-  return []; // Production format doesn't have insights at this level
+// V3 script response structure
+interface TaskVelocityV3Data {
+  velocity: {
+    period: string;
+    averageCompleted: string;
+    averageCreated: string;
+    dailyVelocity: string;
+    backlogGrowthRate: string;
+  };
+  throughput: {
+    intervals: Array<{
+      start: Date;
+      end: Date;
+      created: number;
+      completed: number;
+      label: string;
+    }>;
+    totalCompleted: number;
+    totalCreated: number;
+  };
+  breakdown: {
+    medianCompletionHours: string;
+    tasksAnalyzed: number;
+  };
+  projections: {
+    tasksPerDay: string;
+    tasksPerWeek: string;
+    tasksPerMonth: string;
+  };
+  optimization: string;
 }
 
 export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
@@ -114,44 +82,30 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
         );
       }
 
-      // Execute script
-      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
-        options: { days, groupBy, includeWeekends },
+      // Execute script - V3 uses period instead of groupBy
+      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT_V3, {
+        options: { period: groupBy },
       });
 
-      // Schema matching the optimized velocity payload
-
-      const result = await this.execJson<VelocityDataUnion>(script);
+      // Schema matching the V3 velocity payload
+      const result = await this.execJson<TaskVelocityV3Data>(script);
 
       if (isScriptError(result)) {
         return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
       }
 
-      const data: VelocityDataUnion = isScriptSuccess(result) ? result.data : {
-        velocity: {
-          daily: 0,
-          weekly: 0,
-          monthly: 0,
-          trend: 'stable',
-        },
-        trends: [],
-        predictions: {
-          confidence: 0,
-        },
-        summary: {
-          currentVelocity: 0,
-          previousVelocity: 0,
-          percentageChange: 0,
-        },
-      };
+      // V3 response structure
+      const scriptData = isScriptSuccess(result) ? result.data : null;
 
-      // Use type-safe helpers to extract data from either format
-      const tasksCompleted = getTasksCompleted(data);
-      const averagePerDay = getAveragePerDay(data);
-      const peak = getPeakDay(data);
-      const trend = getTrend(data);
-      const predictedCapacity = getPredictedCapacity(data);
-      const daily = isTestMockFormat(data) ? data.dailyData : (data.trends || []);
+      // Extract V3 data or use defaults
+      const tasksCompleted = scriptData?.throughput?.totalCompleted || 0;
+      const averagePerDay = parseFloat(scriptData?.velocity?.dailyVelocity || '0');
+      const predictedCapacity = parseFloat(scriptData?.projections?.tasksPerWeek || '0');
+
+      // V3 doesn't track trend/peak - use defaults
+      const peak = { date: null, count: 0 };
+      const trend = 'stable' as const;
+      const daily = scriptData?.throughput?.intervals || [];
 
       const responseData = {
         velocity: {
@@ -168,7 +122,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
           byTimeOfDay: {},
           byProject: [],
         },
-        insights: getInsights(data),
+        insights: [], // V3 doesn't include insights in script output
       };
 
       // Cache for 1 hour
