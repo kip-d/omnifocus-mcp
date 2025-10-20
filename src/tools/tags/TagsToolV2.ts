@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
+import { LIST_TAGS_SCRIPT_V3 } from '../../omnifocus/scripts/tags/list-tags-v3.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -124,8 +124,8 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         return cached as TagsResponseV2; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
-      // Use consolidated script that handles all optimization modes internally
-      const scriptTemplate = LIST_TAGS_SCRIPT;
+      // Use V3 script with OmniJS for all modes
+      const scriptTemplate = LIST_TAGS_SCRIPT_V3;
 
       const script = this.omniAutomation.buildScript(scriptTemplate, {
         options: {
