@@ -14,8 +14,14 @@ export interface OmniFocusTask {
   dueDate?: string;
   deferDate?: string;
   completionDate?: string;
+  added?: string;
+  modified?: string;
+  dropDate?: string;
   note?: string;
   projectId?: string;
   project?: string;
   tags?: string[];
+  parentTaskId?: string;
+  parentTaskName?: string;
+  inInbox?: boolean;
 }

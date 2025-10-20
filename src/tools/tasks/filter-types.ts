@@ -86,7 +86,7 @@ export interface QueryFilters {
  * Sort configuration
  */
 export interface SortOption {
-  field: 'dueDate' | 'deferDate' | 'name' | 'flagged' | 'estimatedMinutes' | 'added' | 'completionDate';
+  field: 'dueDate' | 'deferDate' | 'name' | 'flagged' | 'estimatedMinutes' | 'added' | 'modified' | 'completionDate';
   direction: 'asc' | 'desc';
 }
 

@@ -72,6 +72,33 @@ export const LIST_TASKS_SCRIPT = `
               task.completionDate = completionDate.toISOString();
             }
           }
+          if (shouldIncludeField('added')) {
+            try {
+              const added = omniJsTask.added();
+              task.added = added ? added.toISOString() : null;
+            } catch (e) {
+              // added field not accessible via JXA - set to null
+              task.added = null;
+            }
+          }
+          if (shouldIncludeField('modified')) {
+            try {
+              const modified = omniJsTask.modified();
+              task.modified = modified ? modified.toISOString() : null;
+            } catch (e) {
+              // modified field not accessible via JXA - set to null
+              task.modified = null;
+            }
+          }
+          if (shouldIncludeField('dropDate')) {
+            try {
+              const dropDate = omniJsTask.dropDate();
+              task.dropDate = dropDate ? dropDate.toISOString() : null;
+            } catch (e) {
+              // dropDate field not accessible via JXA - set to null
+              task.dropDate = null;
+            }
+          }
 
           // Tags - retrieved inline
           if (shouldIncludeField('tags')) {
@@ -142,6 +169,24 @@ export const LIST_TASKS_SCRIPT = `
           if (shouldIncludeField('inInbox')) {
             const containingProject = omniJsTask.containingProject();
             task.inInbox = !containingProject;
+          }
+
+          // Parent task information
+          if (shouldIncludeField('parentTaskId')) {
+            try {
+              const parentTask = omniJsTask.parent();
+              task.parentTaskId = parentTask ? parentTask.id() : null;
+            } catch (e) {
+              task.parentTaskId = null;
+            }
+          }
+          if (shouldIncludeField('parentTaskName')) {
+            try {
+              const parentTask = omniJsTask.parent();
+              task.parentTaskName = parentTask ? parentTask.name() : null;
+            } catch (e) {
+              task.parentTaskName = null;
+            }
           }
 
         } catch (e) {

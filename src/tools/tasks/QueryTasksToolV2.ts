@@ -91,19 +91,25 @@ const QueryTasksToolSchemaV2 = z.object({
     'deferDate',
     'plannedDate',
     'completionDate',
+    'added',
+    'modified',
+    'dropDate',
     'note',
     'projectId',
     'project',
     'tags',
     'repetitionRule',
-  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule'),
+    'parentTaskId',
+    'parentTaskName',
+    'inInbox',
+  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox'),
 
   // Advanced filtering (optional - for complex queries)
   filters: z.any().optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
 
   // Sorting options (optional)
   sort: z.array(z.object({
-    field: z.enum(['dueDate', 'deferDate', 'name', 'flagged', 'estimatedMinutes', 'added', 'completionDate']),
+    field: z.enum(['dueDate', 'deferDate', 'name', 'flagged', 'estimatedMinutes', 'added', 'modified', 'completionDate']),
     direction: z.enum(['asc', 'desc']),
   })).optional().describe('Sort results by one or more fields. Example: [{ field: "dueDate", direction: "asc" }, { field: "flagged", direction: "desc" }]. Applied after filtering.'),
 });
@@ -1149,6 +1155,11 @@ CONVERSION PATTERN: When user asks in natural language, identify:
         deferDate?: string | Date;
         completionDate?: string | Date;
         added?: string | Date;
+        modified?: string | Date;
+        dropDate?: string | Date;
+        parentTaskId?: string;
+        parentTaskName?: string;
+        inInbox?: boolean;
         [key: string]: unknown;
       };
       return {
@@ -1157,6 +1168,11 @@ CONVERSION PATTERN: When user asks in natural language, identify:
         deferDate: t.deferDate ? new Date(t.deferDate) : undefined,
         completionDate: t.completionDate ? new Date(t.completionDate) : undefined,
         added: t.added ? new Date(t.added) : undefined,
+        modified: t.modified ? new Date(t.modified) : undefined,
+        dropDate: t.dropDate ? new Date(t.dropDate) : undefined,
+        parentTaskId: t.parentTaskId,
+        parentTaskName: t.parentTaskName,
+        inInbox: t.inInbox,
       } as unknown as OmniFocusTask;
     });
   }
