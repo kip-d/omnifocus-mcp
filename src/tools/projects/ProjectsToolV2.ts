@@ -4,7 +4,7 @@ import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects/list-proj
 import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
 import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
-import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
+import { GET_PROJECT_STATS_SCRIPT_V3 } from '../../omnifocus/scripts/projects/get-project-stats-v3.js';
 import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
@@ -673,8 +673,8 @@ export class ProjectsToolV2 extends BaseTool<typeof ProjectsToolSchemaV2, Projec
       ) as unknown as ProjectsResponseV2;
     }
 
-    // Execute the stats script
-    const script = this.omniAutomation.buildScript(GET_PROJECT_STATS_SCRIPT, {
+    // Execute the V3 stats script with OmniJS
+    const script = this.omniAutomation.buildScript(GET_PROJECT_STATS_SCRIPT_V3, {
       options: {
         projectId: args.projectId,
         limit: args.limit || 200,
