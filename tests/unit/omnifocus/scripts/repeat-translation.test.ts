@@ -2,39 +2,35 @@ import { describe, it, expect } from 'vitest';
 import {
   mapAnchorIntentToOmniFocus,
   translateRepeatIntent,
-  featureRequires4_7Plus,
   type RepeatUserIntent
 } from '../../../../src/omnifocus/scripts/shared/repeat-translation';
 
 describe('Repeat Translation Layer', () => {
   describe('mapAnchorIntentToOmniFocus', () => {
-    it('should map when-due to DueDate + Regularly (4.6.1 compatible)', () => {
+    it('should map when-due to DueDate + Regularly', () => {
       const result = mapAnchorIntentToOmniFocus('when-due');
       expect(result.anchorDateKey).toBe('DueDate');
       expect(result.method).toBe('Fixed');
       expect(result.scheduleType).toBe('Regularly');
-      expect(result.requiresVersion).toBeNull();
     });
 
-    it('should map when-deferred to DeferDate + FromCompletion (4.6.1 compatible)', () => {
+    it('should map when-deferred to DeferDate + FromCompletion', () => {
       const result = mapAnchorIntentToOmniFocus('when-deferred');
       expect(result.anchorDateKey).toBe('DeferDate');
       expect(result.method).toBe('DeferUntilDate');
       expect(result.scheduleType).toBe('FromCompletion');
-      expect(result.requiresVersion).toBeNull();
     });
 
-    it('should map when-marked-done to 4.7+ params', () => {
+    it('should map when-marked-done to FromCompletion', () => {
       const result = mapAnchorIntentToOmniFocus('when-marked-done');
       expect(result.scheduleType).toBe('FromCompletion');
-      expect(result.requiresVersion).toBe('4.7');
+      expect(result.method).toBe('DueDate');
     });
 
-    it('should map planned-date to PlannedDate anchor (4.7+)', () => {
+    it('should map planned-date to PlannedDate anchor', () => {
       const result = mapAnchorIntentToOmniFocus('planned-date');
       expect(result.anchorDateKey).toBe('PlannedDate');
       expect(result.scheduleType).toBe('Regularly');
-      expect(result.requiresVersion).toBe('4.7');
     });
   });
 
@@ -95,21 +91,4 @@ describe('Repeat Translation Layer', () => {
     });
   });
 
-  describe('featureRequires4_7Plus', () => {
-    it('should return false for when-due', () => {
-      expect(featureRequires4_7Plus('when-due')).toBe(false);
-    });
-
-    it('should return false for when-deferred', () => {
-      expect(featureRequires4_7Plus('when-deferred')).toBe(false);
-    });
-
-    it('should return true for when-marked-done', () => {
-      expect(featureRequires4_7Plus('when-marked-done')).toBe(true);
-    });
-
-    it('should return true for planned-date', () => {
-      expect(featureRequires4_7Plus('planned-date')).toBe(true);
-    });
-  });
 });

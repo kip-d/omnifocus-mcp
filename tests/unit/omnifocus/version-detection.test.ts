@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getOmniFocusVersion,
-  supportsFeature,
   getVersionInfo,
   clearVersionCache
 } from '../../../src/omnifocus/version-detection';
@@ -31,34 +30,6 @@ describe('OmniFocus Version Detection', () => {
       expect(version.version.major).toBeGreaterThanOrEqual(0);
       expect(version.version.minor).toBeGreaterThanOrEqual(0);
       expect(version.version.patch).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  describe('supportsFeature', () => {
-    it('should return boolean for plannedDates feature', async () => {
-      const supports = await supportsFeature('plannedDates');
-      expect(typeof supports).toBe('boolean');
-    });
-
-    it('should return boolean for mutuallyExclusiveTags feature', async () => {
-      const supports = await supportsFeature('mutuallyExclusiveTags');
-      expect(typeof supports).toBe('boolean');
-    });
-
-    it('should return boolean for enhancedRepeats feature', async () => {
-      const supports = await supportsFeature('enhancedRepeats');
-      expect(typeof supports).toBe('boolean');
-    });
-
-    it('should return false for unknown features', async () => {
-      const supports = await supportsFeature('unknownFeature' as any);
-      expect(supports).toBe(false);
-    });
-
-    it('should be consistent across multiple calls', async () => {
-      const first = await supportsFeature('plannedDates');
-      const second = await supportsFeature('plannedDates');
-      expect(first).toBe(second);
     });
   });
 

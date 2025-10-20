@@ -24,47 +24,43 @@ export interface RepeatUserIntent {
 }
 
 export interface OmniFocusRepeatParams {
-  ruleString: string;           // RRULE format: "FREQ=DAILY;INTERVAL=3"
-  method: string;               // RepetitionMethod: "Fixed" | "DeferUntilDate" | "DueDate"
-  scheduleType: string;         // RepetitionScheduleType: "Regularly" | "FromCompletion" | "None"
-  anchorDateKey: string;        // AnchorDateKey: "DeferDate" | "DueDate" | "PlannedDate"
+  ruleString: string;            // RRULE format: "FREQ=DAILY;INTERVAL=3"
+  method: string;                // RepetitionMethod: "Fixed" | "DeferUntilDate" | "DueDate"
+  scheduleType: string;          // RepetitionScheduleType: "Regularly" | "FromCompletion" | "None"
+  anchorDateKey: string;         // AnchorDateKey: "DeferDate" | "DueDate" | "PlannedDate"
   catchUpAutomatically: boolean; // Should skip missed occurrences
   _source: 'user-intent';
 }
 
 /**
  * Map user intent "anchorTo" to OmniFocus internal parameters
+ * Note: OmniFocus 4.7+ is required, so all versions are 4.7+ compatible
  */
 export function mapAnchorIntentToOmniFocus(anchorTo: AnchorIntent): {
   anchorDateKey: string;
   method: string;
   scheduleType: string;
-  requiresVersion: string | null; // null if 4.6.1 compatible, '4.7' if 4.7+ only
 } {
   const mapping: Record<AnchorIntent, any> = {
     'when-deferred': {
       anchorDateKey: 'DeferDate',
       method: 'DeferUntilDate',
-      scheduleType: 'FromCompletion',
-      requiresVersion: null // 4.6.1 compatible
+      scheduleType: 'FromCompletion'
     },
     'when-due': {
       anchorDateKey: 'DueDate',
       method: 'Fixed',
-      scheduleType: 'Regularly',
-      requiresVersion: null // 4.6.1 compatible
+      scheduleType: 'Regularly'
     },
     'when-marked-done': {
-      anchorDateKey: 'DueDate', // Fallback for 4.6.1
+      anchorDateKey: 'DueDate',
       method: 'DueDate',
-      scheduleType: 'FromCompletion',
-      requiresVersion: '4.7' // 4.7+ only (would use DueDate + FromCompletion on older)
+      scheduleType: 'FromCompletion'
     },
     'planned-date': {
       anchorDateKey: 'PlannedDate',
       method: 'Fixed',
-      scheduleType: 'Regularly',
-      requiresVersion: '4.7' // 4.7+ only
+      scheduleType: 'Regularly'
     }
   };
 
@@ -87,10 +83,3 @@ export function translateRepeatIntent(intent: RepeatUserIntent): OmniFocusRepeat
   };
 }
 
-/**
- * Determine if feature requires 4.7+ version
- */
-export function featureRequires4_7Plus(anchorTo: AnchorIntent): boolean {
-  const params = mapAnchorIntentToOmniFocus(anchorTo);
-  return params.requiresVersion === '4.7';
-}

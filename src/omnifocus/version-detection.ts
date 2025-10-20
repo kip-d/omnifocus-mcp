@@ -76,8 +76,8 @@ export async function getOmniFocusVersion(): Promise<VersionInfo> {
   let detectedVersion: OmniFocusVersion = {
     version: 'unknown',
     major: 4,
-    minor: 6,
-    patch: 1
+    minor: 7,
+    patch: 0
   };
 
   try {
@@ -88,7 +88,7 @@ export async function getOmniFocusVersion(): Promise<VersionInfo> {
       detectedVersion = parseVersion(result.data.version);
     }
   } catch (e) {
-    // If we can't detect version, fall back to safe defaults (4.6.1)
+    // If we can't detect version, fall back to safe defaults (OmniFocus 4.7.0 is minimum)
     console.error('[version-detection] Failed to detect OmniFocus version:', e);
   }
 
@@ -106,27 +106,6 @@ export async function getOmniFocusVersion(): Promise<VersionInfo> {
   };
 
   return cachedVersionInfo;
-}
-
-/**
- * Check if a specific feature is supported
- * This is the main API for checking version-dependent features
- */
-export async function supportsFeature(
-  feature: 'plannedDates' | 'mutuallyExclusiveTags' | 'enhancedRepeats'
-): Promise<boolean> {
-  const versionInfo = await getOmniFocusVersion();
-
-  switch (feature) {
-    case 'plannedDates':
-      return versionInfo.features.hasPlannedDates;
-    case 'mutuallyExclusiveTags':
-      return versionInfo.features.hasMutuallyExclusiveTags;
-    case 'enhancedRepeats':
-      return versionInfo.features.hasEnhancedRepeats;
-    default:
-      return false;
-  }
 }
 
 /**
