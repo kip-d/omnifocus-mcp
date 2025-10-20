@@ -1,8 +1,8 @@
-# OmniFocus MCP v2.2.0 Quick Reference (LLM-Optimized)
+# OmniFocus MCP v2.2.1 Quick Reference (LLM-Optimized)
 
-**Last Updated:** 2025-10-17
+**Last Updated:** 2025-10-20
 
-**17 Consolidated Tools** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
+**17 Consolidated Tools** | **22 Task Fields** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
 
 **📖 Related Resources:**
 - **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily GTD workflows
@@ -82,6 +82,30 @@
 - String: CONTAINS, STARTS_WITH, ENDS_WITH, EQUALS, NOT_EQUALS
 - Array: OR, AND, NOT_IN, IN
 - Date/Number: >, >=, <, <=, BETWEEN
+
+**Available Task Fields** (22 total, use in `fields[]?` parameter):
+- **Core**: id, name, note
+- **Status**: completed, flagged, blocked, available, inInbox
+- **Scheduling**: dueDate, deferDate, plannedDate, completionDate, dropDate
+- **Audit Trail**: added, modified (v2.2.1 new - enable "tasks created/modified when?" queries)
+- **Organization**: projectId, project, tags, repetitionRule
+- **Hierarchy**: parentTaskId, parentTaskName (v2.2.1 new - enable "subtasks of X?" queries)
+- **Planning**: estimatedMinutes
+
+**Sort Fields** (use in `sort[]?` parameter):
+- dueDate, deferDate, name, flagged, estimatedMinutes, added, modified, completionDate
+
+**Sorting Examples:**
+```javascript
+// Recently modified first
+{ sort: [{ field: "modified", direction: "desc" }], limit: 10 }
+
+// Tasks created this week, sorted by due date
+{
+  filters: { added: { operator: ">=", value: "2025-10-14" } },
+  sort: [{ field: "dueDate", direction: "asc" }]
+}
+```
 
 **manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
 - Ops: create(name*)|update(taskId*)|complete(taskId*)|delete(taskId*)

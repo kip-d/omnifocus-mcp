@@ -6,6 +6,7 @@
 
 ### Tasks (4)
 - tasks(mode*,limit*:25,details*:false,fastSearch*:true,fields[]?,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
+  - fields: id|name|completed|flagged|blocked|available|estimatedMinutes|dueDate|deferDate|plannedDate|completionDate|added|modified|dropDate|note|projectId|project|tags|repetitionRule|parentTaskId|parentTaskName|inInbox
 - manage_task(operation*:create|update|complete|delete,taskId?,name?,plannedDate?,...all_task_fields)
 - batch_create(items*[],createSequentially*:true,atomicOperation*:false,returnMapping*:true,stopOnError*:true)
 - parse_meeting_notes(input*,extractMode*:both,suggestProjects*:true,suggestTags*:true,suggestDueDates*:true,suggestEstimates*:true,returnFormat*:preview,groupByProject*:true,existingProjects[]?,defaultProject?)
@@ -32,7 +33,8 @@
 - system(operation*:version|diagnostics,testScript?)
 
 ## Notes
-- **v2.2.0**: 17 consolidated tools (15 core + 2 capture tools)
+- **v2.2.1**: 17 consolidated tools (15 core + 2 capture tools) + 22 task fields
+- **v2.2.0 → v2.2.1**: Added Phase 1 & 2 fields (added, modified, dropDate, parentTaskId, parentTaskName, inInbox)
 - **Smart Capture**: parse_meeting_notes extracts tasks from unstructured text (meeting notes, emails, transcripts)
 - **Operation-based routing**: Most tools use `operation` parameter
 - All params→strings via MCP
