@@ -1158,4 +1158,82 @@ Combine our caching advantages with their selective retrieval for optimal perfor
 
 ---
 
+## 🧹 Technical Debt & Cleanup Opportunities
+
+### Legacy Version Code Cleanup (OmniFocus 4.7+ Requirement)
+
+**Analysis Date**: October 20, 2025
+**Context**: After updating README to require OmniFocus 4.7+ (released August 2025), identified legacy 4.6.1 compatibility code that is no longer needed.
+
+#### Safe to Remove (Never Used in Production)
+
+1. **`featureRequires4_7Plus()` function** (`src/omnifocus/scripts/shared/repeat-translation.ts:93-96`)
+   - Only used in unit tests
+   - The `requiresVersion` field it checks is never actually used in production code
+   - Can remove both the function and the `requiresVersion` field entirely
+   - **Impact**: ~40 lines removed from repeat-translation.ts
+
+2. **`supportsFeature()` function** (`src/omnifocus/version-detection.ts:115-130`)
+   - Only used in unit tests and documentation
+   - Never imported or called in production code
+   - Feature flags themselves ARE used (reported in SystemToolV2 metadata), but this checking function is unused
+   - **Impact**: ~15 lines removed from version-detection.ts
+
+3. **`requiresVersion` field annotations** (`src/omnifocus/scripts/shared/repeat-translation.ts`)
+   - Lines 42, 49, 55, 61, 67: Comments and field declarations
+   - Never accessed in production code
+   - Only read by `featureRequires4_7Plus()` which is unused
+   - **Impact**: Cleaner mapping structure
+
+4. **OmniFocus-4.6.1-d.ts** type definitions
+   - Located at `src/omnifocus/api/versions/OmniFocus-4.6.1-d.ts`
+   - Only version-specific type file (60KB)
+   - Should be archived if we only support 4.7+
+   - **Impact**: 60KB removed from codebase
+
+#### Update (Not Remove)
+
+5. **Version detection fallback** (`src/omnifocus/version-detection.ts:76-81`)
+   - Currently falls back to 4.6.1 if detection fails
+   - Should update to 4.7.0 since that's our minimum requirement
+   ```typescript
+   // Current:
+   let detectedVersion: OmniFocusVersion = {
+     version: 'unknown',
+     major: 4,
+     minor: 6,  // ← Should be 7
+     patch: 1   // ← Should be 0
+   };
+   ```
+   - **Impact**: More accurate fallback behavior
+
+#### Keep (Actually Used)
+
+- `getOmniFocusVersion()` - Used by SystemToolV2 to report version
+- Feature flags (`hasPlannedDates`, `hasMutuallyExclusiveTags`, `hasEnhancedRepeats`) - Reported in system tool metadata
+- Version detection infrastructure - Still useful for diagnostics and future version differences
+
+#### Implementation Summary
+
+**Removable Code**:
+- `featureRequires4_7Plus()` function + associated tests
+- `requiresVersion` field from repeat translation mapping
+- `supportsFeature()` function + associated tests
+- `OmniFocus-4.6.1-d.ts` type definitions (archive)
+
+**Updates Required**:
+- Change version fallback from 4.6.1 → 4.7.0
+
+**Total Impact**:
+- Removes ~150 lines of unused version-checking code
+- Simplifies repeat-translation.ts by removing version annotations
+- Cleanup ~60KB of obsolete type definitions
+- More accurate fallback behavior
+
+**Effort**: 2-3 hours (code removal, test cleanup, verification)
+**Risk**: Low (unused code paths)
+**Priority**: Medium (technical debt cleanup, not blocking features)
+
+---
+
 *This roadmap is a living document. Updated based on user feedback, performance data, and development priorities.*
