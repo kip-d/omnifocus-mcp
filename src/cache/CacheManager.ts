@@ -315,7 +315,11 @@ export class CacheManager {
     // Determine which query patterns are affected
     if (context.affectsToday) patterns.push('today');
     if (context.affectsOverdue) patterns.push('overdue');
-    if (context.operation === 'create' && !context.projectId) patterns.push('inbox');
+    if (context.operation === 'create' && !context.projectId) {
+      // Invalidate inbox, but also 'all' because OmniFocus might auto-move
+      // tasks with tags/projects out of inbox based on user settings
+      patterns.push('inbox', 'all');
+    }
 
     // For updates/deletes, we need to be more conservative
     if (context.operation === 'update' || context.operation === 'delete') {

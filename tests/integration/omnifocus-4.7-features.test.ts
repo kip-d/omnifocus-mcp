@@ -46,32 +46,26 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
         tags: ['test', 'planned-query']
       });
 
-      console.log('Created task:', JSON.stringify({
-        success: createResp.success,
-        taskId: createResp.data?.task?.taskId,
-        tags: createResp.data?.task?.tags
-      }, null, 2));
+      expect(createResp.success).toBe(true);
+      const taskName = 'Planned Task for Query';
 
-      // Query inbox tasks (task created without project goes to inbox)
+      // Wait for OmniFocus to index the newly created task
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Query inbox where test task was created (faster than search with 1900+ tasks)
       const response = await client.callTool('tasks', {
-        mode: 'inbox'
+        mode: 'inbox',
+        limit: 100
       });
 
-      console.log('Inbox tasks:', JSON.stringify({
-        success: response.success,
-        count: response.data?.tasks?.length || 0,
-        tasks: (response.data?.tasks || []).map((t: any) => ({
-          name: t.name,
-          tags: t.tags
-        })).slice(0, 5)
-      }, null, 2));
-
       expect(response.success).toBe(true);
-      const plannedTasks = (response.data?.tasks || []).filter(
-        (t: any) => t.tags?.includes('planned-query')
+      const plannedTask = (response.data?.tasks || []).find(
+        (t: any) => t.name === taskName
       );
-      expect(plannedTasks.length).toBeGreaterThan(0);
-      expect(plannedTasks[0].plannedDate).toBeDefined();
+      expect(plannedTask).toBeDefined();
+      expect(plannedTask?.plannedDate).toBeDefined();
+      expect(plannedTask?.tags).toContain('test');
+      expect(plannedTask?.tags).toContain('planned-query');
     });
 
     it('should update task with new planned date', async () => {
@@ -365,20 +359,27 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(createResponse.success).toBe(true);
+      const taskName = 'Query Test Task';
 
-      // Query inbox tasks (task created without project goes to inbox)
+      // Wait for OmniFocus to index the newly created task
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Query inbox where test task was created (faster than search with 1900+ tasks)
       const queryResponse = await client.callTool('tasks', {
-        mode: 'inbox'
+        mode: 'inbox',
+        limit: 100
       });
 
       expect(queryResponse.success).toBe(true);
       const testTask = (queryResponse.data?.tasks || []).find(
-        (t: any) => t.tags?.includes('query-all')
+        (t: any) => t.name === taskName
       );
 
       expect(testTask).toBeDefined();
       expect(testTask?.plannedDate).toBeDefined();
       expect(testTask?.repetitionRule).toBeDefined();
+      expect(testTask?.tags).toContain('test');
+      expect(testTask?.tags).toContain('query-all');
     });
   });
 });

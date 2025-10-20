@@ -54,6 +54,35 @@ export const MINIMAL_TAG_BRIDGE = `
       return {success: false, error: e.message};
     }
   }
+
+  // OmniJS template for setting plannedDate - reliable persistence
+  const __SET_PLANNED_DATE_TEMPLATE = [
+    '(() => {',
+    '  const task = Task.byIdentifier($TASK_ID$);',
+    '  if (!task) return JSON.stringify({success: false, error: "task_not_found"});',
+    '  const dateValue = $DATE_VALUE$;',
+    '  if (dateValue === null) {',
+    '    task.plannedDate = null;',
+    '  } else {',
+    '    task.plannedDate = new Date(dateValue);',
+    '  }',
+    '  return JSON.stringify({success: true, plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null});',
+    '})()'
+  ].join('\\n');
+
+  // Set plannedDate using OmniJS bridge for reliable persistence
+  function bridgeSetPlannedDate(app, taskId, dateValue) {
+    try {
+      const script = __formatTagScript(__SET_PLANNED_DATE_TEMPLATE, {
+        TASK_ID: taskId,
+        DATE_VALUE: dateValue
+      });
+      const result = app.evaluateJavascript(script);
+      return JSON.parse(result);
+    } catch (e) {
+      return {success: false, error: e.message};
+    }
+  }
 `;
 
 /**

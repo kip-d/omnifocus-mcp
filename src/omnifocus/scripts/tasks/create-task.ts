@@ -109,14 +109,7 @@ export const CREATE_TASK_SCRIPT = `
         }
       }
 
-      if (taskData.plannedDate) {
-        try {
-          task.plannedDate = new Date(taskData.plannedDate);
-        } catch (e) {
-          // Skip invalid planned date - log error details for debugging
-          console.log('Invalid planned date:', taskData.plannedDate, e.message);
-        }
-      }
+      // Note: plannedDate is set via bridge after getting taskId (JXA assignment doesn't persist)
 
       // Set estimated minutes if provided
       if (taskData.estimatedMinutes && typeof taskData.estimatedMinutes === 'number') {
@@ -203,7 +196,23 @@ export const CREATE_TASK_SCRIPT = `
           };
         }
       }
-      
+
+      // Apply plannedDate using OmniJS bridge for reliable persistence
+      let plannedDateResult = null;
+      if (taskData.plannedDate) {
+        try {
+          const bridgeResult = bridgeSetPlannedDate(app, taskId, taskData.plannedDate);
+          if (bridgeResult && bridgeResult.success) {
+            plannedDateResult = bridgeResult.plannedDate;
+            console.log('Successfully set plannedDate via bridge:', plannedDateResult);
+          } else {
+            console.log('Warning: Bridge plannedDate assignment failed:', bridgeResult ? bridgeResult.error : 'unknown error');
+          }
+        } catch (plannedDateError) {
+          console.log('Warning: Error setting plannedDate:', plannedDateError.message);
+        }
+      }
+
       // Build response with basic task data (minimal version)
       const response = {
         taskId: taskId,
@@ -212,6 +221,7 @@ export const CREATE_TASK_SCRIPT = `
         flagged: task.flagged(),
         dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
         deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
+        plannedDate: plannedDateResult,
         estimatedMinutes: task.estimatedMinutes() || null,
         tags: tagResult && tagResult.success ? tagResult.verifiedTags : [],
         project: task.containingProject() ? task.containingProject().name() : null,
