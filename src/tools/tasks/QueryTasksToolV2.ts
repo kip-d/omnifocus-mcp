@@ -717,10 +717,11 @@ CONVERSION PATTERN: When user asks in natural language, identify:
       );
     }
 
-    // Execute search
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
-      filter,
+    // Execute search using V3 (fast OmniJS) script
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+      filter: { ...filter, mode: 'search' },
       fields: args.fields || [],
+      limit: args.limit,
     });
     const result = await this.execJson(script);
 

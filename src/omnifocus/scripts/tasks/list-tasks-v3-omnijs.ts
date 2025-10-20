@@ -268,6 +268,58 @@ export const LIST_TASKS_SCRIPT_V3 = `
             });
           })()
         \`;
+      } else if (mode === 'search') {
+        // SEARCH MODE - Find tasks by name or note content
+        const searchTerm = (filter.search || '').toLowerCase();
+        omniJsScript = \`
+          (() => {
+            const results = [];
+            let count = 0;
+            const limit = \${limit};
+            const searchTerm = \${JSON.stringify(searchTerm)};
+
+            flattenedTasks.forEach(task => {
+              if (count >= limit) return;
+
+              // Search in task name and note
+              const taskName = (task.name || '').toLowerCase();
+              const taskNote = (task.note || '').toLowerCase();
+
+              if (!taskName.includes(searchTerm) && !taskNote.includes(searchTerm)) {
+                return;
+              }
+
+              const proj = task.containingProject;
+              results.push({
+                \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
+                \${shouldInclude('name') ? 'name: task.name,' : ''}
+                \${shouldInclude('completed') ? 'completed: task.completed || false,' : ''}
+                \${shouldInclude('flagged') ? 'flagged: task.flagged || false,' : ''}
+                \${shouldInclude('inInbox') ? 'inInbox: task.inInbox || false,' : ''}
+                \${shouldInclude('blocked') ? 'blocked: task.taskStatus === Task.Status.Blocked,' : ''}
+                \${shouldInclude('available') ? 'available: task.taskStatus === Task.Status.Available,' : ''}
+                \${shouldInclude('dueDate') ? 'dueDate: task.dueDate ? task.dueDate.toISOString() : null,' : ''}
+                \${shouldInclude('deferDate') ? 'deferDate: task.deferDate ? task.deferDate.toISOString() : null,' : ''}
+                \${shouldInclude('plannedDate') ? 'plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null,' : ''}
+                \${shouldInclude('tags') ? 'tags: task.tags ? task.tags.map(t => t.name) : [],' : ''}
+                \${shouldInclude('note') ? 'note: task.note || "",' : ''}
+                \${shouldInclude('estimatedMinutes') ? 'estimatedMinutes: task.estimatedMinutes || null,' : ''}
+                \${shouldInclude('project') ? 'project: proj ? proj.name : null,' : ''}
+                \${shouldInclude('projectId') ? 'projectId: proj ? proj.id.primaryKey : null,' : ''}
+                \${shouldInclude('repetitionRule') ? 'repetitionRule: (function() { const rule = task.repetitionRule; if (!rule) return null; try { return { recurrence: rule.recurrence || null, repetitionMethod: rule.method ? rule.method.toString() : null, ruleString: rule.ruleString || null }; } catch (e) { return { _error: e.toString() }; } })(),' : ''}
+              });
+              count++;
+            });
+
+            return JSON.stringify({
+              tasks: results,
+              count: results.length,
+              collection: 'flattenedTasks',
+              mode: 'search',
+              searchTerm: searchTerm
+            });
+          })()
+        \`;
       } else {
         // ALL/DEFAULT MODE - All tasks (optionally filtering completed)
         const includeCompleted = filter.includeCompleted || false;

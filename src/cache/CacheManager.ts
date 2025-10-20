@@ -316,9 +316,12 @@ export class CacheManager {
     if (context.affectsToday) patterns.push('today');
     if (context.affectsOverdue) patterns.push('overdue');
     if (context.operation === 'create' && !context.projectId) {
-      // Invalidate inbox, but also 'all' because OmniFocus might auto-move
-      // tasks with tags/projects out of inbox based on user settings
-      patterns.push('inbox', 'all');
+      patterns.push('inbox');
+      // Only invalidate 'all' if tags are present, as OmniFocus might auto-move
+      // tasks with tags out of inbox based on user settings
+      if (context.tags && context.tags.length > 0) {
+        patterns.push('all');
+      }
     }
 
     // For updates/deletes, we need to be more conservative

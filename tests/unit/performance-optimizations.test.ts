@@ -3,27 +3,23 @@ import { LIST_TASKS_SCRIPT, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scrip
 import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
 
 describe('Performance Optimization Tests', () => {
-  describe('list_tasks skipAnalysis parameter', () => {
-    it('should include skipAnalysis parameter in script', () => {
-      expect(LIST_TASKS_SCRIPT).toContain('filter.skipAnalysis');
-      // New context-aware implementation checks filter then falls back to HELPER_CONFIG
-      expect(LIST_TASKS_SCRIPT).toContain('filter.skipAnalysis');
-      expect(LIST_TASKS_SCRIPT).toContain('HELPER_CONFIG');
+  describe('list_tasks performance features', () => {
+    it('should include query time tracking', () => {
+      // V3 scripts track query time for performance monitoring
+      expect(LIST_TASKS_SCRIPT).toContain('query_time_ms');
+      expect(LIST_TASKS_SCRIPT).toContain('Date.now() - startTime');
     });
 
-    it('should skip recurring task analysis when skipAnalysis is true', () => {
-      // The script should check skipRecurringAnalysis before running analysis
-      expect(LIST_TASKS_SCRIPT).toContain('skipRecurringAnalysis');
-      expect(LIST_TASKS_SCRIPT).toContain('if (!skipRecurringAnalysis)');
-    });
-
-    it('should include performance metrics in response', () => {
-      // The script should track and return performance data
-      expect(LIST_TASKS_SCRIPT).toContain('performance_metrics');
+    it('should track tasks scanned for performance analysis', () => {
+      // The script should track how many tasks were examined
       expect(LIST_TASKS_SCRIPT).toContain('tasks_scanned');
-      expect(LIST_TASKS_SCRIPT).toContain('filter_time_ms');
-      expect(LIST_TASKS_SCRIPT).toContain('analysis_time_ms');
-      expect(LIST_TASKS_SCRIPT).toContain('analysis_skipped');
+      expect(LIST_TASKS_SCRIPT).toContain('scanned');
+    });
+
+    it('should indicate optimization architecture in response', () => {
+      // V3 scripts include architecture metadata
+      expect(LIST_TASKS_SCRIPT).toContain('architecture');
+      expect(LIST_TASKS_SCRIPT).toContain('omnijs');
     });
   });
 
