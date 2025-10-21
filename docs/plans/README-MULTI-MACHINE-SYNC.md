@@ -1,16 +1,44 @@
-# Multi-Machine Session Sync - Implementation Status
+# Multi-Machine Session Sync - Quick Reference & Status
+
+**Status:** Documented design (not yet implemented). Ready to pick up when needed.
+
+**Last Updated:** October 21, 2025 — Design finalized with clear purpose definition
 
 ## Overview
 
 The multi-machine session sync project has been **moved to a separate repository** to keep it independent from the OmniFocus MCP server work.
 
-## Separate Repository
-
-**Location:** `/Users/kip/src/multi-machine-claude-resume`
+**Separate Repository:** `/Users/kip/src/multi-machine-claude-resume`
 
 This is a general-purpose tool for managing work across multiple machines and should not be mixed with OmniFocus MCP-specific code.
 
-## Documentation
+## Design Decision: Session Checkpoint Purpose (Oct 21, 2025)
+
+**Chosen approach: Option 2 - Historical work logs for analysis/patterns**
+
+The session checkpoint serves a **metadata/context purpose**, NOT as primary state sync:
+
+1. **Historical work log** - `session-history.md` records what you worked on, when, from which machine
+   - Enables understanding work patterns and distribution
+   - Example: `"2025-10-21 10:30 [macbook-kip-main] Fixed tag assignment (branch: main)"`
+
+2. **Quick context reminder** - Before switching machines, know:
+   - What task you were last working on
+   - Which branch/commit
+   - Which machine (useful for hardware context)
+
+3. **NOT primary state sync** - iCloud symlink already handles 95% (code, configs, agents)
+   - Checkpoint is informational metadata only
+   - All actual work state syncs automatically via iCloud
+
+**Recommended workflow:**
+```bash
+save-session "What you were working on"    # Before leaving machine
+# ~15 seconds for iCloud sync
+restore-session                             # On new machine to see context
+```
+
+## Separate Repository Documentation
 
 - **README**: Full documentation with features, requirements, workflow
 - **QUICK_START.md**: 5-minute setup guide

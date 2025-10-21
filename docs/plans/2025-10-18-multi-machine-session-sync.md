@@ -2,11 +2,36 @@
 
 > **For Claude:** Use `${SUPERPOWERS_SKILLS_ROOT}/skills/collaboration/executing-plans/SKILL.md` to implement this plan task-by-task.
 
-**Goal:** Enable seamless work continuation across 3 macOS machines by syncing `~/.claude/` via iCloud and implementing session checkpoint/resume functionality.
+**Goal:** Enable seamless work continuation across 3 macOS machines by syncing `~/.claude/` via iCloud and implementing session checkpoint/resume functionality for **historical work logging and context switching**.
 
 **Architecture:** Symlink `~/.claude/` to iCloud Drive for automatic cross-machine sync, maintain session state in JSON checkpoints (machine, branch, todos, test results), implement shell functions to save/restore sessions. No code changes to Claude Code itself—purely filesystem and shell layer.
 
 **Tech Stack:** macOS symlinks, iCloud Drive, JSON (session checkpoint), bash/zsh shell functions
+
+---
+
+## Design Rationale (Session Checkpoint Purpose)
+
+**Decision (Oct 21, 2025):** Implement session checkpoint for **Option 2: Historical work logs for analysis/patterns**, not as primary state synchronization.
+
+**Key Insight:** The iCloud symlink already handles 95% of actual state sync (code, todos, test results all sync automatically). The checkpoint file serves a different purpose:
+
+1. **Historical Work Log** - `session-history.md` creates a record of what you worked on when, from which machine
+   - Example: "2025-10-18 10:30 [macbook-kip-main] Fixed tag assignment issue (branch: main)"
+   - Enables understanding work patterns and distribution across machines
+
+2. **Quick Context Reminder** - Without opening files, immediately know:
+   - What task you were last working on
+   - Which branch you were on
+   - Last commit hash
+   - Which machine you were on (useful for understanding hardware context)
+
+3. **Not Primary State** - The checkpoint is informational/metadata, not the source of truth. All actual work state (code, configs, agents) syncs via iCloud automatically.
+
+**Recommended Workflow:**
+- Before switching machines: `save-session "Description of what you were doing"`
+- On new machine after iCloud sync: `restore-session` to see context
+- Optional: `session-log` to view recent work history across machines
 
 ---
 
