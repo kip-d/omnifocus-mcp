@@ -220,7 +220,34 @@ export const LIST_TASKS_SCRIPT = `
               return false; // Looking for inbox, but has project
             }
             if (filter.project !== null && filter.project !== '') {
-              if (!hasProject || containingProject.name() !== filter.project) {
+              if (!hasProject) {
+                return false; // Task has no project but filter requires one
+              }
+
+              const projectName = containingProject.name();
+              const operator = filter.projectOperator || 'EQUALS';
+              let matches = false;
+
+              switch(operator) {
+                case 'CONTAINS':
+                  matches = projectName && projectName.toLowerCase().includes(filter.project.toLowerCase());
+                  break;
+                case 'STARTS_WITH':
+                  matches = projectName && projectName.toLowerCase().startsWith(filter.project.toLowerCase());
+                  break;
+                case 'ENDS_WITH':
+                  matches = projectName && projectName.toLowerCase().endsWith(filter.project.toLowerCase());
+                  break;
+                case 'NOT_EQUALS':
+                  matches = projectName !== filter.project;
+                  break;
+                case 'EQUALS':
+                default:
+                  matches = projectName === filter.project;
+                  break;
+              }
+
+              if (!matches) {
                 return false;
               }
             }
@@ -266,15 +293,101 @@ export const LIST_TASKS_SCRIPT = `
             if (!inName && !inNote) return false;
           }
 
-          // Date filters
-          if (filter.dueBefore || filter.dueAfter) {
+          // Date filters with operator support
+          if (filter.dueBefore || filter.dueAfter || filter.dueDateOperator) {
             const dueDate = omniJsTask.dueDate();
-            if (!dueDate) {
-              if (filter.dueBefore || filter.dueAfter) return false; // Has date filter but task has no due date
-            } else {
+            const operator = filter.dueDateOperator || '<=';
+
+            // If operator is BETWEEN, both dueBefore and dueAfter should be set
+            if (operator === 'BETWEEN') {
+              if (!dueDate) {
+                return false; // Has date filter but task has no due date
+              }
               const dueMs = dueDate.getTime();
-              if (filter.dueBefore && dueMs >= filter.dueBefore) return false;
-              if (filter.dueAfter && dueMs <= filter.dueAfter) return false;
+              const beforeMs = new Date(filter.dueBefore).getTime();
+              const afterMs = new Date(filter.dueAfter).getTime();
+              // BETWEEN includes both boundaries
+              if (dueMs < afterMs || dueMs > beforeMs) return false;
+            } else if (filter.dueBefore || filter.dueAfter) {
+              if (!dueDate) {
+                return false; // Has date filter but task has no due date
+              }
+              const dueMs = dueDate.getTime();
+              const beforeMs = filter.dueBefore ? new Date(filter.dueBefore).getTime() : null;
+              const afterMs = filter.dueAfter ? new Date(filter.dueAfter).getTime() : null;
+
+              // Apply operator logic
+              if (operator === '<' || operator === '<=') {
+                if (beforeMs !== null && dueMs > beforeMs) return false;
+              } else if (operator === '>' || operator === '>=') {
+                if (afterMs !== null && dueMs < afterMs) return false;
+              }
+            }
+          }
+
+          // Defer date filters with operator support
+          if (filter.deferBefore || filter.deferAfter || filter.deferDateOperator) {
+            const deferDate = omniJsTask.deferDate();
+            const operator = filter.deferDateOperator || '<=';
+
+            // If operator is BETWEEN, both deferBefore and deferAfter should be set
+            if (operator === 'BETWEEN') {
+              if (!deferDate) {
+                return false; // Has date filter but task has no defer date
+              }
+              const deferMs = deferDate.getTime();
+              const beforeMs = new Date(filter.deferBefore).getTime();
+              const afterMs = new Date(filter.deferAfter).getTime();
+              // BETWEEN includes both boundaries
+              if (deferMs < afterMs || deferMs > beforeMs) return false;
+            } else if (filter.deferBefore || filter.deferAfter) {
+              if (!deferDate) {
+                return false; // Has date filter but task has no defer date
+              }
+              const deferMs = deferDate.getTime();
+              const beforeMs = filter.deferBefore ? new Date(filter.deferBefore).getTime() : null;
+              const afterMs = filter.deferAfter ? new Date(filter.deferAfter).getTime() : null;
+
+              // Apply operator logic
+              if (operator === '<' || operator === '<=') {
+                if (beforeMs !== null && deferMs > beforeMs) return false;
+              } else if (operator === '>' || operator === '>=') {
+                if (afterMs !== null && deferMs < afterMs) return false;
+              }
+            }
+          }
+
+          // Estimated minutes filter with operator support
+          if (filter.estimatedMinutes !== undefined || filter.estimatedMinutesOperator) {
+            const estimatedMinutes = omniJsTask.estimatedMinutes() || 0;
+            const operator = filter.estimatedMinutesOperator || '=';
+
+            let matches = false;
+            switch(operator) {
+              case '<=':
+                matches = estimatedMinutes <= filter.estimatedMinutes;
+                break;
+              case '>=':
+                matches = estimatedMinutes >= filter.estimatedMinutes;
+                break;
+              case '<':
+                matches = estimatedMinutes < filter.estimatedMinutes;
+                break;
+              case '>':
+                matches = estimatedMinutes > filter.estimatedMinutes;
+                break;
+              case 'BETWEEN':
+                matches = estimatedMinutes >= filter.estimatedMinutes &&
+                         estimatedMinutes <= (filter.estimatedMinutesUpperBound || filter.estimatedMinutes);
+                break;
+              case '=':
+              default:
+                matches = estimatedMinutes === filter.estimatedMinutes;
+                break;
+            }
+
+            if (filter.estimatedMinutes !== undefined && !matches) {
+              return false;
             }
           }
 

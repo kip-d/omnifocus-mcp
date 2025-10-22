@@ -105,7 +105,18 @@ const QueryTasksToolSchemaV2 = z.object({
   ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox'),
 
   // Advanced filtering (optional - for complex queries)
-  filters: z.any().optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
+  // Handle both object and stringified JSON (Claude Desktop converts to string)
+  filters: z.union([
+    z.string().transform(val => {
+      // Try to parse as JSON first (Claude Desktop may stringify it)
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val;  // Return as-is if not valid JSON
+      }
+    }),
+    z.any(),  // Direct object when called from tests or Node.js
+  ]).optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
 
   // Sorting options (optional)
   sort: z.array(z.object({
@@ -191,6 +202,13 @@ CONVERSION PATTERN: When user asks in natural language, identify:
     const timer = new OperationTimerV2();
 
     try {
+      // Debug: Log incoming args
+      this.logger.debug('[TAG_FILTER_DEBUG] executeValidated received args:', {
+        hasFilters: !!args.filters,
+        filterKeys: args.filters ? Object.keys(args.filters) : [],
+        filters: args.filters,
+      });
+
       // Validate search mode requirements early
       if (args.mode === 'search' && !args.search && !args.filters) {
         return createErrorResponseV2(
@@ -382,13 +400,37 @@ CONVERSION PATTERN: When user asks in natural language, identify:
     if (args.dueBy) filter.dueBefore = args.dueBy;
     if (args.fastSearch) filter.fastSearch = args.fastSearch;
 
+    // DEBUG: Check if filters parameter made it through
+    if (typeof args.filters === 'string') {
+      filter._debug_filters_is_string = true;
+      filter._debug_filters_string_val = args.filters;
+      try {
+        const parsed = JSON.parse(args.filters);
+        filter._debug_filters_parsed = parsed;
+      } catch (e) {
+        filter._debug_filters_parse_error = 'failed to parse';
+      }
+    } else if (typeof args.filters === 'object' && args.filters !== null) {
+      filter._debug_filters_is_object = true;
+      filter._debug_filters_obj_keys = Object.keys(args.filters);
+    } else {
+      filter._debug_filters_type = typeof args.filters;
+      filter._debug_filters_value = args.filters;
+    }
+
     // If no advanced filters provided, return simple filters
     if (!args.filters) {
+      // Add to filter object for debugging in metadata
+      filter._debug_no_filters_param = true;
       return filter;
     }
 
     // Process advanced filters
     const advancedFilters = args.filters as QueryFilters;
+    filter._debug_has_filters_param = true;
+    filter._debug_filter_type = typeof advancedFilters;
+    filter._debug_filter_keys = Object.keys(advancedFilters);
+    filter._debug_has_tags = !!advancedFilters.tags;
 
     // String filters (project, projectId, search)
     if (advancedFilters.project && !filter.project) {
@@ -414,9 +456,12 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 
     // Array filters (tags, taskStatus)
     if (advancedFilters.tags && !filter.tags) {
+      filter._debug_tags_exists = true;
+      filter._debug_is_array_filter = isArrayFilter(advancedFilters.tags);
       if (isArrayFilter(advancedFilters.tags)) {
         filter.tags = advancedFilters.tags.values;
         filter.tagsOperator = advancedFilters.tags.operator;
+        filter._debug_tags_processed = true;
       }
     }
 
@@ -517,6 +562,14 @@ CONVERSION PATTERN: When user asks in natural language, identify:
         }
       }
     }
+
+    // Debug: Log processed filter
+    this.logger.debug('[TAG_FILTER_DEBUG] processAdvancedFilters returning filter:', {
+      filterKeys: Object.keys(filter),
+      tags: filter.tags,
+      tagsOperator: filter.tagsOperator,
+      fullFilter: filter,
+    });
 
     return filter;
   }
