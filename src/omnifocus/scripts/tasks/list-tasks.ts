@@ -12,10 +12,15 @@
  * - Start with OmniJS collections (inbox, flattenedTasks, flattenedProjects)
  * - Apply filtering IN OmniJS (fast)
  * - Build complete task objects with tags inline
+ * - Enrich with added/modified/dropDate via OmniJS bridge (when requested)
  * - Return everything in one bridge call
  */
 
+import { getDateFieldsBridge } from '../shared/date-fields-bridge.js';
+
 export const LIST_TASKS_SCRIPT = `
+  ${getDateFieldsBridge()}
+
   (() => {
     try {
       const app = Application('OmniFocus');
@@ -72,18 +77,8 @@ export const LIST_TASKS_SCRIPT = `
               task.completionDate = completionDate.toISOString();
             }
           }
-          // These fields cannot be accessed in JXA context and are not accessible via evaluateJavascript()
-          // OmniJS has these properties available (confirmed via direct OmniJS testing), but the
-          // JXA->OmniJS bridge doesn't provide access to them reliably. See architecture notes.
-          if (shouldIncludeField('added')) {
-            task.added = null;
-          }
-          if (shouldIncludeField('modified')) {
-            task.modified = null;
-          }
-          if (shouldIncludeField('dropDate')) {
-            task.dropDate = null;
-          }
+          // Added/Modified/DropDate fields will be populated via bridge after task collection
+          // (see enrichment section below)
 
           // Tags - retrieved inline
           if (shouldIncludeField('tags')) {
@@ -429,6 +424,45 @@ export const LIST_TASKS_SCRIPT = `
         }
       }
 
+      // Enrich with added/modified/dropDate fields if requested
+      const needsDateFields = shouldIncludeField('added') ||
+                              shouldIncludeField('modified') ||
+                              shouldIncludeField('dropDate');
+
+      if (needsDateFields && results.length > 0) {
+        try {
+          // Collect task IDs
+          const taskIds = [];
+          for (let i = 0; i < results.length; i++) {
+            if (results[i].id) {
+              taskIds.push(results[i].id);
+            }
+          }
+
+          // Get date fields via OmniJS bridge
+          if (taskIds.length > 0) {
+            const dateFields = bridgeGetDateFields(app, taskIds);
+
+            // Merge into results
+            for (let i = 0; i < results.length; i++) {
+              const taskId = results[i].id;
+              if (taskId && dateFields[taskId]) {
+                if (shouldIncludeField('added')) {
+                  results[i].added = dateFields[taskId].added;
+                }
+                if (shouldIncludeField('modified')) {
+                  results[i].modified = dateFields[taskId].modified;
+                }
+                if (shouldIncludeField('dropDate')) {
+                  results[i].dropDate = dateFields[taskId].dropDate;
+                }
+              }
+            }
+          }
+        } catch (enrichError) {
+          // Graceful degradation - continue without date fields
+        }
+      }
 
       const elapsed = Date.now() - startTime;
 
