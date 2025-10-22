@@ -37,6 +37,112 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 **Documentation Impact:** Must update all testing documentation to reflect proper MCP protocol usage.
 
+## 🚨 CRITICAL: Pattern Search Before Implementation (October 2025)
+
+### The "Reinventing the Wheel" Anti-Pattern - DOCUMENTED ✅
+
+**Problem:** Spent 2+ hours implementing a "two-stage query enrichment" pattern that already existed as the "embedded bridge helper" pattern in `minimal-tag-bridge.ts`.
+
+**Root Cause:** Failed to search for existing patterns before implementing new functionality.
+
+**What Happened:**
+1. User requested access to `added`, `modified`, `dropDate` fields on tasks
+2. We discovered JXA can't access these fields directly (Date conversion issue)
+3. We tested and confirmed OmniJS bridge CAN access these fields
+4. **MISTAKE:** We immediately started designing a "two-stage query" approach:
+   - Run main query from TypeScript → get tasks
+   - Run second query from TypeScript → get date fields
+   - Merge results in TypeScript tool layer
+5. After 2 hours of implementation, user asked: "Why not follow existing patterns?"
+6. Search revealed `minimal-tag-bridge.ts` had the EXACT pattern we needed:
+   - Embed bridge function in script as template string
+   - Call bridge FROM WITHIN JXA script
+   - Return complete enriched data in one call
+7. Correct implementation took 10 minutes once we found the pattern
+
+**The Critical Steps We Skipped:**
+
+```bash
+# SHOULD HAVE RUN FIRST:
+grep -r "bridge\|evaluateJavascript" src/omnifocus/scripts/shared/
+
+# Would have immediately found:
+# - minimal-tag-bridge.ts (tag assignment pattern)
+# - The embedded bridge helper pattern
+# - Multiple examples of in-script enrichment
+```
+
+**Cost Analysis:**
+- Time to search and find pattern: 5 minutes
+- Time to implement using pattern: 10 minutes
+- **Total with search: 15 minutes**
+
+vs.
+
+- Time designing wrong approach: 30 minutes
+- Time implementing two-stage query: 90 minutes
+- Time debugging integration issues: 30 minutes
+- Time discovering pattern exists: 5 minutes
+- Time rewriting correctly: 10 minutes
+- **Total without search: 165 minutes**
+
+**ROI: Searching saved 150 minutes (10x faster development)**
+
+**Pattern Recognition Red Flags:**
+
+These situations mean "search for pattern FIRST":
+- "This feels like it should already exist"
+- "I need to access data that JXA can't handle"
+- "I need to call evaluateJavascript()"
+- "I'm implementing something for the second time"
+- "This seems like a common operation"
+
+**Documentation Created:**
+1. Added prominent "🚨 STOP!" section to CLAUDE.md
+2. Created `docs/dev/PATTERN_INDEX.md` - searchable pattern catalog
+3. Enhanced `minimal-tag-bridge.ts` header with pattern documentation
+4. Enhanced `date-fields-bridge.ts` with implementation example
+5. This lesson in LESSONS_LEARNED.md
+
+**Mandatory Pre-Implementation Checklist (Now in CLAUDE.md):**
+
+```bash
+# 1. Search shared helpers
+grep -r "your_task_keyword" src/omnifocus/scripts/shared/
+
+# 2. Check pattern index
+# Read: docs/dev/PATTERN_INDEX.md
+
+# 3. If pattern found, READ IT COMPLETELY
+# Don't skim - understand why it works
+
+# 4. Only then: implement or adapt pattern
+```
+
+**Quote from User:**
+> "So why were we off on that wild goose chase? Was part of my mistake using the Haiku model instead of the Sonnet model?"
+>
+> Answer: No - this was Sonnet 4.5 throughout. The mistake was not following the documented checklist. Even advanced models will reinvent wheels if they don't systematically search for existing patterns first.
+
+**Lesson for Future AI Developers:**
+The existence of a checklist is not enough. The checklist must be:
+1. **Visible:** Prominently placed at the top of documentation
+2. **Mandatory:** Framed as required steps, not suggestions
+3. **Specific:** Exact commands to run, not vague advice
+4. **Cost-justified:** Show the time savings (10x faster in this case)
+
+**Related Documentation:**
+- `CLAUDE.md` - Updated with prominent STOP section
+- `docs/dev/PATTERN_INDEX.md` - New pattern catalog
+- `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Pattern example
+- `src/omnifocus/scripts/shared/date-fields-bridge.ts` - Pattern implementation
+
+**Time to Solution:**
+- Wrong approach: 2.5 hours to dead end
+- Right approach (after pattern search): 10 minutes
+
+**Prevention:** 30-second pattern search would have saved 2+ hours.
+
 ## 🚨 CRITICAL: Script Size Assumptions - 27x Underestimate (September 2025)
 
 ### The Great Script Size Misconception - RESOLVED ✅

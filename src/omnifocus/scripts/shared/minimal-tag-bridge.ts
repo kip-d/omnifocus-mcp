@@ -1,6 +1,56 @@
 /**
  * Minimal Tag Bridge - Focused only on tag assignment after task creation
  * Designed to fit within JXA size limits while providing reliable tag visibility
+ *
+ * ============================================================================
+ * 🎯 PATTERN: Embedded Bridge Helpers
+ * ============================================================================
+ *
+ * This file demonstrates the STANDARD PATTERN for accessing OmniFocus
+ * properties that JXA cannot handle directly.
+ *
+ * WHEN TO USE THIS PATTERN:
+ * - JXA cannot access/set a property reliably
+ * - Property works in pure OmniJS but fails in JXA
+ * - Examples: tags, repetition rules, certain date fields
+ *
+ * HOW THIS PATTERN WORKS:
+ * 1. Define bridge functions as template strings (exported constants)
+ * 2. Functions use `app.evaluateJavascript()` to execute OmniJS code
+ * 3. Scripts import and EMBED these functions using template literals
+ * 4. Functions are called FROM WITHIN the JXA script IIFE
+ *
+ * USAGE EXAMPLE:
+ * ```typescript
+ * import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
+ *
+ * export const MY_SCRIPT = `
+ *   ${getMinimalTagBridge()}  // ← Embed bridge functions
+ *
+ *   (() => {
+ *     const app = Application('OmniFocus');
+ *     // ... create task ...
+ *
+ *     // Call embedded bridge function:
+ *     const result = bridgeSetTags(app, taskId, ['tag1', 'tag2']);
+ *   })()
+ * `;
+ * ```
+ *
+ * IMPLEMENTATIONS IN THIS FILE:
+ * - bridgeSetTags() - Assign tags to tasks
+ * - bridgeSetPlannedDate() - Set planned date on tasks
+ *
+ * OTHER BRIDGE HELPERS:
+ * - date-fields-bridge.ts - Get added/modified/dropDate fields
+ * - (Search for "bridge" in src/omnifocus/scripts/shared/ for more)
+ *
+ * WHY NOT TWO-STAGE QUERIES?
+ * ❌ Don't: Run main query, then separate enrichment query from TypeScript
+ * ✅ Do: Embed bridge, call from within script, return complete data
+ *
+ * See: docs/dev/PATTERN_INDEX.md for complete pattern documentation
+ * ============================================================================
  */
 
 export const MINIMAL_TAG_BRIDGE = `

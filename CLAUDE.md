@@ -2,6 +2,40 @@
 
 This file provides critical guidance to Claude Code (claude.ai/code) when working with this OmniFocus MCP server.
 
+---
+
+# 🚨🚨🚨 STOP! Before Writing ANY Code 🚨🚨🚨
+
+**This project has established patterns for common tasks. DON'T REINVENT THE WHEEL.**
+
+### 1. Search for Existing Patterns FIRST
+
+```bash
+# Before implementing, search shared helpers:
+grep -r "your_task_keyword" src/omnifocus/scripts/shared/
+
+# Examples:
+grep -r "bridge" src/omnifocus/scripts/shared/          # Bridge patterns
+grep -r "evaluateJavascript" src/omnifocus/scripts/    # OmniJS usage
+grep -r "tag" src/omnifocus/scripts/shared/             # Tag operations
+```
+
+### 2. Check the Pattern Index
+
+See **`docs/dev/PATTERN_INDEX.md`** for:
+- Bridge helper patterns (tags, dates, repetition)
+- Field access patterns (JXA vs OmniJS)
+- Script embedding patterns
+- Common solutions to known problems
+
+### 3. Read Existing Code COMPLETELY
+
+If you find similar code, **READ IT IN FULL** before implementing your solution.
+
+**Real Cost of Skipping This:** We spent 2+ hours reinventing the bridge pattern that already existed in `minimal-tag-bridge.ts`. The solution took 10 minutes once we found the pattern.
+
+---
+
 ## 📚 CRITICAL: Read Architecture Documentation First!
 **Before making ANY changes, consult these essential documents:**
 - `/docs/dev/PATTERNS.md` - **START HERE** - Quick symptom lookup and common solutions
