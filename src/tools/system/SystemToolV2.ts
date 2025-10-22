@@ -146,8 +146,8 @@ export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
           omnifocus_features: {
             plannedDates: omniFocusVersion.features.hasPlannedDates,
             mutuallyExclusiveTags: omniFocusVersion.features.hasMutuallyExclusiveTags,
-            enhancedRepeats: omniFocusVersion.features.hasEnhancedRepeats
-          }
+            enhancedRepeats: omniFocusVersion.features.hasEnhancedRepeats,
+          },
         },
       );
     } catch (error) {

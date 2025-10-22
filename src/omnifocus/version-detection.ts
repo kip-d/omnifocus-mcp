@@ -33,7 +33,7 @@ let cachedVersionInfo: VersionInfo | null = null;
 const VersionResponseSchema = z.object({
   ok: z.boolean(),
   version: z.string(),
-  v: z.string()
+  v: z.string(),
 });
 
 /**
@@ -49,7 +49,7 @@ function parseVersion(versionString: string): OmniFocusVersion {
     version: versionString,
     major,
     minor,
-    patch
+    patch,
   };
 }
 
@@ -77,7 +77,7 @@ export async function getOmniFocusVersion(): Promise<VersionInfo> {
     version: 'unknown',
     major: 4,
     minor: 7,
-    patch: 0
+    patch: 0,
   };
 
   try {
@@ -100,9 +100,9 @@ export async function getOmniFocusVersion(): Promise<VersionInfo> {
     features: {
       hasPlannedDates: is47Plus,
       hasMutuallyExclusiveTags: is47Plus,
-      hasEnhancedRepeats: is47Plus
+      hasEnhancedRepeats: is47Plus,
     },
-    detectedAt: Date.now()
+    detectedAt: Date.now(),
   };
 
   return cachedVersionInfo;

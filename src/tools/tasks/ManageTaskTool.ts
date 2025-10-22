@@ -396,7 +396,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               task: parsedCreateResult,
               id: createdTaskId,  // Expose id at top level for convenience
               name: (parsedCreateResult as Record<string, unknown>).name,  // Expose name at top level
-              operation: 'create' as const
+              operation: 'create' as const,
             },
             undefined,
             {

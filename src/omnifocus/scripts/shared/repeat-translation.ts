@@ -36,32 +36,34 @@ export interface OmniFocusRepeatParams {
  * Map user intent "anchorTo" to OmniFocus internal parameters
  * Note: OmniFocus 4.7+ is required, so all versions are 4.7+ compatible
  */
-export function mapAnchorIntentToOmniFocus(anchorTo: AnchorIntent): {
+interface AnchorMapping {
   anchorDateKey: string;
   method: string;
   scheduleType: string;
-} {
-  const mapping: Record<AnchorIntent, any> = {
+}
+
+export function mapAnchorIntentToOmniFocus(anchorTo: AnchorIntent): AnchorMapping {
+  const mapping: Record<AnchorIntent, AnchorMapping> = {
     'when-deferred': {
       anchorDateKey: 'DeferDate',
       method: 'DeferUntilDate',
-      scheduleType: 'FromCompletion'
+      scheduleType: 'FromCompletion',
     },
     'when-due': {
       anchorDateKey: 'DueDate',
       method: 'Fixed',
-      scheduleType: 'Regularly'
+      scheduleType: 'Regularly',
     },
     'when-marked-done': {
       anchorDateKey: 'DueDate',
       method: 'DueDate',
-      scheduleType: 'FromCompletion'
+      scheduleType: 'FromCompletion',
     },
     'planned-date': {
       anchorDateKey: 'PlannedDate',
       method: 'Fixed',
-      scheduleType: 'Regularly'
-    }
+      scheduleType: 'Regularly',
+    },
   };
 
   return mapping[anchorTo];
@@ -79,7 +81,7 @@ export function translateRepeatIntent(intent: RepeatUserIntent): OmniFocusRepeat
     scheduleType: omniFocusParams.scheduleType,
     anchorDateKey: omniFocusParams.anchorDateKey,
     catchUpAutomatically: intent.skipMissed ?? false,
-    _source: 'user-intent'
+    _source: 'user-intent',
   };
 }
 
