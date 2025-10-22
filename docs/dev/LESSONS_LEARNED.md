@@ -143,6 +143,133 @@ The existence of a checklist is not enough. The checklist must be:
 
 **Prevention:** 30-second pattern search would have saved 2+ hours.
 
+### ADDENDUM: Detailed Timeline and Commit Analysis (October 22, 2025)
+
+**Purpose:** Retrospective analysis showing exactly where time was wasted and recovered.
+
+#### Commit-by-Commit Timeline
+
+**12:25 PM** - Commit `e709615` - Initial investigation
+- Documented JXA Date type conversion limitations
+- Confirmed `added`, `modified`, `dropDate` fields cannot be accessed via JXA
+- Status: "Problem identified"
+
+**12:43 PM** - Commit `6714c7c` - Wrong conclusion (⚠️ DEAD END)
+- **Title:** "document OmniJS bridge limitation for added/modified/dropDate fields"
+- **Conclusion:** "The fields cannot be retrieved through the current architecture"
+- **Quote from commit:** "This is an architectural limitation... No workaround is available"
+- **Action taken:** Removed attempted implementation code, gave up
+- **Time invested:** ~18 minutes of research
+- **Outcome:** Declared problem unsolvable
+
+**1:44 PM** - Commit `994320d` - Pattern discovery (💡 BREAKTHROUGH)
+- **Title:** "add pattern search documentation to prevent wheel reinvention"
+- **What happened:** User asked "Why not follow existing patterns?"
+- **Discovery:** Simple grep found `minimal-tag-bridge.ts` with exact pattern needed
+- **Quote from commit:** "30-second grep search would have saved 2+ hours"
+- **Time wasted:** ~2 hours between giving up and finding solution
+
+**1:44 PM** - Commit `157c875` - Correct implementation (✅ SUCCESS)
+- **Title:** "feat: add added/modified/dropDate field support using bridge pattern"
+- **Implementation time:** 10 minutes after finding pattern
+- **Pattern used:** Embedded bridge helper (already existed)
+- **Status:** Fully working
+
+#### What Went Wrong
+
+**The Critical Mistake:**
+Between commits `6714c7c` and `994320d`, we:
+1. Concluded the problem was "architecturally impossible"
+2. Wrote extensive documentation explaining why it couldn't work
+3. Removed attempted implementation code
+4. **Never searched for existing patterns that solved identical problems**
+
+**The Wrong Approach Attempted:**
+- Two-stage query from TypeScript (fetch tasks, then enrich)
+- Complex merge logic in tool layer
+- Multiple osascript executions
+- Increased complexity and maintenance burden
+
+**The 18-Minute Investigation That Failed:**
+- Tested JXA direct access → failed ✓
+- Tested OmniJS bridge access → worked ✓
+- Concluded it was impossible → **wrong conclusion** ✗
+- Should have searched for existing bridge patterns → **never did this**
+
+#### What Went Right
+
+**The 30-Second Search That Worked:**
+```bash
+grep -r "bridge" src/omnifocus/scripts/shared/
+```
+
+Found `minimal-tag-bridge.ts` which showed:
+- ✅ Exact same problem (JXA limitations)
+- ✅ Exact same solution (embedded bridge helper)
+- ✅ Working implementation to copy
+- ✅ Pattern to follow
+
+**The 10-Minute Implementation:**
+1. Created `date-fields-bridge.ts` following tag bridge pattern
+2. Imported into `list-tasks.ts`
+3. Embedded bridge in script template
+4. Called from within JXA script IIFE
+5. Returned enriched data in one call
+6. Tested → worked perfectly
+
+#### Cost-Benefit Analysis
+
+| Approach | Time | Outcome |
+|----------|------|---------|
+| **What we did:** | | |
+| Investigation | 18 min | Found problem |
+| Wrong conclusion | 0 min | Gave up |
+| Later: Pattern search | 30 sec | Found solution |
+| Implementation | 10 min | Success |
+| **Total productive time:** | **29 min** | ✅ Working feature |
+| | | |
+| **Time wasted:** | **~2 hours** | Between giving up and breakthrough |
+| | | |
+| **What we should have done:** | | |
+| Investigation | 18 min | Found problem |
+| Pattern search | 30 sec | Found solution |
+| Implementation | 10 min | Success |
+| **Total time:** | **29 min** | ✅ Same result |
+
+#### The Key Insight
+
+**From commit `6714c7c` message:**
+> "This resolves the investigation - we've confirmed the limitation is architectural, not implementation-based."
+
+**This was WRONG.** The limitation was implementation-based, not architectural. The pattern to solve it already existed in `minimal-tag-bridge.ts` (created months earlier for the exact same type of JXA limitation).
+
+**The correct conclusion should have been:**
+> "JXA can't access these fields directly. Let me search for existing patterns that handle JXA limitations using the bridge approach."
+
+#### Prevention Measures Implemented
+
+1. **CLAUDE.md** - Added huge "🚨 STOP!" section at the top
+2. **PATTERN_INDEX.md** - Created searchable pattern catalog
+3. **Bridge files** - Enhanced with detailed usage examples
+4. **This addendum** - Concrete timeline showing exactly where time was lost
+
+#### Lessons for Future Development
+
+**Red flag that should trigger pattern search:**
+- "This is architecturally impossible" ← Almost always means "I haven't found the pattern yet"
+- "No workaround is available" ← Almost always means "I haven't searched existing code"
+- "Cannot be done" ← Almost always means "Cannot be done MY way"
+
+**The mantra:**
+> "Before concluding something is impossible, search for how it was already solved."
+
+**Time ratio observed:**
+- 2 hours wasted : 30 seconds of searching = **240:1 waste ratio**
+- This is why the "STOP!" section is now mandatory
+
+**Evidence from git history:**
+The solution was literally 10 minutes away from the moment we gave up. The only missing step was a 30-second grep command.
+
 ## 🚨 CRITICAL: Script Size Assumptions - 27x Underestimate (September 2025)
 
 ### The Great Script Size Misconception - RESOLVED ✅
