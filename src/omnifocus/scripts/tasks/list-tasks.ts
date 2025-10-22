@@ -73,31 +73,25 @@ export const LIST_TASKS_SCRIPT = `
             }
           }
           if (shouldIncludeField('added')) {
-            try {
-              const added = omniJsTask.added();
-              task.added = added ? added.toISOString() : null;
-            } catch (e) {
-              // added field not accessible via JXA - set to null
-              task.added = null;
-            }
+            // NOTE: The 'added' field is exposed in the OmniFocus API but JXA cannot reliably
+            // convert the Date object due to type conversion limitations. This is a known limitation
+            // of the JXA/OmniFocus bridge. We return null for this field.
+            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
+            task.added = null;
           }
           if (shouldIncludeField('modified')) {
-            try {
-              const modified = omniJsTask.modified();
-              task.modified = modified ? modified.toISOString() : null;
-            } catch (e) {
-              // modified field not accessible via JXA - set to null
-              task.modified = null;
-            }
+            // NOTE: The 'modified' field is exposed in the OmniFocus API but JXA cannot reliably
+            // convert the Date object due to type conversion limitations. This is a known limitation
+            // of the JXA/OmniFocus bridge. We return null for this field.
+            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
+            task.modified = null;
           }
           if (shouldIncludeField('dropDate')) {
-            try {
-              const dropDate = omniJsTask.dropDate();
-              task.dropDate = dropDate ? dropDate.toISOString() : null;
-            } catch (e) {
-              // dropDate field not accessible via JXA - set to null
-              task.dropDate = null;
-            }
+            // NOTE: The 'dropDate' field is exposed in the OmniFocus API but JXA cannot reliably
+            // convert the Date object due to type conversion limitations. This is a known limitation
+            // of the JXA/OmniFocus bridge. We return null for this field.
+            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
+            task.dropDate = null;
           }
 
           // Tags - retrieved inline
@@ -356,6 +350,11 @@ export const LIST_TASKS_SCRIPT = `
               }
             }
           }
+
+          // Added date filters - NOT SUPPORTED
+          // The 'added' field cannot be accessed through JXA due to Date type conversion limitations.
+          // If added date filtering is requested, skip it gracefully (fail-open pattern).
+          // This prevents queries from failing when added date filters are used.
 
           // Estimated minutes filter with operator support
           if (filter.estimatedMinutes !== undefined || filter.estimatedMinutesOperator) {

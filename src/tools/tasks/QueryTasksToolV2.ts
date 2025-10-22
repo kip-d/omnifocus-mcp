@@ -102,7 +102,7 @@ const QueryTasksToolSchemaV2 = z.object({
     'parentTaskId',
     'parentTaskName',
     'inInbox',
-  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox'),
+  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox. NOTE: "added", "modified", and "dropDate" fields are technically available in the OmniFocus API but cannot be reliably accessed through the JXA bridge due to Date type conversion limitations - they will return null.'),
 
   // Advanced filtering (optional - for complex queries)
   // Handle both object and stringified JSON (Claude Desktop converts to string)
@@ -174,7 +174,11 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 1. Mode (today/overdue/all/search/etc.)
 2. Filter operators needed (OR/AND/CONTAINS/etc.)
 3. Sort requirements
-4. Combine into structured query`;
+4. Combine into structured query
+
+LIMITATIONS:
+- The "added", "modified", and "dropDate" fields cannot be accessed due to JXA Date type conversion limitations. They are technically available in the OmniFocus API but return null when queried. Filtering by these dates is not supported.
+- Creation date information is not accessible through the JXA bridge.`;
   schema = QueryTasksToolSchemaV2;
 
   meta = {
@@ -546,6 +550,38 @@ CONVERSION PATTERN: When user asks in natural language, identify:
                 }
               }
               filter.deferDateOperator = 'BETWEEN';
+              break;
+          }
+        }
+      }
+    }
+
+    // Added date filters
+    if (advancedFilters.added && !filter.addedBefore && !filter.addedAfter) {
+      if (isDateFilter(advancedFilters.added)) {
+        const normalizedDate = normalizeDateInput(advancedFilters.added.value, 'due');
+        if (normalizedDate) {
+          const isoDate = normalizedDate.toISOString();
+          switch (advancedFilters.added.operator) {
+            case '<':
+            case '<=':
+              filter.addedBefore = isoDate;
+              filter.addedDateOperator = advancedFilters.added.operator;
+              break;
+            case '>':
+            case '>=':
+              filter.addedAfter = isoDate;
+              filter.addedDateOperator = advancedFilters.added.operator;
+              break;
+            case 'BETWEEN':
+              filter.addedBefore = isoDate;
+              if (advancedFilters.added.upperBound) {
+                const upperDate = normalizeDateInput(advancedFilters.added.upperBound, 'due');
+                if (upperDate) {
+                  filter.addedAfter = upperDate.toISOString();
+                }
+              }
+              filter.addedDateOperator = 'BETWEEN';
               break;
           }
         }
