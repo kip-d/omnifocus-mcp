@@ -226,13 +226,34 @@ export const LIST_TASKS_SCRIPT = `
             }
           }
 
-          // Tags filter - check ALL tags match
+          // Tags filter - use operator to determine matching logic
           if (filter.tags && filter.tags.length > 0) {
             const tags = omniJsTask.tags();
             const taskTags = tags ? tags.map(t => t.name().toLowerCase()) : [];
             const filterTags = filter.tags.map(t => t.toLowerCase());
-            const hasAllTags = filterTags.every(tag => taskTags.includes(tag));
-            if (!hasAllTags) return false;
+
+            // Use operator to determine logic (default to AND for backward compatibility)
+            const operator = filter.tagsOperator || 'AND';
+
+            let matches;
+            switch(operator) {
+              case 'OR':
+              case 'IN':
+                // Task must have AT LEAST ONE matching tag
+                matches = filterTags.some(tag => taskTags.includes(tag));
+                break;
+              case 'NOT_IN':
+                // Task must have NONE of the filter tags
+                matches = !filterTags.some(tag => taskTags.includes(tag));
+                break;
+              case 'AND':
+              default:
+                // Task must have ALL filter tags
+                matches = filterTags.every(tag => taskTags.includes(tag));
+                break;
+            }
+
+            if (!matches) return false;
           }
 
           // Search filter - name or note

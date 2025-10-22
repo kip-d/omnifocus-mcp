@@ -44,11 +44,32 @@ export const GET_TASK_COUNT_SCRIPT = `
           return false;
         }
         
-        // Tag filters
+        // Tag filters - use operator to determine matching logic
         if (filter.tags && filter.tags.length > 0) {
           const taskTags = safeGetTags(task);
-          const hasAllTags = filter.tags.every(tag => taskTags.includes(tag));
-          if (!hasAllTags) {
+
+          // Use operator to determine logic (default to AND for backward compatibility)
+          const operator = filter.tagsOperator || 'AND';
+
+          let matches;
+          switch(operator) {
+            case 'OR':
+            case 'IN':
+              // Task must have AT LEAST ONE matching tag
+              matches = filter.tags.some(tag => taskTags.includes(tag));
+              break;
+            case 'NOT_IN':
+              // Task must have NONE of the filter tags
+              matches = !filter.tags.some(tag => taskTags.includes(tag));
+              break;
+            case 'AND':
+            default:
+              // Task must have ALL filter tags
+              matches = filter.tags.every(tag => taskTags.includes(tag));
+              break;
+          }
+
+          if (!matches) {
             return false;
           }
         }
