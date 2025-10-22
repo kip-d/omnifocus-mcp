@@ -44,6 +44,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       expect(response.success).toBe(true);
       expect(response.data?.task?.taskId).toBeDefined();
       expect(response.data?.task?.name).toBe('Task with Planned Date');
+      client.trackCreatedTaskId(response);
     });
 
     it('should list tasks with planned date included', async () => {
@@ -56,6 +57,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(createResp.success).toBe(true);
+      client.trackCreatedTaskId(createResp);
       const taskName = 'Planned Task for Query';
 
       // Query inbox where test task was created (faster than search with 1900+ tasks)
@@ -86,6 +88,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
 
       const taskId = createResponse.data?.task?.taskId;
       expect(taskId).toBeDefined();
+      client.trackCreatedTaskId(createResponse);
 
       // Update planned date
       const updateResponse = await client.callTool('manage_task', {
@@ -107,6 +110,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       const taskId = createResponse.data?.task?.taskId;
+      client.trackCreatedTaskId(createResponse);
 
       // Clear planned date
       const updateResponse = await client.callTool('manage_task', {
@@ -232,6 +236,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       expect(response.success).toBe(true);
       expect(response.data?.task?.taskId).toBeDefined();
       expect(response.data?.task?.name).toBe('Daily Standup');
+      client.trackCreatedTaskId(response);
     });
 
     it('should support repeat intent with "when-marked-done" anchor', async () => {
@@ -249,6 +254,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
 
       expect(response.success).toBe(true);
       expect(response.data?.task?.name).toBe('Review Meeting Notes');
+      client.trackCreatedTaskId(response);
     });
 
     it('should create task with end date for repeat rule', async () => {
@@ -269,6 +275,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(response.success).toBe(true);
+      client.trackCreatedTaskId(response);
     });
   });
 
@@ -299,6 +306,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       // If OmniFocus 4.6.1, might fail or degrade gracefully
       if (response.success) {
         expect(response.data?.task?.taskId).toBeDefined();
+        client.trackCreatedTaskId(response);
       } else {
         // Graceful degradation message expected
         expect(response.error?.message).toContain(
@@ -332,6 +340,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       expect(response.success).toBe(true);
       expect(response.data?.task?.taskId).toBeDefined();
       expect(response.data?.task?.name).toBe('Comprehensive 4.7+ Test Task');
+      client.trackCreatedTaskId(response);
     });
 
     it('should query tasks with all 4.7+ properties', async () => {
@@ -349,6 +358,7 @@ describe('OmniFocus 4.7+ Features Integration Tests', () => {
       });
 
       expect(createResponse.success).toBe(true);
+      client.trackCreatedTaskId(createResponse);
       const taskName = 'Query Test Task';
 
       // Query inbox where test task was created (faster than search with 1900+ tasks)

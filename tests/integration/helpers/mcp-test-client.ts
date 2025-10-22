@@ -239,6 +239,34 @@ export class MCPTestClient {
     return result;
   }
 
+  /**
+   * Helper method to track task IDs from direct callTool('manage_task', ...) calls
+   * Use this when you create tasks without using createTestTask()
+   *
+   * Example:
+   *   const result = await client.callTool('manage_task', { operation: 'create', name: 'Test' });
+   *   client.trackCreatedTaskId(result);
+   *
+   * This ensures the task will be cleaned up in afterEach/afterAll hooks.
+   */
+  trackCreatedTaskId(result: any): void {
+    if (result?.success && result?.data?.task?.taskId) {
+      this.createdTaskIds.push(result.data.task.taskId);
+    }
+  }
+
+  /**
+   * Helper method to track project IDs from direct callTool('projects', ...) calls
+   * Use this when you create projects without using createTestProject()
+   *
+   * This ensures the project will be cleaned up in afterEach/afterAll hooks.
+   */
+  trackCreatedProjectId(result: any): void {
+    if (result?.success && result?.data?.project?.project?.id) {
+      this.createdProjectIds.push(result.data.project.project.id);
+    }
+  }
+
   async quickCleanup(): Promise<void> {
     // Quick cleanup: Delete only tracked IDs (no scan)
     // OPTIMIZATION: Use bulk_delete for all tasks at once instead of individual deletes
