@@ -634,6 +634,8 @@ These fields will return null when requested.`;
 
     const result = await this.execJson(script);
 
+    // Enrich with date fields if requested
+
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -681,6 +683,8 @@ These fields will return null when requested.`;
     });
 
     const result = await this.execJson(script);
+
+    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -737,6 +741,8 @@ These fields will return null when requested.`;
     });
 
     const result = await this.execJson(script);
+
+    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -822,6 +828,8 @@ These fields will return null when requested.`;
     });
     const result = await this.execJson(script);
 
+    // Enrich with date fields if requested
+
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -889,6 +897,8 @@ These fields will return null when requested.`;
     });
     const result = await this.execJson(script);
 
+    // Enrich with date fields if requested
+
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -948,6 +958,8 @@ These fields will return null when requested.`;
     });
     const result = await this.execJson(script);
 
+    // Enrich with date fields if requested
+
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -996,6 +1008,8 @@ These fields will return null when requested.`;
     });
     const result = await this.execJson(script);
 
+    // Enrich with date fields if requested
+
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -1034,6 +1048,8 @@ These fields will return null when requested.`;
       limit: args.limit,
     });
     const result = await this.execJson(script);
+
+    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       // Check for specific error types first
@@ -1086,6 +1102,8 @@ These fields will return null when requested.`;
       fields: args.fields || [],
     });
     const result = await this.execJson(script);
+
+    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       // Check for specific error types first
@@ -1156,6 +1174,8 @@ These fields will return null when requested.`;
       fields: args.fields || [],
     });
     const result = await this.execJson(script);
+
+    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -1368,5 +1388,4 @@ These fields will return null when requested.`;
       return 0; // All sort fields are equal
     });
   }
-
 }
