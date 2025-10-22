@@ -102,7 +102,7 @@ const QueryTasksToolSchemaV2 = z.object({
     'parentTaskId',
     'parentTaskName',
     'inInbox',
-  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox. NOTE: "added", "modified", and "dropDate" fields are technically available in the OmniFocus API but cannot be reliably accessed through the JXA bridge due to Date type conversion limitations - they will return null.'),
+  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox. NOTE: "added", "modified", and "dropDate" fields are technically exposed in the OmniFocus API and are accessible in OmniJS, but cannot be reliably retrieved through the JXA-to-OmniJS bridge used by this tool - they will return null when requested.'),
 
   // Advanced filtering (optional - for complex queries)
   // Handle both object and stringified JSON (Claude Desktop converts to string)
@@ -176,9 +176,11 @@ CONVERSION PATTERN: When user asks in natural language, identify:
 3. Sort requirements
 4. Combine into structured query
 
-LIMITATIONS:
-- The "added", "modified", and "dropDate" fields cannot be accessed due to JXA Date type conversion limitations. They are technically available in the OmniFocus API but return null when queried. Filtering by these dates is not supported.
-- Creation date information is not accessible through the JXA bridge.`;
+KNOWN LIMITATIONS:
+- Creation date ("added" field): Not accessible through the JXA-to-OmniJS bridge, despite being available in the native OmniJS API. This is an architectural limitation of how OmniAutomation's evaluateJavascript() works when called from JXA context.
+- Modified date ("modified" field): Same limitation as added date
+- Drop date ("dropDate" field): Same limitation as added date
+These fields will return null when requested.`;
   schema = QueryTasksToolSchemaV2;
 
   meta = {

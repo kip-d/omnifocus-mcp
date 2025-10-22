@@ -72,25 +72,16 @@ export const LIST_TASKS_SCRIPT = `
               task.completionDate = completionDate.toISOString();
             }
           }
+          // These fields cannot be accessed in JXA context and are not accessible via evaluateJavascript()
+          // OmniJS has these properties available (confirmed via direct OmniJS testing), but the
+          // JXA->OmniJS bridge doesn't provide access to them reliably. See architecture notes.
           if (shouldIncludeField('added')) {
-            // NOTE: The 'added' field is exposed in the OmniFocus API but JXA cannot reliably
-            // convert the Date object due to type conversion limitations. This is a known limitation
-            // of the JXA/OmniFocus bridge. We return null for this field.
-            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
             task.added = null;
           }
           if (shouldIncludeField('modified')) {
-            // NOTE: The 'modified' field is exposed in the OmniFocus API but JXA cannot reliably
-            // convert the Date object due to type conversion limitations. This is a known limitation
-            // of the JXA/OmniFocus bridge. We return null for this field.
-            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
             task.modified = null;
           }
           if (shouldIncludeField('dropDate')) {
-            // NOTE: The 'dropDate' field is exposed in the OmniFocus API but JXA cannot reliably
-            // convert the Date object due to type conversion limitations. This is a known limitation
-            // of the JXA/OmniFocus bridge. We return null for this field.
-            // See: https://github.com/omnigroup/OmniAutomation/issues (archived discussion)
             task.dropDate = null;
           }
 
@@ -437,6 +428,7 @@ export const LIST_TASKS_SCRIPT = `
           collected++;
         }
       }
+
 
       const elapsed = Date.now() - startTime;
 
