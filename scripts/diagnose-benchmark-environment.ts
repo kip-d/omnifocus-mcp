@@ -56,9 +56,24 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
 
   // Helper to call MCP tools
   const callTool = (toolName: string, args: Record<string, any>): any => {
-    const input = JSON.stringify({
+    // MCP requires initialization handshake before tool calls
+    const initMessage = JSON.stringify({
       jsonrpc: '2.0',
-      id: Math.random(),
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: {
+          name: 'diagnostic-script',
+          version: '1.0.0',
+        },
+      },
+    });
+
+    const toolMessage = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
       method: 'tools/call',
       params: {
         name: toolName,
@@ -67,17 +82,19 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
     });
 
     try {
-      const output = execSync(`echo '${input}' | node ${mcpPath}`, {
+      // Send both initialization and tool call in one stdin stream
+      const output = execSync(`echo '${initMessage}\n${toolMessage}' | node ${mcpPath}`, {
         encoding: 'utf-8',
         timeout: 120000, // 2 minute timeout
       });
 
-      // Parse MCP response
+      // Parse MCP response - look for id: 2 (the tool call response)
       const lines = output.split('\n').filter(l => l.trim());
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
-          if (parsed.result?.content?.[0]?.text) {
+          // Look for the tool call response (id: 2)
+          if (parsed.id === 2 && parsed.result?.content?.[0]?.text) {
             return JSON.parse(parsed.result.content[0].text);
           }
         } catch {
