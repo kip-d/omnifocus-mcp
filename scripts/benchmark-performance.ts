@@ -6,12 +6,15 @@
  * Uses same pattern as test-as-claude-desktop.js for reliability
  *
  * Usage: npm run benchmark
+ * Outputs: Console display + JSON summary file (benchmark-summary-{machine}-{date}.json)
  */
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { createInterface } from 'readline';
 import { performance } from 'perf_hooks';
 import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface BenchmarkResult {
   operation: string;
@@ -22,9 +25,53 @@ interface BenchmarkResult {
   percentile95: number;
 }
 
+interface BenchmarkSummary {
+  machine: {
+    name: string;
+    cpu: string;
+    cores: number;
+    memory: string;
+    nodeVersion: string;
+  };
+  benchmarkInfo: {
+    mode: string;
+    commit: string;
+    timestamp: string;
+  };
+  cacheWarming: {
+    duration_ms: number;
+    enabled: boolean;
+  };
+  operations: Array<{
+    name: string;
+    iterations: number;
+    avg_ms: number;
+    min_ms: number;
+    max_ms: number;
+    p95_ms: number;
+  }>;
+  comparisons: {
+    tags_names_vs_full?: {
+      improvement_pct: number;
+      baseline_ms: number;
+      optimized_ms: number;
+    };
+    tags_fast_vs_full?: {
+      improvement_pct: number;
+      baseline_ms: number;
+      optimized_ms: number;
+    };
+  };
+  totals: {
+    total_benchmark_time_ms: number;
+    operations_run: number;
+  };
+}
+
 let requestId = 1;
 const times: Record<string, number[]> = {};
 let benchmarkStartTime = 0;
+const benchmarkOverallStart = performance.now();
 const results: BenchmarkResult[] = [];
 
 // Spawn server with cache warming enabled (production mode)
@@ -104,6 +151,34 @@ const calculateStats = (label: string, times: number[]): BenchmarkResult => {
   };
 };
 
+const getGitCommit = (): string => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+};
+
+const getMachineName = (): string => {
+  try {
+    const hostname = os.hostname();
+    // Try to extract a friendly name (e.g., "m4-pro" from "m4-pro.local")
+    const shortName = hostname.split('.')[0];
+
+    // Map common hostnames to friendly names
+    const cpuModel = os.cpus()[0]?.model || '';
+    if (cpuModel.includes('M4 Pro')) return 'm4-pro';
+    if (cpuModel.includes('M4') && !cpuModel.includes('Pro')) return 'm4';
+    if (cpuModel.includes('M2 Ultra')) return 'm2-ultra';
+    if (cpuModel.includes('M2') && cpuModel.includes('Air')) return 'm2-air';
+    if (cpuModel.includes('M2')) return 'm2';
+
+    return shortName.toLowerCase();
+  } catch {
+    return 'unknown';
+  }
+};
+
 const getSystemInfo = (): string => {
   const cpus = os.cpus();
   const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(0);
@@ -115,6 +190,81 @@ const getSystemInfo = (): string => {
   Memory: ${totalMem} GB
   Node Version: ${process.version}
 `;
+};
+
+const writeSummaryFile = (): string => {
+  const cpus = os.cpus();
+  const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(0);
+  const machineName = getMachineName();
+  const totalTime = performance.now() - benchmarkOverallStart;
+
+  // Build comparisons object
+  const comparisons: BenchmarkSummary['comparisons'] = {};
+  const tagsNamesOnly = times['Tags (names only)'];
+  const tagsFull = times['Tags (full mode)'];
+  const tagsFast = times['Tags (fast mode)'];
+
+  if (tagsNamesOnly && tagsFull) {
+    const avgNamesOnly = tagsNamesOnly.reduce((a, b) => a + b, 0) / tagsNamesOnly.length;
+    const avgFull = tagsFull.reduce((a, b) => a + b, 0) / tagsFull.length;
+    const improvement = ((avgFull - avgNamesOnly) / avgFull) * 100;
+    comparisons.tags_names_vs_full = {
+      improvement_pct: Math.round(improvement * 10) / 10,
+      baseline_ms: Math.round(avgFull),
+      optimized_ms: Math.round(avgNamesOnly),
+    };
+  }
+
+  if (tagsFast && tagsFull) {
+    const avgFast = tagsFast.reduce((a, b) => a + b, 0) / tagsFast.length;
+    const avgFull = tagsFull.reduce((a, b) => a + b, 0) / tagsFull.length;
+    const improvement = ((avgFull - avgFast) / avgFull) * 100;
+    comparisons.tags_fast_vs_full = {
+      improvement_pct: Math.round(improvement * 10) / 10,
+      baseline_ms: Math.round(avgFull),
+      optimized_ms: Math.round(avgFast),
+    };
+  }
+
+  const summary: BenchmarkSummary = {
+    machine: {
+      name: machineName,
+      cpu: cpus[0]?.model || 'Unknown',
+      cores: cpus.length,
+      memory: `${totalMem} GB`,
+      nodeVersion: process.version,
+    },
+    benchmarkInfo: {
+      mode: 'warm_cache',
+      commit: getGitCommit(),
+      timestamp: new Date().toISOString(),
+    },
+    cacheWarming: {
+      duration_ms: Math.round(cacheWarmingDuration),
+      enabled: true,
+    },
+    operations: results.map(r => ({
+      name: r.operation,
+      iterations: r.iterations,
+      avg_ms: Math.round(r.avgTime),
+      min_ms: Math.round(r.minTime),
+      max_ms: Math.round(r.maxTime),
+      p95_ms: Math.round(r.percentile95),
+    })),
+    comparisons,
+    totals: {
+      total_benchmark_time_ms: Math.round(totalTime),
+      operations_run: results.length,
+    },
+  };
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+  const filename = `benchmark-summary-${machineName}-${timestamp}.json`;
+  const filepath = path.join(process.cwd(), filename);
+
+  fs.writeFileSync(filepath, JSON.stringify(summary, null, 2), 'utf-8');
+
+  return filename;
 };
 
 const cleanup = (code: number = 0) => {
@@ -167,6 +317,14 @@ const displayResults = () => {
   }
 
   console.log('\n📊 Benchmark complete!');
+
+  // Write JSON summary file
+  try {
+    const summaryFile = writeSummaryFile();
+    console.log(`\n✅ Summary saved to: ${summaryFile}`);
+  } catch (error) {
+    console.error(`\n⚠️  Failed to write summary file: ${error}`);
+  }
 };
 
 rl.on('line', (line) => {

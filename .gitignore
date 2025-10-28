@@ -22,3 +22,7 @@ archive/
 
 # Git worktrees directory
 .worktrees/
+
+# Benchmark and diagnostic data files (not code)
+benchmark-summary-*.json
+diagnostic-*.json
