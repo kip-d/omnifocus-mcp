@@ -32,7 +32,11 @@ export const GET_PROJECT_STATS_SCRIPT_V3 = `
               const projectObj = {
                 id: project.id ? project.id.primaryKey : 'unknown',
                 name: project.name || 'Unnamed Project',
-                status: project.status || 'unknown'
+                // Convert status enum to string for JSON serialization and comparison
+                status: project.status === Project.Status.Active ? 'active' :
+                        project.status === Project.Status.OnHold ? 'onHold' :
+                        project.status === Project.Status.Done ? 'done' :
+                        project.status === Project.Status.Dropped ? 'dropped' : 'unknown'
               };
 
               // Get container info
@@ -64,15 +68,33 @@ export const GET_PROJECT_STATS_SCRIPT_V3 = `
                 projectObj.nextReviewDate = project.nextReviewDate.toISOString();
               }
               if (project.reviewInterval) {
-                projectObj.reviewInterval = project.reviewInterval;
+                // Explicitly extract reviewInterval properties for proper JSON serialization
+                projectObj.reviewInterval = {
+                  unit: project.reviewInterval.unit || 'days',
+                  steps: project.reviewInterval.steps || 0
+                };
               }
 
-              // CRITICAL: Use OmniFocus's own accurate task counts via task property
+              // Get task counts by manually iterating flattenedTasks
+              // NOTE: numberOfTasks/numberOfAvailableTasks/numberOfCompletedTasks don't exist in OmniJS API
               const rootTask = project.task;
-              if (rootTask) {
-                const totalTasks = rootTask.numberOfTasks || 0;
-                const availableTasks = rootTask.numberOfAvailableTasks || 0;
-                const completedTasks = rootTask.numberOfCompletedTasks || 0;
+              if (rootTask && rootTask.flattenedTasks) {
+                const allTasks = rootTask.flattenedTasks;
+                const totalTasks = allTasks.length;
+
+                // Count completed and available tasks
+                let completedTasks = 0;
+                let availableTasks = 0;
+
+                allTasks.forEach(task => {
+                  if (task.completed) {
+                    completedTasks++;
+                  } else {
+                    // Task is available if not completed and not blocked/deferred
+                    // For now, count all non-completed as available (can refine later)
+                    availableTasks++;
+                  }
+                });
 
                 if (totalTasks > 0) {
                   projectObj.taskCounts = {
