@@ -17,7 +17,7 @@
 ### Organization (3)
 - folders(operation*:list|get|search|projects|create|update|delete|move|duplicate|set_status,...)
 - tags(operation*:list|active|manage,action?,tagName?,mutuallyExclusive?,...)
-- manage_reviews(operation*:list|mark_reviewed|set_schedule|clear_schedule,projectId?,...)
+- manage_reviews(operation*:list_for_review|mark_reviewed|set_schedule|clear_schedule,projectId?,projectIds[]?,reviewInterval?,overdue?,daysAhead?)
 
 ### Analytics (5)
 - productivity_stats(period*,includeProjectStats*,includeTagStats*)

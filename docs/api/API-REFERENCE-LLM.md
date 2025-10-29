@@ -148,7 +148,7 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 - **set_mutual_exclusivity** (OmniFocus 4.7+): Set `mutuallyExclusive: true` to enable mutual exclusivity on tag's children, `false` to disable
 
 **manage_reviews** `operation*` `projectId?` `reviewDate?` `reviewInterval?` `nextReviewDate?`
-- Ops: list|mark_reviewed(projectId*)|set_schedule(projectId*,reviewInterval*)|clear_schedule(projectId*)
+- Ops: list_for_review|mark_reviewed(projectId*)|set_schedule(projectIds*[],reviewInterval*)|clear_schedule(projectIds*[])
 
 ## Analytics (5 tools - all return summary first)
 
