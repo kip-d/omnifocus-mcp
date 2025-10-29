@@ -8,20 +8,36 @@
 
 # 🧪 OmniFocus MCP Test Session - Lightweight Mode
 
-Execute all tests below systematically. Use this concise output format:
+**CRITICAL OUTPUT INSTRUCTIONS:**
 
-**Format:**
+1. **Output ONLY the test result line for each test**
+2. **NO commentary between tests** (no "validating...", "progressing...", "preparing...")
+3. **NO status updates** (no "Now moving to...", "Test passed...")
+4. **NO thinking out loud** (no explanations unless test fails)
+5. **Just execute → report → next test**
+
+**Format - EXACTLY THIS:**
 ```
 ✅ Test N: tool_name(params) - brief_result
 ❌ Test N: tool_name - FAIL: one_line_error
 ⚠️ Test N: tool_name - WARNING: issue
 ```
 
+**Example correct output:**
+```
+✅ Test 1: system(version) - v2.2.0, healthy
+✅ Test 2: manage_task(create) - Created with tags
+✅ Test 3: manage_task(create) - Created in inbox
+❌ Test 4: tasks(available) - FAIL: returned unavailable tasks
+✅ Test 5: tasks(overdue) - 25 tasks
+```
+
 **Rules:**
-- ONE line per passing test
-- Brief results only (counts, success confirmations)
-- Only expand full details for failures/warnings
+- ONE line per test
+- Brief results only (counts, confirmations)
+- Only expand details for failures/warnings
 - Report timing only if > 10 seconds
+- **No conversation, just results**
 
 **After Phase 1 Completion:**
 IF any tests failed → Automatically proceed to Phase 2 detailed investigation
