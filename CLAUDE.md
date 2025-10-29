@@ -2,6 +2,10 @@
 
 This file provides critical guidance to Claude Code (claude.ai/code) when working with this OmniFocus MCP server.
 
+## 📍 Complete Documentation Index
+
+**[docs/DOCS_MAP.md](docs/DOCS_MAP.md)** - Complete navigation index for all 85+ documentation files organized by audience (users, developers, operations) and topic (architecture, testing, performance, API).
+
 ---
 
 # 🚨🚨🚨 STOP! Before Writing ANY Code 🚨🚨🚨

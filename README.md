@@ -24,11 +24,11 @@ A Model Context Protocol (MCP) server that provides programmatic access to OmniF
 - 🤖 **[Smart Capture](docs/user/SMART_CAPTURE.md)** - Parse meeting notes into tasks
 
 **For Developers:**
+- 🗺️ **[Documentation Map](docs/DOCS_MAP.md)** - Complete index of all 85+ documentation files
 - 💻 **[Developer Guide](docs/dev/DEVELOPER_GUIDE.md)** - API examples, tool call formats, integration patterns
 - 🏗️ **[Architecture Documentation](docs/dev/ARCHITECTURE.md)** - Technical implementation details (START HERE)
 - 📖 **[API Reference](docs/api/README.md)** - Three versions optimized for different use cases
 - 🧪 **[Testing Framework](docs/operational/REAL_LLM_TESTING.md)** - Real LLM integration testing with Ollama
-- 🗺️ **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Completed features and future plans
 - 📚 **[Patterns & Solutions](docs/dev/PATTERNS.md)** - Quick symptom lookup and common solutions
 
 ## Quick Start

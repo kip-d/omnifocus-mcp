@@ -1,9 +1,10 @@
 # OmniFocus MCP Documentation
 
 **📖 Quick Access:**
+- **[📍 Documentation Map](DOCS_MAP.md)** - **START HERE** - Complete index of all 85+ docs
 - **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily use
 - **[Main README](../README.md)** - Installation, setup, and overview
-- **[LLM API Reference](./API-REFERENCE-LLM.md)** - Quick tool reference for AI assistants
+- **[LLM API Reference](api/API-REFERENCE-LLM.md)** - Quick tool reference for AI assistants
 
 ## Core Documentation
 
