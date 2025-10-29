@@ -174,14 +174,16 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         );
       }
 
-      // Parse result
-      const parsedResult = result.data;
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
+      const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
+      const parsedResult: TagListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as TagListData);
 
       const response = createListResponseV2(
         'tags',
-        (parsedResult as { tags?: unknown[]; items?: unknown[] }).tags || (parsedResult as { tags?: unknown[]; items?: unknown[] }).items || [],
+        parsedResult.tags || parsedResult.items || [],
         'other',
-        { ...timer.toMetadata(), total: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'list', mode: 'unified', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
+        { ...timer.toMetadata(), total: parsedResult.count || parsedResult.tags?.length || 0, operation: 'list', mode: 'unified', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
       ) as TagsResponseV2;
 
       // Cache the result
@@ -221,14 +223,16 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         );
       }
 
-      // Parse result
-      const parsedResult = result.data;
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
+      const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
+      const parsedResult: TagListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as TagListData);
 
       const response = createListResponseV2(
         'tags',
-        (parsedResult as { tags?: unknown[]; items?: unknown[] }).tags || (parsedResult as { tags?: unknown[]; items?: unknown[] }).items || [],
+        parsedResult.tags || parsedResult.items || [],
         'other',
-        { ...timer.toMetadata(), count: (parsedResult as { count?: number; tags?: unknown[] }).count || (parsedResult as { count?: number; tags?: unknown[] }).tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
+        { ...timer.toMetadata(), count: parsedResult.count || parsedResult.tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
       ) as TagsResponseV2;
 
       // Cache the result (30 second TTL for active tags)
@@ -326,8 +330,9 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         );
       }
 
-      // Parse result
-      const parsedResult = result.data as { success: boolean; message?: string; data?: unknown };
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+      const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
       // Smart cache invalidation for tag changes
       this.cache.invalidateTag(tagName);
@@ -338,7 +343,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
         this.cache.invalidateTag(targetTag); // Invalidate merge target too
       }
 
-      return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
+      return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult as { success: boolean; message?: string; data?: unknown } }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
 
     } catch (error) {
       return this.handleErrorV2<TagOperationDataV2>(error);
