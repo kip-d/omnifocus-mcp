@@ -9,7 +9,7 @@ import {
 } from '../../utils/response-format.js';
 import { OverdueAnalysisSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { OverdueAnalysisDataV2 } from '../response-types-v2.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { OverdueAnalysisData } from '../../omnifocus/script-response-types.js';
 
 // Union type to support both production script format and test mock format
@@ -145,17 +145,9 @@ export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchema
         return createErrorResponseV2('analyze_overdue', 'ANALYSIS_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
       }
 
-      const scriptData: OverdueDataUnion = isScriptSuccess(result) ? result.data : {
-        summary: {
-          totalOverdue: 0,
-          overduePercentage: 0,
-          averageDaysOverdue: 0,
-          oldestOverdueDate: '',
-        },
-        overdueTasks: [],
-        patterns: [],
-        groupedAnalysis: {},
-      };
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      const envelope = result.data as { ok?: boolean; v?: string; data?: OverdueDataUnion } | OverdueDataUnion;
+      const scriptData: OverdueDataUnion = ('data' in envelope && envelope.data) ? envelope.data : (envelope as OverdueDataUnion);
       // Remove unused total variable
       const responseData: OverdueAnalysisDataV2 = {
         stats: {

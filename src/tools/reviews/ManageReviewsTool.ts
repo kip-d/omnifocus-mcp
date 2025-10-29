@@ -6,7 +6,7 @@ import {
 } from '../../omnifocus/scripts/reviews.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
-import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';
 import { ReviewsResponseV2, ReviewsDataV2 } from '../response-types-v2.js';
 
@@ -104,7 +104,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
       return createErrorResponseV2('manage_reviews', result.error === 'NULL_RESULT' ? 'NULL_RESULT' : 'SCRIPT_ERROR', result.error || 'Script error', undefined, result.details, timer.toMetadata());
     }
 
-    const data: ReviewListData = isScriptSuccess(result) ? result.data : { projects: [], count: 0 };
+    // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+    const envelope = result.data as { ok?: boolean; v?: string; data?: ReviewListData } | ReviewListData;
+    const data: ReviewListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as ReviewListData);
     // Ensure projects array exists (accept both wrapped and raw)
     const src = data?.projects || data?.items || [];
     if (!Array.isArray(src)) {

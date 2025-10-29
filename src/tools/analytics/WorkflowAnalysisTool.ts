@@ -143,8 +143,11 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         };
       }
 
-      // Handle both WorkflowAnalysisData and direct script responses
-      const scriptData: unknown = result && result.data ? result.data : result;
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+      const scriptData: unknown = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data)
+        ? envelope.data
+        : envelope;
 
       let data: WorkflowAnalysisResponse;
 
