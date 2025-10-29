@@ -16,58 +16,50 @@ export const ReviewIntervalSchema = z.object({
   fixed: z.boolean().optional().default(false).describe('Whether to use fixed scheduling (true) or floating (false)'),
 }).describe('Review interval configuration');
 
-// Base operation schemas for discriminated unions
-const ListForReviewOperation = z.object({
-  operation: z.literal('list_for_review'),
+// ManageReviewsTool schema - single object with all parameters (MCP-compatible)
+// Note: discriminatedUnion at top-level breaks MCP SDK JSON Schema serialization
+// Runtime validation in ManageReviewsTool.executeValidated() checks required params per operation
+export const ManageReviewsSchema = z.object({
+  operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule', 'clear_schedule'])
+    .describe('Review operation to perform'),
+
+  // list_for_review parameters
   overdue: coerceBoolean()
     .default(false)
-    .describe('Show only projects overdue for review'),
+    .optional()
+    .describe('Show only projects overdue for review (list_for_review)'),
   daysAhead: coerceNumber()
     .int()
     .min(0)
     .max(365)
     .default(7)
-    .describe('Include projects due for review within this many days'),
-});
+    .optional()
+    .describe('Include projects due for review within this many days (list_for_review)'),
 
-const MarkReviewedOperation = z.object({
-  operation: z.literal('mark_reviewed'),
+  // mark_reviewed parameters
   projectId: IdSchema
-    .describe('ID of the project to mark as reviewed'),
+    .optional()
+    .describe('ID of the project to mark as reviewed (mark_reviewed) or clear schedule (clear_schedule with single project)'),
   reviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Date of the review in your local time (defaults to now)'),
+    .describe('Date of the review in your local time - defaults to now (mark_reviewed)'),
   updateNextReviewDate: coerceBoolean()
     .default(true)
-    .describe('Whether to automatically calculate the next review date based on the review interval'),
-});
+    .optional()
+    .describe('Whether to automatically calculate the next review date based on the review interval (mark_reviewed)'),
 
-const SetScheduleOperation = z.object({
-  operation: z.literal('set_schedule'),
+  // set_schedule and clear_schedule parameters
   projectIds: z.array(IdSchema)
     .min(1)
-    .describe('IDs of projects to update review schedules for'),
+    .optional()
+    .describe('IDs of projects to update review schedules for (set_schedule) or clear schedules (clear_schedule)'),
   reviewInterval: ReviewIntervalSchema
-    .describe('Review interval to apply to all projects'),
+    .optional()
+    .describe('Review interval to apply to all projects (set_schedule)'),
   nextReviewDate: LocalDateTimeSchema
     .optional()
-    .describe('Next review date to set in your local time (if not provided, calculated from review interval)'),
+    .describe('Next review date to set in your local time - if not provided, calculated from review interval (set_schedule)'),
 });
-
-const ClearScheduleOperation = z.object({
-  operation: z.literal('clear_schedule'),
-  projectIds: z.array(IdSchema)
-    .min(1)
-    .describe('IDs of projects to clear review schedules for'),
-});
-
-// ManageReviewsTool schema - discriminated union for type safety
-export const ManageReviewsSchema = z.discriminatedUnion('operation', [
-  ListForReviewOperation,
-  MarkReviewedOperation,
-  SetScheduleOperation,
-  ClearScheduleOperation,
-]);
 
 // Batch task operation schemas
 const UpdateTasksOperation = z.object({

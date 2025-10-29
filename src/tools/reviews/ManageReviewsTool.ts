@@ -73,9 +73,12 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   }
 
   private async listForReview(
-    args: Extract<ManageReviewsInput, { operation: 'list_for_review' }>,
+    args: ManageReviewsInput,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
+    // Extract parameters with defaults
+    const daysAhead = args.daysAhead ?? 7;
+
     // Create cache key from filter
     const cacheKey = JSON.stringify(args);
 
@@ -147,7 +150,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
           reviewStatus = 'overdue';
         } else if (daysUntilReview === 0) {
           reviewStatus = 'due_today';
-        } else if (daysUntilReview <= args.daysAhead) {
+        } else if (daysUntilReview <= daysAhead) {
           reviewStatus = 'due_soon';
         } else {
           reviewStatus = 'scheduled';
@@ -202,7 +205,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   }
 
   private async markReviewed(
-    args: Extract<ManageReviewsInput, { operation: 'mark_reviewed' }>,
+    args: ManageReviewsInput,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
     const { projectId, reviewDate, updateNextReviewDate } = args;
@@ -241,7 +244,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   }
 
   private async setSchedule(
-    args: Extract<ManageReviewsInput, { operation: 'set_schedule' }>,
+    args: ManageReviewsInput,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
     const { projectIds, reviewInterval, nextReviewDate } = args;
@@ -273,11 +276,11 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     const envelope = result.data as unknown;
     const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
-    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'set_schedule', projects_updated: projectIds.length, review_interval: reviewInterval, next_review_date: nextReviewDate, input_params: { projectIds, reviewInterval, nextReviewDate } });
+    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'set_schedule', projects_updated: projectIds?.length ?? 0, review_interval: reviewInterval, next_review_date: nextReviewDate, input_params: { projectIds, reviewInterval, nextReviewDate } });
   }
 
   private async clearSchedule(
-    args: Extract<ManageReviewsInput, { operation: 'clear_schedule' }>,
+    args: ManageReviewsInput,
     timer: OperationTimerV2,
   ): Promise<StandardResponseV2<unknown>> {
     const { projectIds } = args;
@@ -309,7 +312,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     const envelope = result.data as unknown;
     const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
-    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'clear_schedule', projects_updated: projectIds.length, input_params: { projectIds } });
+    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'clear_schedule', projects_updated: projectIds?.length ?? 0, input_params: { projectIds } });
   }
 
   // Claude Desktop sends parameters as strings, requiring runtime conversion
