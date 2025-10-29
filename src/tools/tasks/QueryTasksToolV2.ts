@@ -110,12 +110,12 @@ const QueryTasksToolSchemaV2 = z.object({
     z.string().transform(val => {
       // Try to parse as JSON first (Claude Desktop may stringify it)
       try {
-        return JSON.parse(val);
+        return JSON.parse(val) as unknown;
       } catch {
-        return val;  // Return as-is if not valid JSON
+        return val as unknown;  // Return as-is if not valid JSON
       }
     }),
-    z.any(),  // Direct object when called from tests or Node.js
+    z.unknown(),  // Direct object when called from tests or Node.js
   ]).optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
 
   // Sorting options (optional)
@@ -211,7 +211,7 @@ These fields will return null when requested.`;
       // Debug: Log incoming args
       this.logger.debug('[TAG_FILTER_DEBUG] executeValidated received args:', {
         hasFilters: !!args.filters,
-        filterKeys: args.filters ? Object.keys(args.filters) : [],
+        filterKeys: args.filters && typeof args.filters === 'object' && args.filters !== null ? Object.keys(args.filters) : [],
         filters: args.filters,
       });
 
@@ -411,14 +411,14 @@ These fields will return null when requested.`;
       filter._debug_filters_is_string = true;
       filter._debug_filters_string_val = args.filters;
       try {
-        const parsed = JSON.parse(args.filters);
+        const parsed: unknown = JSON.parse(args.filters);
         filter._debug_filters_parsed = parsed;
       } catch {
         filter._debug_filters_parse_error = 'failed to parse';
       }
     } else if (typeof args.filters === 'object' && args.filters !== null) {
       filter._debug_filters_is_object = true;
-      filter._debug_filters_obj_keys = Object.keys(args.filters);
+      filter._debug_filters_obj_keys = Object.keys(args.filters as Record<string, unknown>);
     } else {
       filter._debug_filters_type = typeof args.filters;
       filter._debug_filters_value = args.filters;
