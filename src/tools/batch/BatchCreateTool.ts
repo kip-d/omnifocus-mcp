@@ -31,9 +31,10 @@ interface ItemCreationResult {
 export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
   name = 'batch_create';
   description =
-    'Create multiple projects and tasks in a single operation with hierarchical relationships. ' +
-    'Use temporary IDs to reference parent-child relationships. Optimized for local LLMs ' +
-    'to avoid expensive sequential operations.';
+    'Create multiple NEW projects and tasks in a single operation with hierarchical relationships. ' +
+    'Use temporary IDs to reference parent-child relationships within the batch. ' +
+    'NOTE: This tool creates new hierarchies from scratch. To add tasks to an EXISTING project, use manage_task instead. ' +
+    'Optimized for local LLMs to avoid expensive sequential operations.';
 
   schema = BatchCreateSchema;
   meta = {
@@ -51,6 +52,7 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     requiresPermission: true,
     requiredCapabilities: ['read', 'write'],
     limitations: [
+      'Creates NEW projects/tasks only - cannot add items to existing projects (use manage_task instead)',
       'Maximum 1000 items per batch',
       'Batch operations may take 10-30 seconds depending on item count',
       'Atomic operations not fully supported (partial rollback on failure)',

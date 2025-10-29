@@ -8,7 +8,7 @@
 - tasks(mode*,limit*:25,details*:false,fastSearch*:true,fields[]?,search?,project?,tags[]?,completed?:false,dueBy?,daysAhead?:7) modes:all|search|overdue|today|upcoming|available|blocked|flagged
   - fields: id|name|completed|flagged|blocked|available|estimatedMinutes|dueDate|deferDate|plannedDate|completionDate|added|modified|dropDate|note|projectId|project|tags|repetitionRule|parentTaskId|parentTaskName|inInbox
 - manage_task(operation*:create|update|complete|delete,taskId?,name?,plannedDate?,...all_task_fields)
-- batch_create(items*[],createSequentially*:true,atomicOperation*:false,returnMapping*:true,stopOnError*:true)
+- batch_create(items*[],createSequentially*:true,atomicOperation*:false,returnMapping*:true,stopOnError*:true) - NEW hierarchies only, use manage_task for existing projects
 - parse_meeting_notes(input*,extractMode*:both,suggestProjects*:true,suggestTags*:true,suggestDueDates*:true,suggestEstimates*:true,returnFormat*:preview,groupByProject*:true,existingProjects[]?,defaultProject?)
 
 ### Projects (1)
