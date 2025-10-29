@@ -413,7 +413,7 @@ These fields will return null when requested.`;
       try {
         const parsed = JSON.parse(args.filters);
         filter._debug_filters_parsed = parsed;
-      } catch (e) {
+      } catch {
         filter._debug_filters_parse_error = 'failed to parse';
       }
     } else if (typeof args.filters === 'object' && args.filters !== null) {

@@ -144,7 +144,7 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       }
 
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
-      const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+      const envelope = result.data as unknown;
       const scriptData: unknown = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data)
         ? envelope.data
         : envelope;

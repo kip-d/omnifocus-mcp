@@ -331,7 +331,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
       }
 
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
-      const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+      const envelope = result.data as unknown;
       const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
       // Smart cache invalidation for tag changes
