@@ -106,7 +106,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
 
     // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
     const envelope = result.data as { ok?: boolean; v?: string; data?: ReviewListData } | ReviewListData;
-    const data: ReviewListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as ReviewListData);
+    const data: ReviewListData = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : (envelope as ReviewListData);
     // Ensure projects array exists (accept both wrapped and raw)
     const src = data?.projects || data?.items || [];
     if (!Array.isArray(src)) {
@@ -233,8 +233,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result
-    const parsedResult = (result as { data?: unknown }).data;
+    // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+    const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
     return createSuccessResponseV2('manage_reviews', { project: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'mark_reviewed', reviewed_id: projectId, review_date: actualReviewDate, next_review_calculated: updateNextReviewDate, input_params: { projectId, reviewDate: actualReviewDate, updateNextReviewDate } });
   }
@@ -268,8 +269,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result
-    const parsedResult = (result as { data?: unknown }).data;
+    // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+    const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'set_schedule', projects_updated: projectIds.length, review_interval: reviewInterval, next_review_date: nextReviewDate, input_params: { projectIds, reviewInterval, nextReviewDate } });
   }
@@ -303,8 +305,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     this.cache.invalidate('projects');
     this.cache.invalidate('reviews');
 
-    // Parse the result
-    const parsedResult = (result as { data?: unknown }).data;
+    // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+    const envelope = result.data as { ok?: boolean; v?: string; data?: unknown } | unknown;
+    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
 
     return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'clear_schedule', projects_updated: projectIds.length, input_params: { projectIds } });
   }
