@@ -426,18 +426,32 @@ limit: z.union([
 Always test with BOTH: Direct Node.js calls AND Claude Desktop (stringified params)
 
 ## Date Formats
-- **Preferred**: `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` (local time, e.g., "2025-03-15" or "2025-03-15 14:30")
-- **Smart defaults for date-only (YYYY-MM-DD)**:
-  - **Due dates**: Default to 5:00 PM local time (e.g., "2025-03-15" becomes 5pm)
-  - **Defer dates**: Default to 8:00 AM local time (e.g., "2025-03-15" becomes 8am)
-  - **Completion dates**: Default to 12:00 PM (noon) local time
-- **Avoid**: ISO-8601 with Z suffix (causes timezone confusion - will set wrong time)
-- **Basic natural language works**: 
-  - "today"/"tomorrow" → 5pm for due dates, 8am for defer dates
-  - "next week" → same smart defaults
-  - "next monday" → always 9am
-  - "friday"/"end of week" → always 5pm
-- **Complex natural language should be converted**: LLM should convert "the 3rd Thursday after next week" to YYYY-MM-DD format
+
+**CRITICAL: Your Conversion Responsibility**
+
+Users will give you natural language dates: "tomorrow", "next Friday", "in 3 days", "end of month"
+
+**YOU MUST CONVERT** these to proper format before calling manage_task tool:
+- Required format: `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` (local time only)
+- Examples: `"2025-03-15"` or `"2025-03-15 14:30"`
+- Schema validation REJECTS natural language - convert it first!
+
+**User Flow Example:**
+```
+User: "Create task to call Sarah, due tomorrow"
+You think: Today is 2025-10-28, tomorrow is 2025-10-29
+You call: manage_task({ operation: 'create', name: 'Call Sarah', dueDate: '2025-10-29' })
+```
+
+**Smart defaults for date-only (YYYY-MM-DD)**:
+- **Due dates**: Default to 5:00 PM local time (e.g., "2025-03-15" becomes 5pm)
+- **Defer dates**: Default to 8:00 AM local time (e.g., "2025-03-15" becomes 8am)
+- **Completion dates**: Default to 12:00 PM (noon) local time
+
+**What to avoid**:
+- ❌ Don't pass natural language to tool: `dueDate: 'tomorrow'` (will fail validation)
+- ❌ Don't use ISO-8601 with Z suffix: `2025-03-15T17:00:00Z` (timezone confusion)
+- ✅ Always convert to YYYY-MM-DD first: `dueDate: '2025-10-29'`
 
 ## Task Management
 - **Move to inbox**: Set `projectId` to `null`, `""`, or `"null"`

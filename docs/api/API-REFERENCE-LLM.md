@@ -4,6 +4,12 @@
 
 **17 Consolidated Tools** | **22 Task Fields** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
 
+**🚨 CRITICAL FOR LLMs: Date Conversion Required**
+
+Users will use natural language: "tomorrow", "next Friday", "in 3 days"
+**YOU MUST CONVERT** to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` before calling manage_task
+Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29' }`
+
 **📖 Related Resources:**
 - **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily GTD workflows
 - **[Smart Capture Guide](SMART_CAPTURE.md)** - Extract action items from meeting notes
@@ -109,7 +115,7 @@
 
 **manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
 - Ops: create(name*)|update(taskId*)|complete(taskId*)|delete(taskId*)
-- Dates: "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am)
+- **Dates - YOUR CONVERSION REQUIRED**: Users say "tomorrow"/"next Friday" → YOU convert to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" format (due→5pm, defer→8am). Schema REJECTS natural language.
 - **plannedDate** (OmniFocus 4.7+): When task is planned for scheduling (e.g., "2025-11-15 09:00")
 - **repeatRule** (OmniFocus 4.7+ enhanced): User-friendly intent schema:
   ```javascript

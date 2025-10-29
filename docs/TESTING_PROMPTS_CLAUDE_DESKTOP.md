@@ -6,6 +6,8 @@
 
 # 🧪 OmniFocus MCP v2.1.0 Test Session
 
+**🚨 Important for Claude Desktop**: Users will provide dates in natural language ("tomorrow", "next Friday"). You must convert these to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format before calling manage_task. The tool schema validates date formats strictly.
+
 I need your help systematically testing the OmniFocus MCP server v2.1.0. Please execute this test plan step by step, reporting results and any issues you encounter.
 
 ## **Phase 1: Server Health Check**
@@ -19,14 +21,20 @@ Start by verifying the server is working:
 Test the consolidated task management:
 
 1. **Create a task with tags** (this was broken in v1.x, fixed in v2.0.0):
+
+   **You can say in natural language**: "Create a task called 'v2.2.0 Test Task' with tags test and urgent, due tomorrow"
+
+   **Expected: You should convert to**:
    ```
    manage_task({
      operation: 'create',
-     name: 'v2.1.0 Test Task',
+     name: 'v2.2.0 Test Task',
      tags: ['test', 'urgent'],
-     dueDate: 'tomorrow'
+     dueDate: '2025-10-29'  // You convert "tomorrow" to YYYY-MM-DD
    })
    ```
+
+   **Critical**: The tool schema requires `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format. When users say "tomorrow", "next Friday", etc., you must convert to the proper date format before calling manage_task.
 
 2. **Query tasks using different modes**:
    - `tasks({ mode: 'today' })` - Today's tasks

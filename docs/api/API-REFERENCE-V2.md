@@ -15,7 +15,7 @@
   - `update`: `taskId*` + any create params (all optional)
   - `complete`: `taskId*` `completionDate?`
   - `delete`: `taskId*`
-- **Date Format:** "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am)
+- **Date Format - LLM Conversion Required:** Users say "tomorrow"/"next Friday" → You convert to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (due→5pm, defer→8am). Schema rejects natural language!
 - **plannedDate** (OmniFocus 4.7+): When task should be scheduled/planned (e.g., "2025-11-15 09:00")
 - **Special:** projectId:null → inbox, clearDueDate:true → remove date, clearPlannedDate:true → remove planned date
 - **repeatRule** (OmniFocus 4.7+ enhanced): Supports user-friendly intent schema with `frequency`, `anchorTo`, `skipMissed`, and `endCondition` parameters

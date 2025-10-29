@@ -40,6 +40,6 @@
 - All params→strings via MCP
 - Summary returned first
 - null/""/​"null"→inbox
-- Dates:"YYYY-MM-DD HH:mm"|"YYYY-MM-DD"(due→5pm,defer→8am)
+- **Dates**: Convert user's "tomorrow"→"YYYY-MM-DD", "next Friday"→"YYYY-MM-DD HH:mm" (due→5pm,defer→8am). Schema rejects natural language!
 - RepeatRule(OmniFocus 4.7+ enhanced):{frequency,anchorTo,skipMissed,endCondition} or legacy:{unit,steps,method,weekdays[]?,positions?}
 - **Performance**: Optimized for context efficiency with consolidated tools
