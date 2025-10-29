@@ -86,16 +86,17 @@ Compare the response times and verify the performance difference.
 
 ## **Phase 4: GTD Workflow Features**
 
-### **Reviews & Perspectives**  
+### **Reviews & Perspectives**
 8. **Test GTD-specific tools**:
-   - `manage_reviews({ operation: 'list' })` - Projects needing review
+   - `manage_reviews({ operation: 'list_for_review', daysAhead: 30 })` - Projects needing review
    - `perspectives({ operation: 'list' })` - Available perspectives
    - `perspectives({ operation: 'query', perspectiveName: 'Inbox', limit: 10 })`
 
-### **Export Testing**
-9. **Test data export**:
+### **Export & Utilities Testing**
+9. **Test data export and recurring tasks**:
    - `export({ type: 'tasks', format: 'json', filter: { completed: false, limit: 20 } })`
    - `export({ type: 'projects', format: 'csv' })`
+   - `recurring_tasks({ operation: 'analyze', activeOnly: true })` - Analyze recurring tasks
 
 ## **Phase 5: MCP Prompts Testing**
 
