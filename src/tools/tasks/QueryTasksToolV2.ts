@@ -755,9 +755,12 @@ These fields will return null when requested.`;
       );
     }
 
-    const data = result.data as { tasks: unknown[]; overdueCount: number; dueTodayCount: number; flaggedCount: number; processedCount?: number; totalTasks?: number; optimizationUsed?: string };
+    // Unwrap nested data structure (script returns { ok: true, v: '1', data: { tasks: [...] } })
+    type TodayDataStructure = { tasks?: unknown[]; overdueCount?: number; dueTodayCount?: number; flaggedCount?: number; processedCount?: number; totalTasks?: number; optimizationUsed?: string };
+    const envelope = result.data as { ok?: boolean; v?: string; data?: TodayDataStructure } | TodayDataStructure;
+    const data: TodayDataStructure = ('data' in envelope && envelope.data) ? envelope.data : envelope as TodayDataStructure;
 
-    const todayTasks = this.parseTasks(data.tasks);
+    const todayTasks = this.parseTasks(data.tasks || []);
 
     // Cache the results
     this.cache.set('tasks', cacheKey, { tasks: todayTasks });
@@ -1260,6 +1263,9 @@ These fields will return null when requested.`;
   }
 
   private parseTasks(tasks: unknown[]): OmniFocusTask[] {
+    if (!tasks || !Array.isArray(tasks)) {
+      return [];
+    }
     return tasks.map(task => {
       const t = task as {
         dueDate?: string | Date;
