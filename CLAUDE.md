@@ -328,18 +328,7 @@ This document prevents the Fix → Lint → Build error cycle by establishing pr
 4. ✅ **Identify which layer is wrong** (script vs tool wrapper)
 5. ❌ **Do NOT open script files** until you confirm the problem is in the script
 
-**Testing command:**
-```bash
-npm run build
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{...}}}' | node dist/index.js 2>&1 | tee debug.log
-
-# Check what script returns
-grep "stdout data received" debug.log
-
-# Check what tool returns
-grep -A 20 '"result":' debug.log
-```
+**Testing approach:** See Quick Reference → Testing Pattern below for complete MCP testing commands. Key: check logs for what SCRIPT returns vs what TOOL returns.
 
 **Why this order saves hours:**
 - Scripts might be working perfectly (productivity_stats was!)
@@ -359,15 +348,7 @@ grep -A 20 '"result":' debug.log
 
 **Problem:** Tests frequently break due to response structure mismatches (expecting `data.id` but getting `data.task.taskId`).
 
-**Solution: ALWAYS verify actual response structure before writing tests!**
-
-```bash
-# Test actual MCP response structure (30 seconds)
-npm run build
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"TOOL_NAME","arguments":{}}}' | \
-  node dist/index.js 2>&1 | grep '"result":' | jq '.result.content[0].text | fromjson'
-```
+**Solution: ALWAYS verify actual response structure before writing tests!** (See Quick Reference → Testing Pattern for commands)
 
 **Standard V2 Response Structure:**
 ```typescript
@@ -388,19 +369,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 4. **Response structure is tool-specific AND operation-specific**
 
 **For complete guide:** See `/docs/dev/PATTERNS.md` → "Response Structure Mismatches"
-
-## 🚨 CRITICAL LESSON: MCP stdin Handling
-
-**We spent 6+ months with broken MCP lifecycle compliance!** 
-
-Every MCP server MUST handle stdin closure for specification compliance:
-```typescript
-// ✅ REQUIRED - Add to every MCP server
-process.stdin.on('end', () => process.exit(0));
-process.stdin.on('close', () => process.exit(0));
-```
-
-Without this, servers hang forever and violate MCP specification. See `/docs/dev/LESSONS_LEARNED.md` for full embarrassing details.
 
 ## Documentation Management
 **NEVER delete documentation outright unless there's a clear reason (e.g., contains incorrect/dangerous information).**
@@ -524,52 +492,23 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 **Available helper functions:**
 - `getCoreHelpers()` - Essential JXA utilities (~8KB)
-- `getAllHelpers()` - Full helper suite (~30KB, **now safe to use freely**)
+- `getAllHelpers()` - Full helper suite (~30KB, safe to use freely)
 - `getBridgeOperations()` - evaluateJavascript() bridge templates
 
-## 🚨 CRITICAL: JavaScript Execution Decision Tree
-
-**When to use each approach:**
-```
-Operation needed?
-├── Simple read/write → Use Pure JXA
-├── Tags during creation → Use JXA + Bridge
-├── Task movement → Use JXA + Bridge
-├── Repetition rules → Use JXA + Bridge
-├── Bulk operations → Use JXA + Bridge (if performance needed)
-└── Everything else → Start with Pure JXA, add bridge if needed
-```
-
-**Key Rules:**
-- All scripts MUST start with JXA (`Application('OmniFocus')`)
-- NEVER use pure OmniJS without JXA wrapper
-- Bridge operations use `app.evaluateJavascript(omniJsCode)`
-- See `/docs/dev/ARCHITECTURE.md` for complete implementation patterns
-
-### Implementation Pattern - UPDATED
+**Implementation pattern:**
 ```typescript
-// ✅ NOW SAFE - Use full helpers as needed
+// ✅ Use full helpers as needed
 import { getAllHelpers } from '../shared/helpers.js';
-export const FULL_FEATURED_SCRIPT = `
-  ${getAllHelpers()}  // ~30KB - well within 523KB limit
-  // ... complex script logic
-`;
-
-// ✅ STILL GOOD - Use minimal helpers for simple cases
-import { getMinimalHelpers } from '../shared/helpers.js';
-export const SIMPLE_SCRIPT = `
-  ${getMinimalHelpers()}  // ~8KB for basic needs
-  // ... simple script logic
+export const SCRIPT = `${getAllHelpers()}  // ~30KB - well within 523KB limit
+  // ... script logic
 `;
 ```
 
-### When Scripts Fail with Syntax Errors
-- **Script size is unlikely to be the issue** (limits are 523KB+ for JXA)
-- Check for JXA vs OmniJS syntax differences
-- Validate JavaScript syntax and variable scoping
-- Test with both direct execution AND Claude Desktop
+**When scripts fail:** Script size is unlikely the issue (limits are 523KB+ for JXA). Check JXA vs OmniJS syntax, validate JavaScript syntax, and test with both direct execution and Claude Desktop.
 
-## 🚨 CRITICAL: Async Operation Lifecycle (September 2025)
+## 🚨 CRITICAL: Async Operation Lifecycle & stdin Handling (September 2025)
+
+**We spent 6+ months with broken MCP lifecycle compliance!**
 
 **THE PROBLEM:** MCP server exits immediately when stdin closes, killing osascript child processes before they return results.
 
@@ -668,11 +607,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","a
 timeout 10s node dist/index.js <<< '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-**MCP Specification Compliance**: 
+**MCP Specification Compliance**:
 - **stdio transport**: Client closes stdin → Server exits gracefully ✅ IMPLEMENTED
 - **No protocol shutdown**: MCP uses transport-level termination, not JSON-RPC methods
 - **Graceful cascade**: stdin close → server exit → SIGTERM → SIGKILL (if needed)
 - **Our Implementation**: Added stdin 'end'/'close' handlers → process.exit(0) for clean termination
+
+**CLI Testing Status**: ✅ ALL tools work in both CLI and Claude Desktop (resolved Sept 2025). Bridge operations, tag assignment, and task creation all execute successfully in CLI testing.
 
 ## 📖 MCP Specification Reference
 
@@ -721,48 +662,12 @@ Always reference the official specification rather than making assumptions about
 - **Script timeouts?** Check OmniFocus not blocked by dialogs
 - **ID issues?** See src/omnifocus/scripts/tasks.ts for extraction patterns
 
-## 🚨 CRITICAL: MCP Testing Pattern Recognition
+**Understanding MCP Testing Output - NEVER confuse graceful server exit with failure!**
 
-**NEVER confuse graceful server exit with failure!**
+Success pattern: `[INFO] [tools] Executing tool → [INFO] stdin closed, exiting gracefully`
+Failure pattern: `[INFO] [tools] Executing tool → {"error":{...}} → [INFO] stdin closed`
 
-### ✅ SUCCESS Pattern:
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
-[INFO] [tools] Executing tool: tasks [...]
-# JSON response appears here (if any)
-[INFO] [server] stdin closed, exiting gracefully per MCP specification
-```
-**This is SUCCESSFUL execution!** The server exits gracefully as required by MCP spec.
-
-### ❌ FAILURE Pattern:
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
-[INFO] [tools] Executing tool: tasks [...]
-{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"SCRIPT_ERROR",...}}
-[INFO] [server] stdin closed, exiting gracefully per MCP specification
-```
-**This shows actual failure** - JSON error response before graceful exit.
-
-### Key Indicators:
-- **Success**: Tool execution log + graceful exit (JSON response may not be visible in bash output)
-- **Failure**: Tool execution log + JSON error response + graceful exit
-- **The graceful exit itself is NEVER an error** - it's required MCP compliance!
-
-### ✅ CLI Testing Status - RESOLVED (September 2025)
-**ISSUE RESOLVED:** The previously documented v2.1.0 CLI testing regression has been resolved as of current codebase state.
-
-**Current Status:**
-- ✅ Read-only tools (system, tasks, projects): Perfect CLI testing
-- ✅ Write tools with bridge helpers (manage_task create/update): **Now working in CLI**
-- ✅ ALL tools work in both CLI and Claude Desktop
-
-**Testing Verification (September 26, 2025):**
-- Bridge operations (`app.evaluateJavascript`) execute successfully in CLI
-- Tag assignment via bridge works correctly in CLI testing
-- Task creation with tags completes without truncation issues
-- The "line 145 truncation" issue no longer reproduces
-
-**For Development:** Both CLI testing and Claude Desktop can be used for all operations. The regression documented in earlier versions has been resolved.
+The graceful exit is NEVER an error - it's required MCP compliance!
 
 ## 🚨 Common Mistakes & How to Avoid Them
 
