@@ -9,6 +9,12 @@ import {
 } from '../utils/logger.js';
 
 // Import v2.2.0 CONSOLIDATED tools (18 tools: 17 core + 1 capture)
+// NEW: v2.3.0 Builder API tools (3 unified tools for experimental parallel operation)
+
+// Unified Builder API Tools (EXPERIMENTAL)
+import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
+import { OmniFocusWriteTool } from './unified/OmniFocusWriteTool.js';
+import { OmniFocusAnalyzeTool } from './unified/OmniFocusAnalyzeTool.js';
 
 // Task operations - Consolidated
 import { QueryTasksToolV2 } from './tasks/QueryTasksToolV2.js';
@@ -75,10 +81,15 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
 }
 
 export function registerTools(server: Server, cache: CacheManager): void {
-  logger.info('OmniFocus MCP v2.2.0 - CONSOLIDATED tool set (17 tools + Smart Capture)');
+  logger.info('OmniFocus MCP v2.3.0 - EXPERIMENTAL: 3 Builder API tools + 17 legacy tools (20 total)');
 
   // All tools are now consolidated for optimal LLM usage
   const tools: Tool[] = [
+    // NEW: Unified Builder API Tools (EXPERIMENTAL - parallel operation with legacy)
+    new OmniFocusReadTool(cache),       // 'omnifocus_read' - Unified query builder
+    new OmniFocusWriteTool(cache),      // 'omnifocus_write' - Unified mutation builder
+    new OmniFocusAnalyzeTool(cache),    // 'omnifocus_analyze' - Unified analysis router
+
     // Task operations (2 tools)
     new QueryTasksToolV2(cache),        // 'tasks' - Query/search tasks
     new ManageTaskTool(cache),          // 'manage_task' - Create/update/complete/delete tasks

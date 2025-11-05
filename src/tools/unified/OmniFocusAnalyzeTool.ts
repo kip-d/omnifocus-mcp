@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { AnalyzeSchema, type AnalyzeInput } from './schemas/analyze-schema.js';
@@ -36,6 +35,14 @@ SCOPE FILTERING:
 - Use tags/projects to focus analysis`;
 
   schema = AnalyzeSchema;
+  meta = {
+    category: 'Analytics' as const,
+    stability: 'experimental' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'slow' as const,
+    tags: ['unified', 'builder', 'analyze', 'analytics'],
+    capabilities: ['productivity_stats', 'task_velocity', 'overdue_analysis', 'pattern_analysis', 'workflow_analysis', 'recurring_tasks', 'parse_meeting_notes', 'manage_reviews'],
+  };
 
   private compiler: AnalysisCompiler;
   private productivityTool: ProductivityStatsToolV2;

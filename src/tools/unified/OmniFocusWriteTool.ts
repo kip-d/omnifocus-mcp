@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
@@ -35,6 +34,14 @@ SAFETY:
 - Tags handled automatically via bridge`;
 
   schema = WriteSchema;
+  meta = {
+    category: 'Task Management' as const,
+    stability: 'experimental' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['unified', 'builder', 'write', 'mutations'],
+    capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
+  };
 
   private compiler: MutationCompiler;
   private manageTaskTool: ManageTaskTool;

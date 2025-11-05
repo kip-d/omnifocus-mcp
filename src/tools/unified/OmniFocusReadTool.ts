@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
@@ -30,6 +29,14 @@ PERFORMANCE:
 - Smart suggest uses scoring: overdue +100, due today +80, flagged +50`;
 
   schema = ReadSchema;
+  meta = {
+    category: 'Utility' as const,
+    stability: 'experimental' as const,
+    complexity: 'moderate' as const,
+    performanceClass: 'fast' as const,
+    tags: ['unified', 'builder', 'read', 'query'],
+    capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest'],
+  };
 
   private compiler: QueryCompiler;
   private tasksTool: QueryTasksToolV2;
@@ -102,24 +109,24 @@ PERFORMANCE:
   private async routeToProjectsTool(compiled: any): Promise<any> {
     const projectsArgs: any = {
       operation: 'list',
-      includeCompleted: compiled.filters.status === 'completed',
+      includeCompleted: compiled.filters?.status === 'completed',
     };
 
-    if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
-    if (compiled.filters.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
+    if (compiled.filters?.folder) projectsArgs.folder = compiled.filters.folder;
+    if (compiled.filters?.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
 
     return this.projectsTool.execute(projectsArgs);
   }
 
-  private async routeToTagsTool(compiled: any): Promise<any> {
+  private async routeToTagsTool(_compiled: any): Promise<any> {
     return this.tagsTool.execute({ operation: 'list' });
   }
 
-  private async routeToPerspectivesTool(compiled: any): Promise<any> {
+  private async routeToPerspectivesTool(_compiled: any): Promise<any> {
     return this.perspectivesTool.execute({ operation: 'list' });
   }
 
-  private async routeToFoldersTool(compiled: any): Promise<any> {
+  private async routeToFoldersTool(_compiled: any): Promise<any> {
     return this.foldersTool.execute({ operation: 'list' });
   }
 
