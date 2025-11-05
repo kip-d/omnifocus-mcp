@@ -63,7 +63,7 @@ async function runServer() {
   }
 
   // Register all tools and prompts AFTER server creation but BEFORE connection
-  await registerTools(server, cacheManager);
+  await registerTools(server, cacheManager, pendingOperations);
   registerPrompts(server);
 
   // Warm cache with frequently accessed data (non-blocking)
@@ -87,22 +87,20 @@ async function runServer() {
     },
   });
 
-  // Warm cache in background - don't block server startup
-  // Track as pending operation to prevent premature exit during warming
+  // Warm cache BEFORE accepting requests to prevent concurrent osascript execution
+  // This ensures batch operations don't run concurrently with cache warming
   if (isCIEnvironment) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
   } else if (benchmarkMode) {
     logger.info('Cache warming disabled for benchmark mode');
   } else {
-    const warmingPromise = cacheWarmer
-      .warmCache()
-      .catch(error => {
-        logger.warn('Cache warming failed:', error);
-      })
-      .finally(() => {
-        pendingOperations.delete(warmingPromise);
-      });
-    pendingOperations.add(warmingPromise);
+    logger.info('Warming cache before accepting requests...');
+    try {
+      await cacheWarmer.warmCache();
+      logger.info('Cache warming completed successfully');
+    } catch (error) {
+      logger.warn('Cache warming failed:', error);
+    }
   }
 
   const transport = new StdioServerTransport();

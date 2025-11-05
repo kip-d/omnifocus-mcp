@@ -37,7 +37,7 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
          typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
-export function registerTools(server: Server, cache: CacheManager): void {
+export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
   logger.info('OmniFocus MCP v2.3.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)');
 
   // Unified Builder API + system diagnostics
@@ -100,45 +100,62 @@ export function registerTools(server: Server, cache: CacheManager): void {
       args,
     }));
 
-    try {
-      // Pass correlation context to the tool if it supports it
-      let result: unknown;
-      if (supportsCorrelation(tool)) {
-        // Tool supports correlation context
-        const correlatedTool = tool.withCorrelation(correlationId);
-        result = await correlatedTool.execute(args || {});
-      } else {
-        // Standard tool execution
-        result = await tool.execute(args || {});
+    // Create execution promise and track it to prevent premature server exit
+    const executionPromise = (async () => {
+      try {
+        // Pass correlation context to the tool if it supports it
+        let result: unknown;
+        if (supportsCorrelation(tool)) {
+          // Tool supports correlation context
+          const correlatedTool = tool.withCorrelation(correlationId);
+          result = await correlatedTool.execute(args || {});
+        } else {
+          // Standard tool execution
+          result = await tool.execute(args || {});
+        }
+
+        // Log successful execution with timing
+        const executionTime = Date.now() - startTime;
+        correlatedLogger.info(`Tool execution completed: ${name}`, {
+          executionTime,
+          success: true,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        // Log execution failure with timing and correlation
+        const executionTime = Date.now() - startTime;
+        correlatedLogger.error(`Tool execution failed: ${name}`, {
+          executionTime,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        // Re-throw the error to maintain existing error handling behavior
+        throw error;
       }
+    })();
 
-      // Log successful execution with timing
-      const executionTime = Date.now() - startTime;
-      correlatedLogger.info(`Tool execution completed: ${name}`, {
-        executionTime,
-        success: true,
+    // Track tool execution to prevent premature server exit
+    if (pendingOperations) {
+      pendingOperations.add(executionPromise);
+      correlatedLogger.debug(`Added tool execution to pending operations (size: ${pendingOperations.size})`);
+
+      // Remove from pending operations when done (success or failure)
+      executionPromise.finally(() => {
+        pendingOperations.delete(executionPromise);
+        correlatedLogger.debug(`Removed tool execution from pending operations (size: ${pendingOperations.size})`);
       });
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      // Log execution failure with timing and correlation
-      const executionTime = Date.now() - startTime;
-      correlatedLogger.error(`Tool execution failed: ${name}`, {
-        executionTime,
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      // Re-throw the error to maintain existing error handling behavior
-      throw error;
     }
+
+    return executionPromise;
   });
 
 }
