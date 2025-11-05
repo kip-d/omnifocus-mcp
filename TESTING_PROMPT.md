@@ -56,7 +56,7 @@ Use `omnifocus_analyze` for these analyses:
 
 1. **Productivity stats** for this week
 2. **Task velocity** over last 30 days
-3. **Pattern analysis** - find review gaps or bottlenecks
+3. **Pattern analysis** - analyze patterns: `review_gaps` and `wip_limits`
 4. **Parse meeting notes** - extract action items from: "Meeting with Sarah tomorrow at 2pm to discuss Q1 goals. Need to call Bob by Friday about the budget. Follow up with the team next Monday. Send proposal to client by end of week."
 
 **What to verify:** Analytics and AI-powered analysis work using omnifocus_analyze
