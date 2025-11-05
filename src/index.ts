@@ -120,6 +120,10 @@ async function runServer() {
       }
     }
 
+    // Close server connection cleanly, allowing transport to flush responses
+    logger.info('Closing server connection...');
+    await server.close();
+
     logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
   };
