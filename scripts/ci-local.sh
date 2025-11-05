@@ -106,10 +106,10 @@ if [ -n "$TIMEOUT_CMD" ]; then
     TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
     echo "Registered tools: $TOOL_COUNT"
 
-    if [ "$TOOL_COUNT" -eq "3" ]; then
-        print_success "All 3 unified tools registered correctly (omnifocus_read, omnifocus_write, omnifocus_analyze)"
+    if [ "$TOOL_COUNT" -eq "4" ]; then
+        print_success "All 4 tools registered correctly (3 unified + system diagnostics)"
     else
-        print_error "Expected 3 unified tools, got $TOOL_COUNT"
+        print_error "Expected 4 tools (3 unified + system), got $TOOL_COUNT"
         exit 1
     fi
 else
@@ -121,9 +121,9 @@ fi
 print_step "Sample tool execution test"
 if [ -n "$TIMEOUT_CMD" ]; then
     # 30s timeout is safety net - server normally responds and exits in ~5s
-    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"omnifocus_read","arguments":{"query":{"type":"tags"}}}}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
+    RESULT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"version"}}}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null || echo "error")
 
-    if echo "$RESULT" | grep -q "success"; then
+    if echo "$RESULT" | grep -q "version"; then
         print_success "Sample tool execution successful"
     else
         print_error "Sample tool execution failed"

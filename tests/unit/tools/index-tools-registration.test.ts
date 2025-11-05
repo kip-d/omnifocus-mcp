@@ -11,7 +11,7 @@ class FakeServer {
 }
 
 describe('tools/index registerTools', () => {
-  it('registers list and call handlers and exposes 3 unified tools', async () => {
+  it('registers list and call handlers and exposes 4 tools (3 unified + system)', async () => {
     const server = new FakeServer() as any;
     const cache = new CacheManager();
 
@@ -22,16 +22,17 @@ describe('tools/index registerTools', () => {
     expect(listHandler).toBeTypeOf('function');
     const list = await listHandler({});
     expect(Array.isArray(list.tools)).toBe(true);
-    expect(list.tools.length).toBe(3);
+    expect(list.tools.length).toBe(4);
     const names = list.tools.map((t: any) => t.name);
 
     // Check unified builder API tools
     expect(names).toContain('omnifocus_read');
     expect(names).toContain('omnifocus_write');
     expect(names).toContain('omnifocus_analyze');
+    expect(names).toContain('system');
 
-    // Ensure only these 3 tools exist
-    expect(names).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze']);
+    // Ensure only these 4 tools exist
+    expect(names).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system']);
 
     // Call unknown tool → McpError
     const callHandler = server.handlers.get(CallToolRequestSchema) as Function;

@@ -8,10 +8,11 @@ import {
   generateCorrelationId,
 } from '../utils/logger.js';
 
-// v2.3.0 Unified Builder API - 3 tools replace all legacy tools
+// v2.3.0 Unified Builder API - 3 tools + system diagnostics
 import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from './unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from './unified/OmniFocusAnalyzeTool.js';
+import { SystemToolV2 } from './system/SystemToolV2.js';
 
 const logger = createLogger('tools');
 
@@ -37,13 +38,14 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
 }
 
 export function registerTools(server: Server, cache: CacheManager): void {
-  logger.info('OmniFocus MCP v2.3.0 - Unified Builder API: 3 tools (omnifocus_read, omnifocus_write, omnifocus_analyze)');
+  logger.info('OmniFocus MCP v2.3.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)');
 
-  // Unified Builder API - consolidates all functionality into 3 tools
+  // Unified Builder API + system diagnostics
   const tools: Tool[] = [
     new OmniFocusReadTool(cache),       // 'omnifocus_read' - Query tasks, projects, tags, perspectives, folders
     new OmniFocusWriteTool(cache),      // 'omnifocus_write' - Create, update, complete, delete operations
     new OmniFocusAnalyzeTool(cache),    // 'omnifocus_analyze' - All analytics and analysis operations
+    new SystemToolV2(cache),            // 'system' - Version info and diagnostics
   ];
 
   // Register handlers
