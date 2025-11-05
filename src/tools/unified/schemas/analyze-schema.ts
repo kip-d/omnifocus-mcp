@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Scope schema for filtering analysis
+// Scope schema for filtering analysis (shared across most analysis types)
 const AnalysisScopeSchema = z.object({
   dateRange: z.object({
     start: z.string(),
@@ -12,46 +12,78 @@ const AnalysisScopeSchema = z.object({
   includeDropped: z.boolean().optional(),
 });
 
-// Analysis-type-specific parameters
-const AnalysisParamsSchema = z.object({
-  // productivity_stats / task_velocity
-  groupBy: z.enum(['day', 'week', 'month']).optional(),
-  metrics: z.array(z.string()).optional(),
-
-  // pattern_analysis
-  insights: z.array(z.string()).optional(),
-
-  // recurring_tasks
-  operation: z.enum(['analyze', 'patterns']).optional(),
-  sortBy: z.enum(['nextDue', 'frequency', 'name']).optional(),
-
-  // parse_meeting_notes
-  text: z.string().optional(),
-  extractTasks: z.boolean().optional(),
-  defaultProject: z.string().optional(),
-  defaultTags: z.array(z.string()).optional(),
-
-  // manage_reviews
-  projectId: z.string().optional(),
-  reviewDate: z.string().optional(),
-}).passthrough();
+// Analysis schema - discriminated union by type
+const AnalysisSchema = z.discriminatedUnion('type', [
+  // Productivity stats
+  z.object({
+    type: z.literal('productivity_stats'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({
+      groupBy: z.enum(['day', 'week', 'month']).optional(),
+      metrics: z.array(z.string()).optional(),
+    }).optional(),
+  }),
+  // Task velocity
+  z.object({
+    type: z.literal('task_velocity'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({
+      groupBy: z.enum(['day', 'week', 'month']).optional(),
+      metrics: z.array(z.string()).optional(),
+    }).optional(),
+  }),
+  // Overdue analysis
+  z.object({
+    type: z.literal('overdue_analysis'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({}).optional(),
+  }),
+  // Pattern analysis
+  z.object({
+    type: z.literal('pattern_analysis'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({
+      insights: z.array(z.string()).optional(),
+    }).optional(),
+  }),
+  // Workflow analysis
+  z.object({
+    type: z.literal('workflow_analysis'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({}).optional(),
+  }),
+  // Recurring tasks
+  z.object({
+    type: z.literal('recurring_tasks'),
+    scope: AnalysisScopeSchema.optional(),
+    params: z.object({
+      operation: z.enum(['analyze', 'patterns']).optional(),
+      sortBy: z.enum(['nextDue', 'frequency', 'name']).optional(),
+    }).optional(),
+  }),
+  // Parse meeting notes (text is required)
+  z.object({
+    type: z.literal('parse_meeting_notes'),
+    params: z.object({
+      text: z.string(),
+      extractTasks: z.boolean().optional(),
+      defaultProject: z.string().optional(),
+      defaultTags: z.array(z.string()).optional(),
+    }),
+  }),
+  // Manage reviews
+  z.object({
+    type: z.literal('manage_reviews'),
+    params: z.object({
+      projectId: z.string().optional(),
+      reviewDate: z.string().optional(),
+    }).optional(),
+  }),
+]);
 
 // Main analyze schema
 export const AnalyzeSchema = z.object({
-  analysis: z.object({
-    type: z.enum([
-      'productivity_stats',
-      'task_velocity',
-      'overdue_analysis',
-      'pattern_analysis',
-      'workflow_analysis',
-      'recurring_tasks',
-      'parse_meeting_notes',
-      'manage_reviews',
-    ]),
-    scope: AnalysisScopeSchema.optional(),
-    params: AnalysisParamsSchema.optional(),
-  }),
+  analysis: AnalysisSchema,
 });
 
 export type AnalyzeInput = z.infer<typeof AnalyzeSchema>;
