@@ -138,8 +138,10 @@ export abstract class BaseTool<
     }
 
     // Unwrap ZodNullable
-    if ('_def' in schema && 'innerType' in (schema._def as any)) {
-      return this.isOptionalField((schema._def as any).innerType as z.ZodTypeAny);
+    // Type guard for schemas with innerType property
+    if ('_def' in schema && schema._def && typeof schema._def === 'object' && 'innerType' in schema._def) {
+      const defWithInnerType = schema._def as { innerType: z.ZodTypeAny };
+      return this.isOptionalField(defWithInnerType.innerType);
     }
 
     // Check for nullable union (alternative form)
@@ -217,13 +219,16 @@ export abstract class BaseTool<
     }
     if (schema instanceof z.ZodDiscriminatedUnion) {
       // Handle discriminated unions (NESTED only - top-level breaks MCP)
-      const discriminator = schema._def.discriminator;
-      const options = schema._def.options as z.ZodTypeAny[];
+      // Type the _def property properly
+      const def = schema._def as {
+        discriminator: string;
+        options: z.ZodTypeAny[];
+      };
 
       return {
-        oneOf: options.map(option => this.zodTypeToJsonSchema(option)),
+        oneOf: def.options.map(option => this.zodTypeToJsonSchema(option)),
         discriminator: {
-          propertyName: discriminator
+          propertyName: def.discriminator
         },
         description: schema.description,
       };

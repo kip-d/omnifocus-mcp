@@ -1,47 +1,7 @@
-import type { ReadInput } from '../schemas/read-schema.js';
+import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
 
-// Type for filter operators
-interface TagFilter {
-  all?: string[];
-  any?: string[];
-  none?: string[];
-}
-
-interface DateFilter {
-  before?: string;
-  after?: string;
-  between?: [string, string];
-}
-
-interface TextFilter {
-  contains?: string;
-  matches?: string;
-}
-
-// Recursive filter type (simplified - actual runtime validation done by Zod)
-export interface QueryFilter {
-  // Task filters
-  status?: 'active' | 'completed' | 'dropped' | 'on_hold';
-  tags?: TagFilter;
-  project?: string | null;
-  dueDate?: DateFilter;
-  deferDate?: DateFilter;
-  flagged?: boolean;
-  blocked?: boolean;
-  available?: boolean;
-  text?: TextFilter;
-
-  // Project filters
-  folder?: string;
-
-  // Logical operators (allow any for recursive filters)
-  AND?: QueryFilter[];
-  OR?: QueryFilter[];
-  NOT?: QueryFilter;
-
-  // Allow passthrough of unknown fields
-  [key: string]: unknown;
-}
+// Re-export FilterValue as QueryFilter for backwards compatibility
+export type QueryFilter = FilterValue;
 
 export interface CompiledQuery {
   type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders';

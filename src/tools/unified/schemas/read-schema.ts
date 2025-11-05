@@ -18,8 +18,8 @@ const TextFilterSchema = z.object({
   matches: z.string().optional(),
 });
 
-// Recursive filter for AND/OR/NOT
-type FilterType = z.ZodType<{
+// Define the filter value type first (for recursive reference)
+export interface FilterValue {
   // Task filters
   status?: 'active' | 'completed' | 'dropped' | 'on_hold';
   tags?: z.infer<typeof TagFilterSchema>;
@@ -34,11 +34,17 @@ type FilterType = z.ZodType<{
   // Project filters
   folder?: string;
 
-  // Logical operators
-  AND?: Array<any>;
-  OR?: Array<any>;
-  NOT?: any;
-}>;
+  // Logical operators (recursive)
+  AND?: FilterValue[];
+  OR?: FilterValue[];
+  NOT?: FilterValue;
+
+  // Allow passthrough of unknown fields
+  [key: string]: unknown;
+}
+
+// Zod schema type wrapping FilterValue
+type FilterType = z.ZodType<FilterValue>;
 
 const FilterSchema: FilterType = z.lazy(() => z.object({
   // Task filters
