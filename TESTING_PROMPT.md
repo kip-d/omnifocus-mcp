@@ -1,201 +1,117 @@
-# Natural Language Testing Prompt for Claude Desktop
+# OmniFocus MCP - 4-Tool Unified API Testing
 
-Copy and paste this entire conversation into Claude Desktop to test the four-tool unified API.
-
----
-
-## Testing Session: Four-Tool Unified OmniFocus API
-
-Hi Claude! I need you to help me test the new experimental OmniFocus MCP API. This version consolidates 17 legacy tools into just **4 unified tools**. Please follow these steps exactly and report what you find at each stage.
-
-### Part 1: Verify Tool Availability
-
-First, tell me which OmniFocus tools you can see. You should see exactly **4 tools**:
-1. **omnifocus_read** - Query operations
-2. **omnifocus_write** - Mutation operations
-3. **omnifocus_analyze** - Analysis operations
-4. **system** - Version info and diagnostics
-
-**Important:** If you see any tools named `tasks`, `manage_task`, `projects`, `tags`, etc., that's wrong - those legacy tools should not exist in this experimental branch.
-
-**Expected:** You should see only 4 tools total
+**Copy this entire message into Claude Desktop to run the test.**
 
 ---
 
-### Part 2: Test READ Operations
+## Hi Claude! Test the new 4-tool unified OmniFocus API
 
-Let's test the unified read tool with several different queries:
+This is a natural language test of the experimental OmniFocus MCP API that consolidates 17 tools into 4. Work through each phase and report your findings.
 
-#### Test 2.1: Query Inbox Tasks
-Using **omnifocus_read**, query my inbox tasks (tasks not assigned to any project). Show me up to 5 results.
+### Phase 1: Verify Tool Setup
 
-**Success criteria:** You successfully use omnifocus_read with `query: {type: "tasks", filters: {project: null}, limit: 5}`
+First, which OmniFocus tools can you see?
 
-#### Test 2.2: Query All Projects
-Using **omnifocus_read**, list all my active projects.
+**Expected:** Exactly **4 tools**:
+1. `omnifocus_read` - Query operations
+2. `omnifocus_write` - Mutation operations
+3. `omnifocus_analyze` - Analysis operations
+4. `system` - Version/diagnostics
 
-**Success criteria:** You use omnifocus_read with `query: {type: "projects"}`
-
-#### Test 2.3: Query All Tags
-Using **omnifocus_read**, list all my tags.
-
-**Success criteria:** You use omnifocus_read with `query: {type: "tags"}`
-
-#### Test 2.4: Query Flagged Tasks
-Using **omnifocus_read**, find all my flagged tasks.
-
-**Success criteria:** You use omnifocus_read with `query: {type: "tasks", filters: {flagged: true}}`
-
-#### Test 2.5: Query with Multiple Filters
-Using **omnifocus_read**, find tasks that are:
-- Flagged
-- Due this week
-- Not completed
-
-**Success criteria:** You use omnifocus_read with multiple filters in a single query
+**🚨 STOP if you see old tools** like `tasks`, `manage_task`, `projects`, `tags` - that means wrong branch!
 
 ---
 
-### Part 3: Test WRITE Operations
+### Phase 2: Test Read Operations (Queries)
 
-Now let's test the unified write tool with a complete CRUD cycle:
+Use `omnifocus_read` for these 5 queries:
 
-#### Test 3.1: Create Task
-Using **omnifocus_write**, create a new task with:
-- Name: "Test Task - Unified API"
-- Note: "Created during four-tool API testing"
-- Flagged: true
-- Due date: tomorrow
+1. **Inbox tasks** - Query tasks not in any project, limit 5
+2. **All projects** - List my active projects
+3. **All tags** - List all tags
+4. **Flagged tasks** - Find flagged tasks
+5. **Complex filter** - Find tasks that are flagged AND due this week AND not completed
 
-**Success criteria:** Task created successfully, you receive a task ID
-
-#### Test 3.2: Update Task
-Using **omnifocus_write**, update the task you just created:
-- Change the note to: "Updated during testing - flag removed"
-- Change flagged to: false
-- Change due date to: 3 days from now
-
-**Success criteria:** Task updated successfully
-
-#### Test 3.3: Complete Task
-Using **omnifocus_write**, mark the task as completed.
-
-**Success criteria:** Task marked complete
-
-#### Test 3.4: Delete Task
-Using **omnifocus_write**, delete the completed task.
-
-**Success criteria:** Task deleted successfully
-
-#### Test 3.5: Batch Create
-Using **omnifocus_write**, create a project with multiple tasks in one operation:
-- Project name: "Testing Project - Unified API"
-- Tasks: "Task 1", "Task 2", "Task 3"
-
-**Success criteria:** Project and all tasks created in a single operation
+**What to verify:** You can construct all these queries using omnifocus_read with different filters
 
 ---
 
-### Part 4: Test ANALYZE Operations
+### Phase 3: Test Write Operations (Full CRUD Cycle)
 
-Let's test the unified analyze tool with different analysis types:
+Use `omnifocus_write` to test create, update, complete, delete:
 
-#### Test 4.1: Productivity Stats
-Using **omnifocus_analyze**, generate my productivity statistics for this week.
+1. **Create** a task named "Test Task - Unified API" with note, flagged=true, due tomorrow
+2. **Update** that task: change note, set flagged=false, change due date to 3 days from now
+3. **Complete** the task
+4. **Delete** the completed task
+5. **Batch create** a project named "Testing Project - Unified API" with 3 tasks in one operation
 
-**Success criteria:** You use omnifocus_analyze with `analysis: {type: "productivity_stats", params: {groupBy: "week"}}`
-
-#### Test 4.2: Task Velocity
-Using **omnifocus_analyze**, analyze my task completion velocity over the last 30 days.
-
-**Success criteria:** You use omnifocus_analyze with `analysis: {type: "task_velocity", params: {period: 30}}`
-
-#### Test 4.3: Pattern Analysis
-Using **omnifocus_analyze**, identify patterns in my task management (like review gaps or bottlenecks).
-
-**Success criteria:** You use omnifocus_analyze with `analysis: {type: "analyze_patterns"}`
-
-#### Test 4.4: Parse Meeting Notes
-Using **omnifocus_analyze**, extract action items from this meeting note:
-
-"Meeting with Sarah tomorrow at 2pm to discuss Q1 goals. Need to call Bob by Friday about the budget. Follow up with the team next Monday. Send proposal to client by end of week."
-
-**Success criteria:** You use omnifocus_analyze with `analysis: {type: "parse_meeting_notes"}` and extract actionable tasks
+**What to verify:** Full CRUD cycle works using omnifocus_write
 
 ---
 
-### Part 5: Test System Tool
+### Phase 4: Test Analyze Operations (Analytics & Insights)
 
-#### Test 5.1: Version Information
-Using **system** tool, get the current version and build information.
+Use `omnifocus_analyze` for these analyses:
 
-**Success criteria:** You successfully retrieve version info including build ID
+1. **Productivity stats** for this week
+2. **Task velocity** over last 30 days
+3. **Pattern analysis** - find review gaps or bottlenecks
+4. **Parse meeting notes** - extract action items from: "Meeting with Sarah tomorrow at 2pm to discuss Q1 goals. Need to call Bob by Friday about the budget. Follow up with the team next Monday. Send proposal to client by end of week."
 
-#### Test 5.2: Diagnostics
-Using **system** tool, run diagnostics to verify OmniFocus connectivity.
-
-**Success criteria:** You successfully run diagnostics check
-
----
-
-### Part 6: Complex Workflow Test
-
-Now let's test a realistic workflow combining all three unified tools:
-
-1. **Query** (omnifocus_read): Find all tasks due this week
-2. **Analyze** (omnifocus_analyze): Get my productivity stats for context
-3. **Write** (omnifocus_write): Based on the analysis, create a new task to review overdue items
-4. **Query** (omnifocus_read): Verify the new task was created
-
-**Success criteria:** You successfully chain operations across all tools in a natural workflow
+**What to verify:** Analytics and AI-powered analysis work using omnifocus_analyze
 
 ---
 
-### Part 7: Edge Cases & Error Handling
+### Phase 5: Test Combined Workflow
 
-#### Test 7.1: Invalid Query
-Try using **omnifocus_read** with an invalid query type. What error do you get?
+Chain all 4 tools together in a realistic workflow:
 
-#### Test 7.2: Missing Required Field
-Try using **omnifocus_write** to create a task without a name. What happens?
+1. Use `omnifocus_read` to find all tasks due this week
+2. Use `omnifocus_analyze` to get productivity stats for context
+3. Use `omnifocus_write` to create a task "Review overdue items" based on the analysis
+4. Use `omnifocus_read` to verify the new task exists
+5. Use `system` to check version and diagnostics
 
-#### Test 7.3: Update Non-Existent Task
-Try using **omnifocus_write** to update a task with ID "invalid-id-12345". What error do you get?
+**What to verify:** All 4 tools work together in a natural conversation flow
 
 ---
 
 ## Final Report
 
-After completing all tests, please provide a summary:
+After completing all 5 phases, provide a summary:
 
-### ✅ What Worked
-List all tests that passed successfully
+### Test Results Summary
 
-### ❌ What Failed
-List any tests that failed with error details
+**Phase 1 (Tool Setup):** ✅ / ❌
+- Tool count: ___
+- Correct tools visible: YES / NO
 
-### 💡 Observations
-- Did the unified tools feel natural to use?
-- Were there any operations that were harder to accomplish with the unified API compared to the legacy tools?
-- Any suggestions for improving the tool interfaces?
+**Phase 2 (Read):** ✅ / ❌
+- Queries working: ___/5
 
-### 🐛 Bugs Found
-List any bugs discovered during testing, including:
-- What you tried to do
-- What you expected to happen
-- What actually happened
-- Error messages (if any)
+**Phase 3 (Write):** ✅ / ❌
+- CRUD operations: ___/5
+
+**Phase 4 (Analyze):** ✅ / ❌
+- Analytics working: ___/4
+
+**Phase 5 (Workflow):** ✅ / ❌
+- Combined workflow: YES / NO
+
+### Overall Assessment
+
+- [ ] **PASS** - All phases work, 4 tools can replace 17 tools
+- [ ] **FAIL** - Issues found (list below)
+
+### Issues / Bugs Found
+(List any errors with details)
+
+### Observations
+- Did the 4 unified tools feel natural to use?
+- Any operations harder with unified API vs old tools?
+- Performance issues or timeouts?
 
 ---
 
-## Important Notes for Tester
-
-1. **Tool Count:** You should see exactly **4 tools**, not 20. If you see more, the test environment is incorrect.
-
-2. **Error Reporting:** Be specific about errors - copy the exact error message and the parameters you used.
-
-3. **Performance:** Note if any operations feel slow or timeout.
-
-4. **Builder Pattern:** The unified tools use a "builder" pattern where you construct queries/mutations/analyses as nested JSON objects. This is different from the flat parameter structure of the legacy tools.
-
-5. **Documentation:** Reference the API-COMPACT-UNIFIED.md file if you need details about available operations and parameters.
+**End of test. Thank you!**
