@@ -228,7 +228,7 @@ export abstract class BaseTool<
       return {
         oneOf: def.options.map(option => this.zodTypeToJsonSchema(option)),
         discriminator: {
-          propertyName: def.discriminator
+          propertyName: def.discriminator,
         },
         description: schema.description,
       };

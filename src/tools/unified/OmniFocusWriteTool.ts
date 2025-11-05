@@ -67,7 +67,7 @@ SAFETY:
   }
 
   private async routeToManageTask(
-    compiled: Exclude<CompiledMutation, { operation: 'batch' }>
+    compiled: Exclude<CompiledMutation, { operation: 'batch' }>,
   ): Promise<unknown> {
     const manageArgs: Record<string, unknown> = {
       operation: compiled.operation,
@@ -95,15 +95,20 @@ SAFETY:
   }
 
   private async routeToBatch(
-    compiled: Extract<CompiledMutation, { operation: 'batch' }>
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
   ): Promise<unknown> {
     // Convert builder batch format to existing batch tool format
     const batchArgs: Record<string, unknown> = {
-      items: compiled.operations.map(op => ({
-        type: op.target,
-        name: op.data?.name,
-        ...op.data,
-      }))
+      items: compiled.operations
+        .filter(op => op.operation === 'create')
+        .map(op => ({
+          type: op.target,
+          ...op.data,
+        })),
+      createSequentially: compiled.createSequentially ?? true,
+      atomicOperation: compiled.atomicOperation ?? false,
+      returnMapping: compiled.returnMapping ?? true,
+      stopOnError: compiled.stopOnError ?? true,
     };
 
     return this.batchTool.execute(batchArgs);

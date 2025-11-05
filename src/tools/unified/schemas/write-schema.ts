@@ -41,12 +41,21 @@ const UpdateChangesSchema = z.object({
   estimatedMinutes: z.number().optional(),
 }).passthrough();
 
+// Enhanced batch item schema with hierarchical relationships
+const BatchItemDataSchema = CreateDataSchema.extend({
+  tempId: z.string().min(1).optional(),
+  parentTempId: z.string().optional(),
+  estimatedMinutes: z.number().optional(),
+  sequential: z.boolean().optional(),
+  reviewInterval: z.number().optional(),
+});
+
 // Batch operation schema - discriminated union
 const BatchOperationSchema = z.discriminatedUnion('operation', [
   z.object({
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
-    data: CreateDataSchema,
+    data: BatchItemDataSchema,
   }),
   z.object({
     operation: z.literal('update'),
@@ -83,11 +92,15 @@ const MutationSchema = z.discriminatedUnion('operation', [
     target: z.enum(['task', 'project']),
     id: z.string(),
   }),
-  // Batch operation
+  // Batch operation with options
   z.object({
     operation: z.literal('batch'),
     target: z.enum(['task', 'project']),
     operations: z.array(BatchOperationSchema),
+    createSequentially: z.boolean().optional().default(true),
+    atomicOperation: z.boolean().optional().default(false),
+    returnMapping: z.boolean().optional().default(true),
+    stopOnError: z.boolean().optional().default(true),
   }),
 ]);
 

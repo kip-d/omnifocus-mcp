@@ -389,4 +389,259 @@ describe('Unified Tools End-to-End Integration', () => {
       expect(parsed).toHaveProperty('success');
     }, 60000);
   });
+
+  describe('OmniFocus 4.7+ Features', () => {
+    describe('Planned Dates', () => {
+      it('should create task with planned date', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 12,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Task with Planned Date',
+                  plannedDate: '2025-11-15 09:00',
+                  tags: ['test', 'planned-dates'],
+                },
+              },
+            },
+          },
+        });
+
+        expect(result).toBeDefined();
+        expect(result).toHaveProperty('content');
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const responseText = content[0].text;
+        const parsed = JSON.parse(responseText);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data?.task?.taskId).toBeDefined();
+      }, 60000);
+
+      it('should update task with new planned date', async () => {
+        // Create task
+        const createResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 13,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Task to Update Planned Date',
+                  plannedDate: '2025-11-15',
+                  tags: ['test', 'planned-update'],
+                },
+              },
+            },
+          },
+        });
+
+        const createContent = (createResult as { content: Array<{ type: string; text: string }> }).content;
+        const createParsed = JSON.parse(createContent[0].text);
+        const taskId = createParsed.data?.task?.taskId;
+        expect(taskId).toBeDefined();
+
+        // Update planned date
+        const updateResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 14,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'update',
+                target: 'task',
+                id: taskId,
+                changes: {
+                  plannedDate: '2025-12-01 10:30',
+                },
+              },
+            },
+          },
+        });
+
+        const updateContent = (updateResult as { content: Array<{ type: string; text: string }> }).content;
+        const updateParsed = JSON.parse(updateContent[0].text);
+        expect(updateParsed.success).toBe(true);
+      }, 60000);
+
+      it('should clear planned date when set to null', async () => {
+        // Create task with planned date
+        const createResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 15,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Task to Clear Planned Date',
+                  plannedDate: '2025-11-15',
+                  tags: ['test', 'clear-planned'],
+                },
+              },
+            },
+          },
+        });
+
+        const createContent = (createResult as { content: Array<{ type: string; text: string }> }).content;
+        const createParsed = JSON.parse(createContent[0].text);
+        const taskId = createParsed.data?.task?.taskId;
+
+        // Clear planned date
+        const updateResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 16,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'update',
+                target: 'task',
+                id: taskId,
+                changes: {
+                  plannedDate: null,
+                },
+              },
+            },
+          },
+        });
+
+        const updateContent = (updateResult as { content: Array<{ type: string; text: string }> }).content;
+        const updateParsed = JSON.parse(updateContent[0].text);
+        expect(updateParsed.success).toBe(true);
+      }, 60000);
+    });
+
+    describe('Enhanced Repeats', () => {
+      it('should create task with daily repeat rule', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 17,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Daily Standup',
+                  dueDate: '2025-11-17 09:00',
+                  repetitionRule: {
+                    frequency: 'daily',
+                    interval: 1,
+                  },
+                  tags: ['test', 'repeats'],
+                },
+              },
+            },
+          },
+        });
+
+        expect(result).toBeDefined();
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const parsed = JSON.parse(content[0].text);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data?.task?.taskId).toBeDefined();
+      }, 60000);
+
+      it('should create task with weekly repeat rule', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 18,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Weekly Review',
+                  dueDate: '2025-11-17',
+                  repetitionRule: {
+                    frequency: 'weekly',
+                    interval: 1,
+                    daysOfWeek: [1], // Monday
+                  },
+                  tags: ['test', 'weekly-repeat'],
+                },
+              },
+            },
+          },
+        });
+
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const parsed = JSON.parse(content[0].text);
+        expect(parsed.success).toBe(true);
+      }, 60000);
+
+      it('should create task with repeat rule and end date', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 19,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_write',
+            arguments: {
+              mutation: {
+                operation: 'create',
+                target: 'task',
+                data: {
+                  name: 'Limited Repeat Task',
+                  dueDate: '2025-11-17',
+                  repetitionRule: {
+                    frequency: 'daily',
+                    interval: 2,
+                    endDate: '2025-12-31',
+                  },
+                  tags: ['test', 'limited-repeat'],
+                },
+              },
+            },
+          },
+        });
+
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const parsed = JSON.parse(content[0].text);
+        expect(parsed.success).toBe(true);
+      }, 60000);
+    });
+
+    describe('Version Detection', () => {
+      it('should report version information in system tool', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 20,
+          method: 'tools/call',
+          params: {
+            name: 'system',
+            arguments: {
+              operation: 'version',
+            },
+          },
+        });
+
+        expect(result).toBeDefined();
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const parsed = JSON.parse(content[0].text);
+        expect(parsed.success).toBe(true);
+        expect(parsed.metadata?.omnifocus_version).toBeDefined();
+      }, 60000);
+    });
+  });
 });

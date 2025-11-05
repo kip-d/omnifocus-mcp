@@ -22,6 +22,10 @@ interface CreateData {
   folder?: string;
   sequential?: boolean;
   status?: 'active' | 'on_hold' | 'completed' | 'dropped';
+  // Batch-specific
+  tempId?: string;
+  parentTempId?: string;
+  reviewInterval?: number;
 }
 
 interface UpdateChanges {
@@ -78,6 +82,10 @@ export type CompiledMutation =
       operation: 'batch';
       target: 'task' | 'project';
       operations: BatchOperation[];
+      createSequentially?: boolean;
+      atomicOperation?: boolean;
+      returnMapping?: boolean;
+      stopOnError?: boolean;
     };
 
 export class MutationCompiler {
@@ -141,6 +149,10 @@ export class MutationCompiler {
           operation: 'batch',
           target: mutation.target,
           operations: mutation.operations as BatchOperation[],
+          createSequentially: mutation.createSequentially,
+          atomicOperation: mutation.atomicOperation,
+          returnMapping: mutation.returnMapping,
+          stopOnError: mutation.stopOnError,
         };
 
       default: {

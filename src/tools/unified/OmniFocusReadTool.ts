@@ -151,7 +151,7 @@ PERFORMANCE:
       filters.text ||
       filters.OR ||
       filters.AND ||
-      filters.NOT
+      filters.NOT,
     );
   }
 

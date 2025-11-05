@@ -91,15 +91,16 @@ SCOPE FILTERING:
         return this.routeToMeetingNotes(compiled);
       case 'manage_reviews':
         return this.routeToReviews(compiled);
-      default:
+      default: {
         // TypeScript exhaustiveness check
         const _exhaustive: never = compiled;
         throw new Error(`Unsupported analysis type: ${(_exhaustive as CompiledAnalysis).type}`);
+      }
     }
   }
 
   private async routeToProductivityStats(
-    compiled: Extract<CompiledAnalysis, { type: 'productivity_stats' }>
+    compiled: Extract<CompiledAnalysis, { type: 'productivity_stats' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -115,7 +116,7 @@ SCOPE FILTERING:
   }
 
   private async routeToVelocity(
-    compiled: Extract<CompiledAnalysis, { type: 'task_velocity' }>
+    compiled: Extract<CompiledAnalysis, { type: 'task_velocity' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -132,7 +133,7 @@ SCOPE FILTERING:
   }
 
   private async routeToOverdue(
-    compiled: Extract<CompiledAnalysis, { type: 'overdue_analysis' }>
+    compiled: Extract<CompiledAnalysis, { type: 'overdue_analysis' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -148,7 +149,7 @@ SCOPE FILTERING:
   }
 
   private async routeToPattern(
-    compiled: Extract<CompiledAnalysis, { type: 'pattern_analysis' }>
+    compiled: Extract<CompiledAnalysis, { type: 'pattern_analysis' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -160,7 +161,7 @@ SCOPE FILTERING:
   }
 
   private async routeToWorkflow(
-    compiled: Extract<CompiledAnalysis, { type: 'workflow_analysis' }>
+    compiled: Extract<CompiledAnalysis, { type: 'workflow_analysis' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -173,7 +174,7 @@ SCOPE FILTERING:
   }
 
   private async routeToRecurring(
-    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>
+    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
@@ -189,7 +190,7 @@ SCOPE FILTERING:
   }
 
   private async routeToMeetingNotes(
-    compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>
+    compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {
       input: compiled.params.text, // Note: ParseMeetingNotesTool expects 'input' not 'text'
@@ -212,7 +213,7 @@ SCOPE FILTERING:
   }
 
   private async routeToReviews(
-    compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>
+    compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
