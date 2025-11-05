@@ -8,6 +8,68 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 ---
 
+## 🧪 Unified Builder API (Experimental - v2.3.0)
+
+**Status:** EXPERIMENTAL - Operates in parallel with existing 17 tools for testing and gradual migration.
+
+**Overview:** Three new unified tools consolidate the 17 existing MCP tools into a builder-pattern API for LLM optimization:
+
+- **`omnifocus_read`** - Unified query builder (routes to tasks, projects, tags, perspectives, folders tools)
+- **`omnifocus_write`** - Unified mutation builder (routes to manage_task, batch_create tools)
+- **`omnifocus_analyze`** - Unified analysis router (routes to 8 analysis tools)
+
+**Architecture:**
+- All three tools use discriminated union schemas for type-safe operation selection
+- Compilers translate builder JSON to existing tool parameters (maximum code reuse)
+- Zero changes to existing backend infrastructure - pure routing layer
+- Both APIs operate simultaneously: 20 total tools (3 new + 17 legacy)
+
+**Example Usage:**
+
+```typescript
+// Query inbox tasks
+{
+  query: {
+    type: "tasks",
+    filters: { project: null },  // Inbox
+    limit: 10
+  }
+}
+
+// Create and complete task
+{
+  mutation: {
+    operation: "create",
+    target: "task",
+    data: { name: "Example", flagged: true }
+  }
+}
+
+// Analyze productivity
+{
+  analysis: {
+    type: "productivity_stats",
+    params: { groupBy: "week" }
+  }
+}
+```
+
+**Current Status:**
+- ✅ All schemas implemented with discriminated unions
+- ✅ All compilers route to existing backend tools
+- ✅ All tools registered and exposed via MCP
+- ✅ End-to-end integration tests passing (10/10)
+- ⚠️  EXPERIMENTAL - Use existing tools for production
+- 📊 Testing phase for context window optimization
+
+**Files:**
+- Schemas: `src/tools/unified/schemas/{read,write,analyze}-schema.ts`
+- Compilers: `src/tools/unified/compilers/{Query,Mutation,Analysis}Compiler.ts`
+- Tools: `src/tools/unified/OmniFocus{Read,Write,Analyze}Tool.ts`
+- Tests: `tests/integration/tools/unified/*.test.ts`
+
+---
+
 # 🚨🚨🚨 STOP! Before Writing ANY Code 🚨🚨🚨
 
 **This project has established patterns for common tasks. DON'T REINVENT THE WHEEL.**
