@@ -96,9 +96,8 @@ PERFORMANCE:
     // Map filters to existing parameters
     if (compiled.filters.status) tasksArgs.completed = compiled.filters.status === 'completed';
     if (compiled.filters.tags) tasksArgs.tags = this.extractSimpleTags(compiled.filters.tags);
-    if (compiled.filters.flagged !== undefined) tasksArgs.flagged = compiled.filters.flagged;
 
-    // Use advanced filters for complex queries
+    // Use advanced filters for complex queries (including flagged)
     if (this.needsAdvancedFilters(compiled.filters)) {
       tasksArgs.filters = this.mapToAdvancedFilters(compiled.filters);
     }
@@ -142,6 +141,9 @@ PERFORMANCE:
       filters.tags?.none ||
       filters.dueDate ||
       filters.deferDate ||
+      filters.flagged !== undefined ||
+      filters.blocked !== undefined ||
+      filters.available !== undefined ||
       filters.text ||
       filters.OR ||
       filters.AND ||
@@ -169,6 +171,17 @@ PERFORMANCE:
       } else if (filters.dueDate.after) {
         advanced.dueDate = { operator: '>=', value: filters.dueDate.after };
       }
+    }
+
+    // Boolean filters
+    if (filters.flagged !== undefined) {
+      advanced.flagged = filters.flagged;
+    }
+    if (filters.blocked !== undefined) {
+      advanced.blocked = filters.blocked;
+    }
+    if (filters.available !== undefined) {
+      advanced.available = filters.available;
     }
 
     // Handle OR/AND/NOT recursively if needed
