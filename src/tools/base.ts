@@ -184,6 +184,19 @@ export abstract class BaseTool<
       // Handle refinements
       return this.zodTypeToJsonSchema(schema._def.schema as z.ZodTypeAny);
     }
+    if (schema instanceof z.ZodDiscriminatedUnion) {
+      // Handle discriminated unions (NESTED only - top-level breaks MCP)
+      const discriminator = schema._def.discriminator;
+      const options = schema._def.options as z.ZodTypeAny[];
+
+      return {
+        oneOf: options.map(option => this.zodTypeToJsonSchema(option)),
+        discriminator: {
+          propertyName: discriminator
+        },
+        description: schema.description,
+      };
+    }
     if (schema instanceof z.ZodObject) {
       // Handle nested objects properly
       const shape = schema.shape as Record<string, z.ZodType>;
