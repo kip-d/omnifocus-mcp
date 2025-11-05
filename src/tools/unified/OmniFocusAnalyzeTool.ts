@@ -1,7 +1,7 @@
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { AnalyzeSchema, type AnalyzeInput } from './schemas/analyze-schema.js';
-import { AnalysisCompiler } from './compilers/AnalysisCompiler.js';
+import { AnalysisCompiler, type CompiledAnalysis } from './compilers/AnalysisCompiler.js';
 import { ProductivityStatsToolV2 } from '../analytics/ProductivityStatsToolV2.js';
 import { TaskVelocityToolV2 } from '../analytics/TaskVelocityToolV2.js';
 import { OverdueAnalysisToolV2 } from '../analytics/OverdueAnalysisToolV2.js';
@@ -11,7 +11,7 @@ import { RecurringTasksTool } from '../recurring/RecurringTasksTool.js';
 import { ParseMeetingNotesTool } from '../capture/ParseMeetingNotesTool.js';
 import { ManageReviewsTool } from '../reviews/ManageReviewsTool.js';
 
-export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, any> {
+export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, unknown> {
   name = 'omnifocus_analyze';
   description = `Analyze OmniFocus data for insights, patterns, and specialized operations.
 
@@ -69,10 +69,11 @@ SCOPE FILTERING:
     this.reviewsTool = new ManageReviewsTool(cache);
   }
 
-  async executeValidated(args: AnalyzeInput): Promise<any> {
+  async executeValidated(args: AnalyzeInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
     // Route to appropriate tool based on type
+    // TypeScript will narrow the type in each case branch
     switch (compiled.type) {
       case 'productivity_stats':
         return this.routeToProductivityStats(compiled);
@@ -91,12 +92,16 @@ SCOPE FILTERING:
       case 'manage_reviews':
         return this.routeToReviews(compiled);
       default:
-        throw new Error(`Unsupported analysis type: ${compiled.type}`);
+        // TypeScript exhaustiveness check
+        const _exhaustive: never = compiled;
+        throw new Error(`Unsupported analysis type: ${(_exhaustive as CompiledAnalysis).type}`);
     }
   }
 
-  private async routeToProductivityStats(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToProductivityStats(
+    compiled: Extract<CompiledAnalysis, { type: 'productivity_stats' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     // ProductivityStatsToolV2 uses period enum (not custom date ranges)
     // Map groupBy to period if provided
@@ -109,8 +114,10 @@ SCOPE FILTERING:
     return this.productivityTool.execute(args);
   }
 
-  private async routeToVelocity(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToVelocity(
+    compiled: Extract<CompiledAnalysis, { type: 'task_velocity' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.scope?.dateRange) {
       args.startDate = compiled.scope.dateRange.start;
@@ -124,8 +131,10 @@ SCOPE FILTERING:
     return this.velocityTool.execute(args);
   }
 
-  private async routeToOverdue(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToOverdue(
+    compiled: Extract<CompiledAnalysis, { type: 'overdue_analysis' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.scope?.tags) {
       args.tags = compiled.scope.tags;
@@ -138,8 +147,10 @@ SCOPE FILTERING:
     return this.overdueTool.execute(args);
   }
 
-  private async routeToPattern(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToPattern(
+    compiled: Extract<CompiledAnalysis, { type: 'pattern_analysis' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.params?.insights) {
       args.insights = compiled.params.insights;
@@ -148,8 +159,10 @@ SCOPE FILTERING:
     return this.patternTool.execute(args);
   }
 
-  private async routeToWorkflow(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToWorkflow(
+    compiled: Extract<CompiledAnalysis, { type: 'workflow_analysis' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.scope?.dateRange) {
       args.startDate = compiled.scope.dateRange.start;
@@ -159,8 +172,10 @@ SCOPE FILTERING:
     return this.workflowTool.execute(args);
   }
 
-  private async routeToRecurring(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToRecurring(
+    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.params?.operation) {
       args.operation = compiled.params.operation;
@@ -173,29 +188,33 @@ SCOPE FILTERING:
     return this.recurringTool.execute(args);
   }
 
-  private async routeToMeetingNotes(compiled: any): Promise<any> {
-    const args: any = {
+  private async routeToMeetingNotes(
+    compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {
       input: compiled.params.text, // Note: ParseMeetingNotesTool expects 'input' not 'text'
     };
 
-    if (compiled.params?.extractTasks !== undefined) {
+    if (compiled.params.extractTasks !== undefined) {
       // Map extractTasks to extractMode
       args.extractMode = compiled.params.extractTasks ? 'action_items' : 'both';
     }
 
-    if (compiled.params?.defaultProject) {
+    if (compiled.params.defaultProject) {
       args.defaultProject = compiled.params.defaultProject;
     }
 
-    if (compiled.params?.defaultTags) {
+    if (compiled.params.defaultTags) {
       args.defaultTags = compiled.params.defaultTags;
     }
 
     return this.meetingNotesTool.execute(args);
   }
 
-  private async routeToReviews(compiled: any): Promise<any> {
-    const args: any = {};
+  private async routeToReviews(
+    compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>
+  ): Promise<unknown> {
+    const args: Record<string, unknown> = {};
 
     if (compiled.params?.projectId) {
       args.projectId = compiled.params.projectId;

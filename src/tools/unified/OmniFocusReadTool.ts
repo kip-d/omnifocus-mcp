@@ -1,14 +1,14 @@
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
-import { QueryCompiler } from './compilers/QueryCompiler.js';
+import { QueryCompiler, type CompiledQuery, type QueryFilter } from './compilers/QueryCompiler.js';
 import { QueryTasksToolV2 } from '../tasks/QueryTasksToolV2.js';
 import { ProjectsToolV2 } from '../projects/ProjectsToolV2.js';
 import { TagsToolV2 } from '../tags/TagsToolV2.js';
 import { PerspectivesToolV2 } from '../perspectives/PerspectivesToolV2.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
 
-export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, any> {
+export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
   description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, or folders.
 
@@ -57,7 +57,7 @@ PERFORMANCE:
     this.foldersTool = new FoldersTool(cache);
   }
 
-  async executeValidated(args: ReadInput): Promise<any> {
+  async executeValidated(args: ReadInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
     // Route to appropriate existing tool based on type
@@ -72,14 +72,17 @@ PERFORMANCE:
         return this.routeToPerspectivesTool(compiled);
       case 'folders':
         return this.routeToFoldersTool(compiled);
-      default:
-        throw new Error(`Unsupported query type: ${compiled.type}`);
+      default: {
+        // Exhaustiveness check
+        const _exhaustive: never = compiled.type;
+        throw new Error(`Unsupported query type: ${String(_exhaustive)}`);
+      }
     }
   }
 
-  private async routeToTasksTool(compiled: any): Promise<any> {
+  private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
     // Map compiled query to existing tasks tool parameters
-    const tasksArgs: any = {
+    const tasksArgs: Record<string, unknown> = {
       mode: compiled.mode,
       limit: compiled.limit || 25,
       fields: compiled.fields,
@@ -105,37 +108,38 @@ PERFORMANCE:
     return this.tasksTool.execute(tasksArgs);
   }
 
-  private async routeToProjectsTool(compiled: any): Promise<any> {
-    const projectsArgs: any = {
+  private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {
+    const projectsArgs: Record<string, unknown> = {
       operation: 'list',
-      includeCompleted: compiled.filters?.status === 'completed',
+      includeCompleted: compiled.filters.status === 'completed',
     };
 
-    if (compiled.filters?.folder) projectsArgs.folder = compiled.filters.folder;
-    if (compiled.filters?.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
+    if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
+    if (compiled.filters.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
 
     return this.projectsTool.execute(projectsArgs);
   }
 
-  private async routeToTagsTool(_compiled: any): Promise<any> {
+  private async routeToTagsTool(_compiled: CompiledQuery): Promise<unknown> {
     return this.tagsTool.execute({ operation: 'list' });
   }
 
-  private async routeToPerspectivesTool(_compiled: any): Promise<any> {
+  private async routeToPerspectivesTool(_compiled: CompiledQuery): Promise<unknown> {
     return this.perspectivesTool.execute({ operation: 'list' });
   }
 
-  private async routeToFoldersTool(_compiled: any): Promise<any> {
+  private async routeToFoldersTool(_compiled: CompiledQuery): Promise<unknown> {
     return this.foldersTool.execute({ operation: 'list' });
   }
 
-  private extractSimpleTags(tagFilter: any): string[] | undefined {
+  private extractSimpleTags(tagFilter: QueryFilter['tags']): string[] | undefined {
+    if (!tagFilter) return undefined;
     if (tagFilter.any) return tagFilter.any;
     if (tagFilter.all) return tagFilter.all;
     return undefined;
   }
 
-  private needsAdvancedFilters(filters: any): boolean {
+  private needsAdvancedFilters(filters: QueryFilter): boolean {
     return Boolean(
       filters.tags?.all ||
       filters.tags?.none ||
@@ -151,9 +155,9 @@ PERFORMANCE:
     );
   }
 
-  private mapToAdvancedFilters(filters: any): any {
+  private mapToAdvancedFilters(filters: QueryFilter): Record<string, unknown> {
     // Map builder filters to existing advanced filter structure
-    const advanced: any = {};
+    const advanced: Record<string, unknown> = {};
 
     if (filters.tags) {
       if (filters.tags.any) {
@@ -186,7 +190,7 @@ PERFORMANCE:
 
     // Handle OR/AND/NOT recursively if needed
     if (filters.OR) {
-      advanced.OR = filters.OR.map((f: any) => this.mapToAdvancedFilters(f));
+      advanced.OR = filters.OR.map((f: QueryFilter) => this.mapToAdvancedFilters(f));
     }
 
     return advanced;
