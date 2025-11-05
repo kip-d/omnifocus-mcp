@@ -162,7 +162,7 @@ type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
  */
 export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperationResponseV2> {
   name = 'manage_task';
-  description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).';
+  description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).\n\nNOTE: An experimental unified API (omnifocus_write) is available for testing builder-style mutations. The \'manage_task\' tool remains the stable, recommended option for production use.';
   schema = ManageTaskSchema;
   meta = {
     // Phase 1: Essential metadata

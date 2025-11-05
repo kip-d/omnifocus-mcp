@@ -13,7 +13,7 @@ import { ProductivityStatsData } from '../../omnifocus/script-response-types.js'
 
 export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2> {
   name = 'productivity_stats';
-  description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.';
+  description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.\n\nNOTE: An experimental unified API (omnifocus_analyze) is available for testing builder-style analysis. The \'productivity_stats\' tool remains the stable, recommended option for production use.';
   schema = ProductivityStatsSchemaV2;
   meta = {
     // Phase 1: Essential metadata

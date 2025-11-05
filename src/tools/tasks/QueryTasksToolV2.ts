@@ -180,7 +180,9 @@ KNOWN LIMITATIONS:
 - Creation date ("added" field): Not accessible through the JXA-to-OmniJS bridge, despite being available in the native OmniJS API. This is an architectural limitation of how OmniAutomation's evaluateJavascript() works when called from JXA context.
 - Modified date ("modified" field): Same limitation as added date
 - Drop date ("dropDate" field): Same limitation as added date
-These fields will return null when requested.`;
+These fields will return null when requested.
+
+NOTE: An experimental unified API (omnifocus_read) is available for testing builder-style queries. The 'tasks' tool remains the stable, recommended option for production use.`;
   schema = QueryTasksToolSchemaV2;
 
   meta = {
