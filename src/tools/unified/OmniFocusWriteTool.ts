@@ -16,6 +16,12 @@ OPERATIONS:
 - delete: Remove permanently (provide id)
 - batch: Multiple operations in one call
 
+BATCH OPERATIONS:
+- tempId: Optional for each item (auto-generated if not provided)
+- parentTempId: Reference parent by tempId for hierarchies
+- createSequentially: true (respects dependencies)
+- returnMapping: true (returns tempId → realId map)
+
 TAG OPERATIONS:
 - tags: [...] - Replace all tags
 - addTags: [...] - Add to existing
@@ -98,13 +104,24 @@ SAFETY:
     compiled: Extract<CompiledMutation, { operation: 'batch' }>,
   ): Promise<unknown> {
     // Convert builder batch format to existing batch tool format
+    // Auto-generate tempIds for items that don't have them
+    let autoTempIdCounter = 0;
     const batchArgs: Record<string, unknown> = {
       items: compiled.operations
         .filter(op => op.operation === 'create')
-        .map(op => ({
-          type: op.target,
-          ...op.data,
-        })),
+        .map(op => {
+          const item = {
+            type: op.target,
+            ...op.data,
+          };
+
+          // Ensure tempId exists (required by BatchCreateTool for dependency graph)
+          if (!item.tempId) {
+            item.tempId = `auto_temp_${++autoTempIdCounter}`;
+          }
+
+          return item;
+        }),
       createSequentially: compiled.createSequentially ?? true,
       atomicOperation: compiled.atomicOperation ?? false,
       returnMapping: compiled.returnMapping ?? true,
