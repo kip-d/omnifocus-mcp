@@ -188,9 +188,22 @@ PERFORMANCE:
       advanced.available = filters.available;
     }
 
-    // Handle OR/AND/NOT recursively if needed
+    // Handle OR/AND/NOT logic
     if (filters.OR) {
       advanced.OR = filters.OR.map((f: QueryFilter) => this.mapToAdvancedFilters(f));
+    }
+
+    // AND filters: Since QueryTasksToolV2 implicitly ANDs all filters together,
+    // flatten the AND array by merging all sub-filters into the parent object
+    if (filters.AND) {
+      for (const subFilter of filters.AND) {
+        const mapped = this.mapToAdvancedFilters(subFilter);
+        Object.assign(advanced, mapped);
+      }
+    }
+
+    if (filters.NOT) {
+      advanced.NOT = this.mapToAdvancedFilters(filters.NOT);
     }
 
     return advanced;
