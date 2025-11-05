@@ -1,4 +1,15 @@
-# Testing Instructions: Three-Tool Builder API
+# Testing Instructions: Four-Tool Unified API
+
+**Status:** Experimental branch - 4 tools replace 17 legacy tools
+
+## Overview
+
+This branch consolidates the OmniFocus MCP server from 17 legacy tools to **4 unified tools**:
+
+1. **omnifocus_read** - Query operations (tasks, projects, tags, perspectives, folders)
+2. **omnifocus_write** - Mutation operations (create, update, complete, delete)
+3. **omnifocus_analyze** - Analysis operations (analytics, patterns, workflows)
+4. **system** - Version info and diagnostics
 
 ## Step 1: Pull Down the Feature Branch
 
@@ -26,31 +37,42 @@ npm run build
 # Should complete with no errors
 npm run build
 
-# Verify all 20 tools are registered
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | node dist/index.js 2>&1 | grep -c '"name":'
+# Verify all 4 tools are registered
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 10s node dist/index.js 2>/dev/null | jq '.result.tools[].name'
 
-# Expected output: 20 (3 new + 17 legacy)
+# Expected output:
+# "omnifocus_read"
+# "omnifocus_write"
+# "omnifocus_analyze"
+# "system"
 ```
 
 ## Step 3: Run Integration Tests
 
 ```bash
-# Run all unified tool tests
-npm run test:integration -- tests/integration/tools/unified
+# Run unified tool end-to-end tests
+npm run test:integration -- tests/integration/tools/unified/end-to-end.test.ts
 
-# Expected: All tests passing
-# - OmniFocusReadTool.test.ts: 3/3 passing
-# - OmniFocusWriteTool.test.ts: 2/2 passing
-# - OmniFocusAnalyzeTool.test.ts: 3/3 passing
-# - end-to-end.test.ts: 10/10 passing
+# Expected: All 10 tests passing
+# - omnifocus_read > should query inbox tasks ✓
+# - omnifocus_read > should query tasks with filters ✓
+# - omnifocus_read > should list all projects ✓
+# - omnifocus_read > should list all tags ✓
+# - omnifocus_write > should create a new task ✓
+# - omnifocus_write > should update the created task ✓
+# - omnifocus_write > should complete the task ✓
+# - omnifocus_write > should delete the completed task ✓
+# - omnifocus_analyze > should analyze productivity stats ✓
+# - omnifocus_analyze > should analyze task patterns ✓
 ```
+
+**Note:** Legacy integration tests (26 tests) will fail because they use old tool names like `tasks`, `manage_task`, `projects`, etc. This is expected - those tools no longer exist.
 
 ## Step 4: Test with Claude Desktop
 
-### A. Test with ALL tools (3 new + 17 legacy)
+### Update Claude Desktop Configuration
 
-1. Update your Claude Desktop MCP config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+1. Edit your Claude Desktop MCP config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -67,112 +89,71 @@ npm run test:integration -- tests/integration/tools/unified
 
 3. Use the natural language testing prompt (see `TESTING_PROMPT.md`)
 
-### B. Test with ONLY the 3 new tools (remove 17 legacy)
+## Step 5: Verify Tool Functionality
 
-This verifies the new tools can operate independently.
+All functionality from the 17 legacy tools should work through the 4 unified tools:
 
-1. **Temporarily disable legacy tools:**
+### Query Operations (omnifocus_read replaces 5 tools)
+- ✅ Query tasks (replaces `tasks` tool)
+- ✅ List projects (replaces `projects` tool)
+- ✅ List tags (replaces `tags` tool)
+- ✅ List perspectives (replaces `perspectives` tool)
+- ✅ List folders (replaces `folders` tool)
 
-```bash
-# Edit src/tools/index.ts
-# Comment out the 17 legacy tool instantiations (lines 94-123)
-# Keep only the 3 new unified tools (lines 89-91)
+### Mutation Operations (omnifocus_write replaces 3 tools)
+- ✅ Create/update/delete tasks (replaces `manage_task` tool)
+- ✅ Batch create tasks/projects (replaces `batch_create` tool)
+- ✅ Parse meeting notes (replaces `parse_meeting_notes` tool)
 
-# Then rebuild
-npm run build
-```
+### Analysis Operations (omnifocus_analyze replaces 8 tools)
+- ✅ Productivity stats (replaces `productivity_stats` tool)
+- ✅ Task velocity (replaces `task_velocity` tool)
+- ✅ Overdue analysis (replaces `analyze_overdue` tool)
+- ✅ Workflow analysis (replaces `workflow_analysis` tool)
+- ✅ Pattern analysis (replaces `analyze_patterns` tool)
+- ✅ Recurring tasks (replaces `recurring_tasks` tool)
+- ✅ Review management (replaces `manage_reviews` tool)
+- ✅ Export operations (replaces `export` tool)
 
-2. **Verify only 3 tools registered:**
+### System Operations (system tool retained)
+- ✅ Version info and diagnostics
 
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | node dist/index.js 2>&1 | grep -c '"name":'
+## Step 6: Report Results
 
-# Expected output: 3 (only unified tools)
-```
+After testing, report:
 
-3. **Test with Claude Desktop** using the same natural language prompt
-
-4. **Important:** All functionality should work through the 3 unified tools
-
-5. **Restore legacy tools when testing complete:**
-
-```bash
-# Undo changes to src/tools/index.ts
-git checkout src/tools/index.ts
-
-# Rebuild
-npm run build
-```
-
-## Step 5: Report Results
-
-Create a testing report with:
-
-### Test Results Template
-
-```markdown
-## Testing Results: Three-Tool Builder API
-
-**Date:** [DATE]
-**Tester:** [NAME]
-**Branch:** feature/three-tool-builder-api
-**Commit:** [COMMIT_HASH from git log]
-
-### Build Status
-- [ ] Clean build (no TypeScript errors)
-- [ ] All 20 tools registered
-
-### Integration Tests
-- [ ] OmniFocusReadTool.test.ts: PASS/FAIL
-- [ ] OmniFocusWriteTool.test.ts: PASS/FAIL
-- [ ] OmniFocusAnalyzeTool.test.ts: PASS/FAIL
-- [ ] end-to-end.test.ts: PASS/FAIL
-
-### Claude Desktop Testing - All Tools (3+17)
-- [ ] Read operations working
-- [ ] Write operations working
-- [ ] Analyze operations working
-- [ ] No errors in Claude Desktop
-
-### Claude Desktop Testing - Only 3 Tools
-- [ ] Successfully disabled 17 legacy tools
-- [ ] Only 3 tools showing in tool list
-- [ ] Read operations working
-- [ ] Write operations working
-- [ ] Analyze operations working
-- [ ] ALL functionality working with just 3 tools
-
-### Issues Found
-[List any issues, errors, or unexpected behavior]
-
-### Notes
-[Any additional observations or feedback]
-```
+1. ✅ **What works:** List all operations that work correctly through the 4 unified tools
+2. ❌ **What doesn't work:** Any functionality that fails or behaves differently
+3. 💡 **Suggestions:** Any improvements or issues discovered during testing
 
 ## Troubleshooting
 
-### Build Fails
+### Tool count is wrong
 ```bash
-# Clean and rebuild
-rm -rf dist/
+# Check how many tools are registered
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | timeout 10s node dist/index.js 2>/dev/null | jq '.result.tools | length'
+
+# Should be: 4
+```
+
+### Build fails
+```bash
+# Clean build
+rm -rf dist node_modules
+npm install
 npm run build
 ```
 
-### Tests Timeout
+### Tests fail
 ```bash
-# OmniFocus may be blocked by dialogs
-# Check OmniFocus app for permission dialogs
+# Only run unified tool tests (legacy tests are expected to fail)
+npm run test:integration -- tests/integration/tools/unified
 ```
 
-### Claude Desktop Not Connecting
-```bash
-# Check logs
-tail -f ~/Library/Logs/Claude/mcp*.log
+## Expected Test Results
 
-# Verify config path is correct
-cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
-```
+- ✅ Unified end-to-end tests: **10/10 passing**
+- ✅ Unit tests: **All passing**
+- ⚠️ Legacy integration tests: **26 failures expected** (they use old tool names)
 
-### Only 3 Tools Test Fails
-This would indicate the new tools cannot fully replace the old ones - CRITICAL FINDING to report immediately.
+The legacy test failures are **normal and expected** - those tools no longer exist and the tests haven't been updated yet to use the builder API.
