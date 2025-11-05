@@ -153,8 +153,12 @@ SCOPE FILTERING:
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
+    // Map insights to patterns (PatternAnalysisToolV2 expects 'patterns' not 'insights')
     if (compiled.params?.insights) {
-      args.insights = compiled.params.insights;
+      args.patterns = compiled.params.insights;
+    } else {
+      // Default to 'all' if no patterns specified
+      args.patterns = ['all'];
     }
 
     return this.patternTool.execute(args);
