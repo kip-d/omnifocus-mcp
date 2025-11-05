@@ -1,11 +1,11 @@
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
-import { MutationCompiler } from './compilers/MutationCompiler.js';
+import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
 import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 
-export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, any> {
+export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
   description = `Create, update, complete, or delete OmniFocus tasks and projects.
 
@@ -54,7 +54,7 @@ SAFETY:
     this.batchTool = new BatchCreateTool(cache);
   }
 
-  async executeValidated(args: WriteInput): Promise<any> {
+  async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
     // Route to batch tool if batch operation
@@ -66,40 +66,40 @@ SAFETY:
     return this.routeToManageTask(compiled);
   }
 
-  private async routeToManageTask(compiled: any): Promise<any> {
-    const manageArgs: any = {
+  private async routeToManageTask(
+    compiled: Exclude<CompiledMutation, { operation: 'batch' }>
+  ): Promise<unknown> {
+    const manageArgs: Record<string, unknown> = {
       operation: compiled.operation,
     };
 
     // Add ID for update/complete/delete
-    if (compiled.taskId) {
+    if ('taskId' in compiled && compiled.taskId) {
       manageArgs.taskId = compiled.taskId;
     }
 
     // Note: projectId not used by ManageTaskTool (it uses 'project' parameter instead)
 
     // Add data for create - spread all fields
-    if (compiled.data) {
+    if ('data' in compiled && compiled.data) {
       // Spread data fields directly (name, tags, project, dueDate, etc.)
       Object.assign(manageArgs, compiled.data);
     }
 
     // Add changes for update - spread all fields
-    if (compiled.changes) {
+    if ('changes' in compiled && compiled.changes) {
       Object.assign(manageArgs, compiled.changes);
     }
 
     return this.manageTaskTool.execute(manageArgs);
   }
 
-  private async routeToBatch(compiled: any): Promise<any> {
-    if (!compiled.operations) {
-      throw new Error('Batch operation requires operations array');
-    }
-
+  private async routeToBatch(
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>
+  ): Promise<unknown> {
     // Convert builder batch format to existing batch tool format
-    const batchArgs: any = {
-      items: compiled.operations.map((op: any) => ({
+    const batchArgs: Record<string, unknown> = {
+      items: compiled.operations.map(op => ({
         type: op.target,
         name: op.data?.name,
         ...op.data,
