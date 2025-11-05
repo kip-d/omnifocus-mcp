@@ -568,13 +568,16 @@ export const SCRIPT = `${getAllHelpers()}  // ~30KB - well within 523KB limit
 
 **When scripts fail:** Script size is unlikely the issue (limits are 523KB+ for JXA). Check JXA vs OmniJS syntax, validate JavaScript syntax, and test with both direct execution and Claude Desktop.
 
-## 🚨 CRITICAL: Async Operation Lifecycle & stdin Handling (September 2025)
+## 🚨 CRITICAL: Async Operation Lifecycle & MCP Shutdown (September-November 2025)
 
 **We spent 6+ months with broken MCP lifecycle compliance!**
 
-**THE PROBLEM:** MCP server exits immediately when stdin closes, killing osascript child processes before they return results.
+**THE PROBLEM:** MCP server exits immediately when stdin closes, killing osascript child processes AND not flushing responses to stdout.
 
-**THE SOLUTION:** Implement pending operations tracking:
+**THE SOLUTION:** Two-part pattern:
+1. Track pending operations to prevent premature exit
+2. **CRITICAL:** Call server.close() before process.exit() to flush responses
+
 ```typescript
 // ✅ REQUIRED: Track async operations to prevent premature exit
 const pendingOperations = new Set<Promise<any>>();
@@ -582,19 +585,29 @@ setPendingOperationsTracker(pendingOperations);
 
 const gracefulExit = async (reason: string) => {
   logger.info(`${reason}, waiting for pending operations to complete...`);
+
+  // Wait for tool executions to complete
   if (pendingOperations.size > 0) {
     await Promise.allSettled([...pendingOperations]);
   }
+
+  // ✅ CRITICAL: Close server to flush buffered responses to stdout
+  // Without this, responses may not be written before process.exit()
+  await server.close();
+
   process.exit(0);
 };
 
 process.stdin.on('end', () => gracefulExit('stdin closed'));
 ```
 
-**SYMPTOMS of missing async tracking:**
+**NEVER call process.exit() without server.close() first!** (Exception: fatal startup errors)
+
+**SYMPTOMS of missing patterns:**
 - Tools execute but return no response
-- osascript processes get killed mid-execution  
+- osascript processes get killed mid-execution
 - "Silent failures" where tools appear to work but produce no output
+- Responses show in logs but not in stdout (missing server.close)
 
 **See `docs/LESSONS_LEARNED.md` for complete implementation details.**
 
