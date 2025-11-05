@@ -170,7 +170,14 @@ PERFORMANCE:
     }
 
     if (filters.dueDate) {
-      if (filters.dueDate.before) {
+      // Handle date ranges with BETWEEN operator when both before and after are specified
+      if (filters.dueDate.before && filters.dueDate.after) {
+        advanced.dueDate = {
+          operator: 'BETWEEN',
+          value: filters.dueDate.after,
+          upperBound: filters.dueDate.before,
+        };
+      } else if (filters.dueDate.before) {
         advanced.dueDate = { operator: '<=', value: filters.dueDate.before };
       } else if (filters.dueDate.after) {
         advanced.dueDate = { operator: '>=', value: filters.dueDate.after };
