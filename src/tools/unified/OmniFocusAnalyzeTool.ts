@@ -1,0 +1,203 @@
+import { z } from 'zod';
+import { BaseTool } from '../base.js';
+import { CacheManager } from '../../cache/CacheManager.js';
+import { AnalyzeSchema, type AnalyzeInput } from './schemas/analyze-schema.js';
+import { AnalysisCompiler } from './compilers/AnalysisCompiler.js';
+import { ProductivityStatsToolV2 } from '../analytics/ProductivityStatsToolV2.js';
+import { TaskVelocityToolV2 } from '../analytics/TaskVelocityToolV2.js';
+import { OverdueAnalysisToolV2 } from '../analytics/OverdueAnalysisToolV2.js';
+import { PatternAnalysisToolV2 } from '../analytics/PatternAnalysisToolV2.js';
+import { WorkflowAnalysisTool } from '../analytics/WorkflowAnalysisTool.js';
+import { RecurringTasksTool } from '../recurring/RecurringTasksTool.js';
+import { ParseMeetingNotesTool } from '../capture/ParseMeetingNotesTool.js';
+import { ManageReviewsTool } from '../reviews/ManageReviewsTool.js';
+
+export class OmniFocusAnalyzeTool extends BaseTool<typeof AnalyzeSchema, any> {
+  name = 'omnifocus_analyze';
+  description = `Analyze OmniFocus data for insights, patterns, and specialized operations.
+
+ANALYSIS TYPES:
+- productivity_stats: GTD health metrics (completion rates, velocity)
+- task_velocity: Completion trends over time
+- overdue_analysis: Bottleneck identification
+- pattern_analysis: Database-wide patterns (tags, projects, stale items)
+- workflow_analysis: Deep workflow analysis
+- recurring_tasks: Recurring task patterns and frequencies
+- parse_meeting_notes: Extract action items from meeting notes
+- manage_reviews: Project review operations
+
+PERFORMANCE WARNINGS:
+- pattern_analysis on 1000+ items: ~5-10 seconds
+- workflow_analysis: ~3-5 seconds for comprehensive
+- Most others: <1 second with caching
+
+SCOPE FILTERING:
+- Use dateRange for time-based analysis
+- Use tags/projects to focus analysis`;
+
+  schema = AnalyzeSchema;
+
+  private compiler: AnalysisCompiler;
+  private productivityTool: ProductivityStatsToolV2;
+  private velocityTool: TaskVelocityToolV2;
+  private overdueTool: OverdueAnalysisToolV2;
+  private patternTool: PatternAnalysisToolV2;
+  private workflowTool: WorkflowAnalysisTool;
+  private recurringTool: RecurringTasksTool;
+  private meetingNotesTool: ParseMeetingNotesTool;
+  private reviewsTool: ManageReviewsTool;
+
+  constructor(cache: CacheManager) {
+    super(cache);
+    this.compiler = new AnalysisCompiler();
+
+    // Instantiate all analysis tools
+    this.productivityTool = new ProductivityStatsToolV2(cache);
+    this.velocityTool = new TaskVelocityToolV2(cache);
+    this.overdueTool = new OverdueAnalysisToolV2(cache);
+    this.patternTool = new PatternAnalysisToolV2(cache);
+    this.workflowTool = new WorkflowAnalysisTool(cache);
+    this.recurringTool = new RecurringTasksTool(cache);
+    this.meetingNotesTool = new ParseMeetingNotesTool(cache);
+    this.reviewsTool = new ManageReviewsTool(cache);
+  }
+
+  async executeValidated(args: AnalyzeInput): Promise<any> {
+    const compiled = this.compiler.compile(args);
+
+    // Route to appropriate tool based on type
+    switch (compiled.type) {
+      case 'productivity_stats':
+        return this.routeToProductivityStats(compiled);
+      case 'task_velocity':
+        return this.routeToVelocity(compiled);
+      case 'overdue_analysis':
+        return this.routeToOverdue(compiled);
+      case 'pattern_analysis':
+        return this.routeToPattern(compiled);
+      case 'workflow_analysis':
+        return this.routeToWorkflow(compiled);
+      case 'recurring_tasks':
+        return this.routeToRecurring(compiled);
+      case 'parse_meeting_notes':
+        return this.routeToMeetingNotes(compiled);
+      case 'manage_reviews':
+        return this.routeToReviews(compiled);
+      default:
+        throw new Error(`Unsupported analysis type: ${compiled.type}`);
+    }
+  }
+
+  private async routeToProductivityStats(compiled: any): Promise<any> {
+    const args: any = {};
+
+    // ProductivityStatsToolV2 uses period enum (not custom date ranges)
+    // Map groupBy to period if provided
+    if (compiled.params?.groupBy) {
+      args.period = compiled.params.groupBy; // day/week/month
+    } else {
+      args.period = 'week'; // default
+    }
+
+    return this.productivityTool.execute(args);
+  }
+
+  private async routeToVelocity(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.scope?.dateRange) {
+      args.startDate = compiled.scope.dateRange.start;
+      args.endDate = compiled.scope.dateRange.end;
+    }
+
+    if (compiled.params?.groupBy) {
+      args.interval = compiled.params.groupBy;
+    }
+
+    return this.velocityTool.execute(args);
+  }
+
+  private async routeToOverdue(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.scope?.tags) {
+      args.tags = compiled.scope.tags;
+    }
+
+    if (compiled.scope?.projects) {
+      args.projects = compiled.scope.projects;
+    }
+
+    return this.overdueTool.execute(args);
+  }
+
+  private async routeToPattern(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.params?.insights) {
+      args.insights = compiled.params.insights;
+    }
+
+    return this.patternTool.execute(args);
+  }
+
+  private async routeToWorkflow(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.scope?.dateRange) {
+      args.startDate = compiled.scope.dateRange.start;
+      args.endDate = compiled.scope.dateRange.end;
+    }
+
+    return this.workflowTool.execute(args);
+  }
+
+  private async routeToRecurring(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.params?.operation) {
+      args.operation = compiled.params.operation;
+    }
+
+    if (compiled.params?.sortBy) {
+      args.sortBy = compiled.params.sortBy;
+    }
+
+    return this.recurringTool.execute(args);
+  }
+
+  private async routeToMeetingNotes(compiled: any): Promise<any> {
+    const args: any = {
+      input: compiled.params.text, // Note: ParseMeetingNotesTool expects 'input' not 'text'
+    };
+
+    if (compiled.params?.extractTasks !== undefined) {
+      // Map extractTasks to extractMode
+      args.extractMode = compiled.params.extractTasks ? 'action_items' : 'both';
+    }
+
+    if (compiled.params?.defaultProject) {
+      args.defaultProject = compiled.params.defaultProject;
+    }
+
+    if (compiled.params?.defaultTags) {
+      args.defaultTags = compiled.params.defaultTags;
+    }
+
+    return this.meetingNotesTool.execute(args);
+  }
+
+  private async routeToReviews(compiled: any): Promise<any> {
+    const args: any = {};
+
+    if (compiled.params?.projectId) {
+      args.projectId = compiled.params.projectId;
+    }
+
+    if (compiled.params?.reviewDate) {
+      args.reviewDate = compiled.params.reviewDate;
+    }
+
+    return this.reviewsTool.execute(args);
+  }
+}
