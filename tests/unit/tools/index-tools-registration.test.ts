@@ -11,7 +11,7 @@ class FakeServer {
 }
 
 describe('tools/index registerTools', () => {
-  it('registers list and call handlers and exposes 17 tools', async () => {
+  it('registers list and call handlers and exposes 20 tools (3 unified + 17 legacy)', async () => {
     const server = new FakeServer() as any;
     const cache = new CacheManager();
 
@@ -22,8 +22,15 @@ describe('tools/index registerTools', () => {
     expect(listHandler).toBeTypeOf('function');
     const list = await listHandler({});
     expect(Array.isArray(list.tools)).toBe(true);
-    expect(list.tools.length).toBe(17);
+    expect(list.tools.length).toBe(20);
     const names = list.tools.map((t: any) => t.name);
+
+    // Check unified builder API tools (new in v2.3.0)
+    expect(names).toContain('omnifocus_read');
+    expect(names).toContain('omnifocus_write');
+    expect(names).toContain('omnifocus_analyze');
+
+    // Check legacy tools still present
     expect(names).toContain('system');
     expect(names).toContain('tasks');
     expect(names).toContain('manage_task');
