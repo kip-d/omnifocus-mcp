@@ -42,10 +42,10 @@ SAFETY:
   schema = WriteSchema;
   meta = {
     category: 'Task Management' as const,
-    stability: 'experimental' as const,
+    stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
-    tags: ['unified', 'builder', 'write', 'mutations'],
+    tags: ['unified', 'write', 'mutations'],
     capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
   };
 

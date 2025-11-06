@@ -1,8 +1,8 @@
 # User Testing Instructions: 4-Tool Unified API
 
-**Branch to test:** `feature/three-tool-builder-api`
+**Branch to test:** `feature/unified-api`
 **What it has:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
-**Note:** Branch name says "three-tool" but actually has 4 tools (system was added back for diagnostics)
+**Note:** This branch implements the unified API that consolidates 17 legacy tools into 3 core tools (plus system diagnostics)
 
 ---
 
@@ -12,7 +12,7 @@
 # 1. Get the correct branch
 cd ~/src/omnifocus-mcp
 git fetch --all
-git checkout feature/three-tool-builder-api
+git checkout feature/unified-api
 git pull
 
 # 2. Build
@@ -103,7 +103,7 @@ List tests that failed with error details
 ## Troubleshooting
 
 ### "Claude doesn't see 4 tools, it sees 17"
-Wrong branch! Check: `git branch --show-current` should show `feature/three-tool-builder-api`
+Wrong branch! Check: `git branch --show-current` should show `feature/unified-api`
 
 ### "Build fails"
 ```bash
@@ -129,5 +129,5 @@ npm run build
 ---
 
 **Last Updated:** 2025-11-05
-**Branch:** feature/three-tool-builder-api
+**Branch:** feature/unified-api
 **Tools:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)

@@ -31,10 +31,10 @@ PERFORMANCE:
   schema = ReadSchema;
   meta = {
     category: 'Utility' as const,
-    stability: 'experimental' as const,
+    stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
-    tags: ['unified', 'builder', 'read', 'query'],
+    tags: ['unified', 'read', 'query'],
     capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest'],
   };
 
@@ -88,6 +88,11 @@ PERFORMANCE:
       fields: compiled.fields,
       sort: compiled.sort,
     };
+
+    // Map ID filter (exact match)
+    if (compiled.filters.id) {
+      tasksArgs.id = compiled.filters.id;
+    }
 
     // Special case: project: null means inbox mode
     if (compiled.filters.project === null) {

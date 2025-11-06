@@ -37,10 +37,10 @@ SCOPE FILTERING:
   schema = AnalyzeSchema;
   meta = {
     category: 'Analytics' as const,
-    stability: 'experimental' as const,
+    stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'slow' as const,
-    tags: ['unified', 'builder', 'analyze', 'analytics'],
+    tags: ['unified', 'analyze', 'analytics'],
     capabilities: ['productivity_stats', 'task_velocity', 'overdue_analysis', 'pattern_analysis', 'workflow_analysis', 'recurring_tasks', 'parse_meeting_notes', 'manage_reviews'],
   };
 

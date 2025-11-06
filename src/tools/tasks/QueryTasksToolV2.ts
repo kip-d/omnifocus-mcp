@@ -49,6 +49,7 @@ const QueryTasksToolSchemaV2 = z.object({
     .describe('Query mode: "all" = all tasks with optional filters, "inbox" = tasks in inbox (not assigned to any project), "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
 
   // Common filters (work with most modes)
+  id: z.string().optional().describe('Filter by exact task ID (returns single task if found)'),
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
   project: z.string().optional().describe('Filter by project name or ID'),
   tags: z.array(z.string()).optional().describe('Filter by tag names'),
@@ -231,6 +232,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
+
+      // Special case: ID filtering (exact match for single task)
+      if (normalizedArgs.id) {
+        return this.handleTaskById(normalizedArgs, timer);
+      }
 
       // Route to appropriate handler based on mode
       switch (normalizedArgs.mode) {
@@ -612,6 +618,57 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     });
 
     return filter;
+  }
+
+  private async handleTaskById(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Fast path for exact ID lookup
+    const filter = {
+      id: args.id,
+      limit: 1,  // Only need one result for exact ID match
+      includeDetails: args.details,
+    };
+
+    // Execute query using V3 script for performance
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+      filter,
+      fields: args.fields || [],
+      limit: 1,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      const specificError = this.getSpecificErrorResponse(result, 'id_lookup', timer);
+      if (specificError) {
+        return specificError;
+      }
+
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        `Failed to find task with ID: ${args.id}`,
+        'Verify the task ID is correct and the task exists',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
+
+    // Apply field projection if requested
+    const projectedTasks = this.projectFields(tasks, args.fields);
+
+    return createTaskResponseV2(
+      'tasks',
+      projectedTasks,
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'id_lookup',
+        filters_applied: filter,
+        sort_applied: false,
+      },
+    );
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
