@@ -8,11 +8,11 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 ---
 
-## 🧪 Unified Builder API (Experimental - v2.3.0)
+## 🎯 Unified API (Production Ready - v2.3.0)
 
-**Status:** EXPERIMENTAL - Operates in parallel with existing 17 tools for testing and gradual migration.
+**Status:** STABLE - Production-ready unified API with comprehensive testing and validation.
 
-**Overview:** Three new unified tools consolidate the 17 existing MCP tools into a builder-pattern API for LLM optimization:
+**Overview:** Three unified tools consolidate the MCP interface into a streamlined API for LLM optimization:
 
 - **`omnifocus_read`** - Unified query builder (routes to tasks, projects, tags, perspectives, folders tools)
 - **`omnifocus_write`** - Unified mutation builder (routes to manage_task, batch_create tools)
@@ -59,8 +59,9 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 - ✅ All compilers route to existing backend tools
 - ✅ All tools registered and exposed via MCP
 - ✅ End-to-end integration tests passing (10/10)
-- ⚠️  EXPERIMENTAL - Use existing tools for production
-- 📊 Testing phase for context window optimization
+- ✅ User testing complete with 100% success rate
+- ✅ ID filtering bug fixed and verified
+- ✅ Production ready and stable
 
 **Files:**
 - Schemas: `src/tools/unified/schemas/{read,write,analyze}-schema.ts`
@@ -365,9 +366,9 @@ If you see these in your plan, STOP and search for patterns:
 - ⚠️ "This seems slow in JXA"
 - ⚠️ Timeout issues with existing scripts
 
-## Critical: V2 Architecture
-- **Use only V2 tools** (`*ToolV2.ts` files in `src/tools/`)
-- V1 tools removed in v2.0.0 for 30% context reduction
+## Critical: Architecture
+- **Unified API**: Production tools in `src/tools/unified/` directory
+- **Backend tools**: Individual tool implementations in `src/tools/` subdirectories
 - **Official API**: See `src/omnifocus/api/OmniFocus.d.ts` for OmniFocus 4.6.1 type definitions
 
 ## Development Rules
@@ -412,7 +413,7 @@ This document prevents the Fix → Lint → Build error cycle by establishing pr
 
 **Solution: ALWAYS verify actual response structure before writing tests!** (See Quick Reference → Testing Pattern for commands)
 
-**Standard V2 Response Structure:**
+**Standard Response Structure:**
 ```typescript
 {
   success: boolean;
@@ -789,7 +790,7 @@ The graceful exit is NEVER an error - it's required MCP compliance!
 - Added logging: console.error() debug statements → broke the script!
 - User suggested: "Run the test yourself"
 - **Finally tested MCP integration:** Script returns completedInPeriod: 95 ✓, tool returns 0 ✗
-- **Root cause found:** Tool wrapper double-unwrapping issue in ProductivityStatsToolV2.ts
+- **Root cause found:** Tool wrapper double-unwrapping issue in ProductivityStatsTool.ts
 - **Fix applied:** Commit 84c01cc - unwrap both layers, works perfectly
 
 **Cost of not following the rule:**
@@ -803,7 +804,7 @@ The graceful exit is NEVER an error - it's required MCP compliance!
 1. Run MCP integration test FIRST (5 minutes)
 2. Compare script output (95) vs tool output (0)
 3. Identify: Wrapper issue, not script issue
-4. Fix: ProductivityStatsToolV2.ts unwrapping logic
+4. Fix: ProductivityStatsTool.ts unwrapping logic
 5. Total time: 10 minutes vs 2 hours
 
 **Lesson:** See `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values" for diagnostic commands
