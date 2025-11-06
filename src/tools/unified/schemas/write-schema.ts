@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceBoolean } from '../../schemas/coercion-helpers.js';
 
 // Repetition rule schema
 const RepetitionRuleSchema = z.object({
@@ -97,10 +98,10 @@ const MutationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('batch'),
     target: z.enum(['task', 'project']),
     operations: z.array(BatchOperationSchema),
-    createSequentially: z.boolean().optional().default(true),
-    atomicOperation: z.boolean().optional().default(false),
-    returnMapping: z.boolean().optional().default(true),
-    stopOnError: z.boolean().optional().default(true),
+    createSequentially: coerceBoolean().optional().default(true),
+    atomicOperation: coerceBoolean().optional().default(false),
+    returnMapping: coerceBoolean().optional().default(true),
+    stopOnError: coerceBoolean().optional().default(true),
   }),
 ]);
 
