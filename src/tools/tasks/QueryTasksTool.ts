@@ -655,6 +655,29 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
 
+    // Validate ID lookup result
+    if (tasks.length === 0) {
+      return createErrorResponseV2(
+        'tasks',
+        'NOT_FOUND',
+        `Task not found with ID: ${args.id}`,
+        'Verify the task ID is correct and the task exists',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    if (tasks[0].id !== args.id) {
+      return createErrorResponseV2(
+        'tasks',
+        'ID_MISMATCH',
+        `Task ID mismatch: requested ${args.id}, received ${tasks[0].id}`,
+        'This indicates a potential issue with the OmniFocus script - please report this bug',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
     // Apply field projection if requested
     const projectedTasks = this.projectFields(tasks, args.fields);
 

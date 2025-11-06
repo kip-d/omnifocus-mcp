@@ -8,7 +8,7 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 
 ---
 
-## 🎯 Unified API (Production Ready - v2.3.0)
+## 🎯 Unified API (Production Ready - v3.0.0)
 
 **Status:** STABLE - Production-ready unified API with comprehensive testing and validation.
 
@@ -22,7 +22,7 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
 - All three tools use discriminated union schemas for type-safe operation selection
 - Compilers translate builder JSON to existing tool parameters (maximum code reuse)
 - Zero changes to existing backend infrastructure - pure routing layer
-- Both APIs operate simultaneously: 20 total tools (3 new + 17 legacy)
+- 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
 
 **Example Usage:**
 

@@ -88,10 +88,11 @@ omnifocus_read(query)
 - Compile-time validation
 - MCP-compliant error handling
 
-### Zero Breaking Changes
-- Pure routing layer
+### Architecture Benefits
+- Clean routing layer with discriminated unions
 - Reuses all existing backend infrastructure
 - No changes to OmniFocus scripts
+- 76% reduction in tool count (17 → 4)
 
 ---
 
@@ -122,11 +123,11 @@ omnifocus_read(query)
 
 ---
 
-## Migration Path
+## API Usage
 
-### For LLMs (Recommended)
+### Unified Interface
 ```javascript
-// New unified API (cleaner, fewer tools)
+// Clean, type-safe unified API
 {
   query: {
     type: "tasks",
@@ -136,13 +137,7 @@ omnifocus_read(query)
 }
 ```
 
-### For Direct Users (Still Supported)
-```javascript
-// Individual tools still work
-{ mode: "flagged", project: "Work", limit: 10 }
-```
-
-**Note:** Both APIs work simultaneously. No breaking changes.
+**LLM Integration:** The unified API provides a cleaner interface for LLM assistants to interact with OmniFocus. End users continue using natural language - the LLM handles the API calls.
 
 ---
 
@@ -186,11 +181,16 @@ omnifocus_read(query)
 
 ## Breaking Changes
 
-**None.** This is a purely additive change.
+**BREAKING:** This release consolidates from 17 individual tools to 4 unified tools.
 
-- Legacy 17-tool interface still works
-- All existing scripts unchanged
-- Backward compatible
+### What Changed
+- **Removed:** 17 individual tool interfaces (tasks, manage_task, projects, tags, etc.)
+- **Added:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
+- **Impact:** LLM assistants using this MCP server will use the new unified API
+- **Backend:** All OmniFocus scripts remain unchanged - this is a pure API refactoring
+
+### Why v3.0.0
+This is a major version bump due to the API consolidation. The unified interface provides better type safety, cleaner tool schemas, and improved LLM usability.
 
 ---
 
@@ -232,27 +232,27 @@ omnifocus_read(query)
 - [x] ID filtering bug fixed and verified
 - [x] Documentation updated
 - [x] Checkpoint document created
-- [x] No breaking changes
-- [x] Backward compatible
+- [x] Breaking changes documented
+- [x] Version bumped to 3.0.0
 
 ---
 
 ## Next Steps (Post-Merge)
 
-1. **User Communication**
-   - Announce unified API availability
-   - Provide migration examples
-   - Highlight benefits (cleaner, type-safe)
+1. **Release**
+   - Tag as v3.0.0
+   - Publish to npm (if applicable)
+   - Update Claude Desktop configs to use new version
 
 2. **Monitoring**
-   - Track unified API adoption
    - Monitor performance metrics
    - Gather user feedback
+   - Track any integration issues
 
 3. **Future Enhancements**
-   - Gradual deprecation of legacy 17-tool interface (v3.0.0)
    - Additional compiler optimizations
    - Enhanced type definitions
+   - Extended analysis capabilities
 
 ---
 
