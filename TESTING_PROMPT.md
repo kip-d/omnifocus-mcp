@@ -30,7 +30,7 @@ Use `omnifocus_read` for these 5 queries:
 2. **All projects** - List my active projects
 3. **All tags** - List all tags
 4. **Flagged tasks** - Find flagged tasks
-5. **Complex filter** - Find tasks that are flagged AND due this week AND not completed
+5. **Complex filter** - Find tasks that are NOT completed AND due within the next 30 days (tests AND logic with date ranges)
 
 **What to verify:** You can construct all these queries using omnifocus_read with different filters
 
