@@ -597,6 +597,8 @@ app.evaluateJavascript(`
 
 ### 5. MCP Bridge Type Coercion
 **Problem:** Claude Desktop converts ALL parameters to strings
+
+**Numbers:**
 ```typescript
 // ❌ FAILS with Claude Desktop
 schema: z.object({
@@ -611,6 +613,32 @@ schema: z.object({
   ])
 })
 ```
+
+**Booleans:**
+```typescript
+// ❌ FAILS with Claude Desktop
+schema: z.object({
+  flagged: z.boolean()  // Will receive "true" not true
+})
+
+// ✅ WORKS everywhere - use coerceBoolean() helper
+import { coerceBoolean } from './schemas/coercion-helpers.js';
+
+schema: z.object({
+  flagged: coerceBoolean()  // Handles "true", "false", "1", "0", etc.
+})
+```
+
+**Common places this breaks:**
+- Batch operation parameters (createSequentially, returnMapping, etc.)
+- Feature flags in unified tool schemas
+- Any boolean in tool schemas
+
+**Fix checklist:**
+1. Search for `z.boolean()` in schema files
+2. Replace with `coerceBoolean()` from coercion-helpers.ts
+3. Test with Claude Desktop (sends strings)
+4. Test with direct calls (sends booleans)
 
 ### 6. Task Status is Not a Simple Property
 **Problem:** Task availability depends on multiple factors

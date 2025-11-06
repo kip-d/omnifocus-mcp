@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2025-11-06
+
+### BREAKING CHANGES
+- **Unified API Consolidation** - Streamlined from 17 individual tools to 4 unified tools
+  - **Removed:** 17 individual tool interfaces (tasks, manage_task, projects, tags, etc.)
+  - **Added:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
+  - **Impact:** LLM assistants will use the new unified API
+  - **Backend:** All OmniFocus scripts remain unchanged - pure API refactoring
+
 ### Added
 - **GTD Power User Suite**: 4 new pattern analyzers for workflow health
   - `review_gaps` - Identifies projects overdue for GTD weekly review
@@ -14,6 +23,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `wip_limits` - Detects projects with excessive work-in-progress
   - `due_date_bunching` - Identifies workload imbalances and deadline clustering
 - Configurable options for WIP limits (default: 5) and bunching threshold (default: 8)
+
+### Fixed
+- **Critical: ID Filtering Validation** - Added safety checks to task ID lookups
+  - Validates task exists (returns NOT_FOUND error if no results)
+  - Validates returned task ID matches requested ID (returns ID_MISMATCH error on mismatch)
+  - Prevents silent failures when OmniFocus script returns wrong or missing data
+  - Location: `src/tools/tasks/QueryTasksTool.ts:658-679`
+
+### Improved
+- **Clean Naming** - Removed all V2/V3 version suffixes
+  - Renamed 9 tool classes (e.g., QueryTasksToolV2 → QueryTasksTool)
+  - Renamed 5 script files (e.g., list-tasks-v3-omnijs.ts → list-tasks-omnijs.ts)
+  - Updated 180+ import statements
+  - Rationale: This IS the production version - no need for version suffixes
 
 ### Code Quality
 - **Unused Code Cleanup (October 13, 2025)** - Removed dead code identified by static analysis

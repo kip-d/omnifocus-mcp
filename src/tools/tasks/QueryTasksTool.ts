@@ -49,6 +49,7 @@ const QueryTasksToolSchemaV2 = z.object({
     .describe('Query mode: "all" = all tasks with optional filters, "inbox" = tasks in inbox (not assigned to any project), "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
 
   // Common filters (work with most modes)
+  id: z.string().optional().describe('Filter by exact task ID (returns single task if found)'),
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
   project: z.string().optional().describe('Filter by project name or ID'),
   tags: z.array(z.string()).optional().describe('Filter by tag names'),
@@ -127,7 +128,7 @@ const QueryTasksToolSchemaV2 = z.object({
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
-export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
+export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
   description = `Query OmniFocus tasks with modes and advanced filtering. Returns summary first, then detailed data.
 
@@ -180,7 +181,9 @@ KNOWN LIMITATIONS:
 - Creation date ("added" field): Not accessible through the JXA-to-OmniJS bridge, despite being available in the native OmniJS API. This is an architectural limitation of how OmniAutomation's evaluateJavascript() works when called from JXA context.
 - Modified date ("modified" field): Same limitation as added date
 - Drop date ("dropDate" field): Same limitation as added date
-These fields will return null when requested.`;
+These fields will return null when requested.
+
+NOTE: An experimental unified API (omnifocus_read) is available for testing builder-style queries. The 'tasks' tool remains the stable, recommended option for production use.`;
   schema = QueryTasksToolSchemaV2;
 
   meta = {
@@ -229,6 +232,11 @@ These fields will return null when requested.`;
 
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
+
+      // Special case: ID filtering (exact match for single task)
+      if (normalizedArgs.id) {
+        return this.handleTaskById(normalizedArgs, timer);
+      }
 
       // Route to appropriate handler based on mode
       switch (normalizedArgs.mode) {
@@ -610,6 +618,80 @@ These fields will return null when requested.`;
     });
 
     return filter;
+  }
+
+  private async handleTaskById(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Fast path for exact ID lookup
+    const filter = {
+      id: args.id,
+      limit: 1,  // Only need one result for exact ID match
+      includeDetails: args.details,
+    };
+
+    // Execute query using V3 script for performance
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+      filter,
+      fields: args.fields || [],
+      limit: 1,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      const specificError = this.getSpecificErrorResponse(result, 'id_lookup', timer);
+      if (specificError) {
+        return specificError;
+      }
+
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        `Failed to find task with ID: ${args.id}`,
+        'Verify the task ID is correct and the task exists',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
+
+    // Validate ID lookup result
+    if (tasks.length === 0) {
+      return createErrorResponseV2(
+        'tasks',
+        'NOT_FOUND',
+        `Task not found with ID: ${args.id}`,
+        'Verify the task ID is correct and the task exists',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    if (tasks[0].id !== args.id) {
+      return createErrorResponseV2(
+        'tasks',
+        'ID_MISMATCH',
+        `Task ID mismatch: requested ${args.id}, received ${tasks[0].id}`,
+        'This indicates a potential issue with the OmniFocus script - please report this bug',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Apply field projection if requested
+    const projectedTasks = this.projectFields(tasks, args.fields);
+
+    return createTaskResponseV2(
+      'tasks',
+      projectedTasks,
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'id_lookup',
+        filters_applied: filter,
+        sort_applied: false,
+      },
+    );
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {

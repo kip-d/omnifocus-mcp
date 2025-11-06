@@ -2,6 +2,61 @@
 
 **PURPOSE**: Quick reference for common issues. Always check here BEFORE debugging.
 
+## 🔧 Discriminated Unions Failing in Claude Desktop?
+
+**Symptoms:**
+- Claude Desktop sends JSON string instead of nested object
+- Error: "Invalid parameters: <field>: Expected object, received string"
+- Tool works in CLI but fails in Claude Desktop
+- MCP tools/list shows `{type: "string"}` instead of proper schema
+
+**Root Cause:**
+BaseTool's `zodToJsonSchema()` missing handler for `ZodDiscriminatedUnion`
+
+**Solution:**
+1. Check if BaseTool.zodTypeToJsonSchema() has ZodDiscriminatedUnion handler
+2. Handler should return oneOf with discriminator property
+3. Location: `src/tools/base.ts` around line 187
+
+**Pattern:**
+```typescript
+if (schema instanceof z.ZodDiscriminatedUnion) {
+  const discriminator = schema._def.discriminator;
+  const options = schema._def.options as z.ZodTypeAny[];
+
+  return {
+    oneOf: options.map(option => this.zodTypeToJsonSchema(option)),
+    discriminator: {
+      propertyName: discriminator
+    },
+    description: schema.description,
+  };
+}
+```
+
+**Important Notes:**
+- Discriminated unions work when NESTED (inside z.object())
+- Top-level discriminated unions break MCP SDK (commit d2038c1)
+- Unified tools correctly use NESTED discriminated unions
+- Without handler, falls through to `{type: "string"}` default
+
+**Testing:**
+```bash
+# Verify schema has oneOf (not {type: "string"})
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js | \
+  jq '.result.tools[] | select(.name == "omnifocus_write") | .inputSchema.properties.mutation'
+
+# Should show: {"oneOf": [...], "discriminator": {...}}
+# Not: {"type": "string"}
+```
+
+**See Also:**
+- Commit ca1a257 (this fix)
+- Commit d2038c1 (previous discriminated union issue with manage_reviews)
+- ARCHITECTURE.md section on discriminated unions
+
+---
+
 ## 🏷️ Tags Not Working?
 
 **Symptoms:**

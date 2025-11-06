@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { QueryTasksToolV2 } from '../../../../src/tools/tasks/QueryTasksToolV2';
+import { QueryTasksTool } from '../../../../src/tools/tasks/QueryTasksTool';
 import { CacheManager } from '../../../../src/cache/CacheManager';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
@@ -7,8 +7,8 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
 
-describe('QueryTasksToolV2', () => {
-  let tool: QueryTasksToolV2;
+describe('QueryTasksTool', () => {
+  let tool: QueryTasksTool;
   let mockCache: CacheManager;
   let mockOmni: any;
 
@@ -21,7 +21,7 @@ describe('QueryTasksToolV2', () => {
       invalidate: vi.fn(),
     } as any;
     
-    tool = new QueryTasksToolV2(mockCache);
+    tool = new QueryTasksTool(mockCache);
     
     // Mock OmniAutomation
     mockOmni = {

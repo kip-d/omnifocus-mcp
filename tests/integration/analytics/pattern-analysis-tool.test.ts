@@ -1,19 +1,19 @@
 /**
- * Integration tests for PatternAnalysisToolV2 GTD patterns
+ * Integration tests for PatternAnalysisTool GTD patterns
  * Tests the 4 new analyzer integrations: review_gaps, next_actions, wip_limits, due_date_bunching
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { PatternAnalysisToolV2 } from '../../../src/tools/analytics/PatternAnalysisToolV2.js';
+import { PatternAnalysisTool } from '../../../src/tools/analytics/PatternAnalysisTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 
-describe('PatternAnalysisToolV2 - GTD Patterns Integration', () => {
-  let tool: PatternAnalysisToolV2;
+describe('PatternAnalysisTool - GTD Patterns Integration', () => {
+  let tool: PatternAnalysisTool;
   let cache: CacheManager;
 
   beforeAll(() => {
     cache = new CacheManager();
-    tool = new PatternAnalysisToolV2(cache);
+    tool = new PatternAnalysisTool(cache);
   });
 
   it('analyzes review gaps pattern', async () => {

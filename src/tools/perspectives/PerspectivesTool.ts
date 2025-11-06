@@ -112,7 +112,7 @@ interface PerspectiveMetadata {
 
 type PerspectivesResponse = StandardResponseV2<{ perspectives: PerspectiveInfo[] } | QueryPerspectiveData>;
 
-export class PerspectivesToolV2 extends BaseTool<typeof PerspectivesToolSchema> {
+export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
   name = 'perspectives';
   description = 'Manage OmniFocus perspectives with enhanced viewing capabilities. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective with rich formatting, grouping, and field selection options. Set formatOutput=true for human-readable display with checkboxes and visual indicators.';
   schema = PerspectivesToolSchema;

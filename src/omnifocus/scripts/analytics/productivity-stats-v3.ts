@@ -1,5 +1,5 @@
 /**
- * productivity-stats-v3.ts - OmniJS-First Productivity Statistics
+ * productivity-stats.ts - OmniJS-First Productivity Statistics
  *
  * Performance improvement: 7.7s → <1s expected (8-10x faster)
  *
@@ -15,7 +15,7 @@
  * - Tag stats: ~30 tags × 3 properties × 16.662ms = ~1.5s → <0.05s
  * - Task stats: Already using OmniJS bridge in V1
  *
- * Pattern based on: task-velocity-v3.ts, get-project-stats-v3.ts, list-tags-v3.ts
+ * Pattern based on: task-velocity.ts, get-project-stats.ts, list-tags.ts
  */
 
 export const PRODUCTIVITY_STATS_SCRIPT_V3 = `

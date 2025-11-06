@@ -51,29 +51,28 @@ d('MCP Protocol Compliance Tests', () => {
 
       expect(result.result).toBeDefined();
       expect(result.result.tools).toBeInstanceOf(Array);
-      expect(result.result.tools.length).toBeGreaterThan(0);
+      expect(result.result.tools.length).toBe(4); // Unified API: 4 tools
 
       const toolNames = result.result.tools.map((t: any) => t.name);
 
-      expect(toolNames).toContain('tasks');
-      expect(toolNames).toContain('projects');
-      expect(toolNames).toContain('manage_task');
-      expect(toolNames).toContain('productivity_stats');
-      expect(toolNames).toContain('task_velocity');
-      expect(toolNames).toContain('analyze_overdue');
-      expect(toolNames).toContain('tags');
+      // Unified Builder API - 4 tools (3 unified + system)
+      expect(toolNames).toContain('omnifocus_read');
+      expect(toolNames).toContain('omnifocus_write');
+      expect(toolNames).toContain('omnifocus_analyze');
       expect(toolNames).toContain('system');
-      expect(toolNames).toContain('perspectives');
-      expect(toolNames).toContain('export');
+
+      // Ensure ONLY these 4 tools exist
+      expect(toolNames).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system']);
     });
   });
 
   describe('Task Operations', () => {
     it('should handle tasks tool call', { timeout: 90000 }, async () => {
-      const result = await client.callTool('tasks', {
-        mode: 'all',
-        limit: 10,
-        details: false,
+      const result = await client.callTool('omnifocus_read', {
+        query: {
+          type: 'tasks',
+          limit: 10,
+        },
       });
 
       expect(result).toBeDefined();
@@ -91,12 +90,17 @@ d('MCP Protocol Compliance Tests', () => {
     });
 
     it('should handle task creation with validation', { timeout: 90000 }, async () => {
-      const result = await client.callTool('manage_task', {
-        operation: 'create',
-        name: 'Test task from protocol test',
-        note: 'This is a test task',
-        flagged: 'true',
-        tags: ['test', 'integration', 'mcp-test'],
+      const result = await client.callTool('omnifocus_write', {
+        mutation: {
+          operation: 'create',
+          target: 'task',
+          data: {
+            name: 'Test task from protocol test',
+            note: 'This is a test task',
+            flagged: true,
+            tags: ['test', 'integration', 'mcp-test'],
+          },
+        },
       });
 
       expect(result).toBeDefined();
@@ -120,10 +124,11 @@ d('MCP Protocol Compliance Tests', () => {
 
   describe('Project Operations', () => {
     it('should handle projects tool call', async () => {
-      const result = await client.callTool('projects', {
-        operation: 'list',
-        limit: 10,
-        details: false,
+      const result = await client.callTool('omnifocus_read', {
+        query: {
+          type: 'projects',
+          limit: 10,
+        },
       });
 
       expect(result).toBeDefined();
@@ -156,10 +161,16 @@ d('MCP Protocol Compliance Tests', () => {
     });
 
     it('should handle missing required parameters', async () => {
-      const result = await client.callTool('manage_task', {
-        operation: 'update',
-        // Missing required taskId
-        name: 'Updated name',
+      const result = await client.callTool('omnifocus_write', {
+        mutation: {
+          operation: 'update',
+          target: 'task',
+          // Missing required id
+          id: '',  // Invalid empty string
+          changes: {
+            name: 'Updated name',
+          },
+        },
       });
 
       expect(result).toBeDefined();

@@ -107,8 +107,8 @@ export abstract class BaseTool<
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = this.zodTypeToJsonSchema(value as z.ZodTypeAny);
 
-        // Check if field is required
-        if (!(value instanceof z.ZodOptional)) {
+        // Check if field is required - need to unwrap effects/transformations
+        if (!this.isOptionalField(value as z.ZodTypeAny)) {
           required.push(key);
         }
       }
@@ -121,6 +121,39 @@ export abstract class BaseTool<
     }
 
     return { type: 'object', properties: {} };
+  }
+
+  /**
+   * Check if a Zod field is optional (unwrapping effects/transformations)
+   */
+  private isOptionalField(schema: z.ZodTypeAny): boolean {
+    // Direct optional check
+    if (schema instanceof z.ZodOptional) {
+      return true;
+    }
+
+    // Unwrap ZodEffects (from .transform(), .refine(), etc.)
+    if (schema instanceof z.ZodEffects) {
+      return this.isOptionalField(schema._def.schema as z.ZodTypeAny);
+    }
+
+    // Unwrap ZodNullable
+    // Type guard for schemas with innerType property
+    if ('_def' in schema && schema._def && typeof schema._def === 'object' && 'innerType' in schema._def) {
+      const defWithInnerType = schema._def as { innerType: z.ZodTypeAny };
+      return this.isOptionalField(defWithInnerType.innerType);
+    }
+
+    // Check for nullable union (alternative form)
+    if (schema instanceof z.ZodUnion) {
+      const options = schema._def.options as z.ZodTypeAny[];
+      // If it's a union with null, it's effectively optional
+      if (options.some((o: z.ZodTypeAny) => o instanceof z.ZodNull)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -184,6 +217,22 @@ export abstract class BaseTool<
       // Handle refinements
       return this.zodTypeToJsonSchema(schema._def.schema as z.ZodTypeAny);
     }
+    if (schema instanceof z.ZodDiscriminatedUnion) {
+      // Handle discriminated unions (NESTED only - top-level breaks MCP)
+      // Type the _def property properly
+      const def = schema._def as {
+        discriminator: string;
+        options: z.ZodTypeAny[];
+      };
+
+      return {
+        oneOf: def.options.map(option => this.zodTypeToJsonSchema(option)),
+        discriminator: {
+          propertyName: def.discriminator,
+        },
+        description: schema.description,
+      };
+    }
     if (schema instanceof z.ZodObject) {
       // Handle nested objects properly
       const shape = schema.shape as Record<string, z.ZodType>;
@@ -193,8 +242,8 @@ export abstract class BaseTool<
       for (const [key, value] of Object.entries(shape)) {
         properties[key] = this.zodTypeToJsonSchema(value as z.ZodType);
 
-        // Check if field is required in nested object
-        if (!(value instanceof z.ZodOptional)) {
+        // Check if field is required - need to unwrap effects/transformations
+        if (!this.isOptionalField(value)) {
           required.push(key);
         }
       }

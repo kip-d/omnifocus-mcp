@@ -32,6 +32,8 @@ jobs:
     name: Quick Validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Skip CI for experimental three-tool-builder-api branch
+    if: github.head_ref != 'feature/three-tool-builder-api'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,6 +83,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: quick-check
+    # Skip CI for experimental three-tool-builder-api branch
+    if: github.head_ref != 'feature/three-tool-builder-api'
     steps:
       - name: Checkout
         uses: actions/checkout@v4

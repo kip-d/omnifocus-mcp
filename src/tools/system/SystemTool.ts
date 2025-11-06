@@ -69,7 +69,7 @@ interface MetricsResult {
 
 type SystemResponse = StandardResponseV2<VersionInfo | DiagnosticsResult | MetricsResult | Record<string, unknown>>;
 
-export class SystemToolV2 extends BaseTool<typeof SystemToolSchema> {
+export class SystemTool extends BaseTool<typeof SystemToolSchema> {
   name = 'system';
   description = 'System utilities for OmniFocus MCP: get version information, run diagnostics, view performance metrics, or get cache statistics. Use operation="version" for version info, operation="diagnostics" to test OmniFocus connection, operation="metrics" for performance analytics, operation="cache" for cache statistics.';
   schema = SystemToolSchema;

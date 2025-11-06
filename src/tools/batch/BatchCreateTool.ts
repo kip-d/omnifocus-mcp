@@ -90,7 +90,8 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
         : args.items;
 
       // Step 4: Create items in order
-      for (const item of orderedItems) {
+      for (let i = 0; i < orderedItems.length; i++) {
+        const item = orderedItems[i];
         try {
           const result = await this.createItem(item, resolver);
           results.push(result);
@@ -121,6 +122,7 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
           }
         }
       }
+
 
       // Step 5: Handle atomic operation rollback if needed
       const failedCount = resolver.getFailedCount();

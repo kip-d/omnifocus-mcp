@@ -1,13 +1,13 @@
 /**
- * Integration tests for batch operations
+ * Integration tests for batch operations using unified API
  *
  * These tests require real OmniFocus access and must be run with:
  * VITEST_ALLOW_JXA=1 npx vitest tests/integration/batch-operations.test.ts
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { BatchCreateTool } from '../../src/tools/batch/BatchCreateTool.js';
-import { CacheManager } from '../../src/cache/CacheManager.js';
+import { getSharedClient } from './helpers/shared-server.js';
+import { MCPTestClient } from './helpers/mcp-test-client.js';
 import { OmniAutomation } from '../../src/omnifocus/OmniAutomation.js';
 
 // Only run on macOS with OmniFocus and real JXA enabled
@@ -18,15 +18,13 @@ const RUN_INTEGRATION_TESTS =
 
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
-d('Batch Operations Integration', () => {
-  let tool: BatchCreateTool;
-  let cache: CacheManager;
+d('Batch Operations Integration (Unified API)', () => {
+  let client: MCPTestClient;
   const createdIds: Array<{ id: string; type: 'project' | 'task' }> = [];
   const timestamp = Date.now();
 
-  beforeAll(() => {
-    cache = new CacheManager();
-    tool = new BatchCreateTool(cache);
+  beforeAll(async () => {
+    client = await getSharedClient();
   });
 
   afterAll(async () => {
@@ -72,25 +70,33 @@ d('Batch Operations Integration', () => {
         console.error(`Failed to cleanup ${item.type} ${item.id}:`, e);
       }
     }
+
+    await client.thoroughCleanup();
   });
 
   it('should create a simple project', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj1',
-          type: 'project',
-          name: `TestBatch_Simple_${timestamp}`,
-          note: 'Integration test project',
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj1',
+              name: `TestBatch_Simple_${timestamp}`,
+              note: 'Integration test project',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
-    // Tool returns wrapped response format
     expect(response).toHaveProperty('success', true);
     expect(response).toHaveProperty('data');
     const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
@@ -106,29 +112,38 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should create project with task', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj2',
-          type: 'project',
-          name: `TestBatch_ProjectWithTasks_${timestamp}`,
-          note: 'Has child tasks',
-        },
-        {
-          tempId: 'task1',
-          type: 'task',
-          name: `TestBatch_ChildTask_${timestamp}`,
-          parentTempId: 'proj2',
-          dueDate: '2025-10-15',
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj2',
+              name: `TestBatch_ProjectWithTasks_${timestamp}`,
+              note: 'Has child tasks',
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task1',
+              name: `TestBatch_ChildTask_${timestamp}`,
+              parentTempId: 'proj2',
+              dueDate: '2025-10-15',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
-    // Tool returns wrapped response format
     expect(response).toHaveProperty('success', true);
     const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(2);
@@ -143,33 +158,45 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should create nested tasks (task with subtask)', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj3',
-          type: 'project',
-          name: `TestBatch_NestedTasks_${timestamp}`,
-        },
-        {
-          tempId: 'task2',
-          type: 'task',
-          name: `TestBatch_ParentTask_${timestamp}`,
-          parentTempId: 'proj3',
-        },
-        {
-          tempId: 'task3',
-          type: 'task',
-          name: `TestBatch_Subtask_${timestamp}`,
-          parentTempId: 'task2',
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj3',
+              name: `TestBatch_NestedTasks_${timestamp}`,
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task2',
+              name: `TestBatch_ParentTask_${timestamp}`,
+              parentTempId: 'proj3',
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task3',
+              name: `TestBatch_Subtask_${timestamp}`,
+              parentTempId: 'task2',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
-    // Tool returns wrapped response format
     expect(response).toHaveProperty('success', true);
     const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(3);
@@ -186,18 +213,25 @@ d('Batch Operations Integration', () => {
     const projectName = 'Test Duplicate Project ' + Date.now();
 
     // Create first project
-    const result1 = await tool.execute({
-      items: [
-        {
-          tempId: 'proj4',
-          type: 'project',
-          name: projectName,
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const result1 = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj4',
+              name: projectName,
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
     const data1 = (result1 as { data: { results: Array<{ realId: string }> } }).data;
@@ -206,18 +240,25 @@ d('Batch Operations Integration', () => {
     }
 
     // Try to create duplicate
-    const result2 = await tool.execute({
-      items: [
-        {
-          tempId: 'proj5',
-          type: 'project',
-          name: projectName,
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const result2 = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj5',
+              name: projectName,
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
     const data2 = (result2 as { data: { success: boolean; failed: number } }).data;
@@ -226,21 +267,27 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should return tempId to realId mapping', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj6',
-          type: 'project',
-          name: `TestBatch_Mapping_${timestamp}`,
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'project',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj6',
+              name: `TestBatch_Mapping_${timestamp}`,
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
-    // Tool returns wrapped response format
     expect(response).toHaveProperty('data.mapping');
     const result = (response as { data: { mapping: Record<string, string>; results: Array<{ realId: string }> } }).data;
     expect(result.mapping).toHaveProperty('proj6');
@@ -252,29 +299,42 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should stop on error when configured', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj7',
-          type: 'project',
-          name: `TestBatch_ValidProject_${timestamp}`,
-        },
-        {
-          tempId: 'task4',
-          type: 'task',
-          name: `TestBatch_MissingParent_${timestamp}`,
-          parentTempId: 'nonexistent',
-        },
-        {
-          tempId: 'proj8',
-          type: 'project',
-          name: `TestBatch_ShouldNotCreate_${timestamp}`,
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj7',
+              name: `TestBatch_ValidProject_${timestamp}`,
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task4',
+              name: `TestBatch_MissingParent_${timestamp}`,
+              parentTempId: 'nonexistent',
+            },
+          },
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj8',
+              name: `TestBatch_ShouldNotCreate_${timestamp}`,
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
     // Should return error for missing parent
@@ -285,25 +345,35 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should validate circular dependencies', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'task5',
-          type: 'task',
-          name: `TestBatch_CircularA_${timestamp}`,
-          parentTempId: 'task6',
-        },
-        {
-          tempId: 'task6',
-          type: 'task',
-          name: `TestBatch_CircularB_${timestamp}`,
-          parentTempId: 'task5',
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task5',
+              name: `TestBatch_CircularA_${timestamp}`,
+              parentTempId: 'task6',
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task6',
+              name: `TestBatch_CircularB_${timestamp}`,
+              parentTempId: 'task5',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
     // Should return error for circular dependency
@@ -314,33 +384,42 @@ d('Batch Operations Integration', () => {
   }, 30000);
 
   it('should handle tasks with dates and metadata', async () => {
-    const response = await tool.execute({
-      items: [
-        {
-          tempId: 'proj9',
-          type: 'project',
-          name: `TestBatch_Metadata_${timestamp}`,
-        },
-        {
-          tempId: 'task7',
-          type: 'task',
-          name: `TestBatch_FullMetadata_${timestamp}`,
-          parentTempId: 'proj9',
-          dueDate: '2025-10-20 17:00',
-          deferDate: '2025-10-10 08:00',
-          estimatedMinutes: '60',
-          flagged: true,
-          tags: ['test', 'integration'],
-          note: 'Test task with all fields',
-        },
-      ],
-      createSequentially: 'true',
-      atomicOperation: 'false',
-      returnMapping: 'true',
-      stopOnError: 'true',
+    const response = await client.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj9',
+              name: `TestBatch_Metadata_${timestamp}`,
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task7',
+              name: `TestBatch_FullMetadata_${timestamp}`,
+              parentTempId: 'proj9',
+              dueDate: '2025-10-20 17:00',
+              deferDate: '2025-10-10 08:00',
+              estimatedMinutes: 60,
+              flagged: true,
+              tags: ['test', 'integration'],
+              note: 'Test task with all fields',
+            },
+          },
+        ],
+        createSequentially: true,
+        atomicOperation: false,
+        returnMapping: true,
+        stopOnError: true,
+      },
     });
 
-    // Tool returns wrapped response format
     expect(response).toHaveProperty('success', true);
     const result = (response as { data: { created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(2);

@@ -23,9 +23,9 @@ vi.mock('../../../../src/omnifocus/scripts/export/export-projects.js', () => ({
   EXPORT_PROJECTS_SCRIPT: 'mock-projects-export-script'
 }));
 
-// Mock TagsToolV2 for bulk export
-vi.mock('../../../../src/tools/tags/TagsToolV2.js', () => ({
-  TagsToolV2: vi.fn().mockImplementation(() => ({
+// Mock TagsTool for bulk export
+vi.mock('../../../../src/tools/tags/TagsTool.js', () => ({
+  TagsTool: vi.fn().mockImplementation(() => ({
     execute: vi.fn(async () => ({
       success: true,
       data: { items: [{ id: 't1', name: 'Work' }] },

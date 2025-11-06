@@ -1,5 +1,5 @@
 /**
- * list-tasks-v3-omnijs.ts - OmniJS-First Architecture
+ * list-tasks-omnijs.ts - OmniJS-First Architecture
  *
  * MAJOR REDESIGN: Achieves 13-22x performance improvement by using OmniJS
  * property access instead of JXA per-property calls.
@@ -40,7 +40,51 @@ export const LIST_TASKS_SCRIPT_V3 = `
       // Determine which OmniJS collection and filter to use
       let omniJsScript = '';
 
-      if (mode === 'inbox') {
+      if (filter.id) {
+        // ID MODE - Fast lookup by exact task ID
+        omniJsScript = \`
+          (() => {
+            const results = [];
+            const targetId = '\${filter.id}';
+
+            // Search through all tasks for exact ID match
+            flattenedTasks.forEach(task => {
+              if (task.id.primaryKey === targetId) {
+                results.push({
+                  \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
+                  \${shouldInclude('name') ? 'name: task.name,' : ''}
+                  \${shouldInclude('completed') ? 'completed: task.completed || false,' : ''}
+                  \${shouldInclude('flagged') ? 'flagged: task.flagged || false,' : ''}
+                  \${shouldInclude('inInbox') ? 'inInbox: !task.containingProject,' : ''}
+                  \${shouldInclude('blocked') ? 'blocked: task.taskStatus === Task.Status.Blocked,' : ''}
+                  \${shouldInclude('available') ? 'available: task.taskStatus === Task.Status.Available,' : ''}
+                  \${shouldInclude('taskStatus') ? 'taskStatus: task.taskStatus === Task.Status.Available ? "available" : task.taskStatus === Task.Status.Blocked ? "blocked" : "other",' : ''}
+                  \${shouldInclude('dueDate') ? 'dueDate: task.dueDate ? task.dueDate.toISOString() : null,' : ''}
+                  \${shouldInclude('deferDate') ? 'deferDate: task.deferDate ? task.deferDate.toISOString() : null,' : ''}
+                  \${shouldInclude('plannedDate') ? 'plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null,' : ''}
+                  \${shouldInclude('added') ? 'added: task.added ? task.added.toISOString() : null,' : ''}
+                  \${shouldInclude('modified') ? 'modified: task.modified ? task.modified.toISOString() : null,' : ''}
+                  \${shouldInclude('completionDate') ? 'completionDate: task.completionDate ? task.completionDate.toISOString() : null,' : ''}
+                  \${shouldInclude('tags') ? 'tags: task.tags ? task.tags.map(t => t.name) : [],' : ''}
+                  \${shouldInclude('note') ? 'note: task.note || "",' : ''}
+                  \${shouldInclude('estimatedMinutes') ? 'estimatedMinutes: task.estimatedMinutes || null,' : ''}
+                  \${shouldInclude('project') || shouldInclude('projectId') ? '...((project) => { const result = {}; if (project) { result.project = project.name; result.projectId = project.id.primaryKey; } else { result.project = null; result.projectId = null; } return result; })(task.containingProject),' : ''}
+                  \${shouldInclude('repetitionRule') ? 'repetitionRule: (function() { const rule = task.repetitionRule; if (!rule) return null; try { return { recurrence: rule.recurrence || null, repetitionMethod: rule.method ? rule.method.toString() : null, ruleString: rule.ruleString || null }; } catch (e) { return { _error: e.toString() }; } })(),' : ''}
+                  \${shouldInclude('parentTaskId') || shouldInclude('parentTaskName') ? '...((parent) => { const result = {}; if (parent) { result.parentTaskId = parent.id.primaryKey; result.parentTaskName = parent.name; } return result; })(task.parent),' : ''}
+                });
+              }
+            });
+
+            return JSON.stringify({
+              tasks: results,
+              count: results.length,
+              collection: 'flattenedTasks',
+              mode: 'id_lookup',
+              targetId: targetId
+            });
+          })()
+        \`;
+      } else if (mode === 'inbox') {
         // INBOX MODE - Use inbox global collection
         omniJsScript = \`
           (() => {
