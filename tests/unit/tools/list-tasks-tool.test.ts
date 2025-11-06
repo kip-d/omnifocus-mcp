@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { QueryTasksToolV2 } from '../../../src/tools/tasks/QueryTasksToolV2.js';
+import { QueryTasksTool } from '../../../src/tools/tasks/QueryTasksTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 import { Logger } from '../../../src/utils/Logger.js';
@@ -20,8 +20,8 @@ vi.mock('../../../src/utils/Logger.js', () => ({
   }))
 }));
 
-describe('QueryTasksToolV2', () => {
-  let tool: QueryTasksToolV2;
+describe('QueryTasksTool', () => {
+  let tool: QueryTasksTool;
   let mockCache: any;
   let mockOmniAutomation: any;
   let mockLogger: any;
@@ -50,7 +50,7 @@ describe('QueryTasksToolV2', () => {
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
 
-    tool = new QueryTasksToolV2(mockCache);
+    tool = new QueryTasksTool(mockCache);
     (tool as any).omniAutomation = mockOmniAutomation;
   });
 

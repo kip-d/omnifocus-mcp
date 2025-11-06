@@ -12,7 +12,7 @@ import {
 import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from './unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from './unified/OmniFocusAnalyzeTool.js';
-import { SystemToolV2 } from './system/SystemToolV2.js';
+import { SystemTool } from './system/SystemTool.js';
 
 const logger = createLogger('tools');
 
@@ -45,7 +45,7 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
     new OmniFocusReadTool(cache),       // 'omnifocus_read' - Query tasks, projects, tags, perspectives, folders
     new OmniFocusWriteTool(cache),      // 'omnifocus_write' - Create, update, complete, delete operations
     new OmniFocusAnalyzeTool(cache),    // 'omnifocus_analyze' - All analytics and analysis operations
-    new SystemToolV2(cache),            // 'system' - Version info and diagnostics
+    new SystemTool(cache),            // 'system' - Version info and diagnostics
   ];
 
   // Register handlers

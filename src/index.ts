@@ -77,7 +77,7 @@ async function runServer() {
       projects: true,
       tags: true,
       tasks: true,
-      perspectives: true, // Fast operation (~340ms), high value for enhanced PerspectivesToolV2
+      perspectives: true, // Fast operation (~340ms), high value for enhanced PerspectivesTool
     },
     taskWarmingOptions: {
       today: true,

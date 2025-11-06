@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { TASK_VELOCITY_SCRIPT_V3 } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
+import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
@@ -42,7 +42,7 @@ interface TaskVelocityV3Data {
   optimization: string;
 }
 
-export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
+export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
   name = 'task_velocity';
   description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
@@ -104,7 +104,7 @@ export class TaskVelocityToolV2 extends BaseTool<typeof TaskVelocitySchemaV2> {
       }
 
       // Execute script - V3 uses period instead of groupBy
-      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT_V3, {
+      const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
         options: { period: groupBy },
       });
 

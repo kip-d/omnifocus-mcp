@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { QueryTasksToolV2 } from '../../../../src/tools/tasks/QueryTasksToolV2';
+import { QueryTasksTool } from '../../../../src/tools/tasks/QueryTasksTool';
 import { CacheManager } from '../../../../src/cache/CacheManager';
 import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
 
@@ -9,8 +9,8 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
 }));
 
-describe('QueryTasksToolV2 upcoming mode', () => {
-  let tool: QueryTasksToolV2;
+describe('QueryTasksTool upcoming mode', () => {
+  let tool: QueryTasksTool;
   let mockCache: any;
   let mockOmni: any;
 
@@ -18,7 +18,7 @@ describe('QueryTasksToolV2 upcoming mode', () => {
     vi.clearAllMocks();
     mockCache = { get: vi.fn().mockReturnValue(null), set: vi.fn(), invalidate: vi.fn() };
     (CacheManager as any).mockImplementation(() => mockCache);
-    tool = new QueryTasksToolV2(mockCache);
+    tool = new QueryTasksTool(mockCache);
     mockOmni = { executeJson: vi.fn(), buildScript: vi.fn() };
     (tool as any).omniAutomation = mockOmni;
   });

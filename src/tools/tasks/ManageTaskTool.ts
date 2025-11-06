@@ -1019,7 +1019,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           search: bulkCriteria.search,
         };
 
-        // Use the same script as QueryTasksToolV2
+        // Use the same script as QueryTasksTool
         const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, { filter });
         const result = await this.execJson(script);
 

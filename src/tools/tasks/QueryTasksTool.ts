@@ -128,7 +128,7 @@ const QueryTasksToolSchemaV2 = z.object({
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
-export class QueryTasksToolV2 extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
+export class QueryTasksTool extends BaseTool<typeof QueryTasksToolSchemaV2, TasksResponseV2> {
   name = 'tasks';
   description = `Query OmniFocus tasks with modes and advanced filtering. Returns summary first, then detailed data.
 

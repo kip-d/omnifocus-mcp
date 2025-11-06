@@ -1,5 +1,5 @@
 /**
- * list-tags-v3.ts - OmniJS-First Tags Query
+ * list-tags.ts - OmniJS-First Tags Query
  *
  * Performance improvement: All modes use OmniJS bridge
  *
@@ -8,7 +8,7 @@
  * - Fast mode: JXA iteration → OmniJS flattenedTags (6.9s → <0.5s expected)
  * - Full mode: Already uses OmniJS, maintained
  *
- * Pattern based on: task-velocity-v3.ts and existing full mode
+ * Pattern based on: task-velocity.ts and existing full mode
  */
 
 export const LIST_TAGS_SCRIPT_V3 = `

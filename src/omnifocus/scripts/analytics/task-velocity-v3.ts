@@ -1,5 +1,5 @@
 /**
- * task-velocity-v3.ts - OmniJS-First Task Velocity Calculation
+ * task-velocity.ts - OmniJS-First Task Velocity Calculation
  *
  * Performance improvement: 67.6s → <1s (67x faster)
  *
@@ -8,7 +8,7 @@
  * - Accesses completionDate and modificationDate in OmniJS context (~0.001ms each)
  * - Eliminates 1,961 tasks × 2 properties × 16.662ms = 65.3s of JXA overhead
  *
- * Pattern based on: list-tasks-v3-omnijs.ts
+ * Pattern based on: list-tasks-omnijs.ts
  */
 
 export const TASK_VELOCITY_SCRIPT_V3 = `

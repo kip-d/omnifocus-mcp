@@ -213,7 +213,7 @@ interface DormantProject {
   available_tasks?: number;
 }
 
-export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema, PatternAnalysisResponseV2> {
+export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema, PatternAnalysisResponseV2> {
   name = 'analyze_patterns';
   description = 'Analyze patterns across entire OmniFocus database for insights and improvements. Supports: duplicates, dormant projects, tag audits, deadline health, waiting tasks, review gaps, next actions clarity, WIP limits, and due date bunching analysis.';
   schema = PatternAnalysisSchema;
@@ -239,7 +239,7 @@ export class PatternAnalysisToolV2 extends BaseTool<typeof PatternAnalysisSchema
     ],
   };
 
-  protected logger = createLogger('PatternAnalysisToolV2');
+  protected logger = createLogger('PatternAnalysisTool');
 
   protected async executeValidated(params: PatternAnalysisParams): Promise<PatternAnalysisResponseV2> {
     const startTime = Date.now();

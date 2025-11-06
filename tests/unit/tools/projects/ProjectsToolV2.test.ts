@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ProjectsToolV2 } from '../../../../src/tools/projects/ProjectsToolV2';
+import { ProjectsTool } from '../../../../src/tools/projects/ProjectsTool';
 import { CacheManager } from '../../../../src/cache/CacheManager';
 
 vi.mock('../../../../src/cache/CacheManager');
 
-describe('ProjectsToolV2', () => {
-  let tool: ProjectsToolV2;
+describe('ProjectsTool', () => {
+  let tool: ProjectsTool;
   let mockCache: CacheManager;
   let mockOmni: any;
 
@@ -24,7 +24,7 @@ describe('ProjectsToolV2', () => {
       invalidateTaskQueries: vi.fn(),
     } as any;
     
-    tool = new ProjectsToolV2(mockCache);
+    tool = new ProjectsTool(mockCache);
     
     // Mock the OmniAutomation instance
     mockOmni = {

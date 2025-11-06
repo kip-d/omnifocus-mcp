@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SystemToolV2 } from '../../../src/tools/system/SystemToolV2.js';
+import { SystemTool } from '../../../src/tools/system/SystemTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { DiagnosticOmniAutomation } from '../../../src/omnifocus/DiagnosticOmniAutomation.js';
 import * as versionUtils from '../../../src/utils/version.js';
@@ -17,8 +17,8 @@ vi.mock('../../../src/utils/logger.js', () => ({
   }))
 }));
 
-describe('SystemToolV2', () => {
-  let tool: SystemToolV2;
+describe('SystemTool', () => {
+  let tool: SystemTool;
   let mockCache: any;
   let mockDiagnosticOmni: any;
 
@@ -40,7 +40,7 @@ describe('SystemToolV2', () => {
     (CacheManager as any).mockImplementation(() => mockCache);
     (DiagnosticOmniAutomation as any).mockImplementation(() => mockDiagnosticOmni);
 
-    tool = new SystemToolV2(mockCache);
+    tool = new SystemTool(mockCache);
   });
 
   describe('version operation', () => {

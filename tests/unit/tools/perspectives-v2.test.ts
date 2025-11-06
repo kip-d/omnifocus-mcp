@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PerspectivesToolV2 } from '../../../src/tools/perspectives/PerspectivesToolV2.js';
+import { PerspectivesTool } from '../../../src/tools/perspectives/PerspectivesTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 
@@ -15,8 +15,8 @@ vi.mock('../../../src/utils/logger.js', () => ({
   }))
 }));
 
-describe('PerspectivesToolV2', () => {
-  let tool: PerspectivesToolV2;
+describe('PerspectivesTool', () => {
+  let tool: PerspectivesTool;
   let mockCache: any;
   let mockOmniAutomation: any;
 
@@ -39,7 +39,7 @@ describe('PerspectivesToolV2', () => {
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
 
-    tool = new PerspectivesToolV2(mockCache);
+    tool = new PerspectivesTool(mockCache);
     (tool as any).omniAutomation = mockOmniAutomation;
   });
 

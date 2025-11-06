@@ -1,5 +1,5 @@
 /**
- * list-tasks-v3-omnijs.ts - OmniJS-First Architecture
+ * list-tasks-omnijs.ts - OmniJS-First Architecture
  *
  * MAJOR REDESIGN: Achieves 13-22x performance improvement by using OmniJS
  * property access instead of JXA per-property calls.

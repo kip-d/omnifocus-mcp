@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { QueryTasksToolV2 } from '../../../../src/tools/tasks/QueryTasksToolV2.js';
+import { QueryTasksTool } from '../../../../src/tools/tasks/QueryTasksTool.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
 
 describe('Advanced Filter Operators', () => {
-  let tool: QueryTasksToolV2;
+  let tool: QueryTasksTool;
 
   beforeEach(() => {
-    tool = new QueryTasksToolV2();
+    tool = new QueryTasksTool();
   });
 
   describe('String Operators', () => {

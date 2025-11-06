@@ -7,9 +7,9 @@
 
 import { CacheManager } from './CacheManager.js';
 import { createLogger } from '../utils/logger.js';
-import { TagsToolV2 } from '../tools/tags/TagsToolV2.js';
-import { QueryTasksToolV2 } from '../tools/tasks/QueryTasksToolV2.js';
-import { PerspectivesToolV2 } from '../tools/perspectives/PerspectivesToolV2.js';
+import { TagsTool } from '../tools/tags/TagsTool.js';
+import { QueryTasksTool } from '../tools/tasks/QueryTasksTool.js';
+import { PerspectivesTool } from '../tools/perspectives/PerspectivesTool.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
 import { WARM_PROJECTS_CACHE_SCRIPT } from '../omnifocus/scripts/cache/warm-projects-cache.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
@@ -54,7 +54,7 @@ export class CacheWarmer {
         projects: true,
         tags: true,
         tasks: true,
-        perspectives: true, // Fast operation (~340ms), valuable with enhanced PerspectivesToolV2
+        perspectives: true, // Fast operation (~340ms), valuable with enhanced PerspectivesTool
         ...strategy.categories,
       },
       taskWarmingOptions: {
@@ -287,7 +287,7 @@ export class CacheWarmer {
     try {
       logger.debug('Warming tags cache...');
 
-      const tagsTool = new TagsToolV2(this.cache);
+      const tagsTool = new TagsTool(this.cache);
 
       // Only warm the main tags list (full mode with OmniJS bridge)
       // Note: fastMode=false uses OmniJS bridge (10x faster), fastMode=true uses slow JXA
@@ -329,7 +329,7 @@ export class CacheWarmer {
     try {
       logger.debug('Warming flagged tasks cache...');
 
-      const tasksTool = new QueryTasksToolV2(this.cache);
+      const tasksTool = new QueryTasksTool(this.cache);
 
       // Flagged tasks with default parameters (must match actual usage - completed defaults to undefined)
       await this.warmSingleOperation('tasks', 'tasks_flagged_25_undefined', async () => {
@@ -358,7 +358,7 @@ export class CacheWarmer {
     try {
       logger.debug('Warming perspectives cache...');
 
-      const perspectivesTool = new PerspectivesToolV2(this.cache);
+      const perspectivesTool = new PerspectivesTool(this.cache);
 
       // List all perspectives (store under tasks category since they query tasks)
       await this.warmSingleOperation('tasks', 'perspectives_list', async () => {

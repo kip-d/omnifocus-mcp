@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
-import { TagsToolV2 } from '../tags/TagsToolV2.js';
+import { TagsTool } from '../tags/TagsTool.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import * as path from 'path';
@@ -360,8 +360,8 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         totalExported += projectCount;
       }
 
-      // Export tags (JSON only) - delegate to TagsToolV2
-      const tagExporter = new TagsToolV2(this.cache);
+      // Export tags (JSON only) - delegate to TagsTool
+      const tagExporter = new TagsTool(this.cache);
       const tagResult = await tagExporter.execute({ includeEmpty: true }) as {
         success?: boolean;
         data?: {

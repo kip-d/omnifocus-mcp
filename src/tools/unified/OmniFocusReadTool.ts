@@ -2,10 +2,10 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
 import { QueryCompiler, type CompiledQuery, type QueryFilter } from './compilers/QueryCompiler.js';
-import { QueryTasksToolV2 } from '../tasks/QueryTasksToolV2.js';
-import { ProjectsToolV2 } from '../projects/ProjectsToolV2.js';
-import { TagsToolV2 } from '../tags/TagsToolV2.js';
-import { PerspectivesToolV2 } from '../perspectives/PerspectivesToolV2.js';
+import { QueryTasksTool } from '../tasks/QueryTasksTool.js';
+import { ProjectsTool } from '../projects/ProjectsTool.js';
+import { TagsTool } from '../tags/TagsTool.js';
+import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
@@ -39,10 +39,10 @@ PERFORMANCE:
   };
 
   private compiler: QueryCompiler;
-  private tasksTool: QueryTasksToolV2;
-  private projectsTool: ProjectsToolV2;
-  private tagsTool: TagsToolV2;
-  private perspectivesTool: PerspectivesToolV2;
+  private tasksTool: QueryTasksTool;
+  private projectsTool: ProjectsTool;
+  private tagsTool: TagsTool;
+  private perspectivesTool: PerspectivesTool;
   private foldersTool: FoldersTool;
 
   constructor(cache: CacheManager) {
@@ -50,10 +50,10 @@ PERFORMANCE:
     this.compiler = new QueryCompiler();
 
     // Instantiate existing tools for routing
-    this.tasksTool = new QueryTasksToolV2(cache);
-    this.projectsTool = new ProjectsToolV2(cache);
-    this.tagsTool = new TagsToolV2(cache);
-    this.perspectivesTool = new PerspectivesToolV2(cache);
+    this.tasksTool = new QueryTasksTool(cache);
+    this.projectsTool = new ProjectsTool(cache);
+    this.tagsTool = new TagsTool(cache);
+    this.perspectivesTool = new PerspectivesTool(cache);
     this.foldersTool = new FoldersTool(cache);
   }
 
@@ -205,7 +205,7 @@ PERFORMANCE:
       advanced.OR = filters.OR.map((f: QueryFilter) => this.mapToAdvancedFilters(f));
     }
 
-    // AND filters: Since QueryTasksToolV2 implicitly ANDs all filters together,
+    // AND filters: Since QueryTasksTool implicitly ANDs all filters together,
     // flatten the AND array by merging all sub-filters into the parent object
     if (filters.AND) {
       for (const subFilter of filters.AND) {

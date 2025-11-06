@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TagsToolV2 } from '../../../src/tools/tags/TagsToolV2.js';
+import { TagsTool } from '../../../src/tools/tags/TagsTool.js';
 import { CacheManager } from '../../../src/cache/CacheManager.js';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation.js';
 import { Logger } from '../../../src/utils/Logger.js';
@@ -20,8 +20,8 @@ vi.mock('../../../src/utils/Logger.js', () => ({
   }))
 }));
 
-describe('TagsToolV2', () => {
-  let tool: TagsToolV2;
+describe('TagsTool', () => {
+  let tool: TagsTool;
   let mockCache: any;
   let mockOmniAutomation: any;
   let mockLogger: any;
@@ -51,7 +51,7 @@ describe('TagsToolV2', () => {
     (CacheManager as any).mockImplementation(() => mockCache);
     (OmniAutomation as any).mockImplementation(() => mockOmniAutomation);
 
-    tool = new TagsToolV2(mockCache);
+    tool = new TagsTool(mockCache);
     (tool as any).omniAutomation = mockOmniAutomation;
   });
 

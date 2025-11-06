@@ -80,7 +80,7 @@ function getTaskDaysOverdue(task: OverdueDataUnion['overdueTasks'][0]): number {
   return 0;
 }
 
-export class OverdueAnalysisToolV2 extends BaseTool<typeof OverdueAnalysisSchemaV2> {
+export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2> {
   name = 'analyze_overdue';
   description = 'Analyze overdue tasks for patterns and bottlenecks. Returns summary with key findings first, then detailed analysis.';
   schema = OverdueAnalysisSchemaV2;

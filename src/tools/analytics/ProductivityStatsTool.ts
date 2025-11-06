@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { PRODUCTIVITY_STATS_SCRIPT_V3 } from '../../omnifocus/scripts/analytics/productivity-stats-v3.js';
+import { PRODUCTIVITY_STATS_SCRIPT } from '../../omnifocus/scripts/analytics/productivity-stats.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
@@ -11,7 +11,7 @@ import { ProductivityStatsSchemaV2 } from '../schemas/analytics-schemas-v2.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ProductivityStatsData } from '../../omnifocus/script-response-types.js';
 
-export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSchemaV2> {
+export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSchemaV2> {
   name = 'productivity_stats';
   description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.\n\nNOTE: An experimental unified API (omnifocus_analyze) is available for testing builder-style analysis. The \'productivity_stats\' tool remains the stable, recommended option for production use.';
   schema = ProductivityStatsSchemaV2;
@@ -68,7 +68,7 @@ export class ProductivityStatsToolV2 extends BaseTool<typeof ProductivityStatsSc
       }
 
       // Execute V3 optimized script with OmniJS bridge (tests provide simple mock shapes via executeJson)
-      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT_V3, {
+      const script = this.omniAutomation.buildScript(PRODUCTIVITY_STATS_SCRIPT, {
         options: {
           period,
           includeProjectStats,

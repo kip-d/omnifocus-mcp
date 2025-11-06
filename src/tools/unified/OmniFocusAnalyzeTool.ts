@@ -2,10 +2,10 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { AnalyzeSchema, type AnalyzeInput } from './schemas/analyze-schema.js';
 import { AnalysisCompiler, type CompiledAnalysis } from './compilers/AnalysisCompiler.js';
-import { ProductivityStatsToolV2 } from '../analytics/ProductivityStatsToolV2.js';
-import { TaskVelocityToolV2 } from '../analytics/TaskVelocityToolV2.js';
-import { OverdueAnalysisToolV2 } from '../analytics/OverdueAnalysisToolV2.js';
-import { PatternAnalysisToolV2 } from '../analytics/PatternAnalysisToolV2.js';
+import { ProductivityStatsTool } from '../analytics/ProductivityStatsTool.js';
+import { TaskVelocityTool } from '../analytics/TaskVelocityTool.js';
+import { OverdueAnalysisTool } from '../analytics/OverdueAnalysisTool.js';
+import { PatternAnalysisTool } from '../analytics/PatternAnalysisTool.js';
 import { WorkflowAnalysisTool } from '../analytics/WorkflowAnalysisTool.js';
 import { RecurringTasksTool } from '../recurring/RecurringTasksTool.js';
 import { ParseMeetingNotesTool } from '../capture/ParseMeetingNotesTool.js';
@@ -45,10 +45,10 @@ SCOPE FILTERING:
   };
 
   private compiler: AnalysisCompiler;
-  private productivityTool: ProductivityStatsToolV2;
-  private velocityTool: TaskVelocityToolV2;
-  private overdueTool: OverdueAnalysisToolV2;
-  private patternTool: PatternAnalysisToolV2;
+  private productivityTool: ProductivityStatsTool;
+  private velocityTool: TaskVelocityTool;
+  private overdueTool: OverdueAnalysisTool;
+  private patternTool: PatternAnalysisTool;
   private workflowTool: WorkflowAnalysisTool;
   private recurringTool: RecurringTasksTool;
   private meetingNotesTool: ParseMeetingNotesTool;
@@ -59,10 +59,10 @@ SCOPE FILTERING:
     this.compiler = new AnalysisCompiler();
 
     // Instantiate all analysis tools
-    this.productivityTool = new ProductivityStatsToolV2(cache);
-    this.velocityTool = new TaskVelocityToolV2(cache);
-    this.overdueTool = new OverdueAnalysisToolV2(cache);
-    this.patternTool = new PatternAnalysisToolV2(cache);
+    this.productivityTool = new ProductivityStatsTool(cache);
+    this.velocityTool = new TaskVelocityTool(cache);
+    this.overdueTool = new OverdueAnalysisTool(cache);
+    this.patternTool = new PatternAnalysisTool(cache);
     this.workflowTool = new WorkflowAnalysisTool(cache);
     this.recurringTool = new RecurringTasksTool(cache);
     this.meetingNotesTool = new ParseMeetingNotesTool(cache);
@@ -104,7 +104,7 @@ SCOPE FILTERING:
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
-    // ProductivityStatsToolV2 uses period enum (not custom date ranges)
+    // ProductivityStatsTool uses period enum (not custom date ranges)
     // Map groupBy to period if provided
     if (compiled.params?.groupBy) {
       args.period = compiled.params.groupBy; // day/week/month
@@ -153,7 +153,7 @@ SCOPE FILTERING:
   ): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
-    // Map insights to patterns (PatternAnalysisToolV2 expects 'patterns' not 'insights')
+    // Map insights to patterns (PatternAnalysisTool expects 'patterns' not 'insights')
     if (compiled.params?.insights) {
       args.patterns = compiled.params.insights;
     } else {

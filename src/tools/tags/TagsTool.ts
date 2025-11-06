@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TAGS_SCRIPT_V3 } from '../../omnifocus/scripts/tags/list-tags-v3.js';
+import { LIST_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -73,7 +73,7 @@ const TagsToolSchema = z.object({
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
 
-export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | TagOperationResponseV2> {
+export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | TagOperationResponseV2> {
   name = 'tags';
   description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
@@ -147,7 +147,7 @@ export class TagsToolV2 extends BaseTool<typeof TagsToolSchema, TagsResponseV2 |
       }
 
       // Use V3 script with OmniJS for all modes
-      const scriptTemplate = LIST_TAGS_SCRIPT_V3;
+      const scriptTemplate = LIST_TAGS_SCRIPT;
 
       const script = this.omniAutomation.buildScript(scriptTemplate, {
         options: {
