@@ -177,6 +177,315 @@ This separation keeps compilers simple and puts translation logic in routing met
 
 ---
 
+## Backend Tools → Scripts
+
+**Purpose:** Map which OmniFocus scripts each backend tool uses.
+
+**Note:** Some tools use barrel exports (tasks.ts, recurring.ts, reviews.ts) which re-export from modular script files. This mapping shows both the import source and the actual script file location.
+
+### QueryTasksTool
+**File:** `src/tools/tasks/QueryTasksTool.ts`
+
+**Script Imports:**
+- `LIST_TASKS_SCRIPT` - from `scripts/tasks.ts` (barrel export)
+  - Actual file: `scripts/tasks/list-tasks.ts`
+  - Alternative: `LIST_TASKS_SCRIPT_V3` from `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version)
+- Date range scripts - from `scripts/date-range-queries.ts`
+  - `GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT`
+  - `GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT`
+  - `GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT`
+- `FLAGGED_TASKS_PERSPECTIVE_SCRIPT` - from `scripts/tasks/flagged-tasks-perspective.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+- Uses `list-tasks.ts` by default (JXA version)
+- Note: OmniJS version (`list-tasks-omnijs.ts`) exists but not currently used by tool
+
+---
+
+### ManageTaskTool
+**File:** `src/tools/tasks/ManageTaskTool.ts`
+
+**Script Imports:**
+- `CREATE_TASK_SCRIPT` - from `scripts/tasks.ts` (barrel export)
+  - Actual file: `scripts/tasks/create-task.ts`
+- `COMPLETE_TASK_SCRIPT` - from `scripts/tasks.ts`
+  - Actual file: `scripts/tasks/complete-task.ts`
+- `BULK_COMPLETE_TASKS_SCRIPT` - from `scripts/tasks.ts`
+  - Actual file: `scripts/tasks/complete-tasks-bulk.ts`
+- `DELETE_TASK_SCRIPT` - from `scripts/tasks.ts`
+  - Actual file: `scripts/tasks/delete-task.ts`
+- `BULK_DELETE_TASKS_SCRIPT` - from `scripts/tasks.ts`
+  - Actual file: `scripts/tasks/delete-tasks-bulk.ts`
+- `LIST_TASKS_SCRIPT` - from `scripts/tasks.ts`
+  - Actual file: `scripts/tasks/list-tasks.ts`
+- `createUpdateTaskScript` - from `scripts/tasks/update-task.ts` (function, not constant)
+
+**Conditional Logic:**
+- No conditional script selection observed
+- Uses standard task scripts for all operations
+- Note: Comments mention "Tag assignment requires bridge operation" but uses regular create-task.ts
+
+---
+
+### ProjectsTool
+**File:** `src/tools/projects/ProjectsTool.ts`
+
+**Script Imports:**
+- `LIST_PROJECTS_SCRIPT` - from `scripts/projects/list-projects.ts`
+- `CREATE_PROJECT_SCRIPT` - from `scripts/projects/create-project.ts`
+- `COMPLETE_PROJECT_SCRIPT` - from `scripts/projects/complete-project.ts`
+- `DELETE_PROJECT_SCRIPT` - from `scripts/projects/delete-project.ts`
+- `GET_PROJECT_STATS_SCRIPT` - from `scripts/projects/get-project-stats.ts`
+- `createUpdateProjectScript` - from `scripts/projects/update-project.ts` (function)
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### TagsTool
+**File:** `src/tools/tags/TagsTool.ts`
+
+**Script Imports:**
+- `LIST_TAGS_SCRIPT` - from `scripts/tags/list-tags.ts`
+- `GET_ACTIVE_TAGS_SCRIPT` - from `scripts/tags/list-tags.ts` (same file, different export)
+- `MANAGE_TAGS_SCRIPT` - from `scripts/tags/manage-tags.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+- Note: Both `LIST_TAGS_SCRIPT` and `GET_ACTIVE_TAGS_SCRIPT` come from same file
+
+---
+
+### PerspectivesTool
+**File:** `src/tools/perspectives/PerspectivesTool.ts`
+
+**Script Imports:**
+- `LIST_PERSPECTIVES_SCRIPT` - from `scripts/perspectives/list-perspectives.ts`
+- `QUERY_PERSPECTIVE_SCRIPT` - from `scripts/perspectives/query-perspective.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### FoldersTool
+**File:** `src/tools/folders/FoldersTool.ts`
+
+**Script Imports:**
+- `createListFoldersScript` - from `scripts/folders/list-folders.ts` (function)
+- `CREATE_FOLDER_SCRIPT` - from `scripts/folders/create-folder.ts`
+- `UPDATE_FOLDER_SCRIPT` - from `scripts/folders/update-folder.ts`
+- `DELETE_FOLDER_SCRIPT` - from `scripts/folders/delete-folder.ts`
+- `MOVE_FOLDER_SCRIPT` - from `scripts/folders/move-folder.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### BatchCreateTool
+**File:** `src/tools/batch/BatchCreateTool.ts`
+
+**Script Imports:**
+- `CREATE_PROJECT_SCRIPT` - from `scripts/projects/create-project.ts`
+- `DELETE_PROJECT_SCRIPT` - from `scripts/projects/delete-project.ts`
+- `CREATE_TASK_SCRIPT` - from `scripts/tasks/create-task-with-bridge.ts` ⚠️
+- `DELETE_TASK_SCRIPT` - from `scripts/tasks.ts` (barrel export)
+  - Actual file: `scripts/tasks/delete-task.ts`
+
+**Conditional Logic:**
+- **IMPORTANT:** BatchCreateTool specifically uses `create-task-with-bridge.ts` instead of regular `create-task.ts`
+- This is the ONLY tool that imports the bridge version for task creation
+- Bridge version required for proper tag assignment during batch operations
+
+---
+
+### ProductivityStatsTool
+**File:** `src/tools/analytics/ProductivityStatsTool.ts`
+
+**Script Imports:**
+- `PRODUCTIVITY_STATS_SCRIPT` - from `scripts/analytics/productivity-stats.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+- Note: Comment mentions "V3 optimized script with OmniJS bridge" but imports `productivity-stats.ts` not v3 variant
+
+---
+
+### TaskVelocityTool
+**File:** `src/tools/analytics/TaskVelocityTool.ts`
+
+**Script Imports:**
+- `TASK_VELOCITY_SCRIPT` - from `scripts/analytics/task-velocity.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### OverdueAnalysisTool
+**File:** `src/tools/analytics/OverdueAnalysisTool.ts`
+
+**Script Imports:**
+- `ANALYZE_OVERDUE_SCRIPT` - from `scripts/analytics/analyze-overdue.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### PatternAnalysisTool
+**File:** `src/tools/analytics/PatternAnalysisTool.ts`
+
+**Script Imports:**
+- `analyzeReviewGaps` - from `scripts/analytics/review-gaps-analyzer.ts` (function)
+- `analyzeNextActions` - from `scripts/analytics/next-actions-analyzer.ts` (function)
+- `analyzeWipLimits` - from `scripts/analytics/wip-limits-analyzer.ts` (function)
+- `analyzeDueDateBunching` - from `scripts/analytics/due-date-bunching-analyzer.ts` (function)
+
+**Conditional Logic:**
+- Uses different analyzer functions based on selected pattern types
+- Not a script version selection, but functional composition pattern
+
+---
+
+### WorkflowAnalysisTool
+**File:** `src/tools/analytics/WorkflowAnalysisTool.ts`
+
+**Script Imports:**
+- `WORKFLOW_ANALYSIS_SCRIPT` - from `scripts/analytics/workflow-analysis.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### RecurringTasksTool
+**File:** `src/tools/recurring/RecurringTasksTool.ts`
+
+**Script Imports:**
+- `ANALYZE_RECURRING_TASKS_SCRIPT` - from `scripts/recurring.ts` (barrel export)
+  - Actual file: `scripts/recurring/analyze-recurring-tasks.ts`
+- `GET_RECURRING_PATTERNS_SCRIPT` - from `scripts/recurring.ts` (barrel export)
+  - Actual file: `scripts/recurring/get-recurring-patterns.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### ManageReviewsTool
+**File:** `src/tools/reviews/ManageReviewsTool.ts`
+
+**Script Imports:**
+- From `scripts/reviews.ts` (barrel export):
+  - `PROJECTS_FOR_REVIEW_SCRIPT` - actual file: `scripts/reviews/projects-for-review.ts`
+  - `MARK_PROJECT_REVIEWED_SCRIPT` - actual file: `scripts/reviews/mark-project-reviewed.ts`
+  - `SET_REVIEW_SCHEDULE_SCRIPT` - actual file: `scripts/reviews/set-review-schedule.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### ExportTool
+**File:** `src/tools/export/ExportTool.ts`
+
+**Script Imports:**
+- `EXPORT_TASKS_SCRIPT` - from `scripts/export/export-tasks.ts`
+- `EXPORT_PROJECTS_SCRIPT` - from `scripts/export/export-projects.ts`
+
+**Conditional Logic:**
+- No conditional script selection observed
+
+---
+
+### ParseMeetingNotesTool
+**File:** `src/tools/capture/ParseMeetingNotesTool.ts`
+
+**Script Imports:**
+- **None** - This tool is pure TypeScript and does not execute OmniFocus scripts
+- Uses TypeScript functions: `detectContextTags()`, `extractDates()`
+
+**Notes:**
+- ParseMeetingNotesTool is a text parsing tool that generates batch operations
+- No JXA/OmniJS scripts involved
+- Output can be fed to BatchCreateTool for actual task creation
+
+---
+
+### SystemTool
+**File:** `src/tools/system/SystemTool.ts`
+
+**Script Imports:**
+- **None** - System tool does not execute OmniFocus scripts
+- Provides MCP server metadata and diagnostics
+
+---
+
+## Script Version Variants Discovered
+
+During backend tool analysis, the following script variants were identified:
+
+### Task Scripts
+
+**list-tasks variants:**
+- `scripts/tasks/list-tasks.ts` (JXA version - currently used by QueryTasksTool)
+- `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version - 13-22x faster, not currently used)
+
+**create-task variants:**
+- `scripts/tasks/create-task.ts` (standard version - used by ManageTaskTool)
+- `scripts/tasks/create-task-with-bridge.ts` (bridge version - used ONLY by BatchCreateTool)
+
+### Analytics Scripts
+
+**productivity-stats variants:**
+- `scripts/analytics/productivity-stats.ts` (currently used)
+- Possible v3 variant existence (comment mentions "V3 optimized" but imports don't show it)
+
+**task-velocity variants:**
+- `scripts/analytics/task-velocity.ts` (currently used)
+- Possible v3 variant existence (based on pattern from inventory)
+
+**list-tags variants:**
+- `scripts/tags/list-tags.ts` (currently used)
+- Possible v3 variant existence (based on pattern from inventory)
+
+---
+
+## Key Findings
+
+### 1. Minimal Conditional Logic
+- **No backend tools** dynamically choose between script versions at runtime
+- All script imports are static
+- The only "conditional" behavior is BatchCreateTool using a different create-task variant
+
+### 2. Bridge Script Usage Pattern
+- Only **BatchCreateTool** uses the bridge variant (`create-task-with-bridge.ts`)
+- ManageTaskTool uses regular `create-task.ts` despite comments about bridge operations
+- This suggests potential consolidation opportunity or inconsistency
+
+### 3. Barrel Exports
+Three barrel export files re-export from modular scripts:
+- `scripts/tasks.ts` → re-exports from `scripts/tasks/*.ts`
+- `scripts/recurring.ts` → re-exports from `scripts/recurring/*.ts`
+- `scripts/reviews.ts` → re-exports from `scripts/reviews/*.ts`
+
+### 4. Function Exports vs Constants
+Most scripts export constants, but some export functions:
+- `createUpdateTaskScript()` - generates script dynamically
+- `createUpdateProjectScript()` - generates script dynamically
+- `createListFoldersScript()` - generates script dynamically
+- `analyzeReviewGaps()`, `analyzeNextActions()`, etc. - PatternAnalysisTool analyzers
+
+### 5. Unused Optimized Versions
+- `list-tasks-omnijs.ts` (13-22x faster) exists but is **not used** by QueryTasksTool
+- This is a high-impact consolidation opportunity identified in the plan
+
+---
+
 ## Next Steps
 
-Continue to Task 2: Map backend tools → scripts to complete the full call graph.
+Task 2 complete. Continue to Task 3: Identify dead code by cross-referencing this mapping with actual file system.
