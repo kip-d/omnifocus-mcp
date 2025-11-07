@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity.js';
+import { TASK_VELOCITY_SCRIPT_V3 as TASK_VELOCITY_SCRIPT } from '../../omnifocus/scripts/analytics/task-velocity-v3.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,

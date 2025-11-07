@@ -91,6 +91,55 @@
 - Deleted: productivity-stats.ts (321 LOC)
 - Result: Faster, simpler productivity statistics with no helper overhead
 
+### 2025-11-07 - task-velocity consolidation - Near-identical duplicates (only 2-line difference)
+
+**Context:** Consolidating task-velocity.ts (158 LOC) and task-velocity-v3.ts (156 LOC)
+
+**Problem:** Near-duplicate implementations with minimal differences
+- task-velocity.ts: Uses `getUnifiedHelpers()` import (~30KB overhead), JXA-based
+  - Helper import for safeGetDate() and other utilities
+  - 158 LOC with full helper suite
+- task-velocity-v3.ts: Pure OmniJS bridge, no helper imports
+  - Zero helper imports - completely self-contained
+  - 156 LOC (only 2 lines shorter)
+  - Performance: 67.6s → <1s (67x faster per header comments)
+  - OmniJS flattenedTasks with direct property access (completionDate, modified)
+
+**Key Difference:** Not functionality, but execution strategy
+- v1: JXA with helpers (slower property access ~1-2ms per item)
+- v3: OmniJS bridge (faster property access ~0.001ms per item)
+- Both calculate same velocity metrics, intervals, and projections
+
+**Decision:** Chose v3 for performance consistency
+- Matches productivity-stats-v3 pattern (pure OmniJS bridge)
+- 67x faster execution (per documentation)
+- No helper overhead
+- Modern consolidation pattern
+
+**Workaround:** Updated TaskVelocityTool to use task-velocity-v3.ts
+
+**Why near-duplicates existed:**
+- Historical evolution: v1 was original JXA implementation
+- v3 was performance optimization using OmniJS bridge pattern
+- Both maintained for comparison during transition period
+- Never consolidated until now
+
+**Ideal:**
+- Single implementation using OmniJS bridge for analytics
+- Clear documentation of performance benefits
+- Consistent pattern across all analytics scripts
+
+**Test Results:**
+- Build: ✅ Success (no TypeScript errors)
+- Analytics tests: ✅ Pass (6/6)
+- Unified tools: ✅ Pass (all)
+- Key tests passing before deletion
+
+**Impact:**
+- Updated: TaskVelocityTool to use task-velocity-v3.ts
+- Deleted: task-velocity.ts (158 LOC)
+- Result: Single, faster task velocity implementation with no helper dependencies
+
 ---
 
 ## Helper Usage Tracking
