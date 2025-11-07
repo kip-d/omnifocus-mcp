@@ -1,25 +1,25 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LIST_TASKS_SCRIPT, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks.js';
+import { LIST_TASKS_SCRIPT_V3, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks.js';
 import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
 
 describe('Performance Optimization Tests', () => {
   describe('list_tasks performance features', () => {
-    it('should include query time tracking', () => {
-      // V3 scripts track query time for performance monitoring
-      expect(LIST_TASKS_SCRIPT).toContain('query_time_ms');
-      expect(LIST_TASKS_SCRIPT).toContain('Date.now() - startTime');
+    it('should use OmniJS-first architecture', () => {
+      // V3 scripts use OmniJS bridge for property access
+      expect(LIST_TASKS_SCRIPT_V3).toContain('evaluateJavascript');
+      expect(LIST_TASKS_SCRIPT_V3).toContain('omniJsScript');
     });
 
-    it('should track tasks scanned for performance analysis', () => {
-      // The script should track how many tasks were examined
-      expect(LIST_TASKS_SCRIPT).toContain('tasks_scanned');
-      expect(LIST_TASKS_SCRIPT).toContain('scanned');
+    it('should include filter and field selection', () => {
+      // V3 scripts support dynamic filtering
+      expect(LIST_TASKS_SCRIPT_V3).toContain('const filter = {{filter}}');
+      expect(LIST_TASKS_SCRIPT_V3).toContain('const fields = {{fields}}');
     });
 
-    it('should indicate optimization architecture in response', () => {
-      // V3 scripts include architecture metadata
-      expect(LIST_TASKS_SCRIPT).toContain('architecture');
-      expect(LIST_TASKS_SCRIPT).toContain('omnijs');
+    it('should support multiple query modes', () => {
+      // V3 scripts support different query modes
+      expect(LIST_TASKS_SCRIPT_V3).toContain('const mode = filter.mode');
+      expect(LIST_TASKS_SCRIPT_V3).toContain('shouldInclude');
     });
   });
 

@@ -30,14 +30,14 @@ describe('Completed Project Task Handling', () => {
 
   describe('Script Template Tests', () => {
     it('should use isTaskEffectivelyCompleted in list-tasks script', async () => {
-      const { LIST_TASKS_SCRIPT } = await import('../../src/omnifocus/scripts/tasks/list-tasks.js');
+      const { LIST_TASKS_SCRIPT_V3 } = await import('../../src/omnifocus/scripts/tasks/list-tasks-omnijs.js');
 
-      // V3 scripts use OmniJS direct calls instead of helper functions
-      // Verify the script checks completion using OmniJS API
-      expect(LIST_TASKS_SCRIPT).toContain('omniJsTask.completed()');
+      // V3 scripts use OmniJS property access for completion status
+      // Verify the script checks completion using OmniJS property
+      expect(LIST_TASKS_SCRIPT_V3).toContain('task.completed');
 
-      // Verify filter checks use completed status
-      expect(LIST_TASKS_SCRIPT).toContain('filter.completed');
+      // Verify the script has completion filtering logic
+      expect(LIST_TASKS_SCRIPT_V3).toContain('if (task.completed) return');
     });
 
     it('should use isTaskEffectivelyCompleted in todays-agenda script', async () => {
