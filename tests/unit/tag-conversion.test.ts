@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags.js';
+import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags-v3.js';
 import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Type Conversion Issues', () => {

@@ -13,6 +13,43 @@
 
 ---
 
+## Task 9 - list-tags.ts → list-tags-v3.ts - 2025-11-07
+
+**Pain Point**: The v3 version was missing GET_ACTIVE_TAGS_SCRIPT which was needed by TagsTool
+**Time Spent**: ~25 minutes
+**Resolution**:
+- Added pure OmniJS version of GET_ACTIVE_TAGS_SCRIPT to list-tags-v3.ts
+- Renamed LIST_TAGS_SCRIPT_V3 → LIST_TAGS_SCRIPT to match expected import names
+- Updated TagsTool.ts to import from list-tags-v3.js
+- Updated 2 test files (tag-operations.test.ts, tag-conversion.test.ts)
+- Modified tag-operations.test.ts assertions to match v3 implementation (no safeGet in pure OmniJS)
+- Deleted old list-tags.ts file (287 LOC)
+
+**Learnings**:
+- Check for ALL exported constants from the original file, not just the main one
+- v3 version was 24% smaller (219 LOC vs 287 LOC) by eliminating helper dependencies
+- Pure OmniJS doesn't need safeGet() wrappers - tests need updating to match
+- GET_ACTIVE_TAGS_SCRIPT uses pure OmniJS bridge (counts incomplete tasks per tag in single bridge call)
+- Both scripts now export clean v3 response structure with `{ok: true, v: '3', items: [], summary: {}}`
+
+**Architecture Difference**:
+- **Original**: Used getUnifiedHelpers() (~30KB), safeGet() wrappers, fallback error handling
+- **V3**: Pure OmniJS bridge for all modes (namesOnly, fastMode, full), no helper imports, direct property access
+- **GET_ACTIVE_TAGS_SCRIPT**: Original used JXA iteration with safeGet, v3 uses OmniJS flattenedTasks.forEach
+
+**Performance**: Expected similar to other v3 consolidations (13-67x faster due to pure OmniJS bridge)
+
+**Files Modified**:
+- `/src/omnifocus/scripts/tags/list-tags-v3.ts` - Added GET_ACTIVE_TAGS_SCRIPT, renamed exports
+- `/src/tools/tags/TagsTool.ts` - Updated imports to use list-tags-v3.js
+- `/tests/unit/tag-operations.test.ts` - Updated assertions for OmniJS bridge patterns
+- `/tests/unit/tag-conversion.test.ts` - Updated import path
+
+**Files Deleted**:
+- `/src/omnifocus/scripts/tags/list-tags.ts` (287 LOC helper-based version)
+
+---
+
 ## Task 5 - list-tasks.ts → list-tasks-omnijs.ts - 2025-11-06
 
 **Pain Point**: Multiple tools using the old JXA version required updating
