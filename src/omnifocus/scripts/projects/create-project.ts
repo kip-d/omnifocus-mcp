@@ -1,4 +1,5 @@
 import { getUnifiedHelpers } from '../shared/helpers.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to create a new project in OmniFocus
@@ -14,6 +15,7 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  */
 export const CREATE_PROJECT_SCRIPT = `
   ${getUnifiedHelpers()}
+  ${REPEAT_HELPERS}
   
   
   (() => {

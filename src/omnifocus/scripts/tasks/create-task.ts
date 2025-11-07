@@ -7,10 +7,12 @@
 
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 export const CREATE_TASK_SCRIPT = `
   ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
+  ${REPEAT_HELPERS}
 
   // Repeat intent translation (OmniFocus 4.7+)
   function translateRepeatIntentToOmniFocus(intent) {

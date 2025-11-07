@@ -1,5 +1,6 @@
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 
 /**
  * Script to update an existing task in OmniFocus
@@ -10,6 +11,7 @@ import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 export const UPDATE_TASK_SCRIPT = `
   ${getUnifiedHelpers()}
   ${getMinimalTagBridge()}
+  ${REPEAT_HELPERS}
 
   // Repeat intent translation (OmniFocus 4.7+)
   function translateRepeatIntentToOmniFocus(intent) {

@@ -236,85 +236,6 @@ export const ERROR_HANDLING = `
   }
 `;
 
-/**
- * Recurrence apply functions - just the functions without config
- * For composing with other helpers that already include config
- */
-export const RECURRENCE_APPLY_FUNCTIONS = `
-  function convertToRRULE(rule) {
-    if (!rule || !rule.unit || !rule.steps) return '';
-    const u = rule.unit;
-    const s = rule.steps;
-    const F = u === 'minute' ? 'MINUTELY' : u === 'hour' ? 'HOURLY' : u === 'day' ? 'DAILY' : u === 'week' ? 'WEEKLY' : u === 'month' ? 'MONTHLY' : u === 'year' ? 'YEARLY' : '';
-    if (!F) return '';
-    let r = 'FREQ=' + F;
-    if (s > 1) r += ';INTERVAL=' + s;
-    if (Array.isArray(rule.weekdays) && rule.weekdays.length) {
-      const M = {sunday:'SU',monday:'MO',tuesday:'TU',wednesday:'WE',thursday:'TH',friday:'FR',saturday:'SA'};
-      const days = rule.weekdays.map(d => M[d] || '').filter(Boolean).join(',');
-      if (days) r += ';BYDAY=' + days;
-    }
-    if (rule.weekPosition && rule.weekday) {
-      const M = {sunday:'SU',monday:'MO',tuesday:'TU',wednesday:'WE',thursday:'TH',friday:'FR',saturday:'SA'};
-      const w = M[rule.weekday];
-      if (w) {
-        if (Array.isArray(rule.weekPosition)) {
-          const pos = rule.weekPosition.map(p => p === 'last' ? ('-1' + w) : (p + w)).join(',');
-          r += ';BYDAY=' + pos;
-        } else {
-          const p = rule.weekPosition === 'last' ? '-1' : String(rule.weekPosition);
-          r += ';BYDAY=' + p + w;
-        }
-      }
-    }
-    return r;
-  }
-  function convertToOmniMethod(method) {
-    return method === 'start-after-completion' ? 'DeferUntilDate' : method === 'due-after-completion' ? 'DueDate' : method === 'fixed' ? 'Fixed' : 'None';
-  }
-  function prepareRepetitionRuleData(rule) {
-    if (!rule || !rule.unit || !rule.steps) return null;
-    try {
-      const ruleString = convertToRRULE(rule);
-      const method = convertToOmniMethod(rule.method || 'fixed');
-      if (!ruleString) return null;
-      return { ruleString, method, needsBridge: true };
-    } catch (e) { return null }
-  }
-  function applyRepetitionRuleViaBridge(taskId, ruleData) {
-    if (!ruleData || !ruleData.ruleString || !taskId) return false;
-    try {
-      const app = Application('OmniFocus');
-      if (typeof setRepeatRuleViaBridge === 'function') {
-        const res = setRepeatRuleViaBridge(taskId, ruleData.ruleString, ruleData.method || 'Fixed', app);
-        return !!(res && res.success);
-      }
-      try {
-        const escapedTaskId = JSON.stringify(taskId);
-        const escapedRule = JSON.stringify(ruleData.ruleString);
-        const method = ruleData.method === 'DeferUntilDate' ? 'Task.RepetitionMethod.DeferUntilDate' : ruleData.method === 'DueDate' ? 'Task.RepetitionMethod.DueDate' : 'Task.RepetitionMethod.Fixed';
-        const script = [
-          'const task = Task.byIdentifier(' + escapedTaskId + ');',
-          'if (task) {',
-          '  const rule = new Task.RepetitionRule(' + escapedRule + ', ' + method + ');',
-          '  task.repetitionRule = rule;',
-          '  "success";',
-          '} else {',
-          '  "task_not_found";',
-          '}'
-        ].join('');
-        return app.evaluateJavascript(script) === 'success';
-      } catch (e2) { return false }
-    } catch (e) { return false }
-  }
-  function applyDeferAnother(task, rule) {
-    if (!rule || !rule.deferAnother || !task.dueDate()) return;
-    const u = rule.deferAnother.unit, n = rule.deferAnother.steps;
-    let ms = 0;
-    if (u === 'minute') ms = n * 60 * 1000; else if (u === 'hour') ms = n * 3600000; else if (u === 'day') ms = n * 86400000; else if (u === 'week') ms = n * 604800000; else if (u === 'month') ms = n * 2592000000; else if (u === 'year') ms = n * 31536000000;
-    if (ms > 0) task.deferDate = new Date(task.dueDate().getTime() - ms);
-  }
-`;
 
 /**
  * ===========================================================================
@@ -353,9 +274,6 @@ export function getUnifiedHelpers(context?: HelperContext): string {
     '',
     '// ----- Error Handling -----',
     ERROR_HANDLING,
-    '',
-    '// ----- Recurrence Functions -----',
-    RECURRENCE_APPLY_FUNCTIONS,
     '',
     '// ===== END HELPERS =====',
   ].join('\n');
