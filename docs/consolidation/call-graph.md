@@ -188,18 +188,33 @@ This separation keeps compilers simple and puts translation logic in routing met
 
 **Script Imports:**
 - `LIST_TASKS_SCRIPT` - from `scripts/tasks.ts` (barrel export)
-  - Actual file: `scripts/tasks/list-tasks.ts`
-  - Alternative: `LIST_TASKS_SCRIPT_V3` from `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version)
+  - Actual file: `scripts/tasks/list-tasks.ts` (JXA version)
+- `LIST_TASKS_SCRIPT_V3` - from `scripts/tasks.ts` (barrel export)
+  - Actual file: `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version, 13-22x faster)
+- `TODAYS_AGENDA_SCRIPT` - from `scripts/tasks.ts` (barrel export)
+  - Actual file: `scripts/tasks/todays-agenda.ts`
 - Date range scripts - from `scripts/date-range-queries.ts`
   - `GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT`
   - `GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT`
-  - `GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT`
+  - Note: `GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT` mentioned in docs but NOT imported
 - `FLAGGED_TASKS_PERSPECTIVE_SCRIPT` - from `scripts/tasks/flagged-tasks-perspective.ts`
 
 **Conditional Logic:**
-- No conditional script selection observed
-- Uses `list-tasks.ts` by default (JXA version)
-- Note: OmniJS version (`list-tasks-omnijs.ts`) exists but not currently used by tool
+- ✅ **DOES conditionally select scripts based on operation mode:**
+  - **Uses LIST_TASKS_SCRIPT_V3 (OmniJS, 13-22x faster) for:**
+    - `mode: 'inbox'` → handleInboxTasks() (line 1130)
+    - `mode: 'search'` → handleSearchTasks() (line 909)
+    - ID lookup → handleTaskById() (line 632)
+  - **Uses LIST_TASKS_SCRIPT (JXA) for:**
+    - `mode: 'available'` → handleAvailableTasks() (line 979)
+    - `mode: 'blocked'` → handleBlockedTasks() (line 1040)
+    - `mode: 'all'` → handleAllTasks() (line 1185)
+    - `mode: 'smart_suggest'` → handleSmartSuggest() (line 1257)
+  - **Uses specialized scripts for:**
+    - `mode: 'today'` → TODAYS_AGENDA_SCRIPT (line 820)
+    - `mode: 'overdue'` → GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT (line 712)
+    - `mode: 'upcoming'` → GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT (line 761)
+    - `mode: 'flagged'` → FLAGGED_TASKS_PERSPECTIVE_SCRIPT (line 1089)
 
 ---
 
@@ -224,7 +239,7 @@ This separation keeps compilers simple and puts translation logic in routing met
 **Conditional Logic:**
 - No conditional script selection observed
 - Uses standard task scripts for all operations
-- Note: Comments mention "Tag assignment requires bridge operation" but uses regular create-task.ts
+- **Note on bridge variants:** ManageTaskTool uses regular `create-task.ts` (not the bridge variant). The bridge variant `create-task-with-bridge.ts` is ONLY used by BatchCreateTool. This suggests that ManageTaskTool may rely on bridge operations embedded within `create-task.ts` itself, while BatchCreateTool uses a separate bridge-specific version for batch tag assignment optimization
 
 ---
 
@@ -432,8 +447,8 @@ During backend tool analysis, the following script variants were identified:
 ### Task Scripts
 
 **list-tasks variants:**
-- `scripts/tasks/list-tasks.ts` (JXA version - currently used by QueryTasksTool)
-- `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version - 13-22x faster, not currently used)
+- `scripts/tasks/list-tasks.ts` (JXA version - used by QueryTasksTool for: available, blocked, all, smart_suggest)
+- `scripts/tasks/list-tasks-omnijs.ts` (OmniJS version - 13-22x faster, used by QueryTasksTool for: inbox, search, ID lookup)
 
 **create-task variants:**
 - `scripts/tasks/create-task.ts` (standard version - used by ManageTaskTool)
@@ -480,9 +495,11 @@ Most scripts export constants, but some export functions:
 - `createListFoldersScript()` - generates script dynamically
 - `analyzeReviewGaps()`, `analyzeNextActions()`, etc. - PatternAnalysisTool analyzers
 
-### 5. Unused Optimized Versions
-- `list-tasks-omnijs.ts` (13-22x faster) exists but is **not used** by QueryTasksTool
-- This is a high-impact consolidation opportunity identified in the plan
+### 5. Optimized Version Usage
+- `list-tasks-omnijs.ts` (13-22x faster, exported as LIST_TASKS_SCRIPT_V3) **IS actively used** by QueryTasksTool
+- Used for modes: inbox, search, and ID lookup (high-frequency operations)
+- JXA version (LIST_TASKS_SCRIPT) still used for: available, blocked, all, smart_suggest
+- This indicates a strategic choice: use OmniJS for simple queries, JXA for complex filtering that requires analysis
 
 ---
 
