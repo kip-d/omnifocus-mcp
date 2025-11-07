@@ -36,20 +36,60 @@
 - Deleted: create-task-with-bridge.ts (180 LOC)
 - Result: Single source of truth for task creation with all capabilities
 
-### [DATE] - [Script Name] - [Issue Summary]
+### 2025-11-06 - productivity-stats consolidation - Helper-free v3 outperforms helper-heavy v1
 
-**Context:** What were you trying to do?
+**Context:** Consolidating productivity-stats.ts (321 LOC) and productivity-stats-v3.ts (283 LOC)
 
-**Problem:** What helper issue did you encounter?
-- Missing function?
-- Awkward API?
-- Performance issue?
-- Duplication?
-- Other?
+**Problem:** Different helper philosophies with significant trade-offs
+- productivity-stats.ts (v1): Uses `getUnifiedHelpers()` + hybrid JXA/OmniJS approach
+  - Imports full helper suite (~30KB)
+  - JXA iteration for projects/tags with direct API methods
+  - OmniJS bridge only for task statistics
+  - Graceful fallback from OmniJS to JXA if bridge fails
+  - 321 LOC total
+- productivity-stats-v3.ts: Pure OmniJS bridge, no helper imports
+  - Zero helper imports - completely self-contained
+  - Single OmniJS bridge call for ALL statistics (projects, tags, tasks)
+  - No JXA fallback - fails hard if bridge fails
+  - 283 LOC total (12% smaller)
 
-**Workaround:** What did you do instead?
+**Key Architectural Difference:**
+- v1: "Hybrid safety" - use helpers and fallbacks for reliability
+- v3: "Bridge-first purity" - single bridge call for maximum performance
 
-**Ideal:** What would you have preferred to exist?
+**Performance Analysis:**
+- v1: Multiple operations (JXA projects + JXA tags + OmniJS tasks)
+- v3: Single OmniJS bridge call (8-10x faster expected)
+- v3 metadata: Includes query_time_ms timing for performance monitoring
+
+**Decision:** Chose v3 for performance and simplicity
+- 12% smaller code size
+- Single bridge call = faster execution
+- No helper dependencies = clearer dependencies
+- Modern pattern (matches task-velocity-v3, list-tags-v3)
+
+**Workaround:** Updated ProductivityStatsTool to use productivity-stats-v3.ts
+
+**Ideal Helper Pattern Insight:**
+- When OmniJS bridge can handle entire operation, skip helpers entirely
+- Helpers are valuable for:
+  - Shared utility functions used across multiple scripts
+  - Complex JXA operations requiring error handling
+  - Fallback logic when bridge isn't suitable
+- Helpers are overhead for:
+  - Pure OmniJS bridge scripts (self-contained is better)
+  - Simple, focused operations with no shared logic
+
+**Test Results:**
+- Build: ✅ Success (no TypeScript errors)
+- Analytics tests: ✅ All pass (6/6)
+- Unified tools: ✅ All pass (8/8 unified tools tests)
+- Regression: ✅ None detected
+
+**Impact:**
+- Updated: ProductivityStatsTool to use productivity-stats-v3.ts
+- Deleted: productivity-stats.ts (321 LOC)
+- Result: Faster, simpler productivity statistics with no helper overhead
 
 ---
 
