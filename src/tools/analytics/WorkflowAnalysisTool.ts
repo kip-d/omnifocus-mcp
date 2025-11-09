@@ -3,7 +3,7 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
-import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics/workflow-analysis.js';
+import { WORKFLOW_ANALYSIS_V3 as WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
 
