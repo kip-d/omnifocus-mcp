@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
-import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
+import { EXPORT_TASKS_V3 as EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks-v3.js';
+import { EXPORT_PROJECTS_V3 as EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects-v3.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';

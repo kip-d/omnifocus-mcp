@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders.js';
-import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder.js';
-import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
-import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
-import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
+import { createListFoldersV3 as createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders-v3.js';
+import { CREATE_FOLDER_V3 as CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder-v3.js';
+import { UPDATE_FOLDER_V3 as UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder-v3.js';
+import { DELETE_FOLDER_V3 as DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder-v3.js';
+import { MOVE_FOLDER_V3 as MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder-v3.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';

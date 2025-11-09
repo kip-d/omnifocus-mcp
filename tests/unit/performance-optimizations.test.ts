@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LIST_TASKS_SCRIPT_V3, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks.js';
+import { LIST_TASKS_SCRIPT_V3 } from '../../src/omnifocus/scripts/tasks.js';
+import { createUpdateTaskScript } from '../../src/omnifocus/scripts/tasks/update-task-v3.js';
 import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
 
 describe('Performance Optimization Tests', () => {
@@ -56,10 +57,11 @@ describe('Performance Optimization Tests', () => {
   });
 
   describe('Task lookup optimizations', () => {
-    it('should avoid whose() and iterate safely', async () => {
-      const { UPDATE_TASK_SCRIPT } = await import('../../src/omnifocus/scripts/tasks.js');
+    it('should avoid whose() and iterate safely', () => {
+      // Generate a sample update task script to test
+      const UPDATE_TASK_SCRIPT = createUpdateTaskScript('test-id', { name: 'test' });
       expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
-      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks(');
+      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks');
       expect(UPDATE_TASK_SCRIPT).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
     });
 
@@ -194,9 +196,11 @@ describe('Error Handling Tests', () => {
   });
 
   it('should perform safe and efficient task lookup', () => {
+    // Generate a sample update task script to test
+    const UPDATE_TASK_SCRIPT = createUpdateTaskScript('test-id', { name: 'test' });
     // Either use whose() or safe iteration; both are acceptable
     const usesWhose = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks.whose({id: taskId})');
-    const usesIteration = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks(')
+    const usesIteration = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks')
       && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(UPDATE_TASK_SCRIPT);
     expect(usesWhose || usesIteration).toBe(true);
     expect(UPDATE_TASK_SCRIPT).toContain('if (!task)');

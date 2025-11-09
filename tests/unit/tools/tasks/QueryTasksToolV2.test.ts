@@ -448,7 +448,11 @@ describe('QueryTasksTool', () => {
       expect(mockOmni.buildScript).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          days: 14,
+          options: expect.objectContaining({
+            days: 14,
+            includeToday: true,
+            limit: 25,
+          }),
         })
       );
     });

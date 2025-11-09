@@ -16,11 +16,11 @@ vi.mock('../../../../src/utils/logger.js', () => ({
 }));
 
 // Mock the export scripts since we're testing the self-contained implementation
-vi.mock('../../../../src/omnifocus/scripts/export/export-tasks.js', () => ({
-  EXPORT_TASKS_SCRIPT: 'mock-tasks-export-script'
+vi.mock('../../../../src/omnifocus/scripts/export/export-tasks-v3.js', () => ({
+  EXPORT_TASKS_V3: 'mock-tasks-export-script'
 }));
-vi.mock('../../../../src/omnifocus/scripts/export/export-projects.js', () => ({
-  EXPORT_PROJECTS_SCRIPT: 'mock-projects-export-script'
+vi.mock('../../../../src/omnifocus/scripts/export/export-projects-v3.js', () => ({
+  EXPORT_PROJECTS_V3: 'mock-projects-export-script'
 }));
 
 // Mock TagsTool for bulk export
