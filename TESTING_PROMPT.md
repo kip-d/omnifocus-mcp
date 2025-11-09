@@ -80,22 +80,11 @@ When creating test tasks or projects, add the unique tag:
 
 ---
 
-## Expected Tools
-
-Before starting tests, verify you have access to exactly **4 tools**:
-
-1. **`omnifocus_read`** - Query operations (tasks, projects, tags, perspectives, folders)
-2. **`omnifocus_write`** - Mutation operations (create, update, complete, delete)
-3. **`omnifocus_analyze`** - Analysis operations (productivity stats, velocity, patterns, workflow)
-4. **`system`** - Version information and diagnostics
-
-If you see different tools (like `tasks`, `manage_task`, `projects`, etc.), you're using an older API version.
-
----
-
 ## Testing Scenarios
 
-### Phase 1: Natural Language Tests (User-Friendly)
+All tests below should be conducted using **natural language** - just say these things to Claude. The LLM assistant should figure out which tools to use automatically. You don't need to know any technical details about the API.
+
+### Core Functionality Tests
 
 These tests verify natural conversation works smoothly:
 
@@ -156,268 +145,51 @@ These tests verify natural conversation works smoothly:
 
 ---
 
-### Phase 2: Technical Validation (4-Tool API)
+### Error Handling & Edge Cases
 
-These tests verify the unified API works correctly:
+Try these edge cases to verify the system handles errors gracefully:
 
-#### **Tool 1: omnifocus_read**
+- **Invalid dates:** "Create task 'Bad Date' due 'notadate'"
+  - Should get a clear error explaining date format requirements
 
-**Test 1.1: Query Today's Tasks**
-```
-Ask: "Show me tasks for today, limit to 5"
-Expected Tool: omnifocus_read
-Expected Response: Up to 5 tasks due today or flagged
-```
+- **Missing information:** "Create a task" (no name provided)
+  - Should be asked to provide a task name
 
-**Test 1.2: Query Overdue Tasks**
-```
-Ask: "What's overdue?"
-Expected Tool: omnifocus_read
-Expected Response: Tasks past due date with days overdue count
-```
+- **Invalid operations:** "Perform invalid operation on task"
+  - Should get a clear error message
 
-**Test 1.3: Query Available Tasks**
-```
-Ask: "What can I work on right now?"
-Expected Tool: omnifocus_read
-Expected Response: Only tasks that are available (not blocked, not deferred)
-```
+- **Nonexistent items:** "Update task with ID 'nonexistent-id'"
+  - Should get "task not found" error
 
-**Test 1.4: Search Tasks**
-```
-Ask: "Find tasks with 'test' in them"
-Expected Tool: omnifocus_read
-Expected Response: Tasks matching search term
-```
+- **Invalid time periods:** "Show productivity stats for invalid period"
+  - Should get user-friendly error with valid suggestions
 
-**Test 1.5: Query Projects**
-```
-Ask: "List my first 10 projects"
-Expected Tool: omnifocus_read
-Expected Response: 10 projects with basic info
-```
-
-**Test 1.6: Query Tags**
-```
-Ask: "Show me all tags that have active tasks"
-Expected Tool: omnifocus_read
-Expected Response: Tags currently in use, fast response (< 200ms)
-```
-
-**Test 1.7: Query Perspectives**
-```
-Ask: "Show me all available perspectives"
-Expected Tool: omnifocus_read
-Expected Response: Built-in and custom perspectives
-```
-
-**Test 1.8: Query Inbox**
-```
-Ask: "What's in my inbox?"
-Expected Tool: omnifocus_read
-Expected Response: Tasks without project assignment
-```
-
-#### **Tool 2: omnifocus_write**
-
-**Test 2.1: Create Task with Tags**
-```
-Ask: "Create task 'Test Write API' with tags @mcp-test-TIMESTAMP and urgent, due tomorrow"
-Expected Tool: omnifocus_write
-Expected Response: Task created with tags assigned (single operation!)
-Verify: Tags should be set immediately, not require second operation
-```
-
-**Test 2.2: Create Task in Inbox**
-```
-Ask: "Create task 'Inbox Test' in inbox with note 'testing inbox creation'"
-Expected Tool: omnifocus_write
-Expected Response: Task created in inbox with note
-```
-
-**Test 2.3: Update Task**
-```
-Ask: "Update task 'Test Write API' with note 'updated via unified API'"
-Expected Tool: omnifocus_write
-Expected Response: Task updated successfully
-```
-
-**Test 2.4: Complete Task**
-```
-Ask: "Mark 'Test Write API' as complete"
-Expected Tool: omnifocus_write
-Expected Response: Task marked complete with completion timestamp
-```
-
-**Test 2.5: Delete Task**
-```
-Ask: "Delete task 'Inbox Test'"
-Expected Tool: omnifocus_write
-Expected Response: Task deleted successfully
-```
-
-**Test 2.6: Create Project**
-```
-Ask: "Create project 'Test Project Write' with tag @mcp-test-TIMESTAMP"
-Expected Tool: omnifocus_write
-Expected Response: Project created with ID
-```
-
-**Test 2.7: Bulk Complete**
-```
-Ask: "Complete all tasks tagged @mcp-test-TIMESTAMP"
-Expected Tool: omnifocus_write
-Expected Response: Multiple tasks completed in single operation
-```
-
-#### **Tool 3: omnifocus_analyze**
-
-**Test 3.1: Productivity Stats**
-```
-Ask: "Show my productivity stats for this week, including project breakdowns"
-Expected Tool: omnifocus_analyze
-Expected Response: Completion counts, rates, per-project statistics
-```
-
-**Test 3.2: Task Velocity**
-```
-Ask: "Analyze my task completion velocity over the last 7 days"
-Expected Tool: omnifocus_analyze
-Expected Response: Velocity trends by day, increasing/decreasing indicators
-```
-
-**Test 3.3: Overdue Analysis**
-```
-Ask: "What's blocking me? Show overdue tasks grouped by project"
-Expected Tool: omnifocus_analyze
-Expected Response: Overdue items organized by project, bottleneck identification
-```
-
-**Test 3.4: Pattern Detection - Duplicates**
-```
-Ask: "Check my task list for duplicate tasks"
-Expected Tool: omnifocus_analyze
-Expected Response: Tasks with similar names identified
-```
-
-**Test 3.5: Pattern Detection - Dormant Projects**
-```
-Ask: "Find projects that haven't had activity in the last 30 days"
-Expected Tool: omnifocus_analyze
-Expected Response: Dormant projects list
-```
-
-**Test 3.6: Workflow Analysis**
-```
-Ask: "Analyze my workflow health and system efficiency"
-Expected Tool: omnifocus_analyze
-Expected Response: Workflow patterns, momentum indicators, bottlenecks
-```
-
-**Test 3.7: Recurring Task Analysis**
-```
-Ask: "Analyze my recurring tasks and show which ones are active"
-Expected Tool: omnifocus_analyze
-Expected Response: Recurring task patterns with repeat rules
-```
-
-#### **Tool 4: system**
-
-**Test 4.1: Version Check**
-```
-Ask: "Check OmniFocus MCP server version"
-Expected Tool: system
-Expected Response: Version 3.0.0 or higher
-```
-
-**Test 4.2: Health Diagnostics**
-```
-Ask: "Run diagnostics on the OmniFocus server"
-Expected Tool: system
-Expected Response: Health status, no errors
-```
+**What to watch for:** Clear error messages that help you fix the problem, not crashes or confusing technical jargon.
 
 ---
 
-### Phase 3: Error Handling & Edge Cases
+## Performance Verification
 
-**Test 5.1: Invalid Date Format**
-```
-Ask: "Create task 'Bad Date' due 'notadate'"
-Expected: Clear error message explaining date format requirements
-Should NOT: Crash or create task with invalid date
-```
+Test these to verify the system performs well:
 
-**Test 5.2: Invalid Operation**
-```
-Ask: "Perform invalid operation on task"
-Expected: Clear error message, operation not recognized
-Should NOT: Silent failure or confusing error
-```
+### Caching
+- **First query:** "Show me what I need to do today"
+  - Note the response time (should be < 2 seconds)
 
-**Test 5.3: Missing Required Field**
-```
-Ask: "Create a task" (no name provided)
-Expected: Error requesting task name
-Should NOT: Create task with empty/null name
-```
+- **Repeat query:** "Show me what I need to do today" (ask again immediately)
+  - Should be noticeably faster (50-90% improvement)
 
-**Test 5.4: Invalid Time Period**
-```
-Ask: "Show productivity stats for invalid period"
-Expected: User-friendly error with valid period suggestions
-Should NOT: Return empty/zero stats
-```
+- **Cache freshness:**
+  1. "Show tasks for today"
+  2. "Create task 'Cache Test' due today with tag @mcp-test-TIMESTAMP"
+  3. "Show tasks for today" (new task should appear)
 
-**Test 5.5: Nonexistent Task**
-```
-Ask: "Update task with ID 'nonexistent-id'"
-Expected: Clear error that task not found
-Should NOT: Silent failure
-```
+### Query Speed
+- **Large queries:** "Show all tasks, limit to 200"
+  - Should complete in < 5 seconds
 
----
-
-## Performance Tests
-
-### Caching Verification
-
-**Test 6.1: First Query (Cold)**
-```
-Ask: "Show me what I need to do today"
-Note: Response time (should be < 2 seconds for typical database)
-```
-
-**Test 6.2: Repeat Query (Cached)**
-```
-Ask: "Show me what I need to do today" (immediate repeat)
-Expected: Faster response, metadata indicates cache hit
-Should be: 50-90% faster than cold query
-```
-
-**Test 6.3: Cache Invalidation**
-```
-1. Ask: "Show tasks for today" (cached)
-2. Ask: "Create task 'Cache Test' due today with tag @mcp-test-TIMESTAMP"
-3. Ask: "Show tasks for today" (should be fresh, not cached)
-Expected: New task appears in results
-```
-
-### Query Optimization
-
-**Test 6.4: Minimal vs Full Details**
-```
-Ask 1: "Show today's tasks with minimal details" (no notes, no subtasks)
-Ask 2: "Show today's tasks with full details" (all fields)
-Expected: Minimal query faster than full details
-```
-
-**Test 6.5: Large Result Sets**
-```
-Ask: "Show all tasks, limit to 200"
-Expected: Response in < 5 seconds
-If slower: May indicate performance issue
-```
+- **Simple queries:** "What's in my inbox?"
+  - Should complete in < 1 second
 
 ---
 
@@ -455,16 +227,14 @@ If slower: May indicate performance issue
 After completing all tests, verify:
 
 - [ ] Can create tasks naturally without knowing technical syntax
-- [ ] Tags work during task creation (single step - this is huge!)
+- [ ] Tags work during task creation (single step)
 - [ ] All query types return appropriate results
 - [ ] Tasks can be updated and completed easily
 - [ ] Projects can be created and managed
 - [ ] Analytics provide useful insights
-- [ ] Pattern analysis helps identify issues
 - [ ] Performance is good (< 2 seconds for most queries)
 - [ ] Caching provides noticeable speed improvements
 - [ ] Error messages are helpful, not cryptic
-- [ ] All 4 unified tools work correctly
 - [ ] Test cleanup completed successfully
 
 ---
