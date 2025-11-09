@@ -169,9 +169,8 @@
 
 **Testing prompts:**
 
-- **[docs/TESTING_PROMPTS_COMPREHENSIVE_V3.md](TESTING_PROMPTS_COMPREHENSIVE_V3.md)** - Comprehensive testing prompts v3
-- **[docs/TESTING_PROMPTS_NATURAL_CONVERSATION.md](TESTING_PROMPTS_NATURAL_CONVERSATION.md)** - Natural conversation testing prompts
-- **[docs/TESTING_PROMPTS_CLAUDE_DESKTOP.md](TESTING_PROMPTS_CLAUDE_DESKTOP.md)** - Claude Desktop-specific testing prompts
+- **[TESTING_PROMPT.md](../TESTING_PROMPT.md)** - Unified testing guide for v3.0.0 API (4 tools) with natural language scenarios, technical validation, error handling, performance tests, and cleanup system
+- **[.archive/testing-prompts/](../.archive/testing-prompts/)** - Archived testing prompts (consolidated November 2025)
 
 ---
 
