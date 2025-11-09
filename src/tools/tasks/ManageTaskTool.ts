@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CREATE_TASK_SCRIPT, COMPLETE_TASK_SCRIPT, BULK_COMPLETE_TASKS_SCRIPT, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT, LIST_TASKS_SCRIPT_V3 } from '../../omnifocus/scripts/tasks.js';
-import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task.js';
+import { createUpdateTaskScript } from '../../omnifocus/scripts/tasks/update-task-v3.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { localToUTC } from '../../utils/timezone.js';
@@ -348,6 +348,19 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             );
           }
 
+          // Handle v3 envelope format - unwrap if present
+          // Scripts return: {ok: true, v: "3", data: {...}}
+          // execJson wraps it: {success: true, data: {ok: true, v: "3", data: {...}}}
+          // After line 296 we have: {ok: true, v: "3", data: {...}}
+          // We need to unwrap to: {...}
+          if (parsedCreateResult && typeof parsedCreateResult === 'object') {
+            const envelope = parsedCreateResult as { ok?: boolean; v?: string; data?: unknown };
+            if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
+              this.logger.debug('Unwrapping v3 envelope', { envelope });
+              parsedCreateResult = envelope.data;
+            }
+          }
+
           // Check if parsedResult is valid
           if (!parsedCreateResult || typeof parsedCreateResult !== 'object' || (!(parsedCreateResult as Record<string, unknown>).taskId && !(parsedCreateResult as Record<string, unknown>).id)) {
             return createErrorResponseV2(
@@ -495,7 +508,16 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               }
             }
           }
-          const parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
+          let parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
+
+          // Handle v3 envelope format - unwrap if present
+          if (parsedUpdateResult && typeof parsedUpdateResult === 'object') {
+            const envelope = parsedUpdateResult as { ok?: boolean; v?: string; data?: unknown };
+            if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
+              this.logger.debug('Unwrapping v3 envelope for update', { envelope });
+              parsedUpdateResult = envelope.data;
+            }
+          }
 
           // Smart cache invalidation after successful update
           this.cache.invalidateForTaskChange({
