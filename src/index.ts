@@ -12,6 +12,27 @@ import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
 
 const logger = createLogger('server');
 
+// Global error handlers to prevent server crashes from uncaught exceptions
+// These are defensive safety nets - tool execution errors should be caught and converted to McpError
+process.on('uncaughtException', (error: Error) => {
+  logger.error('Uncaught exception (server continuing):', {
+    message: error.message,
+    stack: error.stack,
+    name: error.name,
+  });
+  // Don't exit - let server continue operating
+  // The error has been logged for debugging
+});
+
+process.on('unhandledRejection', (reason: unknown, _promise: Promise<unknown>) => {
+  logger.error('Unhandled promise rejection (server continuing):', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+  // Don't exit - let server continue operating
+  // The rejection has been logged for debugging
+});
+
 // Create server instance
 const versionInfo = getVersionInfo();
 const server = new Server(
@@ -67,11 +88,12 @@ async function runServer() {
   registerPrompts(server);
 
   // Warm cache with frequently accessed data (non-blocking)
-  // Disable cache warming in CI environments (Linux, no OmniFocus) or benchmark mode
+  // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
+  const isTestEnvironment = process.env.NODE_ENV === 'test';
   const benchmarkMode = process.env.NO_CACHE_WARMING === 'true';
   const cacheWarmer = new CacheWarmer(cacheManager, {
-    enabled: !isCIEnvironment && !benchmarkMode,
+    enabled: !isCIEnvironment && !isTestEnvironment && !benchmarkMode,
     timeout: 240000, // 240 second (4 minute) timeout - matches OMNIFOCUS_SCRIPT_TIMEOUT for benchmarking
     categories: {
       projects: true,
@@ -91,6 +113,8 @@ async function runServer() {
   // This ensures batch operations don't run concurrently with cache warming
   if (isCIEnvironment) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
+  } else if (isTestEnvironment) {
+    logger.info('Cache warming disabled in test environment (NODE_ENV=test)');
   } else if (benchmarkMode) {
     logger.info('Cache warming disabled for benchmark mode');
   } else {

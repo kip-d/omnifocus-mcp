@@ -138,8 +138,17 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
           error: error instanceof Error ? error.message : String(error),
         });
 
-        // Re-throw the error to maintain existing error handling behavior
-        throw error;
+        // Convert to McpError to prevent uncaught exceptions from crashing the server
+        // McpError is the only exception type the MCP SDK properly handles
+        if (error instanceof McpError) {
+          throw error;
+        }
+
+        // Wrap all other errors as McpError with InternalError code
+        throw new McpError(
+          ErrorCode.InternalError,
+          error instanceof Error ? error.message : String(error),
+        );
       }
     })();
 
