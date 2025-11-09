@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects/list-projects.js';
+import { WARM_PROJECTS_CACHE_WITH_STATS_SCRIPT } from '../../omnifocus/scripts/cache/warm-projects-cache-with-stats.js';
 import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
 import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
@@ -282,7 +283,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       filter.folder = args.folder;
     }
 
-    const cacheKey = `projects_list_${JSON.stringify(filter)}`;
+    // Use simple cache keys that match cache warming
+    // This ensures cache hits for common queries
+    const cacheKey = args.status === 'active' && !args.folder
+      ? 'projects_active'  // Matches cache warming key
+      : `projects_list_${JSON.stringify(filter)}`;
 
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
@@ -296,11 +301,19 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
-      filter,
-      limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true,
-    });
+    // Use fast OmniJS bridge when stats are needed (100-200x faster than JXA)
+    const includeStats = args.details !== undefined ? args.details : false;
+    const script = includeStats && !args.folder
+      ? this.omniAutomation.buildScript(WARM_PROJECTS_CACHE_WITH_STATS_SCRIPT, {
+          filterStatus: filter.status || 'active',
+          limit: args.limit || 50,
+          includeStats: true,
+        })
+      : this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
+          filter,
+          limit: args.limit || 10,
+          includeStats: false, // LIST_PROJECTS_SCRIPT uses slow JXA for stats
+        });
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       // Check for specific error types first
@@ -590,11 +603,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       ) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query
+    // Execute query - review lists typically don't need stats
     const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
       limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true,
+      includeStats: false, // Review lists don't need expensive stats
     });
     const result = await this.execJson(script);
 
@@ -648,11 +661,19 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
-      filter,
-      limit: args.limit || 10,
-      includeStats: args.details !== undefined ? args.details : true,
-    });
+    // Use fast OmniJS bridge when stats are needed (100-200x faster than JXA)
+    const includeStats = args.details !== undefined ? args.details : false;
+    const script = includeStats
+      ? this.omniAutomation.buildScript(WARM_PROJECTS_CACHE_WITH_STATS_SCRIPT, {
+          filterStatus: 'active',
+          limit: args.limit || 50,
+          includeStats: true,
+        })
+      : this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
+          filter,
+          limit: args.limit || 10,
+          includeStats: false,
+        });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
