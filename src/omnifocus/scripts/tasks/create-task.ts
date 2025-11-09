@@ -1,16 +1,67 @@
 /**
  * Script to create a new task in OmniFocus
  *
- * SIMPLIFIED ARCHITECTURE (v2.2+): Uses unified helper bundle
- * All helpers included once - no composition complexity
+ * ESSENTIAL BRIDGE ARCHITECTURE (v2.3+): Minimal helpers only
+ * Only includes the 2 functions actually used by this script
  */
 
-import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
+import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
+
+// Essential helpers - only functions used by create-task
+const ESSENTIAL_HELPERS = `
+  // validateProject - Find and validate project by ID
+  function validateProject(projectId, doc) {
+    if (!projectId) return { valid: true, project: null };
+
+    // Find by iteration (avoid the whose method)
+    let foundProject = null;
+    const projects = doc.flattenedProjects();
+    for (let i = 0; i < projects.length; i++) {
+      try { if (projects[i].id() === projectId) { foundProject = projects[i]; break; } } catch (e) {}
+    }
+
+    if (!foundProject) {
+      // Check if it's a numeric-only ID (Claude Desktop bug)
+      const isNumericOnly = /^\\d+$/.test(projectId);
+      let errorMessage = 'Project not found: ' + projectId;
+
+      if (isNumericOnly) {
+        errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
+      }
+
+      return {
+        valid: false,
+        error: errorMessage
+      };
+    }
+
+    return {
+      valid: true,
+      project: foundProject
+    };
+  }
+
+  // formatError - Standardize error message format with context
+  function formatError(error, context = '') {
+    const errorObj = {
+      error: true,
+      message: error.message || String(error),
+      context: context
+    };
+
+    if (error.stack) {
+      errorObj.stack = error.stack;
+    }
+
+    return JSON.stringify(errorObj);
+  }
+`;
 
 export const CREATE_TASK_SCRIPT = `
-  ${getUnifiedHelpers()}
+  ${ESSENTIAL_HELPERS}
   ${getMinimalTagBridge()}
+  ${REPEAT_HELPERS}
 
   // Repeat intent translation (OmniFocus 4.7+)
   function translateRepeatIntentToOmniFocus(intent) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags.js';
+import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags-v3.js';
 import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Type Conversion Issues', () => {
@@ -31,10 +31,10 @@ describe('Tag Type Conversion Issues', () => {
   });
   
   it('should verify tag array handling patterns', () => {
-    // Check for proper array handling (official API uses property access)
-    expect(LIST_TAGS_SCRIPT).toContain('doc.flattenedTags');
+    // V3 uses OmniJS bridge - check for bridge patterns
+    expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags');
-    
+
     // Check for tag manipulation
     expect(MANAGE_TAGS_SCRIPT).toContain('task.addTags');
     expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTags');

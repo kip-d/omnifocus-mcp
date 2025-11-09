@@ -14,7 +14,6 @@ export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
 export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { UPDATE_TASK_SCRIPT } from './tasks/update-task.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
-export { LIST_TASKS_SCRIPT } from './tasks/list-tasks.js';
 export { LIST_TASKS_SCRIPT_V3 } from './tasks/list-tasks-omnijs.js';
 
 // Legacy helper export

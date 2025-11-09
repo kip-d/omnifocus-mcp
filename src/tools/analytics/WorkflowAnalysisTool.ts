@@ -3,7 +3,7 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
 import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
-import { WORKFLOW_ANALYSIS_SCRIPT } from '../../omnifocus/scripts/analytics/workflow-analysis.js';
+import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
 
@@ -96,11 +96,11 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         );
       }
 
-      // Execute the workflow analysis script
-      const script = this.omniAutomation.buildScript(WORKFLOW_ANALYSIS_SCRIPT, {
+      // Execute the workflow analysis script (v3 with pure OmniJS)
+      const script = this.omniAutomation.buildScript(WORKFLOW_ANALYSIS_V3, {
         options: {
           analysisDepth: args.analysisDepth,
-          focusAreas: args.focusAreas.join(','), // Convert array to comma-separated string for script compatibility
+          focusAreas: args.focusAreas, // v3 script accepts array directly
           maxInsights: args.maxInsights,
           includeRawData: args.includeRawData,
         },
@@ -119,37 +119,21 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         );
       }
 
-      // Handle the script result properly - check for actual data structure
-      interface WorkflowScriptData {
-        insights?: Array<string | { insight?: string; message?: string }>;
-        patterns?: unknown[];
-        recommendations?: Array<string | { recommendation?: string; message?: string }>;
-        bottlenecks?: unknown[];
-        metadata?: {
-          score?: number;
-        };
-      }
-
-      interface WorkflowAnalysisResponse {
-        analysis?: {
-          patterns?: unknown[];
-          bottlenecks?: unknown[];
-          recommendations?: Array<string | { recommendation?: string; message?: string }>;
-          insights?: Array<string | { insight?: string; message?: string }>;
-        };
-        summary?: {
-          score?: number;
-          status?: string;
-        };
-      }
-
-      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
+      // V3 envelope unwrapping
+      // V3 script returns: {ok: true, v: "3", data: {...}}
+      // execJson wraps it: {success: true, data: {ok: true, v: "3", data: {...}}}
+      // We need to unwrap the inner v3 envelope to get the actual data
       const envelope = result.data as unknown;
-      const scriptData: unknown = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data)
-        ? envelope.data
-        : envelope;
+      let scriptData: unknown = envelope;
 
-      let data: WorkflowAnalysisResponse;
+      // Check for v3 envelope and unwrap
+      if (envelope && typeof envelope === 'object' && 'ok' in envelope && 'v' in envelope && envelope.v === '3') {
+        const v3Envelope = envelope as { ok: boolean; v: string; data?: unknown };
+        if (v3Envelope.ok && v3Envelope.data) {
+          scriptData = v3Envelope.data;
+          logger.debug('Unwrapped v3 envelope');
+        }
+      }
 
       // Check if we have any meaningful data
       if (!scriptData || typeof scriptData !== 'object' || scriptData === null) {
@@ -163,55 +147,51 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
         );
       }
 
-      // Type guard for script response format
-      if ('insights' in scriptData || 'patterns' in scriptData || 'recommendations' in scriptData) {
-        // Script returns data directly with insights, patterns, recommendations at top level
-        const typedScriptData = scriptData as WorkflowScriptData;
-        data = {
-          analysis: {
-            patterns: typedScriptData.patterns || [],
-            bottlenecks: typedScriptData.bottlenecks || [],
-            recommendations: typedScriptData.recommendations || [],
-            insights: typedScriptData.insights || [],
-          },
-          summary: {
-            score: typedScriptData.metadata?.score || 0,
-            status: 'Analysis completed',
-          },
+      // V3 script returns data directly at top level with all fields
+      interface WorkflowV3Data {
+        insights: Array<{ category: string; insight: string; priority: string }>;
+        patterns: {
+          workloadDistribution?: unknown;
+          workflowMetrics?: unknown;
+          deferralAnalysis?: unknown;
         };
-      } else {
-        // Fallback for empty/error cases
-        data = {
-          analysis: {
-            patterns: [],
-            bottlenecks: [],
-            recommendations: [],
-            insights: [],
-          },
-          summary: {
-            score: 0,
-            status: 'No data available',
-          },
+        recommendations: Array<{ category: string; recommendation: string; priority: string }>;
+        data?: unknown;
+        totalTasks: number;
+        totalProjects: number;
+        analysisTime: number;
+        dataPoints: number;
+        metadata: {
+          analysisDepth: string;
+          focusAreas: string[];
+          maxInsights: number;
+          method?: string;
+          optimization?: string;
+          query_time_ms?: number;
+          note?: string;
         };
       }
 
-      // Structure the response data
+      const v3Data = scriptData as WorkflowV3Data;
+
+      // Structure the response data from v3 format
       const responseData = {
         analysis: {
           depth: args.analysisDepth,
           focusAreas: args.focusAreas,
           timestamp: new Date().toISOString(),
         },
-        insights: data.analysis?.insights || [],
-        patterns: data.analysis?.patterns || [],
-        recommendations: data.analysis?.recommendations || [],
-        data: args.includeRawData ? data : undefined,
+        insights: v3Data.insights || [],
+        patterns: v3Data.patterns || {},
+        recommendations: v3Data.recommendations || [],
+        data: args.includeRawData ? v3Data.data : undefined,
         metadata: {
-          totalTasks: 0,
-          totalProjects: 0,
-          analysisTime: 0,
-          dataPoints: data.analysis?.patterns?.length || 0,
-          score: data.summary?.score || 0,
+          totalTasks: v3Data.totalTasks || 0,
+          totalProjects: v3Data.totalProjects || 0,
+          analysisTime: v3Data.analysisTime || 0,
+          dataPoints: v3Data.dataPoints || 0,
+          method: v3Data.metadata?.method || 'omnijs_v3',
+          optimization: v3Data.metadata?.optimization || 'v3',
         },
       };
 
@@ -268,41 +248,54 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
   }
 
   private extractKeyFindings(data: {
-    insights?: Array<string | { insight?: string; message?: string }>;
-    recommendations?: Array<string | { recommendation?: string; message?: string }>;
-    patterns?: unknown[];
+    insights?: Array<string | { category?: string; insight?: string; message?: string; priority?: string }>;
+    recommendations?: Array<string | { category?: string; recommendation?: string; message?: string; priority?: string }>;
+    patterns?: unknown;
     metadata?: {
       score?: number;
+      totalTasks?: number;
+      totalProjects?: number;
     };
   }): string[] {
     const findings: string[] = [];
 
+    // V3 format: insights are objects with category, insight, priority
     if (data.insights && Array.isArray(data.insights)) {
       findings.push(...data.insights.slice(0, 3).map(i => {
         if (typeof i === 'string') return i;
         if (typeof i === 'object' && i !== null) {
-          return (i as { insight?: string; message?: string }).insight || (i as { insight?: string; message?: string }).message || JSON.stringify(i);
+          const insight = (i as { category?: string; insight?: string; message?: string }).insight ||
+                         (i as { category?: string; insight?: string; message?: string }).message;
+          return insight || JSON.stringify(i);
         }
         return JSON.stringify(i);
       }));
     }
 
+    // V3 format: recommendations are objects with category, recommendation, priority
     if (data.recommendations && Array.isArray(data.recommendations)) {
       findings.push(...data.recommendations.slice(0, 2).map(r => {
         if (typeof r === 'string') return r;
         if (typeof r === 'object' && r !== null) {
-          return (r as { recommendation?: string; message?: string }).recommendation || (r as { recommendation?: string; message?: string }).message || JSON.stringify(r);
+          const rec = (r as { category?: string; recommendation?: string; message?: string }).recommendation ||
+                      (r as { category?: string; recommendation?: string; message?: string }).message;
+          return rec || JSON.stringify(r);
         }
         return JSON.stringify(r);
       }));
     }
 
-    if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
-      findings.push(`Found ${data.patterns.length} key patterns in your workflow`);
+    // V3 format: patterns is an object, not an array
+    if (data.patterns && typeof data.patterns === 'object') {
+      const patternCount = Object.keys(data.patterns).length;
+      if (patternCount > 0) {
+        findings.push(`Found ${patternCount} pattern categories in your workflow`);
+      }
     }
 
-    if (data.metadata?.score && data.metadata.score > 0) {
-      findings.push(`Workflow health score: ${data.metadata.score}/100`);
+    // Include task/project counts if available
+    if (data.metadata?.totalTasks && data.metadata.totalTasks > 0) {
+      findings.push(`Analyzed ${data.metadata.totalTasks} tasks across ${data.metadata.totalProjects || 0} projects`);
     }
 
     return findings.length > 0 ? findings : ['Analysis completed successfully'];

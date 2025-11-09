@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags.js';
+import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags-v3.js';
 import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Operations Fix Verification', () => {
-  it('should use correct property access without parentheses', () => {
-    // Verify tag properties use method calls with safe getters (with or without default values)
-    expect(LIST_TAGS_SCRIPT).toMatch(/safeGet\(\(\) => tag\.id\(\)/);
-    expect(LIST_TAGS_SCRIPT).toMatch(/safeGet\(\(\) => tag\.name\(\)/);
-    expect(LIST_TAGS_SCRIPT).toContain('safeGetTags(task)');
+  it('should use OmniJS bridge for tag property access (v3)', () => {
+    // V3 uses pure OmniJS bridge - no safeGet needed
+    expect(LIST_TAGS_SCRIPT).toContain('evaluateJavascript');
+    expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.name');
+    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
   });
   
   it('should use plural methods for tag manipulation', () => {

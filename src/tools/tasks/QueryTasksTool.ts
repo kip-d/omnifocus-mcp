@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import {
-  LIST_TASKS_SCRIPT,
   LIST_TASKS_SCRIPT_V3,
   TODAYS_AGENDA_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
@@ -976,7 +975,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
     });
@@ -1037,7 +1036,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     }
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
     });
@@ -1182,7 +1181,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     };
 
     // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
     });
@@ -1254,7 +1253,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     };
 
     // Execute comprehensive query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT, {
+    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
     });

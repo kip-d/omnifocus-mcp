@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/scripts/analytics/analyze-overdue.js';
+import { ANALYZE_OVERDUE_V3 as ANALYZE_OVERDUE_SCRIPT } from '../../omnifocus/scripts/analytics/analyze-overdue-v3.js';
 import {
   createAnalyticsResponseV2,
   createErrorResponseV2,
