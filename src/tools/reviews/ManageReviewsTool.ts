@@ -1,7 +1,9 @@
 import { BaseTool } from '../base.js';
-import { PROJECTS_FOR_REVIEW_V3 as PROJECTS_FOR_REVIEW_SCRIPT } from '../../omnifocus/scripts/reviews/projects-for-review-v3.js';
-import { MARK_PROJECT_REVIEWED_V3 as MARK_PROJECT_REVIEWED_SCRIPT } from '../../omnifocus/scripts/reviews/mark-project-reviewed-v3.js';
-import { SET_REVIEW_SCHEDULE_V3 as SET_REVIEW_SCHEDULE_SCRIPT } from '../../omnifocus/scripts/reviews/set-review-schedule-v3.js';
+import {
+  PROJECTS_FOR_REVIEW_SCRIPT,
+  MARK_PROJECT_REVIEWED_SCRIPT,
+  SET_REVIEW_SCHEDULE_SCRIPT,
+} from '../../omnifocus/scripts/reviews.js';
 import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';

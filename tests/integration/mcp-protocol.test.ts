@@ -79,10 +79,7 @@ d('MCP Protocol Compliance Tests', () => {
       expect(result).toHaveProperty('success');
 
       if (result.success === false) {
-        // Just verify error has a message, don't require specific wording
-        expect(result.error).toBeDefined();
-        expect(result.error.message).toBeDefined();
-        expect(typeof result.error.message).toBe('string');
+        expect(result.error.message).toContain('OmniFocus');
       } else {
         expect(result.success).toBe(true);
         expect(result).toHaveProperty('data');
@@ -110,8 +107,7 @@ d('MCP Protocol Compliance Tests', () => {
 
       if (result.error && result.error.code === 'INTERNAL_ERROR') {
         expect(result.success).toBe(false);
-        expect(result.error.message).toBeDefined();
-        expect(typeof result.error.message).toBe('string');
+        expect(result.error.message).toContain('OmniFocus');
       } else {
         expect(result.success).toBe(true);
         expect(result.data).toBeDefined();
@@ -139,10 +135,11 @@ d('MCP Protocol Compliance Tests', () => {
       expect(result).toHaveProperty('success');
 
       if (result.success === false) {
-        // Just verify error has a message, don't require specific wording
-        expect(result.error).toBeDefined();
-        expect(result.error.message).toBeDefined();
-        expect(typeof result.error.message).toBe('string');
+        const errorMessage = result.error.message;
+        const isOmniFocusError = errorMessage.includes('OmniFocus') ||
+                                 errorMessage.includes('not be available') ||
+                                 errorMessage.includes('not running');
+        expect(isOmniFocusError).toBe(true);
       } else {
         expect(result.success).toBe(true);
         expect(result).toHaveProperty('data');

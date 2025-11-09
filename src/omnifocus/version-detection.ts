@@ -4,7 +4,7 @@
  */
 
 import { OmniAutomation } from './OmniAutomation.js';
-import { GET_VERSION_V3 as GET_VERSION_SCRIPT } from './scripts/system/get-version-v3.js';
+import { GET_VERSION_SCRIPT } from './scripts/system/get-version.js';
 import { z } from 'zod';
 
 interface OmniFocusVersion {

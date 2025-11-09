@@ -3,13 +3,14 @@ import { BaseTool } from '../base.js';
 import {
   LIST_TASKS_SCRIPT_V3,
   TODAYS_AGENDA_SCRIPT,
-  FLAGGED_TASKS_PERSPECTIVE_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import {
-  GET_OVERDUE_TASKS_V3_SCRIPT,
-  GET_UPCOMING_TASKS_V3_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries-v3.js';
-import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+  GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+  GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
+} from '../../omnifocus/scripts/date-range-queries.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
+import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
+import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
   createTaskResponseV2,
   createErrorResponseV2,
@@ -706,12 +707,10 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Execute v3 overdue script
-    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_V3_SCRIPT, {
-      options: {
-        limit: args.limit,
-        includeCompleted: args.completed || false,
-      },
+    // Execute optimized overdue script
+    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
+      limit: args.limit,
+      includeCompleted: args.completed || false,
     });
 
     const result = await this.execJson(script);
@@ -757,13 +756,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Execute v3 upcoming script
-    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_V3_SCRIPT, {
-      options: {
-        days,
-        includeToday: true,
-        limit: args.limit,
-      },
+    // Execute optimized upcoming script
+    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
+      days,
+      includeToday: true,
+      limit: args.limit,
     });
 
     const result = await this.execJson(script);

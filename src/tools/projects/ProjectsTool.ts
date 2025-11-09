@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createListProjectsV3 } from '../../omnifocus/scripts/projects/list-projects-v3.js';
-import { CREATE_PROJECT_V3 as CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project-v3.js';
-import { COMPLETE_PROJECT_V3 as COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project-v3.js';
-import { DELETE_PROJECT_V3 as DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project-v3.js';
-import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats-v3.js';
-import { UPDATE_PROJECT_V3 as UPDATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/update-project-v3.js';
+import { LIST_PROJECTS_SCRIPT } from '../../omnifocus/scripts/projects/list-projects.js';
+import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
+import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
+import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
+import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
+import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
@@ -295,12 +295,12 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       ) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query (v3 uses function-based script generation)
-    const script = createListProjectsV3(
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
-      args.limit || 10,
-      args.details !== undefined ? args.details : true
-    );
+      limit: args.limit || 10,
+      includeStats: args.details !== undefined ? args.details : true,
+    });
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       // Check for specific error types first
@@ -456,11 +456,8 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
 
     if (args.status !== undefined) updates.status = args.status;
 
-    // Execute update (v3 uses buildScript with template substitution)
-    const script = this.omniAutomation.buildScript(UPDATE_PROJECT_SCRIPT, {
-      projectId: args.projectId,
-      updates
-    });
+    // Execute update using new function argument approach with schema validation
+    const script = createUpdateProjectScript(args.projectId!, updates);
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -593,12 +590,12 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       ) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query (v3 uses function-based script generation)
-    const script = createListProjectsV3(
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
-      args.limit || 10,
-      args.details !== undefined ? args.details : true
-    );
+      limit: args.limit || 10,
+      includeStats: args.details !== undefined ? args.details : true,
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -650,12 +647,12 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       ) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query (v3 uses function-based script generation)
-    const script = createListProjectsV3(
+    // Execute query
+    const script = this.omniAutomation.buildScript(LIST_PROJECTS_SCRIPT, {
       filter,
-      args.limit || 10,
-      args.details !== undefined ? args.details : true
-    );
+      limit: args.limit || 10,
+      includeStats: args.details !== undefined ? args.details : true,
+    });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {

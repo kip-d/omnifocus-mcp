@@ -42,7 +42,7 @@
  * - bridgeSetPlannedDate() - Set planned date on tasks
  *
  * OTHER BRIDGE HELPERS:
- * - repeat-helpers.ts - Repetition rule management
+ * - date-fields-bridge.ts - Get added/modified/dropDate fields
  * - (Search for "bridge" in src/omnifocus/scripts/shared/ for more)
  *
  * WHY NOT TWO-STAGE QUERIES?

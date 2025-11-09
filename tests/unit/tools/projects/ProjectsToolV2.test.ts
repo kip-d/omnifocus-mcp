@@ -94,7 +94,14 @@ describe('ProjectsTool', () => {
         details: false,
       });
 
-      // V3 scripts use function-based generation, not buildScript template
+      expect(mockOmni.buildScript).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ 
+          filter: expect.objectContaining({
+            status: 'active'
+          })
+        })
+      );
       expect(mockOmni.executeJson).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.data.items).toHaveLength(1);
@@ -428,8 +435,8 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      // V3 scripts use function-based generation, executeJson is called directly
-      expect(mockOmni.executeJson).toHaveBeenCalled();
+      // buildScript is called with the template and parameters
+      expect(mockOmni.buildScript).toHaveBeenCalled();
       // Just verify the coercion worked by checking the result
       expect(result.data.items).toEqual([]);
     });
