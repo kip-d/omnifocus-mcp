@@ -54,39 +54,40 @@ describe('ProjectsTool', () => {
   });
 
   describe('details parameter', () => {
-    it('should pass details as includeStats to script builder', async () => {
+    it('should use OmniJS bridge when details is true', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
+        ok: true,
         projects: [],
         metadata: {
-          total_available: 50,
-          returned_count: 0,
-          limit_applied: 10
+          processedCount: 0,
+          returnedCount: 0,
+          optimizationUsed: 'omniJs_bridge',
+          statsIncluded: true
         }
       });
 
-      await tool.executeValidated({ 
+      await tool.executeValidated({
         operation: 'list',
         limit: 10,
-        details: true 
+        details: true
       });
 
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
       const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
-      expect(template).toContain('const filter = {{filter}}');
-      expect(template).toContain('const includeStats = {{includeStats}}');
+      // OmniJS bridge script uses different template variables
+      expect(template).toContain('{{filterStatus}}');
+      expect(template).toContain('{{limit}}');
+      expect(template).toContain('{{includeStats}}');
       expect(params).toEqual({
-        filter: {
-          limit: 10,
-          includeDropped: false
-        },
+        filterStatus: 'active',
         limit: 10,
         includeStats: true
       });
     });
 
-    it('should default details to true', async () => {
+    it('should default details to false for performance', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
@@ -98,15 +99,15 @@ describe('ProjectsTool', () => {
 
       expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
       const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
+      // When details is false, uses LIST_PROJECTS_SCRIPT (fast, no stats)
       expect(template).toContain('const filter = {{filter}}');
-      expect(template).toContain('const includeStats = {{includeStats}}');
       expect(params).toEqual({
         filter: {
           limit: 10,
           includeDropped: false
         },
         limit: 10,
-        includeStats: true
+        includeStats: false
       });
     });
 
