@@ -8,7 +8,7 @@ export interface CompiledQuery {
   mode: 'all' | 'search' | 'smart_suggest';
   filters: QueryFilter;
   fields?: string[];
-  sort?: Array<{ field: string; order: 'asc' | 'desc' }>;
+  sort?: Array<{ field: string; direction: 'asc' | 'desc' }>;
   limit?: number;
   offset?: number;
 }

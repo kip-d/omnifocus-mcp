@@ -39,7 +39,7 @@ Three unified tools consolidate 17 legacy tools using builder pattern:
       NOT?: Filter
     },
     fields?: string[],  // Select specific fields to return
-    sort?: Array<{field: string, order: "asc" | "desc"}>,
+    sort?: Array<{field: string, direction: "asc" | "desc"}>,
     limit?: number,     // Default: 25
     offset?: number,
     mode?: "search" | "smart_suggest"

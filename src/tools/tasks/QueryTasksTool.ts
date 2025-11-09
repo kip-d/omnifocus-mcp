@@ -978,6 +978,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
+      limit: args.limit,
     });
     const result = await this.execJson(script);
 
@@ -1039,6 +1040,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
+      limit: args.limit,
     });
     const result = await this.execJson(script);
 
@@ -1184,6 +1186,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
+      limit: args.limit,
     });
     const result = await this.execJson(script);
 
@@ -1256,6 +1259,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
       filter,
       fields: args.fields || [],
+      limit: args.limit,
     });
     const result = await this.execJson(script);
 

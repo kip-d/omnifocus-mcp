@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceNumber } from '../../schemas/coercion-helpers.js';
 
 // Filter operators for flexible queries
 const TagFilterSchema = z.object({
@@ -67,10 +68,10 @@ const FilterSchema: FilterType = z.lazy(() => z.object({
   NOT: FilterSchema.optional(),
 }).passthrough());
 
-// Sort options
+// Sort options (matches backend QueryTasksTool schema which uses 'direction')
 const SortSchema = z.object({
   field: z.string(),
-  order: z.enum(['asc', 'desc']),
+  direction: z.enum(['asc', 'desc']),
 });
 
 // Main query schema
@@ -80,8 +81,9 @@ export const ReadSchema = z.object({
     filters: FilterSchema.optional(),
     fields: z.array(z.string()).optional(),
     sort: z.array(SortSchema).optional(),
-    limit: z.number().min(1).max(500).optional(),
-    offset: z.number().min(0).optional(),
+    // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings
+    limit: coerceNumber().min(1).max(500).optional(),
+    offset: coerceNumber().min(0).optional(),
     mode: z.enum(['search', 'smart_suggest']).optional(),
   }),
 });
