@@ -467,6 +467,14 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       }
     }
 
+    // Text filter (CONTAINS/MATCHES operators) - Bug #9 fix
+    if (advancedFilters.text && !filter.text) {
+      if (isStringFilter(advancedFilters.text)) {
+        filter.text = advancedFilters.text.value;
+        filter.textOperator = advancedFilters.text.operator;
+      }
+    }
+
     // Array filters (tags, taskStatus)
     if (advancedFilters.tags && !filter.tags) {
       filter._debug_tags_exists = true;

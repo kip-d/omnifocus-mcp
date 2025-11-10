@@ -58,6 +58,48 @@ export const LIST_TASKS_SCRIPT_V3 = `
         }
       \`;
 
+      // Text filter helper - Bug #9 fix
+      const textFilterHelper = \`
+        function matchesTextFilter(task, filterText, textOperator) {
+          if (!filterText) return true;
+
+          const taskName = (task.name || '').toLowerCase();
+          const taskNote = (task.note || '').toLowerCase();
+          const searchTerm = filterText.toLowerCase();
+          const operator = textOperator || 'CONTAINS';
+
+          switch(operator) {
+            case 'CONTAINS':
+              return taskName.includes(searchTerm) || taskNote.includes(searchTerm);
+            case 'MATCHES':
+              return taskName === searchTerm || taskNote === searchTerm;
+            default:
+              return true;
+          }
+        }
+      \`;
+
+      // Date filter helper - Bug #10 fix
+      const dateFilterHelper = \`
+        function matchesDateFilter(task, dueAfter, dueBefore, dueDateOperator) {
+          if (!dueAfter && !dueBefore) return true;
+
+          const dueDate = task.dueDate;
+
+          if (dueDateOperator === 'BETWEEN' && dueAfter && dueBefore) {
+            // BETWEEN: Exclude tasks with no due date AND tasks outside range
+            if (!dueDate) return false;
+            const dueLower = new Date(dueAfter);
+            const dueUpper = new Date(dueBefore);
+            // Include tasks with dueDate >= lower AND dueDate <= upper
+            return dueDate >= dueLower && dueDate <= dueUpper;
+          }
+
+          // Other operators can be added here as needed
+          return true;
+        }
+      \`;
+
       // Determine which OmniJS collection and filter to use
       let omniJsScript = '';
 
@@ -423,15 +465,27 @@ export const LIST_TASKS_SCRIPT_V3 = `
         const includeCompleted = filter.includeCompleted || false;
         const filterTags = filter.tags || [];
         const tagsOperator = filter.tagsOperator || 'AND';
+        const filterText = filter.text || '';
+        const textOperator = filter.textOperator || 'CONTAINS';
+        const dueAfter = filter.dueAfter || '';
+        const dueBefore = filter.dueBefore || '';
+        const dueDateOperator = filter.dueDateOperator || '';
         omniJsScript = \`
           (() => {
             \${tagFilterHelper}
+            \${textFilterHelper}
+            \${dateFilterHelper}
 
             const results = [];
             let count = 0;
             const limit = \${limit};
             const filterTags = \${JSON.stringify(filterTags)};
             const tagsOperator = '\${tagsOperator}';
+            const filterText = \${JSON.stringify(filterText)};
+            const textOperator = '\${textOperator}';
+            const dueAfter = \${JSON.stringify(dueAfter)};
+            const dueBefore = \${JSON.stringify(dueBefore)};
+            const dueDateOperator = '\${dueDateOperator}';
 
             flattenedTasks.forEach(task => {
               if (count >= limit) return;
@@ -439,6 +493,12 @@ export const LIST_TASKS_SCRIPT_V3 = `
 
               // Apply tag filter
               if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
+              // Apply text filter (Bug #9 fix)
+              if (!matchesTextFilter(task, filterText, textOperator)) return;
+
+              // Apply date filter (Bug #10 fix)
+              if (!matchesDateFilter(task, dueAfter, dueBefore, dueDateOperator)) return;
 
               const proj = task.containingProject;
               results.push({

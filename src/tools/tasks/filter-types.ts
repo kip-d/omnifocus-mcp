@@ -75,8 +75,9 @@ export interface QueryFilters {
   // Number filters
   estimatedMinutes?: NumberFilter;
 
-  // Text search filter
+  // Text search filters
   search?: StringFilter;
+  text?: StringFilter;  // Bug #9 fix - separate text filter with CONTAINS/MATCHES operators
 
   // Status field filter (for taskStatus enum)
   taskStatus?: ArrayFilter;
