@@ -257,8 +257,8 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
                            updates.projectId !== undefined ||
                            updates.parentTaskId !== undefined;
 
-      // If we only have basic updates (including tags), execute via OmniJS/bridge and return immediately
-      if (!needsJXATask && (updateOps.length > 0 || updates.tags !== undefined)) {
+      // If we only have basic updates (including tags/addTags/removeTags), execute via OmniJS/bridge and return immediately
+      if (!needsJXATask && (updateOps.length > 0 || updates.tags !== undefined || updates.addTags !== undefined || updates.removeTags !== undefined)) {
         let updateResult = null;
 
         // Execute basic updates via OmniJS if we have any
@@ -319,6 +319,56 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
             }
           } catch (tagError) {
             changes.push("Warning: Tag update failed - " + String(tagError));
+          }
+        }
+
+        // AddTags/RemoveTags operations (Issue #12 extension - modify existing tags)
+        if (updates.addTags !== undefined || updates.removeTags !== undefined) {
+          try {
+            // First get current tags via OmniJS
+            const getCurrentTagsScript = \`
+              (() => {
+                const task = Task.byIdentifier("\${taskId}");
+                if (!task) {
+                  return JSON.stringify({ success: false, error: "task_not_found" });
+                }
+                const tags = task.tags.map(t => t.name);
+                return JSON.stringify({ success: true, tags: tags });
+              })()
+            \`;
+            const currentTagsResult = JSON.parse(app.evaluateJavascript(getCurrentTagsScript));
+
+            if (!currentTagsResult.success) {
+              changes.push("Warning: Could not get current tags for add/remove operation");
+            } else {
+              let mergedTags = currentTagsResult.tags || [];
+
+              // Add new tags
+              if (updates.addTags && Array.isArray(updates.addTags)) {
+                updates.addTags.forEach(tag => {
+                  if (!mergedTags.includes(tag)) {
+                    mergedTags.push(tag);
+                  }
+                });
+              }
+
+              // Remove tags
+              if (updates.removeTags && Array.isArray(updates.removeTags)) {
+                mergedTags = mergedTags.filter(tag => !updates.removeTags.includes(tag));
+              }
+
+              // Set the merged tag list
+              const bridgeResult = bridgeSetTags(app, taskId, mergedTags);
+              if (bridgeResult && bridgeResult.success) {
+                const added = updates.addTags ? updates.addTags.length : 0;
+                const removed = updates.removeTags ? updates.removeTags.length : 0;
+                changes.push(\`Tags modified (added: \${added}, removed: \${removed})\`);
+              } else {
+                changes.push("Warning: Failed to update tags via bridge");
+              }
+            }
+          } catch (tagError) {
+            changes.push("Warning: Tag add/remove operation failed - " + String(tagError));
           }
         }
 
