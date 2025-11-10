@@ -270,6 +270,208 @@ Found `minimal-tag-bridge.ts` which showed:
 **Evidence from git history:**
 The solution was literally 10 minutes away from the moment we gave up. The only missing step was a 30-second grep command.
 
+## 🚨 CRITICAL: Refactoring Regression - Advanced Filter Loss (November 2025)
+
+### The "Optimization Stripped Out Features" Bug - FIXED ✅
+
+**Problem:** During v3.0.0 OmniJS refactor, text search and date range filters completely stopped working. User testing reported ZERO results for queries that should have returned multiple tasks.
+
+**Root Cause:** Performance optimization refactor created mode-based filtering (inbox, today, overdue, etc.) but the all/default mode ONLY implemented tag filtering. ALL advanced filter handling was accidentally removed.
+
+**User Impact:** CRITICAL BLOCKER
+- **Bug #9 - Text Filter:** Query `{text: {contains: "meeting"}}` returned 10 tasks NOT containing "meeting"
+- **Bug #10 - Date Range Filter:** Query `{dueDate: {between: ["2025-11-09", "2025-11-16"]}}` returned 4 overdue + 16 no-due-date tasks = ZERO in range
+
+**What Happened:**
+
+1. **Before v3 refactor** - `list-tasks-omnijs.ts` had comprehensive filter handling:
+   - Tag filtering ✓
+   - Text search filtering ✓
+   - Date range filtering ✓
+   - Project filtering ✓
+   - Status filtering ✓
+
+2. **During v3 refactor** - Consolidated filtering into modes for performance:
+   - Created specialized modes: inbox, today, overdue, flagged, available, search
+   - Created all/default mode for general queries
+   - **MISTAKE:** Only implemented tag filtering in all/default mode
+   - **RESULT:** Text and date filters silently ignored
+
+3. **Why it wasn't caught:**
+   - Unit tests focused on common cases (tags, status)
+   - Integration tests didn't verify advanced filter combinations
+   - Performance benchmarks measured speed, not correctness
+   - User testing discovered the regression
+
+**The Critical Oversight:**
+
+```typescript
+// ❌ BEFORE FIX - all/default mode (lines 463-519)
+omniJsScript = `
+  (() => {
+    ${tagFilterHelper}  // Only tag filtering!
+
+    allTasks.forEach(task => {
+      if (!matchesTagFilter(task)) return;  // Only tag check!
+
+      results.push(buildTaskObject(task));
+    });
+  })();
+`;
+
+// ✅ AFTER FIX - all/default mode (complete filtering)
+omniJsScript = `
+  (() => {
+    ${tagFilterHelper}
+    ${textFilterHelper}      // Added text filtering
+    ${dateFilterHelper}      // Added date filtering
+
+    allTasks.forEach(task => {
+      if (!matchesTagFilter(task)) return;
+      if (!matchesTextFilter(task, filterText, textOperator)) return;  // Text check
+      if (!matchesDateFilter(task, dueAfter, dueBefore, dueDateOperator)) return;  // Date check
+
+      results.push(buildTaskObject(task));
+    });
+  })();
+`;
+```
+
+**Fix Applied:**
+
+**File: `src/omnifocus/scripts/tasks/list-tasks-omnijs.ts`**
+1. Added `textFilterHelper` function (lines 61-80) - 20 lines
+2. Added `dateFilterHelper` function (lines 82-101) - 20 lines
+3. Modified all/default mode to embed helpers (lines 476-477)
+4. Applied filters in forEach loop (lines 498, 501)
+
+**File: `src/tools/tasks/QueryTasksTool.ts`**
+1. Added text filter processing (lines 470-476) - 7 lines
+
+**File: `src/tools/tasks/filter-types.ts`**
+1. Added `text?: StringFilter;` type definition (line 80)
+
+**Testing Results:**
+
+**Text Filter (Bug #9):**
+```
+Query: {text: {contains: "meeting"}}
+Before: 10 tasks, NONE containing "meeting"
+After: 12 tasks, ALL containing "meeting" ✅
+```
+
+**Date Range Filter (Bug #10):**
+```
+Query: {dueDate: {between: ["2025-11-09", "2025-11-16"]}}
+Before: 4 overdue + 16 no-date = ZERO in range
+After: 9 tasks, ALL dates Nov 10-15 ✅
+  - Nov 10: 1 task
+  - Nov 11: 3 tasks
+  - Nov 12: 1 task
+  - Nov 14: 3 tasks
+  - Nov 15: 1 task
+```
+
+**Cost Analysis:**
+- Time to identify regression: 30 minutes (user testing)
+- Time to fix both filters: 45 minutes
+- Time to test and verify: 15 minutes
+- **Total fix time: 90 minutes**
+
+**Time Cost of NOT Having Regression Tests:**
+- Performance optimization completed without catching regression
+- Released to user testing with broken filters
+- Had to pause v3.0.0 deployment for emergency fix
+- **Prevention cost: 2 hours to write comprehensive filter tests**
+- **Actual cost: Emergency fix during release cycle**
+
+**Lessons Learned:**
+
+1. **Test ALL filter types during refactoring, not just common ones**
+   ```bash
+   # Should have tested BEFORE merging v3:
+   - Tag filter (any/all/not) ✓ (tested)
+   - Text filter (contains/matches) ✗ (NOT tested)
+   - Date range filter (between/before/after) ✗ (NOT tested)
+   - Project filter (id/name) ✓ (tested)
+   - Status filter (completed/flagged) ✓ (tested)
+   ```
+
+2. **Performance optimization should preserve ALL functionality**
+   - Moving from N filter checks to mode-based filtering = valid optimization
+   - But all/default mode must handle ALL filter types, not just tags
+   - "Optimize the common case, but don't break the uncommon case"
+
+3. **Integration tests need advanced filter coverage**
+   - **Missing test:** Text search with multiple terms
+   - **Missing test:** Date range with BETWEEN operator
+   - **Missing test:** Combined filters (tags AND text AND date)
+   - **Had test:** Simple tag filter (which kept working)
+
+**Pattern to Remember:**
+
+When refactoring filtering logic:
+
+```bash
+# Step 1: Document ALL filter types BEFORE refactoring
+grep -r "filter\." src/tools/tasks/QueryTasksTool.ts | sort -u
+
+# Step 2: Write integration tests for EACH filter type
+# - Simple cases (single filter)
+# - Complex cases (combined filters)
+# - Edge cases (empty results, no matches)
+
+# Step 3: Run tests BEFORE and AFTER refactor
+npm run test:integration
+
+# Step 4: Verify test coverage for ALL filters
+# - Tag filter ✓
+# - Text filter ✓
+# - Date filter ✓
+# - Project filter ✓
+# - Status filter ✓
+
+# Step 5: User acceptance testing with real queries
+```
+
+**Red Flags - When to Stop and Verify:**
+
+These situations mean "verify ALL filter types work":
+- "I'm refactoring filtering logic for performance"
+- "I'm consolidating filter handling into modes"
+- "I'm optimizing the common case"
+- "I removed some old code that looked redundant"
+- "I simplified the filter processing"
+
+**Prevention Checklist (Now Required for Filter Refactoring):**
+
+- [ ] Document all existing filter types
+- [ ] Write integration test for each filter type
+- [ ] Verify tests pass BEFORE refactoring
+- [ ] Refactor filtering logic
+- [ ] Verify ALL tests still pass AFTER refactoring
+- [ ] Test with real data (user queries)
+- [ ] Verify uncommon filters work, not just common ones
+
+**Quote from Fix Session:**
+
+> "The v3 refactor created mode-based filtering (inbox, today, overdue, flagged, available, search, all) but failed to implement advanced filters in the all/default mode. The all/default mode only had tag filtering - no text or date filtering at all."
+
+**Evidence from Commit History:**
+- Commit `f8581f3` - "fix: add missing text and date range filters to OmniJS script (Bug #9, #10)"
+- 3 files changed, 70 insertions, 1 deletion
+- All CI checks passed (662 unit tests)
+- Both filters tested and verified working
+
+**Related Documentation:**
+- User Testing Report (Bug #9 & #10) - `/tmp/bug-9-10-fix-summary.md`
+- Filter Types - `src/tools/tasks/filter-types.ts`
+- OmniJS Script - `src/omnifocus/scripts/tasks/list-tasks-omnijs.ts`
+- Query Tool - `src/tools/tasks/QueryTasksTool.ts`
+
+**The Mantra:**
+> "When refactoring for performance, verify ALL existing filter capabilities are preserved, not just the most common ones. Test the uncommon cases explicitly - they won't be caught by accident."
+
 ## 🚨 CRITICAL: Script Size Assumptions - 27x Underestimate (September 2025)
 
 ### The Great Script Size Misconception - RESOLVED ✅
