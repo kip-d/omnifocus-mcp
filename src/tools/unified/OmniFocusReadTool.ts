@@ -179,16 +179,16 @@ PERFORMANCE:
     }
 
     if (filters.dueDate) {
-      // Handle date ranges with BETWEEN operator when both before and after are specified
-      if (filters.dueDate.before && filters.dueDate.after) {
+      // Handle date filters (discriminated union - only one operator per filter)
+      if ('between' in filters.dueDate) {
         advanced.dueDate = {
           operator: 'BETWEEN',
-          value: filters.dueDate.after,
-          upperBound: filters.dueDate.before,
+          value: filters.dueDate.between[0],
+          upperBound: filters.dueDate.between[1],
         };
-      } else if (filters.dueDate.before) {
+      } else if ('before' in filters.dueDate) {
         advanced.dueDate = { operator: '<=', value: filters.dueDate.before };
-      } else if (filters.dueDate.after) {
+      } else if ('after' in filters.dueDate) {
         advanced.dueDate = { operator: '>=', value: filters.dueDate.after };
       }
     }
@@ -204,11 +204,11 @@ PERFORMANCE:
       advanced.available = filters.available;
     }
 
-    // Text search filters (Bug fix #2: text filter mapping)
+    // Text search filters (discriminated union - only one operator per filter)
     if (filters.text) {
-      if (filters.text.contains) {
+      if ('contains' in filters.text) {
         advanced.text = { operator: 'CONTAINS', value: filters.text.contains };
-      } else if (filters.text.matches) {
+      } else if ('matches' in filters.text) {
         advanced.text = { operator: 'MATCHES', value: filters.text.matches };
       }
     }

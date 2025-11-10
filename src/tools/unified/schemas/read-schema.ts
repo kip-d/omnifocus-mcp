@@ -8,16 +8,18 @@ const TagFilterSchema = z.object({
   none: z.array(z.string()).optional(),
 });
 
-const DateFilterSchema = z.object({
-  before: z.string().optional(),
-  after: z.string().optional(),
-  between: z.tuple([z.string(), z.string()]).optional(),
-});
+// Date filter as discriminated union - only ONE operator allowed
+const DateFilterSchema = z.union([
+  z.object({ before: z.string() }).strict(),
+  z.object({ after: z.string() }).strict(),
+  z.object({ between: z.tuple([z.string(), z.string()]) }).strict(),
+]);
 
-const TextFilterSchema = z.object({
-  contains: z.string().optional(),
-  matches: z.string().optional(),
-});
+// Text filter as discriminated union - only ONE operator allowed
+const TextFilterSchema = z.union([
+  z.object({ contains: z.string() }).strict(),
+  z.object({ matches: z.string() }).strict(),
+]);
 
 // Define the filter value type first (for recursive reference)
 export interface FilterValue {
