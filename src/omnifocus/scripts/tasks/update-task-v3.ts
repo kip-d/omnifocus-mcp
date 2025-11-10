@@ -216,77 +216,124 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
         changes.push(updates.flagged ? "Flagged" : "Unflagged");
       }
 
+      // Date updates via OmniJS bridge (Issue #11 - avoid JXA cache staleness)
+      if (updates.dueDate !== undefined) {
+        if (updates.dueDate === null) {
+          updateOps.push(\`task.dueDate = null\`);
+          changes.push("Due date cleared");
+        } else {
+          updateOps.push(\`task.dueDate = new Date(\${JSON.stringify(updates.dueDate)})\`);
+          changes.push("Due date set");
+        }
+      }
+
+      if (updates.deferDate !== undefined) {
+        if (updates.deferDate === null) {
+          updateOps.push(\`task.deferDate = null\`);
+          changes.push("Defer date cleared");
+        } else {
+          updateOps.push(\`task.deferDate = new Date(\${JSON.stringify(updates.deferDate)})\`);
+          changes.push("Defer date set");
+        }
+      }
+
+      if (updates.plannedDate !== undefined) {
+        if (updates.plannedDate === null) {
+          updateOps.push(\`task.plannedDate = null\`);
+          changes.push("Planned date cleared");
+        } else {
+          updateOps.push(\`task.plannedDate = new Date(\${JSON.stringify(updates.plannedDate)})\`);
+          changes.push("Planned date set");
+        }
+      }
+
       // Check if we only have basic updates (no complex operations)
+      // NOTE: Date and tag updates moved to OmniJS bridge path (Issues #11, #12)
       const needsJXATask = updates.completed !== undefined ||
-                           updates.dueDate !== undefined ||
-                           updates.deferDate !== undefined ||
-                           updates.plannedDate !== undefined ||
                            updates.estimatedMinutes !== undefined ||
                            updates.sequential !== undefined ||
                            updates.repeatRule !== undefined ||
                            updates.clearRepeatRule ||
                            updates.projectId !== undefined ||
-                           updates.parentTaskId !== undefined ||
-                           updates.tags !== undefined;
+                           updates.parentTaskId !== undefined;
 
-      // If we only have basic updates, execute via OmniJS and return immediately
-      if (!needsJXATask && updateOps.length > 0) {
-        const basicUpdateScript = \`
-          (() => {
-            const task = Task.byIdentifier("\${taskId}");
-            if (!task) {
-              return JSON.stringify({ success: false, error: "task_not_found" });
-            }
-            \${updateOps.join(';\\n            ')}
-            return JSON.stringify({
-              success: true,
-              task: {
-                id: task.id.primaryKey,
-                name: task.name,
-                note: task.note || '',
-                flagged: task.flagged
+      // If we only have basic updates (including tags), execute via OmniJS/bridge and return immediately
+      if (!needsJXATask && (updateOps.length > 0 || updates.tags !== undefined)) {
+        let updateResult = null;
+
+        // Execute basic updates via OmniJS if we have any
+        if (updateOps.length > 0) {
+          const basicUpdateScript = \`
+            (() => {
+              const task = Task.byIdentifier("\${taskId}");
+              if (!task) {
+                return JSON.stringify({ success: false, error: "task_not_found" });
               }
-            });
-          })()
-        \`;
+              \${updateOps.join(';\\n              ')}
+              return JSON.stringify({
+                success: true,
+                task: {
+                  id: task.id.primaryKey,
+                  name: task.name,
+                  note: task.note || '',
+                  flagged: task.flagged
+                }
+              });
+            })()
+          \`;
 
-        try {
-          const updateResult = JSON.parse(app.evaluateJavascript(basicUpdateScript));
-          if (!updateResult.success) {
+          try {
+            updateResult = JSON.parse(app.evaluateJavascript(basicUpdateScript));
+            if (!updateResult.success) {
+              return JSON.stringify({
+                ok: false,
+                v: '3',
+                error: {
+                  message: "Failed to update basic properties via OmniJS",
+                  operation: 'update_task',
+                  code: 'UPDATE_FAILED'
+                }
+              });
+            }
+          } catch (e) {
             return JSON.stringify({
               ok: false,
               v: '3',
               error: {
-                message: "Failed to update basic properties via OmniJS",
+                message: "Error executing update via OmniJS: " + String(e),
                 operation: 'update_task',
-                code: 'UPDATE_FAILED'
+                code: 'BRIDGE_ERROR'
               }
             });
           }
-
-          // Return success with updated task data
-          return JSON.stringify({
-            ok: true,
-            v: '3',
-            data: {
-              success: true,
-              message: "Task updated successfully",
-              changes: changes,
-              task: updateResult.task
-            },
-            query_time_ms: Date.now() - operationStart
-          });
-        } catch (e) {
-          return JSON.stringify({
-            ok: false,
-            v: '3',
-            error: {
-              message: "Error executing update via OmniJS: " + String(e),
-              operation: 'update_task',
-              code: 'BRIDGE_ERROR'
-            }
-          });
         }
+
+        // Tag updates via bridge (Issue #12 - no JXA task reference needed)
+        if (updates.tags !== undefined && Array.isArray(updates.tags)) {
+          try {
+            const bridgeResult = bridgeSetTags(app, taskId, updates.tags);
+            if (bridgeResult && bridgeResult.success) {
+              changes.push("Tags updated: " + (bridgeResult.tags || []).join(", "));
+            } else {
+              changes.push("Warning: Failed to update tags via bridge");
+            }
+          } catch (tagError) {
+            changes.push("Warning: Tag update failed - " + String(tagError));
+          }
+        }
+
+        // Return success with updated task data
+        return JSON.stringify({
+          ok: true,
+          v: '3',
+          data: {
+            success: true,
+            message: "Task updated successfully",
+            changes: changes,
+            task: updateResult ? updateResult.task : { id: taskId }
+          },
+          query_time_ms: Date.now() - operationStart
+        });
       }
 
       // For complex operations, we need the JXA task reference
