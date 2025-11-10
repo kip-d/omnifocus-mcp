@@ -25,7 +25,7 @@
 export const WARM_PROJECTS_CACHE_WITH_STATS_SCRIPT = `
   (() => {
     const app = Application('OmniFocus');
-    const filterStatus = '{{filterStatus}}';
+    const filterStatus = {{filterStatus}};
     const limit = {{limit}};
     const includeStats = {{includeStats}};
 
