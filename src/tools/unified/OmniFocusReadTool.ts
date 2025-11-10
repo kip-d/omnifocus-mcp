@@ -103,9 +103,12 @@ PERFORMANCE:
 
     // Map filters to existing parameters
     if (compiled.filters.status) tasksArgs.completed = compiled.filters.status === 'completed';
-    if (compiled.filters.tags) tasksArgs.tags = this.extractSimpleTags(compiled.filters.tags);
 
-    // Use advanced filters for complex queries (including flagged)
+    // REMOVED: Simple tags parameter - all tag filters now use advanced filters
+    // This fixes Bug #1: tags.any not working (was being passed as simple array)
+
+    // Use advanced filters for complex queries
+    // ALL tag filters (any/all/none) now use advanced filters for consistency
     if (this.needsAdvancedFilters(compiled.filters)) {
       tasksArgs.filters = this.mapToAdvancedFilters(compiled.filters);
     }
@@ -146,6 +149,7 @@ PERFORMANCE:
 
   private needsAdvancedFilters(filters: QueryFilter): boolean {
     return Boolean(
+      filters.tags?.any ||   // Bug fix: tags.any now uses advanced filters
       filters.tags?.all ||
       filters.tags?.none ||
       filters.dueDate ||
@@ -198,6 +202,15 @@ PERFORMANCE:
     }
     if (filters.available !== undefined) {
       advanced.available = filters.available;
+    }
+
+    // Text search filters (Bug fix #2: text filter mapping)
+    if (filters.text) {
+      if (filters.text.contains) {
+        advanced.text = { operator: 'CONTAINS', value: filters.text.contains };
+      } else if (filters.text.matches) {
+        advanced.text = { operator: 'MATCHES', value: filters.text.matches };
+      }
     }
 
     // Handle OR/AND/NOT logic

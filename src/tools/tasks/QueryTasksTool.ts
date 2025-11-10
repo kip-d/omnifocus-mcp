@@ -520,11 +520,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
               filter.dueDateOperator = advancedFilters.dueDate.operator;
               break;
             case 'BETWEEN':
-              filter.dueBefore = isoDate;
+              // Bug fix #3: Swap assignments - value is lower bound (after), upperBound is upper bound (before)
+              filter.dueAfter = isoDate; // Tasks due AFTER this date (lower bound)
               if (advancedFilters.dueDate.upperBound) {
                 const upperDate = normalizeDateInput(advancedFilters.dueDate.upperBound, 'due');
                 if (upperDate) {
-                  filter.dueAfter = upperDate.toISOString();
+                  filter.dueBefore = upperDate.toISOString(); // Tasks due BEFORE this date (upper bound)
                 }
               }
               filter.dueDateOperator = 'BETWEEN';
@@ -551,11 +552,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
               filter.deferDateOperator = advancedFilters.deferDate.operator;
               break;
             case 'BETWEEN':
-              filter.deferBefore = isoDate;
+              // Bug fix #3: Swap assignments - value is lower bound (after), upperBound is upper bound (before)
+              filter.deferAfter = isoDate; // Tasks deferred AFTER this date (lower bound)
               if (advancedFilters.deferDate.upperBound) {
                 const upperDate = normalizeDateInput(advancedFilters.deferDate.upperBound, 'defer');
                 if (upperDate) {
-                  filter.deferAfter = upperDate.toISOString();
+                  filter.deferBefore = upperDate.toISOString(); // Tasks deferred BEFORE this date (upper bound)
                 }
               }
               filter.deferDateOperator = 'BETWEEN';
@@ -583,11 +585,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
               filter.addedDateOperator = advancedFilters.added.operator;
               break;
             case 'BETWEEN':
-              filter.addedBefore = isoDate;
+              // Bug fix #3: Swap assignments - value is lower bound (after), upperBound is upper bound (before)
+              filter.addedAfter = isoDate; // Tasks added AFTER this date (lower bound)
               if (advancedFilters.added.upperBound) {
                 const upperDate = normalizeDateInput(advancedFilters.added.upperBound, 'due');
                 if (upperDate) {
-                  filter.addedAfter = upperDate.toISOString();
+                  filter.addedBefore = upperDate.toISOString(); // Tasks added BEFORE this date (upper bound)
                 }
               }
               filter.addedDateOperator = 'BETWEEN';

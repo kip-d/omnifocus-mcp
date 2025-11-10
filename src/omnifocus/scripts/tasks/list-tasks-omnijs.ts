@@ -37,6 +37,27 @@ export const LIST_TASKS_SCRIPT_V3 = `
         return !fields || fields.length === 0 || fields.includes(fieldName);
       }
 
+      // Tag filter helper - will be embedded in each mode's OmniJS script
+      const tagFilterHelper = \`
+        function matchesTagFilter(task, filterTags, tagsOperator) {
+          if (!filterTags || filterTags.length === 0) return true;
+
+          const taskTags = task.tags ? task.tags.map(t => t.name) : [];
+          const operator = tagsOperator || 'AND';
+
+          switch(operator) {
+            case 'OR':
+            case 'IN':
+              return filterTags.some(tag => taskTags.includes(tag));
+            case 'NOT_IN':
+              return !filterTags.some(tag => taskTags.includes(tag));
+            case 'AND':
+            default:
+              return filterTags.every(tag => taskTags.includes(tag));
+          }
+        }
+      \`;
+
       // Determine which OmniJS collection and filter to use
       let omniJsScript = '';
 
@@ -44,12 +65,19 @@ export const LIST_TASKS_SCRIPT_V3 = `
         // ID MODE - Fast lookup by exact task ID
         omniJsScript = \`
           (() => {
+            \${tagFilterHelper}
+
             const results = [];
             const targetId = '\${filter.id}';
+            const filterTags = \${JSON.stringify(filter.tags || [])};
+            const tagsOperator = '\${filter.tagsOperator || 'AND'}';
 
             // Search through all tasks for exact ID match
             flattenedTasks.forEach(task => {
               if (task.id.primaryKey === targetId) {
+                // Apply tag filter
+                if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
                 results.push({
                   \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
                   \${shouldInclude('name') ? 'name: task.name,' : ''}
@@ -88,12 +116,19 @@ export const LIST_TASKS_SCRIPT_V3 = `
         // INBOX MODE - Use inbox global collection
         omniJsScript = \`
           (() => {
+            \${tagFilterHelper}
+
             const results = [];
             let count = 0;
             const limit = \${limit};
+            const filterTags = \${JSON.stringify(filter.tags || [])};
+            const tagsOperator = '\${filter.tagsOperator || 'AND'}';
 
             inbox.forEach(task => {
               if (count >= limit) return;
+
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
 
               results.push({
                 \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
@@ -133,9 +168,13 @@ export const LIST_TASKS_SCRIPT_V3 = `
         // TODAY MODE - Incomplete tasks due today
         omniJsScript = \`
           (() => {
+            \${tagFilterHelper}
+
             const results = [];
             let count = 0;
             const limit = \${limit};
+            const filterTags = \${JSON.stringify(filter.tags || [])};
+            const tagsOperator = '\${filter.tagsOperator || 'AND'}';
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
@@ -152,6 +191,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
               taskDate.setHours(0, 0, 0, 0);
 
               if (taskDate >= today && taskDate < tomorrow) {
+                // Apply tag filter
+                if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
                 const proj = task.containingProject;
                 results.push({
                   \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
@@ -198,6 +240,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
               const dueDate = task.dueDate;
               if (!dueDate || dueDate >= now) return;
 
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
               const proj = task.containingProject;
               results.push({
                 \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
@@ -240,6 +285,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
               if (task.completed) return;
               if (!task.flagged) return;
 
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
               const proj = task.containingProject;
               results.push({
                 \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
@@ -281,6 +329,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
               if (count >= limit) return;
               if (task.completed) return;
               if (task.taskStatus !== Task.Status.Available) return;
+
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
 
               const proj = task.containingProject;
               results.push({
@@ -333,6 +384,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
                 return;
               }
 
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
+
               const proj = task.containingProject;
               results.push({
                 \${shouldInclude('id') ? 'id: task.id.primaryKey,' : ''}
@@ -376,6 +430,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
             flattenedTasks.forEach(task => {
               if (count >= limit) return;
               \${!includeCompleted ? 'if (task.completed) return;' : ''}
+
+              // Apply tag filter
+              if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
 
               const proj = task.containingProject;
               results.push({
