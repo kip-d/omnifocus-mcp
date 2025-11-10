@@ -108,7 +108,15 @@ const ManageTaskSchema = z.object({
 
   tags: z.array(z.string())
     .optional()
-    .describe('Tags to assign to the task'),
+    .describe('Tags to assign to the task (replaces all existing tags)'),
+
+  addTags: z.array(z.string())
+    .optional()
+    .describe('Tags to add to existing tags (for update operations)'),
+
+  removeTags: z.array(z.string())
+    .optional()
+    .describe('Tags to remove from existing tags (for update operations)'),
 
   sequential: z.union([z.boolean(), z.string()])
     .optional()
@@ -520,10 +528,16 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           }
 
           // Smart cache invalidation after successful update
+          // Collect all affected tags (tags, addTags, removeTags)
+          const affectedTags: string[] = [];
+          if (Array.isArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
+          if (Array.isArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
+          if (Array.isArray(safeUpdates.removeTags)) affectedTags.push(...safeUpdates.removeTags);
+
           this.cache.invalidateForTaskChange({
             operation: 'update',
             projectId: typeof safeUpdates.projectId === 'string' ? safeUpdates.projectId : undefined,
-            tags: Array.isArray(safeUpdates.tags) ? safeUpdates.tags : undefined,
+            tags: affectedTags.length > 0 ? affectedTags : undefined,
             affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueToday(safeUpdates.dueDate) : false,
             affectsOverdue: false, // Updates don't automatically make things overdue
           });
@@ -868,9 +882,19 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       sanitized.projectId = updates.projectId;
     }
 
-    // Handle tags array
+    // Handle tags array (replaces all tags)
     if (Array.isArray(updates.tags)) {
       sanitized.tags = updates.tags.filter((tag: unknown) => typeof tag === 'string');
+    }
+
+    // Handle addTags array (adds to existing tags)
+    if (Array.isArray(updates.addTags)) {
+      sanitized.addTags = updates.addTags.filter((tag: unknown) => typeof tag === 'string');
+    }
+
+    // Handle removeTags array (removes from existing tags)
+    if (Array.isArray(updates.removeTags)) {
+      sanitized.removeTags = updates.removeTags.filter((tag: unknown) => typeof tag === 'string');
     }
 
     // Handle parent task ID (allow null/empty string)

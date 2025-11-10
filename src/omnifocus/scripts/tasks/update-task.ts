@@ -469,6 +469,37 @@ export const UPDATE_TASK_SCRIPT = `
       }
     }
     
+    // Handle addTags and removeTags by merging with current tags
+    if (updates.addTags !== undefined || updates.removeTags !== undefined) {
+      try {
+        // Get current tags from task
+        const currentTags = task.tags();
+        const currentTagNames = currentTags ? currentTags.map(t => t.name()) : [];
+
+        // Start with current tags
+        let mergedTags = [...currentTagNames];
+
+        // Add new tags (if addTags provided)
+        if (updates.addTags && Array.isArray(updates.addTags)) {
+          mergedTags = mergedTags.concat(updates.addTags);
+        }
+
+        // Remove tags (if removeTags provided)
+        if (updates.removeTags && Array.isArray(updates.removeTags)) {
+          mergedTags = mergedTags.filter(tag => !updates.removeTags.includes(tag));
+        }
+
+        // Remove duplicates
+        mergedTags = [...new Set(mergedTags)];
+
+        // Set the merged result as updates.tags so the bridge code below handles it
+        updates.tags = mergedTags;
+      } catch (mergeError) {
+        console.log('Warning: Error merging tags:', mergeError.message);
+        // If merge fails, try to proceed with direct addTags/removeTags if possible
+      }
+    }
+
     // Update tags using OmniJS bridge for reliability (required for OmniFocus 4.x)
     let tagUpdateResult = null;
     if (updates.tags !== undefined) {
