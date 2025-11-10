@@ -12,9 +12,11 @@ interface CreateData {
   name: string;
   note?: string;
   project?: string | null;
+  parentTaskId?: string; // Bug #17: Enable subtask creation
   tags?: string[];
   dueDate?: string;
   deferDate?: string;
+  plannedDate?: string;
   flagged?: boolean;
   estimatedMinutes?: number;
   repetitionRule?: RepetitionRule;
@@ -36,10 +38,16 @@ interface UpdateChanges {
   removeTags?: string[];
   dueDate?: string | null;
   deferDate?: string | null;
+  plannedDate?: string | null;
+  clearDueDate?: boolean;
+  clearDeferDate?: boolean;
+  clearPlannedDate?: boolean;
   flagged?: boolean;
   status?: 'completed' | 'dropped';
   project?: string | null;
   estimatedMinutes?: number;
+  clearEstimatedMinutes?: boolean; // Bug #18: Clear estimated time
+  clearRepeatRule?: boolean; // Bug #19: Clear repetition rule
   // Allow passthrough of additional fields
   [key: string]: unknown;
 }
@@ -58,6 +66,7 @@ export type CompiledMutation =
       operation: 'create';
       target: 'task' | 'project';
       data: CreateData;
+      minimalResponse?: boolean; // Bug #21: Reduce response size
     }
   | {
       operation: 'update';
@@ -65,12 +74,15 @@ export type CompiledMutation =
       taskId?: string;
       projectId?: string;
       changes: UpdateChanges;
+      minimalResponse?: boolean; // Bug #21: Reduce response size
     }
   | {
       operation: 'complete';
       target: 'task' | 'project';
       taskId?: string;
       projectId?: string;
+      completionDate?: string; // Bug #20: Allow custom completion date
+      minimalResponse?: boolean; // Bug #21: Reduce response size
     }
   | {
       operation: 'delete';
@@ -99,6 +111,7 @@ export class MutationCompiler {
           operation: 'create',
           target: mutation.target,
           data: mutation.data as CreateData,
+          minimalResponse: mutation.minimalResponse, // Bug #21
         };
 
       case 'update': {
@@ -106,6 +119,7 @@ export class MutationCompiler {
           operation: 'update',
           target: mutation.target,
           changes: mutation.changes as UpdateChanges,
+          minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
         if (mutation.target === 'task') {
@@ -120,6 +134,8 @@ export class MutationCompiler {
         const result: Extract<CompiledMutation, { operation: 'complete' }> = {
           operation: 'complete',
           target: mutation.target,
+          completionDate: mutation.completionDate, // Bug #20
+          minimalResponse: mutation.minimalResponse, // Bug #21
         };
         // Map ID to taskId or projectId based on target
         if (mutation.target === 'task') {

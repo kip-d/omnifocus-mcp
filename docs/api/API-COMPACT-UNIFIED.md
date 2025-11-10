@@ -26,37 +26,73 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
   query: {
     type: "tasks" | "projects" | "tags" | "perspectives" | "folders",
     filters?: {
+      // Task filters
+      id?: string,        // Exact task ID lookup
       project?: string | null,  // null = inbox
       tags?: {any: string[]} | {all: string[]} | {none: string[]},
-      status?: "active" | "completed",
+      status?: "active" | "completed" | "dropped" | "on_hold",
       flagged?: boolean,
+      blocked?: boolean,
+      available?: boolean,
+      inInbox?: boolean,  // Explicit inbox filter
       dueDate?: {before: string} | {after: string} | {between: [string, string]},
-      deferDate?: {before: string} | {after: string},
+      deferDate?: {before: string} | {after: string} | {between: [string, string]},
+      plannedDate?: {before: string} | {after: string} | {between: [string, string]},
+      added?: {before: string} | {after: string} | {between: [string, string]},
+      estimatedMinutes?: {equals: number} | {lessThan: number} | {greaterThan: number} | {between: [number, number]},
       text?: {contains: string} | {matches: string},
+      // Project filters
       folder?: string,
+      // Logical operators (recursive)
       OR?: Filter[],
       AND?: Filter[],
       NOT?: Filter
     },
-    fields?: string[],  // Select specific fields to return
-    sort?: Array<{field: string, direction: "asc" | "desc"}>,
-    limit?: number,     // Default: 25
-    offset?: number,
-    mode?: "search" | "smart_suggest"
+    fields?: string[],  // Type-safe enum: id, name, dueDate, tags, etc. (23 fields)
+    sort?: Array<{field: string, direction: "asc" | "desc"}>,  // Type-safe sort fields (9 fields)
+    limit?: number,     // Default: 25, Max: 500
+    offset?: number,    // For pagination
+    // Query modes
+    mode?: "all" | "inbox" | "search" | "overdue" | "today" | "upcoming" |
+           "available" | "blocked" | "flagged" | "smart_suggest",
+    // Response control
+    details?: boolean,      // Include full details vs minimal
+    fastSearch?: boolean,   // Search names only (performance)
+    daysAhead?: number      // For upcoming mode (1-30 days)
   }
 }
 ```
 
 **Examples:**
 ```typescript
-// Inbox tasks
+// Inbox tasks (two ways)
 {query: {type: "tasks", filters: {project: null}, limit: 10}}
+{query: {type: "tasks", filters: {inInbox: true}, limit: 10}}
 
-// Overdue tasks
-{query: {type: "tasks", filters: {dueDate: {before: "2025-11-05"}, status: "active"}}}
-
-// Smart suggestions
+// Query modes
+{query: {type: "tasks", mode: "today"}}          // Due soon (≤3 days) OR flagged
+{query: {type: "tasks", mode: "overdue"}}        // Past due date
+{query: {type: "tasks", mode: "upcoming", daysAhead: 7}}  // Next 7 days
+{query: {type: "tasks", mode: "available"}}      // Ready to work on
+{query: {type: "tasks", mode: "blocked"}}        // Waiting on others
+{query: {type: "tasks", mode: "flagged"}}        // High priority
 {query: {type: "tasks", mode: "smart_suggest", limit: 10}}
+
+// Exact task ID lookup
+{query: {type: "tasks", filters: {id: "kz7wD9uVzJB"}}}
+
+// Quick wins (short tasks)
+{query: {type: "tasks", filters: {estimatedMinutes: {lessThan: 30}}, mode: "available"}}
+
+// Recently added tasks
+{query: {type: "tasks", filters: {added: {after: "2025-11-01"}}}}
+
+// Tasks with planned dates
+{query: {type: "tasks", filters: {plannedDate: {between: ["2025-11-10", "2025-11-17"]}}}}
+
+// Response optimization
+{query: {type: "tasks", mode: "inbox", details: false}}  // Minimal response
+{query: {type: "tasks", mode: "search", filters: {text: {contains: "meeting"}}, fastSearch: true}}
 
 // All projects
 {query: {type: "projects"}}

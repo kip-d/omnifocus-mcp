@@ -14,9 +14,11 @@ const CreateDataSchema = z.object({
   name: z.string().min(1),
   note: z.string().optional(),
   project: z.union([z.string(), z.null()]).optional(),
+  parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
   tags: z.array(z.string()).optional(),
   dueDate: z.string().optional(),
   deferDate: z.string().optional(),
+  plannedDate: z.string().optional(),
   flagged: z.boolean().optional(),
   estimatedMinutes: z.number().optional(),
   repetitionRule: RepetitionRuleSchema.optional(),
@@ -36,10 +38,16 @@ const UpdateChangesSchema = z.object({
   removeTags: z.array(z.string()).optional(),
   dueDate: z.union([z.string(), z.null()]).optional(),
   deferDate: z.union([z.string(), z.null()]).optional(),
+  plannedDate: z.union([z.string(), z.null()]).optional(),
+  clearDueDate: z.boolean().optional(),
+  clearDeferDate: z.boolean().optional(),
+  clearPlannedDate: z.boolean().optional(),
   flagged: z.boolean().optional(),
   status: z.enum(['completed', 'dropped']).optional(),
   project: z.union([z.string(), z.null()]).optional(),
   estimatedMinutes: z.number().optional(),
+  clearEstimatedMinutes: z.boolean().optional(), // Bug #18: Clear estimated time
+  clearRepeatRule: z.boolean().optional(), // Bug #19: Clear repetition rule
 }).passthrough();
 
 // Enhanced batch item schema with hierarchical relationships
@@ -73,6 +81,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: CreateDataSchema,
+    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Update operation
   z.object({
@@ -80,12 +89,15 @@ const MutationSchema = z.discriminatedUnion('operation', [
     target: z.enum(['task', 'project']),
     id: z.string(),
     changes: UpdateChangesSchema,
+    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Complete operation
   z.object({
     operation: z.literal('complete'),
     target: z.enum(['task', 'project']),
     id: z.string(),
+    completionDate: z.string().optional(), // Bug #20: Allow custom completion date
+    minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
   }),
   // Delete operation
   z.object({
