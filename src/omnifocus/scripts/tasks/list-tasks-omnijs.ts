@@ -421,11 +421,17 @@ export const LIST_TASKS_SCRIPT_V3 = `
       } else {
         // ALL/DEFAULT MODE - All tasks (optionally filtering completed)
         const includeCompleted = filter.includeCompleted || false;
+        const filterTags = filter.tags || [];
+        const tagsOperator = filter.tagsOperator || 'AND';
         omniJsScript = \`
           (() => {
+            \${tagFilterHelper}
+
             const results = [];
             let count = 0;
             const limit = \${limit};
+            const filterTags = \${JSON.stringify(filterTags)};
+            const tagsOperator = '\${tagsOperator}';
 
             flattenedTasks.forEach(task => {
               if (count >= limit) return;
