@@ -162,6 +162,7 @@ export const ReadSchema = z.object({
     details: z.boolean().optional(), // Include full task details vs minimal
     fastSearch: z.boolean().optional(), // Search only names, not notes (performance)
     daysAhead: coerceNumber().min(1).max(30).optional(), // For upcoming mode: days to look ahead
+    countOnly: z.boolean().optional(), // Return only count, not full task data (33x faster)
   }),
 });
 

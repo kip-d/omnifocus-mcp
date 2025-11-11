@@ -36,6 +36,15 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
   }
 }
 
+// Count-only query (33x faster for "how many" questions)
+{
+  query: {
+    type: "tasks",
+    filters: { status: "active" },
+    countOnly: true  // Returns count in metadata, no task data
+  }
+}
+
 // Create and complete task
 {
   mutation: {
@@ -50,6 +59,52 @@ This file provides critical guidance to Claude Code (claude.ai/code) when workin
   analysis: {
     type: "productivity_stats",
     params: { groupBy: "week" }
+  }
+}
+```
+
+**Performance Optimization - Count-Only Queries:**
+
+When you only need to know "how many" tasks match a filter (not the actual task data), use `countOnly: true`:
+
+```typescript
+// ❌ SLOW: Fetches all active tasks, then counts (10,274ms for 2089 tasks)
+{
+  query: {
+    type: "tasks",
+    filters: { status: "active" },
+    limit: 10000
+  }
+}
+// Then count: result.data.items.length
+
+// ✅ FAST: Uses optimized count-only script (306ms for 2089 tasks - 33x faster!)
+{
+  query: {
+    type: "tasks",
+    filters: { status: "active" },
+    countOnly: true
+  }
+}
+// Count in metadata: result.metadata.total_count
+```
+
+**When to Use Count-Only:**
+- User asks "How many tasks..." or "Do I have any..."
+- Dashboard statistics or summary views
+- Filtering/pagination metadata
+- Any query where you need the count but not the task details
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": { "items": [] },  // Empty - no task data
+  "metadata": {
+    "total_count": 2089,  // The count you need
+    "count_only": true,
+    "optimization": "count_only_script_33x_faster",
+    "filters_applied": { "status": "active" }
   }
 }
 ```

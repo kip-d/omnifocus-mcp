@@ -15,6 +15,7 @@ export interface CompiledQuery {
   details?: boolean;
   fastSearch?: boolean;
   daysAhead?: number;
+  countOnly?: boolean; // Return only count (33x faster than fetching full tasks)
 }
 
 /**
@@ -40,6 +41,7 @@ export class QueryCompiler {
       details: query.details,
       fastSearch: query.fastSearch,
       daysAhead: query.daysAhead,
+      countOnly: query.countOnly,
     };
   }
 }

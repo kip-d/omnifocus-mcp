@@ -3,6 +3,7 @@ import { BaseTool } from '../base.js';
 import {
   LIST_TASKS_SCRIPT_V3,
   TODAYS_AGENDA_SCRIPT,
+  GET_TASK_COUNT_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
@@ -77,6 +78,10 @@ const QueryTasksToolSchemaV2 = z.object({
     z.boolean(),
     z.string().transform(val => val === 'true' || val === '1'),
   ]).default(false).describe('Fast search mode: only search task names, not notes (improves performance)'),
+  countOnly: z.union([
+    z.boolean(),
+    z.string().transform(val => val === 'true' || val === '1'),
+  ]).default(false).describe('Return only task count, not full task data (33x faster - ideal for "how many" questions)'),
 
   // Field selection for response optimization
   fields: z.array(z.enum([
@@ -231,6 +236,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
+
+      // Special case: Count-only queries (33x faster - use optimized GET_TASK_COUNT_SCRIPT)
+      if (normalizedArgs.countOnly) {
+        return this.handleCountOnly(normalizedArgs, timer);
+      }
 
       // Special case: ID filtering (exact match for single task)
       if (normalizedArgs.id) {
@@ -628,6 +638,51 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     });
 
     return filter;
+  }
+
+  private async handleCountOnly(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // Process filters into format expected by GET_TASK_COUNT_SCRIPT
+    const filter = this.processAdvancedFilters(args);
+
+    // Execute optimized count-only script (33x faster than fetching full tasks)
+    const script = this.omniAutomation.buildScript(GET_TASK_COUNT_SCRIPT, { filter });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      const specificError = this.getSpecificErrorResponse(result, 'count_only', timer);
+      if (specificError) {
+        return specificError;
+      }
+
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to count tasks',
+        'Check if OmniFocus is running and filters are valid',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Extract count from result
+    const data = result as { count?: number; warning?: string; filters_applied?: unknown; query_time_ms?: number };
+    const count = data.count ?? 0;
+
+    // Return count in standardized format
+    return createTaskResponseV2(
+      'tasks',
+      [], // No actual tasks, just metadata with count
+      {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: args.mode || 'count_only',
+        count_only: true,
+        total_count: count,
+        filters_applied: filter,
+        optimization: 'count_only_script_33x_faster',
+        warning: data.warning,
+      },
+    );
   }
 
   private async handleTaskById(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {

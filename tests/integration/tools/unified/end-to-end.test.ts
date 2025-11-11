@@ -194,6 +194,82 @@ describe('Unified Tools End-to-End Integration', () => {
       const parsed = JSON.parse(responseText);
       expect(parsed).toHaveProperty('success');
     }, 60000);
+
+    it('should return count-only for active tasks (33x faster optimization)', async () => {
+      const result = await sendRequest({
+        jsonrpc: '2.0',
+        id: 6,
+        method: 'tools/call',
+        params: {
+          name: 'omnifocus_read',
+          arguments: {
+            query: {
+              type: 'tasks',
+              filters: {
+                status: 'active',
+              },
+              countOnly: true,
+            },
+          },
+        },
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('content');
+      const content = (result as { content: Array<{ type: string; text: string }> }).content;
+      const responseText = content[0].text;
+      const parsed = JSON.parse(responseText);
+
+      // Verify success
+      expect(parsed).toHaveProperty('success');
+      expect(parsed.success).toBe(true);
+
+      // Verify metadata includes count and optimization flag
+      expect(parsed.metadata).toHaveProperty('total_count');
+      expect(parsed.metadata).toHaveProperty('count_only', true);
+      expect(parsed.metadata).toHaveProperty('optimization', 'count_only_script_33x_faster');
+      expect(typeof parsed.metadata.total_count).toBe('number');
+
+      // Verify no task data returned (just count in metadata)
+      if (parsed.data?.items) {
+        expect(parsed.data.items.length).toBe(0);
+      }
+    }, 60000);
+
+    it('should return count-only for flagged tasks', async () => {
+      const result = await sendRequest({
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'tools/call',
+        params: {
+          name: 'omnifocus_read',
+          arguments: {
+            query: {
+              type: 'tasks',
+              filters: {
+                flagged: true,
+              },
+              countOnly: true,
+            },
+          },
+        },
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('content');
+      const content = (result as { content: Array<{ type: string; text: string }> }).content;
+      const responseText = content[0].text;
+      const parsed = JSON.parse(responseText);
+
+      // Verify success
+      expect(parsed).toHaveProperty('success');
+      expect(parsed.success).toBe(true);
+
+      // Verify count metadata
+      expect(parsed.metadata).toHaveProperty('total_count');
+      expect(parsed.metadata.count_only).toBe(true);
+      expect(typeof parsed.metadata.total_count).toBe('number');
+    }, 60000);
   });
 
   describe('omnifocus_write', () => {
@@ -202,7 +278,7 @@ describe('Unified Tools End-to-End Integration', () => {
     it('should create a new task', async () => {
       const result = await sendRequest({
         jsonrpc: '2.0',
-        id: 6,
+        id: 8,
         method: 'tools/call',
         params: {
           name: 'omnifocus_write',
@@ -245,7 +321,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
       const result = await sendRequest({
         jsonrpc: '2.0',
-        id: 7,
+        id: 9,
         method: 'tools/call',
         params: {
           name: 'omnifocus_write',
@@ -280,7 +356,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
       const result = await sendRequest({
         jsonrpc: '2.0',
-        id: 8,
+        id: 10,
         method: 'tools/call',
         params: {
           name: 'omnifocus_write',
@@ -311,7 +387,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
       const result = await sendRequest({
         jsonrpc: '2.0',
-        id: 9,
+        id: 11,
         method: 'tools/call',
         params: {
           name: 'omnifocus_write',
