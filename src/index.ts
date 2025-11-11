@@ -119,9 +119,12 @@ async function runServer() {
     logger.info('Cache warming disabled for benchmark mode');
   } else {
     logger.info('Warming cache before accepting requests...');
-    try {
+  try {
       await cacheWarmer.warmCache();
       logger.info('Cache warming completed successfully');
+      // Emit cache statistics after warm‑up to verify hit‑rate potential
+      const stats = cacheManager.getStats();
+      logger.debug('Post‑warm cache stats:', JSON.stringify(stats));
     } catch (error) {
       logger.warn('Cache warming failed:', error);
     }

@@ -388,7 +388,21 @@ export class CacheWarmer {
     key: string,
     fetcher: () => Promise<T>,
   ): Promise<T> {
-    return this.cache.warm(category, key, fetcher);
+    // Wrap the fetcher to log how many items were cached (if applicable)
+    const wrappedFetcher = async (): Promise<T> => {
+      const result = await fetcher();
+      // If the result is an array, log its length for visibility into warm size
+      if (Array.isArray(result)) {
+        logger.debug(`Warm cache key '${key}' populated with ${result.length} items`);
+      } else if (result && typeof result === 'object' && 'tasks' in result && Array.isArray((result as any).tasks)) {
+        // Some fetchers return an object with a tasks array (e.g., unified task cache)
+        const tasks = (result as any).tasks as unknown[];
+        logger.debug(`Warm cache key '${key}' populated with ${tasks.length} tasks`);
+      }
+      return result;
+    };
+
+    return this.cache.warm(category, key, wrappedFetcher);
   }
 
   /**

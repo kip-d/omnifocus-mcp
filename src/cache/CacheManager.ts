@@ -15,12 +15,16 @@ export class CacheManager {
   };
 
   private config: CacheConfig = {
-    tasks: { ttl: 300 * 1000 },       // 5 minutes - long enough for cache warming + usage, short enough for GTD workflow
-    projects: { ttl: 300 * 1000 },    // 5 minutes - weekly review and project reorganization
-    folders: { ttl: 600 * 1000 },     // 10 minutes - folders change less frequently
-    analytics: { ttl: 3600 * 1000 },  // 1 hour - expensive computations
-    tags: { ttl: 600 * 1000 },        // 10 minutes - tag assignments during processing
-    reviews: { ttl: 180 * 1000 },     // 3 minutes - GTD review workflow needs fresh data
+    // TTL values are chosen to balance freshness with the benefit of cache warming.
+    // Tasks change frequently, so a shorter TTL keeps the view up‑to‑date.
+    tasks: { ttl: 300 * 1000 }, // 5 min – ideal for cache warm + typical GTD operations.
+    // Projects and tags change less often; extending their TTL reduces churn after warm.
+    projects: { ttl: 900 * 1000 }, // 15 min – enough for a full work session.
+    folders: { ttl: 600 * 1000 }, // 10 min – unchanged.
+    analytics: { ttl: 3600 * 1000 }, // 1 h – unchanged.
+    tags: { ttl: 900 * 1000 }, // 15 min – matches projects for consistency.
+    // Reviews are short‑lived; keep a tight window.
+    reviews: { ttl: 180 * 1000 }, // 3 min – unchanged.
   };
 
   constructor(config?: Partial<CacheConfig>) {
