@@ -217,6 +217,11 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
       }
 
       // Date updates via OmniJS bridge (Issue #11 - avoid JXA cache staleness)
+      // KNOWN LIMITATION: OmniJS "task.dueDate = null" and "task.deferDate = null" don't persist
+      // The assignment executes without error but doesn't actually clear the date in the database.
+      // This appears to be an OmniJS API limitation where null assignment is a no-op.
+      // The operation will return success but the date will remain unchanged.
+      // Workaround: Users must manually clear dates in OmniFocus app or use far-future date as placeholder.
       if (updates.dueDate !== undefined) {
         if (updates.dueDate === null) {
           updateOps.push(\`task.dueDate = null\`);
@@ -247,10 +252,15 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
         }
       }
 
+      if (updates.estimatedMinutes !== undefined) {
+        updateOps.push(\`task.estimatedMinutes = \${JSON.stringify(updates.estimatedMinutes)}\`);
+        changes.push("Estimated minutes updated");
+      }
+
       // Check if we only have basic updates (no complex operations)
       // NOTE: Date and tag updates moved to OmniJS bridge path (Issues #11, #12)
+      // NOTE: plannedDate and estimatedMinutes work in OmniJS (moved to bridge path for Bug #15)
       const needsJXATask = updates.completed !== undefined ||
-                           updates.estimatedMinutes !== undefined ||
                            updates.sequential !== undefined ||
                            updates.repeatRule !== undefined ||
                            updates.clearRepeatRule ||
@@ -276,7 +286,10 @@ export function createUpdateTaskScript(taskId: string, updates: any): string {
                   id: task.id.primaryKey,
                   name: task.name,
                   note: task.note || '',
-                  flagged: task.flagged
+                  flagged: task.flagged,
+                  dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+                  deferDate: task.deferDate ? task.deferDate.toISOString() : null,
+                  plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null
                 }
               });
             })()

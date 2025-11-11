@@ -6,7 +6,7 @@ const filesRequiringEscapedJoins = [
   'src/omnifocus/scripts/recurring/analyze-recurring-tasks.ts',
   'src/omnifocus/scripts/shared/minimal-tag-bridge.ts',
   'src/omnifocus/scripts/tasks/list-tasks-omnijs.ts',
-  'src/omnifocus/scripts/tasks/update-task.ts',
+  'src/omnifocus/scripts/tasks/update-task-v3.ts',
 ];
 
 describe('JXA script join escaping', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LIST_TASKS_SCRIPT_V3, UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks.js';
+import { LIST_TASKS_SCRIPT_V3 } from '../../src/omnifocus/scripts/tasks.js';
+import { createUpdateTaskScript } from '../../src/omnifocus/scripts/tasks/update-task-v3.js';
 import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
 
 describe('Performance Optimization Tests', () => {
@@ -56,11 +57,12 @@ describe('Performance Optimization Tests', () => {
   });
 
   describe('Task lookup optimizations', () => {
-    it('should avoid whose() and iterate safely', async () => {
-      const { UPDATE_TASK_SCRIPT } = await import('../../src/omnifocus/scripts/tasks.js');
-      expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
-      expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks(');
-      expect(UPDATE_TASK_SCRIPT).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
+    it('should avoid whose() and iterate safely', () => {
+      // Test the v3 function-generated script
+      const testScript = createUpdateTaskScript('test-id-123', { name: 'Test Task' });
+      expect(testScript).not.toContain('whose(');
+      expect(testScript).toContain('doc.flattenedTasks'); // v3 uses property access, not function call
+      expect(testScript).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
     });
 
     it('should use Project.byIdentifier for O(1) lookups', async () => {
@@ -194,11 +196,14 @@ describe('Error Handling Tests', () => {
   });
 
   it('should perform safe and efficient task lookup', () => {
+    // Test the v3 function-generated script
+    const testScript = createUpdateTaskScript('test-id-123', { name: 'Test Task' });
+
     // Either use whose() or safe iteration; both are acceptable
-    const usesWhose = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks.whose({id: taskId})');
-    const usesIteration = UPDATE_TASK_SCRIPT.includes('doc.flattenedTasks(')
-      && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(UPDATE_TASK_SCRIPT);
+    const usesWhose = testScript.includes('doc.flattenedTasks.whose({id: taskId})');
+    const usesIteration = testScript.includes('doc.flattenedTasks')
+      && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(testScript);
     expect(usesWhose || usesIteration).toBe(true);
-    expect(UPDATE_TASK_SCRIPT).toContain('if (!task)');
+    expect(testScript).toContain('if (!task)');
   });
 });

@@ -8,7 +8,7 @@ import {
   generateCorrelationId,
 } from '../utils/logger.js';
 
-// v2.3.0 Unified Builder API - 3 tools + system diagnostics
+// v3.0.0 Unified Builder API - 3 tools + system diagnostics
 import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from './unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from './unified/OmniFocusAnalyzeTool.js';
@@ -38,7 +38,7 @@ function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
 }
 
 export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
-  logger.info('OmniFocus MCP v2.3.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)');
+  logger.info('OmniFocus MCP v3.0.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)');
 
   // Unified Builder API + system diagnostics
   const tools: Tool[] = [

@@ -1,29 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { UPDATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks';
+import { createUpdateTaskScript } from '../../src/omnifocus/scripts/tasks/update-task-v3';
 
 describe('Task Search Limit Bug Fix', () => {
+  // Test the v3 function-generated script
+  const testScript = createUpdateTaskScript('test-id-123', {
+    name: 'Test Task',
+    projectId: 'test-project-id'
+  });
+
   it('should avoid whose() and use safe iteration', () => {
     // We explicitly avoid whose() due to performance and reliability issues
-    expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
+    expect(testScript).not.toContain('whose(');
     // Confirm it iterates over flattenedTasks and compares ids safely
-    expect(UPDATE_TASK_SCRIPT).toContain('const tasks = doc.flattenedTasks');
-    expect(UPDATE_TASK_SCRIPT).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
-    expect(UPDATE_TASK_SCRIPT).toMatch(/tasks\[i\]\.id\(\)\) === taskId|safeGet\(\(\) => tasks\[i\]\.id\(\)\)/);
+    expect(testScript).toContain('doc.flattenedTasks');
+    expect(testScript).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
+    // v3 uses direct property access: tasks[i].id.primaryKey === taskId
+    expect(testScript).toMatch(/tasks\[i\]\.id\.primaryKey === taskId|tasks\[i\]\.id\(\)\) === taskId|safeGet\(\(\) => tasks\[i\]\.id\(\)\)/);
   });
 
   it('should directly scan tasks collection without whose()', () => {
-    expect(UPDATE_TASK_SCRIPT).toContain('doc.flattenedTasks(');
-    expect(UPDATE_TASK_SCRIPT).not.toContain('whose(');
+    expect(testScript).toContain('doc.flattenedTasks');
+    expect(testScript).not.toContain('whose(');
   });
 
   it('should handle projectId in the simplified script', () => {
     // Verify projectId support was added
-    expect(UPDATE_TASK_SCRIPT).toContain('if (updates.projectId !== undefined)');
-    
+    expect(testScript).toContain('if (updates.projectId !== undefined)');
+
     // Check that it handles moving to inbox (various patterns possible)
-    expect(UPDATE_TASK_SCRIPT).toMatch(/assignedContainer|moveTasks|inboxTasks/);
-    
+    expect(testScript).toMatch(/assignedContainer|moveTasks|inboxTasks/);
+
     // Check for project validation/lookup (various patterns)
-    expect(UPDATE_TASK_SCRIPT).toMatch(/projects\[i\]|targetProject|findProject/);
+    expect(testScript).toMatch(/projects\[i\]|targetProject|findProject/);
   });
 });

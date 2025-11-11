@@ -30,6 +30,42 @@ That's it! No technical syntax needed.
 
 ---
 
+## Pre-Test Setup
+
+### Version Check (Required)
+
+**Before starting any tests, capture the version information:**
+
+**You say:** "What version of the OmniFocus MCP server are you using?"
+
+**Expected response:** Server version and build number (e.g., "OmniFocus MCP v3.0.0")
+
+**📝 Record this information at the top of your test report.** This ensures we know exactly which build was tested and prevents confusion if development and testing are out of sync.
+
+### Diagnostic Check (Conditional)
+
+**If you encounter connection issues, unexpected failures, or things just seem broken:**
+
+**You say:** "Check the MCP server diagnostics"
+
+**Expected response:** Diagnostic report showing:
+- OmniFocus application status (running/not running)
+- Database connection (working/failed)
+- Basic functionality check (operational/errors)
+
+**⚠️ If diagnostics show failures:**
+1. Stop testing immediately
+2. Report the diagnostic output
+3. Note any error messages or warnings
+4. Don't continue with other tests until environment issues are resolved
+
+**When diagnostics are NOT needed:**
+- Everything is working normally
+- Tests are passing as expected
+- Just a few specific tests failing (not everything)
+
+---
+
 ## Test Identifier & Cleanup System
 
 ### Unique Test Identifier
@@ -138,33 +174,37 @@ These tests verify natural conversation works smoothly:
 **Expected:** Useful insights and statistics
 
 #### **Scenario 8: Error Handling**
-- "Create a task with due date 'notadate'"
-- "Show productivity for period 'invalid'"
+- "Create a task called 'Test Error' due next Flurday" (typo in day name)
+- "Show my productivity stats for last dinosaur" (nonsense time period)
+- "Complete the task about calling the dentist" (when no such task exists)
 
-**Expected:** Clear, helpful error messages (not crashes)
+**Expected:** Clear, helpful error messages that guide you to fix the issue (not crashes or confusing technical errors)
 
 ---
 
 ### Error Handling & Edge Cases
 
-Try these edge cases to verify the system handles errors gracefully:
+Try these natural scenarios to verify the system handles errors gracefully:
 
-- **Invalid dates:** "Create task 'Bad Date' due 'notadate'"
-  - Should get a clear error explaining date format requirements
+- **Date typos:** "Create a task called 'Meeting prep' due Thursdai at 3pm"
+  - Should get a helpful message like "I didn't recognize 'Thursdai' as a day - did you mean Thursday?"
 
-- **Missing information:** "Create a task" (no name provided)
-  - Should be asked to provide a task name
+- **Nonsense dates:** "Add task 'Review notes' due next banana"
+  - Should explain it doesn't understand "banana" as a date and suggest valid options
 
-- **Invalid operations:** "Perform invalid operation on task"
-  - Should get a clear error message
+- **Missing task name:** "Create a task due tomorrow"
+  - Should ask "What would you like to call this task?"
 
-- **Nonexistent items:** "Update task with ID 'nonexistent-id'"
-  - Should get "task not found" error
+- **Nonexistent tasks:** "Mark the task about fixing the garage door as complete"
+  - Should say "I couldn't find a task about fixing the garage door" (if no such task exists)
 
-- **Invalid time periods:** "Show productivity stats for invalid period"
-  - Should get user-friendly error with valid suggestions
+- **Unclear time periods:** "Show me my productivity for the blue period"
+  - Should explain valid time periods (this week, last month, etc.)
 
-**What to watch for:** Clear error messages that help you fix the problem, not crashes or confusing technical jargon.
+- **Vague references:** "Update that one task I created yesterday"
+  - Should ask for clarification about which specific task
+
+**What to watch for:** Clear, conversational error messages that help you understand what went wrong and how to fix it - not crashes or technical jargon.
 
 ---
 
