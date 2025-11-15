@@ -62,7 +62,7 @@ describe('TaskVelocityTool', () => {
 
     const res: any = await tool.execute({ days: 7 } as any);
     expect(res.success).toBe(false);
-    expect(res.error?.code).toBe('VELOCITY_FAILED');
+    expect(res.error?.code).toBe('VELOCITY_ERROR');
   });
 
   it('should return analytics response with velocity metrics', async () => {
@@ -104,9 +104,9 @@ describe('TaskVelocityTool', () => {
 
     expect(res.success).toBe(true);
     expect(res.data.velocity).toBeDefined();
-    expect(res.data.velocity.dailyVelocity).toBe('6.5');
-    expect(res.data.throughput.totalCompleted).toBe(45);
-    expect(res.data.projections.tasksPerWeek).toBe('45.5');
+    expect(res.data.velocity.averagePerDay).toBe(6.5);
+    expect(res.data.velocity.tasksCompleted).toBe(45);
+    expect(res.data.velocity.predictedCapacity).toBe(45.5);
     expect(Array.isArray(res.summary.key_findings)).toBe(true);
   });
 
@@ -156,7 +156,7 @@ describe('TaskVelocityTool', () => {
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
-    const groupByOptions = ['day', 'week', 'month'];
+    const groupByOptions = ['day', 'week', 'project'];
     for (const groupBy of groupByOptions) {
       mockCache.get.mockReturnValue(null); // Clear cache
       const res: any = await tool.execute({ days: 7, groupBy } as any);
@@ -246,6 +246,6 @@ describe('TaskVelocityTool', () => {
 
     const res: any = await tool.execute({ days: 7 } as any);
     expect(res.success).toBe(true);
-    expect(res.data.velocity.dailyVelocity).toBe('0');
+    expect(res.data.velocity.averagePerDay).toBe(0);
   });
 });
