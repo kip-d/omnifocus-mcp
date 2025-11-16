@@ -31,9 +31,9 @@
 it('should apply text + date + tag filters together', async () => {
   const result = await queryTasks({
     filters: {
-      text: { contains: 'meeting' },
-      dueDate: { lte: '2025-11-09' }, // Overdue
-      tags: { any: ['urgent'] }
+      text: { operator: 'CONTAINS', value: 'meeting' },
+      dueDate: { operator: 'LTE', value: '2025-11-09' }, // Overdue
+      tags: { operator: 'OR', values: ['urgent'] }
     }
   });
 
@@ -219,19 +219,48 @@ it('should create multiple tasks with all properties', async () => {
 **Required tests:**
 ```typescript
 describe('Analytics Result Validation', () => {
-  it('productivity_stats should calculate correctly', async () => {
-    // 1. Create known test data
-    const completedTask = await createTask('Completed', {
-      tags: ['test-analytics'],
+  let testTag: string;
+  const createdTaskIds: string[] = [];
+
+  beforeAll(() => {
+    // Use unique tag to isolate test data from real data
+    testTag = `test-analytics-${Date.now()}`;
+  });
+
+  afterAll(async () => {
+    // Clean up all test tasks
+    for (const id of createdTaskIds) {
+      try {
+        await deleteTask(id);
+      } catch (err) {
+        console.warn(`Cleanup failed for ${id}:`, err);
+      }
+    }
+  });
+
+  async function createTestTask(name: string, props: any) {
+    const task = await createTask(name, {
+      ...props,
+      tags: [...(props.tags || []), testTag]  // Always include test tag
+    });
+    createdTaskIds.push(task.id);
+    return task;
+  }
+
+  it('productivity_stats should calculate correctly with controlled data', async () => {
+    // 1. Create CONTROLLED test dataset with known values
+    const completed1 = await createTestTask('Completed 1', {
       completedDate: '2025-11-05'
     });
-
-    const pendingTask = await createTask('Pending', {
-      tags: ['test-analytics'],
+    const completed2 = await createTestTask('Completed 2', {
+      completedDate: '2025-11-06'
+    });
+    const pending = await createTestTask('Pending', {
       dueDate: '2025-11-15'
     });
 
-    // 2. Query stats
+    // 2. Query stats filtered to ONLY our test data
+    // NOTE: If analytics tools support tag filtering, use it
     const result = await omnifocus_analyze({
       analysis: {
         type: 'productivity_stats',
@@ -243,19 +272,41 @@ describe('Analytics Result Validation', () => {
       }
     });
 
-    // 3. ✅ Validate calculations
-    expect(result.data.completedTasks).toBeGreaterThanOrEqual(1);
-    expect(result.data.totalTasks).toBeGreaterThanOrEqual(2);
+    // 3. ✅ Validate structure (minimum viable validation)
+    expect(result.data.completedTasks).toBeGreaterThanOrEqual(2); // At least our 2
+    expect(result.data.totalTasks).toBeGreaterThanOrEqual(3); // At least our 3
     expect(result.data.completionRate).toBeGreaterThan(0);
     expect(result.data.completionRate).toBeLessThanOrEqual(1);
 
-    // 4. Cleanup
-    await deleteTask(completedTask.id);
-    await deleteTask(pendingTask.id);
+    // Note: We use >= because other tasks in OmniFocus may exist.
+    // For exact counts, analytics would need tag filtering support.
   });
 
-  it('workflow_analysis should identify bottlenecks', async () => {
-    // Test that workflow analysis returns valid insights
+  it('productivity_stats returns valid rate calculations', async () => {
+    const result = await omnifocus_analyze({
+      analysis: {
+        type: 'productivity_stats',
+        params: { period: 'month' }
+      }
+    });
+
+    // ✅ Validate mathematical correctness
+    const { completedTasks, totalTasks, completionRate } = result.data;
+
+    // Rate should be calculated correctly
+    if (totalTasks > 0) {
+      const expectedRate = completedTasks / totalTasks;
+      expect(Math.abs(completionRate - expectedRate)).toBeLessThan(0.01);
+    } else {
+      expect(completionRate).toBe(0);
+    }
+
+    // Rate must be in valid range
+    expect(completionRate).toBeGreaterThanOrEqual(0);
+    expect(completionRate).toBeLessThanOrEqual(1);
+  });
+
+  it('workflow_analysis should return valid structure', async () => {
     const result = await omnifocus_analyze({
       analysis: {
         type: 'workflow_analysis',
@@ -263,8 +314,17 @@ describe('Analytics Result Validation', () => {
       }
     });
 
+    // ✅ Validate response structure
+    expect(result.success).toBe(true);
     expect(Array.isArray(result.data.insights)).toBe(true);
     expect(result.data.recommendations).toBeDefined();
+
+    // ✅ Validate insight structure
+    if (result.data.insights.length > 0) {
+      const insight = result.data.insights[0];
+      expect(insight.type).toBeDefined();
+      expect(insight.message).toBeDefined();
+    }
   });
 });
 ```

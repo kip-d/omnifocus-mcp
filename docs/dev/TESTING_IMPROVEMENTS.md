@@ -142,6 +142,104 @@ it('should return only tasks within date range', async () => {
 
 ## Immediate Action Items
 
+### Priority 0: Test Infrastructure Setup
+
+Before writing validation tests, ensure proper test infrastructure exists.
+
+**MCPTestClient Pattern:**
+
+Create `tests/integration/helpers/mcp-test-client.ts` if it doesn't exist:
+```typescript
+import { spawn, ChildProcess } from 'child_process';
+
+export class MCPTestClient {
+  private process: ChildProcess | null = null;
+  private requestId = 0;
+
+  async connect(): Promise<void> {
+    this.process = spawn('node', ['dist/index.js'], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    // Send initialize request
+    await this.sendRequest({
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'test-client', version: '1.0.0' }
+      }
+    });
+  }
+
+  async sendRequest(request: { method: string; params?: any }): Promise<any> {
+    if (!this.process?.stdin || !this.process?.stdout) {
+      throw new Error('Client not connected');
+    }
+
+    const id = ++this.requestId;
+    const jsonRpcRequest = JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method: request.method,
+      params: request.params || {}
+    });
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Request timeout')), 60000);
+
+      const onData = (data: Buffer) => {
+        clearTimeout(timeout);
+        try {
+          const response = JSON.parse(data.toString());
+          if (response.id === id) {
+            this.process?.stdout?.off('data', onData);
+            resolve(response.result);
+          }
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      this.process!.stdout!.on('data', onData);
+      this.process!.stdin!.write(jsonRpcRequest + '\n');
+    });
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.process) {
+      this.process.stdin?.end();
+      this.process.kill();
+      this.process = null;
+    }
+  }
+}
+```
+
+**Test Directory Organization:**
+
+```bash
+tests/
+├── unit/                           # Schema/utility validation (fast, no OmniFocus)
+│   └── tools/unified/              # Existing unit tests
+├── integration/
+│   ├── helpers/                    # Test utilities
+│   │   └── mcp-test-client.ts      # MCP protocol client
+│   ├── tools/unified/              # Existing integration tests
+│   └── validation/                 # NEW: Result validation tests
+│       ├── filter-results.test.ts  # Text, date, tag filters
+│       ├── combined-filters.test.ts # Multiple filters together
+│       ├── update-operations.test.ts # All updates with read-back
+│       ├── analytics-validation.test.ts # Stats calculations
+│       ├── sort-fields.test.ts     # Sort and fields parameters
+│       └── bulk-operations.test.ts # Batch create validation
+└── e2e/                            # End-to-end workflows (future)
+```
+
+**Note:** The new `validation/` directory focuses specifically on result correctness, while existing `tools/unified/` tests focus on MCP protocol integration. Both are needed.
+
+---
+
 ### Priority 1: Add Result Validation Tests (CRITICAL)
 
 Create integration tests that validate actual behavior, not parameter conversion.
@@ -216,7 +314,13 @@ describe('Filter Result Validation', () => {
         arguments: {
           query: {
             type: 'tasks',
-            filters: { dueDate: { between: [startDate, endDate] } },
+            filters: {
+              dueDate: {
+                operator: 'BETWEEN',
+                value: startDate,
+                upperBound: endDate
+              }
+            },
             limit: 100
           }
         }
@@ -300,9 +404,13 @@ describe('Filter Result Validation', () => {
           query: {
             type: 'tasks',
             filters: {
-              text: { contains: 'review' },
-              dueDate: { between: ['2025-11-01', '2025-12-31'] },
-              tags: { any: ['Work'] }
+              text: { operator: 'CONTAINS', value: 'review' },
+              dueDate: {
+                operator: 'BETWEEN',
+                value: '2025-11-01',
+                upperBound: '2025-12-31'
+              },
+              tags: { operator: 'OR', values: ['Work'] }
             },
             limit: 100
           }
