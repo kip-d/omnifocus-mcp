@@ -26,44 +26,8 @@ export ANTHROPIC_API_KEY=your_key_here
 # Navigate to the OmniFocus MCP directory
 cd /Users/kip/src/omnifocus-mcp
 
-# Run the evaluation with stdio transport
-python3 << 'EVAL_SCRIPT'
-import subprocess
-import json
-from anthropic import Anthropic
-
-# Initialize MCP connection
-transport_process = subprocess.Popen(
-    ["node", "dist/index.js"],
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    text=True
-)
-
-# Initialize MCP
-init_msg = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-        "protocolVersion": "2025-06-18",
-        "capabilities": {},
-        "clientInfo": {"name": "evaluation", "version": "1.0"}
-    }
-}
-
-transport_process.stdin.write(json.dumps(init_msg) + "\n")
-transport_process.stdin.flush()
-
-# Read initialization response
-response = transport_process.stdout.readline()
-print(f"Initialized: {response}")
-
-# Close gracefully
-transport_process.stdin.close()
-transport_process.wait()
-EVAL_SCRIPT
+# Run the evaluation script
+python3 scripts/run_evaluation.py
 ```
 
 ## Evaluation Questions
@@ -155,15 +119,26 @@ To add your own evaluation questions:
 </qa_pair>
 ```
 
-2. Verify the answer by testing with your MCP tools:
+2. **Interactive Update Mode**:
+
+If your OmniFocus data has changed and the evaluation is failing, you can run the script with the `--update` flag to interactively update the ground truth in `evaluation.xml`:
 
 ```bash
-# Query the MCP server manually
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}
-{"jsonrpc":"2.0","id":2,"method":"tools/call",...}' | node dist/index.js
+python3 scripts/run_evaluation.py --update
 ```
 
-3. Run the updated evaluation
+The script will prompt you for each mismatch:
+```text
+⚠️  MISMATCH DETECTED
+Expected: Old Answer
+Actual:   New Answer
+Update ground truth to 'New Answer'? (y/n): y
+✅ Updated in memory.
+```
+
+3. **Manual Update**:
+
+Edit `evaluation.xml` directly if you prefer.
 
 ## Troubleshooting
 
