@@ -394,10 +394,9 @@ export class CacheWarmer {
       // If the result is an array, log its length for visibility into warm size
       if (Array.isArray(result)) {
         logger.debug(`Warm cache key '${key}' populated with ${result.length} items`);
-      } else if (result && typeof result === 'object' && 'tasks' in result && Array.isArray((result as any).tasks)) {
+      } else if (isTaskContainer(result)) {
         // Some fetchers return an object with a tasks array (e.g., unified task cache)
-        const tasks = (result as any).tasks as unknown[];
-        logger.debug(`Warm cache key '${key}' populated with ${tasks.length} tasks`);
+        logger.debug(`Warm cache key '${key}' populated with ${result.tasks.length} tasks`);
       }
       return result;
     };
@@ -455,4 +454,12 @@ export interface WarmingResults {
   totalTime?: number;
   successCount?: number;
   totalCount?: number;
+}
+
+function isTaskContainer(value: unknown): value is { tasks: unknown[] } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const maybeTasks = (value as { tasks?: unknown }).tasks;
+  return Array.isArray(maybeTasks);
 }

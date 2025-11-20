@@ -530,9 +530,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Smart cache invalidation after successful update
           // Collect all affected tags (tags, addTags, removeTags)
           const affectedTags: string[] = [];
-          if (Array.isArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
-          if (Array.isArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
-          if (Array.isArray(safeUpdates.removeTags)) affectedTags.push(...safeUpdates.removeTags);
+          if (isStringArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
+          if (isStringArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
+          if (isStringArray(safeUpdates.removeTags)) affectedTags.push(...safeUpdates.removeTags);
 
           this.cache.invalidateForTaskChange({
             operation: 'update',
@@ -1208,4 +1208,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
     return this.formatForCLI(response, operation, 'success');
   }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
