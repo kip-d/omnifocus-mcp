@@ -13,6 +13,7 @@ import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
 import { OmniFocusWriteTool } from './unified/OmniFocusWriteTool.js';
 import { OmniFocusAnalyzeTool } from './unified/OmniFocusAnalyzeTool.js';
 import { SystemTool } from './system/SystemTool.js';
+import { ManageTaskTool } from './tasks/ManageTaskTool.js';
 
 const logger = createLogger('tools');
 
@@ -34,7 +35,7 @@ interface Tool {
 // Type guard to check if a tool supports correlation
 function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
   return 'withCorrelation' in tool &&
-         typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
+    typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
 export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
@@ -46,6 +47,7 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
     new OmniFocusWriteTool(cache),      // 'omnifocus_write' - Create, update, complete, delete operations
     new OmniFocusAnalyzeTool(cache),    // 'omnifocus_analyze' - All analytics and analysis operations
     new SystemTool(cache),            // 'system' - Version info and diagnostics
+    new ManageTaskTool(cache),        // 'manage_task' - Stable task management tool
   ];
 
   // Register handlers

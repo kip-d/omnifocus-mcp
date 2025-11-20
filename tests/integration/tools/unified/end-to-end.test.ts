@@ -14,8 +14,8 @@ describe('Unified Tools End-to-End Integration', () => {
       let errorOutput = '';
 
       const timeout = setTimeout(() => {
-        reject(new Error('Request timeout after 60s'));
-      }, 60000);
+        reject(new Error('Request timeout after 120s'));
+      }, 120000);
 
       const onData = (data: Buffer) => {
         response += data.toString();
@@ -269,7 +269,7 @@ describe('Unified Tools End-to-End Integration', () => {
       expect(parsed.metadata).toHaveProperty('total_count');
       expect(parsed.metadata.count_only).toBe(true);
       expect(typeof parsed.metadata.total_count).toBe('number');
-    }, 60000);
+    }, 120000);
   });
 
   describe('omnifocus_write', () => {

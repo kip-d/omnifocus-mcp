@@ -87,6 +87,7 @@ PERFORMANCE:
       limit: compiled.limit || 25,
       fields: compiled.fields,
       sort: compiled.sort,
+      countOnly: compiled.countOnly,
     };
 
     // Map ID filter (exact match)

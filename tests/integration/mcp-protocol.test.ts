@@ -51,7 +51,7 @@ d('MCP Protocol Compliance Tests', () => {
 
       expect(result.result).toBeDefined();
       expect(result.result.tools).toBeInstanceOf(Array);
-      expect(result.result.tools.length).toBe(4); // Unified API: 4 tools
+      expect(result.result.tools.length).toBe(5); // Unified API + manage_task: 5 tools
 
       const toolNames = result.result.tools.map((t: any) => t.name);
 
@@ -62,7 +62,7 @@ d('MCP Protocol Compliance Tests', () => {
       expect(toolNames).toContain('system');
 
       // Ensure ONLY these 4 tools exist
-      expect(toolNames).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system']);
+      expect(toolNames).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system', 'manage_task']);
     });
   });
 
@@ -137,8 +137,8 @@ d('MCP Protocol Compliance Tests', () => {
       if (result.success === false) {
         const errorMessage = result.error.message;
         const isOmniFocusError = errorMessage.includes('OmniFocus') ||
-                                 errorMessage.includes('not be available') ||
-                                 errorMessage.includes('not running');
+          errorMessage.includes('not be available') ||
+          errorMessage.includes('not running');
         expect(isOmniFocusError).toBe(true);
       } else {
         expect(result.success).toBe(true);

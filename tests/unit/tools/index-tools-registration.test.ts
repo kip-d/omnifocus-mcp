@@ -22,7 +22,7 @@ describe('tools/index registerTools', () => {
     expect(listHandler).toBeTypeOf('function');
     const list = await listHandler({});
     expect(Array.isArray(list.tools)).toBe(true);
-    expect(list.tools.length).toBe(4);
+    expect(list.tools.length).toBe(5);
     const names = list.tools.map((t: any) => t.name);
 
     // Check unified builder API tools
@@ -32,7 +32,7 @@ describe('tools/index registerTools', () => {
     expect(names).toContain('system');
 
     // Ensure only these 4 tools exist
-    expect(names).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system']);
+    expect(names).toEqual(['omnifocus_read', 'omnifocus_write', 'omnifocus_analyze', 'system', 'manage_task']);
 
     // Call unknown tool → McpError
     const callHandler = server.handlers.get(CallToolRequestSchema) as Function;

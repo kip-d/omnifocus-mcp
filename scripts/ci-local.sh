@@ -106,10 +106,10 @@ if [ -n "$TIMEOUT_CMD" ]; then
     TOOL_COUNT=$(echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | $TIMEOUT_CMD 30s node dist/index.js 2>/dev/null | jq -r '.result.tools | length' 2>/dev/null || echo "0")
     echo "Registered tools: $TOOL_COUNT"
 
-    if [ "$TOOL_COUNT" -eq "4" ]; then
-        print_success "All 4 tools registered correctly (3 unified + system diagnostics)"
+    if [ "$TOOL_COUNT" -eq "5" ]; then
+        print_success "All 5 tools registered correctly (3 unified + system + manage_task)"
     else
-        print_error "Expected 4 tools (3 unified + system), got $TOOL_COUNT"
+        print_error "Expected 5 tools (3 unified + system + manage_task), got $TOOL_COUNT"
         exit 1
     fi
 else
