@@ -2,7 +2,6 @@
 
 # Local CI script - mirrors the GitHub Actions workflow
 set -e
-export CI=true
 
 echo "🚀 Running Local CI Pipeline..."
 echo "================================="
