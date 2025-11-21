@@ -214,7 +214,13 @@ export class MCPTestClient {
       tags: tags
     };
 
-    const result = await this.callTool('manage_task', { operation: 'create', ...taskParams });
+    const result = await this.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: taskParams
+      }
+    });
     if (result.success && result.data?.task?.taskId) {
       this.createdTaskIds.push(result.data.task.taskId);
     }
@@ -226,13 +232,18 @@ export class MCPTestClient {
     const tags = [...(properties.tags || []), TESTING_TAG, this.sessionId];
 
     const projectParams = {
-      operation: 'create',
       name: name,
       ...properties,
       tags: tags
     };
 
-    const result = await this.callTool('projects', projectParams);
+    const result = await this.callTool('omnifocus_write', {
+      mutation: {
+        operation: 'create',
+        target: 'project',
+        data: projectParams
+      }
+    });
     if (result.success && result.data?.project?.project?.id) {
       this.createdProjectIds.push(result.data.project.project.id);
     }
@@ -269,18 +280,21 @@ export class MCPTestClient {
 
   async quickCleanup(): Promise<void> {
     // Quick cleanup: Delete only tracked IDs (no scan)
-    // OPTIMIZATION: Use bulk_delete for all tasks at once instead of individual deletes
+    // OPTIMIZATION: Use bulk_delete for all tasks/projects at once
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
     console.log(`🧹 Quick cleanup: deleting ${this.createdTaskIds.length} tasks, ${this.createdProjectIds.length} projects`);
 
-    // Clean up created tasks using optimized bulk_delete
+    // Clean up created tasks using bulk_delete
     if (this.createdTaskIds.length > 0) {
       try {
-        const result = await this.callTool('manage_task', {
-          operation: 'bulk_delete',
-          taskIds: this.createdTaskIds
+        await this.callTool('omnifocus_write', {
+          mutation: {
+            operation: 'bulk_delete',
+            target: 'task',
+            ids: this.createdTaskIds
+          }
         });
         this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
@@ -289,14 +303,20 @@ export class MCPTestClient {
       }
     }
 
-    // Clean up created projects (still individual delete as bulk_delete not available for projects)
-    for (const projectId of this.createdProjectIds) {
+    // Clean up created projects using bulk_delete
+    if (this.createdProjectIds.length > 0) {
       try {
-        await this.callTool('projects', { operation: 'delete', projectId: projectId });
-        this.cleanupMetrics.operations++;
+        await this.callTool('omnifocus_write', {
+          mutation: {
+            operation: 'bulk_delete',
+            target: 'project',
+            ids: this.createdProjectIds
+          }
+        });
+        this.cleanupMetrics.operations += this.createdProjectIds.length;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
+        console.log(`  ⚠️  Could not bulk delete projects: ${message}`);
       }
     }
 
@@ -310,19 +330,22 @@ export class MCPTestClient {
   }
 
   async thoroughCleanup(): Promise<void> {
-    // Thorough cleanup: Delete tracked IDs + efficient session-based scan
-    // OPTIMIZATION: Use bulk_delete for all tasks at once instead of individual deletes
+    // Thorough cleanup: Delete tracked IDs (no session-based scan to avoid timeouts)
+    // OPTIMIZATION: Use bulk_delete for all tasks/projects at once
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
     console.log(`🧹 Thorough cleanup for session: ${this.sessionId}`);
 
-    // Clean up created tasks using optimized bulk_delete
+    // Clean up created tasks using bulk_delete
     if (this.createdTaskIds.length > 0) {
       try {
-        const result = await this.callTool('manage_task', {
-          operation: 'bulk_delete',
-          taskIds: this.createdTaskIds
+        await this.callTool('omnifocus_write', {
+          mutation: {
+            operation: 'bulk_delete',
+            target: 'task',
+            ids: this.createdTaskIds
+          }
         });
         this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
@@ -331,14 +354,20 @@ export class MCPTestClient {
       }
     }
 
-    // Clean up created projects (still individual delete as bulk_delete not available for projects)
-    for (const projectId of this.createdProjectIds) {
+    // Clean up created projects using bulk_delete
+    if (this.createdProjectIds.length > 0) {
       try {
-        await this.callTool('projects', { operation: 'delete', projectId: projectId });
-        this.cleanupMetrics.operations++;
+        await this.callTool('omnifocus_write', {
+          mutation: {
+            operation: 'bulk_delete',
+            target: 'project',
+            ids: this.createdProjectIds
+          }
+        });
+        this.cleanupMetrics.operations += this.createdProjectIds.length;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        console.log(`  ⚠️  Could not delete project ${projectId}: ${message}`);
+        console.log(`  ⚠️  Could not bulk delete projects: ${message}`);
       }
     }
 

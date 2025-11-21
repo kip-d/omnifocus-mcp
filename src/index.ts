@@ -52,7 +52,7 @@ const server = new Server(
 const pendingOperations = new Set<Promise<unknown>>();
 
 // Start server
-async function runServer() {
+export async function runServer() {
   // Initialize pending operations tracking
   setPendingOperationsTracker(pendingOperations);
 
@@ -187,7 +187,11 @@ async function runServer() {
   await server.connect(transport);
 }
 
-runServer().catch((error) => {
-  console.error('Server startup error:', error);
-  process.exit(1);
-});
+const shouldAutoStart = process.env.MCP_SKIP_AUTO_START !== 'true';
+
+if (shouldAutoStart) {
+  runServer().catch((error) => {
+    console.error('Server startup error:', error);
+    process.exit(1);
+  });
+}

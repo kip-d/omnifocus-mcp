@@ -137,8 +137,8 @@ d('MCP Protocol Compliance Tests', () => {
       if (result.success === false) {
         const errorMessage = result.error.message;
         const isOmniFocusError = errorMessage.includes('OmniFocus') ||
-                                 errorMessage.includes('not be available') ||
-                                 errorMessage.includes('not running');
+          errorMessage.includes('not be available') ||
+          errorMessage.includes('not running');
         expect(isOmniFocusError).toBe(true);
       } else {
         expect(result.success).toBe(true);

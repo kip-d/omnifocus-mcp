@@ -23,10 +23,16 @@ describe('Update Operations - Read-Back Validation', () => {
     // Cleanup: Delete all created tasks
     if (createdTaskIds.length > 0) {
       try {
-        await client.callTool('manage_task', {
-          operation: 'bulk_delete',
-          taskIds: createdTaskIds
-        });
+        // Use individual deletes via omnifocus_write
+        for (const taskId of createdTaskIds) {
+          await client.callTool('omnifocus_write', {
+            mutation: {
+              operation: 'delete',
+              target: 'task',
+              id: taskId
+            }
+          });
+        }
       } catch (err) {
         console.warn('Failed to cleanup tasks:', err);
       }

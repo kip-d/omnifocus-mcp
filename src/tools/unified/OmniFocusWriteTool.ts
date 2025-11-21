@@ -68,6 +68,11 @@ SAFETY:
       return this.routeToBatch(compiled);
     }
 
+    // Route bulk_delete to ManageTaskTool's existing bulk_delete
+    if (compiled.operation === 'bulk_delete') {
+      return this.routeToBulkDelete(compiled);
+    }
+
     // Otherwise route to manage_task
     return this.routeToManageTask(compiled);
   }
@@ -129,5 +134,23 @@ SAFETY:
     };
 
     return this.batchTool.execute(batchArgs);
+  }
+
+  private async routeToBulkDelete(
+    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>
+  ): Promise<unknown> {
+    // Route to ManageTaskTool's existing bulk_delete functionality
+    const manageArgs: Record<string, unknown> = {
+      operation: 'bulk_delete',
+    };
+
+    // Map to taskIds or projectIds based on target
+    if (compiled.target === 'task') {
+      manageArgs.taskIds = compiled.ids;
+    } else {
+      manageArgs.projectIds = compiled.ids;
+    }
+
+    return this.manageTaskTool.execute(manageArgs);
   }
 }

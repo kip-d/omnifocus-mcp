@@ -1,12 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CacheWarmer } from '../../src/cache/CacheWarmer.js';
 import { CacheManager } from '../../src/cache/CacheManager.js';
+import type { WarmingResult } from '../../src/cache/CacheWarmer.js';
 
 // Mock dependencies
 vi.mock('../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
+
+const loggerMocks = vi.hoisted(() => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 vi.mock('../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }))
+  createLogger: vi.fn(() => loggerMocks.logger),
 }));
 
 describe('CacheWarmer', () => {
@@ -15,13 +21,20 @@ describe('CacheWarmer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.values(loggerMocks.logger).forEach(fn => fn.mockClear());
+
     mockCache = {
       set: vi.fn(),
       get: vi.fn(),
       clear: vi.fn(),
-      clearNamespace: vi.fn()
+      clearNamespace: vi.fn(),
+      warm: vi.fn()
     };
     (CacheManager as any).mockImplementation(() => mockCache);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Constructor and Configuration', () => {
@@ -84,6 +97,35 @@ describe('CacheWarmer', () => {
       expect(result).toBeDefined();
       expect(result.enabled).toBe(true);
       expect(Array.isArray(result.results)).toBe(true);
+    });
+
+    it('executes enabled warm operations and aggregates statistics', async () => {
+      warmer = new CacheWarmer(mockCache as any, {
+        categories: { projects: true, tags: true, tasks: false, perspectives: false },
+      });
+
+      const warmProjects = vi.spyOn(warmer as any, 'warmProjects' as any).mockResolvedValue({
+        operation: 'projects',
+        success: true,
+        duration: 12,
+      });
+      const warmTags = vi.spyOn(warmer as any, 'warmTags' as any).mockResolvedValue({
+        operation: 'tags',
+        success: true,
+        duration: 5,
+      });
+
+      const result = await warmer.warmCache();
+
+      expect(warmProjects).toHaveBeenCalledTimes(1);
+      expect(warmTags).toHaveBeenCalledTimes(1);
+      expect(result.enabled).toBe(true);
+      expect(result.totalCount).toBe(2);
+      expect(result.successCount).toBe(2);
+      expect(result.results).toEqual([
+        { operation: 'projects', success: true, duration: 12 },
+        { operation: 'tags', success: true, duration: 5 },
+      ]);
     });
   });
 
@@ -171,22 +213,67 @@ describe('CacheWarmer', () => {
       warmer = new CacheWarmer(mockCache as any);
       expect(warmer).toBeDefined();
     });
+
+    it('falls back with timeout results when operations hang', async () => {
+      vi.useFakeTimers();
+      warmer = new CacheWarmer(mockCache as any, { timeout: 5 });
+      const never = new Promise<WarmingResult>(() => { });
+
+      const executePromise = (warmer as any).executeWithTimeout([never]);
+
+      vi.advanceTimersByTime(6);
+      const results = await executePromise;
+
+      expect(results).toEqual([
+        {
+          operation: 'timeout',
+          success: false,
+          duration: 5,
+          error: 'Timeout exceeded',
+        },
+      ]);
+    });
   });
 
   describe('Error Resilience', () => {
     it('should handle cache manager errors gracefully', async () => {
-      mockCache.set = vi.fn().mockRejectedValue(new Error('Cache error'));
+      // We need to mock the internal warmProjects/etc calls to fail, or mock cache.warm
+      // Since warmCache calls warmProjects which calls cache.warm
+
+      // Let's mock warmProjects to fail
       warmer = new CacheWarmer(mockCache as any, {
         categories: {
-          projects: false,
+          projects: true,
           tags: false,
           tasks: false,
           perspectives: false
         }
       });
 
+      vi.spyOn(warmer as any, 'warmProjects' as any).mockRejectedValue(new Error('Cache error'));
+
+      // Note: executeWithTimeout catches errors and returns them as failed results
+      // But warmCache expects executeWithTimeout to return results
+
+      // Actually, warmProjects catches its own errors and returns { success: false }
+      // So we should test that behavior
+
+      // Let's test the internal error handling of warmProjects by mocking OmniAutomation to fail?
+      // Or just trust the existing tests that cover this.
+
+      // The original test mocked mockCache.set to fail.
+      // But CacheWarmer uses cache.warm.
+
+      mockCache.warm = vi.fn().mockRejectedValue(new Error('Cache error'));
+
+      // We need to instantiate warmer again to use the mocked cache? No, reference is same.
+
+      // However, warmProjects catches errors.
+      // Let's just verify that warmCache doesn't throw.
+
       const result = await warmer.warmCache();
       expect(result).toBeDefined();
+      // It might be enabled=true but with failed results
       expect(result.enabled).toBe(true);
     });
   });
@@ -251,6 +338,23 @@ describe('CacheWarmer', () => {
       });
 
       expect(warmer).toBeDefined();
+    });
+  });
+
+  describe('Internal Behavior', () => {
+    it('wraps cache warm operations and returns fetched data', async () => {
+      const cacheWarmMock = vi.fn((_category, _key, fetcher: () => Promise<unknown>) => fetcher());
+      mockCache.warm = cacheWarmMock;
+
+      warmer = new CacheWarmer(mockCache as any);
+
+      const fetcher = vi.fn().mockResolvedValue([{ id: '1' }]);
+
+      const data = await (warmer as any).warmSingleOperation('tasks', 'demo', fetcher);
+
+      expect(cacheWarmMock).toHaveBeenCalledWith('tasks', 'demo', expect.any(Function));
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(data).toEqual([{ id: '1' }]);
     });
   });
 });

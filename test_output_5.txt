@@ -1,0 +1,95 @@
+
+> omnifocus-mcp-cached@3.0.0 test:integration
+> vitest tests/integration --run
+
+
+ RUN  v3.2.4 /Users/kip/src/omnifocus-mcp
+
+ ↓ tests/integration/llm-assistant-simulation.test.ts (14 tests | 14 skipped)
+ ↓ tests/integration/batch-operations.test.ts (8 tests | 8 skipped)
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🚀 Starting shared MCP server for integration tests...
+
+ ↓ tests/integration/real-llm-integration.test.ts (8 tests | 8 skipped)
+ ✓ tests/integration/edge-case-escaping.test.ts (11 tests) 3ms
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes review gaps pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes next actions pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes wip limits pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes due date bunching pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes all GTD patterns together
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > includes GTD patterns when "all" is specified
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+ ✓ tests/integration/analytics/pattern-analysis-tool.test.ts (6 tests) 4ms
+ ✓ tests/integration/tools/unified/OmniFocusWriteTool.test.ts (2 tests) 4ms
+[2025-11-20T23:09:41.616Z] [INFO] [ParseMeetingNotesTool] Parsing meeting notes
+ ✓ tests/integration/tools/unified/OmniFocusAnalyzeTool.test.ts (3 tests) 7ms
+ ✓ tests/integration/tools/unified/OmniFocusReadTool.test.ts (3 tests) 5ms
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+✅ Shared MCP server ready
+
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🧹 Thorough cleanup for session: mcp-test-session-1763680181385-241vsc
+  📊 Thorough cleanup completed in 0ms (0 operations)
+
+ ✓ tests/integration/mcp-protocol.test.ts (7 tests) 23625ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle tasks tool call  7888ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle task creation with validation  10123ms
+   ✓ MCP Protocol Compliance Tests > Project Operations > should handle projects tool call  4889ms
+ ✓ tests/integration/validation/filter-results.test.ts (7 tests) 27479ms
+   ✓ Filter Results Validation > Text Filter (Bug #9 Prevention) > should return ONLY tasks containing search text in name or note  4271ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should return ONLY tasks within specified date range  8302ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should exclude tasks before start date  2485ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ANY of specified tags  1510ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ALL specified tags  1400ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should exclude tasks with specified tags (none operator)  3789ms
+   ✓ Filter Results Validation > Combined Filters (P0-3: Complex Queries) > should apply text + date filters together  5051ms
+stdout | tests/integration/validation/update-operations.test.ts > Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)
+⚠️  plannedDate not available - database may not be migrated for planned dates feature
+
+ ✓ tests/integration/validation/update-operations.test.ts (12 tests) 71014ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update dueDate and persist change  28160ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update deferDate and persist change  3298ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)  2310ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should clear dueDate using clearDueDate flag  2809ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support tags (full replacement)  3095ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support addTags (append to existing)  3104ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support removeTags (filter out specified)  3144ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should handle addTags with deduplication  3212ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update note and persist change  2889ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update flagged status and persist change  2728ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update estimatedMinutes and persist change  2894ms
+   ✓ Update Operations - Read-Back Validation > Multiple Updates (Combined Changes) > should apply multiple field updates in single call  3528ms
+ ✓ tests/integration/tools/unified/end-to-end.test.ts (19 tests) 130890ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query inbox tasks  518ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query tasks with filters  8881ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all projects  4006ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all tags  2204ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should return count-only for active tasks (33x faster optimization)  1429ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should return count-only for flagged tasks  92112ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should create a new task  469ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should complete the task  8071ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should delete the completed task  7937ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_analyze > should analyze productivity stats  1468ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should create task with planned date  707ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should update task with new planned date  458ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should clear planned date when set to null  471ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with daily repeat rule  462ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with weekly repeat rule  462ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with repeat rule and end date  454ms
+
+ Test Files  9 passed | 3 skipped (12)
+      Tests  70 passed | 30 skipped (100)
+   Start at  18:09:41
+   Duration  131.23s (transform 709ms, setup 416ms, collect 1.34s, tests 253.03s, environment 1ms, prepare 485ms)
+

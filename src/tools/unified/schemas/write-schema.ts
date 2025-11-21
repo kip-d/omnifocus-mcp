@@ -115,6 +115,12 @@ const MutationSchema = z.discriminatedUnion('operation', [
     returnMapping: coerceBoolean().optional().default(true),
     stopOnError: coerceBoolean().optional().default(true),
   }),
+  // Bulk delete operation - for efficient batch deletion
+  z.object({
+    operation: z.literal('bulk_delete'),
+    target: z.enum(['task', 'project']),
+    ids: z.array(z.string()).min(1).max(100), // Limit to 100 items for safety
+  }),
 ]);
 
 // Main write schema

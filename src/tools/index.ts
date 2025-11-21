@@ -34,7 +34,7 @@ interface Tool {
 // Type guard to check if a tool supports correlation
 function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
   return 'withCorrelation' in tool &&
-         typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
+    typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
 export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {

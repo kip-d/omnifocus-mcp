@@ -1,0 +1,158 @@
+
+> omnifocus-mcp-cached@3.0.0 test:integration
+> vitest tests/integration --run
+
+
+ RUN  v3.2.4 /Users/kip/src/omnifocus-mcp
+
+ ↓ tests/integration/llm-assistant-simulation.test.ts (14 tests | 14 skipped)
+ ↓ tests/integration/batch-operations.test.ts (8 tests | 8 skipped)
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🚀 Starting shared MCP server for integration tests...
+
+ ↓ tests/integration/real-llm-integration.test.ts (8 tests | 8 skipped)
+ ✓ tests/integration/edge-case-escaping.test.ts (11 tests) 3ms
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes review gaps pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes next actions pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes wip limits pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes due date bunching pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes all GTD patterns together
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > includes GTD patterns when "all" is specified
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+ ✓ tests/integration/analytics/pattern-analysis-tool.test.ts (6 tests) 4ms
+ ✓ tests/integration/tools/unified/OmniFocusWriteTool.test.ts (2 tests) 4ms
+[2025-11-21T02:22:26.026Z] [INFO] [ParseMeetingNotesTool] Parsing meeting notes
+ ✓ tests/integration/tools/unified/OmniFocusAnalyzeTool.test.ts (3 tests) 6ms
+ ✓ tests/integration/tools/unified/OmniFocusReadTool.test.ts (3 tests) 5ms
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+✅ Shared MCP server ready
+
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🧹 Thorough cleanup for session: mcp-test-session-1763691745791-q52wmr
+  📊 Thorough cleanup completed in 0ms (0 operations)
+
+ ✓ tests/integration/mcp-protocol.test.ts (7 tests) 17932ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle tasks tool call  8198ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle task creation with validation  6914ms
+   ✓ MCP Protocol Compliance Tests > Project Operations > should handle projects tool call  2036ms
+ ✓ tests/integration/validation/filter-results.test.ts (7 tests) 19409ms
+   ✓ Filter Results Validation > Text Filter (Bug #9 Prevention) > should return ONLY tasks containing search text in name or note  4460ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should return ONLY tasks within specified date range  6311ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should exclude tasks before start date  1635ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ANY of specified tags  1352ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ALL specified tags  1330ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should exclude tasks with specified tags (none operator)  1190ms
+   ✓ Filter Results Validation > Combined Filters (P0-3: Complex Queries) > should apply text + date filters together  2364ms
+stdout | tests/integration/validation/update-operations.test.ts > Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)
+⚠️  plannedDate not available - database may not be migrated for planned dates feature
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+🧹 Quick cleanup: deleting 5 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+  📊 Quick cleanup completed in 9096ms (5 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist
+🧹 Quick cleanup: deleting 1 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist
+  📊 Quick cleanup completed in 8597ms (1 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks
+🧹 Quick cleanup: deleting 1 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks
+  📊 Quick cleanup completed in 8666ms (1 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully
+🧹 Quick cleanup: deleting 1 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully
+  📊 Quick cleanup completed in 8664ms (1 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks
+🧹 Quick cleanup: deleting 1 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks
+  📊 Quick cleanup completed in 8944ms (1 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools
+🧹 Quick cleanup: deleting 2 tasks, 0 projects
+
+ ✓ tests/integration/tools/unified/end-to-end.test.ts (19 tests) 162878ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query inbox tasks  438ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query tasks with filters  9317ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all projects  1564ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all tags  1395ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should return count-only for active tasks (33x faster optimization)  1322ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should return count-only for flagged tasks  111608ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should create a new task  515ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should complete the task  10119ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should delete the completed task  17912ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_analyze > should analyze productivity stats  3843ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should create task with planned date  807ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should update task with new planned date  542ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should clear planned date when set to null  821ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with daily repeat rule  537ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with weekly repeat rule  582ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with repeat rule and end date  537ms
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools
+  📊 Quick cleanup completed in 15494ms (2 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations
+🧹 Thorough cleanup for session: mcp-test-session-1763691745791-jckgnk
+  📊 Thorough cleanup completed in 0ms (0 operations)
+
+ ❯ tests/integration/validation/analytics-validation.test.ts (6 tests | 1 failed) 167344ms
+   × Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data 84602ms
+     → Cannot read properties of undefined (reading 'length')
+   ✓ Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist  13202ms
+   ✓ Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks  11241ms
+   ✓ Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully  12770ms
+   ✓ Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks  19753ms
+   ✓ Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools  25080ms
+ ✓ tests/integration/validation/update-operations.test.ts (12 tests) 192631ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update dueDate and persist change  19821ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update deferDate and persist change  4027ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)  3156ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should clear dueDate using clearDueDate flag  5168ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support tags (full replacement)  5036ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support addTags (append to existing)  2232ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support removeTags (filter out specified)  4386ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should handle addTags with deduplication  2172ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update note and persist change  4248ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update flagged status and persist change  2093ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update estimatedMinutes and persist change  3732ms
+   ✓ Update Operations - Read-Back Validation > Multiple Updates (Combined Changes) > should apply multiple field updates in single call  3976ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+TypeError: Cannot read properties of undefined (reading 'length')
+ ❯ tests/integration/validation/analytics-validation.test.ts:72:34
+     70|       });
+     71| 
+     72|       if (tasksResult.data.items.length > 0) {
+       |                                  ^
+     73|         await client.callTool('omnifocus_write', {
+     74|           mutation: {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 9 passed | 3 skipped (13)
+      Tests  1 failed | 75 passed | 30 skipped (106)
+   Start at  21:22:25
+   Duration  192.98s (transform 715ms, setup 579ms, collect 1.38s, tests 560.22s, environment 1ms, prepare 556ms)
+

@@ -1,0 +1,266 @@
+
+> omnifocus-mcp-cached@3.0.0 test:integration
+> vitest tests/integration --run
+
+
+ RUN  v3.2.4 /Users/kip/src/omnifocus-mcp
+
+ ↓ tests/integration/llm-assistant-simulation.test.ts (14 tests | 14 skipped)
+ ↓ tests/integration/real-llm-integration.test.ts (8 tests | 8 skipped)
+ ↓ tests/integration/batch-operations.test.ts (8 tests | 8 skipped)
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🚀 Starting shared MCP server for integration tests...
+
+ ✓ tests/integration/edge-case-escaping.test.ts (11 tests) 3ms
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes review gaps pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes next actions pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes wip limits pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes due date bunching pattern
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > analyzes all GTD patterns together
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+stderr | tests/integration/analytics/pattern-analysis-tool.test.ts > PatternAnalysisTool - GTD Patterns Integration > includes GTD patterns when "all" is specified
+Skipping test - OmniFocus not available: Failed to fetch complete data from OmniFocus - missing tasks or projects
+
+ ✓ tests/integration/analytics/pattern-analysis-tool.test.ts (6 tests) 4ms
+ ✓ tests/integration/tools/unified/OmniFocusWriteTool.test.ts (2 tests) 4ms
+[2025-11-20T23:52:49.297Z] [INFO] [ParseMeetingNotesTool] Parsing meeting notes
+ ✓ tests/integration/tools/unified/OmniFocusAnalyzeTool.test.ts (3 tests) 6ms
+ ✓ tests/integration/tools/unified/OmniFocusReadTool.test.ts (3 tests) 5ms
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+✅ Shared MCP server ready
+
+stdout | tests/integration/mcp-protocol.test.ts > MCP Protocol Compliance Tests
+🧹 Thorough cleanup for session: mcp-test-session-1763682769061-1bscfw
+  📊 Thorough cleanup completed in 1ms (0 operations)
+
+ ✓ tests/integration/mcp-protocol.test.ts (7 tests) 12026ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle tasks tool call  2692ms
+   ✓ MCP Protocol Compliance Tests > Task Operations > should handle task creation with validation  5138ms
+   ✓ MCP Protocol Compliance Tests > Project Operations > should handle projects tool call  3429ms
+ ✓ tests/integration/validation/filter-results.test.ts (7 tests) 16481ms
+   ✓ Filter Results Validation > Text Filter (Bug #9 Prevention) > should return ONLY tasks containing search text in name or note  1749ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should return ONLY tasks within specified date range  3224ms
+   ✓ Filter Results Validation > Date Range Filter (Bug #10 Prevention) > should exclude tasks before start date  1518ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ANY of specified tags  1254ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should return tasks with ALL specified tags  2713ms
+   ✓ Filter Results Validation > Tag Filter Operators (Bug #12 Extension) > should exclude tasks with specified tags (none operator)  3597ms
+   ✓ Filter Results Validation > Combined Filters (P0-3: Complex Queries) > should apply text + date filters together  1680ms
+stdout | tests/integration/validation/update-operations.test.ts > Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)
+⚠️  plannedDate not available - database may not be migrated for planned dates feature
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+🧹 Quick cleanup: deleting 5 tasks, 0 projects
+
+stderr | tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_write > should create a new task
+Create task failed: {
+  "code": "SCRIPT_ERROR",
+  "message": "Failed to count tasks",
+  "suggestion": "Check if OmniFocus is running and filters are valid",
+  "details": {
+    "script": "\n  // ===== UNIFIED OMNIFOCUS HELPERS =====\n// Generated: 2025-11-20T23:52:49.151Z\n\n// Helper configuration injected at script generation time\n  const HELPER_CONFIG = {\n    skipAnalysis: true,\n    performanceTracking: false,\n    maxRetries: 3,\n    timeout: 120000,\n    cacheStrategy: 'aggressive',\n    helperLevel: 'standard'\n  };\n\n// ----- Safe Utilities -----\n\n  // Safe utility functions for OmniFocus automation\n  function safeGet(getter, defaultValue = null) {\n    try {\n      const result = getter();\n      return result !== null && result !== undefined ? result : defaultValue;\n    } catch (e) {\n      return defaultValue;\n    }\n  }\n  \n  function safeGetDate(getter) {\n    try {\n      const date = getter();\n      if (!date) return null;\n      \n      // Use isValidDate to check if it's a valid Date object\n      if (!isValidDate(date)) return null;\n      \n      return date.toISOString();\n    } catch (e) {\n      return null;\n    }\n  }\n  \n  function safeGetProject(task) {\n    try {\n      const project = task.containingProject();\n      if (project) {\n        return {\n          name: safeGet(() => project.name()),\n          id: safeGet(() => project.id())\n        };\n      }\n      return null;\n    } catch (e) {\n      return null;\n    }\n  }\n  \n  function safeGetTags(task) {\n    try {\n      const tags = task.tags();\n      if (!tags) return [];\n      const tagNames = [];\n      for (let i = 0; i < tags.length; i++) {\n        const tagName = safeGet(() => tags[i].name());\n        if (tagName) {\n          tagNames.push(tagName);\n        }\n      }\n      return tagNames;\n    } catch (e) {\n      return [];\n    }\n  }\n  \n  function isValidDate(date) {\n    return date && date.toString() !== 'missing value' && !isNaN(date.getTime());\n  }\n  \n  function isTaskAvailable(task) {\n    try {\n      const deferDate = task.deferDate();\n      if (!deferDate || !isValidDate(deferDate)) {\n        return true; // No defer date means available\n      }\n      return deferDate <= new Date();\n    } catch (e) {\n      return true; // If we can't check, assume available\n    }\n  }\n  \n  function isTaskEffectivelyCompleted(task) {\n    try {\n      // Check if directly completed\n      if (task.completed()) return true;\n      \n      // Check if dropped\n      if (task.dropped && task.dropped()) return true;\n      \n      // Check if parent project is completed/dropped\n      const container = task.containingProject();\n      if (container) {\n        if (container.completed && container.completed()) return true;\n        if (container.dropped && container.dropped()) return true;\n        if (container.status && container.status() === 'dropped') return true;\n        if (container.status && container.status() === 'done') return true;\n      }\n      \n      return false;\n    } catch (e) {\n      // If there's an error checking, assume not completed\n      return false;\n    }\n  }\n  \n  function isFlagged(obj) {\n    try {\n      return obj.flagged() === true;\n    } catch (e) {\n      return false;\n    }\n  }\n  \n  function safeGetEstimatedMinutes(task) {\n    try {\n      const estimate = task.estimatedMinutes();\n      return typeof estimate === 'number' ? estimate : null;\n    } catch (e) {\n      return null;\n    }\n  }\n  \n  function safeGetFolder(project) {\n    try {\n      const container = project.container();\n      if (container && container.constructor.name === 'Folder') {\n        return safeGet(() => container.name());\n      }\n      return null;\n    } catch (e) {\n      return null;\n    }\n  }\n  \n  function safeGetTaskCount(project) {\n    try {\n      return project.numberOfTasks() || 0;\n    } catch (e) {\n      return 0;\n    }\n  }\n  \n  function safeIsCompleted(task) {\n    try {\n      return task.completed() === true;\n    } catch (e) {\n      return false;\n    }\n  }\n  \n  function getTaskStatus(task) {\n    try {\n      const status = task.taskStatus();\n      // Convert the Task.Status enum to string\n      if (status) {\n        return status.toString();\n      }\n      return null;\n    } catch (e) {\n      return null;\n    }\n  }\n\n  function safeGetStatus(project) {\n    try {\n      const status = project.status();\n      if (!status) return 'active';\n      \n      // OmniFocus returns status as \"active status\", \"done status\", etc.\n      // We need to normalize these to match our API expectations\n      const statusStr = status.toString().toLowerCase();\n      \n      if (statusStr.includes('active')) return 'active';\n      if (statusStr.includes('done')) return 'done';\n      if (statusStr.includes('hold')) return 'onHold';\n      if (statusStr.includes('dropped')) return 'dropped';\n      \n      return 'active'; // Default fallback\n    } catch (e) {\n      return 'active';\n    }\n  }\n\n\n// ----- Project Validation -----\n\n  function validateProject(projectId, doc) {\n    if (!projectId) return { valid: true, project: null };\n    \n    // Find by iteration (avoid the whose method)\n    let foundProject = null;\n    const projects = doc.flattenedProjects();\n    for (let i = 0; i < projects.length; i++) {\n      try { if (projects[i].id() === projectId) { foundProject = projects[i]; break; } } catch (e) {}\n    }\n    \n    if (!foundProject) {\n      // Check if it's a numeric-only ID (Claude Desktop bug)\n      const isNumericOnly = /^\\d+$/.test(projectId);\n      let errorMessage = 'Project not found: ' + projectId;\n      \n      if (isNumericOnly) {\n        errorMessage += \". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.\";\n      }\n      \n      return { \n        valid: false, \n        error: errorMessage \n      };\n    }\n    \n    return { \n      valid: true, \n      project: foundProject \n    };\n  }\n\n\n// ----- Error Handling -----\n\n  function formatError(error, context = '') {\n    const errorObj = {\n      error: true,\n      message: error.message || String(error),\n      context: context\n    };\n    \n    if (error.stack) {\n      errorObj.stack = error.stack;\n    }\n    \n    return JSON.stringify(errorObj);\n  }\n\n\n// ===== END HELPERS =====\n  \n  (() => {\n    const app = Application('OmniFocus');\n    const doc = app.defaultDocument();\n    const filter = {\"_debug_filters_is_object\": true, \"_debug_filters_obj_keys\": [\"flagged\"], \"_debug_has_filters_param\": true, \"_debug_filter_type\": \"object\", \"_debug_filter_keys\": [\"flagged\"], \"_debug_has_tags\": false, \"flagged\": true};\n    \n    try {\n      let count = 0;\n      // Avoid JXA whose() — use plain collections then filter in JS (per LESSONS_LEARNED)\n      const baseCollection = (filter.inInbox === true)\n        ? doc.inboxTasks()\n        : doc.flattenedTasks();\n      \n      // Helper function to check if task matches all filters\n      function matchesFilters(task) {\n        // Skip if effectively completed (unless we want completed tasks)\n        if (filter.completed !== true && isTaskEffectivelyCompleted(task)) {\n          return false;\n        }\n        \n        // Flagged filter\n        if (filter.flagged !== undefined && isFlagged(task) !== filter.flagged) {\n          return false;\n        }\n        \n        // Project filter\n        if (filter.projectId) {\n          const project = task.containingProject();\n          if (!project || safeGet(() => project.id()) !== filter.projectId) {\n            return false;\n          }\n        }\n        \n        // Inbox filter\n        if (filter.inInbox !== undefined && safeGet(() => task.inInbox(), false) !== filter.inInbox) {\n          return false;\n        }\n        \n        // Tag filters - use operator to determine matching logic\n        if (filter.tags && filter.tags.length > 0) {\n          const taskTags = safeGetTags(task);\n\n          // Use operator to determine logic (default to AND for backward compatibility)\n          const operator = filter.tagsOperator || 'AND';\n\n          let matches;\n          switch(operator) {\n            case 'OR':\n            case 'IN':\n              // Task must have AT LEAST ONE matching tag\n              matches = filter.tags.some(tag => taskTags.includes(tag));\n              break;\n            case 'NOT_IN':\n              // Task must have NONE of the filter tags\n              matches = !filter.tags.some(tag => taskTags.includes(tag));\n              break;\n            case 'AND':\n            default:\n              // Task must have ALL filter tags\n              matches = filter.tags.every(tag => taskTags.includes(tag));\n              break;\n          }\n\n          if (!matches) {\n            return false;\n          }\n        }\n        \n        // Date filters\n        if (filter.dueBefore || filter.dueAfter) {\n          const dueDate = task.dueDate();\n          if (!dueDate || !isValidDate(dueDate)) {\n            return false;\n          }\n          if (filter.dueBefore && dueDate >= new Date(filter.dueBefore)) {\n            return false;\n          }\n          if (filter.dueAfter && dueDate <= new Date(filter.dueAfter)) {\n            return false;\n          }\n        }\n        \n        // Available filter\n        if (filter.available !== undefined && isTaskAvailable(task) !== filter.available) {\n          return false;\n        }\n        \n        // Search filter\n        if (filter.search) {\n          const searchTerm = filter.search.toLowerCase();\n          const name = safeGet(() => task.name(), '').toLowerCase();\n          const note = safeGet(() => task.note(), '').toLowerCase();\n          if (!name.includes(searchTerm) && !note.includes(searchTerm)) {\n            return false;\n          }\n        }\n        \n        return true;\n      }\n      \n      // Count matching tasks\n      const startTime = Date.now();\n      \n      // If we have a large collection and simple filters, try to use whose() for better performance\n      if (baseCollection.length > 500 && !filter.search && !filter.tags && !filter.dueBefore && !filter.dueAfter && filter.flagged === undefined && filter.available === undefined && !filter.projectId) {\n        // Simple count - just return the length\n        count = baseCollection.length;\n      } else {\n        // Complex filters - need to iterate\n        // Add a reasonable limit to prevent timeouts\n        const maxToCheck = Math.min(baseCollection.length, 5000);\n        \n        for (let i = 0; i < maxToCheck; i++) {\n          try {\n            if (matchesFilters(baseCollection[i])) {\n              count++;\n            }\n          } catch (e) {\n            // Skip tasks that throw errors\n            continue;\n          }\n        }\n        \n        // If we hit the limit, add a warning\n        if (baseCollection.length > maxToCheck) {\n          count = Math.round(count * (baseCollection.length / maxToCheck)); // Extrapolate\n        }\n      }\n      \n      const endTime = Date.now();\n      \n      const result = {\n        count: count,\n        filters_applied: filter,\n        query_time_ms: endTime - startTime\n      };\n      \n      // Add warning if we had to limit/extrapolate\n      if (baseCollection.length > 5000) {\n        result.warning = 'Count is estimated due to large task volume. Actual count may vary.';\n        result.tasks_checked = Math.min(baseCollection.length, 5000);\n        result.total_tasks = baseCollection.length;\n      }\n      \n      return JSON.stringify(result);\n      \n    } catch (error) {\n      return formatError(error, 'get_task_count');\n    }\n  })();\n",
+    "stderr": ""
+  }
+}
+
+stderr | tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_write > should update the created task
+Skipping update test - no task ID from create
+
+stderr | tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_write > should complete the task
+Skipping complete test - no task ID
+
+stderr | tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_write > should delete the completed task
+Skipping delete test - no task ID
+
+ ❯ tests/integration/tools/unified/end-to-end.test.ts (19 tests | 3 failed) 132925ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query inbox tasks  441ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should query tasks with filters  3393ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all projects  1654ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should list all tags  1194ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_read > should return count-only for active tasks (33x faster optimization)  1248ms
+   × Unified Tools End-to-End Integration > omnifocus_read > should return count-only for flagged tasks 120012ms
+     → Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × Unified Tools End-to-End Integration > omnifocus_write > should create a new task 5ms
+     → expected false to be true // Object.is equality
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should update the created task 0ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should complete the task 0ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_write > should delete the completed task 0ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_analyze > should analyze productivity stats  1705ms
+   ✓ Unified Tools End-to-End Integration > omnifocus_analyze > should parse meeting notes 5ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should create task with planned date 222ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should update task with new planned date  706ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Planned Dates > should clear planned date when set to null 96ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with daily repeat rule  738ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with weekly repeat rule 12ms
+   ✓ Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Enhanced Repeats > should create task with repeat rule and end date  888ms
+   × Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Version Detection > should report version information in system tool 1ms
+     → expected undefined to be defined
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist
+🧹 Quick cleanup: deleting 6 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks
+🧹 Quick cleanup: deleting 7 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks
+  📊 Quick cleanup completed in 44135ms (5 operations)
+
+ ❯ tests/integration/validation/update-operations.test.ts (12 tests) 356903ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update dueDate and persist change  19231ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update deferDate and persist change  2519ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should update plannedDate and persist change (if database migrated)  2291ms
+   ✓ Update Operations - Read-Back Validation > Date Updates (Bug #11 Prevention) > should clear dueDate using clearDueDate flag  2418ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support tags (full replacement)  3524ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support addTags (append to existing)  4102ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should support removeTags (filter out specified)  5002ms
+   ✓ Update Operations - Read-Back Validation > Tag Operations (Bug #12 Prevention) > should handle addTags with deduplication  4143ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update note and persist change  3699ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update flagged status and persist change  2133ms
+   ✓ Update Operations - Read-Back Validation > Basic Property Updates > should update estimatedMinutes and persist change  2219ms
+   ✓ Update Operations - Read-Back Validation > Multiple Updates (Combined Changes) > should apply multiple field updates in single call  4891ms
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully
+🧹 Quick cleanup: deleting 1 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully
+  📊 Quick cleanup completed in 31687ms (3 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks
+  📊 Quick cleanup completed in 40814ms (5 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks
+🧹 Quick cleanup: deleting 0 tasks, 0 projects
+  📊 Quick cleanup completed in 1ms (0 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools
+🧹 Quick cleanup: deleting 2 tasks, 0 projects
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools
+  📊 Quick cleanup completed in 62803ms (4 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations
+🧹 Thorough cleanup for session: mcp-test-session-1763682769057-6wzt9o
+  📊 Thorough cleanup completed in 0ms (0 operations)
+
+stdout | tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations
+  📊 Quick cleanup completed in 2614ms (1 operations)
+
+ ❯ tests/integration/validation/analytics-validation.test.ts (6 tests | 3 failed) 507276ms
+   × Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data 180015ms
+     → Test timed out in 90000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+     → Hook timed out in 90000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+   × Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist 91899ms
+     → Hook timed out in 90000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+   × Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks 93140ms
+     → Hook timed out in 90000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+   ✓ Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should handle zero overdue tasks gracefully  34796ms
+   ✓ Analytics Validation - Actual Calculations > TaskVelocity Calculation Validation > should calculate velocity from completed tasks  33597ms
+   ✓ Analytics Validation - Actual Calculations > Cross-Tool Data Consistency > should have consistent task counts across analytics tools  70565ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/validation/update-operations.test.ts > Update Operations - Read-Back Validation
+Error: Hook timed out in 300000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/integration/validation/update-operations.test.ts:22:3
+     20|   }, 30000);
+     21| 
+     22|   afterAll(async () => {
+       |   ^
+     23|     // Cleanup: Delete all created tasks
+     24|     if (createdTaskIds.length > 0) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+Error: Test timed out in 90000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/integration/validation/analytics-validation.test.ts:37:5
+     35| 
+     36|   describe('ProductivityStats Calculation Validation', () => {
+     37|     it('should calculate correct completion rates with known data', as…
+       |     ^
+     38|       // Create known test data: 3 completed, 2 pending = 60% completi…
+     39|       await client.createTestTask('Completed 1', { tags: [testSessionT…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should calculate correct completion rates with known data
+ FAIL  tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > ProductivityStats Calculation Validation > should return non-zero stats when tasks exist
+ FAIL  tests/integration/validation/analytics-validation.test.ts > Analytics Validation - Actual Calculations > OverdueAnalysis Calculation Validation > should correctly identify overdue tasks
+Error: Hook timed out in 90000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/integration/validation/analytics-validation.test.ts:27:3
+     25|   }, 30000);
+     26| 
+     27|   afterEach(async () => {
+       |   ^
+     28|     await client.cleanup();
+     29|   }, 90000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_read > should return count-only for flagged tasks
+Error: Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/integration/tools/unified/end-to-end.test.ts:239:5
+    237|     }, 60000);
+    238| 
+    239|     it('should return count-only for flagged tasks', async () => {
+       |     ^
+    240|       const result = await sendRequest({
+    241|         jsonrpc: '2.0',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > omnifocus_write > should create a new task
+AssertionError: expected false to be true // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+ ❯ tests/integration/tools/unified/end-to-end.test.ts:308:30
+    306|         console.error('Create task failed:', JSON.stringify(parsed.err…
+    307|       }
+    308|       expect(parsed.success).toBe(true);
+       |                              ^
+    309| 
+    310|       // Extract task ID for subsequent tests
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/integration/tools/unified/end-to-end.test.ts > Unified Tools End-to-End Integration > OmniFocus 4.7+ Features > Version Detection > should report version information in system tool
+AssertionError: expected undefined to be defined
+ ❯ tests/integration/tools/unified/end-to-end.test.ts:722:52
+    720|         const parsed = JSON.parse(content[0].text);
+    721|         expect(parsed.success).toBe(true);
+    722|         expect(parsed.metadata?.omnifocus_version).toBeDefined();
+       |                                                    ^
+    723|       }, 60000);
+    724|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+
+ Test Files  3 failed | 7 passed | 3 skipped (13)
+      Tests  6 failed | 70 passed | 30 skipped (106)
+   Start at  18:52:48
+   Duration  507.60s (transform 755ms, setup 544ms, collect 1.43s, tests 1025.63s, environment 1ms, prepare 554ms)
+
