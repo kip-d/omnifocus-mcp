@@ -49,6 +49,14 @@ SAFETY:
     capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
   };
 
+  annotations = {
+    title: "Manage OmniFocus Tasks",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true
+  };
+
   private compiler: MutationCompiler;
   private manageTaskTool: ManageTaskTool;
   private batchTool: BatchCreateTool;

@@ -331,11 +331,11 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
   const stalledProjects = projects
     .map(item => item as OmniFocusProject)
     .filter(p => {
-    if (p.status !== 'active') return false;
-    if (!isValidDateValue(p.modifiedDate)) return false;
-    const daysSinceModified = Math.floor((now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24));
-    return daysSinceModified > 14;
-  });
+      if (p.status !== 'active') return false;
+      if (!isValidDateValue(p.modifiedDate)) return false;
+      const daysSinceModified = Math.floor((now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24));
+      return daysSinceModified > 14;
+    });
 
   if (stalledProjects.length > 0) {
     bottlenecks.push(`${stalledProjects.length} active projects with no activity in 14+ days`);
@@ -483,6 +483,56 @@ export function createListResponseV2<T>(
   };
 }
 
+import { CHARACTER_LIMIT } from './constants.js';
+
+export interface TruncationInfo {
+  truncated: boolean;
+  originalLength?: number;
+  truncatedLength?: number;
+  message?: string;
+}
+
+export function truncateResponse<T>(
+  data: T,
+  limit: number = CHARACTER_LIMIT
+): { data: T; truncation?: TruncationInfo } {
+  const serialized = JSON.stringify(data);
+
+  if (serialized.length <= limit) {
+    return { data };
+  }
+
+  // For arrays, truncate by removing items from the end
+  if (Array.isArray(data)) {
+    const truncatedData = data.slice(0, Math.max(1, Math.floor(data.length / 2)));
+    return {
+      data: truncatedData as T,
+      truncation: {
+        truncated: true,
+        originalLength: data.length,
+        truncatedLength: truncatedData.length,
+        message: `Response truncated from ${data.length} to ${truncatedData.length} items. Use 'limit' or 'offset' parameters to see more results.`
+      }
+    };
+  }
+
+  // For strings, truncate with ellipsis
+  if (typeof data === 'string') {
+    return {
+      data: (data.slice(0, limit - 100) + '\n\n[... truncated ...]') as T,
+      truncation: {
+        truncated: true,
+        originalLength: data.length,
+        truncatedLength: limit,
+        message: 'Response truncated. Use filters to reduce result size.'
+      }
+    };
+  }
+
+  // For objects, return as-is (already limited by other mechanisms)
+  return { data };
+}
+
 /**
  * Create task-specific response with insights
  */
@@ -493,11 +543,14 @@ export function createTaskResponseV2<T>(
 ): StandardResponseV2<{ tasks: T[]; preview?: T[] }> {
   const summary = generateTaskSummary(tasks as unknown[]);
 
+  // Apply truncation
+  const { data: truncatedTasks, truncation } = truncateResponse(tasks);
+
   return {
     success: true,
     summary,
     data: {
-      tasks,
+      tasks: truncatedTasks,
       preview: tasks.slice(0, 5),
     },
     metadata: {
@@ -505,7 +558,11 @@ export function createTaskResponseV2<T>(
       timestamp: new Date().toISOString(),
       from_cache: false,
       total_count: tasks.length,
-      returned_count: tasks.length,
+      returned_count: truncatedTasks.length,
+      ...(truncation && {
+        truncated: truncation.truncated,
+        truncation_message: truncation.message
+      }),
       ...metadata,
     },
   };

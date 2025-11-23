@@ -44,6 +44,14 @@ SCOPE FILTERING:
     capabilities: ['productivity_stats', 'task_velocity', 'overdue_analysis', 'pattern_analysis', 'workflow_analysis', 'recurring_tasks', 'parse_meeting_notes', 'manage_reviews'],
   };
 
+  annotations = {
+    title: "Analyze OmniFocus Data",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true
+  };
+
   private compiler: AnalysisCompiler;
   private productivityTool: ProductivityStatsTool;
   private velocityTool: TaskVelocityTool;

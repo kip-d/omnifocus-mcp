@@ -38,6 +38,14 @@ PERFORMANCE:
     capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest'],
   };
 
+  annotations = {
+    title: "Query OmniFocus Data",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true
+  };
+
   private compiler: QueryCompiler;
   private tasksTool: QueryTasksTool;
   private projectsTool: ProjectsTool;
@@ -88,6 +96,7 @@ PERFORMANCE:
       fields: compiled.fields,
       sort: compiled.sort,
       countOnly: compiled.countOnly,
+      response_format: 'json', // Optimized for LLM token efficiency
     };
 
     // Map ID filter (exact match)
@@ -121,6 +130,7 @@ PERFORMANCE:
     const projectsArgs: Record<string, unknown> = {
       operation: 'list',
       includeCompleted: compiled.filters.status === 'completed',
+      response_format: 'json', // Optimized for LLM token efficiency
     };
 
     if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;

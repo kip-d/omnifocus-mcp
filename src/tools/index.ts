@@ -61,6 +61,10 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
         if ('meta' in t && t.meta) {
           toolDef.meta = (t as Record<string, unknown>).meta;
         }
+        // Include annotations if the tool provides them
+        if ('annotations' in t && t.annotations) {
+          toolDef.annotations = (t as Record<string, unknown>).annotations;
+        }
         return toolDef;
       }),
     };

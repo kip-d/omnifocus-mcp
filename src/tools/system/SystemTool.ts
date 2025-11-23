@@ -95,6 +95,14 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
     ],
   };
 
+  annotations = {
+    title: "System Utilities",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  };
+
   private diagnosticOmni: DiagnosticOmniAutomation;
 
   constructor(cache: import('../../cache/CacheManager.js').CacheManager) {
