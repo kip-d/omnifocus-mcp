@@ -39,11 +39,11 @@ PERFORMANCE:
   };
 
   annotations = {
-    title: "Query OmniFocus Data",
+    title: 'Query OmniFocus Data',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
-    openWorldHint: true
+    openWorldHint: true,
   };
 
   private compiler: QueryCompiler;

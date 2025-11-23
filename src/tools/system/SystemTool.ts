@@ -96,11 +96,11 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
   };
 
   annotations = {
-    title: "System Utilities",
+    title: 'System Utilities',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
-    openWorldHint: false
+    openWorldHint: false,
   };
 
   private diagnosticOmni: DiagnosticOmniAutomation;

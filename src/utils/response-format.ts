@@ -494,7 +494,7 @@ export interface TruncationInfo {
 
 export function truncateResponse<T>(
   data: T,
-  limit: number = CHARACTER_LIMIT
+  limit: number = CHARACTER_LIMIT,
 ): { data: T; truncation?: TruncationInfo } {
   const serialized = JSON.stringify(data);
 
@@ -511,8 +511,8 @@ export function truncateResponse<T>(
         truncated: true,
         originalLength: data.length,
         truncatedLength: truncatedData.length,
-        message: `Response truncated from ${data.length} to ${truncatedData.length} items. Use 'limit' or 'offset' parameters to see more results.`
-      }
+        message: `Response truncated from ${data.length} to ${truncatedData.length} items. Use 'limit' or 'offset' parameters to see more results.`,
+      },
     };
   }
 
@@ -524,8 +524,8 @@ export function truncateResponse<T>(
         truncated: true,
         originalLength: data.length,
         truncatedLength: limit,
-        message: 'Response truncated. Use filters to reduce result size.'
-      }
+        message: 'Response truncated. Use filters to reduce result size.',
+      },
     };
   }
 
@@ -561,7 +561,7 @@ export function createTaskResponseV2<T>(
       returned_count: truncatedTasks.length,
       ...(truncation && {
         truncated: truncation.truncated,
-        truncation_message: truncation.message
+        truncation_message: truncation.message,
       }),
       ...metadata,
     },

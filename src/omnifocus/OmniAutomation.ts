@@ -267,8 +267,6 @@ export class OmniAutomation {
 
         }
       });
-    } else {
-
     }
 
     return promise;

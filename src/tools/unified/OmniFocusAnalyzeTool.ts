@@ -45,11 +45,11 @@ SCOPE FILTERING:
   };
 
   annotations = {
-    title: "Analyze OmniFocus Data",
+    title: 'Analyze OmniFocus Data',
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
-    openWorldHint: true
+    openWorldHint: true,
   };
 
   private compiler: AnalysisCompiler;

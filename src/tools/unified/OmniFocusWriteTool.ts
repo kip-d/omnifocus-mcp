@@ -50,11 +50,11 @@ SAFETY:
   };
 
   annotations = {
-    title: "Manage OmniFocus Tasks",
+    title: 'Manage OmniFocus Tasks',
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,
-    openWorldHint: true
+    openWorldHint: true,
   };
 
   private compiler: MutationCompiler;
@@ -145,7 +145,7 @@ SAFETY:
   }
 
   private async routeToBulkDelete(
-    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>
+    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>,
   ): Promise<unknown> {
     // Route to ManageTaskTool's existing bulk_delete functionality
     const manageArgs: Record<string, unknown> = {
