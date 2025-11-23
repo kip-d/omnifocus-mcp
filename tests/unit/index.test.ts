@@ -168,7 +168,7 @@ describe('server entrypoint', () => {
   });
 
   it('initializes the server, registers tools, and warms the cache', async () => {
-    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development' });
+    resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development', CI: 'false' });
     const { runServer } = await importEntry();
 
     await runServer();
