@@ -180,6 +180,19 @@ These tests verify natural conversation works smoothly:
 
 **Expected:** Clear, helpful error messages that guide you to fix the issue (not crashes or confusing technical errors)
 
+#### **Scenario 9: Tool Capabilities (New)**
+- "What capabilities do your tools have?"
+- "Are your tools read-only or can you modify data?"
+- "Is the 'system' tool safe to use?"
+
+**Expected:** Claude should accurately describe tool capabilities based on the new annotations (e.g., "My tools allow reading and writing data," "The system tool is read-only").
+
+#### **Scenario 10: Stress Test (New)**
+- "Show me all my tasks" (if you have a large database)
+- "List every single project and folder"
+
+**Expected:** If the response is very large (>25k chars), you should see a message indicating the response was truncated, rather than a crash or timeout. Claude should handle this gracefully (e.g., "The list is too long, here are the first X items...").
+
 ---
 
 ### Error Handling & Edge Cases

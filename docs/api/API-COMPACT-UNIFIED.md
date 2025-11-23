@@ -446,12 +446,16 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 
 ## ⚠️ Important Notes
 
-1. **Date Format:** Always convert natural language ("tomorrow") to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"
-2. **Inbox:** Use `project: null` (not empty string)
-3. **Tag Operations:** Use `tags` (replace all), `addTags` (add), or `removeTags` (remove)
-4. **Discriminated Unions:** The `operation` and `type` fields determine which other fields are required/valid
-5. **String Coercion:** All parameters stringified by Claude Desktop MCP bridge
-6. **Response Format:** Standard V2 response with `{success, data, error, metadata}`
+1.  **Date Format:** Always convert natural language ("tomorrow") to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"
+2.  **Inbox:** Use `project: null` (not empty string)
+3.  **Tag Operations:** Use `tags` (replace all), `addTags` (add), or `removeTags` (remove)
+4.  **Discriminated Unions:** The `operation` and `type` fields determine which other fields are required/valid
+5.  **String Coercion:** All parameters stringified by Claude Desktop MCP bridge
+6.  **Response Format:**
+    *   **JSON Default:** Tools return optimized JSON structure by default (saving ~20-30% tokens).
+    *   **Standard V2:** All responses follow `{success, data, error, metadata}`.
+    *   **Character Limit:** Responses are capped at 25,000 characters. Large results are automatically truncated with a helpful message.
+7.  **Tool Annotations:** All tools provide standard MCP annotations (`readOnlyHint`, `destructiveHint`, etc.) to guide client behavior.
 
 ---
 
