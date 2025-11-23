@@ -3,6 +3,7 @@ import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
 import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
 import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
+import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
@@ -59,12 +60,14 @@ SAFETY:
 
   private compiler: MutationCompiler;
   private manageTaskTool: ManageTaskTool;
+  private projectsTool: ProjectsTool;
   private batchTool: BatchCreateTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new MutationCompiler();
     this.manageTaskTool = new ManageTaskTool(cache);
+    this.projectsTool = new ProjectsTool(cache);
     this.batchTool = new BatchCreateTool(cache);
   }
 
@@ -76,12 +79,17 @@ SAFETY:
       return this.routeToBatch(compiled);
     }
 
-    // Route bulk_delete to ManageTaskTool's existing bulk_delete
+    // Route bulk_delete based on target
     if (compiled.operation === 'bulk_delete') {
       return this.routeToBulkDelete(compiled);
     }
 
-    // Otherwise route to manage_task
+    // Route based on target: task vs project
+    if (compiled.target === 'project') {
+      return this.routeToProjectsTool(compiled);
+    }
+
+    // Default: route tasks to manage_task
     return this.routeToManageTask(compiled);
   }
 
@@ -111,6 +119,32 @@ SAFETY:
     }
 
     return this.manageTaskTool.execute(manageArgs);
+  }
+
+  private async routeToProjectsTool(
+    compiled: Exclude<CompiledMutation, { operation: 'batch' | 'bulk_delete' }>,
+  ): Promise<unknown> {
+    // Map compiled mutation to ProjectsTool parameters
+    const projectArgs: Record<string, unknown> = {
+      operation: compiled.operation,
+    };
+
+    // Add projectId for update/complete/delete operations
+    if ('projectId' in compiled && compiled.projectId) {
+      projectArgs.projectId = compiled.projectId;
+    }
+
+    // Add data for create - spread all fields (name, tags, dueDate, etc.)
+    if ('data' in compiled && compiled.data) {
+      Object.assign(projectArgs, compiled.data);
+    }
+
+    // Add changes for update - spread all fields
+    if ('changes' in compiled && compiled.changes) {
+      Object.assign(projectArgs, compiled.changes);
+    }
+
+    return this.projectsTool.execute(projectArgs);
   }
 
   private async routeToBatch(
