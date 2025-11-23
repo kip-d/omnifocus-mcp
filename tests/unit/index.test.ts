@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const originalEnv = { ...process.env };
+const originalPlatform = process.platform;
 
 const serverConnectMock = vi.fn<[], Promise<void>>(() => Promise.resolve());
 const serverCloseMock = vi.fn<[], Promise<void>>(() => Promise.resolve());
@@ -161,6 +162,7 @@ describe('server entrypoint', () => {
 
   afterEach(() => {
     resetEnv();
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
     process.stdin.removeAllListeners('end');
     process.stdin.removeAllListeners('close');
     process.stdout.removeAllListeners('error');
@@ -169,6 +171,7 @@ describe('server entrypoint', () => {
 
   it('initializes the server, registers tools, and warms the cache', async () => {
     resetEnv({ MCP_SKIP_AUTO_START: 'true', NODE_ENV: 'development', CI: 'false' });
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
     const { runServer } = await importEntry();
 
     await runServer();
