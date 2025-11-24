@@ -211,5 +211,45 @@ describe('QueryCompiler', () => {
         expect(result.projectId).toBe('abc123');
       });
     });
+
+    describe('logical operator handling', () => {
+      it('logs warning for OR operator and uses first condition', () => {
+        const compiler = new QueryCompiler();
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = compiler.transformFilters({
+          OR: [{ status: 'active' }, { flagged: true }]
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('OR operator not yet supported')
+        );
+        // Should use first condition
+        expect(result.completed).toBe(false);
+
+        warnSpy.mockRestore();
+      });
+
+      it('flattens AND operator by merging conditions', () => {
+        const compiler = new QueryCompiler();
+
+        const result = compiler.transformFilters({
+          AND: [{ status: 'active' }, { flagged: true }]
+        });
+
+        expect(result.completed).toBe(false);
+        expect(result.flagged).toBe(true);
+      });
+
+      it('transforms simple NOT status to inverse', () => {
+        const compiler = new QueryCompiler();
+
+        const result = compiler.transformFilters({
+          NOT: { status: 'completed' }
+        });
+
+        expect(result.completed).toBe(false);
+      });
+    });
   });
 });
