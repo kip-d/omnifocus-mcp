@@ -1682,3 +1682,80 @@ const MINIMAL_TAG_BRIDGE = `
 ---
 
 **Remember:** These lessons cost months of debugging. When in doubt, check this document first before attempting optimizations or architectural changes.
+---
+
+## Lesson 8: Layer Boundary Bugs - Variable Name Mismatches (November 2025)
+
+### The Pattern
+
+15+ bugs in git history share common root causes related to layer boundaries:
+
+1. **Property name mismatches** between QueryCompiler and OmniJS scripts
+2. **Duplicated filter logic** that gets out of sync across modes
+3. **Response structure confusion** (the double-unwrap saga)
+4. **Parameters not passed through** all layers
+
+### Example: `completed` vs `includeCompleted`
+
+**The bug (commit 88f26fe):**
+- QueryCompiler mapped `status: "completed"` → `filter.completed = true`
+- OmniJS script checked `filter.includeCompleted` (wrong name!)
+- Result: Completed tasks never returned, even when explicitly requested
+
+**Why it wasn't caught:**
+- No shared type between layers
+- Unit tests mocked the boundary
+- Integration tests didn't cover this specific combination
+
+### The Double-Unwrap Saga
+
+Four separate commits fixed the same pattern:
+- `bb67136` - 4 tool failures at once
+- `b229a59` - tags tool
+- `55daae9` - manage_reviews
+- `f160f53` - tasks mode:today
+
+Each fix was correct, but the pattern wasn't identified until commit 4.
+
+### Root Cause
+
+**No single source of truth for:**
+- Filter property names
+- Response structures
+- Filter logic implementation
+
+Each layer could define its own names, and there was no compile-time check that they matched.
+
+### Solution: Shared Contracts
+
+Created `src/contracts/` with:
+- `TaskFilter` interface - canonical filter property names
+- `unwrapScriptOutput()` - handles all response wrapper formats
+- `generateFilterBlock()` - generates filter logic from spec
+
+**Key insight:** OmniJS scripts are generated strings. Generate them from typed specs instead of hand-writing and hoping names match.
+
+### Detection Pattern
+
+If you see these symptoms:
+- Tool works with some filters but not others
+- ID lookup works but filtered queries don't
+- Same data returns different results in different modes
+
+Check for property name mismatches at layer boundaries.
+
+### Prevention
+
+1. Use `TaskFilter` type at every layer
+2. Generate OmniJS filter logic, don't copy-paste
+3. Use `unwrapScriptOutput()` for response handling
+4. Validate filter properties at runtime with `validateFilterProperties()`
+
+### Files
+
+- `src/contracts/filters.ts` - Filter type definitions
+- `src/contracts/responses.ts` - Response contracts
+- `src/contracts/generator.ts` - OmniJS code generator
+- `src/contracts/SESSION_NOTES_2025-11-24.md` - Full analysis
+
+**Time cost of not having this pattern:** 15+ bugs over several months, each requiring investigation to find the layer mismatch.
