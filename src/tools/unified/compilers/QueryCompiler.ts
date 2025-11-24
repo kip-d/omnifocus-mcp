@@ -76,6 +76,45 @@ export class QueryCompiler {
       }
     }
 
+    // Date transformation helper
+    const transformDateFilter = (
+      dateFilter: { before?: string; after?: string; between?: [string, string] } | undefined,
+      beforeKey: 'dueBefore' | 'deferBefore',
+      afterKey: 'dueAfter' | 'deferAfter',
+      operatorKey?: 'dueDateOperator'
+    ) => {
+      if (!dateFilter) return;
+
+      if ('before' in dateFilter && dateFilter.before) {
+        (result as Record<string, unknown>)[beforeKey] = dateFilter.before;
+      }
+      if ('after' in dateFilter && dateFilter.after) {
+        (result as Record<string, unknown>)[afterKey] = dateFilter.after;
+      }
+      if ('between' in dateFilter && dateFilter.between) {
+        (result as Record<string, unknown>)[afterKey] = dateFilter.between[0];
+        (result as Record<string, unknown>)[beforeKey] = dateFilter.between[1];
+        if (operatorKey) {
+          (result as Record<string, unknown>)[operatorKey] = 'BETWEEN';
+        }
+      }
+    };
+
+    // Due date transformation
+    transformDateFilter(
+      input.dueDate as { before?: string; after?: string; between?: [string, string] },
+      'dueBefore',
+      'dueAfter',
+      'dueDateOperator'
+    );
+
+    // Defer date transformation
+    transformDateFilter(
+      input.deferDate as { before?: string; after?: string; between?: [string, string] },
+      'deferBefore',
+      'deferAfter'
+    );
+
     return result;
   }
 }
