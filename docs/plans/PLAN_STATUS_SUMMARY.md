@@ -42,6 +42,20 @@ This document tracks the status of all implementation plans in this directory.
 
 ---
 
+### 2025-11-06-unified-api-cleanup-plan.md
+**Status:** ✅ Mostly Implemented (v3.0.0)
+**What was built:**
+- Phase 1: ID filter bug fixed and verified
+- Phase 2: Branch renamed, terminology updated
+- Phase 3: Code cleanup (partial)
+- Phase 4: PR created and merged to main
+
+**Remaining (optional/low priority):**
+- Some TODO comments may still exist
+- Commit history cleanup was skipped (risky)
+
+---
+
 ### 2025-10-16-omnifocus-4.7-upgrade.md
 **Status:** ✅ Partially Implemented
 **What was built:**
@@ -59,10 +73,12 @@ This document tracks the status of all implementation plans in this directory.
 
 ### 2025-11-06-script-helper-consolidation-design.md
 **Status:** 🟡 Phase 1 Complete, Phase 2 In Progress
+**Related:** `2025-11-06-phase1-script-consolidation.md` (detailed implementation plan - ✅ executed)
 **What was built:**
 - Script consolidation (62 → 57 scripts)
 - OmniJS bridge conversions (13-67x performance gains)
 - Comprehensive helper analysis
+- Call graph and script inventory documentation
 
 **Remaining (Phase 2B/2C):**
 - Modular helper architecture
@@ -89,8 +105,9 @@ This document tracks the status of all implementation plans in this directory.
 ## Not Started / External
 
 ### 2025-10-18-multi-machine-session-sync.md
-**Status:** ⚪ Personal Workflow (not in codebase)
-**Notes:** This is a personal setup for iCloud sync of ~/.claude/, not code in this repository. May or may not be set up.
+**Status:** ⚪ Moved to Separate Repository
+**Related:** `README-MULTI-MACHINE-SYNC.md` (quick reference)
+**Notes:** Design was finalized and moved to `/Users/kip/src/multi-machine-claude-resume` - a general-purpose tool for managing work across multiple machines. Not mixed with OmniFocus MCP code.
 
 ---
 
