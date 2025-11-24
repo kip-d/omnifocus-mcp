@@ -6,7 +6,7 @@ import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-p
 import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
 import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
 import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
-import { createUpdateProjectScript } from '../../omnifocus/scripts/projects/update-project.js';
+import { buildUpdateProjectScript } from '../../contracts/ast/mutation-script-builder.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
@@ -467,10 +467,20 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       }
     }
 
-    if (args.status !== undefined) updates.status = args.status;
+    if (args.status !== undefined) {
+      // Map status values from tool schema to contract types
+      const statusMap: Record<string, 'active' | 'on_hold' | 'completed' | 'dropped'> = {
+        'active': 'active',
+        'on-hold': 'on_hold',
+        'done': 'completed',
+        'dropped': 'dropped',
+      };
+      updates.status = statusMap[args.status];
+    }
 
-    // Execute update using new function argument approach with schema validation
-    const script = createUpdateProjectScript(args.projectId!, updates);
+    // Use AST-powered mutation builder (Phase 2 consolidation)
+    // Cast to ProjectUpdateData since status mapping ensures type compatibility
+    const script = buildUpdateProjectScript(args.projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData).script;
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
