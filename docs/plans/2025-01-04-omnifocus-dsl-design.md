@@ -1,8 +1,80 @@
 # OmniFocus DSL Design Document
 
-**Status:** Exploratory Design
+**Status:** ~~Exploratory Design~~ → **Partially Implemented (v3.0.0)**
 **Date:** 2025-01-04
+**Updated:** 2025-11-24
 **Purpose:** Define a custom Domain-Specific Language for OmniFocus operations that can serve multiple use cases including MCP servers, CLI tools, web APIs, and automation workflows.
+
+---
+
+## Implementation Status (November 2025)
+
+> **This design was incrementally implemented through v3.0.0's Unified API, though the path differed from the original plan.**
+
+### What Was Built
+
+| DSL Design Goal | Implementation | Status |
+|-----------------|----------------|--------|
+| Replace 17 tools with 1-3 | Unified API: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system` | ✅ Shipped v3.0.0 |
+| JSON-based query syntax | `{ query: { type: "tasks", filters: {...} } }` | ✅ Exact syntax implemented |
+| JSON-based mutations | `{ mutation: { operation: "create", target: "task", data: {...} } }` | ✅ Implemented |
+| JSON-based analysis | `{ analysis: { type: "productivity_stats", params: {...} } }` | ✅ Implemented |
+| QueryCompiler | Routes unified API to backend tools | ✅ Implemented |
+| MutationCompiler | Routes mutations to manage_task/batch_create | ✅ Implemented |
+| AnalysisCompiler | Routes to 8 analysis tools | ✅ Implemented |
+
+### Key Difference: Routing vs. Generation
+
+**Original Design:** Compilers would generate JXA/OmniJS scripts from scratch.
+
+**Actual Implementation:** Compilers route to existing backend tools (maximum code reuse, faster delivery, proven reliability).
+
+```
+Design assumed:    DSL → Compiler → Generated JXA → OmniFocus
+Actually built:    DSL → Compiler → Existing Tools → Existing Scripts → OmniFocus
+```
+
+This was pragmatic - we got 90% of the benefits with 30% of the effort.
+
+### Gap Discovered: Internal Type Safety
+
+After shipping v3.0.0, we found 15+ bugs sharing a common pattern: **property name mismatches between layers**.
+
+Example: API sends `status: 'completed'`, script checks `filter.completed === true`.
+
+**Solution:** Shared Contracts System (November 2025)
+- `src/contracts/filters.ts` - TaskFilter as single source of truth
+- `src/contracts/responses.ts` - Response structure contracts
+- `src/contracts/generator.ts` - OmniJS code generator (for future migration)
+- QueryCompiler now transforms `FilterValue` → `TaskFilter`
+
+See: `docs/plans/2025-11-24-querycompiler-taskfilter-integration.md`
+
+### Remaining from Original Design
+
+| Feature | Status | Priority |
+|---------|--------|----------|
+| Text syntax layer (human-friendly) | Not started | Low - JSON works well for LLMs |
+| REPL/CLI tool | Not started | Medium |
+| Query optimization engine | Partial (countOnly, fastSearch) | Low |
+| Transaction support | Not started | Low |
+| Dry-run mode for bulk ops | Not started | Medium |
+
+### Lessons Learned
+
+1. **Incremental beats big-bang.** Building routing layer on existing tools was faster and safer than rewriting everything.
+
+2. **External API ≠ internal consistency.** The DSL design focused on what users see but missed internal type safety. We added contracts to fix this.
+
+3. **JSON is fine for LLMs.** The "human-friendly text syntax" (Phase 2 in original design) hasn't been needed - LLMs handle JSON well.
+
+4. **The 17→4 tool reduction worked.** LLMs find the unified API easier to use than remembering 17 tool names.
+
+---
+
+## Original Design (January 2025)
+
+*The following sections represent the original exploratory design. See above for what was actually implemented.*
 
 ---
 
