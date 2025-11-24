@@ -115,6 +115,44 @@ export class QueryCompiler {
       'deferAfter'
     );
 
+    // Text transformation
+    if (input.text) {
+      const textFilter = input.text as { contains?: string; matches?: string };
+      if ('contains' in textFilter && textFilter.contains) {
+        result.text = textFilter.contains;
+        result.textOperator = 'CONTAINS';
+      } else if ('matches' in textFilter && textFilter.matches) {
+        result.text = textFilter.matches;
+        result.textOperator = 'MATCHES';
+      }
+    }
+
+    // Boolean passthrough
+    if (input.flagged !== undefined) {
+      result.flagged = input.flagged;
+    }
+    if (input.available !== undefined) {
+      result.available = input.available;
+    }
+    if (input.blocked !== undefined) {
+      result.blocked = input.blocked;
+    }
+    if (input.inInbox !== undefined) {
+      result.inInbox = input.inInbox;
+    }
+
+    // Project transformation
+    if (input.project === null) {
+      result.inInbox = true;
+    } else if (typeof input.project === 'string') {
+      result.projectId = input.project;
+    }
+
+    // ID passthrough
+    if (input.id) {
+      result.id = input.id;
+    }
+
     return result;
   }
 }
