@@ -134,7 +134,7 @@ If single session still doesn't work after optimization:
 
 ---
 
-## Implementation Results (2025-10-29)
+## Implementation Results (2025-10-29 - Pre-v3.0)
 
 **Attempt 1: Single-session lightweight format**
 - Created `TESTING_PROMPTS_LIGHTWEIGHT.md`
@@ -157,3 +157,35 @@ If single session still doesn't work after optimization:
 2. Stricter instructions don't override fundamental token limits
 3. Two-session approach is the reliable solution
 4. 15-16 tests per session is comfortable margin
+
+---
+
+## Modern Implementation (2025-11-24 - Post-v3.0)
+
+**Status:** ✅ **COMPLETED**
+
+**New Context:**
+- v3.0.0 unified API reduced from 31 tools → 4 tools
+- Automated smoke tests (21s) + integration tests (6min) provide comprehensive coverage
+- Performance optimizations (100x speedup on slow operations)
+
+**Solution: Hybrid Automated + Manual Approach**
+
+Created `TESTING_PROMPT_LIGHTWEIGHT.md` with:
+- **Pre-flight check:** Run automated tests first (smoke → integration)
+- **Manual tests:** 10 real-world scenarios using unified API
+- **Output format:** One-line results (~8-12k tokens vs 60-80k)
+- **Integration:** Leverages automated test infrastructure
+
+**Key Improvements over Oct 2025 version:**
+1. **Smaller surface:** 4 unified tools vs 31 individual tools
+2. **Faster execution:** Performance fixes mean quicker test cycles
+3. **Better automation:** Smoke + integration tests catch most issues
+4. **Focused manual testing:** Real-world scenarios, not exhaustive tool testing
+
+**Token Budget:**
+- Success run: ~8-12k tokens ✅
+- With failures: ~15-20k tokens ✅
+- Comfortable single-session execution
+
+**File:** `/TESTING_PROMPT_LIGHTWEIGHT.md`

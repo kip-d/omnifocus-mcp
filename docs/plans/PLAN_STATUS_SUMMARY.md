@@ -122,27 +122,83 @@ This document tracks the status of all implementation plans in this directory.
 
 ---
 
-## Recently Created (This Session)
+## Recently Completed (2025-11-24 Session)
+
+### 2025-11-24-ast-filter-contracts-design.md
+**Status:** ✅ Fully Implemented
+**What was built:**
+- Complete AST-based contract system for filters and mutations
+- Type-safe builders (ASTBuilder) with validation
+- Dual emitters: JXA and OmniJS code generation
+- Filter generator with operator support
+- Mutation script builder with proper escaping
+- 172 unit tests covering all components
+
+**Files created:**
+- `src/contracts/ast/` - Complete AST system (10 files)
+- `tests/unit/contracts/ast/` - Comprehensive test coverage
+
+---
+
+### 2025-11-24-tiered-test-pipeline-design.md
+**Status:** ✅ Fully Implemented
+**What was built:**
+- Unit tests (5s) - Pure TypeScript logic, watch mode
+- Smoke tests (21s) - Minimal OmniFocus sanity check
+- Integration tests (6min) - Complete validation
+- Pre-commit hook running unit + smoke (27s total)
+- npm scripts: test:watch, test:smoke, test:pre-commit, test:ci
+
+**Files created:**
+- `tests/smoke/omnifocus-sanity.test.ts`
+- Updated `package.json` with tiered scripts
+
+---
+
+### 2025-11-24 Performance Optimizations
+**Status:** ✅ Completed
+**What was fixed:**
+- Today's agenda: 36s → 5s (OmniJS bridge pattern)
+- Overdue tasks: 28s → 5s (OmniJS bridge pattern)
+- Delete task: 27s → 1s (O(1) Task.byIdentifier lookup)
+- Bulk delete: 60s+ → <1s (same O(1) pattern)
+
+**Pattern:** Replaced JXA property access (~1-2ms per call) with OmniJS bridge using evaluateJavascript() for 100x+ speedup.
+
+---
+
+### 2025-11-24 Lightweight Testing Prompt
+**Status:** ✅ Completed
+**What was built:**
+- Modern testing approach for v3.0 unified API
+- 10 real-world scenario tests (vs 31 tools in old approach)
+- Pre-flight automated test integration
+- One-line output format: ~8-12k tokens (85% reduction from verbose)
+- Comparison table: Smoke (21s) vs Lightweight Manual (5-10min) vs Integration (6min) vs Full Manual (15-20min)
+
+**File:** `TESTING_PROMPT_LIGHTWEIGHT.md`
+
+---
 
 ### 2025-11-24-querycompiler-taskfilter-integration.md
-**Status:** 📋 Design Approved
-**Purpose:** Design doc for transforming FilterValue → TaskFilter in QueryCompiler
+**Status:** ✅ Superseded by AST Contracts
+**Note:** Original design evolved into the broader AST contracts system above
 
 ---
 
 ### 2025-11-24-querycompiler-taskfilter-implementation.md
-**Status:** 🔄 In Progress (separate session)
-**Purpose:** 15-task TDD implementation plan
+**Status:** ✅ Superseded by AST Contracts
+**Note:** Implementation plan evolved into AST contracts implementation
 
 ---
 
 ## Unimplemented Good Ideas (Prioritized)
 
 ### HIGH Priority
-1. **Contracts System Integration** (in progress) - Catch layer boundary bugs at compile time
+~~1. **Contracts System Integration**~~ - ✅ **COMPLETED 2025-11-24** - AST-based contracts with validation, builders, and dual emitters
 
 ### MEDIUM Priority
-2. **Lightweight Testing Prompt** - Enable unattended single-session testing
+~~2. **Lightweight Testing Prompt**~~ - ✅ **COMPLETED 2025-11-24** - Integrated with automated tests, modern v3.0 approach
 3. **Dry-run Mode for Bulk Operations** - Preview before executing bulk updates
 4. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
 5. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
@@ -154,7 +210,45 @@ This document tracks the status of all implementation plans in this directory.
 9. **Query Optimization Engine** - Auto-apply performance patterns
 
 ### Consolidation Work (from Phase 2B/2C)
-10. **Delete Zero-Usage Functions** - 271 LOC, zero risk
+10. **Delete Zero-Usage Functions** - 9 functions (~357 LOC), zero risk
 11. **Delete Duplicate Functions** - 79 LOC consolidation
-12. **Convert 28 Scripts to OmniJS v3** - Performance gains
+12. **Convert 28 Scripts to OmniJS v3** - Performance gains (if needed)
 13. **Modular Helper Architecture** - Clean separation of concerns
+
+---
+
+## Next Development Target Analysis (2025-11-24)
+
+**Context:** Just completed HIGH priority contracts system + tiered testing + major performance fixes. Development velocity infrastructure is now excellent (5s unit tests, 27s pre-commit).
+
+**Top Candidates:**
+
+### 🥇 Option 1: Delete Zero-Usage Functions (Quick Win)
+- **Effort:** LOW (1-2 hours)
+- **Risk:** ZERO (functions have zero usage)
+- **Value:** Immediate codebase health, ~357 LOC reduction (9 functions)
+- **Why now:** Clean up technical debt before building new features
+- **Functions:** serializeTask, isTaskBlocked, validateTag, buildTaskObject, serializeProject, parseRepeatRule, buildRepeatRuleString, getTagsViaBridge, translateRepeatIntent, setDateFieldsViaBridge
+- **Details:** `docs/consolidation/helper-usage-analysis.md` has complete analysis
+
+### 🥈 Option 2: Performance Audit of Remaining Scripts
+- **Effort:** MEDIUM (identify slow scripts, then fix)
+- **Risk:** LOW (applying proven OmniJS bridge pattern)
+- **Value:** Ensure consistent performance across all operations
+- **Why now:** We have momentum on performance, know the patterns
+- **Approach:** Profile remaining scripts, convert slowest 5-10 to OmniJS v3
+
+### 🥉 Option 3: Lightweight Testing Prompt (MEDIUM priority) - ✅ **COMPLETED 2025-11-24**
+- Created `TESTING_PROMPT_LIGHTWEIGHT.md` with modern v3.0 approach
+- 10 tests covering real-world scenarios
+- Integrates with automated smoke + integration tests
+- One-line output format: ~8-12k tokens (vs ~60-80k for verbose)
+- Pre-flight check runs automated tests first
+
+### 🏅 Option 4: Dry-run Mode for Bulk Operations
+- **Effort:** MEDIUM
+- **Risk:** LOW
+- **Value:** Safety for bulk updates, preview before commit
+- **Why now:** With AST contracts, implementing preview is straightforward
+
+**Recommendation:** Start with **Option 1 (Delete Zero-Usage Functions)** as a quick win to clean up the codebase, then move to **Option 2 (Performance Audit)** to finish what we started with performance optimization.
