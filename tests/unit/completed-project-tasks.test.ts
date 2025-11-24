@@ -40,12 +40,14 @@ describe('Completed Project Task Handling', () => {
       expect(LIST_TASKS_SCRIPT_V3).toContain('if (task.completed) return');
     });
 
-    it('should use isTaskEffectivelyCompleted in todays-agenda script', async () => {
+    it('should check for completed tasks and projects in todays-agenda script', async () => {
       const { TODAYS_AGENDA_SCRIPT } = await import('../../src/omnifocus/scripts/tasks/todays-agenda.js');
-      
-      // Verify the script defines and uses the correct helper
-      expect(TODAYS_AGENDA_SCRIPT).toContain('function safeIsCompleted(task)');
-      expect(TODAYS_AGENDA_SCRIPT).toContain('return isTaskEffectivelyCompleted(task)');
+
+      // Today's agenda now uses OmniJS bridge with direct property checks
+      // It checks for task.completed and Project.Status.Done/Dropped
+      expect(TODAYS_AGENDA_SCRIPT).toContain('task.completed');
+      expect(TODAYS_AGENDA_SCRIPT).toContain('Project.Status.Done');
+      expect(TODAYS_AGENDA_SCRIPT).toContain('Project.Status.Dropped');
     });
 
     it('should use isTaskEffectivelyCompleted in export-tasks script', async () => {
@@ -56,19 +58,23 @@ describe('Completed Project Task Handling', () => {
       expect(EXPORT_TASKS_SCRIPT).toContain('taskData.completed = isTaskEffectivelyCompleted(task)');
     });
 
-    it('should use isTaskEffectivelyCompleted in date-range-queries script', async () => {
-      // Fixed in this session - date-range-queries now properly uses isTaskEffectivelyCompleted
-      const { 
+    it('should check for completed projects in date-range-queries scripts', async () => {
+      // Scripts use OmniJS bridge which checks completion via:
+      // 1. task.completed (direct property)
+      // 2. Project.Status.Done / Project.Status.Dropped (project status)
+      const {
         GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT,
         GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-        GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT 
+        GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT
       } = await import('../../src/omnifocus/scripts/date-range-queries.js');
-      
-      // Verify date range queries use the correct completion check in property assignment
+
+      // Verify date range queries check project completion status (OmniJS pattern)
       expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
-      
-      // Verify the optimized scripts use it in continue statements
-      expect(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
+
+      // Overdue and upcoming now use OmniJS bridge with direct property checks
+      // They check for task.completed and Project.Status.Done/Dropped
+      expect(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('task.completed');
+      expect(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('Project.Status.Done');
       expect(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
     });
   });
