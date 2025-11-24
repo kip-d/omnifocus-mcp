@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import {
-  LIST_TASKS_SCRIPT_V3,
+  buildListTasksScriptV4,
   TODAYS_AGENDA_SCRIPT,
   GET_TASK_COUNT_SCRIPT,
 } from '../../omnifocus/scripts/tasks.js';
@@ -693,8 +693,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       includeDetails: args.details,
     };
 
-    // Execute query using V3 script for performance
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute query using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: 1,
@@ -970,8 +970,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Execute search using V3 (fast OmniJS) script
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute search using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter: { ...filter, mode: 'search' },
       fields: args.fields || [],
       limit: args.limit,
@@ -1040,8 +1040,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute query using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: args.limit,
@@ -1102,8 +1102,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute query using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: args.limit,
@@ -1186,18 +1186,18 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleInboxTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    // Inbox mode: Use V3 OmniJS-first implementation for performance
-    // V3 achieves 45x speedup by using OmniJS global collections
+    // Inbox mode: Use V4 AST-powered implementation
+    // AST version uses OmniJS global collections for optimal performance
     const filter = {
-      mode: 'inbox',
       includeCompleted: args.completed || false,
     };
 
-    // Execute V3 query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute V4 query with inbox mode
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      mode: 'inbox',
     });
     const result = await this.execJson(script);
 
@@ -1248,8 +1248,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       includeDetails: args.details,
     };
 
-    // Execute query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute query using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: args.limit,
@@ -1321,8 +1321,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       includeDetails: args.details,
     };
 
-    // Execute comprehensive query
-    const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+    // Execute comprehensive query using V4 AST-powered script
+    const script = buildListTasksScriptV4({
       filter,
       fields: args.fields || [],
       limit: args.limit,
