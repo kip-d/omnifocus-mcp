@@ -157,5 +157,59 @@ describe('QueryCompiler', () => {
         expect(result.deferBefore).toBe('2025-06-01');
       });
     });
+
+    describe('text transformation', () => {
+      it('transforms text.contains to text + textOperator: CONTAINS', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          text: { contains: 'search term' }
+        });
+        expect(result.text).toBe('search term');
+        expect(result.textOperator).toBe('CONTAINS');
+      });
+
+      it('transforms text.matches to text + textOperator: MATCHES', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          text: { matches: 'exact' }
+        });
+        expect(result.text).toBe('exact');
+        expect(result.textOperator).toBe('MATCHES');
+      });
+    });
+
+    describe('boolean passthrough', () => {
+      it('passes through flagged', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ flagged: true });
+        expect(result.flagged).toBe(true);
+      });
+
+      it('passes through available', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ available: true });
+        expect(result.available).toBe(true);
+      });
+
+      it('passes through blocked', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ blocked: false });
+        expect(result.blocked).toBe(false);
+      });
+    });
+
+    describe('project/inbox transformation', () => {
+      it('transforms project: null to inInbox: true', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ project: null });
+        expect(result.inInbox).toBe(true);
+      });
+
+      it('transforms project ID to projectId', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ project: 'abc123' });
+        expect(result.projectId).toBe('abc123');
+      });
+    });
   });
 });
