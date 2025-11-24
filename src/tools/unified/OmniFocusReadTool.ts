@@ -1,7 +1,8 @@
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
-import { QueryCompiler, type CompiledQuery, type QueryFilter } from './compilers/QueryCompiler.js';
+import { QueryCompiler, type CompiledQuery } from './compilers/QueryCompiler.js';
+import type { TaskFilter } from '../../contracts/filters.js';
 import { QueryTasksTool } from '../tasks/QueryTasksTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
@@ -104,15 +105,15 @@ PERFORMANCE:
       tasksArgs.id = compiled.filters.id;
     }
 
-    // Special case: project: null means inbox mode
-    if (compiled.filters.project === null) {
+    // Special case: inInbox means inbox mode (transformed from project: null)
+    if (compiled.filters.inInbox) {
       tasksArgs.mode = 'inbox';
-    } else if (compiled.filters.project) {
-      tasksArgs.project = compiled.filters.project;
+    } else if (compiled.filters.projectId) {
+      tasksArgs.project = compiled.filters.projectId;
     }
 
-    // Map filters to existing parameters
-    if (compiled.filters.status) tasksArgs.completed = compiled.filters.status === 'completed';
+    // Map filters to existing parameters (already transformed by QueryCompiler)
+    if (compiled.filters.completed !== undefined) tasksArgs.completed = compiled.filters.completed;
 
     // REMOVED: Simple tags parameter - all tag filters now use advanced filters
     // This fixes Bug #1: tags.any not working (was being passed as simple array)
@@ -129,15 +130,15 @@ PERFORMANCE:
   private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {
     const projectsArgs: Record<string, unknown> = {
       operation: 'list',
-      includeCompleted: compiled.filters.status === 'completed',
+      includeCompleted: compiled.filters.completed === true,
       response_format: 'json', // Optimized for LLM token efficiency
     };
 
     // Pass limit if specified (defaults to 50 in ProjectsTool)
     if (compiled.limit) projectsArgs.limit = compiled.limit;
 
-    if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
-    if (compiled.filters.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
+    // Tags are already transformed to string[] by QueryCompiler
+    if (compiled.filters.tags) projectsArgs.tags = compiled.filters.tags;
 
     return this.projectsTool.execute(projectsArgs);
   }
@@ -154,60 +155,49 @@ PERFORMANCE:
     return this.foldersTool.execute({ operation: 'list' });
   }
 
-  private extractSimpleTags(tagFilter: QueryFilter['tags']): string[] | undefined {
-    if (!tagFilter) return undefined;
-    if (tagFilter.any) return tagFilter.any;
-    if (tagFilter.all) return tagFilter.all;
-    return undefined;
-  }
-
-  private needsAdvancedFilters(filters: QueryFilter): boolean {
+  private needsAdvancedFilters(filters: TaskFilter): boolean {
+    // TaskFilter already has transformed properties
     return Boolean(
-      filters.tags?.any ||   // Bug fix: tags.any now uses advanced filters
-      filters.tags?.all ||
-      filters.tags?.none ||
-      filters.dueDate ||
-      filters.deferDate ||
+      filters.tags ||   // Tags are now string[] with tagsOperator
+      filters.dueBefore ||
+      filters.dueAfter ||
+      filters.deferBefore ||
+      filters.deferAfter ||
       filters.flagged !== undefined ||
       filters.blocked !== undefined ||
       filters.available !== undefined ||
-      filters.text ||
-      filters.OR ||
-      filters.AND ||
-      filters.NOT,
+      filters.text,
     );
   }
 
-  private mapToAdvancedFilters(filters: QueryFilter): Record<string, unknown> {
-    // Map builder filters to existing advanced filter structure
+  private mapToAdvancedFilters(filters: TaskFilter): Record<string, unknown> {
+    // Map TaskFilter to existing advanced filter structure for backend tools
     const advanced: Record<string, unknown> = {};
 
-    if (filters.tags) {
-      if (filters.tags.any) {
-        advanced.tags = { operator: 'OR', values: filters.tags.any };
-      } else if (filters.tags.all) {
-        advanced.tags = { operator: 'AND', values: filters.tags.all };
-      } else if (filters.tags.none) {
-        advanced.tags = { operator: 'NOT_IN', values: filters.tags.none };
-      }
+    // Tags are already transformed: tags: string[], tagsOperator: 'AND' | 'OR' | 'NOT_IN'
+    if (filters.tags && filters.tags.length > 0) {
+      advanced.tags = {
+        operator: filters.tagsOperator || 'AND',
+        values: filters.tags,
+      };
     }
 
-    if (filters.dueDate) {
-      // Handle date filters (discriminated union - only one operator per filter)
-      if ('between' in filters.dueDate) {
+    // Due date filters (already transformed to dueBefore/dueAfter)
+    if (filters.dueBefore || filters.dueAfter) {
+      if (filters.dueDateOperator === 'BETWEEN' && filters.dueAfter && filters.dueBefore) {
         advanced.dueDate = {
           operator: 'BETWEEN',
-          value: filters.dueDate.between[0],
-          upperBound: filters.dueDate.between[1],
+          value: filters.dueAfter,
+          upperBound: filters.dueBefore,
         };
-      } else if ('before' in filters.dueDate) {
-        advanced.dueDate = { operator: '<=', value: filters.dueDate.before };
-      } else if ('after' in filters.dueDate) {
-        advanced.dueDate = { operator: '>=', value: filters.dueDate.after };
+      } else if (filters.dueBefore) {
+        advanced.dueDate = { operator: '<=', value: filters.dueBefore };
+      } else if (filters.dueAfter) {
+        advanced.dueDate = { operator: '>=', value: filters.dueAfter };
       }
     }
 
-    // Boolean filters
+    // Boolean filters (direct passthrough)
     if (filters.flagged !== undefined) {
       advanced.flagged = filters.flagged;
     }
@@ -218,32 +208,16 @@ PERFORMANCE:
       advanced.available = filters.available;
     }
 
-    // Text search filters (discriminated union - only one operator per filter)
+    // Text search filters (already transformed: text is string, textOperator is operator)
     if (filters.text) {
-      if ('contains' in filters.text) {
-        advanced.text = { operator: 'CONTAINS', value: filters.text.contains };
-      } else if ('matches' in filters.text) {
-        advanced.text = { operator: 'MATCHES', value: filters.text.matches };
-      }
+      advanced.text = {
+        operator: filters.textOperator || 'CONTAINS',
+        value: filters.text,
+      };
     }
 
-    // Handle OR/AND/NOT logic
-    if (filters.OR) {
-      advanced.OR = filters.OR.map((f: QueryFilter) => this.mapToAdvancedFilters(f));
-    }
-
-    // AND filters: Since QueryTasksTool implicitly ANDs all filters together,
-    // flatten the AND array by merging all sub-filters into the parent object
-    if (filters.AND) {
-      for (const subFilter of filters.AND) {
-        const mapped = this.mapToAdvancedFilters(subFilter);
-        Object.assign(advanced, mapped);
-      }
-    }
-
-    if (filters.NOT) {
-      advanced.NOT = this.mapToAdvancedFilters(filters.NOT);
-    }
+    // Note: OR/AND/NOT are handled by QueryCompiler.transformFilters()
+    // and don't appear in the TaskFilter output (they're flattened/logged)
 
     return advanced;
   }
