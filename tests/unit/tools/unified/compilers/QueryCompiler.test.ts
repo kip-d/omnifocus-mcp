@@ -121,5 +121,41 @@ describe('QueryCompiler', () => {
         expect(result.tags).toBeUndefined();
       });
     });
+
+    describe('date transformation', () => {
+      it('transforms dueDate.before to dueBefore', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          dueDate: { before: '2025-12-31' }
+        });
+        expect(result.dueBefore).toBe('2025-12-31');
+      });
+
+      it('transforms dueDate.after to dueAfter', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          dueDate: { after: '2025-01-01' }
+        });
+        expect(result.dueAfter).toBe('2025-01-01');
+      });
+
+      it('transforms dueDate.between to dueAfter + dueBefore + operator', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          dueDate: { between: ['2025-01-01', '2025-01-31'] }
+        });
+        expect(result.dueAfter).toBe('2025-01-01');
+        expect(result.dueBefore).toBe('2025-01-31');
+        expect(result.dueDateOperator).toBe('BETWEEN');
+      });
+
+      it('transforms deferDate.before to deferBefore', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          deferDate: { before: '2025-06-01' }
+        });
+        expect(result.deferBefore).toBe('2025-06-01');
+      });
+    });
   });
 });
