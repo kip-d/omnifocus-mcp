@@ -1,4 +1,5 @@
 import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
+import type { TaskFilter } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -43,5 +44,23 @@ export class QueryCompiler {
       daysAhead: query.daysAhead,
       countOnly: query.countOnly,
     };
+  }
+
+  /**
+   * Transform FilterValue (API schema) to TaskFilter (internal contract)
+   * This is the single translation point for filter property names.
+   */
+  transformFilters(input: QueryFilter): TaskFilter {
+    const result: TaskFilter = {};
+
+    // Status transformation
+    if (input.status === 'completed') {
+      result.completed = true;
+    } else if (input.status === 'active') {
+      result.completed = false;
+    }
+    // 'dropped' and 'on_hold' don't map to completion status
+
+    return result;
   }
 }
