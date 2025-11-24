@@ -61,6 +61,21 @@ export class QueryCompiler {
     }
     // 'dropped' and 'on_hold' don't map to completion status
 
+    // Tag transformation
+    if (input.tags) {
+      const tagFilter = input.tags as { any?: string[]; all?: string[]; none?: string[] };
+      if (tagFilter.any && tagFilter.any.length > 0) {
+        result.tags = tagFilter.any;
+        result.tagsOperator = 'OR';
+      } else if (tagFilter.all && tagFilter.all.length > 0) {
+        result.tags = tagFilter.all;
+        result.tagsOperator = 'AND';
+      } else if (tagFilter.none && tagFilter.none.length > 0) {
+        result.tags = tagFilter.none;
+        result.tagsOperator = 'NOT_IN';
+      }
+    }
+
     return result;
   }
 }
