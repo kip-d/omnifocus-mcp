@@ -53,6 +53,44 @@ export class QueryCompiler {
   transformFilters(input: QueryFilter): TaskFilter {
     const result: TaskFilter = {};
 
+    // Handle logical operators
+    if (input.AND && Array.isArray(input.AND)) {
+      // Merge all conditions
+      for (const condition of input.AND) {
+        const transformed = this.transformFilters(condition as QueryFilter);
+        Object.assign(result, transformed);
+      }
+      return result;
+    }
+
+    if (input.OR && Array.isArray(input.OR)) {
+      // Log warning and use first condition only
+      console.warn(
+        '[QueryCompiler] OR operator not yet supported - using first condition only. ' +
+        'If you need OR logic, please open an issue with your use case.'
+      );
+      if (input.OR.length > 0) {
+        return this.transformFilters(input.OR[0] as QueryFilter);
+      }
+      return result;
+    }
+
+    if (input.NOT) {
+      // Handle simple NOT cases
+      const notFilter = input.NOT as QueryFilter;
+      if (notFilter.status === 'completed') {
+        result.completed = false;
+      } else if (notFilter.status === 'active') {
+        result.completed = true;
+      } else {
+        console.warn(
+          '[QueryCompiler] Complex NOT operator simplified. Original: ' +
+          JSON.stringify(notFilter)
+        );
+      }
+      return result;
+    }
+
     // Status transformation
     if (input.status === 'completed') {
       result.completed = true;
