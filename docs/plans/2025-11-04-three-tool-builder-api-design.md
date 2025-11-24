@@ -1,8 +1,11 @@
 # Three-Tool Builder API Design
 
-**Status:** Approved Design
+**Status:** ~~Approved Design~~ → **Fully Implemented (v3.0.0)**
 **Date:** 2025-11-04
+**Implemented:** November 2025
 **Purpose:** Simplify OmniFocus MCP server from 17 tools to 3 tools using builder API pattern, reducing complexity while maintaining full functionality.
+
+> **Implementation Note (Nov 2025):** This design was fully implemented as the v3.0.0 Unified API. The actual implementation uses 4 tools (added `system` tool) and routes to existing backend tools rather than generating scripts from scratch. See `src/tools/unified/` for implementation.
 
 ---
 
