@@ -7,7 +7,7 @@ export type QueryFilter = FilterValue;
 export interface CompiledQuery {
   type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders';
   mode?: 'all' | 'inbox' | 'search' | 'overdue' | 'today' | 'upcoming' | 'available' | 'blocked' | 'flagged' | 'smart_suggest';
-  filters: QueryFilter;
+  filters: TaskFilter;  // Changed from QueryFilter to TaskFilter
   fields?: string[];
   sort?: Array<{ field: string; direction: 'asc' | 'desc' }>;
   limit?: number;
@@ -26,9 +26,10 @@ export class QueryCompiler {
   compile(input: ReadInput): CompiledQuery {
     const { query } = input;
 
-    // Pass through filters (existing tools can handle the structure)
-    // Ensure filters is always defined (empty object if not provided)
-    const filters: QueryFilter = query.filters || {};
+    // Transform filters from API schema to internal contract
+    const filters: TaskFilter = query.filters
+      ? this.transformFilters(query.filters)
+      : {};
 
     return {
       type: query.type,

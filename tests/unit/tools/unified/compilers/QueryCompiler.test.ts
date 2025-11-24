@@ -22,8 +22,10 @@ describe('QueryCompiler', () => {
 
     expect(compiled.type).toBe('tasks');
     expect(compiled.mode).toBe('all');
-    expect(compiled.filters.status).toBe('active');
-    expect(compiled.filters.project).toBe(null);
+    // Filters are transformed: status: 'active' -> completed: false
+    expect(compiled.filters.completed).toBe(false);
+    // project: null -> inInbox: true
+    expect(compiled.filters.inInbox).toBe(true);
     expect(compiled.limit).toBe(25);
   });
 
@@ -55,7 +57,9 @@ describe('QueryCompiler', () => {
 
     const compiled = compiler.compile(input);
 
-    expect(compiled.filters.tags).toEqual({ any: ['work', 'urgent'] });
+    // Tags are transformed: { any: [...] } -> tags: [...], tagsOperator: 'OR'
+    expect(compiled.filters.tags).toEqual(['work', 'urgent']);
+    expect(compiled.filters.tagsOperator).toBe('OR');
     });
   });
 
