@@ -95,7 +95,7 @@ function validateNode(
   node: FilterNode,
   errors: ValidationError[],
   warnings: ValidationWarning[],
-  path: string
+  path: string,
 ): void {
   switch (node.type) {
     case 'literal':
@@ -131,7 +131,7 @@ function validateNode(
 function validateComparisonNode(
   node: ComparisonNode,
   errors: ValidationError[],
-  path: string
+  path: string,
 ): void {
   // Check field is known
   if (!isKnownField(node.field)) {
@@ -157,7 +157,7 @@ function validateComparisonNode(
 function validateExistsNode(
   node: ExistsNode,
   errors: ValidationError[],
-  path: string
+  path: string,
 ): void {
   if (!isKnownField(node.field)) {
     errors.push({
@@ -172,7 +172,7 @@ function validateLogicalNode(
   node: AndNode | OrNode,
   errors: ValidationError[],
   warnings: ValidationWarning[],
-  path: string
+  path: string,
 ): void {
   if (node.children.length === 0) {
     warnings.push({
@@ -196,7 +196,7 @@ function validateLogicalNode(
  */
 function detectContradictions(
   ast: FilterNode,
-  errors: ValidationError[]
+  errors: ValidationError[],
 ): void {
   if (ast.type !== 'and') return;
 
@@ -263,12 +263,12 @@ function collectComparisons(node: FilterNode): ComparisonNode[] {
  */
 function detectTautologies(
   ast: FilterNode,
-  warnings: ValidationWarning[]
+  warnings: ValidationWarning[],
 ): void {
   if (ast.type !== 'or') return;
 
   const comparisons = ast.children.filter(
-    (c): c is ComparisonNode => c.type === 'comparison' && c.operator === '=='
+    (c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==',
   );
 
   const fieldValues = new Map<string, unknown[]>();
@@ -302,7 +302,7 @@ function isKnownField(field: string): boolean {
 function isTypeCompatible(
   value: unknown,
   expectedType: 'boolean' | 'string' | 'date' | 'array',
-  operator: string
+  operator: string,
 ): boolean {
   switch (expectedType) {
     case 'boolean':

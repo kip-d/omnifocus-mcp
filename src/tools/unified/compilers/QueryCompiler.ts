@@ -68,7 +68,7 @@ export class QueryCompiler {
       // Log warning and use first condition only
       console.warn(
         '[QueryCompiler] OR operator not yet supported - using first condition only. ' +
-        'If you need OR logic, please open an issue with your use case.'
+        'If you need OR logic, please open an issue with your use case.',
       );
       if (input.OR.length > 0) {
         return this.transformFilters(input.OR[0] as QueryFilter);
@@ -86,7 +86,7 @@ export class QueryCompiler {
       } else {
         console.warn(
           '[QueryCompiler] Complex NOT operator simplified. Original: ' +
-          JSON.stringify(notFilter)
+          JSON.stringify(notFilter),
         );
       }
       return result;
@@ -120,7 +120,7 @@ export class QueryCompiler {
       dateFilter: { before?: string; after?: string; between?: [string, string] } | undefined,
       beforeKey: 'dueBefore' | 'deferBefore',
       afterKey: 'dueAfter' | 'deferAfter',
-      operatorKey?: 'dueDateOperator'
+      operatorKey?: 'dueDateOperator',
     ) => {
       if (!dateFilter) return;
 
@@ -144,14 +144,14 @@ export class QueryCompiler {
       input.dueDate as { before?: string; after?: string; between?: [string, string] },
       'dueBefore',
       'dueAfter',
-      'dueDateOperator'
+      'dueDateOperator',
     );
 
     // Defer date transformation
     transformDateFilter(
       input.deferDate as { before?: string; after?: string; between?: [string, string] },
       'deferBefore',
-      'deferAfter'
+      'deferAfter',
     );
 
     // Text transformation

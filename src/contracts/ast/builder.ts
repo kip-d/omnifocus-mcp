@@ -62,12 +62,12 @@ export function buildAST(filter: TaskFilter): FilterNode {
   const dueDateConditions = buildDateConditions(
     'task.dueDate',
     filter.dueAfter,
-    filter.dueBefore
+    filter.dueBefore,
   );
   if (dueDateConditions.length > 0) {
     conditions.push(and(
       exists('task.dueDate', true),
-      ...dueDateConditions
+      ...dueDateConditions,
     ));
   }
 
@@ -75,12 +75,12 @@ export function buildAST(filter: TaskFilter): FilterNode {
   const deferDateConditions = buildDateConditions(
     'task.deferDate',
     filter.deferAfter,
-    filter.deferBefore
+    filter.deferBefore,
   );
   if (deferDateConditions.length > 0) {
     conditions.push(and(
       exists('task.deferDate', true),
-      ...deferDateConditions
+      ...deferDateConditions,
     ));
   }
 
@@ -107,7 +107,7 @@ export function buildAST(filter: TaskFilter): FilterNode {
 
 function buildTagsNode(
   tags: string[],
-  operator: 'AND' | 'OR' | 'NOT_IN'
+  operator: 'AND' | 'OR' | 'NOT_IN',
 ): FilterNode {
   switch (operator) {
     case 'OR':
@@ -124,7 +124,7 @@ function buildTagsNode(
 function buildDateConditions(
   field: string,
   after?: string,
-  before?: string
+  before?: string,
 ): ComparisonNode[] {
   const conditions: ComparisonNode[] = [];
 
@@ -146,7 +146,7 @@ function buildDateConditions(
 function comparison(
   field: string,
   operator: ComparisonNode['operator'],
-  value: unknown
+  value: unknown,
 ): ComparisonNode {
   return { type: 'comparison', field, operator, value };
 }

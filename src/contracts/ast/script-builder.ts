@@ -147,7 +147,7 @@ function generateFieldProjection(fields: string[]): string {
  */
 export function buildFilteredTasksScript(
   filter: TaskFilter,
-  options: ScriptOptions = {}
+  options: ScriptOptions = {},
 ): GeneratedScript {
   const { limit = 50, fields = [], includeCompleted = false } = options;
 
@@ -218,7 +218,7 @@ export function buildFilteredTasksScript(
  */
 export function buildInboxScript(
   additionalFilter: TaskFilter = {},
-  options: ScriptOptions = {}
+  options: ScriptOptions = {},
 ): GeneratedScript {
   const { limit = 50, fields = [] } = options;
 
@@ -274,7 +274,7 @@ export function buildInboxScript(
  */
 export function buildTaskByIdScript(
   taskId: string,
-  fields: string[] = []
+  fields: string[] = [],
 ): GeneratedScript {
   const fieldProjection = generateFieldProjection(fields);
 

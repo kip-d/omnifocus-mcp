@@ -290,7 +290,7 @@ export function validateMutation(mutation: TaskMutation): MutationValidationResu
 
 function validateCreateMutation(
   mutation: CreateMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.data) {
     errors.push({
@@ -334,7 +334,7 @@ function validateCreateMutation(
 
 function validateUpdateMutation(
   mutation: UpdateMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.id) {
     errors.push({
@@ -377,7 +377,7 @@ function validateUpdateMutation(
 
 function validateCompleteMutation(
   mutation: CompleteMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.id) {
     errors.push({
@@ -398,7 +398,7 @@ function validateCompleteMutation(
 
 function validateDeleteMutation(
   mutation: DeleteMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.id) {
     errors.push({
@@ -411,7 +411,7 @@ function validateDeleteMutation(
 
 function validateBatchMutation(
   mutation: BatchMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.operations || mutation.operations.length === 0) {
     errors.push({
@@ -451,7 +451,7 @@ function validateBatchMutation(
 
 function validateBulkDeleteMutation(
   mutation: BulkDeleteMutation,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!mutation.ids || mutation.ids.length === 0) {
     errors.push({
@@ -472,7 +472,7 @@ function validateBulkDeleteMutation(
 
 function validateRepetitionRule(
   rule: RepetitionRule,
-  errors: MutationValidationError[]
+  errors: MutationValidationError[],
 ): void {
   if (!['daily', 'weekly', 'monthly', 'yearly'].includes(rule.frequency)) {
     errors.push({

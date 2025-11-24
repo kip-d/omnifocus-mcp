@@ -155,7 +155,7 @@ export interface FilterGeneratorOptions {
  */
 export function generateFilterBlock(
   filter: TaskFilter,
-  options: FilterGeneratorOptions = {}
+  options: FilterGeneratorOptions = {},
 ): { helpers: string; filterCalls: string } {
   const helpers: string[] = [];
   const filterCalls: string[] = [];
@@ -229,7 +229,7 @@ export function generateTaskIterationScript(
     collection?: 'flattenedTasks' | 'inbox';
     limit?: number;
     fields?: string[];
-  } = {}
+  } = {},
 ): string {
   const { helpers, filterCalls } = generateFilterBlock(filter, {
     completion: true,

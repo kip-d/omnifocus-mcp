@@ -348,7 +348,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
  */
 export function buildUpdateTaskScript(
   taskId: string,
-  changes: TaskUpdateData
+  changes: TaskUpdateData,
 ): GeneratedMutationScript {
   const changesData = buildUpdateChangesObject(changes);
 
@@ -490,7 +490,7 @@ export function buildUpdateTaskScript(
  */
 export function buildUpdateProjectScript(
   projectId: string,
-  changes: ProjectUpdateData
+  changes: ProjectUpdateData,
 ): GeneratedMutationScript {
   const changesData = buildUpdateChangesObject(changes);
 
@@ -599,7 +599,7 @@ export function buildUpdateProjectScript(
 export function buildCompleteScript(
   target: MutationTarget,
   id: string,
-  completionDate?: string
+  completionDate?: string,
 ): GeneratedMutationScript {
   const isTask = target === 'task';
   const collection = isTask ? 'flattenedTasks' : 'flattenedProjects';
@@ -744,7 +744,7 @@ export function buildDeleteScript(target: MutationTarget, id: string): Generated
 export function buildBatchScript(
   target: MutationTarget,
   operations: BatchOperation[],
-  options: BatchOptions = {}
+  options: BatchOptions = {},
 ): GeneratedMutationScript {
   const { createSequentially = false, returnMapping = false } = options;
 
@@ -993,7 +993,7 @@ function buildProjectDataObject(data: ProjectCreateData): Record<string, unknown
  * Build update changes object for script embedding
  */
 function buildUpdateChangesObject(
-  changes: TaskUpdateData | ProjectUpdateData
+  changes: TaskUpdateData | ProjectUpdateData,
 ): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
 

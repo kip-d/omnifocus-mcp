@@ -80,7 +80,7 @@ function emitComparison(node: ComparisonNode): string {
       return `${accessor}.toLowerCase().includes(${emitValue(value)}.toLowerCase())`;
 
     case 'matches':
-      return `/${value}/i.test(${accessor})`;
+      return `/${String(value)}/i.test(${accessor})`;
 
     case 'some':
     case 'every':
@@ -88,7 +88,7 @@ function emitComparison(node: ComparisonNode): string {
       return `${accessor}.${operator}(v => ${emitValue(value)}.includes(v))`;
 
     default:
-      throw new Error(`Unknown operator: ${operator}`);
+      throw new Error(`Unknown operator: ${String(operator)}`);
   }
 }
 

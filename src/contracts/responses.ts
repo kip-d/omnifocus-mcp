@@ -231,7 +231,7 @@ export function isProjectListOutput(value: unknown): value is ProjectListScriptO
 export function buildSuccessResponse<T>(
   operation: string,
   data: T,
-  metadata: Partial<MCPToolResponse<T>['metadata']> = {}
+  metadata: Partial<MCPToolResponse<T>['metadata']> = {},
 ): MCPToolResponse<T> {
   return {
     success: true,
@@ -252,7 +252,7 @@ export function buildErrorResponse(
   operation: string,
   code: string,
   message: string,
-  details?: unknown
+  details?: unknown,
 ): MCPToolResponse<never> {
   return {
     success: false,
@@ -281,17 +281,17 @@ export function buildErrorResponse(
  */
 export function unwrapScriptOutput<T>(
   raw: unknown,
-  expectedShape: 'tasks' | 'projects' | 'task' | 'project'
+  expectedShape: 'tasks' | 'projects' | 'task' | 'project',
 ): T | null {
   if (raw === null || raw === undefined) {
     return null;
   }
 
   // If it's a string, parse it first
-  let parsed = raw;
+  let parsed: unknown = raw;
   if (typeof raw === 'string') {
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw) as unknown;
     } catch {
       return null;
     }

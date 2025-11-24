@@ -184,7 +184,7 @@ export function not(child: FilterNode): NotNode {
 export function compare(
   field: string,
   operator: ComparisonOperator,
-  value: unknown
+  value: unknown,
 ): ComparisonNode {
   return { type: 'comparison', field, operator, value };
 }

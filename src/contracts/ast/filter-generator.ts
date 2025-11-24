@@ -57,7 +57,7 @@ export interface GenerateFilterCodeError {
  */
 export function generateFilterCode(
   filter: TaskFilter,
-  target: EmitTarget = 'omnijs'
+  target: EmitTarget = 'omnijs',
 ): string {
   const result = generateFilterCodeSafe(filter, target);
 
@@ -79,7 +79,7 @@ export function generateFilterCode(
  */
 export function generateFilterCodeSafe(
   filter: TaskFilter,
-  target: EmitTarget = 'omnijs'
+  target: EmitTarget = 'omnijs',
 ): GenerateFilterCodeResult | GenerateFilterCodeError {
   // Step 1: Build AST
   const ast = buildAST(filter);
@@ -119,7 +119,7 @@ export function generateFilterCodeSafe(
  */
 export function generateFilterFunction(
   filter: TaskFilter,
-  target: EmitTarget = 'omnijs'
+  target: EmitTarget = 'omnijs',
 ): string {
   const code = generateFilterCode(filter, target);
 
@@ -140,7 +140,7 @@ export function generateFilterFunction(
  * @returns Complete filter code block ready to embed in OmniJS script
  */
 export function generateFilterBlock(
-  filter: TaskFilter
+  filter: TaskFilter,
 ): string {
   const code = generateFilterCode(filter, 'omnijs');
 
