@@ -133,6 +133,9 @@ PERFORMANCE:
       response_format: 'json', // Optimized for LLM token efficiency
     };
 
+    // Pass limit if specified (defaults to 50 in ProjectsTool)
+    if (compiled.limit) projectsArgs.limit = compiled.limit;
+
     if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
     if (compiled.filters.tags) projectsArgs.tags = this.extractSimpleTags(compiled.filters.tags);
 
