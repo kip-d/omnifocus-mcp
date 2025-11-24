@@ -476,6 +476,7 @@ export const LIST_TASKS_SCRIPT_V3 = `
         const dueAfter = filter.dueAfter || '';
         const dueBefore = filter.dueBefore || '';
         const dueDateOperator = filter.dueDateOperator || '';
+        const filterFlagged = filter.flagged; // undefined means no filter, true/false means filter
         omniJsScript = \`
           (() => {
             \${tagFilterHelper}
@@ -492,6 +493,7 @@ export const LIST_TASKS_SCRIPT_V3 = `
             const dueAfter = \${JSON.stringify(dueAfter)};
             const dueBefore = \${JSON.stringify(dueBefore)};
             const dueDateOperator = '\${dueDateOperator}';
+            const filterFlagged = \${filterFlagged === undefined ? 'undefined' : filterFlagged};
 
             flattenedTasks.forEach(task => {
               if (count >= limit) return;
@@ -505,6 +507,9 @@ export const LIST_TASKS_SCRIPT_V3 = `
 
               // Apply date filter (Bug #10 fix)
               if (!matchesDateFilter(task, dueAfter, dueBefore, dueDateOperator)) return;
+
+              // Apply flagged filter (Bug #11 fix - PR #33 testing)
+              if (filterFlagged !== undefined && task.flagged !== filterFlagged) return;
 
               const proj = task.containingProject;
               results.push({
