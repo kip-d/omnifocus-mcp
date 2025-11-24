@@ -86,5 +86,40 @@ describe('QueryCompiler', () => {
         expect(result.completed).toBeUndefined();
       });
     });
+
+    describe('tag transformation', () => {
+      it('transforms tags.any to tags + tagsOperator: OR', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          tags: { any: ['urgent', 'home'] }
+        });
+        expect(result.tags).toEqual(['urgent', 'home']);
+        expect(result.tagsOperator).toBe('OR');
+      });
+
+      it('transforms tags.all to tags + tagsOperator: AND', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          tags: { all: ['work', 'priority'] }
+        });
+        expect(result.tags).toEqual(['work', 'priority']);
+        expect(result.tagsOperator).toBe('AND');
+      });
+
+      it('transforms tags.none to tags + tagsOperator: NOT_IN', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          tags: { none: ['waiting'] }
+        });
+        expect(result.tags).toEqual(['waiting']);
+        expect(result.tagsOperator).toBe('NOT_IN');
+      });
+
+      it('handles empty tags object', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ tags: {} });
+        expect(result.tags).toBeUndefined();
+      });
+    });
   });
 });
