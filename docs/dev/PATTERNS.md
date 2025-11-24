@@ -549,6 +549,46 @@ echo "Actual: $(echo '...' | node dist/index.js 2>&1 | jq '.result.content[0].te
 
 ---
 
+## Complex Filter Operators
+
+The unified API supports logical operators (AND, OR, NOT) in filters, but with limitations:
+
+### Supported
+- `AND: [...]` - Merged into single filter (all conditions must match)
+- `NOT: { status: 'completed' }` - Simple negation (status only)
+
+### Logged but Flattened
+- `OR: [...]` - Uses first condition only, logs warning
+- Complex `NOT` - Best-effort simplification, logs warning
+
+### Filter Transformation
+
+QueryCompiler transforms API filters (FilterValue) to internal filters (TaskFilter):
+
+| API Input | Internal Output |
+|-----------|-----------------|
+| `status: 'active'` | `completed: false` |
+| `status: 'completed'` | `completed: true` |
+| `tags: { any: [...] }` | `tags: [...], tagsOperator: 'OR'` |
+| `tags: { all: [...] }` | `tags: [...], tagsOperator: 'AND'` |
+| `tags: { none: [...] }` | `tags: [...], tagsOperator: 'NOT_IN'` |
+| `dueDate: { before: '...' }` | `dueBefore: '...'` |
+| `dueDate: { after: '...' }` | `dueAfter: '...'` |
+| `project: null` | `inInbox: true` |
+| `project: 'id'` | `projectId: 'id'` |
+
+### Analyzing Rejections
+
+Check logs for OR/NOT warnings to understand if users need full support:
+
+```bash
+grep -r "OR operator not yet supported" ~/.config/claude-code/mcp.log
+```
+
+If >50 OR rejections/month, consider implementing full OR support.
+
+---
+
 ## 🎯 General Debugging Workflow
 
 **BEFORE starting any debugging:**
