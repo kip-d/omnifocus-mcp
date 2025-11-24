@@ -461,8 +461,14 @@ export const LIST_TASKS_SCRIPT_V3 = `
           })()
         \`;
       } else {
-        // ALL/DEFAULT MODE - All tasks (optionally filtering completed)
-        const includeCompleted = filter.includeCompleted || false;
+        // ALL/DEFAULT MODE - All tasks with completed status filtering
+        // Handle three cases:
+        // 1. filter.completed === true → Only return completed tasks
+        // 2. filter.completed === false → Only return non-completed tasks
+        // 3. filter.completed === undefined → Default: skip completed (backward compatible)
+        const wantCompleted = filter.completed === true;
+        const wantOnlyActive = filter.completed === false;
+        const skipCompleted = !wantCompleted && (wantOnlyActive || filter.includeCompleted !== true);
         const filterTags = filter.tags || [];
         const tagsOperator = filter.tagsOperator || 'AND';
         const filterText = filter.text || '';
@@ -489,7 +495,7 @@ export const LIST_TASKS_SCRIPT_V3 = `
 
             flattenedTasks.forEach(task => {
               if (count >= limit) return;
-              \${!includeCompleted ? 'if (task.completed) return;' : ''}
+              \${wantCompleted ? 'if (!task.completed) return;' : (skipCompleted ? 'if (task.completed) return;' : '')}
 
               // Apply tag filter
               if (!matchesTagFilter(task, filterTags, tagsOperator)) return;
