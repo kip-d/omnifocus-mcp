@@ -256,4 +256,29 @@ describe('QueryCompiler', () => {
       });
     });
   });
+
+  describe('compile() integration', () => {
+    it('transforms complex filter through compile()', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          filters: {
+            status: 'active',
+            tags: { any: ['urgent', 'home'] },
+            dueDate: { before: '2025-12-31' },
+            flagged: true,
+          },
+          limit: 10,
+        },
+      });
+
+      expect(result.filters.completed).toBe(false);
+      expect(result.filters.tags).toEqual(['urgent', 'home']);
+      expect(result.filters.tagsOperator).toBe('OR');
+      expect(result.filters.dueBefore).toBe('2025-12-31');
+      expect(result.filters.flagged).toBe(true);
+      expect(result.limit).toBe(10);
+    });
+  });
 });
