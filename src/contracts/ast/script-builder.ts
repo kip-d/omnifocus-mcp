@@ -308,6 +308,290 @@ export function buildTaskByIdScript(
 }
 
 // =============================================================================
+// RECURRING TASKS SCRIPT BUILDER
+// =============================================================================
+
+/**
+ * Options for recurring tasks analysis
+ */
+export interface RecurringTasksOptions extends ScriptOptions {
+  /** Include completed recurring tasks */
+  includeCompleted?: boolean;
+  /** Include dropped recurring tasks */
+  includeDropped?: boolean;
+  /** Only active tasks (not completed or dropped) */
+  activeOnly?: boolean;
+  /** Filter by project ID */
+  projectId?: string;
+  /** Filter by project name */
+  project?: string;
+  /** Sort by: 'dueDate' | 'frequency' | 'project' | 'name' */
+  sortBy?: 'dueDate' | 'frequency' | 'project' | 'name';
+  /** Include completion history */
+  includeHistory?: boolean;
+}
+
+/**
+ * Build an OmniJS script for analyzing recurring tasks
+ *
+ * Uses AST for filtering (hasRepetitionRule, completed, dropped, projectId)
+ * while keeping the domain-specific pattern inference logic.
+ */
+export function buildRecurringTasksScript(
+  options: RecurringTasksOptions = {},
+): GeneratedScript {
+  const {
+    limit = 1000,
+    includeCompleted = false,
+    includeDropped = false,
+    activeOnly = true,
+    projectId,
+    project,
+    sortBy = 'name',
+    includeHistory = false,
+  } = options;
+
+  // Build AST filter from options
+  const filter: TaskFilter = {
+    hasRepetitionRule: true, // Only recurring tasks
+  };
+
+  // Apply completion/dropped filters based on options
+  if (activeOnly && !includeCompleted && !includeDropped) {
+    filter.completed = false;
+    filter.dropped = false;
+  } else {
+    if (!includeCompleted) {
+      filter.completed = false;
+    }
+    if (!includeDropped) {
+      filter.dropped = false;
+    }
+  }
+
+  // Apply project filter if specified
+  if (projectId) {
+    filter.projectId = projectId;
+  }
+
+  // Generate the filter predicate using AST
+  const filterCode = generateFilterCode(filter, 'omnijs');
+  const filterDescription = describeFilterForScript(filter);
+
+  // Build the AST to check if empty (it won't be - we always have hasRepetitionRule)
+  const ast = buildAST(filter);
+  const isEmptyFilter = ast.type === 'literal' && ast.value === true;
+
+  // The script with AST-generated filter predicate and domain-specific inference logic
+  const script = `
+(() => {
+  const options = {
+    project: ${JSON.stringify(project)},
+    sortBy: ${JSON.stringify(sortBy)},
+    includeHistory: ${includeHistory},
+    limit: ${limit}
+  };
+
+  const results = [];
+  const now = new Date();
+  let count = 0;
+
+  // AST-generated filter predicate
+  // Filter: ${filterDescription}
+  function matchesFilter(task) {
+    const taskTags = task.tags ? task.tags.map(t => t.name) : [];
+    return ${filterCode};
+  }
+
+  // Helper to fetch repeat rule via bridge for complete data
+  function fetchRepeatRuleViaBridge(taskId) {
+    try {
+      const task = Task.byIdentifier(taskId);
+      if (!task || !task.repetitionRule) return null;
+      const rule = task.repetitionRule;
+      const method = rule.method ? (typeof rule.method === 'string' ? rule.method : (rule.method.name || null)) : null;
+      return { ruleString: rule.ruleString || null, method: method };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Process each task
+  flattenedTasks.forEach(task => {
+    if (count >= options.limit) return;
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    const taskInfo = {
+      id: task.id.primaryKey,
+      name: task.name,
+      repetitionRule: {}
+    };
+
+    // Extract repetition rule properties
+    const rule = task.repetitionRule;
+    const ruleData = {};
+
+    // Try official OmniFocus API properties
+    ['method', 'ruleString', 'anchorDateKey', 'catchUpAutomatically', 'scheduleType'].forEach(prop => {
+      try {
+        const value = rule[prop];
+        if (value !== undefined && value !== null && value !== '') {
+          ruleData[prop] = value;
+        }
+      } catch (e) {}
+    });
+
+    // Parse RRULE format
+    if (ruleData.ruleString) {
+      try {
+        const ruleStr = ruleData.ruleString.toString();
+        if (ruleStr.includes('FREQ=HOURLY')) { ruleData.unit = 'hours'; ruleData.steps = 1; }
+        else if (ruleStr.includes('FREQ=DAILY')) { ruleData.unit = 'days'; ruleData.steps = 1; }
+        else if (ruleStr.includes('FREQ=WEEKLY')) { ruleData.unit = 'weeks'; ruleData.steps = 1; }
+        else if (ruleStr.includes('FREQ=MONTHLY')) { ruleData.unit = 'months'; ruleData.steps = 1; }
+        else if (ruleStr.includes('FREQ=YEARLY')) { ruleData.unit = 'years'; ruleData.steps = 1; }
+
+        const intervalMatch = ruleStr.match(/INTERVAL=(\\d+)/);
+        if (intervalMatch) { ruleData.steps = parseInt(intervalMatch[1]); }
+        ruleData._inferenceSource = 'ruleString';
+      } catch (e) {}
+    }
+
+    // Bridge fallback for missing data
+    if (!ruleData.ruleString || !ruleData.method) {
+      const bridgeRule = fetchRepeatRuleViaBridge(task.id.primaryKey);
+      if (bridgeRule && bridgeRule.ruleString) {
+        ruleData.ruleString = bridgeRule.ruleString;
+        if (bridgeRule.method) { ruleData.method = bridgeRule.method; }
+        ruleData._inferenceSource = 'bridge';
+      }
+    }
+
+    taskInfo.repetitionRule = ruleData;
+
+    // Add project info
+    const proj = task.containingProject;
+    if (proj) {
+      taskInfo.project = proj.name;
+      taskInfo.projectId = proj.id.primaryKey;
+    }
+
+    // Project name filter (if specified)
+    if (options.project && taskInfo.project && taskInfo.project !== options.project) {
+      return;
+    }
+
+    // Add dates
+    if (task.deferDate) { taskInfo.deferDate = task.deferDate.toISOString(); }
+    if (task.dueDate) {
+      taskInfo.dueDate = task.dueDate.toISOString();
+      if (!task.completed) {
+        taskInfo.nextDue = task.dueDate.toISOString();
+        taskInfo.daysUntilDue = Math.floor((task.dueDate - now) / (1000 * 60 * 60 * 24));
+        if (taskInfo.daysUntilDue < 0) {
+          taskInfo.isOverdue = true;
+          taskInfo.overdueDays = Math.abs(taskInfo.daysUntilDue);
+        }
+      }
+    }
+
+    // Completion history
+    if (options.includeHistory && task.completionDate) {
+      taskInfo.lastCompleted = task.completionDate.toISOString();
+    }
+
+    // Calculate frequency description
+    let frequencyDesc = '';
+    if (ruleData.unit && ruleData.steps) {
+      const s = ruleData.steps;
+      switch(ruleData.unit) {
+        case 'hours': frequencyDesc = s === 1 ? 'Hourly' : 'Every ' + s + ' hours'; break;
+        case 'days': frequencyDesc = s === 1 ? 'Daily' : s === 7 ? 'Weekly' : s === 14 ? 'Biweekly' : 'Every ' + s + ' days'; break;
+        case 'weeks': frequencyDesc = s === 1 ? 'Weekly' : 'Every ' + s + ' weeks'; break;
+        case 'months': frequencyDesc = s === 1 ? 'Monthly' : s === 3 ? 'Quarterly' : 'Every ' + s + ' months'; break;
+        case 'years': frequencyDesc = s === 1 ? 'Yearly' : 'Every ' + s + ' years'; break;
+      }
+    }
+
+    // Fallback: infer from task name
+    if (!frequencyDesc) {
+      const taskName = task.name.toLowerCase();
+      if (taskName.includes('hourly') || taskName.includes('every hour')) { frequencyDesc = 'Hourly'; ruleData.unit = 'hours'; ruleData.steps = 1; }
+      else if (taskName.includes('daily') || taskName.includes('every day')) { frequencyDesc = 'Daily'; ruleData.unit = 'days'; ruleData.steps = 1; }
+      else if (taskName.includes('weekly') || taskName.includes('every week')) { frequencyDesc = 'Weekly'; ruleData.unit = 'weeks'; ruleData.steps = 1; }
+      else if (taskName.includes('monthly') || taskName.includes('every month')) { frequencyDesc = 'Monthly'; ruleData.unit = 'months'; ruleData.steps = 1; }
+      else if (taskName.includes('yearly') || taskName.includes('annually')) { frequencyDesc = 'Yearly'; ruleData.unit = 'years'; ruleData.steps = 1; }
+      else if (taskName.includes('quarterly')) { frequencyDesc = 'Quarterly'; ruleData.unit = 'months'; ruleData.steps = 3; }
+      else if (taskName.includes('biweekly')) { frequencyDesc = 'Biweekly'; ruleData.unit = 'weeks'; ruleData.steps = 2; }
+      else { frequencyDesc = 'Unknown Pattern'; }
+    }
+
+    taskInfo.frequency = frequencyDesc;
+    taskInfo.repetitionRule = ruleData;
+    results.push(taskInfo);
+    count++;
+  });
+
+  // Sort results
+  switch(options.sortBy) {
+    case 'dueDate':
+      results.sort((a, b) => {
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+      break;
+    case 'frequency':
+      results.sort((a, b) => {
+        const aFreq = (a.repetitionRule.steps || 1) * ({ hours: 1/24, days: 1, weeks: 7, months: 30, years: 365 }[a.repetitionRule.unit] || 999);
+        const bFreq = (b.repetitionRule.steps || 1) * ({ hours: 1/24, days: 1, weeks: 7, months: 30, years: 365 }[b.repetitionRule.unit] || 999);
+        return aFreq - bFreq;
+      });
+      break;
+    case 'project':
+      results.sort((a, b) => {
+        if (!a.project) return 1;
+        if (!b.project) return -1;
+        return a.project.localeCompare(b.project);
+      });
+      break;
+    case 'name':
+    default:
+      results.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // Summary statistics
+  const summary = {
+    totalRecurring: results.length,
+    overdue: results.filter(t => t.isOverdue).length,
+    dueThisWeek: results.filter(t => t.daysUntilDue >= 0 && t.daysUntilDue <= 7).length,
+    byFrequency: {}
+  };
+
+  results.forEach(task => {
+    const freq = task.frequency || 'Unknown';
+    summary.byFrequency[freq] = (summary.byFrequency[freq] || 0) + 1;
+  });
+
+  return JSON.stringify({
+    tasks: results,
+    summary: summary,
+    mode: 'recurring_ast',
+    filter_description: ${JSON.stringify(filterDescription)}
+  });
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription,
+    isEmptyFilter,
+  };
+}
+
+// =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
@@ -316,6 +600,12 @@ function describeFilterForScript(filter: TaskFilter): string {
 
   if (filter.completed !== undefined) {
     conditions.push(filter.completed ? 'completed' : 'active');
+  }
+  if (filter.dropped !== undefined) {
+    conditions.push(filter.dropped ? 'dropped' : 'not dropped');
+  }
+  if (filter.hasRepetitionRule !== undefined) {
+    conditions.push(filter.hasRepetitionRule ? 'recurring' : 'non-recurring');
   }
   if (filter.flagged !== undefined) {
     conditions.push(filter.flagged ? 'flagged' : 'not flagged');

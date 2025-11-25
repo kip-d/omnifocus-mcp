@@ -46,6 +46,19 @@ export function buildAST(filter: TaskFilter): FilterNode {
     conditions.push(comparison('task.effectiveInInbox', '==', filter.inInbox));
   }
 
+  // --- Status filters ---
+  if (filter.dropped !== undefined) {
+    // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped
+    // We use 'task.dropped' as a synthetic field that emitter converts to status check
+    conditions.push(comparison('task.dropped', '==', filter.dropped));
+  }
+
+  // --- Repetition rule filter ---
+  if (filter.hasRepetitionRule !== undefined) {
+    // Filter by whether task has a repetition rule
+    conditions.push(exists('task.repetitionRule', filter.hasRepetitionRule));
+  }
+
   // --- Tags ---
   if (filter.tags && filter.tags.length > 0) {
     const tagsNode = buildTagsNode(filter.tags, filter.tagsOperator || 'AND');

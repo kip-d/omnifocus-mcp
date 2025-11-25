@@ -147,6 +147,10 @@ export const KNOWN_FIELDS = [
   'task.available',
   'task.effectiveInInbox',
 
+  // Status properties
+  'task.taskStatus',     // TaskStatus enum: active, completed, dropped
+  'task.dropped',        // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
+
   // Date properties
   'task.dueDate',
   'task.deferDate',
@@ -160,7 +164,8 @@ export const KNOWN_FIELDS = [
 
   // Relationship properties
   'task.containingProject',
-  'taskTags',  // Special: array of tag names
+  'task.repetitionRule',  // RepetitionRule object or null
+  'taskTags',             // Special: array of tag names
 ] as const;
 
 export type KnownField = typeof KNOWN_FIELDS[number];

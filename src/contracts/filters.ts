@@ -89,6 +89,23 @@ export interface TaskFilter {
   available?: boolean;
   inInbox?: boolean;
 
+  // --- Status Filters (for analytics) ---
+  /**
+   * Filter by dropped status
+   * true = only dropped tasks
+   * false = exclude dropped tasks
+   * undefined = no filtering by dropped status
+   */
+  dropped?: boolean;
+
+  /**
+   * Filter by presence of repetition rule
+   * true = only recurring tasks (has repetition rule)
+   * false = only non-recurring tasks
+   * undefined = no filtering by repetition
+   */
+  hasRepetitionRule?: boolean;
+
   // --- Project ---
   projectId?: string;
 
@@ -152,6 +169,8 @@ export const FILTER_PROPERTY_NAMES = [
   'blocked',
   'available',
   'inInbox',
+  'dropped',            // NEW: Filter by dropped status
+  'hasRepetitionRule',  // NEW: Filter for recurring tasks
   'projectId',
   'limit',
   'offset',

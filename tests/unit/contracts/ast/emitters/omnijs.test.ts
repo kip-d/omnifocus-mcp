@@ -109,6 +109,74 @@ describe('emitOmniJS', () => {
     });
   });
 
+  describe('dropped status comparisons', () => {
+    it('emits Task.Status.Dropped check for dropped: true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '==',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Dropped');
+    });
+
+    it('emits not dropped check for dropped: false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '==',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('emits not dropped for dropped != true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '!=',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('emits dropped for dropped != false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '!=',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Dropped');
+    });
+  });
+
+  describe('repetition rule comparisons', () => {
+    it('emits repetitionRule exists check for hasRepetitionRule: true', () => {
+      const ast: FilterNode = {
+        type: 'exists',
+        field: 'task.repetitionRule',
+        exists: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.repetitionRule !== null');
+    });
+
+    it('emits repetitionRule null check for hasRepetitionRule: false', () => {
+      const ast: FilterNode = {
+        type: 'exists',
+        field: 'task.repetitionRule',
+        exists: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.repetitionRule === null');
+    });
+  });
+
   describe('tag comparisons', () => {
     it('emits some check for OR tags', () => {
       const ast: FilterNode = {

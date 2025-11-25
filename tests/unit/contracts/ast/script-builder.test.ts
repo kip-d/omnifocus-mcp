@@ -3,6 +3,7 @@ import {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  buildRecurringTasksScript,
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
@@ -204,5 +205,111 @@ describe('buildTaskByIdScript', () => {
     const result = buildTaskByIdScript('abc123');
 
     expect(result.filterDescription).toBe('id = abc123');
+  });
+});
+
+describe('buildRecurringTasksScript', () => {
+  describe('basic script generation', () => {
+    it('generates valid OmniJS script for recurring tasks', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toContain('flattenedTasks.forEach');
+      expect(result.script).toContain('matchesFilter');
+      expect(result.script).toContain('task.repetitionRule !== null'); // hasRepetitionRule filter
+      expect(result.isEmptyFilter).toBe(false); // Always has hasRepetitionRule filter
+    });
+
+    it('includes AST filter for active tasks by default', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toContain('task.repetitionRule !== null');
+      expect(result.script).toContain('task.completed === false');
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+      expect(result.filterDescription).toContain('recurring');
+      expect(result.filterDescription).toContain('active');
+      expect(result.filterDescription).toContain('not dropped');
+    });
+
+    it('includes completed tasks when includeCompleted is true', () => {
+      const result = buildRecurringTasksScript({ includeCompleted: true });
+
+      // Should NOT have completed === false filter
+      expect(result.script).not.toContain('task.completed === false');
+      // But should still have dropped filter
+      expect(result.script).toContain('task.taskStatus !== Task.Status.Dropped');
+    });
+
+    it('includes dropped tasks when includeDropped is true', () => {
+      const result = buildRecurringTasksScript({ includeDropped: true });
+
+      // Should NOT have dropped filter
+      expect(result.script).not.toContain('Task.Status.Dropped');
+      // But should still have completed filter
+      expect(result.script).toContain('task.completed === false');
+    });
+  });
+
+  describe('options handling', () => {
+    it('respects limit option', () => {
+      const result = buildRecurringTasksScript({ limit: 500 });
+
+      expect(result.script).toContain('limit: 500');
+    });
+
+    it('applies project filter when projectId is specified', () => {
+      const result = buildRecurringTasksScript({ projectId: 'proj123' });
+
+      expect(result.script).toContain('proj123');
+      expect(result.filterDescription).toContain('project');
+    });
+
+    it('passes sortBy option to script', () => {
+      const result = buildRecurringTasksScript({ sortBy: 'dueDate' });
+
+      expect(result.script).toContain('sortBy: "dueDate"');
+    });
+
+    it('passes includeHistory option to script', () => {
+      const result = buildRecurringTasksScript({ includeHistory: true });
+
+      expect(result.script).toContain('includeHistory: true');
+    });
+  });
+
+  describe('script structure', () => {
+    it('generates valid IIFE structure', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toMatch(/^\(\(\) => \{/);
+      expect(result.script).toMatch(/\}\)\(\)$/);
+    });
+
+    it('returns JSON stringified result with summary', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toContain('JSON.stringify');
+      expect(result.script).toContain('tasks: results');
+      expect(result.script).toContain('summary: summary');
+      expect(result.script).toContain("mode: 'recurring_ast'");
+    });
+
+    it('includes frequency calculation logic', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toContain('frequencyDesc');
+      expect(result.script).toContain('Hourly');
+      expect(result.script).toContain('Daily');
+      expect(result.script).toContain('Weekly');
+      expect(result.script).toContain('Monthly');
+    });
+
+    it('includes sorting logic', () => {
+      const result = buildRecurringTasksScript();
+
+      expect(result.script).toContain("case 'dueDate':");
+      expect(result.script).toContain("case 'frequency':");
+      expect(result.script).toContain("case 'project':");
+      expect(result.script).toContain("case 'name':");
+    });
   });
 });

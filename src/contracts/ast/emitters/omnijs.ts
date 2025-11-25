@@ -59,6 +59,12 @@ function emitComparison(node: ComparisonNode): string {
     return emitProjectComparison(operator, value as string);
   }
 
+  // Special handling for 'dropped' synthetic field
+  // OmniFocus uses taskStatus enum, not a boolean 'dropped' property
+  if (field === 'task.dropped') {
+    return emitDroppedComparison(operator, value as boolean);
+  }
+
   // Get the field accessor (OmniJS uses direct property access)
   const accessor = getFieldAccessor(field);
 
@@ -120,6 +126,27 @@ function emitProjectComparison(operator: ComparisonOperator, projectId: string):
       return `(!${accessor} || ${accessor}.id.primaryKey !== ${emitValue(projectId)})`;
     default:
       throw new Error(`Unsupported project operator: ${operator}`);
+  }
+}
+
+function emitDroppedComparison(operator: ComparisonOperator, isDropped: boolean): string {
+  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold
+  // A dropped task has taskStatus === Task.Status.Dropped
+  switch (operator) {
+    case '==':
+      if (isDropped) {
+        return `task.taskStatus === Task.Status.Dropped`;
+      } else {
+        return `task.taskStatus !== Task.Status.Dropped`;
+      }
+    case '!=':
+      if (isDropped) {
+        return `task.taskStatus !== Task.Status.Dropped`;
+      } else {
+        return `task.taskStatus === Task.Status.Dropped`;
+      }
+    default:
+      throw new Error(`Unsupported dropped operator: ${operator}`);
   }
 }
 

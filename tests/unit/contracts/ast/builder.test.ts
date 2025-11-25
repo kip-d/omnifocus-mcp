@@ -84,6 +84,54 @@ describe('buildAST', () => {
         value: true,
       });
     });
+
+    it('transforms dropped: true', () => {
+      const filter: TaskFilter = { dropped: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '==',
+        value: true,
+      });
+    });
+
+    it('transforms dropped: false', () => {
+      const filter: TaskFilter = { dropped: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.dropped',
+        operator: '==',
+        value: false,
+      });
+    });
+  });
+
+  describe('repetition filters', () => {
+    it('transforms hasRepetitionRule: true', () => {
+      const filter: TaskFilter = { hasRepetitionRule: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'exists',
+        field: 'task.repetitionRule',
+        exists: true,
+      });
+    });
+
+    it('transforms hasRepetitionRule: false', () => {
+      const filter: TaskFilter = { hasRepetitionRule: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'exists',
+        field: 'task.repetitionRule',
+        exists: false,
+      });
+    });
   });
 
   describe('tag filters', () => {
