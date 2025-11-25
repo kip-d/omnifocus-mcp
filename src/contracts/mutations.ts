@@ -31,9 +31,17 @@ export type MutationTarget = 'task' | 'project';
 
 /**
  * Repetition rule for recurring tasks
+ *
+ * Frequencies map to ICS RRULE FREQ values:
+ * - minutely → FREQ=MINUTELY
+ * - hourly → FREQ=HOURLY
+ * - daily → FREQ=DAILY
+ * - weekly → FREQ=WEEKLY
+ * - monthly → FREQ=MONTHLY
+ * - yearly → FREQ=YEARLY
  */
 export interface RepetitionRule {
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  frequency: 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval: number;
   daysOfWeek?: number[];  // 0 = Sunday, 1 = Monday, etc.
   endDate?: string;       // ISO date string

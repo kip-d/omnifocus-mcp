@@ -1044,11 +1044,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
   /**
    * Convert RepeatRule (OmniFocus format) to RepetitionRule (mutation contract format)
    * RepeatRule: { unit: 'day', steps: 2 } -> RepetitionRule: { frequency: 'daily', interval: 2 }
+   *
+   * The RepetitionRule frequency maps to ICS RRULE FREQ values used by OmniFocus.
    */
   private convertToRepetitionRule(rule: TaskCreationArgs['repeatRule']): import('../../contracts/mutations.js').RepetitionRule | undefined {
     if (!rule) return undefined;
 
-    const unitToFrequency: Record<string, 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
+    const unitToFrequency: Record<string, 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
+      minute: 'minutely',
+      hour: 'hourly',
       day: 'daily',
       week: 'weekly',
       month: 'monthly',
@@ -1057,8 +1061,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
     const frequency = unitToFrequency[rule.unit];
     if (!frequency) {
-      // OmniFocus supports 'minute' and 'hour' but RepetitionRule doesn't
-      // Default to daily for unsupported units
+      this.logger.warn('Unknown repetition unit, defaulting to daily', { unit: rule.unit });
       return { frequency: 'daily', interval: rule.steps || 1 };
     }
 

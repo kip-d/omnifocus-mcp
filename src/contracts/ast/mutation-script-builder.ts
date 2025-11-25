@@ -170,15 +170,33 @@ export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationSc
         const ruleScript = \`
           (() => {
             const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-            if (!task) return JSON.stringify({success: false});
+            if (!task) return JSON.stringify({success: false, error: 'Task not found'});
 
             const rule = \${JSON.stringify(taskData.repeatRule)};
-            // Build repetition rule string
-            let ruleString = rule.frequency;
-            if (rule.interval > 1) ruleString = 'every ' + rule.interval + ' ' + rule.frequency;
 
-            task.repetitionRule = Task.RepetitionRule.fromString(ruleString, Task.RepetitionMethod.DueDate);
-            return JSON.stringify({success: true});
+            // Map frequency to ICS RRULE FREQ value
+            const freqMap = {
+              minutely: 'MINUTELY', hourly: 'HOURLY', daily: 'DAILY',
+              weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY'
+            };
+            const freq = freqMap[rule.frequency];
+            if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
+
+            // Build ICS RRULE string
+            let rrule = 'FREQ=' + freq;
+            if (rule.interval && rule.interval > 1) {
+              rrule += ';INTERVAL=' + rule.interval;
+            }
+
+            // Use constructor (fromString does not exist)
+            task.repetitionRule = new Task.RepetitionRule(
+              rrule,
+              null,
+              Task.RepetitionScheduleType.Regularly,
+              Task.AnchorDateKey.DueDate,
+              true
+            );
+            return JSON.stringify({success: true, rrule: rrule});
           })()
         \`;
         app.evaluateJavascript(ruleScript);
@@ -465,15 +483,33 @@ export function buildUpdateTaskScript(
       const ruleScript = \`
         (() => {
           const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-          if (!task) return JSON.stringify({success: false});
+          if (!task) return JSON.stringify({success: false, error: 'Task not found'});
 
           const rule = \${JSON.stringify(changes.repetitionRule)};
-          // Build repetition rule string
-          let ruleString = rule.frequency;
-          if (rule.interval > 1) ruleString = 'every ' + rule.interval + ' ' + rule.frequency;
 
-          task.repetitionRule = Task.RepetitionRule.fromString(ruleString, Task.RepetitionMethod.DueDate);
-          return JSON.stringify({success: true});
+          // Map frequency to ICS RRULE FREQ value
+          const freqMap = {
+            minutely: 'MINUTELY', hourly: 'HOURLY', daily: 'DAILY',
+            weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY'
+          };
+          const freq = freqMap[rule.frequency];
+          if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
+
+          // Build ICS RRULE string
+          let rrule = 'FREQ=' + freq;
+          if (rule.interval && rule.interval > 1) {
+            rrule += ';INTERVAL=' + rule.interval;
+          }
+
+          // Use constructor (fromString does not exist)
+          task.repetitionRule = new Task.RepetitionRule(
+            rrule,
+            null,
+            Task.RepetitionScheduleType.Regularly,
+            Task.AnchorDateKey.DueDate,
+            true
+          );
+          return JSON.stringify({success: true, rrule: rrule});
         })()
       \`;
       app.evaluateJavascript(ruleScript);
