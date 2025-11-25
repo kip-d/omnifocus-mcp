@@ -135,15 +135,15 @@ function emitDroppedComparison(operator: ComparisonOperator, isDropped: boolean)
   switch (operator) {
     case '==':
       if (isDropped) {
-        return `task.taskStatus === Task.Status.Dropped`;
+        return 'task.taskStatus === Task.Status.Dropped';
       } else {
-        return `task.taskStatus !== Task.Status.Dropped`;
+        return 'task.taskStatus !== Task.Status.Dropped';
       }
     case '!=':
       if (isDropped) {
-        return `task.taskStatus !== Task.Status.Dropped`;
+        return 'task.taskStatus !== Task.Status.Dropped';
       } else {
-        return `task.taskStatus === Task.Status.Dropped`;
+        return 'task.taskStatus === Task.Status.Dropped';
       }
     default:
       throw new Error(`Unsupported dropped operator: ${operator}`);
