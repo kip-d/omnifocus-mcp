@@ -8,41 +8,13 @@ This document tracks the status of all implementation plans in this directory.
 
 ## Fully Implemented
 
-### 2025-01-04-omnifocus-dsl-design.md
-**Status:** ✅ Partially Implemented (v3.0.0)
-**What was built:**
-- Unified API: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`
-- JSON-based query/mutation/analysis syntax (exact design)
-- QueryCompiler, MutationCompiler, AnalysisCompiler routing
-- 17 tools → 4 tools consolidation
+*The following plans have been fully implemented and are now stored in `docs/plans/completed/`.*
 
-**Remaining unimplemented:**
-- Human-friendly text syntax layer (LOW priority - JSON works well)
-- REPL/CLI tool (MEDIUM)
-- Transaction support (LOW)
-- Dry-run mode for bulk ops (MEDIUM)
+- 2025-11-04-three-tool-builder-api-design.md (moved)
+- 2025-11-04-three-tool-builder-api-implementation.md (moved)
+- 2025-11-24-ast-filter-contracts-design.md (moved)
 
 ---
-
-### 2025-11-04-three-tool-builder-api-design.md
-**Status:** ✅ Fully Implemented (v3.0.0)
-**Needs update:** Change status from "Approved Design" to "Implemented"
-
-**What was built:**
-- All 3 unified tools (plus system = 4)
-- Discriminated union schemas
-- Compilers routing to backend tools
-- Filter syntax with operators
-
----
-
-### 2025-11-04-three-tool-builder-api-implementation.md
-**Status:** ✅ Executed
-**Needs update:** Mark as completed
-
----
-
-### 2025-11-06-unified-api-cleanup-plan.md
 **Status:** ✅ Mostly Implemented (v3.0.0)
 **What was built:**
 - Phase 1: ID filter bug fixed and verified
