@@ -460,6 +460,25 @@ export function buildUpdateTaskScript(
       app.evaluateJavascript(tagScript);
     }
 
+    // Handle repetition rule via bridge
+    if (changes.repetitionRule) {
+      const ruleScript = \`
+        (() => {
+          const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
+          if (!task) return JSON.stringify({success: false});
+
+          const rule = \${JSON.stringify(changes.repetitionRule)};
+          // Build repetition rule string
+          let ruleString = rule.frequency;
+          if (rule.interval > 1) ruleString = 'every ' + rule.interval + ' ' + rule.frequency;
+
+          task.repetitionRule = Task.RepetitionRule.fromString(ruleString, Task.RepetitionMethod.DueDate);
+          return JSON.stringify({success: true});
+        })()
+      \`;
+      app.evaluateJavascript(ruleScript);
+    }
+
     return JSON.stringify({
       taskId: taskId,
       name: task.name(),

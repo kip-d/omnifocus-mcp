@@ -390,15 +390,19 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             try {
               this.logger.debug('Applying repeat rule via update');
               // Use AST-powered mutation builder (Phase 2 consolidation)
-              // TODO: Contract limitation - TaskUpdateData doesn't support setting repetitionRule, only clearRepeatRule
-              // This is a temporary workaround until the contract is updated to support repetition rules
-              const repeatOnlyScript = buildUpdateTaskScript(createdTaskId, { repeatRule: repeatRuleForUpdate } as any).script;
-              const repeatUpdateResult = await this.execJson(repeatOnlyScript);
-              this.logger.debug('Repeat rule update result', { repeatUpdateResult });
-              if (isScriptError(repeatUpdateResult)) {
-                this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
+              // Convert RepeatRule (OmniFocus format) to RepetitionRule (contract format)
+              const repetitionRule = this.convertToRepetitionRule(repeatRuleForUpdate);
+              if (!repetitionRule) {
+                this.logger.warn('Could not convert repeat rule to repetition rule format');
               } else {
-                this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
+                const repeatOnlyScript = buildUpdateTaskScript(createdTaskId, { repetitionRule }).script;
+                const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+                this.logger.debug('Repeat rule update result', { repeatUpdateResult });
+                if (isScriptError(repeatUpdateResult)) {
+                  this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
+                } else {
+                  this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
+                }
               }
             } catch (repeatError) {
               this.logger.warn('Exception applying repeat rule post-creation', repeatError);
@@ -1035,6 +1039,33 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     }
 
     return normalized;
+  }
+
+  /**
+   * Convert RepeatRule (OmniFocus format) to RepetitionRule (mutation contract format)
+   * RepeatRule: { unit: 'day', steps: 2 } -> RepetitionRule: { frequency: 'daily', interval: 2 }
+   */
+  private convertToRepetitionRule(rule: TaskCreationArgs['repeatRule']): import('../../contracts/mutations.js').RepetitionRule | undefined {
+    if (!rule) return undefined;
+
+    const unitToFrequency: Record<string, 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
+      day: 'daily',
+      week: 'weekly',
+      month: 'monthly',
+      year: 'yearly',
+    };
+
+    const frequency = unitToFrequency[rule.unit];
+    if (!frequency) {
+      // OmniFocus supports 'minute' and 'hour' but RepetitionRule doesn't
+      // Default to daily for unsupported units
+      return { frequency: 'daily', interval: rule.steps || 1 };
+    }
+
+    return {
+      frequency,
+      interval: rule.steps || 1,
+    };
   }
 
   private async handleBulkOperation(
