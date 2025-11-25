@@ -393,9 +393,9 @@ describe('QueryTasksTool', () => {
         mode: 'search',
         search: 'meeting',
       });
-      
+
       expect(result.success).toBe(true);
-      expect(mockOmni.buildScript).toHaveBeenCalled();
+      // V4 AST-powered script no longer uses buildScript, it generates scripts directly
       expect(mockOmni.executeJson).toHaveBeenCalled();
     });
 

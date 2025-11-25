@@ -15,6 +15,8 @@ export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
 // Note: UPDATE_TASK_SCRIPT replaced by createUpdateTaskScript() in update-task-v3.ts
 export { LIST_TASKS_SCRIPT_V3 } from './tasks/list-tasks-omnijs.js';
+// AST-powered V4 (74% smaller, type-safe filters)
+export { buildListTasksScriptV4 } from './tasks/list-tasks-ast.js';
 
 // Legacy helper export
 // Note: legacy SAFE_UTILITIES_SCRIPT re-export removed. Import directly from './shared/helpers.js' if needed.

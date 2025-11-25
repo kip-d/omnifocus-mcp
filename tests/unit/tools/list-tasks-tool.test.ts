@@ -57,21 +57,22 @@ describe('QueryTasksTool', () => {
   describe('basic functionality', () => {
     it('should query tasks with mode all', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // V4 AST-powered script no longer uses buildScript, it generates scripts directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
         summary: { total: 0 }
       });
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         mode: 'all',
-        completed: false, 
+        completed: false,
         limit: 10
       });
 
       expect(result.success).toBe(true);
       expect(result.data.tasks).toBeDefined();
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      // No longer asserting on buildScript since V4 generates scripts directly
+      expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
     });
 
     it('should handle search mode', async () => {

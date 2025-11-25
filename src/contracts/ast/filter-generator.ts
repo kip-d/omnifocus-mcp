@@ -215,3 +215,131 @@ export function describeFilter(filter: TaskFilter): string {
 
   return conditions.join(' AND ');
 }
+
+// =============================================================================
+// PROJECT FILTER CODE GENERATION (Phase 3 AST Extension)
+// =============================================================================
+
+import type { ProjectFilter } from '../filters.js';
+
+/**
+ * Generate OmniJS filter predicate for projects
+ *
+ * Projects have simpler filtering than tasks, so we use direct code generation
+ * rather than the full AST pipeline.
+ *
+ * @param filter - The ProjectFilter to transform
+ * @returns OmniJS predicate code string
+ */
+export function generateProjectFilterCode(filter: ProjectFilter): string {
+  const conditions: string[] = [];
+
+  // ID filter (exact match)
+  if (filter.id) {
+    conditions.push(`(project.id.primaryKey === ${JSON.stringify(filter.id)})`);
+  }
+
+  // Status filter (array of allowed statuses - OR logic)
+  if (filter.status && filter.status.length > 0) {
+    const statusMap: Record<string, string> = {
+      'active': 'Project.Status.Active',
+      'onHold': 'Project.Status.OnHold',
+      'done': 'Project.Status.Done',
+      'dropped': 'Project.Status.Dropped',
+    };
+    const statusChecks = filter.status.map(s => `project.status === ${statusMap[s]}`);
+    conditions.push(`(${statusChecks.join(' || ')})`);
+  }
+
+  // Flagged filter
+  if (filter.flagged !== undefined) {
+    conditions.push(`((project.flagged || false) === ${filter.flagged})`);
+  }
+
+  // Needs review filter
+  if (filter.needsReview !== undefined) {
+    if (filter.needsReview) {
+      conditions.push('(project.nextReviewDate && project.nextReviewDate <= new Date())');
+    } else {
+      conditions.push('(!project.nextReviewDate || project.nextReviewDate > new Date())');
+    }
+  }
+
+  // Text search (name + note)
+  if (filter.text) {
+    const escaped = JSON.stringify(filter.text.toLowerCase());
+    conditions.push(
+      `((project.name || '').toLowerCase().includes(${escaped}) || ` +
+      `(project.note || '').toLowerCase().includes(${escaped}))`,
+    );
+  }
+
+  // Folder ID filter
+  if (filter.folderId) {
+    conditions.push(
+      `(project.folder && project.folder.id.primaryKey === ${JSON.stringify(filter.folderId)})`,
+    );
+  }
+
+  // Folder name filter
+  if (filter.folderName) {
+    conditions.push(
+      `(project.folder && project.folder.name === ${JSON.stringify(filter.folderName)})`,
+    );
+  }
+
+  // If no conditions, match all projects
+  if (conditions.length === 0) {
+    return 'true';
+  }
+
+  return conditions.join(' && ');
+}
+
+/**
+ * Get a human-readable description of the project filter
+ */
+export function describeProjectFilter(filter: ProjectFilter): string {
+  const conditions: string[] = [];
+
+  if (filter.id) {
+    conditions.push(`id = ${filter.id}`);
+  }
+  if (filter.status && filter.status.length > 0) {
+    conditions.push(`status in [${filter.status.join(', ')}]`);
+  }
+  if (filter.flagged !== undefined) {
+    conditions.push(filter.flagged ? 'flagged' : 'not flagged');
+  }
+  if (filter.needsReview !== undefined) {
+    conditions.push(filter.needsReview ? 'needs review' : 'no review needed');
+  }
+  if (filter.text) {
+    conditions.push(`text contains "${filter.text}"`);
+  }
+  if (filter.folderId) {
+    conditions.push(`folder id = ${filter.folderId}`);
+  }
+  if (filter.folderName) {
+    conditions.push(`folder = "${filter.folderName}"`);
+  }
+
+  if (conditions.length === 0) {
+    return 'all projects';
+  }
+
+  return conditions.join(' AND ');
+}
+
+/**
+ * Check if a project filter is empty (will match all projects)
+ */
+export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
+  return !filter.id &&
+    (!filter.status || filter.status.length === 0) &&
+    filter.flagged === undefined &&
+    filter.needsReview === undefined &&
+    !filter.text &&
+    !filter.folderId &&
+    !filter.folderName;
+}

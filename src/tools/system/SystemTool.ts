@@ -400,12 +400,12 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         };
       }
 
-      // Test 5: Run actual LIST_TASKS_SCRIPT_V3 if requested
+      // Test 5: Run actual list tasks script if requested
       if (args.testScript === 'list_tasks') {
-        this.logger.info('Running Test 5: Actual LIST_TASKS_SCRIPT_V3 (OmniJS)');
-        const { LIST_TASKS_SCRIPT_V3 } = await import('../../omnifocus/scripts/tasks.js');
-        // Provide ALL required template params: filter, fields, limit
-        const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, {
+        this.logger.info('Running Test 5: Actual LIST_TASKS_SCRIPT_V4 (AST-powered)');
+        const { buildListTasksScriptV4 } = await import('../../omnifocus/scripts/tasks.js');
+        // Generate V4 AST-powered script
+        const script = buildListTasksScriptV4({
           filter: { limit: 1, mode: 'all' },
           fields: [],  // Empty = include all fields
           limit: 1,

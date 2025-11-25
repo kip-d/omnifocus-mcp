@@ -211,3 +211,71 @@ export function normalizeFilter(filter: TaskFilter): TaskFilter {
 
   return normalized;
 }
+
+// =============================================================================
+// PROJECT FILTER (Phase 3 AST Extension)
+// =============================================================================
+
+/**
+ * Project status values matching OmniFocus API
+ */
+export type ProjectStatus = 'active' | 'onHold' | 'done' | 'dropped';
+
+/**
+ * ProjectFilter - Filter properties for project queries
+ *
+ * Simpler than TaskFilter since projects have fewer filterable properties.
+ * Used by:
+ * - QueryCompiler for project queries
+ * - buildFilteredProjectsScript for AST-generated scripts
+ */
+export interface ProjectFilter {
+  // --- Identification ---
+  id?: string;                      // Exact project ID lookup
+
+  // --- Status ---
+  status?: ProjectStatus[];         // Filter by multiple statuses (OR logic)
+
+  // --- Boolean Flags ---
+  flagged?: boolean;
+  needsReview?: boolean;            // Projects past review date
+
+  // --- Text Search ---
+  text?: string;                    // Search in name + note
+
+  // --- Folder ---
+  folderId?: string;
+  folderName?: string;
+
+  // --- Pagination ---
+  limit?: number;
+  offset?: number;
+
+  // --- Performance Mode ---
+  performanceMode?: 'normal' | 'lite';  // lite skips expensive stats
+  includeStats?: boolean;               // Include task counts
+}
+
+/**
+ * Known project filter property names (for validation)
+ */
+export const PROJECT_FILTER_PROPERTY_NAMES = [
+  'id',
+  'status',
+  'flagged',
+  'needsReview',
+  'text',
+  'folderId',
+  'folderName',
+  'limit',
+  'offset',
+  'performanceMode',
+  'includeStats',
+] as const;
+
+/**
+ * Ensure a filter object conforms to ProjectFilter
+ */
+export function createProjectFilter(filter: ProjectFilter): ProjectFilter {
+  return filter;
+}
