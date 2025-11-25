@@ -1,17 +1,191 @@
 /**
- * list-tags.ts - OmniJS-First Tags Query (v3 Consolidated)
+ * list-tags-v3.ts - Mode-Based Tags Query with AST Infrastructure
  *
- * Performance improvement: All modes use OmniJS bridge
+ * Uses TagQueryOptions for consistent mode-based querying.
+ *
+ * Modes:
+ * - 'names': Ultra-fast string array of tag names
+ * - 'basic': Minimal objects with id + name
+ * - 'full': Complete data with optional usage stats
  *
  * Key optimizations:
- * - Names only: JXA iteration → OmniJS flattenedTags (3.5s → <0.5s expected)
- * - Fast mode: JXA iteration → OmniJS flattenedTags (6.9s → <0.5s expected)
- * - Full mode: Already uses OmniJS, maintained
- * - Pure OmniJS bridge - no helper dependencies (24% smaller than original)
+ * - All modes use OmniJS bridge (10-20x faster than JXA)
+ * - Mode-based field projection (return only what's needed)
+ * - Optional usage stats calculation
  *
- * Pattern based on: task-velocity.ts and existing full mode
+ * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
  */
 
+import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../../contracts/tag-options.js';
+import { buildTagsScript, buildTagByIdScript, buildTagByNameScript } from '../../../contracts/ast/tag-script-builder.js';
+
+// =============================================================================
+// AST-POWERED BUILDERS
+// =============================================================================
+
+/**
+ * Build a list tags script using AST-generated code
+ *
+ * @param options - TagQueryOptions for mode and settings
+ * @returns Complete JXA script string
+ */
+export function buildListTagsScript(options: TagQueryOptions): string {
+  const { script } = buildTagsScript(options);
+
+  // Wrap in JXA execution context
+  return `
+    (() => {
+      const app = Application('OmniFocus');
+      try {
+        const startTime = Date.now();
+
+        // Execute AST-generated OmniJS script
+        const omniJsScript = \`${script}\`;
+        const resultJson = app.evaluateJavascript(omniJsScript);
+        const result = JSON.parse(resultJson);
+
+        const endTime = Date.now();
+
+        // Build summary
+        const summary = {
+          total: result.count || 0,
+          insights: ["Found " + (result.count || 0) + " tags (" + result.mode + " mode)"],
+          query_time_ms: endTime - startTime,
+          mode: result.mode,
+          optimization: 'ast_generated_v3'
+        };
+
+        return JSON.stringify({
+          ok: true,
+          v: '3',
+          items: result.tags || [],
+          summary: summary
+        });
+
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            message: 'Failed to list tags: ' + (error && error.toString ? error.toString() : 'Unknown error'),
+            details: error && error.message ? error.message : undefined
+          },
+          v: '3'
+        });
+      }
+    })();
+  `;
+}
+
+/**
+ * Build a tag lookup script by ID
+ */
+export function buildGetTagByIdScript(tagId: string): string {
+  const { script } = buildTagByIdScript(tagId);
+
+  return `
+    (() => {
+      const app = Application('OmniFocus');
+      try {
+        const omniJsScript = \`${script}\`;
+        const resultJson = app.evaluateJavascript(omniJsScript);
+        const result = JSON.parse(resultJson);
+
+        return JSON.stringify({
+          ok: true,
+          v: '3',
+          tag: result.tags && result.tags.length > 0 ? result.tags[0] : null,
+          found: result.count > 0
+        });
+
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            message: 'Failed to get tag: ' + (error && error.toString ? error.toString() : 'Unknown error')
+          },
+          v: '3'
+        });
+      }
+    })();
+  `;
+}
+
+/**
+ * Build a tag lookup script by name
+ */
+export function buildGetTagByNameScript(tagName: string): string {
+  const { script } = buildTagByNameScript(tagName);
+
+  return `
+    (() => {
+      const app = Application('OmniFocus');
+      try {
+        const omniJsScript = \`${script}\`;
+        const resultJson = app.evaluateJavascript(omniJsScript);
+        const result = JSON.parse(resultJson);
+
+        return JSON.stringify({
+          ok: true,
+          v: '3',
+          tag: result.tags && result.tags.length > 0 ? result.tags[0] : null,
+          found: result.count > 0
+        });
+
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            message: 'Failed to get tag: ' + (error && error.toString ? error.toString() : 'Unknown error')
+          },
+          v: '3'
+        });
+      }
+    })();
+  `;
+}
+
+/**
+ * Convert legacy options to TagQueryOptions
+ */
+export function legacyOptionsToTagQueryOptions(options: {
+  namesOnly?: boolean;
+  fastMode?: boolean;
+  includeUsageStats?: boolean;
+  includeEmpty?: boolean;
+  sortBy?: string;
+}): TagQueryOptions {
+  // Determine mode from legacy options
+  let mode: TagQueryMode = 'full';
+  if (options.namesOnly) {
+    mode = 'names';
+  } else if (options.fastMode) {
+    mode = 'basic';
+  }
+
+  // Map sortBy values
+  let sortBy: TagSortBy = 'name';
+  if (options.sortBy === 'usage') {
+    sortBy = 'usage';
+  } else if (options.sortBy === 'tasks') {
+    sortBy = 'activeTasks';
+  }
+
+  return {
+    mode,
+    includeUsageStats: options.includeUsageStats ?? false,
+    includeEmpty: options.includeEmpty ?? true,
+    sortBy,
+  };
+}
+
+// =============================================================================
+// LEGACY SCRIPT TEMPLATES (for backward compatibility)
+// =============================================================================
+
+/**
+ * Legacy script template
+ * @deprecated Use buildListTagsScript with TagQueryOptions instead
+ */
 export const LIST_TAGS_SCRIPT = `
   (() => {
     const app = Application('OmniFocus');
@@ -221,7 +395,7 @@ export const LIST_TAGS_SCRIPT = `
 
 /**
  * Get just active tags (tags with at least one incomplete task)
- * Pure OmniJS bridge version - much faster than JXA iteration
+ * @deprecated Use buildListTagsScript with mode='full', includeUsageStats=true, includeEmpty=false
  */
 export const GET_ACTIVE_TAGS_SCRIPT = `
   (() => {

@@ -60,15 +60,29 @@ export {
   generateFilterBlock,
   isEmptyFilter,
   describeFilter,
+  // Project filter functions (Phase 3)
+  generateProjectFilterCode,
+  describeProjectFilter,
+  isEmptyProjectFilter,
 } from './filter-generator.js';
 
 // Script Builder (generates complete OmniJS scripts with AST filters)
-export type { ScriptOptions, GeneratedScript } from './script-builder.js';
+export type { ScriptOptions, GeneratedScript, ProjectScriptOptions } from './script-builder.js';
 export {
   buildFilteredTasksScript,
   buildInboxScript,
   buildTaskByIdScript,
+  // Project script builders (Phase 3)
+  buildFilteredProjectsScript,
+  buildProjectByIdScript,
 } from './script-builder.js';
+
+// Tag Script Builder (Phase 3 - mode-based, not filter-based)
+export {
+  buildTagsScript,
+  buildTagByIdScript,
+  buildTagByNameScript,
+} from './tag-script-builder.js';
 
 // Mutation Script Builder (generates complete JXA scripts for mutations)
 export type {

@@ -353,3 +353,210 @@ function describeFilterForScript(filter: TaskFilter): string {
 
   return conditions.length > 0 ? conditions.join(' AND ') : 'all tasks';
 }
+
+// =============================================================================
+// PROJECT SCRIPT BUILDER (Phase 3 AST Extension)
+// =============================================================================
+
+import type { ProjectFilter } from '../filters.js';
+import { generateProjectFilterCode, describeProjectFilter, isEmptyProjectFilter } from './filter-generator.js';
+
+/**
+ * Options for project script generation
+ */
+export interface ProjectScriptOptions {
+  /** Maximum projects to return */
+  limit?: number;
+  /** Fields to include in response */
+  fields?: string[];
+  /** Include detailed task statistics */
+  includeStats?: boolean;
+  /** Performance mode: 'lite' skips expensive operations */
+  performanceMode?: 'normal' | 'lite';
+}
+
+/**
+ * Default fields to include in project response
+ */
+const DEFAULT_PROJECT_FIELDS = [
+  'id', 'name', 'status', 'flagged', 'note', 'folder',
+  'dueDate', 'deferDate', 'sequential', 'nextReviewDate',
+];
+
+/**
+ * Generate the field projection code for a project object
+ */
+function generateProjectFieldProjection(fields: string[], includeStats: boolean): string {
+  const fieldList = fields.length > 0 ? fields : DEFAULT_PROJECT_FIELDS;
+
+  const projections: string[] = [];
+
+  for (const field of fieldList) {
+    switch (field) {
+      case 'id':
+        projections.push('id: project.id.primaryKey');
+        break;
+      case 'name':
+        projections.push('name: project.name || "Unnamed Project"');
+        break;
+      case 'status':
+        projections.push(`status: (() => {
+          const s = project.status;
+          if (s === Project.Status.Active) return 'active';
+          if (s === Project.Status.OnHold) return 'onHold';
+          if (s === Project.Status.Done) return 'done';
+          if (s === Project.Status.Dropped) return 'dropped';
+          return 'active';
+        })()`);
+        break;
+      case 'flagged':
+        projections.push('flagged: project.flagged || false');
+        break;
+      case 'note':
+        projections.push('note: project.note || ""');
+        break;
+      case 'folder':
+        projections.push('folder: project.folder ? project.folder.name : null');
+        break;
+      case 'folderId':
+        projections.push('folderId: project.folder ? project.folder.id.primaryKey : null');
+        break;
+      case 'dueDate':
+        projections.push('dueDate: project.dueDate ? project.dueDate.toISOString() : null');
+        break;
+      case 'deferDate':
+        projections.push('deferDate: project.deferDate ? project.deferDate.toISOString() : null');
+        break;
+      case 'sequential':
+        projections.push('sequential: project.sequential || false');
+        break;
+      case 'completedByChildren':
+        projections.push('completedByChildren: project.completedByChildren || false');
+        break;
+      case 'lastReviewDate':
+        projections.push('lastReviewDate: project.lastReviewDate ? project.lastReviewDate.toISOString() : null');
+        break;
+      case 'nextReviewDate':
+        projections.push('nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null');
+        break;
+      case 'reviewInterval':
+        projections.push('reviewInterval: project.reviewInterval || null');
+        break;
+    }
+  }
+
+  // Add task statistics if requested
+  if (includeStats) {
+    projections.push(`taskCounts: (() => {
+      const rootTask = project.rootTask;
+      if (!rootTask) return { total: 0, available: 0, completed: 0 };
+      return {
+        total: rootTask.numberOfTasks || 0,
+        available: rootTask.numberOfAvailableTasks || 0,
+        completed: rootTask.numberOfCompletedTasks || 0
+      };
+    })()`);
+  }
+
+  return projections.join(',\n                ');
+}
+
+/**
+ * Build an OmniJS script that filters projects using AST-generated predicates
+ *
+ * @param filter - The ProjectFilter to apply
+ * @param options - Script generation options
+ * @returns Generated script ready for execution
+ */
+export function buildFilteredProjectsScript(
+  filter: ProjectFilter,
+  options: ProjectScriptOptions = {},
+): GeneratedScript {
+  const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal' } = options;
+
+  // Generate the filter predicate code
+  const filterCode = generateProjectFilterCode(filter);
+
+  // Build description
+  const filterDescription = describeProjectFilter(filter);
+
+  // Generate field projection
+  const fieldProjection = generateProjectFieldProjection(fields, includeStats && performanceMode !== 'lite');
+
+  const script = `
+(() => {
+  const results = [];
+  let count = 0;
+  const limit = ${limit};
+
+  // AST-generated filter predicate
+  // Filter: ${filterDescription}
+  function matchesFilter(project) {
+    return ${filterCode};
+  }
+
+  flattenedProjects.forEach(project => {
+    if (count >= limit) return;
+
+    // Apply AST-generated filter
+    if (!matchesFilter(project)) return;
+
+    results.push({
+      ${fieldProjection}
+    });
+    count++;
+  });
+
+  return JSON.stringify({
+    projects: results,
+    count: results.length,
+    mode: 'ast_filtered',
+    filter_description: ${JSON.stringify(filterDescription)}
+  });
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription,
+    isEmptyFilter: isEmptyProjectFilter(filter),
+  };
+}
+
+/**
+ * Build an OmniJS script for a specific project by ID
+ */
+export function buildProjectByIdScript(
+  projectId: string,
+  fields: string[] = [],
+): GeneratedScript {
+  const fieldProjection = generateProjectFieldProjection(fields, false);
+
+  const script = `
+(() => {
+  const results = [];
+  const targetId = ${JSON.stringify(projectId)};
+
+  flattenedProjects.forEach(project => {
+    if (project.id.primaryKey === targetId) {
+      results.push({
+        ${fieldProjection}
+      });
+    }
+  });
+
+  return JSON.stringify({
+    projects: results,
+    count: results.length,
+    mode: 'id_lookup',
+    targetId: targetId
+  });
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription: `id = ${projectId}`,
+    isEmptyFilter: false,
+  };
+}

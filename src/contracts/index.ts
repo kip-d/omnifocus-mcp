@@ -21,7 +21,25 @@ export {
   validateFilterProperties,
   normalizeFilter,
   FILTER_PROPERTY_NAMES,
+  // Project filter (Phase 3)
+  type ProjectFilter,
+  type ProjectStatus,
+  createProjectFilter,
+  PROJECT_FILTER_PROPERTY_NAMES,
 } from './filters.js';
+
+// Tag query options (Phase 3 - mode-based, not filter-based)
+export {
+  type TagQueryOptions,
+  type TagQueryMode,
+  type TagSortBy,
+  type BasicTagData,
+  type FullTagData,
+  type TagUsageStats,
+  TAG_MODE_FIELDS,
+  createTagQueryOptions,
+  getFieldsForMode,
+} from './tag-options.js';
 
 // Response contracts
 export {
