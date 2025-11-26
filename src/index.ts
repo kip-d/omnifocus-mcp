@@ -89,11 +89,14 @@ export async function runServer() {
 
   // Warm cache with frequently accessed data (non-blocking)
   // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
+  // ENABLE_CACHE_WARMING=true overrides test mode (for integration tests that want realistic behavior)
   const isCIEnvironment = process.env.CI === 'true' || process.platform === 'linux';
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   const benchmarkMode = process.env.NO_CACHE_WARMING === 'true';
+  const forceCacheWarming = process.env.ENABLE_CACHE_WARMING === 'true';
+  const shouldWarmCache = forceCacheWarming || (!isCIEnvironment && !isTestEnvironment && !benchmarkMode);
   const cacheWarmer = new CacheWarmer(cacheManager, {
-    enabled: !isCIEnvironment && !isTestEnvironment && !benchmarkMode,
+    enabled: shouldWarmCache,
     timeout: 240000, // 240 second (4 minute) timeout - matches OMNIFOCUS_SCRIPT_TIMEOUT for benchmarking
     categories: {
       projects: true,
@@ -111,13 +114,16 @@ export async function runServer() {
 
   // Warm cache BEFORE accepting requests to prevent concurrent osascript execution
   // This ensures batch operations don't run concurrently with cache warming
-  if (isCIEnvironment) {
+  if (isCIEnvironment && !forceCacheWarming) {
     logger.info('Cache warming disabled in CI environment (no OmniFocus access)');
-  } else if (isTestEnvironment) {
+  } else if (isTestEnvironment && !forceCacheWarming) {
     logger.info('Cache warming disabled in test environment (NODE_ENV=test)');
-  } else if (benchmarkMode) {
+  } else if (benchmarkMode && !forceCacheWarming) {
     logger.info('Cache warming disabled for benchmark mode');
-  } else {
+  } else if (shouldWarmCache) {
+    if (forceCacheWarming) {
+      logger.info('Cache warming enabled via ENABLE_CACHE_WARMING override');
+    }
     logger.info('Warming cache before accepting requests...');
   try {
       await cacheWarmer.warmCache();

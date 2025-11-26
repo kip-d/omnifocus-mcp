@@ -39,6 +39,11 @@ interface CleanupMetrics {
   lastCleanup: number;
 }
 
+export interface MCPTestClientOptions {
+  /** Enable cache warming for realistic integration test behavior (default: false) */
+  enableCacheWarming?: boolean;
+}
+
 export class MCPTestClient {
   private server: ChildProcess | null = null;
   private messageId: number = 0;
@@ -46,6 +51,7 @@ export class MCPTestClient {
   private createdTaskIds: string[] = [];
   private createdProjectIds: string[] = [];
   private sessionId: string = generateSessionId();  // Unique session tag for efficient cleanup
+  private options: MCPTestClientOptions;
 
   private cleanupMetrics: CleanupMetrics = {
     startTime: 0,
@@ -54,10 +60,22 @@ export class MCPTestClient {
     lastCleanup: 0
   };
 
+  constructor(options: MCPTestClientOptions = {}) {
+    this.options = options;
+  }
+
   async startServer(): Promise<void> {
+    // Build environment variables
+    const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test' };
+
+    // Enable cache warming for integration tests that want realistic behavior
+    if (this.options.enableCacheWarming) {
+      env.ENABLE_CACHE_WARMING = 'true';
+    }
+
     this.server = spawn('node', ['./dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' }
+      env
     });
 
     // Critical Issue #2: Defensive checks for stdio pipes

@@ -3,7 +3,7 @@
  *
  * This module maintains a single long-running MCP server instance that mirrors
  * real-world usage (Claude Desktop session). Benefits:
- * - Cache warming happens once and persists
+ * - Cache warming happens once and persists (enabled by default for realistic behavior)
  * - Minimal overhead (1 server lifecycle instead of N)
  * - Realistic performance testing
  * - Matches production usage pattern
@@ -17,6 +17,10 @@ let initPromise: Promise<MCPTestClient> | null = null;
 /**
  * Get or create the shared MCP client instance
  * Thread-safe lazy initialization
+ *
+ * Cache warming is ENABLED by default for the shared server to match real-world
+ * Claude Desktop behavior. This significantly speeds up read operations (~10x faster)
+ * by pre-caching projects, tags, and common task queries.
  */
 export async function getSharedClient(): Promise<MCPTestClient> {
   if (sharedClient) {
@@ -29,10 +33,10 @@ export async function getSharedClient(): Promise<MCPTestClient> {
   }
 
   initPromise = (async () => {
-    console.log('🚀 Starting shared MCP server for integration tests...');
-    sharedClient = new MCPTestClient();
+    console.log('🚀 Starting shared MCP server for integration tests (with cache warming)...');
+    sharedClient = new MCPTestClient({ enableCacheWarming: true });
     await sharedClient.startServer();
-    console.log('✅ Shared MCP server ready');
+    console.log('✅ Shared MCP server ready (cache warmed)');
     return sharedClient;
   })();
 
