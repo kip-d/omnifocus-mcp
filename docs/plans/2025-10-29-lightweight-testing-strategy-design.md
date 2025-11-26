@@ -1,8 +1,11 @@
 # Lightweight Testing Strategy Design
 
 **Date:** 2025-10-29
-**Status:** Approved
+**Status:** ✅ Superseded (2025-11-24)
+**Superseded By:** `2025-11-24-tiered-test-pipeline-design.md` + `TESTING_PROMPT_LIGHTWEIGHT.md`
 **Goal:** Enable unattended single-session testing of all 31 MCP tools
+
+> **Note:** The core ideas from this design were incorporated into the tiered test pipeline (automated smoke + integration tests) and TESTING_PROMPT_LIGHTWEIGHT.md (modern v3.0 manual testing). The two-phase auto-transition concept was replaced with a cleaner separation of automated vs manual testing.
 
 ## Problem Statement
 
