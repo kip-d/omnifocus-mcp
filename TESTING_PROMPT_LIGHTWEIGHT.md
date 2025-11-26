@@ -50,9 +50,12 @@
 
 **Instructions:**
 1. Execute each test sequentially
-2. Use test tag: `@mcp-test-[YYYYMMDD-HHMM]` (e.g., `@mcp-test-20251124-1430`)
+2. Use test tag: `mcp-test-session-[timestamp]-[random]` (e.g., `mcp-test-session-1764126776844-abc123`)
+   - **IMPORTANT:** Use millisecond timestamp (`Date.now()`) + random suffix to avoid collisions
+   - Minute-precision tags like `@mcp-test-20251124-1430` can collide across test runs
 3. Report results in one-line format
 4. If test fails: Include full details + root cause analysis
+5. **CRITICAL:** Always verify by task/project ID, not just by tag query (see Test 4)
 
 ---
 
@@ -102,22 +105,29 @@ omnifocus_write({
 
 ---
 
-### Test 4: Query By Tag Filter
+### Test 4: Verify Task Created (By ID)
 
 **ACTION:**
 ```json
 omnifocus_read({
   query: {
     type: "tasks",
-    filters: {tags: {any: ["[your-test-tag]"]}},
-    limit: 5
+    filters: {id: "[taskId-from-test-3]"},
+    fields: ["id", "name", "tags", "flagged", "dueDate"]
   }
 })
 ```
 
-**EXPECT:** Returns the task from Test 3
+**EXPECT:** Returns exactly the task created in Test 3, with correct tags
 
-**REPORT:** `✅ Test 4: Tag filter found N tasks` or `❌ Test 4: Expected to find task from Test 3`
+**VERIFICATION:**
+1. Response contains task with matching ID
+2. Tags array includes your test tag
+3. Name matches "Lightweight Test Task"
+
+**REPORT:** `✅ Test 4: Verified task [taskId] has correct tags` or `❌ Test 4: Task not found or missing tags`
+
+**NOTE:** This test verifies by task ID (reliable) rather than querying all tasks with tag (unreliable if pre-existing tasks have test tags)
 
 ---
 
@@ -240,23 +250,35 @@ omnifocus_write({
 
 ---
 
-### Test 10: Verify Cleanup
+### Test 10: Verify Cleanup (By ID)
 
-**ACTION:** Query for test tag to confirm no orphaned test data
+**ACTION:** Query for the specific task and project IDs to confirm deletion
 
+10a. Verify task deleted:
 ```json
 omnifocus_read({
   query: {
     type: "tasks",
-    filters: {tags: {any: ["[your-test-tag]"]}},
-    limit: 10
+    filters: {id: "[taskId-from-test-3]"}
   }
 })
 ```
 
-**EXPECT:** Empty results (or only pre-existing items not from this test run)
+10b. Verify project deleted:
+```json
+omnifocus_read({
+  query: {
+    type: "projects",
+    filters: {id: "[projectId-from-test-6]"}
+  }
+})
+```
 
-**REPORT:** `✅ Test 10: Verified cleanup - no test items remain` or `⚠️ Test 10: Found N orphaned items`
+**EXPECT:** Both queries return empty results (task/project not found)
+
+**REPORT:** `✅ Test 10: Verified cleanup - task and project deleted` or `⚠️ Test 10: Item still exists after deletion`
+
+**NOTE:** Verifying by ID is more reliable than querying by tag, which may return pre-existing items with accumulated test tags from previous sessions
 
 ---
 
@@ -294,6 +316,9 @@ Status: ✅ ALL PASS or ❌ FAILURES DETECTED
    - Tag syntax (array of strings)
    - ID references (saved from previous tests)
    - OmniFocus permissions
+   - **Tag collision:** Pre-existing tasks may have accumulated test tags from prior sessions
+     - Solution: Always verify by task ID, not by tag query
+     - If needed, clean up orphaned test tags from affected tasks
 
 3. **Next steps:**
    - Run `npm run test:integration` to identify if issue is systemic
