@@ -10,9 +10,12 @@
  *
  * See: /docs/dev/TEST_COVERAGE_GAPS.md - Gap #5
  * See: /docs/dev/TESTING_IMPROVEMENTS.md - Priority P0
+ *
+ * OPTIMIZATION: Uses shared server to avoid 13s startup per test file
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 
 describe('Analytics Validation - Actual Calculations', () => {
@@ -20,8 +23,8 @@ describe('Analytics Validation - Actual Calculations', () => {
   const testSessionTag = `analytics-test-${Date.now()}`;
 
   beforeAll(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+    // Use shared server - avoids 13s startup cost per test file
+    client = await getSharedClient();
   }, 30000);
 
   afterEach(async () => {
@@ -30,7 +33,7 @@ describe('Analytics Validation - Actual Calculations', () => {
 
   afterAll(async () => {
     await client.thoroughCleanup();
-    await client.stop();
+    // Don't stop server - globalTeardown handles shared server cleanup
   }, 120000);
 
   describe('ProductivityStats Calculation Validation', () => {
@@ -69,12 +72,12 @@ describe('Analytics Validation - Actual Calculations', () => {
         }
       });
 
-      if (tasksResult.data.items.length > 0) {
+      if (tasksResult.data?.tasks?.length > 0) {
         await client.callTool('omnifocus_write', {
           mutation: {
             operation: 'complete',
             target: 'task',
-            id: tasksResult.data.items[0].id
+            id: tasksResult.data.tasks[0].id
           }
         });
       }
@@ -102,15 +105,15 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(typeof result.data.stats.overview.completedTasks).toBe('number');
       expect(typeof result.data.stats.overview.completionRate).toBe('number');
 
-      // Validate completionRate is a valid percentage
+      // Validate completionRate is a valid percentage (0-100 format)
       expect(result.data.stats.overview.completionRate).toBeGreaterThanOrEqual(0);
-      expect(result.data.stats.overview.completionRate).toBeLessThanOrEqual(1);
+      expect(result.data.stats.overview.completionRate).toBeLessThanOrEqual(100);
 
       // Validate healthScore is calculated
       expect(typeof result.data.healthScore).toBe('number');
       expect(result.data.healthScore).toBeGreaterThanOrEqual(0);
       expect(result.data.healthScore).toBeLessThanOrEqual(100);
-    }, 90000);
+    }, 150000); // 150s timeout: 5 creates + 3 completes + 1 query + 1 analytics = 10+ operations
 
     it('should return non-zero stats when tasks exist', async () => {
       // This test verifies the bug where ProductivityStats returned all 0s
@@ -128,7 +131,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       // At minimum, totalTasks should be > 0 since we just created tasks
       // (There may be other tasks in the system too)
       expect(result.data.stats.overview.totalTasks).toBeGreaterThan(0);
-    }, 60000);
+    }, 120000);
   });
 
   describe('OverdueAnalysis Calculation Validation', () => {
@@ -171,7 +174,7 @@ describe('Analytics Validation - Actual Calculations', () => {
         expect(task.name).toBeDefined();
         expect(task.dueDate).toBeDefined();
       }
-    }, 60000);
+    }, 120000);
 
     it('should handle zero overdue tasks gracefully', async () => {
       // Create task with future due date
@@ -196,7 +199,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(result.data.stats.summary).toBeDefined();
       expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
       expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(0);
-    }, 60000);
+    }, 120000);
   });
 
   describe('TaskVelocity Calculation Validation', () => {
@@ -236,7 +239,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(typeof velocityResult.data.velocity.averagePerDay).toBe('number');
       expect(velocityResult.data.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
       expect(velocityResult.data.velocity.averagePerDay).toBeGreaterThanOrEqual(0);
-    }, 60000);
+    }, 120000);
   });
 
   describe('Cross-Tool Data Consistency', () => {

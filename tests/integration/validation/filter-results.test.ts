@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 
 /**
@@ -8,17 +9,19 @@ import { MCPTestClient } from '../helpers/mcp-test-client.js';
  * by validating that filters return ONLY matching results.
  *
  * PATTERN: query with filter → validate EVERY result matches filter
+ *
+ * OPTIMIZATION: Uses shared server to avoid 13s startup per test file
  */
 describe('Filter Results Validation', () => {
   let client: MCPTestClient;
 
   beforeAll(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+    // Use shared server - avoids 13s startup cost per test file
+    client = await getSharedClient();
   }, 30000);
 
   afterAll(async () => {
-    await client.stop();
+    // Don't stop server - globalTeardown handles shared server cleanup
   });
 
   describe('Text Filter (Bug #9 Prevention)', () => {

@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
 const isIntegrationTest = process.argv.some(arg => arg.includes('tests/integration'));
+const isSmokeTest = process.argv.some(arg => arg.includes('tests/smoke'));
+const needsOmniFocus = isIntegrationTest || isSmokeTest;
 
 export default defineConfig({
   test: {
@@ -10,9 +12,10 @@ export default defineConfig({
     globalSetup: isIntegrationTest ? ['tests/support/setup-integration.ts'] : undefined,
     testTimeout: isIntegrationTest ? 120000 : 30000,     // 2min for integration, 30s for unit
     hookTimeout: isIntegrationTest ? 300000 : 60000,     // 5min for integration (cleanup accumulates), 1min for unit
-    // Sandbox-friendly mode: when VITEST_SAFE=1, use single threaded pool
-    ...(process.env.VITEST_SAFE === '1'
-      ? { pool: 'threads' as const, maxThreads: 1, minThreads: 1 }
+    // OmniFocus tests MUST run sequentially to prevent resource contention
+    // Multiple concurrent osascript processes cause timeouts and failures
+    ...(needsOmniFocus || process.env.VITEST_SAFE === '1'
+      ? { pool: 'forks' as const, poolOptions: { forks: { singleFork: true } } }
       : {}),
     coverage: {
       provider: 'v8',

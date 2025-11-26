@@ -49,6 +49,7 @@ export interface GeneratedScript {
 const DEFAULT_FIELDS = [
   'id', 'name', 'completed', 'flagged', 'inInbox', 'blocked', 'available',
   'dueDate', 'deferDate', 'plannedDate', 'tags', 'note', 'project', 'projectId',
+  'estimatedMinutes',
 ];
 
 /**

@@ -113,7 +113,7 @@ export class MCPTestClient {
     await this.delay(100);
   }
 
-  async sendRequest(request: MCPRequest, timeout: number = 60000): Promise<MCPResponse> {
+  async sendRequest(request: MCPRequest, timeout: number = 120000): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
       // Critical Issue #3: Request ID validation
       if (request.id === undefined) {

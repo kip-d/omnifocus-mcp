@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 
 /**
@@ -8,6 +9,8 @@ import { MCPTestClient } from '../helpers/mcp-test-client.js';
  * by validating that updates actually persist, not just return success.
  *
  * PATTERN: create → update → read-back → verify → cleanup
+ *
+ * OPTIMIZATION: Uses shared server to avoid 13s startup per test file
  */
 describe('Update Operations - Read-Back Validation', () => {
   let client: MCPTestClient;
@@ -15,29 +18,27 @@ describe('Update Operations - Read-Back Validation', () => {
   const TEST_TAG = `@test-update-ops-${Date.now()}`;
 
   beforeAll(async () => {
-    client = new MCPTestClient();
-    await client.startServer();
+    // Use shared server - avoids 13s startup cost per test file
+    client = await getSharedClient();
   }, 30000);
 
   afterAll(async () => {
     // Cleanup: Delete all created tasks
     if (createdTaskIds.length > 0) {
       try {
-        // Use individual deletes via omnifocus_write
-        for (const taskId of createdTaskIds) {
-          await client.callTool('omnifocus_write', {
-            mutation: {
-              operation: 'delete',
-              target: 'task',
-              id: taskId
-            }
-          });
-        }
+        // Use bulk delete for efficiency
+        await client.callTool('omnifocus_write', {
+          mutation: {
+            operation: 'bulk_delete',
+            target: 'task',
+            ids: createdTaskIds
+          }
+        });
       } catch (err) {
         console.warn('Failed to cleanup tasks:', err);
       }
     }
-    await client.stop();
+    // Don't stop server - globalTeardown handles shared server cleanup
   });
 
   // Helper functions
@@ -102,7 +103,7 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.dueDate).toBeDefined();
       const dueDateOnly = task.dueDate.split('T')[0];
       expect(dueDateOnly).toBe('2025-12-25');
-    }, 60000);
+    }, 120000);
 
     it('should update deferDate and persist change', async () => {
       const taskId = await createTask('Test update deferDate');
@@ -115,7 +116,7 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.deferDate).toBeDefined();
       const deferDateOnly = task.deferDate.split('T')[0];
       expect(deferDateOnly).toBe('2025-12-20');
-    }, 60000);
+    }, 120000);
 
     it('should update plannedDate and persist change (if database migrated)', async () => {
       const taskId = await createTask('Test update plannedDate');
@@ -135,7 +136,7 @@ describe('Update Operations - Read-Back Validation', () => {
         // Database not migrated - test passes but logs warning
         console.log('⚠️  plannedDate not available - database may not be migrated for planned dates feature');
       }
-    }, 60000);
+    }, 120000);
 
     it('should clear dueDate using clearDueDate flag', async () => {
       // Bug #14 Fix: Use clearDueDate boolean flag instead of dueDate: null
@@ -151,7 +152,7 @@ describe('Update Operations - Read-Back Validation', () => {
       // ✅ Verify date was cleared
       const task = await readTask(taskId);
       expect(task.dueDate).toBeUndefined();
-    }, 60000);
+    }, 120000);
   });
 
   describe('Tag Operations (Bug #12 Prevention)', () => {
@@ -175,7 +176,7 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).toContain('replaced3');
       expect(task.tags).not.toContain('initial1');
       expect(task.tags).not.toContain('initial2');
-    }, 60000);
+    }, 120000);
 
     it('should support addTags (append to existing)', async () => {
       // Create task with initial tags
@@ -197,7 +198,7 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).toContain('new1');
       expect(task.tags).toContain('new2');
       expect(task.tags.length).toBeGreaterThanOrEqual(5);
-    }, 60000);
+    }, 120000);
 
     it('should support removeTags (filter out specified)', async () => {
       // Create task with multiple tags
@@ -218,7 +219,7 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).toContain('keep2');
       expect(task.tags).not.toContain('remove1');
       expect(task.tags).not.toContain('remove2');
-    }, 60000);
+    }, 120000);
 
     it('should handle addTags with deduplication', async () => {
       const taskId = await createTask('Test addTags dedup', {
@@ -236,7 +237,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const existingCount = task.tags.filter((t: string) => t === 'existing').length;
       expect(existingCount).toBe(1); // Should only appear once
       expect(task.tags).toContain('new');
-    }, 60000);
+    }, 120000);
   });
 
   describe('Basic Property Updates', () => {
@@ -251,7 +252,7 @@ describe('Update Operations - Read-Back Validation', () => {
       // ✅ Verify note persisted
       const task = await readTask(taskId);
       expect(task.note).toBe('This is an updated note');
-    }, 60000);
+    }, 120000);
 
     it('should update flagged status and persist change', async () => {
       const taskId = await createTask('Test update flagged', { flagged: false });
@@ -262,7 +263,7 @@ describe('Update Operations - Read-Back Validation', () => {
       // ✅ Verify flagged persisted
       const task = await readTask(taskId);
       expect(task.flagged).toBe(true);
-    }, 60000);
+    }, 120000);
 
     it('should update estimatedMinutes and persist change', async () => {
       const taskId = await createTask('Test update estimatedMinutes');
@@ -273,7 +274,7 @@ describe('Update Operations - Read-Back Validation', () => {
       // ✅ Verify estimatedMinutes persisted
       const task = await readTask(taskId);
       expect(task.estimatedMinutes).toBe(30);
-    }, 60000);
+    }, 120000);
   });
 
   describe('Multiple Updates (Combined Changes)', () => {
@@ -297,6 +298,6 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.estimatedMinutes).toBe(45);
       expect(task.tags).toContain('urgent');
       expect(task.tags).toContain('priority');
-    }, 60000);
+    }, 120000);
   });
 });
