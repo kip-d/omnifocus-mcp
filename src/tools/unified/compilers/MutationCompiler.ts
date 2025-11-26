@@ -98,11 +98,13 @@ export type CompiledMutation =
     atomicOperation?: boolean;
     returnMapping?: boolean;
     stopOnError?: boolean;
+    dryRun?: boolean;
   }
   | {
     operation: 'bulk_delete';
     target: 'task' | 'project';
     ids: string[];
+    dryRun?: boolean;
   };
 
 export class MutationCompiler {
@@ -174,6 +176,7 @@ export class MutationCompiler {
           atomicOperation: mutation.atomicOperation,
           returnMapping: mutation.returnMapping,
           stopOnError: mutation.stopOnError,
+          dryRun: mutation.dryRun,
         };
 
       case 'bulk_delete':
@@ -181,6 +184,7 @@ export class MutationCompiler {
           operation: 'bulk_delete',
           target: mutation.target,
           ids: mutation.ids,
+          dryRun: mutation.dryRun,
         };
 
       default: {

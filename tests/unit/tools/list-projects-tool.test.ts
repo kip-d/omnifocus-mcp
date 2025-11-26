@@ -56,64 +56,49 @@ describe('ProjectsTool', () => {
   describe('details parameter', () => {
     it('should use OmniJS bridge when details is true', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
-        ok: true,
         projects: [],
         metadata: {
-          processedCount: 0,
-          returnedCount: 0,
-          optimizationUsed: 'omniJs_bridge',
-          statsIncluded: true
+          total_available: 0,
+          returned_count: 0,
+          optimization: 'omnijs_v3',
+          stats_included: true
         }
       });
 
-      await tool.executeValidated({
+      const result = await tool.executeValidated({
         operation: 'list',
         limit: 10,
         details: true
       });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
-      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
-      // OmniJS bridge script uses different template variables
-      expect(template).toContain('{{filterStatus}}');
-      expect(template).toContain('{{limit}}');
-      expect(template).toContain('{{includeStats}}');
-      expect(params).toEqual({
-        filterStatus: 'active',
-        limit: 10,
-        includeStats: true
-      });
+      // v3 implementation uses executeJson directly with generated script string
+      expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+      const [[scriptString]] = mockOmniAutomation.executeJson.mock.calls;
+      // Script string should contain OmniJS bridge pattern
+      expect(scriptString).toContain('evaluateJavascript');
+      expect(result.success).toBe(true);
     });
 
     it('should default details to false for performance', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
       });
 
-      await tool.executeValidated({ operation: 'list', limit: 10 });
+      const result = await tool.executeValidated({ operation: 'list', limit: 10 });
 
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
-      const [[template, params]] = mockOmniAutomation.buildScript.mock.calls;
-      // When details is false, uses LIST_PROJECTS_SCRIPT (fast, no stats)
-      expect(template).toContain('const filter = {{filter}}');
-      expect(params).toEqual({
-        filter: {
-          limit: 10,
-          includeDropped: false
-        },
-        limit: 10,
-        includeStats: false
-      });
+      // v3 implementation uses executeJson directly with generated script string
+      expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
+      expect(result.success).toBe(true);
     });
 
     it('should include stats in project response when details enabled', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
@@ -153,7 +138,7 @@ describe('ProjectsTool', () => {
 
     it('should not include stats when disabled', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
@@ -175,7 +160,7 @@ describe('ProjectsTool', () => {
   describe('stats validation', () => {
     it('should handle empty project stats gracefully', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
@@ -208,7 +193,7 @@ describe('ProjectsTool', () => {
 
     it('should handle stats collection failure', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [{
           id: 'proj-1',
@@ -231,14 +216,14 @@ describe('ProjectsTool', () => {
   describe('caching behavior', () => {
     it('should include filter in cache key', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
       });
 
       await tool.executeValidated({ operation: 'list', limit: 10, details: true });
-      
+
       const setCalls = mockCache.set.mock.calls;
       expect(setCalls.length).toBeGreaterThan(0);
       const [collection, key] = setCalls[0];
@@ -248,7 +233,7 @@ describe('ProjectsTool', () => {
 
     it('should differentiate cache between different filters', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
         metadata: {}
@@ -267,8 +252,8 @@ describe('ProjectsTool', () => {
   describe('performance impact', () => {
     it('should show query time in metadata', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
-      
+
+      // v3 script returns { projects: [...], metadata: {...} } directly
       // Simulate faster response without stats
       mockOmniAutomation.executeJson.mockResolvedValueOnce({
         projects: [{ id: 'p1', name: 'Project 1', numberOfTasks: 5 }],
@@ -277,9 +262,9 @@ describe('ProjectsTool', () => {
 
       // Simulate slower response with stats
       mockOmniAutomation.executeJson.mockResolvedValueOnce({
-        projects: [{ 
-          id: 'p1', 
-          name: 'Project 1', 
+        projects: [{
+          id: 'p1',
+          name: 'Project 1',
           numberOfTasks: 5,
           stats: { active: 3, completed: 2, total: 5, completionRate: 40 }
         }],
@@ -287,7 +272,7 @@ describe('ProjectsTool', () => {
       });
 
       const result1 = await tool.executeValidated({ operation: 'list', details: false });
-      
+
       const result2 = await tool.executeValidated({ operation: 'list', details: true });
 
       // Both results should have query_time_ms

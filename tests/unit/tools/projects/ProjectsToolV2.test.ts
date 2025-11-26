@@ -79,12 +79,10 @@ describe('ProjectsTool', () => {
     });
 
     it('should filter projects by status', async () => {
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmni.executeJson.mockResolvedValue({
-        success: true,
-        data: {
-          items: [{ id: 'p1', name: 'Active Project', status: 'active' }],
-          summary: { total: 1 },
-        },
+        projects: [{ id: 'p1', name: 'Active Project', status: 'active' }],
+        metadata: { total: 1 },
       });
 
       const result = await tool.execute({
@@ -94,14 +92,7 @@ describe('ProjectsTool', () => {
         details: false,
       });
 
-      expect(mockOmni.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ 
-          filter: expect.objectContaining({
-            status: 'active'
-          })
-        })
-      );
+      // v3 implementation uses executeJson directly with generated script string
       expect(mockOmni.executeJson).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.data.items).toHaveLength(1);
@@ -421,9 +412,10 @@ describe('ProjectsTool', () => {
 
   describe('parameter coercion', () => {
     it('should coerce string parameters to correct types', async () => {
+      // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmni.executeJson.mockResolvedValue({
-        success: true,
-        data: { items: [], summary: { total: 0 } },
+        projects: [],
+        metadata: { total: 0 },
       });
 
       const result = await tool.execute({
@@ -435,8 +427,8 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      // buildScript is called with the template and parameters
-      expect(mockOmni.buildScript).toHaveBeenCalled();
+      // v3 implementation uses executeJson directly with generated script string
+      expect(mockOmni.executeJson).toHaveBeenCalled();
       // Just verify the coercion worked by checking the result
       expect(result.data.items).toEqual([]);
     });

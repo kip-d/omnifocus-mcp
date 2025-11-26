@@ -818,6 +818,200 @@ The server uses a hybrid approach:
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for complete details.
 
+## Response Format Standards
+
+The codebase uses a **two-layer response system** that provides type safety from script execution through MCP tool responses.
+
+### Layer 1: ScriptResult (Script Execution)
+
+**File:** `src/omnifocus/script-result-types.ts`
+
+Used by JXA scripts and the `OmniAutomation.executeJson()` method. This is a discriminated union that eliminates scattered error checking.
+
+```typescript
+// The discriminated union
+type ScriptResult<T = unknown> = ScriptSuccess<T> | ScriptError;
+
+interface ScriptSuccess<T = unknown> {
+  success: true;
+  data: T;
+}
+
+interface ScriptError {
+  success: false;
+  error: string;
+  context?: string;
+  details?: unknown;
+  stack?: string;
+}
+```
+
+**Type Guards:**
+```typescript
+import { isScriptSuccess, isScriptError } from '../omnifocus/script-result-types.js';
+
+const result = await omniAutomation.executeJson<TaskData>(script);
+
+if (isScriptSuccess(result)) {
+  // TypeScript knows result.data exists and is TaskData
+  console.log(result.data);
+} else {
+  // TypeScript knows result.error exists
+  console.error(result.error, result.context);
+}
+```
+
+**Factory Functions:**
+```typescript
+import { createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
+
+// Success
+return createScriptSuccess({ tasks: [...], count: 10 });
+
+// Error
+return createScriptError(
+  'Task not found',           // error message
+  'delete_task',              // context (operation name)
+  { taskId: 'abc123' },       // details
+  error.stack                 // stack trace
+);
+```
+
+### Layer 2: StandardResponseV2 (MCP Tool Response)
+
+**File:** `src/utils/response-format.ts`
+
+Used by MCP tools to format responses for LLM consumption. Optimized for fast LLM processing with summary-first design.
+
+```typescript
+interface StandardResponseV2<T> {
+  // Status - always first for fast parsing
+  success: boolean;
+
+  // Quick summary for LLM (always second for fastest processing)
+  summary?: TaskSummary | ProjectSummary | AnalyticsSummary;
+
+  // Main payload (may be truncated/limited)
+  data: T;
+
+  // Full metadata with performance metrics
+  metadata: StandardMetadataV2;
+
+  // Error handling (only present on failure)
+  error?: {
+    code: string;
+    message: string;
+    suggestion?: string;  // Help LLM fix the issue
+    details?: unknown;
+  };
+}
+
+interface StandardMetadataV2 {
+  operation: string;
+  timestamp: string;
+  from_cache: boolean;
+  query_time_ms?: number;
+  total_count?: number;
+  returned_count?: number;
+  has_more?: boolean;
+  // ... additional fields
+}
+```
+
+**Factory Functions:**
+```typescript
+import {
+  createSuccessResponseV2,
+  createErrorResponseV2,
+  createListResponseV2,
+  createTaskResponseV2,
+  createAnalyticsResponseV2,
+} from '../utils/response-format.js';
+
+// Basic success
+return createSuccessResponseV2('list_tasks', data, summary, { query_time_ms: 150 });
+
+// List response (auto-generates summary)
+return createListResponseV2('list_tasks', tasks, 'tasks', { from_cache: true });
+
+// Task-specific (includes insights, preview, truncation)
+return createTaskResponseV2('query_tasks', tasks, { query_time_ms: 200 });
+
+// Error response
+return createErrorResponseV2(
+  'create_task',          // operation
+  'VALIDATION_ERROR',     // error code
+  'Task name is required', // message
+  'Provide a name parameter', // suggestion for LLM
+  { field: 'name' }       // details
+);
+```
+
+### When to Use Each Layer
+
+| Layer | Where | Purpose |
+|-------|-------|---------|
+| `ScriptResult<T>` | Inside tool implementation | Handle JXA script execution results |
+| `StandardResponseV2<T>` | Tool's return value | Format response for MCP/LLM consumption |
+
+**Typical flow in a tool:**
+```typescript
+async executeValidated(args: Input): Promise<StandardResponseV2<Output>> {
+  const timer = new OperationTimerV2();
+
+  // Execute script - returns ScriptResult
+  const scriptResult = await this.omniAutomation.executeJson<ScriptData>(script);
+
+  // Handle script-level errors
+  if (isScriptError(scriptResult)) {
+    return createErrorResponseV2(
+      'operation_name',
+      'SCRIPT_ERROR',
+      scriptResult.error,
+      'Check OmniFocus is running',
+      scriptResult.details
+    );
+  }
+
+  // Transform and return MCP response
+  const transformed = this.transformData(scriptResult.data);
+  return createSuccessResponseV2('operation_name', transformed, summary, timer.toMetadata());
+}
+```
+
+### Summary Types
+
+The response format includes specialized summary types for different data:
+
+- **TaskSummary** - Includes breakdown (overdue, due_today, flagged, etc.), key_insights, preview
+- **ProjectSummary** - Includes active/on_hold/completed counts, needs_review, bottlenecks
+- **AnalyticsSummary** - Includes analysis_type, key_findings, recommendations, health_score
+
+These are auto-generated by `generateTaskSummary()` and `generateProjectSummary()` helpers.
+
+### Performance Utilities
+
+```typescript
+// Timer for measuring operation duration
+const timer = new OperationTimerV2();
+// ... do work ...
+const metadata = timer.toMetadata(); // { query_time_ms: 150 }
+
+// Truncation for large responses
+const { data, truncation } = truncateResponse(largeArray, CHARACTER_LIMIT);
+if (truncation?.truncated) {
+  metadata.truncation_message = truncation.message;
+}
+```
+
+### Best Practices
+
+1. **Always use type guards** for ScriptResult - never access `.data` without checking `.success`
+2. **Include suggestions** in error responses - helps LLM self-correct
+3. **Use factory functions** - don't construct response objects manually
+4. **Include timing metadata** - helps identify performance issues
+5. **Generate summaries** for list operations - LLMs process these faster than raw data
+
 ## Common Patterns
 
 ### Error Handling

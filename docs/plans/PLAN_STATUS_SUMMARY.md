@@ -1,6 +1,6 @@
 # Plan Status Summary
 
-**Last Updated:** 2025-11-24
+**Last Updated:** 2025-11-26
 
 This document tracks the status of all implementation plans in this directory.
 
@@ -54,7 +54,7 @@ This document tracks the status of all implementation plans in this directory.
 
 **Remaining (Phase 2B/2C):**
 - Modular helper architecture
-- Delete zero-usage functions (271 LOC)
+- ~~Delete zero-usage functions (271 LOC)~~ - ✅ **COMPLETED 2025-11-26** (7/9 already deleted, 1 used internally, 1 remaining deleted)
 - Delete duplicate functions (79 LOC)
 - Convert remaining 28 scripts to OmniJS v3
 
@@ -171,7 +171,7 @@ This document tracks the status of all implementation plans in this directory.
 
 ### MEDIUM Priority
 ~~2. **Lightweight Testing Prompt**~~ - ✅ **COMPLETED 2025-11-24** - Integrated with automated tests, modern v3.0 approach
-3. **Dry-run Mode for Bulk Operations** - Preview before executing bulk updates
+~~3. **Dry-run Mode for Bulk Operations**~~ - ✅ **COMPLETED 2025-11-26** - Preview before executing bulk updates
 4. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
 5. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
 
@@ -182,45 +182,52 @@ This document tracks the status of all implementation plans in this directory.
 9. **Query Optimization Engine** - Auto-apply performance patterns
 
 ### Consolidation Work (from Phase 2B/2C)
-10. **Delete Zero-Usage Functions** - 9 functions (~357 LOC), zero risk
+~~10. **Delete Zero-Usage Functions**~~ - ✅ **COMPLETED 2025-11-26** - Most already deleted, 1 remaining removed
 11. **Delete Duplicate Functions** - 79 LOC consolidation
 12. **Convert 28 Scripts to OmniJS v3** - Performance gains (if needed)
 13. **Modular Helper Architecture** - Clean separation of concerns
 
 ---
 
-## Next Development Target Analysis (2025-11-24)
+## Next Development Target Analysis (2025-11-26)
 
-**Context:** Just completed HIGH priority contracts system + tiered testing + major performance fixes. Development velocity infrastructure is now excellent (5s unit tests, 27s pre-commit).
+**Context:** Codebase cleanup complete. Development velocity infrastructure excellent (5s unit tests, 27s pre-commit).
 
 **Top Candidates:**
 
-### 🥇 Option 1: Delete Zero-Usage Functions (Quick Win)
-- **Effort:** LOW (1-2 hours)
-- **Risk:** ZERO (functions have zero usage)
-- **Value:** Immediate codebase health, ~357 LOC reduction (9 functions)
-- **Why now:** Clean up technical debt before building new features
-- **Functions:** serializeTask, isTaskBlocked, validateTag, buildTaskObject, serializeProject, parseRepeatRule, buildRepeatRuleString, getTagsViaBridge, translateRepeatIntent, setDateFieldsViaBridge
-- **Details:** `docs/consolidation/helper-usage-analysis.md` has complete analysis
+### ~~🥇 Option 1: Delete Zero-Usage Functions~~ - ✅ **COMPLETED 2025-11-26**
+- 7 of 9 functions were already deleted in prior sessions
+- 1 function (`getTagsViaBridge`) found to be used internally (not zero-usage)
+- 1 remaining function (`translateRepeatIntent`) + entire `repeat-translation.ts` file deleted
+- Also removed orphaned `list-tasks.ts.backup` file
 
-### 🥈 Option 2: Performance Audit of Remaining Scripts
-- **Effort:** MEDIUM (identify slow scripts, then fix)
-- **Risk:** LOW (applying proven OmniJS bridge pattern)
-- **Value:** Ensure consistent performance across all operations
-- **Why now:** We have momentum on performance, know the patterns
-- **Approach:** Profile remaining scripts, convert slowest 5-10 to OmniJS v3
+### ~~🥇 Option 2: Performance Audit - list-projects~~ - ✅ **COMPLETED 2025-11-26**
+- Profiled list-projects: 12-14s for 50 projects (271ms/project)
+- Created `list-projects-v3.ts` using OmniJS bridge pattern
+- Direct script: 900ms for 50 projects (**15x faster**)
+- Integrated into ProjectsTool: 4.2s first call, 2.9s subsequent (**3-4x faster** via MCP)
+- Files: `src/omnifocus/scripts/projects/list-projects-v3.ts`
 
-### 🥉 Option 3: Lightweight Testing Prompt (MEDIUM priority) - ✅ **COMPLETED 2025-11-24**
+### ~~🥉 Option 3: Lightweight Testing Prompt~~ - ✅ **COMPLETED 2025-11-24**
 - Created `TESTING_PROMPT_LIGHTWEIGHT.md` with modern v3.0 approach
 - 10 tests covering real-world scenarios
 - Integrates with automated smoke + integration tests
-- One-line output format: ~8-12k tokens (vs ~60-80k for verbose)
-- Pre-flight check runs automated tests first
 
-### 🏅 Option 4: Dry-run Mode for Bulk Operations
-- **Effort:** MEDIUM
-- **Risk:** LOW
-- **Value:** Safety for bulk updates, preview before commit
-- **Why now:** With AST contracts, implementing preview is straightforward
+### ~~🥇 Option 4: Dry-run Mode for Bulk Operations~~ - ✅ **COMPLETED 2025-11-26**
+- Added `dryRun: boolean` flag to `batch` and `bulk_delete` operations
+- When `dryRun: true`, returns preview of what WOULD happen without executing
+- Validates inputs and detects issues (duplicate tempIds, orphan parentTempIds)
+- Warns for large batches (>50 items)
+- Files modified: `write-schema.ts`, `MutationCompiler.ts`, `OmniFocusWriteTool.ts`
+- New tests: `tests/unit/tools/unified/write-dry-run.test.ts` (8 tests)
+- Design doc: `docs/plans/2025-11-26-dry-run-mode-design.md`
 
-**Recommendation:** Start with **Option 1 (Delete Zero-Usage Functions)** as a quick win to clean up the codebase, then move to **Option 2 (Performance Audit)** to finish what we started with performance optimization.
+---
+
+## Next Recommendations
+
+**Top Candidates for Next Session:**
+1. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
+2. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
+3. **Performance Audit** - Continue with export, reviews, or other scripts
+4. **Delete Duplicate Functions** - 79 LOC consolidation (from Phase 2B/2C)

@@ -5,6 +5,7 @@ import { MutationCompiler, type CompiledMutation } from './compilers/MutationCom
 import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
+import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
@@ -73,6 +74,16 @@ SAFETY:
 
   async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
+
+    // Handle dry-run for batch operations
+    if (compiled.operation === 'batch' && compiled.dryRun) {
+      return this.previewBatch(compiled);
+    }
+
+    // Handle dry-run for bulk_delete
+    if (compiled.operation === 'bulk_delete' && compiled.dryRun) {
+      return this.previewBulkDelete(compiled);
+    }
 
     // Route to batch tool if batch operation
     if (compiled.operation === 'batch') {
@@ -194,5 +205,142 @@ SAFETY:
     }
 
     return this.manageTaskTool.execute(manageArgs);
+  }
+
+  /**
+   * Preview batch operation without executing
+   * Returns what would be created, with validation results
+   */
+  private previewBatch(
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
+  ): unknown {
+    const timer = new OperationTimerV2();
+
+    // Extract create operations for preview
+    const createOps = compiled.operations.filter(op => op.operation === 'create');
+    const updateOps = compiled.operations.filter(op => op.operation === 'update');
+
+    // Build preview items
+    const previewItems = createOps.map((op, index) => ({
+      tempId: op.data?.tempId || `auto_temp_${index + 1}`,
+      type: compiled.target,
+      name: op.data?.name || 'Unnamed',
+      action: 'create' as const,
+      details: {
+        project: op.data?.project,
+        tags: op.data?.tags,
+        dueDate: op.data?.dueDate,
+        deferDate: op.data?.deferDate,
+        flagged: op.data?.flagged,
+        parentTempId: op.data?.parentTempId,
+      },
+    }));
+
+    // Add update operations to preview
+    const updatePreviewItems = updateOps.map(op => ({
+      id: op.id,
+      type: compiled.target,
+      name: op.changes?.name || `[Update to ${op.id}]`,
+      action: 'update' as const,
+      details: op.changes,
+    }));
+
+    // Validation checks
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // Check for duplicate tempIds
+    const tempIds = previewItems.map(item => item.tempId);
+    const duplicates = tempIds.filter((id, idx) => tempIds.indexOf(id) !== idx);
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate tempIds found: ${duplicates.join(', ')}`);
+    }
+
+    // Check for orphan parentTempIds
+    const parentRefs = previewItems
+      .filter(item => item.details.parentTempId)
+      .map(item => item.details.parentTempId);
+    const orphanRefs = parentRefs.filter(ref => !tempIds.includes(ref as string));
+    if (orphanRefs.length > 0) {
+      errors.push(`Parent references not found in batch: ${orphanRefs.join(', ')}`);
+    }
+
+    // Warning for large batches
+    if (createOps.length > 50) {
+      warnings.push(`Large batch (${createOps.length} items) may take 30+ seconds to execute`);
+    }
+
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        dryRun: true,
+        operation: 'batch',
+        wouldAffect: {
+          count: createOps.length + updateOps.length,
+          creates: previewItems.length,
+          updates: updatePreviewItems.length,
+          items: [...previewItems, ...updatePreviewItems],
+        },
+        validation: {
+          passed: errors.length === 0,
+          errors: errors.length > 0 ? errors : undefined,
+          warnings: warnings.length > 0 ? warnings : undefined,
+        },
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        message: `DRY RUN: No changes made. ${createOps.length} items would be created, ${updateOps.length} updated.`,
+      },
+    );
+  }
+
+  /**
+   * Preview bulk delete operation without executing
+   * Returns the IDs that would be deleted
+   *
+   * Note: Does not verify if IDs exist (that would require expensive lookups).
+   * Verification happens at execution time.
+   */
+  private previewBulkDelete(
+    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>,
+  ): unknown {
+    const timer = new OperationTimerV2();
+
+    // Build preview items from the IDs provided
+    const previewItems = compiled.ids.map(id => ({
+      id,
+      action: 'delete' as const,
+    }));
+
+    const warnings: string[] = [];
+
+    // Warning for large deletes
+    if (compiled.ids.length > 20) {
+      warnings.push(`Large bulk delete (${compiled.ids.length} items). Double-check IDs before executing.`);
+    }
+
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        dryRun: true,
+        operation: 'bulk_delete',
+        target: compiled.target,
+        wouldAffect: {
+          count: compiled.ids.length,
+          items: previewItems,
+        },
+        validation: {
+          passed: true,
+          warnings: warnings.length > 0 ? warnings : undefined,
+          note: 'ID existence not verified in dry-run. Invalid IDs will fail silently at execution.',
+        },
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        message: `DRY RUN: No changes made. ${compiled.ids.length} ${compiled.target}(s) would be permanently deleted.`,
+      },
+    );
   }
 }

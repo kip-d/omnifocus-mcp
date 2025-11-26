@@ -114,12 +114,14 @@ const MutationSchema = z.discriminatedUnion('operation', [
     atomicOperation: coerceBoolean().optional().default(false),
     returnMapping: coerceBoolean().optional().default(true),
     stopOnError: coerceBoolean().optional().default(true),
+    dryRun: coerceBoolean().optional().default(false), // Preview without executing
   }),
   // Bulk delete operation - for efficient batch deletion
   z.object({
     operation: z.literal('bulk_delete'),
     target: z.enum(['task', 'project']),
     ids: z.array(z.string()).min(1).max(100), // Limit to 100 items for safety
+    dryRun: coerceBoolean().optional().default(false), // Preview without executing
   }),
 ]);
 
