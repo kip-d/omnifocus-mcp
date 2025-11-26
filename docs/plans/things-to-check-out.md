@@ -146,6 +146,61 @@ Result: {
 
 ---
 
+### ✅ FIXED (2025-11-25) - Comprehensive RFC 5545 RRULE Support
+
+**Status:** COMPLETE - All OmniFocus-supported RRULE parameters now work.
+
+#### OmniFocus RRULE Support (Empirically Verified)
+
+| Parameter | Supported | Example |
+|-----------|-----------|---------|
+| `FREQ` | ✅ All 6 | MINUTELY, HOURLY, DAILY, WEEKLY, MONTHLY, YEARLY |
+| `INTERVAL` | ✅ | `INTERVAL=2` |
+| `BYDAY` | ✅ | `MO,WE,FR` or `2MO` or `-1FR` |
+| `BYMONTHDAY` | ✅ | `1,15,-1` |
+| `COUNT` | ✅ | `COUNT=10` |
+| `UNTIL` | ✅ | `20251231` |
+| `WKST` | ✅ | `MO` or `SU` |
+| `BYSETPOS` | ✅ | `1,-1` |
+| `BYMONTH` | ❌ | OmniFocus explicitly rejects |
+
+#### New RepetitionRule Interface
+
+```typescript
+interface DayOfWeek {
+  day: 'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA';
+  position?: number;  // -1 = last, 1 = first, 2 = second, etc.
+}
+
+interface RepetitionRule {
+  frequency: 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number;
+  daysOfWeek?: DayOfWeek[];    // BYDAY
+  daysOfMonth?: number[];      // BYMONTHDAY
+  count?: number;              // COUNT
+  endDate?: string;            // UNTIL (YYYY-MM-DD)
+  weekStart?: string;          // WKST
+  setPositions?: number[];     // BYSETPOS
+}
+```
+
+#### Common Patterns (LLM Reference)
+
+| Natural Language | RepetitionRule |
+|-----------------|----------------|
+| "Every Monday and Wednesday" | `{ frequency: 'weekly', daysOfWeek: [{day:'MO'},{day:'WE'}] }` |
+| "Last Friday of month" | `{ frequency: 'monthly', daysOfWeek: [{day:'FR', position:-1}] }` |
+| "1st and 15th of month" | `{ frequency: 'monthly', daysOfMonth: [1, 15] }` |
+| "Every weekday" | `{ frequency: 'weekly', daysOfWeek: [{day:'MO'},{day:'TU'},{day:'WE'},{day:'TH'},{day:'FR'}] }` |
+| "Daily for 10 days" | `{ frequency: 'daily', count: 10 }` |
+| "Weekly until Dec 31" | `{ frequency: 'weekly', endDate: '2025-12-31' }` |
+
+**Commits:**
+- `47eac4f` - fix: replace non-existent Task.RepetitionRule.fromString() with constructor
+- `796078f` - feat: comprehensive RFC 5545 RRULE support for repetition rules
+
+---
+
 ### Related Code
 - `src/contracts/mutations.ts:35-40` - `RepetitionRule` interface
 - `src/tools/tasks/ManageTaskTool.ts:1045-1063` - `convertToRepetitionRule()` function
