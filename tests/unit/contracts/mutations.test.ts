@@ -189,7 +189,7 @@ describe('validateMutation', () => {
           repetitionRule: {
             frequency: 'weekly',
             interval: 1,
-            daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+            daysOfWeek: [{ day: 'MO' }, { day: 'WE' }, { day: 'FR' }], // Mon, Wed, Fri
           },
         },
       };
@@ -198,13 +198,35 @@ describe('validateMutation', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('validates hourly and minutely frequencies', () => {
+      const hourlyMutation: CreateMutation = {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Hourly Task',
+          repetitionRule: { frequency: 'hourly', interval: 2 },
+        },
+      };
+      expect(validateMutation(hourlyMutation).valid).toBe(true);
+
+      const minutelyMutation: CreateMutation = {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Minutely Task',
+          repetitionRule: { frequency: 'minutely', interval: 30 },
+        },
+      };
+      expect(validateMutation(minutelyMutation).valid).toBe(true);
+    });
+
     it('rejects invalid frequency', () => {
       const mutation: CreateMutation = {
         operation: 'create',
         target: 'task',
         data: {
           name: 'Bad Task',
-          repetitionRule: { frequency: 'hourly' as any, interval: 1 },
+          repetitionRule: { frequency: 'secondly' as any, interval: 1 },
         },
       };
       const result = validateMutation(mutation);

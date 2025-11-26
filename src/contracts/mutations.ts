@@ -30,21 +30,78 @@ export type MutationTarget = 'task' | 'project';
 // =============================================================================
 
 /**
- * Repetition rule for recurring tasks
+ * Day of week specification for BYDAY parameter
+ * Can be simple (just day) or positioned (nth occurrence in month)
  *
- * Frequencies map to ICS RRULE FREQ values:
- * - minutely → FREQ=MINUTELY
- * - hourly → FREQ=HOURLY
- * - daily → FREQ=DAILY
- * - weekly → FREQ=WEEKLY
- * - monthly → FREQ=MONTHLY
- * - yearly → FREQ=YEARLY
+ * Examples:
+ * - { day: 'MO' } → Every Monday
+ * - { day: 'FR', position: -1 } → Last Friday of month
+ * - { day: 'MO', position: 2 } → Second Monday of month
+ */
+export interface DayOfWeek {
+  day: 'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA';
+  position?: number;  // -1 = last, 1 = first, 2 = second, etc.
+}
+
+/**
+ * Repetition rule for recurring tasks (RFC 5545 RRULE subset supported by OmniFocus)
+ *
+ * ## Supported Parameters (OmniFocus 4.x)
+ *
+ * | Parameter | Type | Example | Description |
+ * |-----------|------|---------|-------------|
+ * | frequency | string | 'weekly' | FREQ - Required. MINUTELY/HOURLY/DAILY/WEEKLY/MONTHLY/YEARLY |
+ * | interval | number | 2 | INTERVAL - Every Nth occurrence (default: 1) |
+ * | daysOfWeek | DayOfWeek[] | [{day:'MO'},{day:'WE'}] | BYDAY - Which days |
+ * | daysOfMonth | number[] | [1, 15, -1] | BYMONTHDAY - Which days of month (-1 = last) |
+ * | count | number | 10 | COUNT - Stop after N occurrences |
+ * | endDate | string | '2025-12-31' | UNTIL - Stop on this date |
+ * | weekStart | string | 'MO' | WKST - Week start day (default: SU) |
+ * | setPositions | number[] | [1, -1] | BYSETPOS - Filter to Nth occurrences |
+ *
+ * ## NOT Supported by OmniFocus
+ * - BYMONTH (restrict to specific months) - OmniFocus explicitly rejects this
+ * - BYHOUR, BYMINUTE, BYSECOND
+ * - BYYEARDAY, BYWEEKNO
+ *
+ * ## Common Patterns (for LLM reference)
+ *
+ * | Natural Language | RepetitionRule |
+ * |-----------------|----------------|
+ * | "Every day" | { frequency: 'daily', interval: 1 } |
+ * | "Every 2 weeks" | { frequency: 'weekly', interval: 2 } |
+ * | "Every Monday and Wednesday" | { frequency: 'weekly', interval: 1, daysOfWeek: [{day:'MO'},{day:'WE'}] } |
+ * | "On the 15th of each month" | { frequency: 'monthly', interval: 1, daysOfMonth: [15] } |
+ * | "Last Friday of each month" | { frequency: 'monthly', interval: 1, daysOfWeek: [{day:'FR', position:-1}] } |
+ * | "Every weekday" | { frequency: 'weekly', daysOfWeek: [{day:'MO'},{day:'TU'},{day:'WE'},{day:'TH'},{day:'FR'}] } |
+ * | "1st and 15th of month" | { frequency: 'monthly', daysOfMonth: [1, 15] } |
+ * | "Daily until Dec 31" | { frequency: 'daily', endDate: '2025-12-31' } |
+ * | "Weekly for 10 weeks" | { frequency: 'weekly', count: 10 } |
  */
 export interface RepetitionRule {
+  /** Required. Recurrence frequency */
   frequency: 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+  /** Every Nth occurrence. Default: 1 */
   interval: number;
-  daysOfWeek?: number[];  // 0 = Sunday, 1 = Monday, etc.
-  endDate?: string;       // ISO date string
+
+  /** BYDAY - Days of week, optionally with position for monthly rules */
+  daysOfWeek?: DayOfWeek[];
+
+  /** BYMONTHDAY - Days of month (1-31, or negative from end: -1 = last day) */
+  daysOfMonth?: number[];
+
+  /** COUNT - Stop after this many occurrences */
+  count?: number;
+
+  /** UNTIL - End date in YYYY-MM-DD format */
+  endDate?: string;
+
+  /** WKST - Week start day. Default: SU (Sunday) */
+  weekStart?: 'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA';
+
+  /** BYSETPOS - Filter to specific positions within the period (-1 = last, 1 = first) */
+  setPositions?: number[];
 }
 
 // =============================================================================
@@ -479,18 +536,23 @@ function validateBulkDeleteMutation(
   }
 }
 
+const VALID_FREQUENCIES = ['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'];
+const VALID_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
 function validateRepetitionRule(
   rule: RepetitionRule,
   errors: MutationValidationError[],
 ): void {
-  if (!['daily', 'weekly', 'monthly', 'yearly'].includes(rule.frequency)) {
+  // Validate frequency
+  if (!VALID_FREQUENCIES.includes(rule.frequency)) {
     errors.push({
       code: 'INVALID_VALUE',
-      message: `Invalid frequency: ${rule.frequency}`,
+      message: `Invalid frequency: ${rule.frequency}. Must be one of: ${VALID_FREQUENCIES.join(', ')}`,
       field: 'repetitionRule.frequency',
     });
   }
 
+  // Validate interval
   if (rule.interval < 1) {
     errors.push({
       code: 'INVALID_VALUE',
@@ -499,17 +561,91 @@ function validateRepetitionRule(
     });
   }
 
+  // Validate daysOfWeek (BYDAY)
   if (rule.daysOfWeek) {
-    for (const day of rule.daysOfWeek) {
-      if (day < 0 || day > 6) {
+    for (const daySpec of rule.daysOfWeek) {
+      if (!VALID_DAYS.includes(daySpec.day)) {
         errors.push({
           code: 'INVALID_VALUE',
-          message: 'Days of week must be 0-6',
+          message: `Invalid day: ${daySpec.day}. Must be one of: ${VALID_DAYS.join(', ')}`,
+          field: 'repetitionRule.daysOfWeek',
+        });
+        break;
+      }
+      // Validate position if provided (-5 to 5, but not 0)
+      if (daySpec.position !== undefined && (daySpec.position === 0 || daySpec.position < -5 || daySpec.position > 5)) {
+        errors.push({
+          code: 'INVALID_VALUE',
+          message: `Invalid position: ${daySpec.position}. Must be 1-5 or -1 to -5 (not 0)`,
           field: 'repetitionRule.daysOfWeek',
         });
         break;
       }
     }
+  }
+
+  // Validate daysOfMonth (BYMONTHDAY)
+  if (rule.daysOfMonth) {
+    for (const day of rule.daysOfMonth) {
+      if (day === 0 || day < -31 || day > 31) {
+        errors.push({
+          code: 'INVALID_VALUE',
+          message: `Invalid day of month: ${day}. Must be 1-31 or -1 to -31 (not 0)`,
+          field: 'repetitionRule.daysOfMonth',
+        });
+        break;
+      }
+    }
+  }
+
+  // Validate count (COUNT)
+  if (rule.count !== undefined && rule.count < 1) {
+    errors.push({
+      code: 'INVALID_VALUE',
+      message: 'Count must be at least 1',
+      field: 'repetitionRule.count',
+    });
+  }
+
+  // Validate endDate (UNTIL)
+  if (rule.endDate && !/^\d{4}-\d{2}-\d{2}$/.test(rule.endDate)) {
+    errors.push({
+      code: 'INVALID_VALUE',
+      message: 'End date must be in YYYY-MM-DD format',
+      field: 'repetitionRule.endDate',
+    });
+  }
+
+  // Validate weekStart (WKST)
+  if (rule.weekStart && !VALID_DAYS.includes(rule.weekStart)) {
+    errors.push({
+      code: 'INVALID_VALUE',
+      message: `Invalid week start: ${rule.weekStart}. Must be one of: ${VALID_DAYS.join(', ')}`,
+      field: 'repetitionRule.weekStart',
+    });
+  }
+
+  // Validate setPositions (BYSETPOS)
+  if (rule.setPositions) {
+    for (const pos of rule.setPositions) {
+      if (pos === 0 || pos < -366 || pos > 366) {
+        errors.push({
+          code: 'INVALID_VALUE',
+          message: `Invalid set position: ${pos}. Must be 1-366 or -1 to -366 (not 0)`,
+          field: 'repetitionRule.setPositions',
+        });
+        break;
+      }
+    }
+  }
+
+  // Warn about conflicting COUNT and UNTIL (both provided)
+  if (rule.count !== undefined && rule.endDate) {
+    errors.push({
+      code: 'CONFLICTING_FIELDS',
+      message: 'Cannot specify both count and endDate. Use one or the other.',
+      field: 'repetitionRule',
+    });
   }
 }
 

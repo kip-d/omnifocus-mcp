@@ -182,10 +182,48 @@ export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationSc
             const freq = freqMap[rule.frequency];
             if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
 
-            // Build ICS RRULE string
+            // Build ICS RRULE string with all supported parameters
             let rrule = 'FREQ=' + freq;
+
+            // INTERVAL - every Nth occurrence
             if (rule.interval && rule.interval > 1) {
               rrule += ';INTERVAL=' + rule.interval;
+            }
+
+            // BYDAY - days of week (e.g., MO,WE,FR or 2MO,-1FR)
+            if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+              const byDay = rule.daysOfWeek.map(d => {
+                if (d.position) return d.position + d.day;
+                return d.day;
+              }).join(',');
+              rrule += ';BYDAY=' + byDay;
+            }
+
+            // BYMONTHDAY - days of month (e.g., 1,15,-1)
+            if (rule.daysOfMonth && rule.daysOfMonth.length > 0) {
+              rrule += ';BYMONTHDAY=' + rule.daysOfMonth.join(',');
+            }
+
+            // COUNT - number of occurrences
+            if (rule.count && rule.count > 0) {
+              rrule += ';COUNT=' + rule.count;
+            }
+
+            // UNTIL - end date (YYYYMMDD or YYYYMMDDTHHMMSSZ)
+            if (rule.endDate) {
+              // Convert YYYY-MM-DD to YYYYMMDD format
+              const until = rule.endDate.replace(/-/g, '');
+              rrule += ';UNTIL=' + until;
+            }
+
+            // WKST - week start day
+            if (rule.weekStart) {
+              rrule += ';WKST=' + rule.weekStart;
+            }
+
+            // BYSETPOS - filter to specific positions
+            if (rule.setPositions && rule.setPositions.length > 0) {
+              rrule += ';BYSETPOS=' + rule.setPositions.join(',');
             }
 
             // Use constructor (fromString does not exist)
@@ -495,10 +533,48 @@ export function buildUpdateTaskScript(
           const freq = freqMap[rule.frequency];
           if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
 
-          // Build ICS RRULE string
+          // Build ICS RRULE string with all supported parameters
           let rrule = 'FREQ=' + freq;
+
+          // INTERVAL - every Nth occurrence
           if (rule.interval && rule.interval > 1) {
             rrule += ';INTERVAL=' + rule.interval;
+          }
+
+          // BYDAY - days of week (e.g., MO,WE,FR or 2MO,-1FR)
+          if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+            const byDay = rule.daysOfWeek.map(d => {
+              if (d.position) return d.position + d.day;
+              return d.day;
+            }).join(',');
+            rrule += ';BYDAY=' + byDay;
+          }
+
+          // BYMONTHDAY - days of month (e.g., 1,15,-1)
+          if (rule.daysOfMonth && rule.daysOfMonth.length > 0) {
+            rrule += ';BYMONTHDAY=' + rule.daysOfMonth.join(',');
+          }
+
+          // COUNT - number of occurrences
+          if (rule.count && rule.count > 0) {
+            rrule += ';COUNT=' + rule.count;
+          }
+
+          // UNTIL - end date (YYYYMMDD or YYYYMMDDTHHMMSSZ)
+          if (rule.endDate) {
+            // Convert YYYY-MM-DD to YYYYMMDD format
+            const until = rule.endDate.replace(/-/g, '');
+            rrule += ';UNTIL=' + until;
+          }
+
+          // WKST - week start day
+          if (rule.weekStart) {
+            rrule += ';WKST=' + rule.weekStart;
+          }
+
+          // BYSETPOS - filter to specific positions
+          if (rule.setPositions && rule.setPositions.length > 0) {
+            rrule += ';BYSETPOS=' + rule.setPositions.join(',');
           }
 
           // Use constructor (fromString does not exist)
