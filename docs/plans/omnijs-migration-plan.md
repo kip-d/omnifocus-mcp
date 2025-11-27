@@ -231,8 +231,8 @@ These have v3 replacements and are no longer used:
 
 | Phase | Scripts | Priority | Status |
 |-------|---------|----------|--------|
-| Phase 1 | 3 scripts | High | Not started |
-| Phase 2 | 7 scripts | Medium | Not started |
+| Phase 1 | 3 scripts | High | ✅ Complete (2025-11-27) |
+| Phase 2 | 7 scripts | Medium | ✅ Complete (2025-11-27) |
 | Phase 3 | 5+ scripts | Low | Not started |
 | Cleanup | Delete deprecated | Low | Not started |
 

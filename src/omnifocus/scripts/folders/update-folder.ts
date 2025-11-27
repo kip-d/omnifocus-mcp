@@ -1,7 +1,7 @@
-import { getUnifiedHelpers } from '../shared/helpers.js';
-
 /**
  * Script to update folder properties in OmniFocus
+ *
+ * OmniJS-first pattern: All logic runs inside evaluateJavascript()
  *
  * Features:
  * - Update folder name and status
@@ -9,126 +9,96 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  * - Duplicate name checking
  */
 export const UPDATE_FOLDER_SCRIPT = `
-  // UPDATE_FOLDER
-  ${getUnifiedHelpers()}
-  
+  // UPDATE_FOLDER - OmniJS-first pattern
   (() => {
-    const folderId = {{folderId}};
-    const updates = {{updates}};
-    
+    const app = Application('OmniFocus');
+
     try {
-      const app = Application('OmniFocus');
-      const doc = app.defaultDocument();
-      
-      // Find the folder to update
-      let targetFolder = null;
-      
-      // Find by iteration (avoid whose())
-      {
-        const allFolders = doc.flattenedFolders();
-        
-        if (!allFolders) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-            details: "doc.flattenedFolders() returned null or undefined"
-          });
-        }
-        
-        for (let i = 0; i < allFolders.length; i++) {
-          if (allFolders[i].id() === folderId) {
-            targetFolder = allFolders[i];
-            break;
+      const omniJsScript = \`
+        (() => {
+          const folderId = "{{folderId}}";
+          const updates = {{updates}};
+
+          // Find the folder by ID using OmniJS
+          const targetFolder = Folder.byIdentifier(folderId);
+
+          if (!targetFolder) {
+            // Check if it's a numeric-only ID (Claude Desktop bug)
+            const isNumericOnly = /^\\\\d+$/.test(folderId);
+            let errorMessage = 'Folder not found: ' + folderId;
+
+            if (isNumericOnly) {
+              errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric folder ID. Please use the list_folders tool to get the correct full folder ID and try again.";
+            }
+
+            return JSON.stringify({
+              error: true,
+              message: errorMessage
+            });
           }
-        }
-      }
-      
-      if (!targetFolder) {
-        // Check if it's a numeric-only ID (Claude Desktop bug)
-        const isNumericOnly = /^\\d+$/.test(folderId);
-        let errorMessage = 'Folder not found: ' + folderId;
-        
-        if (isNumericOnly) {
-          errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric folder ID. Please use the list_folders tool to get the correct full folder ID and try again.";
-        }
-        
-        return JSON.stringify({
-          error: true,
-          message: errorMessage
-        });
-      }
-      
-      const originalName = safeGet(() => targetFolder.name());
-      const originalStatus = safeGet(() => {
-        const status = targetFolder.status();
-        if (status && status.toString().includes('Active')) return 'active';
-        if (status && status.toString().includes('Dropped')) return 'dropped';
-        return 'active';
-      });
-      
-      // Check for duplicate name if updating name
-      if (updates.name && updates.name !== originalName) {
-        const parent = safeGet(() => targetFolder.parent());
-        const siblingFolders = parent ? parent.folders() : doc.folders();
-        
-        if (siblingFolders) {
-          for (let i = 0; i < siblingFolders.length; i++) {
-            const sibling = siblingFolders[i];
-            if (sibling.id() !== targetFolder.id() && sibling.name() === updates.name) {
-              const parentName = parent ? parent.name() : 'root';
-              return JSON.stringify({
-                error: true,
-                message: "Folder '" + updates.name + "' already exists in " + parentName
-              });
+
+          const originalName = targetFolder.name;
+          const originalStatus = targetFolder.status ? targetFolder.status.name : 'Active';
+
+          // Check for duplicate name if updating name
+          if (updates.name && updates.name !== originalName) {
+            const parent = targetFolder.parent;
+            // Note: In OmniJS, top-level folders use 'folders' global, not library.folders
+            const siblingFolders = parent ? parent.folders : folders;
+
+            for (const sibling of siblingFolders) {
+              if (sibling.id.primaryKey !== targetFolder.id.primaryKey && sibling.name === updates.name) {
+                const parentName = parent ? parent.name : 'root';
+                return JSON.stringify({
+                  error: true,
+                  message: "Folder '" + updates.name + "' already exists in " + parentName
+                });
+              }
+            }
+
+            // Set the name property directly in OmniJS
+            targetFolder.name = updates.name;
+          }
+
+          // Update status using OmniJS Folder.Status enum
+          if (updates.status) {
+            const statusMap = {
+              'active': Folder.Status.Active,
+              'dropped': Folder.Status.Dropped
+            };
+            const newStatus = statusMap[updates.status.toLowerCase()];
+            if (newStatus && targetFolder.status !== newStatus) {
+              targetFolder.status = newStatus;
             }
           }
-        }
-        
-        // Set the name property directly
-        targetFolder.name = updates.name;
-      }
-      
-      // Update status - use string values as JXA may not expose the enum
-      if (updates.status && updates.status !== originalStatus) {
-        try {
-          // Try using the enum first
-          if (updates.status === 'active') {
-            targetFolder.status = app.Folder.Status.Active;
-          } else if (updates.status === 'dropped') {
-            targetFolder.status = app.Folder.Status.Dropped;
-          }
-        } catch (enumError) {
-          // If enum fails, try string assignment
-          try {
-            targetFolder.status = updates.status;
-          } catch (stringError) {
-            // Status update failed but continue with other updates
-            // This is logged but not fatal
-          }
-        }
-      }
-      
-      return JSON.stringify({
-        success: true,
-        folder: {
-          id: targetFolder.id(),
-          name: targetFolder.name(),
-          status: safeGet(() => {
-            const status = targetFolder.status();
-            if (status && status.toString().includes('Active')) return 'active';
-            if (status && status.toString().includes('Dropped')) return 'dropped';
-            return 'active';
-          }),
-          updatedAt: new Date().toISOString()
-        },
-        changes: {
-          name: updates.name ? { from: originalName, to: updates.name } : undefined,
-          status: updates.status ? { from: originalStatus, to: updates.status } : undefined
-        },
-        message: "Folder updated successfully"
-      });
+
+          // Get final status for response
+          const finalStatus = targetFolder.status ? targetFolder.status.name.toLowerCase() : 'active';
+
+          return JSON.stringify({
+            success: true,
+            folder: {
+              id: targetFolder.id.primaryKey,
+              name: targetFolder.name,
+              status: finalStatus,
+              updatedAt: new Date().toISOString()
+            },
+            changes: {
+              name: updates.name ? { from: originalName, to: updates.name } : undefined,
+              status: updates.status ? { from: originalStatus.toLowerCase(), to: updates.status } : undefined
+            },
+            message: "Folder updated successfully"
+          });
+        })()
+      \`;
+
+      return app.evaluateJavascript(omniJsScript);
     } catch (error) {
-      return formatError(error, 'update_folder');
+      return JSON.stringify({
+        error: true,
+        message: error.message || String(error),
+        operation: 'update_folder'
+      });
     }
   })();
 `;
