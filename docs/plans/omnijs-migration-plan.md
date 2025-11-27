@@ -98,17 +98,18 @@ Convert 15 active JXA scripts to OmniJS-first pattern for:
 | Script | Location | Reason | Complexity |
 |--------|----------|--------|------------|
 | `flagged-tasks-perspective.ts` | `scripts/tasks/` | Works, but could be cleaner | Low |
-| Analyzer scripts | `scripts/analytics/` | Work but are JXA | Medium |
+| Analyzer scripts | `scripts/analytics/` | Pure TypeScript (no migration needed) | N/A |
 
 #### Task 3.1: Migrate remaining task scripts
-- [ ] `flagged-tasks-perspective.ts`
-- [ ] Test perspective queries
+- [x] `flagged-tasks-perspective.ts` - Migrated to OmniJS-first pattern
+- [x] Test perspective queries - 1041 unit tests pass
 
-#### Task 3.2: Migrate analyzer scripts (if time permits)
-- [ ] `due-date-bunching-analyzer.ts`
-- [ ] `next-actions-analyzer.ts`
-- [ ] `review-gaps-analyzer.ts`
-- [ ] `wip-limits-analyzer.ts`
+#### Task 3.2: Analyzer scripts - NO MIGRATION NEEDED
+The analyzer scripts are **pure TypeScript functions** that operate on data already fetched from OmniFocus. They don't contain JXA code and don't need migration:
+- `due-date-bunching-analyzer.ts` - Pure TS data analysis
+- `next-actions-analyzer.ts` - Pure TS data analysis
+- `review-gaps-analyzer.ts` - Pure TS data analysis
+- `wip-limits-analyzer.ts` - Pure TS data analysis
 
 ---
 
@@ -233,7 +234,7 @@ These have v3 replacements and are no longer used:
 |-------|---------|----------|--------|
 | Phase 1 | 3 scripts | High | ✅ Complete (2025-11-27) |
 | Phase 2 | 7 scripts | Medium | ✅ Complete (2025-11-27) |
-| Phase 3 | 5+ scripts | Low | Not started |
+| Phase 3 | 1 script (analyzers are pure TS) | Low | ✅ Complete (2025-11-27) |
 | Cleanup | Delete deprecated | Low | Not started |
 
 ---
