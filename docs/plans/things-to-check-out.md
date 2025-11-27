@@ -211,3 +211,218 @@ interface RepetitionRule {
 - [OmniFocus: Repeating Tasks](https://omni-automation.com/omnifocus/task-repeat.html)
 - [OmniFocus API 3.13.1](https://omni-automation.com/omnifocus/OF-API.html)
 - [iCalendar RRULE Tool](https://icalendar.org/rrule-tool.html)
+
+---
+
+## 2. Unified API Filter Passthrough Issues (2025-11-27)
+
+**Context:** When trying to query projects/tasks by folder or project name, filters are not being passed through the unified API correctly.
+
+### Issues Discovered
+
+#### Issue 2.1: Project Folder Filtering Broken → ✅ FIXED (2025-11-27)
+
+**Symptom:** Querying projects with folder filter returns ALL projects instead of filtering.
+
+```typescript
+// ✅ FIXED - Now returns only projects in the specified folder
+{
+  query: {
+    type: "projects",
+    filters: { folder: "Fix OmniFocus MCP Bridge Issues" }
+  }
+}
+```
+
+**Expected:** Only projects in that folder
+**Result:** 4 projects returned (correct!)
+
+**Root Causes Found:**
+1. `QueryCompiler.transformFilters()` was not passing folder filter to internal TaskFilter
+2. `OmniFocusReadTool.routeToProjectsTool()` was not passing folder to ProjectsTool
+3. `list-projects-v3.ts` was using `project.folder` (always null) instead of `project.parentFolder`
+
+**Fix Applied:**
+- Added `folder` to TaskFilter contract (`src/contracts/filters.ts`)
+- Added folder passthrough in QueryCompiler (`src/tools/unified/compilers/QueryCompiler.ts`)
+- Added folder passthrough in OmniFocusReadTool (`src/tools/unified/OmniFocusReadTool.ts`)
+- Fixed OmniJS script to use `project.parentFolder` (`src/omnifocus/scripts/projects/list-projects-v3.ts`)
+
+**Important Finding:** In OmniJS, `project.folder` returns null for all projects accessed via `flattenedProjects`. Must use `project.parentFolder` instead!
+
+**Behavior Note:** The folder filter matches the **direct parent folder** only. Projects in subfolders are not included. For example:
+- `folder: "Development"` → returns 2 projects directly in Development
+- `folder: "Fix OmniFocus MCP Bridge Issues"` → returns 4 projects in that subfolder
+
+#### ✅ Nested Folder Path Support Added (2025-11-27)
+
+Full nested path support is now implemented. You can filter by:
+- Simple folder name: `folder: "Fix OmniFocus MCP Bridge Issues"`
+- Full nested path: `folder: "Development/Fix OmniFocus MCP Bridge Issues"`
+
+Both return the same 4 projects in that folder. The script detects if the filter contains "/" and switches to path-matching mode.
+
+**New Output Field:** Projects now include `folderPath` showing the full hierarchy:
+```json
+{
+  "name": "Investigation: Available Mode Behavior Issue",
+  "folder": "Fix OmniFocus MCP Bridge Issues",
+  "folderPath": "Development/Fix OmniFocus MCP Bridge Issues"
+}
+```
+
+---
+
+#### Issue 2.2: Project Name Filtering Broken
+
+**Symptom:** Querying projects with name filter returns ALL projects.
+
+```typescript
+// ❌ BROKEN - Returns all projects, ignores name filter
+{
+  query: {
+    type: "projects",
+    filters: { name: { contains: "OmniFocus MCP" } }
+  }
+}
+```
+
+**Expected:** Only projects containing "OmniFocus MCP" in name
+**Actual:** All 50 projects returned
+
+---
+
+#### Issue 2.3: Search Mode Filter Handling
+
+**Symptom:** `mode: "search"` rejects filters even when provided.
+
+```typescript
+// ❌ BROKEN - Error: "Search mode requires a search term or filters"
+{
+  query: {
+    type: "tasks",
+    mode: "search",
+    filters: { name: { contains: "MCP" } }
+  }
+}
+```
+
+The filters object is not being passed through to the backend TasksTool.
+
+---
+
+### What Works
+
+```typescript
+// ✅ WORKS - Task text filtering with mode: "all"
+{
+  query: {
+    type: "tasks",
+    mode: "all",
+    filters: { text: { contains: "MCP" } }
+  }
+}
+```
+
+This correctly finds tasks where name or note contains "MCP".
+
+---
+
+### Root Cause Analysis
+
+**Suspected Location:** `src/tools/unified/compilers/QueryCompiler.ts`
+
+The QueryCompiler may not be:
+1. Passing folder/name filters to the ProjectsTool backend
+2. Converting the unified filter format to backend-specific parameters
+3. Handling the `search` mode's filter requirements
+
+**Files to Investigate:**
+- `src/tools/unified/compilers/QueryCompiler.ts` - Filter translation logic
+- `src/tools/unified/OmniFocusReadTool.ts` - Tool routing
+- `src/tools/projects/ProjectsTool.ts` - Backend project filtering
+- `src/tools/tasks/QueryTasksToolV2.ts` - Backend task filtering
+
+---
+
+### What LLMs Can/Cannot Easily See (Updated 2025-11-27)
+
+**CAN see easily:**
+- Tasks by text search (`text: {contains: "keyword"}`)
+- Tasks by tag, status, dates, flagged
+- All projects (unfiltered list)
+- All folders (unfiltered list)
+- **✅ Projects filtered by folder** (FIXED!)
+- **✅ Projects filtered by nested folder path** (e.g., "Development/Fix OmniFocus MCP Bridge Issues")
+
+**CANNOT see easily (still needs work):**
+- Projects filtered by name
+- Tasks via search mode with filters
+
+~~- Folder hierarchy/nesting (nested path like "Parent/Child")~~ **✅ FIXED!**
+
+**Workaround for name filtering:** Search for tasks by text content, which returns the project name as a field.
+
+---
+
+### Test Case for Fix Verification ✅ PASSED
+
+This query now correctly returns only projects in the specified folder:
+
+```typescript
+// ✅ VERIFIED - Returns 4 projects (correct!)
+{
+  query: {
+    type: "projects",
+    filters: { folder: "Fix OmniFocus MCP Bridge Issues" }
+  }
+}
+
+// Results (verified 2025-11-27):
+// - Investigation: Available Mode Behavior Issue
+// - Fix: batch_create Tool - Tags & ParentId Issues
+// - Testing Infrastructure: Claude Desktop Conversation Limits
+// - Fix: task_velocity Tool Returns Zero Data
+```
+
+---
+
+## 3. MCP Hot Reload for Development (2025-11-27)
+
+**Context:** When developing this MCP server, code changes require restarting Claude Code to pick up the new code. Claude Code has no built-in way to restart MCP servers without quitting the session.
+
+### Community Solution: mcp-hot-reload
+
+**Repository:** https://github.com/data-goblin/claude-code-mcp-reload
+
+A Python proxy wrapper that enables hot reloading of MCP servers during development:
+
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "command": "python",
+      "args": [
+        "-m", "mcp_hot_reload", "wrap", "--proxy", "--name", "omnifocus",
+        "--", "node", "/path/to/omnifocus-mcp/dist/index.js"
+      ]
+    }
+  }
+}
+```
+
+**Benefits:**
+- Restart MCP server without losing Claude Code session
+- Preserves conversation context
+- Claude can trigger restarts via a built-in tool
+- Transparent proxy with full MCP protocol support
+
+### Native Feature Requests
+
+No built-in support yet. Open issues requesting this:
+- [#2756](https://github.com/anthropics/claude-code/issues/2756) - `/reload-mcps` command
+- [#1026](https://github.com/anthropics/claude-code/issues/1026) - Reconnect MCP servers
+
+### Current Workaround
+
+Without hot-reload, use `claude --resume` to restart Claude Code while preserving conversation context.

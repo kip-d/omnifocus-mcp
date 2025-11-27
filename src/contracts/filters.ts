@@ -109,6 +109,9 @@ export interface TaskFilter {
   // --- Project ---
   projectId?: string;
 
+  // --- Folder (for project filtering) ---
+  folder?: string;                // Filter projects by folder name
+
   // --- Pagination ---
   limit?: number;
   offset?: number;
@@ -172,6 +175,7 @@ export const FILTER_PROPERTY_NAMES = [
   'dropped',            // NEW: Filter by dropped status
   'hasRepetitionRule',  // NEW: Filter for recurring tasks
   'projectId',
+  'folder',             // NEW: Filter projects by folder name
   'limit',
   'offset',
   'mode',

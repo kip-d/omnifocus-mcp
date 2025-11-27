@@ -140,6 +140,9 @@ PERFORMANCE:
     // Tags are already transformed to string[] by QueryCompiler
     if (compiled.filters.tags) projectsArgs.tags = compiled.filters.tags;
 
+    // Pass folder filter for project filtering
+    if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
+
     return this.projectsTool.execute(projectsArgs);
   }
 

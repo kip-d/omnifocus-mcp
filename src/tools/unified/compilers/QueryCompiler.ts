@@ -192,6 +192,11 @@ export class QueryCompiler {
       result.id = input.id;
     }
 
+    // Folder passthrough (for project filtering)
+    if (input.folder) {
+      result.folder = input.folder;
+    }
+
     return result;
   }
 }

@@ -72,6 +72,21 @@ export function buildListProjectsScriptV3(params: {
               return 'active';
             }
 
+            // Helper to build folder path by walking up parent chain
+            function getFolderPath(folder) {
+              if (!folder) return '';
+              const parts = [];
+              let current = folder;
+              while (current) {
+                parts.unshift(current.name);
+                current = current.parent;
+              }
+              return parts.join('/');
+            }
+
+            // Check if filter contains a path separator
+            const filterIsPath = filterFolder.includes('/');
+
             // Process all projects
             flattenedProjects.forEach(project => {
               if (count >= limit) return;
@@ -92,10 +107,19 @@ export function buildListProjectsScriptV3(params: {
                 if (!name.includes(filterSearch) && !note.includes(filterSearch)) return;
               }
 
-              // Folder filter
+              // Folder filter (supports both simple name and nested path)
               if (filterFolder) {
-                const folder = project.folder;
-                if (!folder || folder.name !== filterFolder) return;
+                const folder = project.parentFolder;
+                if (!folder) return;
+
+                if (filterIsPath) {
+                  // Path match: "Development/Fix OmniFocus MCP Bridge Issues"
+                  const folderPath = getFolderPath(folder);
+                  if (folderPath !== filterFolder && !folderPath.endsWith('/' + filterFolder)) return;
+                } else {
+                  // Simple name match: "Fix OmniFocus MCP Bridge Issues"
+                  if (folder.name !== filterFolder) return;
+                }
               }
 
               // Needs review filter
@@ -114,7 +138,8 @@ export function buildListProjectsScriptV3(params: {
                 ${shouldInclude('note') ? 'note: project.note || "",' : ''}
                 ${shouldInclude('dueDate') ? 'dueDate: project.dueDate ? project.dueDate.toISOString() : null,' : ''}
                 ${shouldInclude('deferDate') ? 'deferDate: project.deferDate ? project.deferDate.toISOString() : null,' : ''}
-                ${shouldInclude('folder') ? 'folder: project.folder ? project.folder.name : null,' : ''}
+                ${shouldInclude('folder') ? 'folder: project.parentFolder ? project.parentFolder.name : null,' : ''}
+                ${shouldInclude('folder') ? 'folderPath: project.parentFolder ? getFolderPath(project.parentFolder) : null,' : ''}
                 ${shouldInclude('sequential') ? 'sequential: project.sequential || false,' : ''}
                 ${shouldInclude('lastReviewDate') ? 'lastReviewDate: project.lastReviewDate ? project.lastReviewDate.toISOString() : null,' : ''}
                 ${shouldInclude('nextReviewDate') ? 'nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null,' : ''}
@@ -267,7 +292,7 @@ export const LIST_PROJECTS_SCRIPT_V3 = `
               note: project.note || '',
               dueDate: project.dueDate ? project.dueDate.toISOString() : null,
               deferDate: project.deferDate ? project.deferDate.toISOString() : null,
-              folder: project.folder ? project.folder.name : null,
+              folder: project.parentFolder ? project.parentFolder.name : null,
               sequential: project.sequential || false,
               lastReviewDate: project.lastReviewDate ? project.lastReviewDate.toISOString() : null,
               nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null
