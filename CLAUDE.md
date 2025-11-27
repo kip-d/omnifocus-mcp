@@ -162,9 +162,15 @@ If you find similar code, **READ IT IN FULL** before implementing your solution.
 **Before making ANY changes, consult these essential documents:**
 - `/docs/dev/PATTERNS.md` - **START HERE** - Quick symptom lookup and common solutions
 - `/docs/dev/ARCHITECTURE.md` - Unified JavaScript execution patterns and decision tree
+- `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` - **CRITICAL** - Syntax differences between JXA and OmniJS (source of many bugs!)
 - `/docs/dev/LESSONS_LEARNED.md` - Hard-won insights that will save you from repeating costly mistakes
 
 **Key Architecture Principle:** Use hybrid JXA + evaluateJavascript() bridge approach. Pure JXA for simple operations, bridge for complex operations that JXA cannot handle.
+
+**JXA vs OmniJS Quick Reference:**
+- **JXA (outer script):** Method calls with `()` → `task.name()`, `folder.parent()`
+- **OmniJS (inside evaluateJavascript):** Property access without `()` → `task.name`, `folder.parent`
+- **Parent relationships ONLY work in OmniJS** → `project.parentFolder`, `folder.parent` (JXA returns null!)
 
 ## 🔍 Quick Symptom → Documentation Index
 
@@ -182,6 +188,9 @@ If you find similar code, **READ IT IN FULL** before implementing your solution.
 | "Script too large" error | `/docs/dev/LESSONS_LEARNED.md` → "Script Size" | Limits are 523KB - check syntax |
 | Function not found | Search `src/omnifocus/scripts/shared/` | Use existing helpers |
 | Integration test timeout | `/docs/dev/PATTERNS.md` → "Integration Tests" | 60s requests, 90s tests |
+| Parent/folder returns null | `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` | Use OmniJS bridge: `project.parentFolder`, `folder.parent` |
+| "X is not a function" error | `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` | You're in OmniJS - remove `()` from property access |
+| Property returns function not value | `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md` | You're in JXA - add `()` to property access |
 
 **Not listed? Search `/docs/dev/PATTERNS.md` for keywords before debugging!**
 

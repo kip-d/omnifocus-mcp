@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders.js';
+import { buildListFoldersScriptV3 } from '../../omnifocus/scripts/folders/list-folders-v3.js';
 import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder.js';
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
@@ -107,16 +108,16 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
       switch (operation) {
         // Query operations
         case 'list': {
-          // Direct implementation of list folders
+          // Direct implementation of list folders using v3 OmniJS script
           const {
-            includeHierarchy = true,
             includeProjects = params.includeProjects || false,
-            sortBy = 'name',
+            includeSubfolders = params.includeSubfolders !== false,
+            sortBy = 'path',
             sortOrder = 'asc',
             limit = 100,
-          } = params as { includeHierarchy?: boolean; includeProjects?: boolean; sortBy?: string; sortOrder?: string; limit?: number };
+          } = params as { includeProjects?: boolean; includeSubfolders?: boolean; sortBy?: string; sortOrder?: string; limit?: number };
 
-          const cacheKey = 'folders';
+          const cacheKey = `folders_${includeProjects ? 'with_projects' : 'basic'}`;
 
           // Check cache first
           const cached = this.cache.get('folders', cacheKey);
@@ -125,18 +126,15 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             return createSuccessResponseV2('folders', { folders: (cached as { folders?: unknown[]; items?: unknown[] }).folders ?? (cached as { folders?: unknown[]; items?: unknown[] }).items ?? cached }, undefined, { ...timer.toMetadata(), operation: 'list', from_cache: true, filters: {} });
           }
 
-          // Build script options
-          const scriptOptions = {
-            includeHierarchy,
-            includeProjects,
-            sortBy,
-            sortOrder,
+          // Use v3 script with OmniJS bridge for accurate hierarchy
+          const script = buildListFoldersScriptV3({
             limit,
-          };
+            includeProjects,
+            includeSubfolders,
+            sortBy: sortBy as 'name' | 'depth' | 'path',
+            sortOrder: sortOrder as 'asc' | 'desc',
+          });
 
-          const script = createListFoldersScript(scriptOptions);
-          console.error(`[FOLDERS_DEBUG] Generated script length: ${script?.length}, type: ${typeof script}`);
-          console.error(`[FOLDERS_DEBUG] Script preview: ${script?.substring(0, 100)}...`);
           const listResult = await this.execJson(script);
           if (isScriptError(listResult)) {
             return createErrorResponseV2(
@@ -149,12 +147,12 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedListResult = listResult.data as { items?: unknown[]; folders?: unknown[] };
+          const parsedListResult = listResult.data as { items?: unknown[]; folders?: unknown[]; metadata?: { returned_count?: number; total_available?: number } };
           const foldersArr = parsedListResult.items || parsedListResult.folders || [];
 
           // Cache the results for 5 minutes (folders change less frequently)
           if (!includeProjects) {
-            this.cache.set('folders', cacheKey, foldersArr);
+            this.cache.set('folders', cacheKey, { folders: foldersArr });
           }
 
           return createSuccessResponseV2('folders', { folders: foldersArr }, undefined, { ...timer.toMetadata(), operation: 'list', total_folders: foldersArr.length });

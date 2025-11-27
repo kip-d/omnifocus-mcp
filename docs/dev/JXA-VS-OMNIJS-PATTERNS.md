@@ -230,6 +230,60 @@ const id = task.id.primaryKey;
 const id = task.id();  // ✅ Use method call
 ```
 
+### Parent/Folder Returns Null or "Can't convert types" (CRITICAL - 2025-11-27)
+
+**Symptom:**
+```javascript
+// In JXA - accessing parent relationships fails
+const parentFolder = folder.parent();     // ❌ "Can't convert types" error
+const projectFolder = project.folder();    // ❌ Returns null for all flattenedProjects
+```
+
+**Root Cause:** JXA's Apple Events bridge cannot properly resolve parent relationships, regardless of whether you use hierarchical (`doc.folders().folders()`) or flattened (`flattenedFolders`) access.
+
+**Fix:** Use OmniJS bridge with property access (no parentheses):
+```javascript
+// OmniJS (inside evaluateJavascript) - WORKS
+const omniJsScript = `
+  flattenedFolders.forEach(folder => {
+    const parent = folder.parent;              // ✅ Property access, works!
+    const parentName = parent ? parent.name : null;
+  });
+
+  flattenedProjects.forEach(project => {
+    const folder = project.parentFolder;       // ✅ Property access, works!
+    const folderPath = getFolderPath(folder);
+  });
+`;
+const result = app.evaluateJavascript(omniJsScript);
+```
+
+**Alternative:** If you must stay in JXA, build parent info while traversing hierarchy:
+```javascript
+// JXA - Manual hierarchy traversal
+function processFolder(folder, parentPath = '') {
+  const name = folder.name();
+  const path = parentPath ? parentPath + '/' + name : name;
+
+  // Process this folder with known path
+  results.push({ name, path, depth: path.split('/').length - 1 });
+
+  // Recurse to children (they inherit our path)
+  const children = folder.folders();
+  for (let i = 0; i < children.length; i++) {
+    processFolder(children[i], path);
+  }
+}
+
+// Start from top-level folders
+const topFolders = doc.folders();
+for (let i = 0; i < topFolders.length; i++) {
+  processFolder(topFolders[i], '');
+}
+```
+
+**Scripts affected:** Any script needing folder hierarchy, project folder assignment, or parent relationships.
+
 ### Error: "X is not a function"
 
 **Symptom:**

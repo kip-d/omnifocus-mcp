@@ -61,10 +61,11 @@ describe('FoldersTool (self-contained implementation)', () => {
 
   describe('Query Operations', () => {
     it('list uses cache when available', async () => {
-      mockCache.get.mockReturnValue([{ id: 'f1', name: 'Work' }]);
+      mockCache.get.mockReturnValue({ folders: [{ id: 'f1', name: 'Work' }] });
       await tool.executeValidated({ operation: 'list' } as any);
-      
-      expect(mockCache.get).toHaveBeenCalledWith('folders', 'folders');
+
+      // v3 script uses 'folders_basic' cache key (or 'folders_with_projects' when includeProjects=true)
+      expect(mockCache.get).toHaveBeenCalledWith('folders', 'folders_basic');
       // Should use cache and not call execJson
       expect((tool as any).execJson).not.toHaveBeenCalled();
     });

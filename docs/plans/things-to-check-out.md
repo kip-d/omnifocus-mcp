@@ -426,3 +426,49 @@ No built-in support yet. Open issues requesting this:
 ### Current Workaround
 
 Without hot-reload, use `claude --resume` to restart Claude Code while preserving conversation context.
+
+---
+
+## 4. JXA vs OmniJS Investigation (2025-11-27)
+
+**Context:** We've documented many JXA "failures" (parent relationships, property access issues), but the Omni Group developers are highly skilled. We should investigate whether these are true JXA/Apple Events limitations or if we're missing something.
+
+### Questions to Answer
+
+1. **Is JXA truly limited, or are we using it wrong?**
+   - Work through all examples in `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md`
+   - Test each "failing" pattern systematically
+   - Verify our assumptions about what works/doesn't work
+
+2. **Why does OmniJS exist?**
+   - Is it purely for performance (avoiding Apple Events overhead)?
+   - Did Omni Group create it because JXA couldn't do what they needed?
+   - Or is it for cross-platform compatibility (iOS doesn't have JXA)?
+
+3. **Apple Events limitations**
+   - JXA uses Apple's JavaScript-ObjectiveC bridge
+   - Parent relationships failing might be Apple Events limitation, not OmniFocus
+   - Research Apple's documentation on scripting bridges
+
+4. **OmniFocus scripting documentation**
+   - Review official OmniFocus automation documentation
+   - Check Omni Automation website: https://omni-automation.com/omnifocus/
+   - Look for guidance on when to use JXA vs OmniJS
+
+### Test Plan
+
+Work through each example in `JXA-VS-OMNIJS-PATTERNS.md`:
+- [ ] Test property access patterns (method calls vs property access)
+- [ ] Test parent/folder relationships in both contexts
+- [ ] Test hierarchical vs flattened collections
+- [ ] Test tag operations in both contexts
+- [ ] Document any patterns where JXA actually works but we thought it didn't
+
+### Hypothesis
+
+The Omni Group likely created OmniJS for:
+1. **Performance** - Direct object access vs Apple Events marshaling
+2. **iOS support** - JXA doesn't exist on iOS, OmniJS works everywhere
+3. **Richer API** - OmniJS may expose more functionality than Apple Events allows
+
+The "failures" we see in JXA might be Apple Events bridge limitations when serializing complex object relationships across process boundaries.
