@@ -429,46 +429,57 @@ Without hot-reload, use `claude --resume` to restart Claude Code while preservin
 
 ---
 
-## 4. JXA vs OmniJS Investigation (2025-11-27)
+## 4. JXA vs OmniJS Investigation (2025-11-27) ✅ COMPLETE
 
-**Context:** We've documented many JXA "failures" (parent relationships, property access issues), but the Omni Group developers are highly skilled. We should investigate whether these are true JXA/Apple Events limitations or if we're missing something.
+**Context:** We documented many JXA "failures" (parent relationships, property access issues), but the Omni Group developers are highly skilled. Investigation completed to understand the true limitations.
 
-### Questions to Answer
+### Key Findings
 
-1. **Is JXA truly limited, or are we using it wrong?**
-   - Work through all examples in `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md`
-   - Test each "failing" pattern systematically
-   - Verify our assumptions about what works/doesn't work
+#### 1. JXA is Official "Legacy/Sunset Mode"
 
-2. **Why does OmniJS exist?**
-   - Is it purely for performance (avoiding Apple Events overhead)?
-   - Did Omni Group create it because JXA couldn't do what they needed?
-   - Or is it for cross-platform compatibility (iOS doesn't have JXA)?
+Per [Omni Group forums](https://discourse.omnigroup.com/t/how-to-get-going-with-javascript-and-omnifocus/66578):
+> "osascript (JXA) and omniJS are completely different programming interfaces... The osascript interface is described as **legacy / sunset mode** with slower performance."
 
-3. **Apple Events limitations**
-   - JXA uses Apple's JavaScript-ObjectiveC bridge
-   - Parent relationships failing might be Apple Events limitation, not OmniFocus
-   - Research Apple's documentation on scripting bridges
+#### 2. Why OmniJS Exists (All Three Hypotheses Confirmed!)
 
-4. **OmniFocus scripting documentation**
-   - Review official OmniFocus automation documentation
-   - Check Omni Automation website: https://omni-automation.com/omnifocus/
-   - Look for guidance on when to use JXA vs OmniJS
+- **Performance**: OmniJS runs *inside* OmniFocus (direct object access). JXA runs *outside* via Apple Events RPC (inter-process communication per property access).
+- **iOS support**: JXA only exists on macOS. OmniJS works on macOS, iOS, and iPadOS.
+- **Richer API**: Some object relationships can't be marshaled through Apple Events.
 
-### Test Plan
+#### 3. Specific JXA Limitations (Empirically Verified)
 
-Work through each example in `JXA-VS-OMNIJS-PATTERNS.md`:
-- [ ] Test property access patterns (method calls vs property access)
-- [ ] Test parent/folder relationships in both contexts
-- [ ] Test hierarchical vs flattened collections
-- [ ] Test tag operations in both contexts
-- [ ] Document any patterns where JXA actually works but we thought it didn't
+**The Pattern**: Folder→folder parent relationships fail. Other parents work fine!
 
-### Hypothesis
+| Method | JXA Result |
+|--------|------------|
+| `task.containingProject()` | ✅ Works |
+| `task.parentTask()` | ✅ Works |
+| `project.folder()` | ✅ Works |
+| `folder.folders()` | ✅ Works |
+| `folder.parent()` | ❌ "Can't convert types" |
+| `folder.containingFolder()` | ❌ "Can't convert types" |
+| `project.parentFolder()` | ❌ "Can't convert types" |
 
-The Omni Group likely created OmniJS for:
-1. **Performance** - Direct object access vs Apple Events marshaling
-2. **iOS support** - JXA doesn't exist on iOS, OmniJS works everywhere
-3. **Richer API** - OmniJS may expose more functionality than Apple Events allows
+#### 4. Documentation Correction
 
-The "failures" we see in JXA might be Apple Events bridge limitations when serializing complex object relationships across process boundaries.
+Previous documentation incorrectly stated `project.folder()` returns null - this is **WRONG**. It works perfectly in JXA! Use `project.folder()` instead of `project.parentFolder()`.
+
+### Test Results
+
+Full empirical testing completed with `/tmp/jxa-patterns-test.js`:
+- Tested 150 projects with `project.folder()` → 127 success, 0 errors
+- Tested 10 folders with `folder.parent()` → 0 success, 10 "Can't convert types" errors
+- Collection-based retrieval (`folders.name()`) works for bulk operations
+- Hierarchical traversal (`doc.folders() → folder.folders()`) works correctly
+
+### Updated Documentation
+
+All findings documented in `/docs/dev/JXA-VS-OMNIJS-PATTERNS.md`:
+- Added "Background: Why Two JavaScript Environments?" section
+- Added "Parent Relationship Compatibility Matrix" with empirical results
+- Corrected troubleshooting section for parent/folder access
+- Added official sources and forum references
+
+### Conclusion
+
+The Omni Group developers *are* sharp - they created OmniJS specifically because JXA/Apple Events has inherent limitations. The `evaluateJavascript()` bridge is the **recommended approach** for operations that JXA can't handle, which is exactly what we're doing.

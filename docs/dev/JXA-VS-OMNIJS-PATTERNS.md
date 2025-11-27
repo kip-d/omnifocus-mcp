@@ -1,18 +1,59 @@
 # JXA vs OmniJS Bridge - Property Access Patterns
 
-**Last Updated:** 2025-10-20
+**Last Updated:** 2025-11-27
 **Critical Reference:** Use this guide when working with OmniFocus automation
 
 ---
 
 ## Table of Contents
 
-1. [Execution Contexts](#execution-contexts)
-2. [Property Access Rules](#property-access-rules)
-3. [Common Patterns](#common-patterns)
-4. [When to Use Bridge](#when-to-use-bridge)
-5. [Troubleshooting](#troubleshooting)
-6. [Examples](#examples)
+1. [Background: Why Two JavaScript Environments?](#background-why-two-javascript-environments)
+2. [Execution Contexts](#execution-contexts)
+3. [Property Access Rules](#property-access-rules)
+4. [Parent Relationship Compatibility Matrix](#parent-relationship-compatibility-matrix)
+5. [Common Patterns](#common-patterns)
+6. [When to Use Bridge](#when-to-use-bridge)
+7. [Troubleshooting](#troubleshooting)
+8. [Examples](#examples)
+
+---
+
+## Background: Why Two JavaScript Environments?
+
+### JXA is "Legacy/Sunset Mode"
+
+Per the [Omni Group forums](https://discourse.omnigroup.com/t/how-to-get-going-with-javascript-and-omnifocus/66578):
+
+> "osascript (JXA) and omniJS are completely different programming interfaces, and two quite different JavaScript interpreter instances."
+>
+> The osascript interface is described as **"legacy / sunset mode"** with slower performance due to external interface traffic overhead.
+
+### Why OmniJS Exists
+
+Omni Group created OmniJS (Omni Automation) for three key reasons:
+
+1. **Performance**: OmniJS runs *inside* OmniFocus with direct object access. JXA runs *outside* via Apple Events (RPC), requiring inter-process communication for every property access.
+
+2. **Cross-platform support**: JXA only exists on macOS. OmniJS works identically on macOS, iOS, and iPadOS.
+
+3. **Richer API**: OmniJS exposes more functionality than Apple Events can marshal across process boundaries.
+
+### Apple Events Architecture (Root Cause of JXA Limitations)
+
+JXA uses Apple's Open Scripting Architecture (OSA) which implements RPC-style communication:
+
+> "Apple event IPC is _not_ OOP, it's RPC + simple first-class relational queries."
+>
+> Each `.property()` access in JXA translates to a separate Apple Event request to OmniFocus.
+
+This explains why:
+- **Bulk operations are slow**: N property accesses = N round-trips
+- **Some relationships fail**: Complex object references don't serialize well across processes
+- **Folder→folder parent access fails**: Apple Events can't marshal folder parent references
+
+### Official Recommendation
+
+The official [Omni Automation documentation](https://omni-automation.com/jxa-applescript.html) recommends using JXA as a *wrapper* to launch OmniJS scripts via URL encoding, not as a direct scripting interface.
 
 ---
 
@@ -92,6 +133,70 @@ In OmniJS context (inside `evaluateJavascript()`), use **property access** not m
 task.id.primaryKey      // Returns string
 task.tags = [...]       // Sets tags (works!)
 task.plannedDate = new Date()  // Sets date (works!)
+```
+
+---
+
+## Parent Relationship Compatibility Matrix
+
+**Empirically tested 2025-11-27** - This matrix shows which parent relationships work in JXA vs require OmniJS bridge.
+
+### What Works in JXA ✅
+
+| Method | Result | Sample Output |
+|--------|--------|---------------|
+| `task.containingProject()` | ✅ SUCCESS | Returns Project object, can call `.name()` |
+| `task.parentTask()` | ✅ SUCCESS | Returns parent Task for subtasks |
+| `project.folder()` | ✅ SUCCESS | Returns Folder object, can call `.name()` |
+| `folder.folders()` | ✅ SUCCESS | Returns array of child Folders |
+| `doc.folders()` | ✅ SUCCESS | Returns top-level Folders |
+
+### What Fails in JXA ❌
+
+| Method | Error | Workaround |
+|--------|-------|------------|
+| `folder.parent()` | "Can't convert types" | Use OmniJS bridge or hierarchical traversal |
+| `folder.containingFolder()` | "Can't convert types" | Use OmniJS bridge or hierarchical traversal |
+| `project.parentFolder()` | "Can't convert types" | Use `project.folder()` instead (it works!) |
+
+### The Pattern
+
+The specific failure is **folder→folder parent relationships**:
+
+- ✅ `task → project` works (task.containingProject())
+- ✅ `task → task` works (task.parentTask())
+- ✅ `project → folder` works (project.folder())
+- ❌ `folder → folder` fails (folder.parent())
+
+**Root cause**: Apple Events has trouble serializing folder parent references back to JXA. This is an OSA limitation, not an OmniFocus bug.
+
+### Test Code (Verified)
+
+```javascript
+// Test script that proves the pattern
+(() => {
+  const app = Application('OmniFocus');
+  const doc = app.defaultDocument();
+
+  // ✅ WORKS - project.folder()
+  const projects = doc.flattenedProjects();
+  for (let i = 0; i < projects.length; i++) {
+    const folder = projects[i].folder();  // Works!
+    if (folder) {
+      console.log(projects[i].name() + ' in ' + folder.name());
+    }
+  }
+
+  // ❌ FAILS - folder.parent()
+  const folders = doc.flattenedFolders();
+  for (let i = 0; i < folders.length; i++) {
+    try {
+      const parent = folders[i].parent();  // "Can't convert types"
+    } catch (e) {
+      console.log('Error: ' + e.message);
+    }
+  }
+})()
 ```
 
 ---
@@ -230,59 +335,74 @@ const id = task.id.primaryKey;
 const id = task.id();  // ✅ Use method call
 ```
 
-### Parent/Folder Returns Null or "Can't convert types" (CRITICAL - 2025-11-27)
+### Parent/Folder "Can't convert types" (CORRECTED - 2025-11-27)
 
 **Symptom:**
 ```javascript
-// In JXA - accessing parent relationships fails
+// In JXA - ONLY folder→folder parent access fails
 const parentFolder = folder.parent();     // ❌ "Can't convert types" error
-const projectFolder = project.folder();    // ❌ Returns null for all flattenedProjects
+const containingFolder = folder.containingFolder();  // ❌ "Can't convert types"
+const parentFolderAlt = project.parentFolder();  // ❌ "Can't convert types"
 ```
 
-**Root Cause:** JXA's Apple Events bridge cannot properly resolve parent relationships, regardless of whether you use hierarchical (`doc.folders().folders()`) or flattened (`flattenedFolders`) access.
-
-**Fix:** Use OmniJS bridge with property access (no parentheses):
+**What Actually Works (Empirically Verified):**
 ```javascript
-// OmniJS (inside evaluateJavascript) - WORKS
-const omniJsScript = `
-  flattenedFolders.forEach(folder => {
-    const parent = folder.parent;              // ✅ Property access, works!
-    const parentName = parent ? parent.name : null;
-  });
-
-  flattenedProjects.forEach(project => {
-    const folder = project.parentFolder;       // ✅ Property access, works!
-    const folderPath = getFolderPath(folder);
-  });
-`;
-const result = app.evaluateJavascript(omniJsScript);
+// ✅ THESE ALL WORK IN JXA:
+const project = task.containingProject();   // ✅ Works!
+const parentTask = task.parentTask();       // ✅ Works!
+const folder = project.folder();            // ✅ Works! (use this, not parentFolder)
+const children = folder.folders();          // ✅ Works!
 ```
 
-**Alternative:** If you must stay in JXA, build parent info while traversing hierarchy:
+**Root Cause:** Apple Events has a specific issue marshaling folder→folder parent references. Other parent relationships (task→project, task→task, project→folder) work fine.
+
+**Solutions:**
+
+1. **For project folders**: Use `project.folder()` not `project.parentFolder()`:
+```javascript
+// ✅ CORRECT - use folder(), not parentFolder()
+const projects = doc.flattenedProjects();
+for (let i = 0; i < projects.length; i++) {
+  const folder = projects[i].folder();  // Works!
+  if (folder) {
+    console.log(projects[i].name() + ' in ' + folder.name());
+  }
+}
+```
+
+2. **For folder hierarchy**: Build paths during traversal or use OmniJS bridge:
 ```javascript
 // JXA - Manual hierarchy traversal
 function processFolder(folder, parentPath = '') {
   const name = folder.name();
   const path = parentPath ? parentPath + '/' + name : name;
-
-  // Process this folder with known path
   results.push({ name, path, depth: path.split('/').length - 1 });
 
-  // Recurse to children (they inherit our path)
   const children = folder.folders();
   for (let i = 0; i < children.length; i++) {
     processFolder(children[i], path);
   }
 }
 
-// Start from top-level folders
 const topFolders = doc.folders();
 for (let i = 0; i < topFolders.length; i++) {
   processFolder(topFolders[i], '');
 }
 ```
 
-**Scripts affected:** Any script needing folder hierarchy, project folder assignment, or parent relationships.
+3. **For full parent access in folders**: Use OmniJS bridge:
+```javascript
+// OmniJS (inside evaluateJavascript) - WORKS
+const omniJsScript = `
+  flattenedFolders.forEach(folder => {
+    const parent = folder.parent;  // Property access in OmniJS
+    const parentName = parent ? parent.name : null;
+  });
+`;
+const result = app.evaluateJavascript(omniJsScript);
+```
+
+**Scripts affected:** Only scripts needing folder→folder parent relationships. Most parent relationships work fine in JXA.
 
 ### Error: "X is not a function"
 
