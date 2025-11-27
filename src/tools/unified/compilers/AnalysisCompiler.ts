@@ -64,6 +64,7 @@ export type CompiledAnalysis =
   | {
       type: 'manage_reviews';
       params?: {
+        operation?: 'list_for_review' | 'mark_reviewed' | 'set_schedule' | 'clear_schedule';
         projectId?: string;
         reviewDate?: string;
       };

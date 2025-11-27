@@ -227,7 +227,10 @@ SCOPE FILTERING:
   private async routeToReviews(
     compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
   ): Promise<unknown> {
-    const args: Record<string, unknown> = {};
+    const args: Record<string, unknown> = {
+      // ManageReviewsTool requires operation - default to list_for_review
+      operation: compiled.params?.operation ?? 'list_for_review',
+    };
 
     if (compiled.params?.projectId) {
       args.projectId = compiled.params.projectId;

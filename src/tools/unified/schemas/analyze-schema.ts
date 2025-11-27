@@ -76,6 +76,7 @@ const AnalysisSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('manage_reviews'),
     params: z.object({
+      operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule', 'clear_schedule']).optional(),
       projectId: z.string().optional(),
       reviewDate: z.string().optional(),
     }).optional(),
