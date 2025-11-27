@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { COMPLETE_TASK_SCRIPT, BULK_COMPLETE_TASKS_SCRIPT, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT, buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
+import { COMPLETE_TASK_SCRIPT, buildBulkCompleteTasksScript, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT, buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 import { buildCreateTaskScript, buildUpdateTaskScript } from '../../contracts/ast/mutation-script-builder.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -1197,11 +1197,10 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
         errors.push({ error: String(error) });
       }
     } else if (operation === 'bulk_complete') {
-      // OPTIMIZATION: Use single-pass bulk complete script instead of looping
-      // Same pattern as bulk_delete - iterates flattenedTasks ONCE for all completions
-      // vs N iterations for N individual completes (70-80% performance improvement expected)
+      // OPTIMIZATION: OmniJS-first bulk complete using Task.byIdentifier() direct lookup
+      // No iteration needed - direct task lookup is faster than building a map
       try {
-        const script = this.omniAutomation.buildScript(BULK_COMPLETE_TASKS_SCRIPT, { taskIds: targetTaskIds, completionDate: null });
+        const script = buildBulkCompleteTasksScript({ taskIds: targetTaskIds, completionDate: null });
         const result = await this.execJson(script);
 
         if (isScriptError(result)) {

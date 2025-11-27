@@ -1,7 +1,9 @@
-import { getUnifiedHelpers } from '../shared/helpers.js';
-
 /**
  * Script to create a new folder in OmniFocus
+ *
+ * Architecture: OmniJS-first (2025+)
+ * - Minimal JXA wrapper for osascript execution
+ * - All logic in OmniJS via evaluateJavascript()
  *
  * Features:
  * - Create folder with name and status
@@ -9,177 +11,246 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  * - Duplicate folder name checking within same parent
  * - Proper error handling and validation
  */
-export const CREATE_FOLDER_SCRIPT = `
-  // CREATE_FOLDER
-  ${getUnifiedHelpers()}
-  
-  (() => {
-    const name = {{name}};
-    const options = {{options}};
-    
-    try {
-      const app = Application('OmniFocus');
-      const doc = app.defaultDocument();
-      
-      // Validate parent folder if specified
-      let parentFolder = null;
-      if (options.parent) {
-        const folders = doc.flattenedFolders();
-        
-        if (!folders) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to retrieve folders from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-            details: "doc.flattenedFolders() returned null or undefined"
-          });
-        }
-        
-        for (let i = 0; i < folders.length; i++) {
-          const folder = folders[i];
-          // Try matching by ID first, then by name
-          const folderId = safeGet(() => folder.id());
-          const folderName = safeGet(() => folder.name());
 
-          if (folderId === options.parent || folderName === options.parent) {
-            parentFolder = folder;
-            break;
-          }
-        }
-        
-        if (!parentFolder) {
-          return JSON.stringify({
-            error: true,
-            message: "Parent folder '" + options.parent + "' not found"
-          });
-        }
-      }
-      
-      // Check for duplicate names within the same parent
-      const existingFolders = parentFolder ? parentFolder.folders() : doc.folders();
-      
-      if (existingFolders) {
-        for (let i = 0; i < existingFolders.length; i++) {
-          if (existingFolders[i].name() === name) {
-            const parentName = parentFolder ? parentFolder.name() : 'root';
-            return JSON.stringify({
-              error: true,
-              message: "Folder '" + name + "' already exists in " + parentName
-            });
-          }
-        }
-      }
-      
-      // Determine position for new folder
-      let position = null;
-      
-      if (options.position && options.position !== 'ending') {
-        const targetContainer = parentFolder || doc;
-        const targetFolders = parentFolder ? parentFolder.folders() : doc.folders();
-        
-        if (options.position === 'beginning') {
-          position = parentFolder ? parentFolder.folders.beginning : doc.folders.beginning;
-        } else if (options.position === 'before' || options.position === 'after') {
-          if (!options.relativeToFolder) {
-            return JSON.stringify({
-              error: true,
-              message: "relativeToFolder is required for '" + options.position + "' position"
-            });
-          }
-          
-          let referenceFolder = null;
-          if (targetFolders) {
-            for (let i = 0; i < targetFolders.length; i++) {
-              if (targetFolders[i].name() === options.relativeToFolder) {
-                referenceFolder = targetFolders[i];
-                break;
+export interface CreateFolderOptions {
+  parent?: string | null;
+  status?: 'active' | 'dropped';
+  position?: 'beginning' | 'ending' | 'before' | 'after';
+  relativeToFolder?: string;
+}
+
+export interface CreateFolderParams {
+  name: string;
+  options: CreateFolderOptions;
+}
+
+export function buildCreateFolderScript(params: CreateFolderParams): string {
+  const serializedParams = JSON.stringify({
+    name: params.name,
+    options: params.options || {},
+  });
+
+  return `
+    (() => {
+      const app = Application('OmniFocus');
+
+      try {
+        const omniJsScript = \`
+          (() => {
+            const params = ${serializedParams};
+            const name = params.name;
+            const options = params.options || {};
+
+            // Validate parent folder if specified
+            let parentFolder = null;
+            if (options.parent) {
+              // Try by ID first, then by name
+              parentFolder = Folder.byIdentifier(options.parent);
+
+              if (!parentFolder) {
+                // Search by name
+                const allFolders = flattenedFolders;
+                for (let i = 0; i < allFolders.length; i++) {
+                  if (allFolders[i].name === options.parent) {
+                    parentFolder = allFolders[i];
+                    break;
+                  }
+                }
+              }
+
+              if (!parentFolder) {
+                return JSON.stringify({
+                  success: false,
+                  error: "Parent folder '" + options.parent + "' not found"
+                });
               }
             }
-          }
-          
-          if (!referenceFolder) {
+
+            // Check for duplicate names within the same parent
+            const existingFolders = parentFolder ? parentFolder.folders : library.folders;
+
+            for (let i = 0; i < existingFolders.length; i++) {
+              if (existingFolders[i].name === name) {
+                const parentName = parentFolder ? parentFolder.name : 'root';
+                return JSON.stringify({
+                  success: false,
+                  error: "Folder '" + name + "' already exists in " + parentName
+                });
+              }
+            }
+
+            // Create the folder
+            let newFolder;
+            try {
+              if (parentFolder) {
+                newFolder = new Folder(name, parentFolder);
+              } else {
+                newFolder = new Folder(name);
+              }
+            } catch (createError) {
+              return JSON.stringify({
+                success: false,
+                error: "Failed to create folder: " + (createError.message || String(createError))
+              });
+            }
+
+            // Set status after creation if specified
+            if (options.status === 'dropped' && newFolder) {
+              try {
+                newFolder.status = Folder.Status.Dropped;
+              } catch (statusError) {
+                // Status setting failed, but folder was created
+              }
+            }
+
+            // Handle positioning
+            if (options.position && options.position !== 'ending' && newFolder) {
+              try {
+                const targetFolders = parentFolder ? parentFolder.folders : library.folders;
+
+                if (options.position === 'beginning') {
+                  moveFolders([newFolder], targetFolders.beginning);
+                } else if ((options.position === 'before' || options.position === 'after') && options.relativeToFolder) {
+                  let referenceFolder = null;
+                  for (let i = 0; i < targetFolders.length; i++) {
+                    if (targetFolders[i].name === options.relativeToFolder) {
+                      referenceFolder = targetFolders[i];
+                      break;
+                    }
+                  }
+
+                  if (referenceFolder) {
+                    if (options.position === 'before') {
+                      moveFolders([newFolder], referenceFolder.before);
+                    } else {
+                      moveFolders([newFolder], referenceFolder.after);
+                    }
+                  }
+                }
+              } catch (positionError) {
+                // Position setting failed, but folder was created
+              }
+            }
+
+            // Build response
+            const folderPath = [];
+            let current = newFolder.parent;
+            while (current) {
+              folderPath.unshift(current.name);
+              current = current.parent;
+            }
+
             return JSON.stringify({
-              error: true,
-              message: "Reference folder '" + options.relativeToFolder + "' not found"
+              success: true,
+              folder: {
+                id: newFolder.id.primaryKey,
+                name: newFolder.name,
+                parent: parentFolder ? parentFolder.name : null,
+                parentId: parentFolder ? parentFolder.id.primaryKey : null,
+                path: folderPath.length > 0 ? folderPath.join('/') + '/' + newFolder.name : newFolder.name,
+                status: newFolder.status === Folder.Status.Dropped ? 'dropped' : 'active',
+                createdAt: new Date().toISOString()
+              },
+              message: "Folder '" + name + "' created successfully"
             });
-          }
-          
-          position = options.position === 'before' ? referenceFolder.before : referenceFolder.after;
-        }
-      }
-      
-      // Create the folder - use make() for JXA
-      let newFolder;
-      try {
-        // Try using make() which is the standard JXA approach
-        const folderLocation = parentFolder ? parentFolder.folders : doc.folders;
-        newFolder = app.make({
-          new: 'folder',
-          withProperties: { name: name },
-          at: folderLocation
+          })()
+        \`;
+
+        const result = app.evaluateJavascript(omniJsScript);
+        return result;
+
+      } catch (error) {
+        return JSON.stringify({
+          success: false,
+          error: error.message || String(error),
+          context: 'create_folder'
         });
-      } catch (makeError) {
-        // If make() fails, try alternate approach
-        try {
-          const folderProps = { name: name };
-          newFolder = app.Folder(folderProps);
-        } catch (constructorError) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to create folder using available JXA methods",
-            details: makeError.toString() + "; " + constructorError.toString()
-          });
-        }
       }
-      
-      // Set status after creation if specified
-      if (options.status && newFolder) {
-        try {
-          if (options.status === 'dropped') {
-            newFolder.status = 'dropped';
+    })()
+  `;
+}
+
+// Legacy export for backwards compatibility (template-based)
+export const CREATE_FOLDER_SCRIPT = `
+  (() => {
+    const app = Application('OmniFocus');
+
+    try {
+      const omniJsScript = \`
+        (() => {
+          const name = {{name}};
+          const options = {{options}};
+
+          // Validate parent folder if specified
+          let parentFolder = null;
+          if (options.parent) {
+            parentFolder = Folder.byIdentifier(options.parent);
+
+            if (!parentFolder) {
+              const allFolders = flattenedFolders;
+              for (let i = 0; i < allFolders.length; i++) {
+                if (allFolders[i].name === options.parent) {
+                  parentFolder = allFolders[i];
+                  break;
+                }
+              }
+            }
+
+            if (!parentFolder) {
+              return JSON.stringify({
+                success: false,
+                error: "Parent folder '" + options.parent + "' not found"
+              });
+            }
           }
-        } catch (statusError) {
-          // Status setting failed, but folder was created
-          // Continue with the folder creation success
-        }
-      }
-      
-      // If we used the Folder() constructor, add to container
-      // (make() already adds it to the specified location)
-      if (!newFolder.id) {
-        try {
+
+          // Check for duplicate names
+          const existingFolders = parentFolder ? parentFolder.folders : library.folders;
+          for (let i = 0; i < existingFolders.length; i++) {
+            if (existingFolders[i].name === name) {
+              return JSON.stringify({
+                success: false,
+                error: "Folder '" + name + "' already exists in " + (parentFolder ? parentFolder.name : 'root')
+              });
+            }
+          }
+
+          // Create the folder
+          let newFolder;
           if (parentFolder) {
-            parentFolder.folders.push(newFolder);
+            newFolder = new Folder(name, parentFolder);
           } else {
-            doc.folders.push(newFolder);
+            newFolder = new Folder(name);
           }
-        } catch (pushError) {
-          // Folder might already be added if make() worked
-        }
-      }
-      
-      // Try to position the folder if needed
-      if (position && newFolder.moveTo) {
-        try {
-          newFolder.moveTo(position);
-        } catch (moveError) {
-          // Position setting failed, but folder was created
-          // Continue with success
-        }
-      }
-      
-      return JSON.stringify({
-        success: true,
-        folder: {
-          id: newFolder.id(),
-          name: newFolder.name(),
-          parent: options.parent || null,
-          status: options.status || 'active',
-          createdAt: new Date().toISOString()
-        },
-        message: "Folder '" + name + "' created successfully"
-      });
+
+          // Set status
+          if (options.status === 'dropped') {
+            newFolder.status = Folder.Status.Dropped;
+          }
+
+          return JSON.stringify({
+            success: true,
+            folder: {
+              id: newFolder.id.primaryKey,
+              name: newFolder.name,
+              parent: options.parent || null,
+              status: options.status || 'active',
+              createdAt: new Date().toISOString()
+            },
+            message: "Folder '" + name + "' created successfully"
+          });
+        })()
+      \`;
+
+      const result = app.evaluateJavascript(omniJsScript);
+      return result;
+
     } catch (error) {
-      return formatError(error, 'create_folder');
+      return JSON.stringify({
+        success: false,
+        error: error.message || String(error),
+        context: 'create_folder'
+      });
     }
-  })();
+  })()
 `;

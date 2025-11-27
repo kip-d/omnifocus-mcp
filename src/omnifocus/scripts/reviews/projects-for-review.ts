@@ -1,7 +1,9 @@
-import { getUnifiedHelpers } from '../shared/helpers.js';
-
 /**
  * Script to find projects that are due for review
+ *
+ * Architecture: OmniJS-first (2025+)
+ * - Minimal JXA wrapper for osascript execution
+ * - All logic in OmniJS via evaluateJavascript()
  *
  * Features:
  * - Find projects overdue for review
@@ -10,158 +12,309 @@ import { getUnifiedHelpers } from '../shared/helpers.js';
  * - Include review status and time calculations
  * - Essential for GTD weekly reviews
  */
-export const PROJECTS_FOR_REVIEW_SCRIPT = `
-  ${getUnifiedHelpers()}
-  
-  (() => {
-    const filter = {{filter}};
-    const projects = [];
-    const now = new Date();
-    
-    // Helper function to calculate days between dates
-    function daysBetweenDates(date1, date2) {
-      const msPerDay = 24 * 60 * 60 * 1000;
-      return Math.ceil((date2.getTime() - date1.getTime()) / msPerDay);
-    }
-    
-    // Helper function to determine if project matches review criteria
-    function shouldIncludeProject(project) {
-      const nextReviewDate = safeGetDate(() => project.nextReviewDate());
-      
-      // If no review date set, only include if we're looking for projects without schedules
-      if (!nextReviewDate) {
-        return !filter.overdue; // Include unscheduled projects unless we only want overdue
-      }
-      
-      const daysUntilReview = daysBetweenDates(now, new Date(nextReviewDate));
-      
-      if (filter.overdue) {
-        // Only include overdue projects (negative days until review)
-        return daysUntilReview < 0;
-      } else {
-        // Include projects due within daysAhead (including overdue)
-        return daysUntilReview <= filter.daysAhead;
-      }
-    }
-  
-    try {
+
+export interface ProjectsForReviewFilter {
+  overdue?: boolean;
+  daysAhead?: number;
+  status?: string[];
+  folder?: string;
+  limit?: number;
+}
+
+export interface ProjectsForReviewParams {
+  filter: ProjectsForReviewFilter;
+}
+
+export function buildProjectsForReviewScript(params: ProjectsForReviewParams): string {
+  const serializedFilter = JSON.stringify(params.filter || {});
+
+  return `
+    (() => {
       const app = Application('OmniFocus');
-      const doc = app.defaultDocument();
-      
-      const allProjects = doc.flattenedProjects();
-      
-      if (!allProjects) {
+
+      try {
+        const omniJsScript = \`
+          (() => {
+            const filter = ${serializedFilter};
+            const projects = [];
+            const now = new Date();
+
+            // Default values
+            const daysAhead = filter.daysAhead || 7;
+            const statusFilter = filter.status || ['active'];
+            const limit = filter.limit || 100;
+
+            // Helper function to calculate days between dates
+            function daysBetween(date1, date2) {
+              const msPerDay = 24 * 60 * 60 * 1000;
+              return Math.ceil((date2.getTime() - date1.getTime()) / msPerDay);
+            }
+
+            // Helper to get project status string
+            function getProjectStatus(project) {
+              if (project.status === Project.Status.Active) return 'active';
+              if (project.status === Project.Status.OnHold) return 'on-hold';
+              if (project.status === Project.Status.Done) return 'done';
+              if (project.status === Project.Status.Dropped) return 'dropped';
+              return 'unknown';
+            }
+
+            // Helper to get folder name
+            function getFolderName(project) {
+              const folder = project.parentFolder;
+              return folder ? folder.name : null;
+            }
+
+            // Helper to determine if project matches review criteria
+            function shouldInclude(project) {
+              const nextReviewDate = project.nextReviewDate;
+
+              // If no review date set, only include if we're looking for projects without schedules
+              if (!nextReviewDate) {
+                return !filter.overdue;
+              }
+
+              const daysUntilReview = daysBetween(now, nextReviewDate);
+
+              if (filter.overdue) {
+                // Only include overdue projects (negative days until review)
+                return daysUntilReview < 0;
+              } else {
+                // Include projects due within daysAhead (including overdue)
+                return daysUntilReview <= daysAhead;
+              }
+            }
+
+            // Process all projects
+            flattenedProjects.forEach(project => {
+              if (projects.length >= limit) return;
+
+              // Apply status filter
+              const projectStatus = getProjectStatus(project);
+              if (!statusFilter.includes(projectStatus)) return;
+
+              // Apply folder filter
+              if (filter.folder) {
+                const folderName = getFolderName(project);
+                if (folderName !== filter.folder) return;
+              }
+
+              // Check if project meets review criteria
+              if (!shouldInclude(project)) return;
+
+              // Build project object with review information
+              const projectObj = {
+                id: project.id.primaryKey,
+                name: project.name,
+                status: projectStatus,
+                flagged: project.flagged
+              };
+
+              // Add optional properties
+              if (project.note) projectObj.note = project.note;
+
+              const folderName = getFolderName(project);
+              if (folderName) projectObj.folder = folderName;
+
+              if (project.dueDate) {
+                projectObj.dueDate = project.dueDate.toISOString();
+              }
+
+              if (project.deferDate) {
+                projectObj.deferDate = project.deferDate.toISOString();
+              }
+
+              // Review-specific information
+              if (project.lastReviewDate) {
+                projectObj.lastReviewDate = project.lastReviewDate.toISOString();
+              }
+
+              if (project.nextReviewDate) {
+                projectObj.nextReviewDate = project.nextReviewDate.toISOString();
+              }
+
+              // Review interval information
+              const reviewInterval = project.reviewInterval;
+              if (reviewInterval) {
+                projectObj.reviewInterval = {
+                  unit: reviewInterval.unit || 'week',
+                  steps: reviewInterval.steps || 1
+                };
+              }
+
+              // Task counts for review context
+              const rootTask = project.task;
+              if (rootTask) {
+                projectObj.taskCounts = {
+                  total: rootTask.numberOfTasks,
+                  available: rootTask.numberOfAvailableTasks,
+                  completed: rootTask.numberOfCompletedTasks
+                };
+              }
+
+              // Sequential vs parallel for review
+              projectObj.sequential = project.sequential;
+              projectObj.completedByChildren = project.completedByChildren;
+
+              projects.push(projectObj);
+            });
+
+            // Sort by next review date (overdue first, then by date)
+            projects.sort((a, b) => {
+              const aDate = a.nextReviewDate ? new Date(a.nextReviewDate) : new Date('2099-12-31');
+              const bDate = b.nextReviewDate ? new Date(b.nextReviewDate) : new Date('2099-12-31');
+              return aDate.getTime() - bDate.getTime();
+            });
+
+            return JSON.stringify({
+              success: true,
+              projects: projects,
+              metadata: {
+                total_found: projects.length,
+                filter_applied: filter,
+                generated_at: now.toISOString(),
+                search_criteria: {
+                  overdue_only: filter.overdue || false,
+                  days_ahead: daysAhead,
+                  status_filter: statusFilter,
+                  folder_filter: filter.folder || null
+                }
+              }
+            });
+          })()
+        \`;
+
+        const result = app.evaluateJavascript(omniJsScript);
+        return result;
+
+      } catch (error) {
         return JSON.stringify({
-          error: true,
-          message: "Failed to retrieve projects from OmniFocus. The document may not be available or OmniFocus may not be running properly.",
-          details: "doc.flattenedProjects() returned null or undefined"
+          success: false,
+          error: error.message || String(error),
+          context: 'projects_for_review'
         });
       }
-      
-      for (let i = 0; i < allProjects.length; i++) {
-        const project = allProjects[i];
-        
-        // Apply status filter (default to Active only if not specified)
-        const statusFilter = filter.status || ['active'];
-        const projectStatus = safeGetStatus(project);
-        if (!statusFilter.includes(projectStatus)) continue;
-        
-        // Apply folder filter
-        if (filter.folder) {
-          const projectFolder = safeGetFolder(project);
-          if (projectFolder !== filter.folder) continue;
-        }
-        
-        // Check if project meets review criteria
-        if (!shouldIncludeProject(project)) continue;
-        
-        // Build project object with review information
-        const projectObj = {
-          id: safeGet(() => project.id(), 'unknown'),
-          name: safeGet(() => project.name(), 'Unnamed Project'),
-          status: projectStatus,
-          flagged: isFlagged(project)
-        };
-        
-        // Add optional properties
-        const note = safeGet(() => project.note());
-        if (note) projectObj.note = note;
-        
-        const folder = safeGetFolder(project);
-        if (folder) projectObj.folder = folder;
-        
-        const dueDate = safeGetDate(() => project.dueDate());
-        if (dueDate) projectObj.dueDate = dueDate;
-        
-        const deferDate = safeGetDate(() => project.deferDate());
-        if (deferDate) projectObj.deferDate = deferDate;
-        
-        // Review-specific information
-        const lastReviewDate = safeGetDate(() => project.lastReviewDate());
-        if (lastReviewDate) projectObj.lastReviewDate = lastReviewDate;
-        
-        const nextReviewDate = safeGetDate(() => project.nextReviewDate());
-        if (nextReviewDate) projectObj.nextReviewDate = nextReviewDate;
-        
-        // Review interval information
-        const reviewInterval = safeGet(() => project.reviewInterval());
-        if (reviewInterval !== null && reviewInterval !== undefined) {
-          if (typeof reviewInterval === 'object' && reviewInterval !== null) {
-            projectObj.reviewInterval = {
-              unit: safeGet(() => reviewInterval.unit, 'week'),
-              steps: safeGet(() => reviewInterval.steps, 1)
+    })()
+  `;
+}
+
+// Legacy export for backwards compatibility (template-based)
+export const PROJECTS_FOR_REVIEW_SCRIPT = `
+  (() => {
+    const app = Application('OmniFocus');
+
+    try {
+      const omniJsScript = \`
+        (() => {
+          const filter = {{filter}};
+          const projects = [];
+          const now = new Date();
+
+          const daysAhead = filter.daysAhead || 7;
+          const statusFilter = filter.status || ['active'];
+          const limit = filter.limit || 100;
+
+          function daysBetween(date1, date2) {
+            const msPerDay = 24 * 60 * 60 * 1000;
+            return Math.ceil((date2.getTime() - date1.getTime()) / msPerDay);
+          }
+
+          function getProjectStatus(project) {
+            if (project.status === Project.Status.Active) return 'active';
+            if (project.status === Project.Status.OnHold) return 'on-hold';
+            if (project.status === Project.Status.Done) return 'done';
+            if (project.status === Project.Status.Dropped) return 'dropped';
+            return 'unknown';
+          }
+
+          function getFolderName(project) {
+            const folder = project.parentFolder;
+            return folder ? folder.name : null;
+          }
+
+          function shouldInclude(project) {
+            const nextReviewDate = project.nextReviewDate;
+            if (!nextReviewDate) return !filter.overdue;
+            const daysUntilReview = daysBetween(now, nextReviewDate);
+            if (filter.overdue) return daysUntilReview < 0;
+            return daysUntilReview <= daysAhead;
+          }
+
+          flattenedProjects.forEach(project => {
+            if (projects.length >= limit) return;
+
+            const projectStatus = getProjectStatus(project);
+            if (!statusFilter.includes(projectStatus)) return;
+
+            if (filter.folder) {
+              const folderName = getFolderName(project);
+              if (folderName !== filter.folder) return;
+            }
+
+            if (!shouldInclude(project)) return;
+
+            const projectObj = {
+              id: project.id.primaryKey,
+              name: project.name,
+              status: projectStatus,
+              flagged: project.flagged
             };
-          } else {
-            // Legacy numeric format (days)
-            projectObj.reviewIntervalDays = reviewInterval;
-          }
-        }
-        
-        // Task counts for review context
-        const rootTask = safeGet(() => project.rootTask());
-        if (rootTask) {
-          projectObj.taskCounts = {
-            total: safeGet(() => rootTask.numberOfTasks(), 0),
-            available: safeGet(() => rootTask.numberOfAvailableTasks(), 0),
-            completed: safeGet(() => rootTask.numberOfCompletedTasks(), 0)
-          };
-        }
-        
-        // Sequential vs parallel for review
-        projectObj.sequential = safeGet(() => project.sequential(), false);
-        projectObj.completedByChildren = safeGet(() => project.completedByChildren(), false);
-        
-        projects.push(projectObj);
-        
-        // Apply limit
-        if (projects.length >= filter.limit) {
-          break;
-        }
-      }
-      
-      // Sort by next review date (overdue first, then by date)
-      projects.sort((a, b) => {
-        const aDate = a.nextReviewDate ? new Date(a.nextReviewDate) : new Date('2099-12-31');
-        const bDate = b.nextReviewDate ? new Date(b.nextReviewDate) : new Date('2099-12-31');
-        return aDate.getTime() - bDate.getTime();
-      });
-      
-      return JSON.stringify({ 
-        projects: projects,
-        metadata: {
-          total_found: projects.length,
-          filter_applied: filter,
-          generated_at: now.toISOString(),
-          search_criteria: {
-            overdue_only: filter.overdue || false,
-            days_ahead: filter.daysAhead || 7,
-            status_filter: filter.status || ['active'],
-            folder_filter: filter.folder || null
-          }
-        }
-      });
+
+            if (project.note) projectObj.note = project.note;
+            const folderName = getFolderName(project);
+            if (folderName) projectObj.folder = folderName;
+            if (project.dueDate) projectObj.dueDate = project.dueDate.toISOString();
+            if (project.deferDate) projectObj.deferDate = project.deferDate.toISOString();
+            if (project.lastReviewDate) projectObj.lastReviewDate = project.lastReviewDate.toISOString();
+            if (project.nextReviewDate) projectObj.nextReviewDate = project.nextReviewDate.toISOString();
+
+            const reviewInterval = project.reviewInterval;
+            if (reviewInterval) {
+              projectObj.reviewInterval = { unit: reviewInterval.unit || 'week', steps: reviewInterval.steps || 1 };
+            }
+
+            const rootTask = project.task;
+            if (rootTask) {
+              projectObj.taskCounts = {
+                total: rootTask.numberOfTasks,
+                available: rootTask.numberOfAvailableTasks,
+                completed: rootTask.numberOfCompletedTasks
+              };
+            }
+
+            projectObj.sequential = project.sequential;
+            projectObj.completedByChildren = project.completedByChildren;
+
+            projects.push(projectObj);
+          });
+
+          projects.sort((a, b) => {
+            const aDate = a.nextReviewDate ? new Date(a.nextReviewDate) : new Date('2099-12-31');
+            const bDate = b.nextReviewDate ? new Date(b.nextReviewDate) : new Date('2099-12-31');
+            return aDate.getTime() - bDate.getTime();
+          });
+
+          return JSON.stringify({
+            success: true,
+            projects: projects,
+            metadata: {
+              total_found: projects.length,
+              filter_applied: filter,
+              generated_at: now.toISOString()
+            }
+          });
+        })()
+      \`;
+
+      const result = app.evaluateJavascript(omniJsScript);
+      return result;
+
     } catch (error) {
-      return formatError(error, 'projects_for_review');
+      return JSON.stringify({
+        success: false,
+        error: error.message || String(error),
+        context: 'projects_for_review'
+      });
     }
-  })();
+  })()
 `;
