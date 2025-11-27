@@ -255,7 +255,46 @@ If you find similar code, **READ IT IN FULL** before implementing your solution.
   - If optimizing, MEASURE the current bottleneck first
   - Don't assume - profile to find what's actually slow
 
-## 🚨 JavaScript Execution Decision Tree (UPDATED - September 2025)
+## 🚨 JavaScript Execution: OmniJS-First Pattern (UPDATED - November 2025)
+
+### For NEW Scripts: Use OmniJS-First
+
+**See `/docs/dev/OMNIJS-FIRST-PATTERN.md` for complete guide and templates.**
+
+JXA is officially "legacy/sunset mode" per Omni Group. For new scripts, use the OmniJS-first pattern:
+
+```javascript
+// Minimal JXA wrapper
+(() => {
+  const app = Application('OmniFocus');
+
+  // ALL logic in OmniJS
+  const result = app.evaluateJavascript(`
+    (() => {
+      // Standard JavaScript - no () confusion
+      const name = task.name;           // NOT task.name()
+      const parent = folder.parent;     // Works! (fails in JXA)
+      task.tags = [tag1, tag2];         // Direct assignment works
+
+      return JSON.stringify({ success: true, data: result });
+    })()
+  `);
+
+  return result;
+})()
+```
+
+**Benefits:**
+- Consistency (one mental model - property access)
+- Performance (no Apple Events overhead)
+- Reliability (no "Can't convert types" surprises)
+- Future-proof (OmniJS is the recommended path)
+
+**Migration Plan:** See `/docs/plans/omnijs-migration-plan.md`
+
+---
+
+### For EXISTING Scripts: Decision Tree
 
 **CRITICAL: Both JXA and Bridge have valid use cases. Choose based on CONTEXT, not just item count:**
 
