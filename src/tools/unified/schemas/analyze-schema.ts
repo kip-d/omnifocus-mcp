@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coerceObject } from '../../schemas/coercion-helpers.js';
 
 // Scope schema for filtering analysis (shared across most analysis types)
 const AnalysisScopeSchema = z.object({
@@ -82,8 +83,9 @@ const AnalysisSchema = z.discriminatedUnion('type', [
 ]);
 
 // Main analyze schema
+// Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const AnalyzeSchema = z.object({
-  analysis: AnalysisSchema,
+  analysis: coerceObject(AnalysisSchema),
 });
 
 export type AnalyzeInput = z.infer<typeof AnalyzeSchema>;

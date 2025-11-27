@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { coerceNumber } from '../../schemas/coercion-helpers.js';
+import { coerceNumber, coerceObject } from '../../schemas/coercion-helpers.js';
 
 // Filter operators for flexible queries
 const TagFilterSchema = z.object({
@@ -133,37 +133,41 @@ const SortSchema = z.object({
   direction: z.enum(['asc', 'desc']),
 });
 
-// Main query schema
+// Query schema definition
+const QuerySchema = z.object({
+  type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders']),
+  filters: FilterSchema.optional(),
+  fields: z.array(TaskFieldEnum).optional(),
+  sort: z.array(SortSchema).optional(),
+  // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings
+  limit: coerceNumber().min(1).max(500).optional(),
+  offset: coerceNumber().min(0).optional(),
+
+  // Mode parameter with all 10 modes from QueryTasksTool
+  mode: z.enum([
+    'all',           // List all tasks (with optional filters)
+    'inbox',         // Tasks in inbox (not assigned to any project)
+    'search',        // Text search in task names
+    'overdue',       // Tasks past their due date
+    'today',         // Today perspective: Due soon (≤3 days) OR flagged
+    'upcoming',      // Tasks due in next N days
+    'available',     // Tasks ready to work on
+    'blocked',       // Tasks waiting on others
+    'flagged',       // High priority tasks
+    'smart_suggest', // AI-powered suggestions
+  ]).optional(),
+
+  // Response control parameters
+  details: z.boolean().optional(), // Include full task details vs minimal
+  fastSearch: z.boolean().optional(), // Search only names, not notes (performance)
+  daysAhead: coerceNumber().min(1).max(30).optional(), // For upcoming mode: days to look ahead
+  countOnly: z.boolean().optional(), // Return only count, not full task data (33x faster)
+});
+
+// Main read schema
+// Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const ReadSchema = z.object({
-  query: z.object({
-    type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders']),
-    filters: FilterSchema.optional(),
-    fields: z.array(TaskFieldEnum).optional(),
-    sort: z.array(SortSchema).optional(),
-    // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings
-    limit: coerceNumber().min(1).max(500).optional(),
-    offset: coerceNumber().min(0).optional(),
-
-    // Mode parameter with all 10 modes from QueryTasksTool
-    mode: z.enum([
-      'all',           // List all tasks (with optional filters)
-      'inbox',         // Tasks in inbox (not assigned to any project)
-      'search',        // Text search in task names
-      'overdue',       // Tasks past their due date
-      'today',         // Today perspective: Due soon (≤3 days) OR flagged
-      'upcoming',      // Tasks due in next N days
-      'available',     // Tasks ready to work on
-      'blocked',       // Tasks waiting on others
-      'flagged',       // High priority tasks
-      'smart_suggest', // AI-powered suggestions
-    ]).optional(),
-
-    // Response control parameters
-    details: z.boolean().optional(), // Include full task details vs minimal
-    fastSearch: z.boolean().optional(), // Search only names, not notes (performance)
-    daysAhead: coerceNumber().min(1).max(30).optional(), // For upcoming mode: days to look ahead
-    countOnly: z.boolean().optional(), // Return only count, not full task data (33x faster)
-  }),
+  query: coerceObject(QuerySchema),
 });
 
 export type ReadInput = z.infer<typeof ReadSchema>;

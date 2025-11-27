@@ -27,3 +27,28 @@ export const coerceBoolean = () => z.preprocess(
  * Coerce number values from MCP bridge
  */
 export const coerceNumber = () => z.coerce.number();
+
+/**
+ * Coerce object values from MCP bridge (handles JSON string conversion)
+ * Claude Desktop and some MCP clients stringify nested objects during transport.
+ *
+ * @param schema - The Zod schema to validate the parsed object against
+ */
+export const coerceObject = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((val) => {
+    // Already an object - return as-is
+    if (typeof val === 'object' && val !== null) return val;
+
+    // String - try to parse as JSON
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        // Return original value, let schema validation handle the error
+        return val;
+      }
+    }
+
+    // Other types - return as-is and let schema validation handle
+    return val;
+  }, schema);

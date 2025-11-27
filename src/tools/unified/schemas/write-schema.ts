@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { coerceBoolean } from '../../schemas/coercion-helpers.js';
+import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
 
 // Repetition rule schema
 const RepetitionRuleSchema = z.object({
@@ -126,8 +126,9 @@ const MutationSchema = z.discriminatedUnion('operation', [
 ]);
 
 // Main write schema
+// Note: coerceObject handles JSON string->object conversion from MCP bridge
 export const WriteSchema = z.object({
-  mutation: MutationSchema,
+  mutation: coerceObject(MutationSchema),
 });
 
 export type WriteInput = z.infer<typeof WriteSchema>;
