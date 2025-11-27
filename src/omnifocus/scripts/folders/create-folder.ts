@@ -67,7 +67,8 @@ export function buildCreateFolderScript(params: CreateFolderParams): string {
             }
 
             // Check for duplicate names within the same parent
-            const existingFolders = parentFolder ? parentFolder.folders : library.folders;
+            // Note: In OmniJS, top-level folders are accessed via 'folders' global, not 'library.folders'
+            const existingFolders = parentFolder ? parentFolder.folders : folders;
 
             for (let i = 0; i < existingFolders.length; i++) {
               if (existingFolders[i].name === name) {
@@ -106,7 +107,7 @@ export function buildCreateFolderScript(params: CreateFolderParams): string {
             // Handle positioning
             if (options.position && options.position !== 'ending' && newFolder) {
               try {
-                const targetFolders = parentFolder ? parentFolder.folders : library.folders;
+                const targetFolders = parentFolder ? parentFolder.folders : folders;
 
                 if (options.position === 'beginning') {
                   moveFolders([newFolder], targetFolders.beginning);
@@ -205,7 +206,8 @@ export const CREATE_FOLDER_SCRIPT = `
           }
 
           // Check for duplicate names
-          const existingFolders = parentFolder ? parentFolder.folders : library.folders;
+          // Note: In OmniJS, top-level folders are accessed via 'folders' global
+          const existingFolders = parentFolder ? parentFolder.folders : folders;
           for (let i = 0; i < existingFolders.length; i++) {
             if (existingFolders[i].name === name) {
               return JSON.stringify({
