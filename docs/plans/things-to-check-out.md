@@ -429,7 +429,149 @@ Without hot-reload, use `claude --resume` to restart Claude Code while preservin
 
 ---
 
-## 4. JXA vs OmniJS Investigation (2025-11-27) ✅ COMPLETE
+## 4. Search/Filter Fixes Session (2025-11-27) ✅ COMPLETE
+
+**Context:** During review of 4 OmniFocus projects in "Fix OmniFocus MCP Bridge Issues" folder, discovered that search/filter functionality needed fixes to properly find projects and tasks.
+
+### Issues Discovered and Fixed
+
+#### Issue 4.1: Task Project Filter Mismatch → ✅ FIXED
+
+**Symptom:** Filtering tasks by project returned 0 results.
+
+**Root Causes Found (Two-layer problem):**
+1. **AST Builder**: `builder.ts` checked `filter.projectId`, but `QueryTasksTool` sets `filter.project`
+2. **OmniJS Emitter**: Compared `task.containingProject.id.primaryKey` with project NAME (always false)
+
+**Fix Applied:**
+- `src/contracts/ast/builder.ts`: Accept both `filter.project` and `filter.projectId`
+- `src/contracts/ast/emitters/omnijs.ts`: Detect ID vs name and compare appropriately:
+  - IDs (>10 chars, alphanumeric): Compare by `.id.primaryKey`
+  - Names: Compare by `.name`
+
+**Verification:** Query for tasks in "Investigation: Available Mode Behavior Issue" returns 6 tasks.
+
+---
+
+#### Issue 4.2: Project Folder ID Filter → ✅ FIXED
+
+**Symptom:** Filtering projects by folder ID returned 0 results; only folder names worked.
+
+**Root Cause:** `list-projects-v3.ts` only matched folder names, not IDs.
+
+**Fix Applied:**
+- Added ID detection regex: `/^[a-zA-Z0-9_-]+$/.test(filterFolder) && filterFolder.length > 10`
+- ID match: Compare `folder.id.primaryKey`
+- Name match: Compare `folder.name`
+- Path match: Compare full `getFolderPath(folder)` for nested paths
+
+**Verification:** Query with folder ID `lCGfklDrxWd` returns 4 projects correctly.
+
+---
+
+#### Issue 4.3: Project Name Filter Not Passed Through → ✅ FIXED
+
+**Symptom:** Projects couldn't be searched by name through the unified API.
+
+**Root Cause:** `name` filter not defined in schema or passed through routing chain.
+
+**Fix Applied:**
+- `read-schema.ts`: Added `name` filter with `contains`/`matches` operators
+- `QueryCompiler.ts`: Transform `name.contains` to `search` filter
+- `OmniFocusReadTool.ts`: Pass `search` to ProjectsTool routing
+- `ProjectsTool.ts`: Added `search` schema and handling
+
+**Verification:** Query for projects with name "Investigation" finds correct matches.
+
+---
+
+### Key Insights
+
+1. **ID vs Name Detection Heuristic:** Strings >10 chars that are alphanumeric (with - or _) are treated as IDs. This works because OmniFocus IDs are 11-char base64-ish strings like `lCGfklDrxWd`.
+
+2. **Two-Layer Problem Pattern:** The task project filter had TWO bugs at different layers (builder and emitter). Fixing only one layer still resulted in 0 results. Always check the full pipeline!
+
+3. **Filter Passthrough Chains:** Unified API → QueryCompiler → OmniFocusReadTool → Backend Tool. Missing a link anywhere breaks the filter.
+
+### Commits
+
+- `58bec6b` - fix: improve search/filter functionality for projects and tasks
+
+### Files Modified
+
+- `src/contracts/ast/builder.ts` - Accept both project and projectId
+- `src/contracts/ast/emitters/omnijs.ts` - Smart ID vs name comparison
+- `src/contracts/filters.ts` - Added project and search to TaskFilter
+- `src/omnifocus/scripts/projects/list-projects-v3.ts` - Folder ID matching
+- `src/tools/projects/ProjectsTool.ts` - Added search parameter
+- `src/tools/unified/OmniFocusReadTool.ts` - Pass search to ProjectsTool
+- `src/tools/unified/compilers/QueryCompiler.ts` - Name→search transform
+- `src/tools/unified/schemas/read-schema.ts` - Added name filter
+
+---
+
+## 5. OmniFocus Projects to Review (2025-11-27)
+
+**Context:** Four projects in "Development/Fix OmniFocus MCP Bridge Issues" folder were identified for review during testing. Status from review session:
+
+### Project 5.1: Investigation: Available Mode Behavior Issue → BUG CONFIRMED
+
+**Status:** Active (5 tasks)
+**Summary:** Available mode returns tasks with `available: false`. Mismatch between filter logic and field calculation.
+
+**Key Findings:**
+- `handleAvailableTasks` sets `filter.available: true`
+- `LIST_TASKS_SCRIPT` calculates `available` via `taskStatus() === Task.Status.Available`
+- Filtering logic and field calculation use different criteria
+
+**Files to Investigate:**
+- `src/tools/tasks/QueryTasksToolV2.ts` (handleAvailableTasks method)
+- `src/omnifocus/scripts/tasks/list-tasks.ts` (available field calculation)
+
+---
+
+### Project 5.2: Fix: batch_create Tool - Tags & ParentId Issues → BUG CONFIRMED
+
+**Status:** Active (5 tasks), Flagged
+**Summary:** Two issues discovered:
+
+**Bug A: Field Name Confusion (User Error - Documentation)**
+- Schema uses `parentTempId` but easily mistaken for `parentId`
+- Solution: Better documentation/examples
+
+**Bug B: CREATE_PROJECT_SCRIPT Doesn't Handle Tags (Server Bug)**
+- `BatchCreateTool.ts:243` passes tags to script
+- `create-project.ts:51-172` handles options but NOT tags
+- Tags silently ignored for projects
+- Need bridge approach like `CREATE_TASK_SCRIPT`
+
+---
+
+### Project 5.3: Testing Infrastructure: Claude Desktop Conversation Limits → NOT A BUG
+
+**Status:** Active (5 tasks), Flagged
+**Summary:** Hit conversation limit at test 21/31. This is a Claude Desktop limitation, not an MCP server bug.
+
+**Conclusion:** Not an MCP server issue. Consider multi-session testing approach or more concise test responses.
+
+---
+
+### Project 5.4: Fix: task_velocity Tool Returns Zero Data → BUG CONFIRMED
+
+**Status:** Active (7 tasks), Flagged
+**Summary:** task_velocity shows all metrics as 0, contradicting productivity_stats showing 197-198 tasks completed.
+
+**Suspected Root Cause:**
+- Similar to productivity_stats bug (using non-existent API properties)
+- May be using `numberOfCompletedTasks` or similar
+
+**Files to Investigate:**
+- `src/tools/analytics/` (tool wrapper)
+- `src/omnifocus/scripts/analytics/` (script)
+
+---
+
+## 6. JXA vs OmniJS Investigation (2025-11-27) ✅ COMPLETE
 
 **Context:** We documented many JXA "failures" (parent relationships, property access issues), but the Omni Group developers are highly skilled. Investigation completed to understand the true limitations.
 
