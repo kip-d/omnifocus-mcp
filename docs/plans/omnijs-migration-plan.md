@@ -214,17 +214,15 @@ These are already OmniJS or don't need migration:
 
 ---
 
-## Deprecated Scripts (Can Be Deleted)
+## Deprecated Scripts (Cleanup Status)
 
-These have v3 replacements and are no longer used:
+| Script | Replacement | Status |
+|--------|-------------|--------|
+| `list-folders.ts` | `list-folders-v3.ts` | ⚠️ Still in use by FoldersTool.ts |
+| `list-projects.ts` | `list-projects-v3.ts` | ✅ Deleted (2025-11-27) |
+| `workflow-analysis.ts` | `workflow-analysis-v3.ts` | ✅ Deleted (2025-11-27) |
 
-| Script | Replacement |
-|--------|-------------|
-| `list-folders.ts` | `list-folders-v3.ts` |
-| `list-projects.ts` | `list-projects-v3.ts` |
-| `workflow-analysis.ts` | `workflow-analysis-v3.ts` |
-
-**Action:** Verify no imports, then delete.
+**Note:** `list-folders.ts` requires migration of FoldersTool.ts to use v3 version before deletion.
 
 ---
 
@@ -235,7 +233,7 @@ These have v3 replacements and are no longer used:
 | Phase 1 | 3 scripts | High | ✅ Complete (2025-11-27) |
 | Phase 2 | 7 scripts | Medium | ✅ Complete (2025-11-27) |
 | Phase 3 | 1 script (analyzers are pure TS) | Low | ✅ Complete (2025-11-27) |
-| Cleanup | Delete deprecated | Low | Not started |
+| Cleanup | Delete deprecated | Low | ✅ Partial (2/3 deleted, list-folders.ts still in use) |
 
 ---
 

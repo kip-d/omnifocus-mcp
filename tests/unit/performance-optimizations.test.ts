@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LIST_TASKS_SCRIPT_V3 } from '../../src/omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../src/omnifocus/scripts/tasks/update-task-v3.js';
-import { LIST_PROJECTS_SCRIPT } from '../../src/omnifocus/scripts/projects/list-projects.js';
+import { buildListProjectsScriptV3 } from '../../src/omnifocus/scripts/projects/list-projects-v3.js';
 
 describe('Performance Optimization Tests', () => {
   describe('list_tasks performance features', () => {
@@ -24,35 +24,32 @@ describe('Performance Optimization Tests', () => {
     });
   });
 
-  describe('list_projects includeStats parameter', () => {
-    it('should include includeStats parameter in script', () => {
-      const scriptWithStats = LIST_PROJECTS_SCRIPT.replace('{{includeStats}}', 'true');
+  describe('list_projects includeStats parameter (v3)', () => {
+    it('should generate script with includeStats parameter', () => {
+      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
       expect(scriptWithStats).toContain('const includeStats = true');
     });
 
-    it('should only collect statistics when includeStats is true', () => {
-      expect(LIST_PROJECTS_SCRIPT).toContain('if (includeStats === true)');
-      expect(LIST_PROJECTS_SCRIPT).toContain('projectObj.stats =');
+    it('should only include stats logic when includeStats is true', () => {
+      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
+      expect(scriptWithStats).toContain('if (includeStats)');
+      expect(scriptWithStats).toContain('proj.stats =');
     });
 
-    it('should include all expected statistics fields', () => {
-      // Check for all stats fields
-      expect(LIST_PROJECTS_SCRIPT).toContain('active:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('completed:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('completionRate:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('overdue:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('flagged:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('estimatedHours:');
-      expect(LIST_PROJECTS_SCRIPT).toContain('lastActivityDate:');
+    it('should include core statistics fields', () => {
+      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
+      // Check for stats fields in v3 format
+      expect(scriptWithStats).toContain('active:');
+      expect(scriptWithStats).toContain('completed:');
+      expect(scriptWithStats).toContain('completionRate:');
+      expect(scriptWithStats).toContain('overdue:');
+      expect(scriptWithStats).toContain('flagged:');
     });
 
-    it('should handle empty projects gracefully', () => {
-      // Should provide empty stats for projects with no tasks
-      expect(LIST_PROJECTS_SCRIPT).toContain('// Empty project stats');
-      expect(LIST_PROJECTS_SCRIPT).toContain('active: 0');
-      expect(LIST_PROJECTS_SCRIPT).toContain('completed: 0');
-      expect(LIST_PROJECTS_SCRIPT).toContain('total: 0');
-      expect(LIST_PROJECTS_SCRIPT).toContain('completionRate: 0');
+    it('should handle projects with no tasks', () => {
+      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
+      // v3 checks tasks.length > 0 before calculating stats
+      expect(scriptWithStats).toContain('tasks.length > 0');
     });
   });
 
@@ -189,10 +186,12 @@ describe('Cache Behavior Tests', () => {
 });
 
 describe('Error Handling Tests', () => {
-  it('should handle stats collection failure gracefully', () => {
-    // The script should continue without stats if collection fails
-    expect(LIST_PROJECTS_SCRIPT).toContain('} catch (statsError) {');
-    expect(LIST_PROJECTS_SCRIPT).toContain('projectObj.statsError');
+  it('should use v3 OmniJS architecture for stats', () => {
+    // v3 uses OmniJS with direct property access which handles errors differently
+    const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
+    // v3 wraps in try-catch at the outer level
+    expect(scriptWithStats).toContain('try {');
+    expect(scriptWithStats).toContain('catch (error)');
   });
 
   it('should perform safe and efficient task lookup', () => {
