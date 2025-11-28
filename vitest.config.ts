@@ -20,7 +20,8 @@ export default defineConfig({
     // Global setup for integration test teardown - enable when any integration tests might run
     globalSetup: isUnitTestOnly ? undefined : ['tests/support/setup-integration.ts'],
     // Default timeouts accommodate integration tests; unit tests finish faster anyway
-    testTimeout: useShortTimeouts ? 30000 : 120000,     // 30s for unit-only, 2min otherwise
+    // Integration tests (especially update-operations) can take 60-90s each, need 3min buffer
+    testTimeout: useShortTimeouts ? 30000 : 180000,     // 30s for unit-only, 3min otherwise
     hookTimeout: useShortTimeouts ? 60000 : 300000,     // 1min for unit-only, 5min otherwise
     // OmniFocus tests MUST run sequentially to prevent resource contention
     // Multiple concurrent osascript processes cause timeouts and failures
