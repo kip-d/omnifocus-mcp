@@ -1,20 +1,30 @@
 import { defineConfig } from 'vitest/config';
 
-const isIntegrationTest = process.argv.some(arg => arg.includes('tests/integration'));
-const isSmokeTest = process.argv.some(arg => arg.includes('tests/smoke'));
-const needsOmniFocus = isIntegrationTest || isSmokeTest;
+// Detect if running only unit tests (explicit path or TEST_UNIT_ONLY env var)
+const isUnitTestOnly = process.argv.some(arg => arg.includes('tests/unit')) ||
+                       process.env.TEST_UNIT_ONLY === '1';
+
+// When running ALL tests together (npm test), we need timeouts that work for integration/smoke tests
+// Only use short timeouts when explicitly running unit tests only
+const useShortTimeouts = isUnitTestOnly;
+
+// Always use safe mode (sequential execution) unless explicitly running unit tests
+// This prevents resource contention when integration/smoke tests are included
+const useSafeMode = !isUnitTestOnly || process.env.VITEST_SAFE === '1';
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     setupFiles: ['tests/support/setup-unit.ts'],
-    globalSetup: isIntegrationTest ? ['tests/support/setup-integration.ts'] : undefined,
-    testTimeout: isIntegrationTest ? 120000 : 30000,     // 2min for integration, 30s for unit
-    hookTimeout: isIntegrationTest ? 300000 : 60000,     // 5min for integration (cleanup accumulates), 1min for unit
+    // Global setup for integration test teardown - enable when any integration tests might run
+    globalSetup: isUnitTestOnly ? undefined : ['tests/support/setup-integration.ts'],
+    // Default timeouts accommodate integration tests; unit tests finish faster anyway
+    testTimeout: useShortTimeouts ? 30000 : 120000,     // 30s for unit-only, 2min otherwise
+    hookTimeout: useShortTimeouts ? 60000 : 300000,     // 1min for unit-only, 5min otherwise
     // OmniFocus tests MUST run sequentially to prevent resource contention
     // Multiple concurrent osascript processes cause timeouts and failures
-    ...(needsOmniFocus || process.env.VITEST_SAFE === '1'
+    ...(useSafeMode
       ? { pool: 'forks' as const, poolOptions: { forks: { singleFork: true } } }
       : {}),
     coverage: {
