@@ -47,6 +47,9 @@ export interface FilterValue {
   text?: z.infer<typeof TextFilterSchema>;
   estimatedMinutes?: z.infer<typeof NumberFilterSchema>; // Task duration
 
+  // Project/Task name filter
+  name?: z.infer<typeof TextFilterSchema>;
+
   // Project filters
   folder?: string;
 
@@ -78,6 +81,9 @@ const FilterSchema: FilterType = z.lazy(() => z.object({
   inInbox: z.boolean().optional(), // Explicit inbox filter
   text: TextFilterSchema.optional(),
   estimatedMinutes: NumberFilterSchema.optional(), // Task duration
+
+  // Project/Task name filter
+  name: TextFilterSchema.optional(),
 
   // Project filters
   folder: z.string().optional(),

@@ -107,12 +107,18 @@ export function buildListProjectsScriptV3(params: {
                 if (!name.includes(filterSearch) && !note.includes(filterSearch)) return;
               }
 
-              // Folder filter (supports both simple name and nested path)
+              // Folder filter (supports name, nested path, and folder ID)
               if (filterFolder) {
                 const folder = project.parentFolder;
                 if (!folder) return;
 
-                if (filterIsPath) {
+                // Check if filter looks like an ID (alphanumeric with possible - or _)
+                const filterIsId = /^[a-zA-Z0-9_-]+$/.test(filterFolder) && filterFolder.length > 10;
+
+                if (filterIsId) {
+                  // ID match: "lCGfklDrxWd"
+                  if (folder.id.primaryKey !== filterFolder) return;
+                } else if (filterIsPath) {
                   // Path match: "Development/Fix OmniFocus MCP Bridge Issues"
                   const folderPath = getFolderPath(folder);
                   if (folderPath !== filterFolder && !folderPath.endsWith('/' + filterFolder)) return;

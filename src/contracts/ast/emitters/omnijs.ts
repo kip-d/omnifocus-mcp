@@ -115,17 +115,34 @@ function emitTagComparison(operator: ComparisonOperator, tags: string[]): string
   }
 }
 
-function emitProjectComparison(operator: ComparisonOperator, projectId: string): string {
+function emitProjectComparison(operator: ComparisonOperator, projectValue: string): string {
   // In OmniJS, project is accessed directly
   const accessor = 'task.containingProject';
 
-  switch (operator) {
-    case '==':
-      return `(${accessor} && ${accessor}.id.primaryKey === ${emitValue(projectId)})`;
-    case '!=':
-      return `(!${accessor} || ${accessor}.id.primaryKey !== ${emitValue(projectId)})`;
-    default:
-      throw new Error(`Unsupported project operator: ${operator}`);
+  // Determine if value looks like an ID (alphanumeric with possible - or _, length > 10)
+  // or a project name (anything else)
+  const isLikelyId = /^[a-zA-Z0-9_-]+$/.test(projectValue) && projectValue.length > 10;
+
+  if (isLikelyId) {
+    // Compare by project ID
+    switch (operator) {
+      case '==':
+        return `(${accessor} && ${accessor}.id.primaryKey === ${emitValue(projectValue)})`;
+      case '!=':
+        return `(!${accessor} || ${accessor}.id.primaryKey !== ${emitValue(projectValue)})`;
+      default:
+        throw new Error(`Unsupported project operator: ${operator}`);
+    }
+  } else {
+    // Compare by project name
+    switch (operator) {
+      case '==':
+        return `(${accessor} && ${accessor}.name === ${emitValue(projectValue)})`;
+      case '!=':
+        return `(!${accessor} || ${accessor}.name !== ${emitValue(projectValue)})`;
+      default:
+        throw new Error(`Unsupported project operator: ${operator}`);
+    }
   }
 }
 

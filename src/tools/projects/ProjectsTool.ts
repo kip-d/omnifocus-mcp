@@ -36,6 +36,7 @@ const ProjectsToolSchemaV2 = z.object({
   status: z.enum(['active', 'on-hold', 'done', 'dropped', 'all']).optional()
     .describe('Filter by project status (for list operation)'),
   folder: z.string().optional().describe('Filter by folder name'),
+  search: z.string().optional().describe('Search by project name or note content'),
   needsReview: z.union([
     z.boolean(),
     z.string().transform(val => val === 'true' || val === '1'),
@@ -267,6 +268,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       includeDropped?: boolean;
       status?: string;
       folder?: string;
+      search?: string;
     } = {
       limit: args.limit,
       includeDropped: args.status === 'all' || args.status === 'dropped',
@@ -280,6 +282,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     // Add folder filter
     if (args.folder) {
       filter.folder = args.folder;
+    }
+
+    // Add search filter for name/note content
+    if (args.search) {
+      filter.search = args.search;
     }
 
     // Use simple cache keys that match cache warming
@@ -308,6 +315,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       filter: {
         status: statusArray,
         folder: filter.folder,
+        search: filter.search,
       },
       limit: args.limit || 50,
       includeStats: includeStats,

@@ -107,7 +107,11 @@ export interface TaskFilter {
   hasRepetitionRule?: boolean;
 
   // --- Project ---
-  projectId?: string;
+  projectId?: string;             // Filter by project ID (from advanced filters)
+  project?: string | null;        // Filter by project (simple param, null = inbox)
+
+  // --- Search (for name/note search) ---
+  search?: string;                // Search term for name/note content
 
   // --- Folder (for project filtering) ---
   folder?: string;                // Filter projects by folder name

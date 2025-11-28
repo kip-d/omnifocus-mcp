@@ -98,8 +98,10 @@ export function buildAST(filter: TaskFilter): FilterNode {
   }
 
   // --- Project filter ---
-  if (filter.projectId !== undefined) {
-    conditions.push(comparison('task.containingProject', '==', filter.projectId));
+  // Support both filter.projectId (from advanced filters) and filter.project (from simple project param)
+  const projectFilter = filter.projectId ?? filter.project;
+  if (projectFilter !== undefined && projectFilter !== null) {
+    conditions.push(comparison('task.containingProject', '==', projectFilter));
   }
 
   // Return appropriate node based on number of conditions

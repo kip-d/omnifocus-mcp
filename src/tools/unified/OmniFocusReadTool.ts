@@ -143,6 +143,9 @@ PERFORMANCE:
     // Pass folder filter for project filtering
     if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
 
+    // Pass search filter for project name search (from name filter)
+    if (compiled.filters.search) projectsArgs.search = compiled.filters.search;
+
     return this.projectsTool.execute(projectsArgs);
   }
 

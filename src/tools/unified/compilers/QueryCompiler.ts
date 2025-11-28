@@ -166,6 +166,16 @@ export class QueryCompiler {
       }
     }
 
+    // Name filter transformation (for project name search)
+    if (input.name) {
+      const nameFilter = input.name as { contains?: string; matches?: string };
+      if ('contains' in nameFilter && nameFilter.contains) {
+        result.search = nameFilter.contains;
+      } else if ('matches' in nameFilter && nameFilter.matches) {
+        result.search = nameFilter.matches;
+      }
+    }
+
     // Boolean passthrough
     if (input.flagged !== undefined) {
       result.flagged = input.flagged;
