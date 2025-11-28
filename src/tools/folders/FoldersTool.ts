@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { createListFoldersScript } from '../../omnifocus/scripts/folders/list-folders.js';
 import { buildListFoldersScriptV3 } from '../../omnifocus/scripts/folders/list-folders-v3.js';
 import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-folder.js';
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
@@ -159,7 +158,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
         }
 
         case 'get': {
-          // Direct implementation of get folder by ID
+          // Direct implementation of get folder by ID using v3 OmniJS script
           if (!params.folderId) {
             return createErrorResponseV2(
               'folders',
@@ -171,11 +170,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          // For get operation, use list with a filter approach since we don't have a separate get script
-          const getScript = createListFoldersScript({
-            includeHierarchy: true,
+          // Use v3 script with includeProjects for complete folder info
+          const getScript = buildListFoldersScriptV3({
+            limit: 1000, // High limit to ensure we get all folders
             includeProjects: true,
-            limit: 1000, // Set high limit to ensure we get all folders for filtering
+            includeSubfolders: true,
           });
           const getResult = await this.execJson(getScript);
           if (isScriptError(getResult)) {
@@ -189,10 +188,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedGetResult = getResult.data as { items?: Array<{ id: string; [key: string]: unknown }> };
+          const parsedGetResult = getResult.data as { folders?: Array<{ id: string; [key: string]: unknown }> };
 
           // Find the specific folder by ID
-          const folder = parsedGetResult.items?.find((f: { id: string; [key: string]: unknown }) => f.id === params.folderId);
+          const folder = parsedGetResult.folders?.find((f: { id: string; [key: string]: unknown }) => f.id === params.folderId);
           if (!folder) {
             return createErrorResponseV2(
               'folders',
@@ -208,7 +207,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
         }
 
         case 'search': {
-          // Direct implementation of search folders by name
+          // Direct implementation of search folders by name using v3 OmniJS script
           if (!params.searchQuery) {
             return createErrorResponseV2(
               'folders',
@@ -220,10 +219,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const searchScript = createListFoldersScript({
+          const searchScript = buildListFoldersScriptV3({
             search: params.searchQuery,
-            includeHierarchy: true,
             includeProjects: true,
+            includeSubfolders: true,
             limit: 100,
           });
           const searchResult = await this.execJson(searchScript);
@@ -238,13 +237,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedSearchResult = searchResult.data as { items?: unknown[]; folders?: unknown[]; summary?: { total?: number } };
+          const parsedSearchResult = searchResult.data as { folders?: unknown[]; metadata?: { returned_count?: number } };
 
-          return createSuccessResponseV2('folders', { folders: parsedSearchResult.items ?? parsedSearchResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: params.searchQuery, total_matches: parsedSearchResult.summary?.total || parsedSearchResult.items?.length || 0 });
+          return createSuccessResponseV2('folders', { folders: parsedSearchResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: params.searchQuery, total_matches: parsedSearchResult.metadata?.returned_count || (parsedSearchResult.folders?.length ?? 0) });
         }
 
         case 'projects': {
-          // Direct implementation of get projects within a folder
+          // Direct implementation of get projects within a folder using v3 OmniJS script
           if (!params.folderId) {
             return createErrorResponseV2(
               'folders',
@@ -256,10 +255,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          // Get folder with projects included
-          const projectsScript = createListFoldersScript({
-            includeHierarchy: false,
+          // Get folders with projects included using v3
+          const projectsScript = buildListFoldersScriptV3({
             includeProjects: true,
+            includeSubfolders: false,
             limit: 1000,
           });
           const projectsResult = await this.execJson(projectsScript);
@@ -274,10 +273,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedProjectsResult = projectsResult.data as { items?: Array<{ id: string; projects?: unknown[] }> };
+          const parsedProjectsResult = projectsResult.data as { folders?: Array<{ id: string; projects?: unknown[] }> };
 
           // Find the specific folder by ID and return its projects
-          const folderWithProjects = parsedProjectsResult.items?.find((f: { id: string; projects?: unknown[] }) => f.id === params.folderId);
+          const folderWithProjects = parsedProjectsResult.folders?.find((f: { id: string; projects?: unknown[] }) => f.id === params.folderId);
           if (!folderWithProjects) {
             return createErrorResponseV2(
               'folders',
