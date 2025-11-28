@@ -126,6 +126,9 @@ export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationSc
     if (taskData.deferDate) {
       try { task.deferDate = new Date(taskData.deferDate); } catch (e) {}
     }
+    if (taskData.plannedDate) {
+      try { task.plannedDate = new Date(taskData.plannedDate); } catch (e) {}
+    }
 
     // Set estimated minutes
     if (taskData.estimatedMinutes) {
@@ -248,6 +251,7 @@ export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationSc
       flagged: task.flagged(),
       dueDate: task.dueDate() ? task.dueDate().toISOString() : null,
       deferDate: task.deferDate() ? task.deferDate().toISOString() : null,
+      plannedDate: task.plannedDate() ? task.plannedDate().toISOString() : null,
       estimatedMinutes: task.estimatedMinutes() || null,
       tags: appliedTags,
       project: task.containingProject() ? task.containingProject().name() : null,
@@ -450,6 +454,11 @@ export function buildUpdateTaskScript(
       task.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
     }
     if (changes.clearDeferDate) task.deferDate = null;
+
+    if (changes.plannedDate !== undefined) {
+      task.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
+    }
+    if (changes.clearPlannedDate) task.plannedDate = null;
 
     if (changes.clearEstimatedMinutes) {
       task.estimatedMinutes = null;
