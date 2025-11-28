@@ -247,7 +247,8 @@ describe('emitOmniJS', () => {
         ],
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('(task.flagged === true || task.blocked === true)');
+      // task.blocked is a synthetic field that maps to Task.Status.Blocked
+      expect(code).toBe('(task.flagged === true || task.taskStatus === Task.Status.Blocked)');
     });
 
     it('emits NOT with ! operator', () => {

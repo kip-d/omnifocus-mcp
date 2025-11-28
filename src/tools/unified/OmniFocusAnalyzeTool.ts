@@ -134,7 +134,7 @@ SCOPE FILTERING:
     }
 
     if (compiled.params?.groupBy) {
-      args.interval = compiled.params.groupBy;
+      args.groupBy = compiled.params.groupBy;  // TaskVelocityTool expects 'groupBy', not 'interval'
     }
 
     return this.velocityTool.execute(args);

@@ -133,6 +133,52 @@ export const MINIMAL_TAG_BRIDGE = `
       return {success: false, error: e.message};
     }
   }
+
+  // OmniJS template for setting tags on projects
+  // Note: Projects created via JXA are not immediately visible to Project.byIdentifier()
+  // So we use a name-based lookup instead
+  const __SET_PROJECT_TAGS_TEMPLATE = [
+    '(() => {',
+    '  const projectName = $PROJECT_NAME$;',
+    '  const tagNames = $TAGS$;',
+    '  ',
+    '  // Find project by name (more reliable than ID for newly created projects)',
+    '  const matches = flattenedProjects.filter(p => p.name === projectName);',
+    '  if (matches.length === 0) {',
+    '    return JSON.stringify({success: false, error: "project_not_found", searchedName: projectName});',
+    '  }',
+    '  ',
+    '  const project = matches[0];',
+    '  project.clearTags();',
+    '  const added = [];',
+    '  for (const name of tagNames) {',
+    '    let tag = flattenedTags.byName(name);',
+    '    if (!tag) tag = new Tag(name);',
+    '    project.addTag(tag);',
+    '    added.push(name);',
+    '  }',
+    '  return JSON.stringify({success: true, projectId: project.id.primaryKey, tags: added});',
+    '})()'
+  ].join('\\n');
+
+  // Apply tags to project using OmniJS bridge for immediate visibility
+  // Note: Uses project name for lookup since newly created projects aren't visible by ID
+  function bridgeSetProjectTags(app, projectName, tagNames) {
+    if (!tagNames || tagNames.length === 0) {
+      return {success: true, tags: []};
+    }
+
+    try {
+      const script = __formatTagScript(__SET_PROJECT_TAGS_TEMPLATE, {
+        PROJECT_NAME: projectName,
+        TAGS: tagNames
+      });
+      const result = app.evaluateJavascript(script);
+      return JSON.parse(result);
+    } catch (e) {
+      return {success: false, error: e.message};
+    }
+  }
 `;
 
 /**

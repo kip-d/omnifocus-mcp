@@ -65,6 +65,18 @@ function emitComparison(node: ComparisonNode): string {
     return emitDroppedComparison(operator, value as boolean);
   }
 
+  // Special handling for 'available' synthetic field
+  // OmniFocus uses taskStatus enum, not a boolean 'available' property
+  if (field === 'task.available') {
+    return emitAvailableComparison(operator, value as boolean);
+  }
+
+  // Special handling for 'blocked' synthetic field
+  // OmniFocus uses taskStatus enum, not a boolean 'blocked' property
+  if (field === 'task.blocked') {
+    return emitBlockedComparison(operator, value as boolean);
+  }
+
   // Get the field accessor (OmniJS uses direct property access)
   const accessor = getFieldAccessor(field);
 
@@ -164,6 +176,48 @@ function emitDroppedComparison(operator: ComparisonOperator, isDropped: boolean)
       }
     default:
       throw new Error(`Unsupported dropped operator: ${operator}`);
+  }
+}
+
+function emitAvailableComparison(operator: ComparisonOperator, isAvailable: boolean): string {
+  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold
+  // An available task has taskStatus === Task.Status.Available
+  switch (operator) {
+    case '==':
+      if (isAvailable) {
+        return 'task.taskStatus === Task.Status.Available';
+      } else {
+        return 'task.taskStatus !== Task.Status.Available';
+      }
+    case '!=':
+      if (isAvailable) {
+        return 'task.taskStatus !== Task.Status.Available';
+      } else {
+        return 'task.taskStatus === Task.Status.Available';
+      }
+    default:
+      throw new Error(`Unsupported available operator: ${operator}`);
+  }
+}
+
+function emitBlockedComparison(operator: ComparisonOperator, isBlocked: boolean): string {
+  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold, .Blocked
+  // A blocked task has taskStatus === Task.Status.Blocked
+  switch (operator) {
+    case '==':
+      if (isBlocked) {
+        return 'task.taskStatus === Task.Status.Blocked';
+      } else {
+        return 'task.taskStatus !== Task.Status.Blocked';
+      }
+    case '!=':
+      if (isBlocked) {
+        return 'task.taskStatus !== Task.Status.Blocked';
+      } else {
+        return 'task.taskStatus === Task.Status.Blocked';
+      }
+    default:
+      throw new Error(`Unsupported blocked operator: ${operator}`);
   }
 }
 

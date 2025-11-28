@@ -514,36 +514,86 @@ Without hot-reload, use `claude --resume` to restart Claude Code while preservin
 
 **Context:** Four projects in "Development/Fix OmniFocus MCP Bridge Issues" folder were identified for review during testing. Status from review session:
 
-### Project 5.1: Investigation: Available Mode Behavior Issue → BUG CONFIRMED
+### Project 5.1: Investigation: Available Mode Behavior Issue → ✅ FIXED (2025-11-28)
 
-**Status:** Active (5 tasks)
-**Summary:** Available mode returns tasks with `available: false`. Mismatch between filter logic and field calculation.
+**Status:** Fixed
+**Summary:** Available mode was emitting incorrect filter code. The OmniJS emitter wasn't handling the synthetic `task.available` field correctly.
 
-**Key Findings:**
-- `handleAvailableTasks` sets `filter.available: true`
-- `LIST_TASKS_SCRIPT` calculates `available` via `taskStatus() === Task.Status.Available`
-- Filtering logic and field calculation use different criteria
+**Root Cause Found:**
+The AST builder creates `comparison('task.available', '==', filter.available)`, but OmniFocus doesn't have a `task.available` property - it uses `task.taskStatus === Task.Status.Available`.
 
-**Files to Investigate:**
-- `src/tools/tasks/QueryTasksToolV2.ts` (handleAvailableTasks method)
-- `src/omnifocus/scripts/tasks/list-tasks.ts` (available field calculation)
+The OmniJS emitter was directly outputting `task.available === true` instead of translating it to the correct status check.
+
+**Fix Applied:**
+Added special handling in `src/contracts/ast/emitters/omnijs.ts`:
+
+```javascript
+// Special handling for 'available' synthetic field
+if (field === 'task.available') {
+  return emitAvailableComparison(operator, value as boolean);
+}
+
+function emitAvailableComparison(operator: ComparisonOperator, isAvailable: boolean): string {
+  if (isAvailable) {
+    return 'task.taskStatus === Task.Status.Available';
+  } else {
+    return 'task.taskStatus !== Task.Status.Available';
+  }
+}
+```
+
+Also added similar handling for `task.blocked` which had the same issue.
+
+**Verification:**
+```
+Query: mode: 'available', limit: 3
+Result: 3 tasks returned, all with available: true ✅
+```
 
 ---
 
-### Project 5.2: Fix: batch_create Tool - Tags & ParentId Issues → BUG CONFIRMED
+### Project 5.2: Fix: batch_create Tool - Tags & ParentId Issues → ✅ FIXED (2025-11-28)
 
-**Status:** Active (5 tasks), Flagged
-**Summary:** Two issues discovered:
+**Status:** Fixed
+**Summary:** Two issues were discovered and addressed:
 
 **Bug A: Field Name Confusion (User Error - Documentation)**
 - Schema uses `parentTempId` but easily mistaken for `parentId`
-- Solution: Better documentation/examples
+- Solution: Better documentation/examples (not a code bug)
 
-**Bug B: CREATE_PROJECT_SCRIPT Doesn't Handle Tags (Server Bug)**
-- `BatchCreateTool.ts:243` passes tags to script
-- `create-project.ts:51-172` handles options but NOT tags
-- Tags silently ignored for projects
-- Need bridge approach like `CREATE_TASK_SCRIPT`
+**Bug B: CREATE_PROJECT_SCRIPT Doesn't Handle Tags (Server Bug) → FIXED**
+
+**Root Cause Found:**
+1. `CREATE_PROJECT_SCRIPT` had no code to handle `options.tags`
+2. Projects created via JXA are not immediately visible to `Project.byIdentifier()` in OmniJS
+3. Unlike tasks, we needed a name-based lookup instead of ID-based lookup
+
+**Fixes Applied:**
+
+1. **minimal-tag-bridge.ts**: Added `bridgeSetProjectTags()` function that uses name-based lookup:
+   ```javascript
+   const __SET_PROJECT_TAGS_TEMPLATE = [
+     '(() => {',
+     '  const projectName = $PROJECT_NAME$;',
+     '  const matches = flattenedProjects.filter(p => p.name === projectName);',
+     '  // ... add tags via OmniJS ...',
+     '})()'
+   ];
+   ```
+
+2. **create-project.ts**: Added tag handling after project creation:
+   - Imports `getMinimalTagBridge()`
+   - Calls `bridgeSetProjectTags(app, name, options.tags)` after project placement
+   - Returns tags in the response object
+
+**Key Insight:**
+Tasks created via JXA are immediately visible to `Task.byIdentifier()`, but projects are NOT visible to `Project.byIdentifier()`. This required using name-based lookup for the project tag bridge.
+
+**Verification:**
+```
+Create project with tags: ["priority", "urgent"] → tags: ["priority", "urgent"] ✅
+Batch create 2 projects with tags → all tags added correctly ✅
+```
 
 ---
 
@@ -556,18 +606,32 @@ Without hot-reload, use `claude --resume` to restart Claude Code while preservin
 
 ---
 
-### Project 5.4: Fix: task_velocity Tool Returns Zero Data → BUG CONFIRMED
+### Project 5.4: Fix: task_velocity Tool Returns Zero Data → ✅ FIXED (2025-11-28)
 
-**Status:** Active (7 tasks), Flagged
-**Summary:** task_velocity shows all metrics as 0, contradicting productivity_stats showing 197-198 tasks completed.
+**Status:** Fixed
+**Summary:** task_velocity was showing all metrics as 0 due to nested data structure mismatch.
 
-**Suspected Root Cause:**
-- Similar to productivity_stats bug (using non-existent API properties)
-- May be using `numberOfCompletedTasks` or similar
+**Root Cause Found:**
+The V3 script returns `{ ok: true, v: '3', data: { velocity: {...}, throughput: {...} } }`.
+When wrapped by `execJson`, it becomes `{ success: true, data: { ok, v, data: {...} } }`.
+The tool was accessing `scriptData?.throughput` but the actual data was in `scriptData?.data?.throughput`.
 
-**Files to Investigate:**
-- `src/tools/analytics/` (tool wrapper)
-- `src/omnifocus/scripts/analytics/` (script)
+**Fixes Applied:**
+1. **TaskVelocityTool.ts** (line 121-122): Unwrap nested data structure
+   ```typescript
+   const rawData = isScriptSuccess(result) ? result.data : null;
+   const scriptData = (rawData as { data?: TaskVelocityV3Data } | null)?.data ?? null;
+   ```
+
+2. **OmniFocusAnalyzeTool.ts** (line 137): Fix parameter name routing
+   ```typescript
+   args.groupBy = compiled.params.groupBy;  // Was incorrectly 'interval'
+   ```
+
+**Verification:**
+- `tasksCompleted: 322` (was 0)
+- `averagePerDay: 4.39` (was 0)
+- `predictedCapacity: 30.8` (was 0)
 
 ---
 

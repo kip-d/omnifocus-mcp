@@ -1,5 +1,6 @@
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
+import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 
 /**
  * Script to create a new project in OmniFocus
@@ -16,6 +17,7 @@ import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
 export const CREATE_PROJECT_SCRIPT = `
   ${getUnifiedHelpers()}
   ${REPEAT_HELPERS}
+  ${getMinimalTagBridge()}
   
   
   (() => {
@@ -172,13 +174,48 @@ export const CREATE_PROJECT_SCRIPT = `
       // Add to root projects
       doc.projects.push(newProject);
     }
-    
+
+    // Apply tags using OmniJS bridge for reliable visibility
+    // Note: We use project name for lookup because newly created projects
+    // are not immediately visible to OmniJS's Project.byIdentifier()
+    let tagResult = null;
+    if (options.tags && options.tags.length > 0) {
+      try {
+        // Use bridge for tag assignment (required for OmniFocus 4.x)
+        const bridgeResult = bridgeSetProjectTags(app, name, options.tags);
+
+        if (bridgeResult && bridgeResult.success) {
+          tagResult = {
+            success: true,
+            tagsAdded: bridgeResult.tags || [],
+            totalTags: bridgeResult.tags ? bridgeResult.tags.length : 0
+          };
+          console.log('Successfully added ' + tagResult.totalTags + ' tags to project via bridge');
+        } else {
+          tagResult = {
+            success: false,
+            error: bridgeResult ? bridgeResult.error : 'Unknown bridge error',
+            tagsAdded: []
+          };
+          console.log('Warning: Failed to add tags via bridge:', bridgeResult ? bridgeResult.error : 'unknown');
+        }
+      } catch (tagError) {
+        tagResult = {
+          success: false,
+          error: tagError.message,
+          tagsAdded: []
+        };
+        console.log('Warning: Error adding tags:', tagError.message);
+      }
+    }
+
     return JSON.stringify({
       success: true,
       project: {
         id: newProject.id(),
         name: newProject.name(),
         createdAt: new Date().toISOString(),
+        tags: tagResult && tagResult.success ? tagResult.tagsAdded : [],
         nextReviewDate: safeGet(() => {
           const date = newProject.nextReviewDate();
           return date ? date.toISOString() : null;
@@ -193,6 +230,7 @@ export const CREATE_PROJECT_SCRIPT = `
         completedByChildren: safeGet(() => newProject.completedByChildren(), false),
         singleton: safeGet(() => newProject.singleton(), false)
       },
+      tagResult: tagResult,
       message: "Project '" + name + "' created successfully"
     });
   } catch (error) {

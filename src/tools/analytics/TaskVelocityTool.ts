@@ -115,8 +115,11 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
         return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
       }
 
-      // V3 response structure
-      const scriptData = isScriptSuccess(result) ? result.data : null;
+      // V3 response structure - unwrap nested data
+      // Script returns { ok: true, v: '3', data: {...} }, execJson wraps to { success: true, data: {...} }
+      // So result.data is { ok, v, data } and we need result.data.data for actual velocity data
+      const rawData = isScriptSuccess(result) ? result.data : null;
+      const scriptData = (rawData as { data?: TaskVelocityV3Data } | null)?.data ?? null;
 
       // Extract V3 data or use defaults
       const tasksCompleted = scriptData?.throughput?.totalCompleted || 0;
