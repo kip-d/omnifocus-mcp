@@ -853,3 +853,114 @@ Create response plannedDate: 2025-12-18T17:00:00.000Z ✅
 The create response now correctly shows the plannedDate being set and returned.
 
 **Status:** ✅ Fixed
+
+---
+
+## 9. TypeScript Generics & Type Safety Improvements (2025-12-04)
+
+**Context:** During review of a TypeScript MCP Server best practices document, we evaluated current generics usage and identified potential improvements.
+
+### Current State: Already Solid
+
+The codebase uses generics effectively in key areas:
+
+| Pattern | Location | Purpose |
+|---------|----------|---------|
+| `BaseTool<TSchema, TResponse>` | `src/tools/base.ts` | Type-safe tool schema and response |
+| `ScriptResult<T>` | `src/omnifocus/script-result-types.ts` | Generic result wrapper |
+| `ScriptOutput<T>` | `src/contracts/responses.ts` | Script output typing |
+| `MCPToolResponse<T>` | `src/contracts/responses.ts` | MCP response wrapper |
+
+### Potential Improvements (Low Priority)
+
+#### 9.1: Branded Types for IDs
+
+**Problem:** TaskId, ProjectId, TagId are all plain strings - easy to accidentally mix them up.
+
+**Solution:** Use TypeScript branded types:
+
+```typescript
+// src/omnifocus/types.ts
+type TaskId = string & { readonly __brand: "TaskId" };
+type ProjectId = string & { readonly __brand: "ProjectId" };
+type TagId = string & { readonly __brand: "TagId" };
+
+function asTaskId(id: string): TaskId {
+  return id as TaskId;
+}
+
+// Now these are compile-time errors:
+// completeTask(projectId);  // ❌ Type error
+// getProject(taskId);       // ❌ Type error
+```
+
+**Trade-offs:**
+- Pro: Catches ID mixup bugs at compile time
+- Con: Requires significant refactoring across codebase
+- Con: Adds type assertion overhead at API boundaries
+
+**Priority:** Low - would help catch bugs but requires substantial effort
+
+---
+
+#### 9.2: AST Filter Output Typing
+
+**Problem:** The AST filter system (`src/contracts/ast/`) generates scripts but the output shape isn't strongly typed based on filter configuration.
+
+**Current:**
+```typescript
+// Filter builder returns generic script string
+const script = buildFilterScript(filter);
+const result = await execute(script);  // result is unknown
+```
+
+**Potential improvement:**
+```typescript
+// Generic over expected output shape
+function buildFilterScript<T extends FilterOutput>(filter: Filter<T>): TypedScript<T>;
+const result = await execute(script);  // result is T
+```
+
+**Trade-offs:**
+- Pro: Type-safe script results
+- Con: Complex type gymnastics
+- Con: Runtime still dynamic (OmniJS scripts)
+
+**Priority:** Low - types don't help much when the script is a string executed at runtime
+
+---
+
+#### 9.3: CacheManager Generic Typing
+
+**Problem:** Cache entries are typed as `unknown`, requiring type assertions on retrieval.
+
+**Current:**
+```typescript
+cache.get('tasks:today');  // returns unknown
+```
+
+**Potential improvement:**
+```typescript
+cache.get<TaskData[]>('tasks:today');  // returns TaskData[] | null
+// Or: typed cache keys
+type CacheKeys = {
+  'tasks:today': TaskData[];
+  'projects:all': ProjectData[];
+};
+cache.get<K extends keyof CacheKeys>(key: K): CacheKeys[K] | null;
+```
+
+**Trade-offs:**
+- Pro: Eliminates type assertions at call sites
+- Con: Cache keys are dynamic (include query params)
+- Con: Modest benefit for modest effort
+
+**Priority:** Low - current approach works fine
+
+---
+
+### Recommendation
+
+None of these improvements are urgent. The codebase already uses generics where they provide real value. Consider implementing branded types (9.1) only if ID mixup bugs become a recurring problem.
+
+**Related Discussion:** This evaluation came from reviewing the "TypeScript MCP Server Best Practices" document (December 2025).
