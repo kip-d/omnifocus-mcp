@@ -39,6 +39,11 @@ export interface CategorizedScriptError extends ErrorWithRecovery {
   actionable?: string;
   originalError?: unknown;
   context?: Record<string, unknown>;
+  error_id?: string;
+  recovery_suggestions?: string[];
+  related_documentation?: string[];
+  support_contact?: string;
+  technical_details?: Record<string, unknown>;
 }
 
 /**
@@ -51,6 +56,11 @@ export function createCategorizedError(
   actionable?: string,
   context?: Record<string, unknown>,
   originalError?: unknown,
+  error_id?: string,
+  recovery_suggestions?: string[],
+  related_documentation?: string[],
+  support_contact?: string,
+  technical_details?: Record<string, unknown>,
 ): CategorizedScriptError {
   return {
     errorType,
@@ -59,6 +69,11 @@ export function createCategorizedError(
     actionable,
     context,
     originalError,
+    error_id,
+    recovery_suggestions,
+    related_documentation,
+    support_contact,
+    technical_details,
   };
 }
 
@@ -272,6 +287,8 @@ export function categorizeError(
   }
 
   // Generic internal error
+  const errorId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  
   return createCategorizedError(
     ScriptErrorType.INTERNAL_ERROR,
     `Internal error during ${operation}: ${errorMessage}`,
@@ -284,6 +301,22 @@ export function categorizeError(
     'Retry operation and verify system state',
     context,
     error,
+    errorId,
+    [
+      'Try the operation again',
+      'Check that OmniFocus is running and responsive',
+      'Verify your parameters are correct',
+      'If the issue persists, restart OmniFocus',
+    ],
+    [
+      'https://docs.omnifocus.com/troubleshooting',
+    ],
+    'support@omnifocus.com',
+    {
+      operation,
+      timestamp: new Date().toISOString(),
+      errorType: 'INTERNAL_ERROR',
+    }
   );
 }
 

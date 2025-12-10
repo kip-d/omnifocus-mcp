@@ -6,6 +6,11 @@
 export interface ErrorWithRecovery {
   message: string;
   recovery?: string[];
+  error_id?: string;
+  recovery_suggestions?: string[];
+  related_documentation?: string[];
+  support_contact?: string;
+  technical_details?: Record<string, unknown>;
 }
 
 /**
@@ -44,9 +49,33 @@ export function parsingError(operation: string, _received: string, expected: str
 export function formatErrorWithRecovery(error: ErrorWithRecovery): string {
   const parts = [error.message];
 
-  if (error.recovery && error.recovery.length > 0) {
+  // Add error ID if present
+  if (error.error_id) {
+    parts.push(`Error ID: ${error.error_id}`);
+  }
+
+  // Add recovery suggestions (prioritize recovery_suggestions over recovery)
+  const suggestions = error.recovery_suggestions || error.recovery;
+  if (suggestions && suggestions.length > 0) {
     parts.push('', 'How to fix:');
-    parts.push(...error.recovery.map(step => `  • ${step}`));
+    parts.push(...suggestions.map(step => `  • ${step}`));
+  }
+
+  // Add related documentation
+  if (error.related_documentation && error.related_documentation.length > 0) {
+    parts.push('', 'Related documentation:');
+    parts.push(...error.related_documentation.map(doc => `  • ${doc}`));
+  }
+
+  // Add support contact
+  if (error.support_contact) {
+    parts.push('', `Support: ${error.support_contact}`);
+  }
+
+  // Add technical details (for debugging)
+  if (error.technical_details && Object.keys(error.technical_details).length > 0) {
+    parts.push('', 'Technical details:');
+    parts.push(JSON.stringify(error.technical_details, null, 2));
   }
 
   return parts.join('\n');
