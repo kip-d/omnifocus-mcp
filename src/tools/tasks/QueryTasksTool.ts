@@ -30,7 +30,6 @@ import {
   isDateFilter,
   isNumberFilter,
 } from './filter-types.js';
-import { QueryHandlerFactory } from './query-modes/query-handler-factory.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -238,12 +237,9 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
 
-      // Use the new modular query handler approach
-      const factory = new QueryHandlerFactory(this, timer);
-
       // Special case: Count-only queries (33x faster - use optimized GET_TASK_COUNT_SCRIPT)
       if (normalizedArgs.countOnly) {
-        return factory.executeHandler('count_only', normalizedArgs);
+        return this.handleCountOnly(normalizedArgs, timer);
       }
 
       // Special case: ID filtering (exact match for single task)
@@ -251,9 +247,30 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
         return this.handleTaskById(normalizedArgs, timer);
       }
 
-      // Route to appropriate handler based on mode using the factory
-      return factory.executeHandler(normalizedArgs.mode, normalizedArgs);
-
+      // Route to appropriate handler based on mode
+      switch (normalizedArgs.mode) {
+        case 'inbox':
+          return this.handleInboxTasks(normalizedArgs, timer);
+        case 'overdue':
+          return this.handleOverdueTasks(normalizedArgs, timer);
+        case 'upcoming':
+          return this.handleUpcomingTasks(normalizedArgs, timer);
+        case 'today':
+          return this.handleTodaysTasks(normalizedArgs, timer);
+        case 'search':
+          return this.handleSearchTasks(normalizedArgs, timer);
+        case 'available':
+          return this.handleAvailableTasks(normalizedArgs, timer);
+        case 'blocked':
+          return this.handleBlockedTasks(normalizedArgs, timer);
+        case 'flagged':
+          return this.handleFlaggedTasks(normalizedArgs, timer);
+        case 'smart_suggest':
+          return this.handleSmartSuggest(normalizedArgs, timer);
+        case 'all':
+        default:
+          return this.handleAllTasks(normalizedArgs, timer);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
