@@ -964,3 +964,69 @@ cache.get<K extends keyof CacheKeys>(key: K): CacheKeys[K] | null;
 None of these improvements are urgent. The codebase already uses generics where they provide real value. Consider implementing branded types (9.1) only if ID mixup bugs become a recurring problem.
 
 **Related Discussion:** This evaluation came from reviewing the "TypeScript MCP Server Best Practices" document (December 2025).
+
+---
+
+## 10. Merged Utility PRs - Integration Notes (2025-12-10)
+
+**Context:** Three PRs merged adding new utility code. These are opt-in additions not yet wired into the main codebase.
+
+### 10.1: Branded Types (PR #41)
+
+**Location:** `src/utils/branded-types.ts`
+
+**What it adds:**
+- `TaskId`, `ProjectId`, `TagId`, `FolderId`, `PerspectiveId`, `ContextId` branded types
+- Type guards: `isTaskId()`, `isProjectId()`, etc.
+- Conversion functions: `asTaskId()`, `tryAsTaskId()`, etc.
+
+**Integration TODO:**
+- [ ] Update function signatures in ManageTaskTool, QueryTasksTool to use branded types
+- [ ] Add type assertions at API boundaries (where strings come in from MCP)
+- [ ] Consider whether 8-50 char length validation is correct (OmniFocus IDs are typically 11 chars)
+
+**Minor concern:** All type guards use identical validation (length 8-50). If different ID types have different formats, these should be differentiated.
+
+---
+
+### 10.2: Error Handling Utilities (PR #40)
+
+**Location:** `src/utils/circuit-breaker.ts`, `src/utils/error-recovery.ts`
+
+**What it adds:**
+- `CircuitBreaker` class - fault tolerance pattern (threshold, timeout, half-open state)
+- `executeWithRetry()` - automatic retry with exponential backoff
+- `isTransientError()` - classifies retryable errors
+- Enhanced error context with error IDs, recovery suggestions, documentation links
+
+**Integration TODO:**
+- [ ] Consider wrapping OmniFocus script execution with circuit breaker
+- [ ] Add retry logic for transient errors (timeouts, "not responding")
+- [ ] Wire enhanced error context into tool error responses
+
+**Minor concerns:**
+- `categorizeError()` function signature now has many parameters - consider options object pattern
+- `isTransientError()` patterns are reasonable but may need tuning based on real OmniFocus errors
+
+---
+
+### 10.3: AST Architecture Documentation (PR #39)
+
+**Location:** `docs/dev/AST_ARCHITECTURE.md`
+
+**What it adds:** Documentation of existing V4 AST query architecture.
+
+**No integration needed** - pure documentation of existing code.
+
+---
+
+### When to Integrate
+
+These utilities are available but not urgent to integrate:
+
+| Utility | Integrate When |
+|---------|----------------|
+| Branded types | ID mixup bugs become a problem |
+| Circuit breaker | OmniFocus connection issues cause cascading failures |
+| Retry logic | Transient errors are common in production |
+| Enhanced errors | User feedback indicates error messages need improvement |
