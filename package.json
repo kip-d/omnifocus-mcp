@@ -29,7 +29,7 @@
     "test:performance": "vitest tests/performance --run",
     "test:coverage": "vitest tests/unit --coverage --run",
     "test:all": "npm run test:unit && npm run test:integration",
-    "test:quick:safe": "VITEST_SAFE=1 vitest tests/unit --run --reporter=verbose --exclude tests/unit/integration.test.ts --exclude tests/unit/test-data-management.test.ts",
+    "test:quick:safe": "VITEST_SAFE=1 vitest tests/unit --run --reporter=verbose",
     "test:comprehensive": "./scripts/test-comprehensive.sh",
     "test:dev": "./scripts/test-quick.sh",
     "test:cleanup": "npx tsx scripts/test-cleanup.ts",
