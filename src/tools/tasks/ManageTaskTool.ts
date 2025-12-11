@@ -286,7 +286,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
           // Use AST-powered mutation builder (Phase 2 consolidation)
           // Note: name is guaranteed to exist due to validation at line 221
-          const script = buildCreateTaskScript(convertedTaskData as import('../../contracts/mutations.js').TaskCreateData).script;
+          const script = (await buildCreateTaskScript(convertedTaskData as import('../../contracts/mutations.js').TaskCreateData)).script;
           let createResult: unknown;
 
           try {
@@ -395,7 +395,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               if (!repetitionRule) {
                 this.logger.warn('Could not convert repeat rule to repetition rule format');
               } else {
-                const repeatOnlyScript = buildUpdateTaskScript(createdTaskId, { repetitionRule }).script;
+                const repeatOnlyScript = (await buildUpdateTaskScript(createdTaskId, { repetitionRule })).script;
                 const repeatUpdateResult = await this.execJson(repeatOnlyScript);
                 this.logger.debug('Repeat rule update result', { repeatUpdateResult });
                 if (isScriptError(repeatUpdateResult)) {
@@ -496,7 +496,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           });
 
           // Use AST-powered mutation builder (Phase 2 consolidation)
-          const updateScript = buildUpdateTaskScript(taskId!, safeUpdates).script;
+          const updateScript = (await buildUpdateTaskScript(taskId!, safeUpdates)).script;
           const updateResult = await this.execJson(updateScript);
           if (isScriptError(updateResult)) {
             this.logger.error(`Update task script error: ${updateResult.error}`);

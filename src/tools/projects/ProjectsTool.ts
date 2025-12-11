@@ -488,7 +488,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
 
     // Use AST-powered mutation builder (Phase 2 consolidation)
     // Cast to ProjectUpdateData since status mapping ensures type compatibility
-    const script = buildUpdateProjectScript(args.projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData).script;
+    const script = (await buildUpdateProjectScript(args.projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData)).script;
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
