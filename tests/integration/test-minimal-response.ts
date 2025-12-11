@@ -2,8 +2,12 @@
 /**
  * Test script for minimal response mode
  * Verifies the response size reduction for bulk operations
+ *
+ * NOTE: Uses sandbox conventions (__test- prefix for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 import { spawn } from 'child_process';
+import { TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const runMCPCommand = (method: string, params: any): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -88,7 +92,7 @@ const testMinimalResponse = async () => {
       name: 'update_task',
       arguments: {
         taskId: taskId,
-        tags: ['test-standard'],
+        tags: [`${TEST_TAG_PREFIX}standard`],
         minimalResponse: false
       }
     });
@@ -104,7 +108,7 @@ const testMinimalResponse = async () => {
       name: 'update_task',
       arguments: {
         taskId: taskId,
-        tags: ['test-minimal'],
+        tags: [`${TEST_TAG_PREFIX}minimal`],
         minimalResponse: true
       }
     });

@@ -2,11 +2,15 @@
 
 /**
  * Test parent-child task relationships
+ *
+ * NOTE: Uses sandbox conventions (__TEST__ prefix for tasks, __test- for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -63,10 +67,10 @@ async function runTest() {
     const parentResult = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: `Plan Party ${Date.now()}`,
+        name: `${TEST_INBOX_PREFIX} Plan Party ${Date.now()}`,
         sequential: true,  // Subtasks must be done in order
         note: 'This is an action group with sequential subtasks',
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
 
@@ -87,10 +91,10 @@ async function runTest() {
     const child1Result = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: 'Make guest list',
+        name: `${TEST_INBOX_PREFIX} Make guest list`,
         parentTaskId: parentTaskId,
         note: 'Must be done first',
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
     
@@ -105,10 +109,10 @@ async function runTest() {
     const child2Result = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: 'Send invitations',
+        name: `${TEST_INBOX_PREFIX} Send invitations`,
         parentTaskId: parentTaskId,
         note: 'Can only be done after guest list is complete',
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
     
@@ -123,10 +127,10 @@ async function runTest() {
     const child3Result = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: 'Buy decorations',
+        name: `${TEST_INBOX_PREFIX} Buy decorations`,
         parentTaskId: parentTaskId,
         note: 'Can be done anytime',
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
     

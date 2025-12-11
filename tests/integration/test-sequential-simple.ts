@@ -2,11 +2,15 @@
 
 /**
  * Simple test to verify sequential project functionality
+ *
+ * NOTE: Uses sandbox conventions (projects in __MCP_TEST_SANDBOX__, __test- for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -65,7 +69,8 @@ async function runTest() {
       arguments: {
         name: `Sequential Test ${Date.now()}`,
         sequential: true,
-        tags: ['mcp-test'],
+        folder: SANDBOX_FOLDER_NAME,
+        tags: [`${TEST_TAG_PREFIX}sequential`],
       },
     });
 
@@ -100,7 +105,8 @@ async function runTest() {
       arguments: {
         name: `Parallel Test ${Date.now()}`,
         // sequential not specified, should default to false
-        tags: ['mcp-test'],
+        folder: SANDBOX_FOLDER_NAME,
+        tags: [`${TEST_TAG_PREFIX}sequential`],
       },
     });
 

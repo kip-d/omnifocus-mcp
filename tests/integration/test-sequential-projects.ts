@@ -2,11 +2,15 @@
 
 /**
  * Integration test for sequential/parallel project functionality
+ *
+ * NOTE: Uses sandbox conventions (projects in __MCP_TEST_SANDBOX__, __test- for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -73,8 +77,8 @@ async function runTests() {
         name: `Test Sequential Project ${Date.now()}`,
         note: 'This project has tasks that must be done in order',
         sequential: true,
-        folder: 'Test Projects',
-        tags: ['mcp-test'],
+        folder: SANDBOX_FOLDER_NAME,
+        tags: [`${TEST_TAG_PREFIX}sequential`],
       },
     });
 
@@ -108,8 +112,8 @@ async function runTests() {
         name: `Test Parallel Project ${Date.now()}`,
         note: 'This project has tasks that can be done in any order',
         // sequential not specified, should default to false
-        folder: 'Test Projects',
-        tags: ['mcp-test'],
+        folder: SANDBOX_FOLDER_NAME,
+        tags: [`${TEST_TAG_PREFIX}sequential`],
       },
     });
 
@@ -140,7 +144,7 @@ async function runTests() {
     const listResult = await sendRequest(proc, 'tools/call', {
       name: 'list_projects',
       arguments: {
-        folder: 'Test Projects',
+        folder: SANDBOX_FOLDER_NAME,
         limit: 10,
       },
     });
@@ -150,7 +154,7 @@ async function runTests() {
         const data = JSON.parse(listResult.result.content[0].text);
         if (data.success && data.data?.items) {
           const projects = data.data.items;
-          console.log(`✅ Found ${projects.length} projects in Test Projects folder`);
+          console.log(`✅ Found ${projects.length} projects in sandbox folder`);
           
           // Check if our projects have the sequential property
           for (const project of projects) {

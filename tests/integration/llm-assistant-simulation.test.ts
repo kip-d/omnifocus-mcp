@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
+import { SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const sleep = promisify(setTimeout);
 
@@ -12,6 +13,9 @@ const sleep = promisify(setTimeout);
  *
  * Each test represents a conversation flow where an LLM assistant uses multiple tools
  * to accomplish a user's request, just like in Claude Desktop.
+ *
+ * NOTE: Uses sandbox conventions (projects in __MCP_TEST_SANDBOX__, __test- for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 
 const RUN_LLM_TESTS = process.env.ENABLE_LLM_SIMULATION_TESTS === 'true';
@@ -232,7 +236,9 @@ d('LLM Assistant Simulation Tests', () => {
         operation: 'create',
         name: 'Plan Summer Vacation 2025',
         note: 'Planning vacation to Europe - flights, hotels, activities',
-        status: 'active'
+        status: 'active',
+        folder: SANDBOX_FOLDER_NAME,
+        tags: [`${TEST_TAG_PREFIX}llm-sim`]
       });
 
       expect(projectResult).toHaveProperty('success');
@@ -254,10 +260,10 @@ d('LLM Assistant Simulation Tests', () => {
 
       // Step 2: LLM adds logical tasks to the project
       const tasks = [
-        { name: 'Research flight options', tags: ['travel', 'research'] },
-        { name: 'Book accommodation in Paris', tags: ['travel', 'booking'] },
-        { name: 'Plan itinerary for Rome', tags: ['travel', 'planning'] },
-        { name: 'Get travel insurance', tags: ['travel', 'admin'] },
+        { name: 'Research flight options', tags: [`${TEST_TAG_PREFIX}travel`, `${TEST_TAG_PREFIX}research`] },
+        { name: 'Book accommodation in Paris', tags: [`${TEST_TAG_PREFIX}travel`, `${TEST_TAG_PREFIX}booking`] },
+        { name: 'Plan itinerary for Rome', tags: [`${TEST_TAG_PREFIX}travel`, `${TEST_TAG_PREFIX}planning`] },
+        { name: 'Get travel insurance', tags: [`${TEST_TAG_PREFIX}travel`, `${TEST_TAG_PREFIX}admin`] },
       ];
 
       for (const task of tasks) {

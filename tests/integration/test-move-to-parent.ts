@@ -2,11 +2,15 @@
 
 /**
  * Test moving tasks to parent (action groups)
+ *
+ * NOTE: Uses sandbox conventions (__TEST__ prefix for tasks, __test- for tags)
+ * Run `npm run test:cleanup` after to clean up test data
  */
 
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -63,9 +67,9 @@ async function runTest() {
     const parentResult = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: `Action Group ${Date.now()}`,
+        name: `${TEST_INBOX_PREFIX} Action Group ${Date.now()}`,
         sequential: true,
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}move-parent`],
       },
     });
 
@@ -78,9 +82,9 @@ async function runTest() {
     const standaloneResult = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
       arguments: {
-        name: `Standalone Task ${Date.now()}`,
+        name: `${TEST_INBOX_PREFIX} Standalone Task ${Date.now()}`,
         note: 'This will be moved to the parent',
-        tags: ['mcp-test'],
+        tags: [`${TEST_TAG_PREFIX}move-parent`],
       },
     });
 
