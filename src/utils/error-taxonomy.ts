@@ -288,7 +288,7 @@ export function categorizeError(
 
   // Generic internal error
   const errorId = `err_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-  
+
   return createCategorizedError(
     ScriptErrorType.INTERNAL_ERROR,
     `Internal error during ${operation}: ${errorMessage}`,
@@ -316,7 +316,7 @@ export function categorizeError(
       operation,
       timestamp: new Date().toISOString(),
       errorType: 'INTERNAL_ERROR',
-    }
+    },
   );
 }
 

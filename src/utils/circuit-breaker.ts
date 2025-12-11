@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker Pattern Implementation for OmniFocus MCP Server
- * 
+ *
  * Provides fault tolerance and prevents cascading failures by temporarily
  * blocking operations when repeated failures are detected.
  */
@@ -8,10 +8,10 @@
 export interface CircuitBreakerOptions {
   /** Number of failures before opening the circuit */
   threshold: number;
-  
+
   /** Time in milliseconds before attempting to close the circuit */
   timeout: number;
-  
+
   /** Function to check if an error should count toward the threshold */
   shouldCountError?: (error: unknown) => boolean;
 }
@@ -34,7 +34,7 @@ export class CircuitBreaker {
     this.threshold = options.threshold;
     this.timeout = options.timeout;
     this.shouldCountError = options.shouldCountError || ((err) => !!(err));
-    
+
     this.state = {
       isOpen: false,
       isHalfOpen: false,
@@ -107,7 +107,7 @@ export class CircuitBreaker {
   private recordFailure(): void {
     this.state.failureCount++;
     this.state.lastFailureTime = Date.now();
-    
+
     if (this.state.failureCount >= this.threshold) {
       this.openCircuit();
     }
@@ -129,7 +129,7 @@ export class CircuitBreaker {
     if (!this.state.isOpen || !this.state.nextAttemptTime) {
       return false;
     }
-    
+
     return Date.now() >= this.state.nextAttemptTime;
   }
 
@@ -138,7 +138,7 @@ export class CircuitBreaker {
    */
   private async attemptReset<T>(operation: () => Promise<T>): Promise<T> {
     this.state.isHalfOpen = true;
-    
+
     try {
       const result = await operation();
       this.reset();

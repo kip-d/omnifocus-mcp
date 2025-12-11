@@ -1,6 +1,6 @@
 /**
  * Error Recovery Utilities for OmniFocus MCP Server
- * 
+ *
  * Provides automatic recovery patterns for transient errors including
  * retry with exponential backoff and intelligent error classification.
  */
@@ -8,16 +8,16 @@
 export interface RetryOptions {
   /** Maximum number of retry attempts */
   maxRetries?: number;
-  
+
   /** Initial delay in milliseconds */
   initialDelay?: number;
-  
+
   /** Maximum delay in milliseconds */
   maxDelay?: number;
-  
+
   /** Function to check if an error is transient (retryable) */
   isTransientError?: (error: unknown) => boolean;
-  
+
   /** Function to call before each retry */
   onRetry?: (attempt: number, error: unknown) => void;
 }
@@ -44,9 +44,9 @@ export function isTransientError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  
+
   const errorMessage = error.message.toLowerCase();
-  
+
   // Transient error patterns
   const transientPatterns = [
     'timeout',
@@ -65,7 +65,7 @@ export function isTransientError(error: unknown): boolean {
     '503',
     '504',
   ];
-  
+
   return transientPatterns.some(pattern => errorMessage.includes(pattern));
 }
 
@@ -74,19 +74,19 @@ export function isTransientError(error: unknown): boolean {
  */
 export async function executeWithRetry<T>(
   operation: () => Promise<T>,
-  options: RetryOptions = {}
+  options: RetryOptions = {},
 ): Promise<RetryResult<T>> {
   const mergedOptions: Required<RetryOptions> = {
     ...DEFAULT_RETRY_OPTIONS,
     ...options,
   };
-  
+
   let lastError: unknown;
   let attempts = 0;
-  
+
   for (let attempt = 1; attempt <= mergedOptions.maxRetries + 1; attempt++) {
     attempts = attempt;
-    
+
     try {
       const result = await operation();
       return {
@@ -96,7 +96,7 @@ export async function executeWithRetry<T>(
       };
     } catch (error) {
       lastError = error;
-      
+
       // Don't retry if this is the last attempt or error is not transient
       if (attempt === mergedOptions.maxRetries + 1 || !mergedOptions.isTransientError(error)) {
         return {
@@ -106,22 +106,22 @@ export async function executeWithRetry<T>(
           lastError: error,
         };
       }
-      
+
       // Calculate exponential backoff delay
       const delay = calculateExponentialBackoff(
         attempt,
         mergedOptions.initialDelay,
-        mergedOptions.maxDelay
+        mergedOptions.maxDelay,
       );
-      
+
       // Call onRetry callback
       mergedOptions.onRetry(attempt, error);
-      
+
       // Wait before retrying
       await sleep(delay);
     }
   }
-  
+
   // This should never be reached, but TypeScript requires it
   throw lastError;
 }
@@ -132,7 +132,7 @@ export async function executeWithRetry<T>(
 function calculateExponentialBackoff(
   attempt: number,
   initialDelay: number,
-  maxDelay: number
+  maxDelay: number,
 ): number {
   const delay = initialDelay * Math.pow(2, attempt - 1);
   return Math.min(delay, maxDelay);
@@ -151,16 +151,16 @@ function sleep(ms: number): Promise<void> {
 export interface EnhancedErrorContext {
   /** Unique error identifier for tracking */
   error_id?: string;
-  
+
   /** Suggested recovery actions */
   recovery_suggestions?: string[];
-  
+
   /** Links to related documentation */
   related_documentation?: string[];
-  
+
   /** Support contact information */
   support_contact?: string;
-  
+
   /** Additional technical details */
   technical_details?: Record<string, unknown>;
 }
@@ -170,20 +170,20 @@ export interface EnhancedErrorContext {
  */
 export function createEnhancedErrorResponse(
   error: Error,
-  context: EnhancedErrorContext = {}
+  context: EnhancedErrorContext = {},
 ): Error & EnhancedErrorContext {
   const enhancedError = new Error(error.message) as Error & EnhancedErrorContext;
-  
+
   // Copy all properties from original error
   Object.assign(enhancedError, error);
-  
+
   // Add enhanced context
   enhancedError.error_id = context.error_id || generateErrorId();
   enhancedError.recovery_suggestions = context.recovery_suggestions;
   enhancedError.related_documentation = context.related_documentation;
   enhancedError.support_contact = context.support_contact;
   enhancedError.technical_details = context.technical_details;
-  
+
   return enhancedError;
 }
 
@@ -199,19 +199,19 @@ function generateErrorId(): string {
  */
 export function classifyErrorWithContext(
   error: unknown,
-  operation: string
+  operation: string,
 ): EnhancedErrorContext {
   if (!(error instanceof Error)) {
     return {
       recovery_suggestions: ['An unknown error occurred', 'Please try again'],
     };
   }
-  
+
   const errorMessage = error.message.toLowerCase();
   const context: EnhancedErrorContext = {
     error_id: generateErrorId(),
   };
-  
+
   // Permission errors
   if (errorMessage.includes('permission') || errorMessage.includes('-1743')) {
     context.recovery_suggestions = [
@@ -222,7 +222,7 @@ export function classifyErrorWithContext(
       'https://docs.omnifocus.com/automation-permissions',
     ];
   }
-  
+
   // Timeout errors
   else if (errorMessage.includes('timeout')) {
     context.recovery_suggestions = [
@@ -235,7 +235,7 @@ export function classifyErrorWithContext(
       timestamp: new Date().toISOString(),
     };
   }
-  
+
   // Connection errors
   else if (errorMessage.includes('connection') || errorMessage.includes('not running')) {
     context.recovery_suggestions = [
@@ -244,6 +244,6 @@ export function classifyErrorWithContext(
       'Restart OmniFocus if needed',
     ];
   }
-  
+
   return context;
 }

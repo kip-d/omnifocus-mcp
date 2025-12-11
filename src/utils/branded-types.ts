@@ -1,6 +1,6 @@
 /**
  * Branded Type Utilities for OmniFocus MCP Server
- * 
+ *
  * Provides type-safe branded types to prevent accidental mixing of different ID types.
  * This eliminates a common source of runtime errors by catching type mismatches at compile time.
  */
