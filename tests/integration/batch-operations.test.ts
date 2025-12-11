@@ -1,14 +1,23 @@
 /**
  * Integration tests for batch operations using unified API
  *
- * These tests require real OmniFocus access and must be run with:
- * VITEST_ALLOW_JXA=1 npx vitest tests/integration/batch-operations.test.ts
+ * Uses the test sandbox for isolation:
+ * - Projects created in __MCP_TEST_SANDBOX__ folder
+ * - Tags prefixed with __test-
+ * - Cleanup via TestWriteClient
+ *
+ * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
-import { OmniAutomation } from '../../src/omnifocus/OmniAutomation.js';
+import {
+  ensureSandboxFolder,
+  fullCleanup,
+  SANDBOX_FOLDER_NAME,
+  TEST_TAG_PREFIX,
+} from './helpers/sandbox-manager.js';
 
 // Only run on macOS with OmniFocus and real JXA enabled
 const RUN_INTEGRATION_TESTS =
@@ -20,61 +29,21 @@ const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
 d('Batch Operations Integration (Unified API)', () => {
   let client: MCPTestClient;
-  const createdIds: Array<{ id: string; type: 'project' | 'task' }> = [];
   const timestamp = Date.now();
 
   beforeAll(async () => {
     client = await getSharedClient();
+    // Ensure sandbox folder exists
+    await ensureSandboxFolder();
   });
 
   afterAll(async () => {
-    // Cleanup: Delete all created items in reverse order
-    const omni = new OmniAutomation();
-    for (let i = createdIds.length - 1; i >= 0; i--) {
-      const item = createdIds[i];
-      try {
-        if (item.type === 'project') {
-          const script = `
-            (() => {
-              const app = Application('OmniFocus');
-              const doc = app.defaultDocument();
-              const projects = doc.flattenedProjects();
-              for (let i = 0; i < projects.length; i++) {
-                if (projects[i].id() === '${item.id}') {
-                  doc.delete(projects[i]);
-                  return JSON.stringify({ success: true });
-                }
-              }
-              return JSON.stringify({ error: true, message: 'Project not found' });
-            })();
-          `;
-          await omni.executeJson(script);
-        } else {
-          const script = `
-            (() => {
-              const app = Application('OmniFocus');
-              const doc = app.defaultDocument();
-              const tasks = doc.flattenedTasks();
-              for (let i = 0; i < tasks.length; i++) {
-                if (tasks[i].id() === '${item.id}') {
-                  doc.delete(tasks[i]);
-                  return JSON.stringify({ success: true });
-                }
-              }
-              return JSON.stringify({ error: true, message: 'Task not found' });
-            })();
-          `;
-          await omni.executeJson(script);
-        }
-      } catch (e) {
-        console.error(`Failed to cleanup ${item.type} ${item.id}:`, e);
-      }
-    }
-
+    // Cleanup all test data via sandbox manager
+    await fullCleanup();
     await client.thoroughCleanup();
   });
 
-  it('should create a simple project', async () => {
+  it('should create a simple project in sandbox', async () => {
     const response = await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
@@ -87,6 +56,7 @@ d('Batch Operations Integration (Unified API)', () => {
               tempId: 'proj1',
               name: `TestBatch_Simple_${timestamp}`,
               note: 'Integration test project',
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
         ],
@@ -104,14 +74,9 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(result.success).toBe(true);
     expect(result.created).toBe(1);
     expect(result.results[0].realId).toBeTruthy();
-
-    // Track for cleanup
-    if (result.results[0].realId) {
-      createdIds.push({ id: result.results[0].realId, type: 'project' });
-    }
   }, 30000);
 
-  it('should create project with task', async () => {
+  it('should create project with task in sandbox', async () => {
     const response = await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
@@ -124,6 +89,7 @@ d('Batch Operations Integration (Unified API)', () => {
               tempId: 'proj2',
               name: `TestBatch_ProjectWithTasks_${timestamp}`,
               note: 'Has child tasks',
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
           {
@@ -148,16 +114,9 @@ d('Batch Operations Integration (Unified API)', () => {
     const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(2);
     expect(result.results).toHaveLength(2);
-
-    // Track for cleanup (tasks first, then project)
-    for (const item of result.results.reverse()) {
-      if (item.realId) {
-        createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
-      }
-    }
   }, 30000);
 
-  it('should create nested tasks (task with subtask)', async () => {
+  it('should create nested tasks (task with subtask) in sandbox', async () => {
     const response = await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
@@ -169,6 +128,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj3',
               name: `TestBatch_NestedTasks_${timestamp}`,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
           {
@@ -200,13 +160,6 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(response).toHaveProperty('success', true);
     const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(3);
-
-    // Track for cleanup
-    for (const item of result.results.reverse()) {
-      if (item.realId) {
-        createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
-      }
-    }
   }, 30000);
 
   it('should handle duplicate project names gracefully', async () => {
@@ -224,6 +177,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj4',
               name: projectName,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
         ],
@@ -234,10 +188,7 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     });
 
-    const data1 = (result1 as { data: { results: Array<{ realId: string }> } }).data;
-    if (data1.results[0].realId) {
-      createdIds.push({ id: data1.results[0].realId, type: 'project' });
-    }
+    expect(result1).toHaveProperty('success', true);
 
     // Try to create duplicate
     const result2 = await client.callTool('omnifocus_write', {
@@ -251,6 +202,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj5',
               name: projectName,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
         ],
@@ -278,6 +230,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj6',
               name: `TestBatch_Mapping_${timestamp}`,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
         ],
@@ -292,10 +245,6 @@ d('Batch Operations Integration (Unified API)', () => {
     const result = (response as { data: { mapping: Record<string, string>; results: Array<{ realId: string }> } }).data;
     expect(result.mapping).toHaveProperty('proj6');
     expect(result.mapping.proj6).toBeTruthy();
-
-    if (result.results[0].realId) {
-      createdIds.push({ id: result.results[0].realId, type: 'project' });
-    }
   }, 30000);
 
   it('should stop on error when configured', async () => {
@@ -310,6 +259,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj7',
               name: `TestBatch_ValidProject_${timestamp}`,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
           {
@@ -327,6 +277,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj8',
               name: `TestBatch_ShouldNotCreate_${timestamp}`,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
         ],
@@ -383,7 +334,7 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(errorResponse.error?.message).toContain('Circular');
   }, 30000);
 
-  it('should handle tasks with dates and metadata', async () => {
+  it('should handle tasks with dates and metadata in sandbox', async () => {
     const response = await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
@@ -395,6 +346,7 @@ d('Batch Operations Integration (Unified API)', () => {
             data: {
               tempId: 'proj9',
               name: `TestBatch_Metadata_${timestamp}`,
+              folder: SANDBOX_FOLDER_NAME,
             },
           },
           {
@@ -408,7 +360,7 @@ d('Batch Operations Integration (Unified API)', () => {
               deferDate: '2025-10-10 08:00',
               estimatedMinutes: 60,
               flagged: true,
-              tags: ['test', 'integration'],
+              tags: [`${TEST_TAG_PREFIX}batch`, `${TEST_TAG_PREFIX}integration`],
               note: 'Test task with all fields',
             },
           },
@@ -423,12 +375,5 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(response).toHaveProperty('success', true);
     const result = (response as { data: { created: number; results: Array<{ realId: string; type: string }> } }).data;
     expect(result.created).toBe(2);
-
-    // Cleanup
-    for (const item of result.results.reverse()) {
-      if (item.realId) {
-        createdIds.push({ id: item.realId, type: item.type as 'project' | 'task' });
-      }
-    }
   }, 30000);
 });

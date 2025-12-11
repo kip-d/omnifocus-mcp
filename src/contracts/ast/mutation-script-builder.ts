@@ -7,8 +7,13 @@
  * Architecture:
  * - TaskMutation → validate → buildScript → JXA script string
  *
+ * TEST SANDBOX GUARD:
+ * When NODE_ENV === 'test', all mutations are validated to ensure they only
+ * affect data within the test sandbox (__MCP_TEST_SANDBOX__ folder).
+ *
  * @see ../mutations.ts for contract types
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
+ * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
 import type {
@@ -18,6 +23,279 @@ import type {
   ProjectUpdateData,
   MutationTarget,
 } from '../mutations.js';
+
+// =============================================================================
+// TEST SANDBOX GUARD
+// =============================================================================
+
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+const SANDBOX_FOLDER_NAME = '__MCP_TEST_SANDBOX__';
+const TEST_TAG_PREFIX = '__test-';
+const TEST_INBOX_PREFIX = '__TEST__';
+
+// Cache the sandbox folder ID to avoid repeated lookups
+let cachedSandboxFolderId: string | null = null;
+
+/**
+ * Check if we're running in integration test mode with sandbox enforcement.
+ *
+ * The guard is ONLY active when:
+ * - NODE_ENV === 'test' AND
+ * - SANDBOX_GUARD_ENABLED === 'true' (set by integration test setup)
+ *
+ * This allows unit tests to run without sandbox restrictions while
+ * integration tests that actually write to OmniFocus are protected.
+ */
+function isTestMode(): boolean {
+  return process.env.NODE_ENV === 'test' && process.env.SANDBOX_GUARD_ENABLED === 'true';
+}
+
+/**
+ * Execute a JXA script and return the result (for guard validation)
+ */
+async function executeGuardJXA<T>(script: string): Promise<T> {
+  const wrappedScript = `
+    (() => {
+      const app = Application('OmniFocus');
+      app.includeStandardAdditions = true;
+      const doc = app.defaultDocument();
+      ${script}
+    })()
+  `;
+
+  const { stdout } = await execAsync(
+    `osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`
+  );
+  return JSON.parse(stdout.trim()) as T;
+}
+
+/**
+ * Get the sandbox folder ID (cached)
+ */
+async function getSandboxFolderId(): Promise<string | null> {
+  if (cachedSandboxFolderId !== null) {
+    return cachedSandboxFolderId;
+  }
+
+  const script = `
+    const folders = doc.flattenedFolders();
+    for (let i = 0; i < folders.length; i++) {
+      try {
+        if (folders[i].name() === '${SANDBOX_FOLDER_NAME}') {
+          return JSON.stringify({ folderId: folders[i].id() });
+        }
+      } catch (e) {}
+    }
+    return JSON.stringify({ folderId: null });
+  `;
+
+  try {
+    const result = await executeGuardJXA<{ folderId: string | null }>(script);
+    cachedSandboxFolderId = result.folderId;
+    return cachedSandboxFolderId;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a project is inside the sandbox folder
+ */
+async function isProjectInSandbox(projectId: string): Promise<boolean> {
+  const sandboxId = await getSandboxFolderId();
+  if (!sandboxId) return false;
+
+  const script = `
+    const projects = doc.flattenedProjects();
+    for (let i = 0; i < projects.length; i++) {
+      try {
+        if (projects[i].id() === '${projectId}') {
+          const folder = projects[i].folder();
+          if (folder && folder.id() === '${sandboxId}') {
+            return JSON.stringify({ inSandbox: true });
+          }
+          return JSON.stringify({ inSandbox: false });
+        }
+      } catch (e) {}
+    }
+    return JSON.stringify({ inSandbox: false });
+  `;
+
+  try {
+    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    return result.inSandbox;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a task is inside the sandbox (via project) or has __TEST__ prefix
+ */
+async function isTaskInSandbox(taskId: string): Promise<boolean> {
+  const sandboxId = await getSandboxFolderId();
+
+  const script = `
+    const tasks = doc.flattenedTasks();
+    for (let i = 0; i < tasks.length; i++) {
+      try {
+        if (tasks[i].id() === '${taskId}') {
+          const name = tasks[i].name();
+          // Check if name starts with __TEST__ prefix
+          if (name && name.startsWith('${TEST_INBOX_PREFIX}')) {
+            return JSON.stringify({ inSandbox: true });
+          }
+          // Check if task's project is in sandbox
+          const project = tasks[i].containingProject();
+          if (project) {
+            const folder = project.folder();
+            if (folder && folder.id() === '${sandboxId || ''}') {
+              return JSON.stringify({ inSandbox: true });
+            }
+          }
+          return JSON.stringify({ inSandbox: false });
+        }
+      } catch (e) {}
+    }
+    return JSON.stringify({ inSandbox: false });
+  `;
+
+  try {
+    const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    return result.inSandbox;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate that a project creation is inside the sandbox
+ */
+function validateProjectCreate(data: ProjectCreateData): void {
+  if (!isTestMode()) return;
+
+  if (data.folder !== SANDBOX_FOLDER_NAME) {
+    throw new Error(
+      `TEST GUARD: Projects must be created inside sandbox folder. ` +
+      `Got folder: "${data.folder || '(none)'}". ` +
+      `Use folder: "${SANDBOX_FOLDER_NAME}"`
+    );
+  }
+
+  // Validate tags
+  if (data.tags && data.tags.length > 0) {
+    const invalidTags = data.tags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+    if (invalidTags.length > 0) {
+      throw new Error(
+        `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
+        `Invalid: ${invalidTags.join(', ')}`
+      );
+    }
+  }
+}
+
+/**
+ * Validate that a task creation is in sandbox or has __TEST__ prefix for inbox
+ */
+async function validateTaskCreate(data: TaskCreateData): Promise<void> {
+  if (!isTestMode()) return;
+
+  // If creating in inbox (no project), name must start with __TEST__
+  if (!data.project) {
+    if (!data.name.startsWith(TEST_INBOX_PREFIX)) {
+      throw new Error(
+        `TEST GUARD: Inbox tasks must have name starting with "${TEST_INBOX_PREFIX}". ` +
+        `Got: "${data.name}"`
+      );
+    }
+    return; // Inbox task with correct prefix is allowed
+  }
+
+  // If creating in a project, verify the project is in the sandbox
+  const inSandbox = await isProjectInSandbox(data.project);
+  if (!inSandbox) {
+    throw new Error(
+      `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
+      `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`
+    );
+  }
+
+  // Validate tags
+  if (data.tags && data.tags.length > 0) {
+    const invalidTags = data.tags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+    if (invalidTags.length > 0) {
+      throw new Error(
+        `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
+        `Invalid: ${invalidTags.join(', ')}`
+      );
+    }
+  }
+}
+
+/**
+ * Validate that tag changes only use __test- prefixed tags
+ */
+function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData): void {
+  if (!isTestMode()) return;
+
+  const allTags: string[] = [];
+
+  if ('tags' in changes && changes.tags) {
+    allTags.push(...changes.tags);
+  }
+  if ('addTags' in changes && changes.addTags) {
+    allTags.push(...changes.addTags);
+  }
+
+  const invalidTags = allTags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+  if (invalidTags.length > 0) {
+    throw new Error(
+      `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
+      `Invalid: ${invalidTags.join(', ')}`
+    );
+  }
+}
+
+/**
+ * Validate that a task update/delete is on a task inside the sandbox
+ */
+async function validateTaskInSandbox(taskId: string, operation: string): Promise<void> {
+  if (!isTestMode()) return;
+
+  const inSandbox = await isTaskInSandbox(taskId);
+  if (!inSandbox) {
+    throw new Error(
+      `TEST GUARD: Cannot ${operation} task "${taskId}" outside sandbox. ` +
+      `Task must be in a project inside "${SANDBOX_FOLDER_NAME}" or have name starting with "${TEST_INBOX_PREFIX}".`
+    );
+  }
+}
+
+/**
+ * Validate that a project update/delete is on a project inside the sandbox
+ */
+async function validateProjectInSandbox(projectId: string, operation: string): Promise<void> {
+  if (!isTestMode()) return;
+
+  const inSandbox = await isProjectInSandbox(projectId);
+  if (!inSandbox) {
+    throw new Error(
+      `TEST GUARD: Cannot ${operation} project "${projectId}" outside sandbox. ` +
+      `Project must be inside "${SANDBOX_FOLDER_NAME}" folder.`
+    );
+  }
+}
+
+/**
+ * Clear the cached sandbox folder ID (for testing)
+ */
+export function clearSandboxCache(): void {
+  cachedSandboxFolderId = null;
+}
 
 // =============================================================================
 // TYPES
@@ -63,7 +341,10 @@ export interface BatchOperation {
 /**
  * Build a JXA script for creating a task
  */
-export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationScript {
+export async function buildCreateTaskScript(data: TaskCreateData): Promise<GeneratedMutationScript> {
+  // Test sandbox guard
+  await validateTaskCreate(data);
+
   const taskData = buildTaskDataObject(data);
 
   const script = `
@@ -281,6 +562,9 @@ export function buildCreateTaskScript(data: TaskCreateData): GeneratedMutationSc
  * Build a JXA script for creating a project
  */
 export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMutationScript {
+  // Test sandbox guard
+  validateProjectCreate(data);
+
   const projectData = buildProjectDataObject(data);
 
   const script = `
@@ -406,10 +690,14 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
 /**
  * Build a JXA script for updating a task
  */
-export function buildUpdateTaskScript(
+export async function buildUpdateTaskScript(
   taskId: string,
   changes: TaskUpdateData,
-): GeneratedMutationScript {
+): Promise<GeneratedMutationScript> {
+  // Test sandbox guard - validate task is in sandbox and tag changes
+  await validateTaskInSandbox(taskId, 'update');
+  validateTagChanges(changes);
+
   const changesData = buildUpdateChangesObject(changes);
 
   const script = `
@@ -628,10 +916,14 @@ export function buildUpdateTaskScript(
 /**
  * Build a JXA script for updating a project
  */
-export function buildUpdateProjectScript(
+export async function buildUpdateProjectScript(
   projectId: string,
   changes: ProjectUpdateData,
-): GeneratedMutationScript {
+): Promise<GeneratedMutationScript> {
+  // Test sandbox guard - validate project is in sandbox and tag changes
+  await validateProjectInSandbox(projectId, 'update');
+  validateTagChanges(changes);
+
   const changesData = buildUpdateChangesObject(changes);
 
   const script = `
@@ -736,11 +1028,18 @@ export function buildUpdateProjectScript(
 /**
  * Build a JXA script for completing a task or project
  */
-export function buildCompleteScript(
+export async function buildCompleteScript(
   target: MutationTarget,
   id: string,
   completionDate?: string,
-): GeneratedMutationScript {
+): Promise<GeneratedMutationScript> {
+  // Test sandbox guard
+  if (target === 'task') {
+    await validateTaskInSandbox(id, 'complete');
+  } else {
+    await validateProjectInSandbox(id, 'complete');
+  }
+
   const isTask = target === 'task';
   const collection = isTask ? 'flattenedTasks' : 'flattenedProjects';
   const idField = isTask ? 'taskId' : 'projectId';
@@ -821,7 +1120,14 @@ export function buildCompleteScript(
 /**
  * Build a JXA script for deleting a task or project
  */
-export function buildDeleteScript(target: MutationTarget, id: string): GeneratedMutationScript {
+export async function buildDeleteScript(target: MutationTarget, id: string): Promise<GeneratedMutationScript> {
+  // Test sandbox guard
+  if (target === 'task') {
+    await validateTaskInSandbox(id, 'delete');
+  } else {
+    await validateProjectInSandbox(id, 'delete');
+  }
+
   const isTask = target === 'task';
   const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
   const idField = isTask ? 'taskId' : 'projectId';
@@ -1018,7 +1324,17 @@ export function buildBatchScript(
 /**
  * Build a JXA script for bulk deletion
  */
-export function buildBulkDeleteScript(target: MutationTarget, ids: string[]): GeneratedMutationScript {
+export async function buildBulkDeleteScript(target: MutationTarget, ids: string[]): Promise<GeneratedMutationScript> {
+  // Test sandbox guard - validate all items are in sandbox
+  if (isTestMode()) {
+    const validationPromises = ids.map(id =>
+      target === 'task'
+        ? validateTaskInSandbox(id, 'bulk delete')
+        : validateProjectInSandbox(id, 'bulk delete')
+    );
+    await Promise.all(validationPromises);
+  }
+
   const isTask = target === 'task';
   const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
   const idsJson = JSON.stringify(ids);

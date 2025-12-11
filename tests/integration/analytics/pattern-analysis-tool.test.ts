@@ -30,10 +30,9 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
-    expect(result.data.patterns.review_gaps).toBeDefined();
+    expect(result.data.review_gaps).toBeDefined();
 
-    const reviewGaps = result.data.patterns.review_gaps;
+    const reviewGaps = result.data.review_gaps;
     expect(reviewGaps.type).toBe('review_gaps');
     expect(reviewGaps.count).toBeGreaterThanOrEqual(0);
     expect(reviewGaps.items).toBeDefined();
@@ -52,10 +51,9 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
-    expect(result.data.patterns.next_actions).toBeDefined();
+    expect(result.data.next_actions).toBeDefined();
 
-    const nextActions = result.data.patterns.next_actions;
+    const nextActions = result.data.next_actions;
     expect(nextActions.type).toBe('next_actions');
     expect(nextActions.count).toBeGreaterThanOrEqual(0);
     expect(nextActions.items).toBeDefined();
@@ -74,10 +72,9 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
-    expect(result.data.patterns.wip_limits).toBeDefined();
+    expect(result.data.wip_limits).toBeDefined();
 
-    const wipLimits = result.data.patterns.wip_limits;
+    const wipLimits = result.data.wip_limits;
     expect(wipLimits.type).toBe('wip_limits');
     expect(wipLimits.count).toBeGreaterThanOrEqual(0);
     expect(wipLimits.items).toBeDefined();
@@ -96,10 +93,9 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
-    expect(result.data.patterns.due_date_bunching).toBeDefined();
+    expect(result.data.due_date_bunching).toBeDefined();
 
-    const dueDateBunching = result.data.patterns.due_date_bunching;
+    const dueDateBunching = result.data.due_date_bunching;
     expect(dueDateBunching.type).toBe('due_date_bunching');
     expect(dueDateBunching.count).toBeGreaterThanOrEqual(0);
     expect(dueDateBunching.items).toBeDefined();
@@ -118,19 +114,18 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
 
-    // Verify all 4 patterns are present
-    expect(result.data.patterns).toHaveProperty('review_gaps');
-    expect(result.data.patterns).toHaveProperty('next_actions');
-    expect(result.data.patterns).toHaveProperty('wip_limits');
-    expect(result.data.patterns).toHaveProperty('due_date_bunching');
+    // Verify all 4 patterns are present (directly under data, not under data.patterns)
+    expect(result.data).toHaveProperty('review_gaps');
+    expect(result.data).toHaveProperty('next_actions');
+    expect(result.data).toHaveProperty('wip_limits');
+    expect(result.data).toHaveProperty('due_date_bunching');
 
     // Verify each has the expected structure
-    expect(result.data.patterns.review_gaps.type).toBe('review_gaps');
-    expect(result.data.patterns.next_actions.type).toBe('next_actions');
-    expect(result.data.patterns.wip_limits.type).toBe('wip_limits');
-    expect(result.data.patterns.due_date_bunching.type).toBe('due_date_bunching');
+    expect(result.data.review_gaps.type).toBe('review_gaps');
+    expect(result.data.next_actions.type).toBe('next_actions');
+    expect(result.data.wip_limits.type).toBe('wip_limits');
+    expect(result.data.due_date_bunching.type).toBe('due_date_bunching');
   }, 90000);
 
   it('includes GTD patterns when "all" is specified', async () => {
@@ -146,12 +141,11 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toBeDefined();
-    expect(result.data.patterns).toBeDefined();
 
-    // All 4 new GTD patterns should be included with "all"
-    expect(result.data.patterns).toHaveProperty('review_gaps');
-    expect(result.data.patterns).toHaveProperty('next_actions');
-    expect(result.data.patterns).toHaveProperty('wip_limits');
-    expect(result.data.patterns).toHaveProperty('due_date_bunching');
+    // All 4 new GTD patterns should be included with "all" (directly under data)
+    expect(result.data).toHaveProperty('review_gaps');
+    expect(result.data).toHaveProperty('next_actions');
+    expect(result.data).toHaveProperty('wip_limits');
+    expect(result.data).toHaveProperty('due_date_bunching');
   }, 90000);
 });

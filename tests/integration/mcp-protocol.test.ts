@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
+import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 // Auto-enable on macOS with OmniFocus
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
@@ -95,10 +96,10 @@ d('MCP Protocol Compliance Tests', () => {
           operation: 'create',
           target: 'task',
           data: {
-            name: 'Test task from protocol test',
+            name: `${TEST_INBOX_PREFIX} Protocol test task`,
             note: 'This is a test task',
             flagged: true,
-            tags: ['test', 'integration', 'mcp-test'],
+            tags: [`${TEST_TAG_PREFIX}test`, `${TEST_TAG_PREFIX}integration`, `${TEST_TAG_PREFIX}mcp-test`],
           },
         },
       });
@@ -114,9 +115,9 @@ d('MCP Protocol Compliance Tests', () => {
         expect(result.data.task).toBeDefined();
         expect(result.data.task.taskId).toBeDefined();
         if (result.data.task.tags) {
-          expect(result.data.task.tags).toContain('test');
-          expect(result.data.task.tags).toContain('integration');
-          expect(result.data.task.tags).toContain('mcp-test');
+          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}test`);
+          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}integration`);
+          expect(result.data.task.tags).toContain(`${TEST_TAG_PREFIX}mcp-test`);
         }
       }
     });

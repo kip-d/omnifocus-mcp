@@ -237,13 +237,19 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
    * Create a project
    */
   private async createProject(item: BatchItem, _resolver: TempIdResolver): Promise<ItemCreationResult> {
-    const options = {
+    const options: Record<string, unknown> = {
       note: item.note || '',
       flagged: item.flagged || false,
       status: (item as { status?: string }).status || 'active',
       sequential: (item as { sequential?: boolean }).sequential || false,
       tags: item.tags || [],
     };
+
+    // Add folder if specified
+    const folder = (item as { folder?: string }).folder;
+    if (folder) {
+      options.folder = folder;
+    }
 
     const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
       name: item.name,

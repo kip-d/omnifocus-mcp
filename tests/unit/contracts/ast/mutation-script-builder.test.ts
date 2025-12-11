@@ -12,8 +12,8 @@ import {
 } from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 describe('buildCreateTaskScript', () => {
-  it('generates valid JXA script for basic task creation', () => {
-    const result = buildCreateTaskScript({
+  it('generates valid JXA script for basic task creation', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Test Task',
     });
 
@@ -23,8 +23,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.target).toBe('task');
   });
 
-  it('includes note in task creation', () => {
-    const result = buildCreateTaskScript({
+  it('includes note in task creation', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Task with Note',
       note: 'This is a detailed note',
     });
@@ -32,8 +32,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('This is a detailed note');
   });
 
-  it('includes flagged status', () => {
-    const result = buildCreateTaskScript({
+  it('includes flagged status', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Flagged Task',
       flagged: true,
     });
@@ -42,8 +42,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('"flagged":true');
   });
 
-  it('includes due date', () => {
-    const result = buildCreateTaskScript({
+  it('includes due date', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Task with Due Date',
       dueDate: '2025-12-31',
     });
@@ -52,8 +52,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('dueDate');
   });
 
-  it('includes defer date', () => {
-    const result = buildCreateTaskScript({
+  it('includes defer date', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Deferred Task',
       deferDate: '2025-12-01 08:00',
     });
@@ -62,8 +62,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('deferDate');
   });
 
-  it('includes estimated minutes', () => {
-    const result = buildCreateTaskScript({
+  it('includes estimated minutes', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Estimated Task',
       estimatedMinutes: 45,
     });
@@ -72,8 +72,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('45');
   });
 
-  it('includes tags array', () => {
-    const result = buildCreateTaskScript({
+  it('includes tags array', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Tagged Task',
       tags: ['work', 'urgent'],
     });
@@ -83,8 +83,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('urgent');
   });
 
-  it('includes project assignment', () => {
-    const result = buildCreateTaskScript({
+  it('includes project assignment', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Project Task',
       project: 'Work Project',
     });
@@ -93,8 +93,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('Work Project');
   });
 
-  it('handles null project (inbox)', () => {
-    const result = buildCreateTaskScript({
+  it('handles null project (inbox)', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Inbox Task',
       project: null,
     });
@@ -102,8 +102,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('inboxTasks');
   });
 
-  it('includes parent task ID for subtasks', () => {
-    const result = buildCreateTaskScript({
+  it('includes parent task ID for subtasks', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Subtask',
       parentTaskId: 'parent-123',
     });
@@ -112,8 +112,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('parent-123');
   });
 
-  it('includes repetition rule', () => {
-    const result = buildCreateTaskScript({
+  it('includes repetition rule', async () => {
+    const result = await buildCreateTaskScript({
       name: 'Recurring Task',
       repetitionRule: {
         frequency: 'weekly',
@@ -126,8 +126,8 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('weekly');
   });
 
-  it('escapes special characters in name', () => {
-    const result = buildCreateTaskScript({
+  it('escapes special characters in name', async () => {
+    const result = await buildCreateTaskScript({
       name: "Task with 'quotes' and \"double quotes\"",
     });
 
@@ -136,22 +136,22 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('quotes');
   });
 
-  it('returns IIFE structure', () => {
-    const result = buildCreateTaskScript({ name: 'Test' });
+  it('returns IIFE structure', async () => {
+    const result = await buildCreateTaskScript({ name: 'Test' });
 
     expect(result.script).toMatch(/^\s*\(\s*\(\s*\)\s*=>\s*\{/);
     expect(result.script).toMatch(/\}\s*\)\s*\(\s*\)\s*;?\s*$/);
   });
 
-  it('includes error handling', () => {
-    const result = buildCreateTaskScript({ name: 'Test' });
+  it('includes error handling', async () => {
+    const result = await buildCreateTaskScript({ name: 'Test' });
 
     expect(result.script).toContain('try {');
     expect(result.script).toContain('catch');
   });
 
-  it('returns JSON stringified response', () => {
-    const result = buildCreateTaskScript({ name: 'Test' });
+  it('returns JSON stringified response', async () => {
+    const result = await buildCreateTaskScript({ name: 'Test' });
 
     expect(result.script).toContain('JSON.stringify');
   });
@@ -211,8 +211,8 @@ describe('buildCreateProjectScript', () => {
 });
 
 describe('buildUpdateTaskScript', () => {
-  it('generates valid script for task update', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('generates valid script for task update', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       name: 'Updated Name',
     });
 
@@ -223,8 +223,8 @@ describe('buildUpdateTaskScript', () => {
     expect(result.target).toBe('task');
   });
 
-  it('handles flagged update', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles flagged update', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       flagged: true,
     });
 
@@ -232,8 +232,8 @@ describe('buildUpdateTaskScript', () => {
     expect(result.script).toContain('true');
   });
 
-  it('handles tag replacement', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles tag replacement', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       tags: ['new-tag-1', 'new-tag-2'],
     });
 
@@ -241,8 +241,8 @@ describe('buildUpdateTaskScript', () => {
     expect(result.script).toContain('new-tag-1');
   });
 
-  it('handles addTags operation', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles addTags operation', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       addTags: ['additional-tag'],
     });
 
@@ -250,8 +250,8 @@ describe('buildUpdateTaskScript', () => {
     expect(result.script).toContain('additional-tag');
   });
 
-  it('handles removeTags operation', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles removeTags operation', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       removeTags: ['unwanted-tag'],
     });
 
@@ -259,16 +259,16 @@ describe('buildUpdateTaskScript', () => {
     expect(result.script).toContain('unwanted-tag');
   });
 
-  it('handles clearDueDate flag', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles clearDueDate flag', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       clearDueDate: true,
     });
 
     expect(result.script).toContain('clearDueDate');
   });
 
-  it('handles project change', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles project change', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       project: 'new-project-id',
     });
 
@@ -276,8 +276,8 @@ describe('buildUpdateTaskScript', () => {
     expect(result.script).toContain('new-project-id');
   });
 
-  it('handles move to inbox (project: null)', () => {
-    const result = buildUpdateTaskScript('task-123', {
+  it('handles move to inbox (project: null)', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
       project: null,
     });
 
@@ -286,8 +286,8 @@ describe('buildUpdateTaskScript', () => {
 });
 
 describe('buildUpdateProjectScript', () => {
-  it('generates valid script for project update', () => {
-    const result = buildUpdateProjectScript('project-123', {
+  it('generates valid script for project update', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
       name: 'Updated Project',
     });
 
@@ -297,8 +297,8 @@ describe('buildUpdateProjectScript', () => {
     expect(result.target).toBe('project');
   });
 
-  it('handles status change', () => {
-    const result = buildUpdateProjectScript('project-123', {
+  it('handles status change', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
       status: 'completed',
     });
 
@@ -306,8 +306,8 @@ describe('buildUpdateProjectScript', () => {
     expect(result.script).toContain('completed');
   });
 
-  it('handles folder change', () => {
-    const result = buildUpdateProjectScript('project-123', {
+  it('handles folder change', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
       folder: 'New Folder',
     });
 
@@ -317,8 +317,8 @@ describe('buildUpdateProjectScript', () => {
 });
 
 describe('buildCompleteScript', () => {
-  it('generates valid script for task completion', () => {
-    const result = buildCompleteScript('task', 'task-123');
+  it('generates valid script for task completion', async () => {
+    const result = await buildCompleteScript('task', 'task-123');
 
     expect(result.script).toContain('task-123');
     expect(result.script).toContain('complete');
@@ -326,47 +326,47 @@ describe('buildCompleteScript', () => {
     expect(result.target).toBe('task');
   });
 
-  it('generates valid script for project completion', () => {
-    const result = buildCompleteScript('project', 'project-123');
+  it('generates valid script for project completion', async () => {
+    const result = await buildCompleteScript('project', 'project-123');
 
     expect(result.script).toContain('project-123');
     expect(result.operation).toBe('complete');
     expect(result.target).toBe('project');
   });
 
-  it('handles custom completion date', () => {
-    const result = buildCompleteScript('task', 'task-123', '2025-11-24');
+  it('handles custom completion date', async () => {
+    const result = await buildCompleteScript('task', 'task-123', '2025-11-24');
 
     expect(result.script).toContain('2025-11-24');
     expect(result.script).toContain('completionDate');
   });
 
-  it('includes markComplete call', () => {
-    const result = buildCompleteScript('task', 'task-123');
+  it('includes markComplete call', async () => {
+    const result = await buildCompleteScript('task', 'task-123');
 
     expect(result.script).toContain('markComplete');
   });
 });
 
 describe('buildDeleteScript', () => {
-  it('generates valid script for task deletion', () => {
-    const result = buildDeleteScript('task', 'task-123');
+  it('generates valid script for task deletion', async () => {
+    const result = await buildDeleteScript('task', 'task-123');
 
     expect(result.script).toContain('task-123');
     expect(result.operation).toBe('delete');
     expect(result.target).toBe('task');
   });
 
-  it('generates valid script for project deletion', () => {
-    const result = buildDeleteScript('project', 'project-123');
+  it('generates valid script for project deletion', async () => {
+    const result = await buildDeleteScript('project', 'project-123');
 
     expect(result.script).toContain('project-123');
     expect(result.operation).toBe('delete');
     expect(result.target).toBe('project');
   });
 
-  it('calls delete method', () => {
-    const result = buildDeleteScript('task', 'task-123');
+  it('calls delete method', async () => {
+    const result = await buildDeleteScript('task', 'task-123');
 
     // Should use OmniFocus delete/remove API
     expect(result.script).toMatch(/delete|remove/);
@@ -443,8 +443,8 @@ describe('buildBatchScript', () => {
 });
 
 describe('buildBulkDeleteScript', () => {
-  it('generates valid script for bulk task deletion', () => {
-    const result = buildBulkDeleteScript('task', ['task-1', 'task-2', 'task-3']);
+  it('generates valid script for bulk task deletion', async () => {
+    const result = await buildBulkDeleteScript('task', ['task-1', 'task-2', 'task-3']);
 
     expect(result.script).toContain('task-1');
     expect(result.script).toContain('task-2');
@@ -453,39 +453,39 @@ describe('buildBulkDeleteScript', () => {
     expect(result.target).toBe('task');
   });
 
-  it('generates valid script for bulk project deletion', () => {
-    const result = buildBulkDeleteScript('project', ['proj-1', 'proj-2']);
+  it('generates valid script for bulk project deletion', async () => {
+    const result = await buildBulkDeleteScript('project', ['proj-1', 'proj-2']);
 
     expect(result.script).toContain('proj-1');
     expect(result.script).toContain('proj-2');
     expect(result.target).toBe('project');
   });
 
-  it('iterates through IDs', () => {
-    const result = buildBulkDeleteScript('task', ['id-1', 'id-2']);
+  it('iterates through IDs', async () => {
+    const result = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
 
     expect(result.script).toMatch(/forEach|for.*\(|map/);
   });
 
-  it('returns count of deleted items', () => {
-    const result = buildBulkDeleteScript('task', ['id-1', 'id-2']);
+  it('returns count of deleted items', async () => {
+    const result = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
 
     expect(result.script).toContain('deletedCount');
   });
 });
 
 describe('script structure consistency', () => {
-  it('all scripts return GeneratedMutationScript interface', () => {
-    const scripts: GeneratedMutationScript[] = [
+  it('all scripts return GeneratedMutationScript interface', async () => {
+    const scripts: GeneratedMutationScript[] = await Promise.all([
       buildCreateTaskScript({ name: 'Test' }),
-      buildCreateProjectScript({ name: 'Test' }),
+      Promise.resolve(buildCreateProjectScript({ name: 'Test' })),
       buildUpdateTaskScript('id', { name: 'Test' }),
       buildUpdateProjectScript('id', { name: 'Test' }),
       buildCompleteScript('task', 'id'),
       buildDeleteScript('task', 'id'),
-      buildBatchScript('task', []),
+      Promise.resolve(buildBatchScript('task', [])),
       buildBulkDeleteScript('task', ['id']),
-    ];
+    ]);
 
     scripts.forEach((result) => {
       expect(result).toHaveProperty('script');
@@ -495,11 +495,11 @@ describe('script structure consistency', () => {
     });
   });
 
-  it('all scripts are valid JavaScript (can be parsed)', () => {
+  it('all scripts are valid JavaScript (can be parsed)', async () => {
     const scripts = [
-      buildCreateTaskScript({ name: 'Test' }).script,
-      buildCompleteScript('task', 'id').script,
-      buildDeleteScript('task', 'id').script,
+      (await buildCreateTaskScript({ name: 'Test' })).script,
+      (await buildCompleteScript('task', 'id')).script,
+      (await buildDeleteScript('task', 'id')).script,
     ];
 
     scripts.forEach((script) => {

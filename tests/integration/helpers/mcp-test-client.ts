@@ -1,17 +1,18 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
+import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './sandbox-manager.js';
 
-export const TESTING_TAG = 'mcp-test';
+export const TESTING_TAG = `${TEST_TAG_PREFIX}mcp-test`;
 
 /**
  * Generate a unique session ID for this test run
  * Used to efficiently find and cleanup only THIS session's test data
- * Format: mcp-test-session-TIMESTAMP-RANDOM
+ * Format: __test-mcp-session-TIMESTAMP-RANDOM (includes test tag prefix for sandbox compliance)
  */
 function generateSessionId(): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 8);
-  return `mcp-test-session-${timestamp}-${random}`;
+  return `${TEST_TAG_PREFIX}mcp-session-${timestamp}-${random}`;
 }
 
 export interface MCPRequest {
@@ -224,10 +225,18 @@ export class MCPTestClient {
 
   async createTestTask(name: string, properties: any = {}): Promise<any> {
     // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
-    const tags = [...(properties.tags || []), TESTING_TAG, this.sessionId];
+    // Prefix tags with __test- if not already prefixed
+    const rawTags = properties.tags || [];
+    const prefixedTags = rawTags.map((t: string) =>
+      t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
+    );
+    const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
+
+    // Ensure task name has __TEST__ prefix for inbox tasks (sandbox compliance)
+    const taskName = name.startsWith(TEST_INBOX_PREFIX) ? name : `${TEST_INBOX_PREFIX} ${name}`;
 
     const taskParams = {
-      name: name,
+      name: taskName,
       ...properties,
       tags: tags
     };
@@ -247,7 +256,12 @@ export class MCPTestClient {
 
   async createTestProject(name: string, properties: any = {}): Promise<any> {
     // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
-    const tags = [...(properties.tags || []), TESTING_TAG, this.sessionId];
+    // Prefix tags with __test- if not already prefixed
+    const rawTags = properties.tags || [];
+    const prefixedTags = rawTags.map((t: string) =>
+      t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
+    );
+    const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
 
     const projectParams = {
       name: name,

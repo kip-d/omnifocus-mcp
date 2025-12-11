@@ -41,6 +41,10 @@ const BaseBatchItemSchema = z.object({
 const ProjectBatchItemSchema = BaseBatchItemSchema.extend({
   type: z.literal('project'),
 
+  folder: z.string()
+    .optional()
+    .describe('Folder to place the project in (created if not exists)'),
+
   status: z.enum(['active', 'on-hold', 'done', 'dropped'])
     .optional()
     .describe('Project status'),
