@@ -26,3 +26,6 @@ archive/
 # Benchmark and diagnostic data files (not code)
 benchmark-summary-*.json
 diagnostic-*.json
+
+# Husky internal directory (auto-generated)
+.husky/_
