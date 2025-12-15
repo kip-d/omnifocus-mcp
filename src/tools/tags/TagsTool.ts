@@ -7,6 +7,7 @@ import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import type { TagsResponseV2, TagOperationResponseV2, TagsDataV2, TagOperationDataV2 } from '../response-types-v2.js';
+import { TagId, asTagId } from '../../utils/branded-types.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
@@ -69,6 +70,11 @@ const TagsToolSchema = z.object({
     .optional()
     .describe('Set to true to make tag children mutually exclusive, false to disable (set_mutual_exclusivity action, OmniFocus 4.7+)'),
 });
+
+// Convert string ID to branded TagId for type safety
+const convertToTagId = (id: string): TagId => {
+  return asTagId(id);
+};
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
 
@@ -249,6 +255,9 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
     try {
       const { action, tagName, newName, targetTag, parentTagName, parentTagId, mutuallyExclusive } = args;
 
+      // Convert string ID to branded TagId for type safety
+      const brandedParentTagId = parentTagId ? convertToTagId(parentTagId) : undefined;
+
       // Validate required parameters
       if (!action) {
         return createErrorResponseV2(
@@ -313,7 +322,7 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         newName,
         targetTag,
         parentTagName,
-        parentTagId,
+        parentTagId: brandedParentTagId,
         mutuallyExclusive,
       });
       const result = await this.execJson(script);

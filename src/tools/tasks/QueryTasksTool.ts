@@ -30,6 +30,7 @@ import {
   isDateFilter,
   isNumberFilter,
 } from './filter-types.js';
+import { TaskId, asTaskId } from '../../utils/branded-types.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -129,6 +130,11 @@ const QueryTasksToolSchemaV2 = z.object({
     direction: z.enum(['asc', 'desc']),
   })).optional().describe('Sort results by one or more fields. Example: [{ field: "dueDate", direction: "asc" }, { field: "flagged", direction: "desc" }]. Applied after filtering.'),
 });
+
+// Convert string ID to branded TaskId for type safety
+const convertToTaskId = (id: string): TaskId => {
+  return asTaskId(id);
+};
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 
@@ -686,9 +692,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleTaskById(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    // Fast path for exact ID lookup
+    // Fast path for exact ID lookup with branded type safety
+    const taskId = args.id ? convertToTaskId(args.id) : undefined;
+
     const filter = {
-      id: args.id,
+      id: taskId,
       limit: 1,  // Only need one result for exact ID match
       includeDetails: args.details,
     };
@@ -710,7 +718,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
-        `Failed to find task with ID: ${args.id}`,
+        `Failed to find task with ID: ${taskId}`,
         'Verify the task ID is correct and the task exists',
         isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
@@ -725,7 +733,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       return createErrorResponseV2(
         'tasks',
         'NOT_FOUND',
-        `Task not found with ID: ${args.id}`,
+        `Task not found with ID: ${taskId}`,
         'Verify the task ID is correct and the task exists',
         undefined,
         timer.toMetadata(),
@@ -736,7 +744,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       return createErrorResponseV2(
         'tasks',
         'ID_MISMATCH',
-        `Task ID mismatch: requested ${args.id}, received ${tasks[0].id}`,
+        `Task ID mismatch: requested ${taskId}, received ${tasks[0].id}`,
         'This indicates a potential issue with the OmniFocus script - please report this bug',
         undefined,
         timer.toMetadata(),

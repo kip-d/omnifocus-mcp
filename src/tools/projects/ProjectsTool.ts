@@ -17,6 +17,7 @@ import {
 } from '../../utils/response-format.js';
 import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
 import { CacheManager } from '../../cache/CacheManager.js';
+import { ProjectId, asProjectId } from '../../utils/branded-types.js';
 
 // Unified schema for all project operations
 const ProjectsToolSchemaV2 = z.object({
@@ -68,6 +69,11 @@ const ProjectsToolSchemaV2 = z.object({
   ]).default(true).describe('Include full project details'),
 });
 
+// Convert string ID to branded ProjectId for type safety
+const convertToProjectId = (id: string): ProjectId => {
+  return asProjectId(id);
+};
+
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;
 
 export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, ProjectsResponseV2 | ProjectOperationResponseV2> {
@@ -102,6 +108,9 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     const timer = new OperationTimerV2();
 
     try {
+      // Convert string ID to branded ProjectId for type safety
+      const projectId = args.projectId ? convertToProjectId(args.projectId) : undefined;
+
       // Validate required fields early
       if (['update', 'complete', 'delete'].includes(args.operation) && !args.projectId) {
         return createErrorResponseV2(
@@ -134,17 +143,17 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
         case 'create':
           return this.handleCreateProject(normalizedArgs, timer);
         case 'update':
-          return this.handleUpdateProject(normalizedArgs, timer);
+          return this.handleUpdateProject(normalizedArgs, projectId!, timer);
         case 'complete':
-          return this.handleCompleteProject(normalizedArgs, timer);
+          return this.handleCompleteProject(projectId!, timer);
         case 'delete':
-          return this.handleDeleteProject(normalizedArgs, timer);
+          return this.handleDeleteProject(projectId!, timer);
         case 'review':
           return this.handleReviewProjects(normalizedArgs, timer);
         case 'active':
           return this.handleActiveProjects(normalizedArgs, timer);
         case 'stats':
-          return this.handleProjectStats(normalizedArgs, timer);
+          return this.handleProjectStats(normalizedArgs, projectId, timer);
         default:
           return createErrorResponseV2(
             'projects',
@@ -427,7 +436,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleUpdateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
+  private async handleUpdateProject(args: ProjectsArgsV2, projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     if (!args.projectId) {
       return createErrorResponseV2(
         'projects',
@@ -488,7 +497,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
 
     // Use AST-powered mutation builder (Phase 2 consolidation)
     // Cast to ProjectUpdateData since status mapping ensures type compatibility
-    const script = (await buildUpdateProjectScript(args.projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData)).script;
+    const script = (await buildUpdateProjectScript(projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData)).script;
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -502,7 +511,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
 
     // Smart cache invalidation - specific project update
-    this.cache.invalidateProject(args.projectId);
+    this.cache.invalidateProject(projectId);
 
     const updated = result.data;
     return createSuccessResponseV2(
@@ -516,21 +525,10 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleCompleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
-    if (!args.projectId) {
-      return createErrorResponseV2(
-        'projects',
-        'MISSING_PARAMETER',
-        'Project ID is required',
-        'Use operation:"list" first to find the project ID',
-        { provided_args: args },
-        timer.toMetadata(),
-      );
-    }
-
+  private async handleCompleteProject(projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     // Execute completion
     const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, {
-      projectId: args.projectId,
+      projectId: projectId,
       completeAllTasks: false, // Default to not completing all tasks
     });
 
@@ -547,7 +545,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
 
     // Smart cache invalidation - completing project affects its tasks
-    this.cache.invalidateProject(args.projectId!);
+    this.cache.invalidateProject(projectId!);
     this.cache.invalidate('analytics'); // Affects completion stats
 
     return createSuccessResponseV2(
@@ -558,21 +556,10 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleDeleteProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
-    if (!args.projectId) {
-      return createErrorResponseV2(
-        'projects',
-        'MISSING_PARAMETER',
-        'Project ID is required',
-        'Use operation:"list" first to find the project ID',
-        { provided_args: args },
-        timer.toMetadata(),
-      );
-    }
-
+  private async handleDeleteProject(projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
     // Execute deletion
     const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
-      projectId: args.projectId,
+      projectId: projectId,
       deleteTasks: false, // Don't delete tasks, move them to inbox
     });
 
@@ -589,7 +576,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
 
     // Smart cache invalidation - deleting project affects its tasks
-    this.cache.invalidateProject(args.projectId!);
+    this.cache.invalidateProject(projectId!);
     this.cache.invalidate('analytics'); // Affects project stats
 
     return createSuccessResponseV2(
@@ -706,8 +693,8 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectsResponseV2;
   }
 
-  private async handleProjectStats(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
-    const cacheKey = `projects_stats_${args.projectId || 'all'}`;
+  private async handleProjectStats(args: ProjectsArgsV2, projectId: ProjectId | undefined, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
+    const cacheKey = `projects_stats_${projectId || 'all'}`;
 
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
@@ -723,7 +710,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     // Execute the V3 stats script with OmniJS
     const script = this.omniAutomation.buildScript(GET_PROJECT_STATS_SCRIPT, {
       options: {
-        projectId: args.projectId,
+        projectId: projectId,
         limit: args.limit || 200,
       },
     });

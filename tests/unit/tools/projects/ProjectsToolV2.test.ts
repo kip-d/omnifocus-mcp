@@ -233,7 +233,7 @@ describe('ProjectsTool', () => {
 
       const result = await tool.execute({
         operation: 'update',
-        projectId: 'p1',
+        projectId: 'project-1234',
         name: 'Updated Name',
         limit: 50,
         details: false,
@@ -241,7 +241,7 @@ describe('ProjectsTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.project.name).toBe('Updated Name');
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('project-1234');
     });
 
     it('should validate required projectId for update', async () => {
@@ -269,7 +269,7 @@ describe('ProjectsTool', () => {
 
       const result = await tool.execute({
         operation: 'update',
-        projectId: 'p1',
+        projectId: 'project-1234',
         dueDate: '2025-03-31',
         limit: 50,
         details: false,
@@ -289,14 +289,14 @@ describe('ProjectsTool', () => {
 
       const result = await tool.execute({
         operation: 'complete',
-        projectId: 'p1',
+        projectId: 'project-1234',
         limit: 50,
         details: false,
       });
 
       expect(result.success).toBe(true);
       expect(result.data.project.status).toBe('done');
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('project-1234');
       expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
@@ -326,14 +326,14 @@ describe('ProjectsTool', () => {
 
       const result = await tool.execute({
         operation: 'delete',
-        projectId: 'p1',
+        projectId: 'project-1234',
         limit: 50,
         details: false,
       });
 
       expect(result.success).toBe(true);
       expect(result.data.project.deleted).toBe(true);
-      expect(mockCache.invalidateProject).toHaveBeenCalledWith('p1');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('project-1234');
       expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
     });
 
@@ -441,7 +441,7 @@ describe('ProjectsTool', () => {
 
       const result = await tool.execute({
         operation: 'update',
-        projectId: 'p1',
+        projectId: 'project-1234',
         reviewInterval: '7' as any,
         limit: 50,
         details: false,

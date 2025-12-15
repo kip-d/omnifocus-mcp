@@ -6,6 +6,11 @@ import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import { TaskId, ProjectId, asTaskId, asProjectId } from '../../utils/branded-types.js';
+
+// Convert string IDs to branded types for type safety
+const convertToTaskId = (id: string): TaskId => asTaskId(id);
+const convertToProjectId = (id: string): ProjectId => asProjectId(id);
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
@@ -111,9 +116,9 @@ SAFETY:
       operation: compiled.operation,
     };
 
-    // Add ID for update/complete/delete
+    // Add ID for update/complete/delete with branded type safety
     if ('taskId' in compiled && compiled.taskId) {
-      manageArgs.taskId = compiled.taskId;
+      manageArgs.taskId = convertToTaskId(compiled.taskId);
     }
 
     // Note: projectId not used by ManageTaskTool (it uses 'project' parameter instead)
@@ -140,9 +145,9 @@ SAFETY:
       operation: compiled.operation,
     };
 
-    // Add projectId for update/complete/delete operations
+    // Add projectId for update/complete/delete operations with branded type safety
     if ('projectId' in compiled && compiled.projectId) {
-      projectArgs.projectId = compiled.projectId;
+      projectArgs.projectId = convertToProjectId(compiled.projectId);
     }
 
     // Add data for create - spread all fields (name, tags, dueDate, etc.)
@@ -197,11 +202,11 @@ SAFETY:
       operation: 'bulk_delete',
     };
 
-    // Map to taskIds or projectIds based on target
+    // Map to taskIds or projectIds based on target with branded type safety
     if (compiled.target === 'task') {
-      manageArgs.taskIds = compiled.ids;
+      manageArgs.taskIds = compiled.ids.map(id => convertToTaskId(id));
     } else {
-      manageArgs.projectIds = compiled.ids;
+      manageArgs.projectIds = compiled.ids.map(id => convertToProjectId(id));
     }
 
     return this.manageTaskTool.execute(manageArgs);
