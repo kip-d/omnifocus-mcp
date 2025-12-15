@@ -17,6 +17,21 @@ print_step() {
     echo -e "\n${BLUE}📋 $1${NC}"
 }
 
+# Run a command and handle success/failure
+run_command() {
+    local cmd="$1"
+    local description="$2"
+    
+    echo -e "${YELLOW}🔧 Running: $description${NC}"
+    if eval "$cmd"; then
+        print_success "$description completed successfully"
+        return 0
+    else
+        print_error "$description failed"
+        return 1
+    fi
+}
+
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
@@ -47,9 +62,13 @@ else
     fi
 fi
 
-# Step 1: TypeScript compilation
+# Step 1: Code formatting check
+print_step "Code formatting check"
+run_command "npm run format:check" "Code formatting check"
+
+# Step 2: TypeScript compilation
 print_step "TypeScript compilation check"
-npm run build
+run_command "npm run build" "TypeScript compilation"
 print_success "TypeScript compilation successful"
 
 # Step 2: Type checking
@@ -137,6 +156,7 @@ fi
 echo -e "\n${GREEN}🎉 All CI checks passed!${NC}"
 echo "================================="
 echo -e "${BLUE}Summary:${NC}"
+echo "- Code formatting: ✅"
 echo "- TypeScript compilation: ✅"
 echo "- Type checking: ✅"
 echo "- Lint errors: ✅ ($ERROR_COUNT <= 50)"
