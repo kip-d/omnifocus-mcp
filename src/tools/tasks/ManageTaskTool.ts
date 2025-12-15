@@ -19,6 +19,37 @@ import {
 } from '../../utils/error-messages.js';
 import type { TaskOperationResponseV2, TaskOperationDataV2 } from '../response-types-v2.js';
 import { RepeatRuleUserIntentSchema } from '../schemas/repeat-schemas.js';
+import {
+  TaskId, ProjectId,
+  asTaskId, asProjectId,
+} from '../../utils/branded-types.js';
+
+// Type for branded ID arguments
+type BrandedTaskArgs = {
+  operation: 'create' | 'update' | 'complete' | 'delete' | 'bulk_complete' | 'bulk_delete';
+  name?: string;
+  note?: string;
+  tags?: string[];
+  flagged?: string | boolean;
+  estimatedMinutes?: string | number;
+  dueDate?: string | null;
+  deferDate?: string | null;
+  plannedDate?: string | null;
+  sequential?: string | boolean;
+  repeatRule?: unknown;
+  taskId?: TaskId;
+  taskIds?: TaskId[];
+  projectId?: ProjectId | null;
+  parentTaskId?: TaskId;
+  completionDate?: string | null;
+  minimalResponse?: string | boolean;
+  bulkCriteria?: {
+    tags?: string[];
+    projectName?: string;
+    search?: string;
+    completed?: boolean;
+  };
+};
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
@@ -202,11 +233,22 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     const timer = new OperationTimerV2();
     const { operation, taskId, ...params} = args;
 
-    this.logger.debug(`Starting ${operation} operation`, { operation, taskId, params });
+    // Convert string IDs to branded types for internal use
+    const brandedArgs: BrandedTaskArgs = {
+      ...args,
+      taskId: args.taskId ? asTaskId(args.taskId) : undefined,
+      taskIds: args.taskIds ? args.taskIds.map(id => asTaskId(id)) : undefined,
+      projectId: args.projectId !== undefined && args.projectId !== null ? asProjectId(args.projectId) : null,
+      parentTaskId: args.parentTaskId ? asTaskId(args.parentTaskId) : undefined,
+    };
+
+    const { taskId: brandedTaskId, ...brandedParams } = brandedArgs;
+
+    this.logger.debug(`Starting ${operation} operation`, { operation, taskId: brandedTaskId, params: brandedParams });
 
     try {
       // Validate required parameters based on operation
-      if (!['create', 'bulk_complete', 'bulk_delete'].includes(operation) && !taskId) {
+      if (!['create', 'bulk_complete', 'bulk_delete'].includes(operation) && !brandedTaskId) {
         const error = createErrorResponseV2(
           'manage_task',
           'MISSING_PARAMETER',
@@ -237,21 +279,21 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       switch (operation) {
         case 'create': {
           // Direct implementation of task creation
-          this.logger.debug('Starting create operation', { params });
+          this.logger.debug('Starting create operation', { params: brandedParams });
 
           // Filter out null/undefined values and convert dates
-          const createArgs: Partial<TaskCreationArgs> = { name: params.name! };
-          if (params.note) createArgs.note = params.note;
-          if (params.projectId) createArgs.projectId = params.projectId;
-          if (params.parentTaskId) createArgs.parentTaskId = params.parentTaskId;
-          if (params.dueDate) createArgs.dueDate = params.dueDate;
-          if (params.deferDate) createArgs.deferDate = params.deferDate;
-          if (params.plannedDate) createArgs.plannedDate = params.plannedDate;
-          if (params.flagged !== undefined) createArgs.flagged = typeof params.flagged === 'string' ? params.flagged === 'true' : params.flagged;
-          if (params.estimatedMinutes !== undefined) createArgs.estimatedMinutes = typeof params.estimatedMinutes === 'string' ? parseInt(params.estimatedMinutes, 10) : params.estimatedMinutes;
-          if (params.tags) createArgs.tags = params.tags;
-          if (params.sequential !== undefined) createArgs.sequential = typeof params.sequential === 'string' ? params.sequential === 'true' : params.sequential;
-          const repeatRuleForUpdate = this.normalizeRepeatRuleInput(params.repeatRule);
+          const createArgs: Partial<TaskCreationArgs> = { name: brandedParams.name! };
+          if (brandedParams.note) createArgs.note = brandedParams.note;
+          if (brandedParams.projectId) createArgs.projectId = brandedParams.projectId;
+          if (brandedParams.parentTaskId) createArgs.parentTaskId = brandedParams.parentTaskId;
+          if (brandedParams.dueDate) createArgs.dueDate = brandedParams.dueDate;
+          if (brandedParams.deferDate) createArgs.deferDate = brandedParams.deferDate;
+          if (brandedParams.plannedDate) createArgs.plannedDate = brandedParams.plannedDate;
+          if (brandedParams.flagged !== undefined) createArgs.flagged = typeof brandedParams.flagged === 'string' ? brandedParams.flagged === 'true' : brandedParams.flagged;
+          if (brandedParams.estimatedMinutes !== undefined) createArgs.estimatedMinutes = typeof brandedParams.estimatedMinutes === 'string' ? parseInt(brandedParams.estimatedMinutes, 10) : brandedParams.estimatedMinutes;
+          if (brandedParams.tags) createArgs.tags = brandedParams.tags;
+          if (brandedParams.sequential !== undefined) createArgs.sequential = typeof brandedParams.sequential === 'string' ? brandedParams.sequential === 'true' : brandedParams.sequential;
+          const repeatRuleForUpdate = this.normalizeRepeatRuleInput(brandedParams.repeatRule);
           if (repeatRuleForUpdate) {
             this.logger.debug('Normalized repeat rule for creation', { repeatRule: repeatRuleForUpdate });
             createArgs.repeatRule = repeatRuleForUpdate;
@@ -450,12 +492,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
         case 'update': {
           // Direct implementation of task update
-          const allParams = params as Partial<TaskUpdateArgs & { minimalResponse?: boolean }>;
+          const allParams = brandedParams as Partial<TaskUpdateArgs & { minimalResponse?: boolean }>;
           const { minimalResponse = false, ...updates } = allParams;
 
           // Debug logging: Log all received parameters
           this.logger.debug('UpdateTaskTool received parameters:', {
-            taskId,
+            taskId: brandedTaskId,
             updates: {
               ...updates,
               // Explicitly log the types and values of date fields
@@ -481,22 +523,22 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           if (Object.keys(safeUpdates).length === 0) {
             result = createSuccessResponseV2(
               'manage_task',
-              { task: { id: taskId!, name: '', updated: false as const, changes: {} } },
+              { task: { id: brandedTaskId!, name: '', updated: false as const, changes: {} } },
               undefined,
-              { ...timer.toMetadata(), input_params: { taskId }, message: 'No valid updates provided' },
+              { ...timer.toMetadata(), input_params: { taskId: brandedTaskId }, message: 'No valid updates provided' },
             );
             break;
           }
 
           // Log what we're sending to the script (debug only - contains user data)
           this.logger.debug('Sending to JXA script:', {
-            taskId,
+            taskId: brandedTaskId,
             safeUpdates,
             safeUpdatesKeys: Object.keys(safeUpdates),
           });
 
           // Use AST-powered mutation builder (Phase 2 consolidation)
-          const updateScript = (await buildUpdateTaskScript(taskId!, safeUpdates)).script;
+          const updateScript = (await buildUpdateTaskScript(brandedTaskId!, safeUpdates)).script;
           const updateResult = await this.execJson(updateScript);
           if (isScriptError(updateResult)) {
             this.logger.error(`Update task script error: ${updateResult.error}`);
@@ -602,8 +644,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Direct implementation of task completion
           // Convert completionDate if provided
           const processedCompleteArgs = {
-            taskId: taskId!,
-            completionDate: params.completionDate ? localToUTC(params.completionDate, 'completion') : undefined,
+            taskId: brandedTaskId!,
+            completionDate: brandedParams.completionDate ? localToUTC(brandedParams.completionDate, 'completion') : undefined,
           };
 
           // Try JXA first, fall back to URL scheme if access denied
@@ -664,7 +706,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Direct implementation of task deletion
           // Try JXA first, fall back to URL scheme if access denied
           try {
-            const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: taskId! } as unknown as Record<string, unknown>);
+            const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: brandedTaskId! } as unknown as Record<string, unknown>);
             const anyOmniDelete = this.omniAutomation as {
               executeJson?: (script: string) => Promise<unknown>;
               execute?: (script: string) => Promise<unknown>;
@@ -718,7 +760,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
         case 'bulk_complete':
         case 'bulk_delete': {
-          return this.handleBulkOperation(operation, args, timer);
+          return this.handleBulkOperation(operation, brandedArgs, timer);
         }
 
         default: {
@@ -1073,7 +1115,15 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
   private async handleBulkOperation(
     operation: 'bulk_complete' | 'bulk_delete',
-    args: ManageTaskInput,
+    args: {
+      taskIds?: TaskId[];
+      bulkCriteria?: {
+        tags?: string[];
+        projectName?: string;
+        search?: string;
+        completed?: boolean;
+      };
+    },
     timer: OperationTimerV2,
   ): Promise<TaskOperationResponseV2> {
     const { taskIds, bulkCriteria } = args;
@@ -1122,7 +1172,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
         const data = result.data as { tasks?: { id: string }[]; items?: { id: string }[] };
         const tasks = data.tasks || data.items || [];
-        targetTaskIds = tasks.map(task => task.id);
+        targetTaskIds = tasks.map(task => asTaskId(task.id));
 
         if (targetTaskIds.length === 0) {
           const error = createErrorResponseV2(
@@ -1169,7 +1219,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       // This executes one script that iterates flattenedTasks ONCE and deletes all tasks
       // vs N iterations for N individual deletes (81% performance improvement achieved)
       try {
-        const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, { taskIds: targetTaskIds });
+        const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, { taskIds: targetTaskIds.map(id => id as string) });
         const result = await this.execJson(script);
 
         if (isScriptError(result)) {
@@ -1200,7 +1250,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       // OPTIMIZATION: OmniJS-first bulk complete using Task.byIdentifier() direct lookup
       // No iteration needed - direct task lookup is faster than building a map
       try {
-        const script = buildBulkCompleteTasksScript({ taskIds: targetTaskIds, completionDate: null });
+        const script = buildBulkCompleteTasksScript({ taskIds: targetTaskIds.map(id => id as string), completionDate: null });
         const result = await this.execJson(script);
 
         if (isScriptError(result)) {
