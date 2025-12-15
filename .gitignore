@@ -29,3 +29,7 @@ diagnostic-*.json
 
 # Husky internal directory (auto-generated)
 .husky/_
+
+# Test output files (temporary JSON responses)
+output.json
+output_read.json

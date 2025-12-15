@@ -172,7 +172,7 @@ async function runComprehensiveTests() {
     const result = callTool('mcp__omnifocus__create_task', {
       name: 'Daily Repeat Test ' + Date.now(),
       flagged: 'false',
-      tags: ['mcp-test']
+      tags: ['mcp-test'],
       sequential: 'false',
       repeatRule: {
         unit: 'day',
