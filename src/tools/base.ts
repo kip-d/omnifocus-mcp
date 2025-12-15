@@ -770,6 +770,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
 
         if (newFailureCount >= 3) {
           // Open the circuit
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
           (this.circuitBreaker as any).state = {
             isOpen: true,
             isHalfOpen: false,
@@ -779,6 +780,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
           };
         } else {
           // Update failure count
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
           (this.circuitBreaker as any).state = {
             ...state,
             failureCount: newFailureCount,
