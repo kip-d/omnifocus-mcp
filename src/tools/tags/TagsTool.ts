@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_TAGS_SCRIPT, GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags-v3.js';
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import {
+  createListResponseV2,
+  createSuccessResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+} from '../../utils/response-format.js';
 import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
@@ -11,18 +16,15 @@ import { TagId, asTagId } from '../../utils/branded-types.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
-  operation: z.enum(['list', 'active', 'manage'])
+  operation: z
+    .enum(['list', 'active', 'manage'])
     .default('list')
     .describe('Operation to perform: list all tags, get active tags only, or manage tags (create/rename/delete/merge)'),
 
   // List operation parameters
-  sortBy: z.enum(['name', 'usage', 'tasks'])
-    .default('name')
-    .describe('How to sort the tags (list operation)'),
+  sortBy: z.enum(['name', 'usage', 'tasks']).default('name').describe('How to sort the tags (list operation)'),
 
-  includeEmpty: coerceBoolean()
-    .default(true)
-    .describe('Include tags with no tasks (list operation)'),
+  includeEmpty: coerceBoolean().default(true).describe('Include tags with no tasks (list operation)'),
 
   includeUsageStats: coerceBoolean()
     .default(false)
@@ -41,34 +43,31 @@ const TagsToolSchema = z.object({
     .describe('Ultra-fast mode: Return only tag names without IDs or hierarchy (list operation)'),
 
   // Manage operation parameters
-  action: z.enum(['create', 'rename', 'delete', 'merge', 'nest', 'unparent', 'reparent', 'set_mutual_exclusivity'])
+  action: z
+    .enum(['create', 'rename', 'delete', 'merge', 'nest', 'unparent', 'reparent', 'set_mutual_exclusivity'])
     .optional()
-    .describe('The management action to perform (manage operation). set_mutual_exclusivity: toggle mutual exclusivity constraint on tag children (OmniFocus 4.7+)'),
+    .describe(
+      'The management action to perform (manage operation). set_mutual_exclusivity: toggle mutual exclusivity constraint on tag children (OmniFocus 4.7+)',
+    ),
 
-  tagName: TagNameSchema
-    .optional()
-    .describe('The tag name to create or operate on (manage operation)'),
+  tagName: TagNameSchema.optional().describe('The tag name to create or operate on (manage operation)'),
 
-  newName: TagNameSchema
-    .optional()
-    .describe('New name for rename action (manage operation)'),
+  newName: TagNameSchema.optional().describe('New name for rename action (manage operation)'),
 
-  targetTag: TagNameSchema
-    .optional()
-    .describe('Target tag for merge action (manage operation)'),
+  targetTag: TagNameSchema.optional().describe('Target tag for merge action (manage operation)'),
 
-  parentTagName: TagNameSchema
-    .optional()
-    .describe('Parent tag name for creating nested tags or nest/reparent operations'),
+  parentTagName: TagNameSchema.optional().describe(
+    'Parent tag name for creating nested tags or nest/reparent operations',
+  ),
 
-  parentTagId: z.string()
-    .optional()
-    .describe('Parent tag ID for creating nested tags or nest/reparent operations'),
+  parentTagId: z.string().optional().describe('Parent tag ID for creating nested tags or nest/reparent operations'),
 
   // Mutual exclusivity operation parameter (OmniFocus 4.7+)
   mutuallyExclusive: coerceBoolean()
     .optional()
-    .describe('Set to true to make tag children mutually exclusive, false to disable (set_mutual_exclusivity action, OmniFocus 4.7+)'),
+    .describe(
+      'Set to true to make tag children mutually exclusive, false to disable (set_mutual_exclusivity action, OmniFocus 4.7+)',
+    ),
 });
 
 // Convert string ID to branded TagId for type safety
@@ -80,7 +79,8 @@ type TagsToolInput = z.infer<typeof TagsToolSchema>;
 
 export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | TagOperationResponseV2> {
   name = 'tags';
-  description = 'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
+  description =
+    'Comprehensive tag management with hierarchy support: list all tags (including parent-child relationships), get active tags, or manage tags (create nested tags, rename, delete, merge, nest, unparent, reparent). Use operation="list" for all tags with hierarchy, "active" for tags with incomplete tasks, "manage" for CRUD and hierarchy operations.';
   schema = TagsToolSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -115,18 +115,17 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         return this.getActiveTags();
       case 'manage':
         return this.manageTags(args);
-      default:
-        {
-          const timer = new OperationTimerV2();
-          return createErrorResponseV2(
-            'tags',
-            'INVALID_OPERATION',
-            `Invalid operation: ${String(operation)}`,
-            undefined,
-            { operation },
-            timer.toMetadata(),
-          ) as TagsResponseV2;
-        }
+      default: {
+        const timer = new OperationTimerV2();
+        return createErrorResponseV2(
+          'tags',
+          'INVALID_OPERATION',
+          `Invalid operation: ${String(operation)}`,
+          undefined,
+          { operation },
+          timer.toMetadata(),
+        ) as TagsResponseV2;
+      }
     }
   }
 
@@ -145,7 +144,12 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
 
       // Cache key
       const cacheKey = `list:${sortBy}:${includeEmpty}:${includeUsageStats}:${includeTaskCounts}:${fastMode}:${namesOnly}`;
-      const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
+      const cached = this.cache.get<{
+        tags?: unknown[];
+        items?: unknown[];
+        count?: number;
+        metadata?: Record<string, unknown>;
+      }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached tag list');
         return cached as TagsResponseV2; // Keep identity to satisfy test equality; cached object may already be a formatted response
@@ -182,19 +186,19 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
       type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
       const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
-      const parsedResult: TagListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as TagListData);
+      const parsedResult: TagListData = 'data' in envelope && envelope.data ? envelope.data : (envelope as TagListData);
 
-      const response = createListResponseV2(
-        'tags',
-        parsedResult.tags || parsedResult.items || [],
-        'other',
-        { ...timer.toMetadata(), total: parsedResult.count || parsedResult.tags?.length || 0, operation: 'list', mode: 'unified', options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly } },
-      ) as TagsResponseV2;
+      const response = createListResponseV2('tags', parsedResult.tags || parsedResult.items || [], 'other', {
+        ...timer.toMetadata(),
+        total: parsedResult.count || parsedResult.tags?.length || 0,
+        operation: 'list',
+        mode: 'unified',
+        options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly },
+      }) as TagsResponseV2;
 
       // Cache the result
       this.cache.set('tags', cacheKey, response);
       return response;
-
     } catch (error) {
       return this.handleErrorV2<TagsDataV2>(error);
     }
@@ -206,7 +210,12 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
     try {
       // Check cache
       const cacheKey = 'active_tags';
-      const cached = this.cache.get<{ tags?: unknown[]; items?: unknown[]; count?: number; metadata?: Record<string, unknown> }>('tags', cacheKey);
+      const cached = this.cache.get<{
+        tags?: unknown[];
+        items?: unknown[];
+        count?: number;
+        metadata?: Record<string, unknown>;
+      }>('tags', cacheKey);
       if (cached) {
         this.logger.debug('Returning cached active tags');
         return cached as TagsResponseV2;
@@ -231,19 +240,18 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
       type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
       const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
-      const parsedResult: TagListData = ('data' in envelope && envelope.data) ? envelope.data : (envelope as TagListData);
+      const parsedResult: TagListData = 'data' in envelope && envelope.data ? envelope.data : (envelope as TagListData);
 
-      const response = createListResponseV2(
-        'tags',
-        parsedResult.tags || parsedResult.items || [],
-        'other',
-        { ...timer.toMetadata(), count: parsedResult.count || parsedResult.tags?.length || 0, operation: 'active', description: 'Tags with incomplete tasks' },
-      ) as TagsResponseV2;
+      const response = createListResponseV2('tags', parsedResult.tags || parsedResult.items || [], 'other', {
+        ...timer.toMetadata(),
+        count: parsedResult.count || parsedResult.tags?.length || 0,
+        operation: 'active',
+        description: 'Tags with incomplete tasks',
+      }) as TagsResponseV2;
 
       // Cache the result (30 second TTL for active tags)
       this.cache.set('tags', cacheKey, response);
       return response;
-
     } catch (error) {
       return this.handleErrorV2<TagsDataV2>(error);
     }
@@ -340,7 +348,8 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
 
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
       const envelope = result.data as unknown;
-      const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
+      const parsedResult =
+        envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
 
       // Smart cache invalidation for tag changes
       this.cache.invalidateTag(tagName);
@@ -351,8 +360,18 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         this.cache.invalidateTag(targetTag); // Invalidate merge target too
       }
 
-      return createSuccessResponseV2('tags', { action, tagName, ...(newName && { newName }), ...(targetTag && { targetTag }), result: parsedResult as { success: boolean; message?: string; data?: unknown } }, undefined, { ...timer.toMetadata(), operation: 'manage', action });
-
+      return createSuccessResponseV2(
+        'tags',
+        {
+          action,
+          tagName,
+          ...(newName && { newName }),
+          ...(targetTag && { targetTag }),
+          result: parsedResult as { success: boolean; message?: string; data?: unknown },
+        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'manage', action },
+      );
     } catch (error) {
       return this.handleErrorV2<TagOperationDataV2>(error);
     }

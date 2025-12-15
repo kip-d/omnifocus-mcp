@@ -109,9 +109,7 @@ SAFETY:
     return this.routeToManageTask(compiled);
   }
 
-  private async routeToManageTask(
-    compiled: Exclude<CompiledMutation, { operation: 'batch' }>,
-  ): Promise<unknown> {
+  private async routeToManageTask(compiled: Exclude<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     const manageArgs: Record<string, unknown> = {
       operation: compiled.operation,
     };
@@ -163,16 +161,14 @@ SAFETY:
     return this.projectsTool.execute(projectArgs);
   }
 
-  private async routeToBatch(
-    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
-  ): Promise<unknown> {
+  private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     // Convert builder batch format to existing batch tool format
     // Auto-generate tempIds for items that don't have them
     let autoTempIdCounter = 0;
     const batchArgs: Record<string, unknown> = {
       items: compiled.operations
-        .filter(op => op.operation === 'create')
-        .map(op => {
+        .filter((op) => op.operation === 'create')
+        .map((op) => {
           const item = {
             type: op.target,
             ...op.data,
@@ -194,9 +190,7 @@ SAFETY:
     return this.batchTool.execute(batchArgs);
   }
 
-  private async routeToBulkDelete(
-    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>,
-  ): Promise<unknown> {
+  private async routeToBulkDelete(compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>): Promise<unknown> {
     // Route to ManageTaskTool's existing bulk_delete functionality
     const manageArgs: Record<string, unknown> = {
       operation: 'bulk_delete',
@@ -204,9 +198,9 @@ SAFETY:
 
     // Map to taskIds or projectIds based on target with branded type safety
     if (compiled.target === 'task') {
-      manageArgs.taskIds = compiled.ids.map(id => convertToTaskId(id));
+      manageArgs.taskIds = compiled.ids.map((id) => convertToTaskId(id));
     } else {
-      manageArgs.projectIds = compiled.ids.map(id => convertToProjectId(id));
+      manageArgs.projectIds = compiled.ids.map((id) => convertToProjectId(id));
     }
 
     return this.manageTaskTool.execute(manageArgs);
@@ -216,14 +210,12 @@ SAFETY:
    * Preview batch operation without executing
    * Returns what would be created, with validation results
    */
-  private previewBatch(
-    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
-  ): unknown {
+  private previewBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): unknown {
     const timer = new OperationTimerV2();
 
     // Extract create operations for preview
-    const createOps = compiled.operations.filter(op => op.operation === 'create');
-    const updateOps = compiled.operations.filter(op => op.operation === 'update');
+    const createOps = compiled.operations.filter((op) => op.operation === 'create');
+    const updateOps = compiled.operations.filter((op) => op.operation === 'update');
 
     // Build preview items
     const previewItems = createOps.map((op, index) => ({
@@ -242,7 +234,7 @@ SAFETY:
     }));
 
     // Add update operations to preview
-    const updatePreviewItems = updateOps.map(op => ({
+    const updatePreviewItems = updateOps.map((op) => ({
       id: op.id,
       type: compiled.target,
       name: op.changes?.name || `[Update to ${op.id}]`,
@@ -255,7 +247,7 @@ SAFETY:
     const errors: string[] = [];
 
     // Check for duplicate tempIds
-    const tempIds = previewItems.map(item => item.tempId);
+    const tempIds = previewItems.map((item) => item.tempId);
     const duplicates = tempIds.filter((id, idx) => tempIds.indexOf(id) !== idx);
     if (duplicates.length > 0) {
       errors.push(`Duplicate tempIds found: ${duplicates.join(', ')}`);
@@ -263,9 +255,9 @@ SAFETY:
 
     // Check for orphan parentTempIds
     const parentRefs = previewItems
-      .filter(item => item.details.parentTempId)
-      .map(item => item.details.parentTempId);
-    const orphanRefs = parentRefs.filter(ref => !tempIds.includes(ref as string));
+      .filter((item) => item.details.parentTempId)
+      .map((item) => item.details.parentTempId);
+    const orphanRefs = parentRefs.filter((ref) => !tempIds.includes(ref as string));
     if (orphanRefs.length > 0) {
       errors.push(`Parent references not found in batch: ${orphanRefs.join(', ')}`);
     }
@@ -307,13 +299,11 @@ SAFETY:
    * Note: Does not verify if IDs exist (that would require expensive lookups).
    * Verification happens at execution time.
    */
-  private previewBulkDelete(
-    compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>,
-  ): unknown {
+  private previewBulkDelete(compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>): unknown {
     const timer = new OperationTimerV2();
 
     // Build preview items from the IDs provided
-    const previewItems = compiled.ids.map(id => ({
+    const previewItems = compiled.ids.map((id) => ({
       id,
       action: 'delete' as const,
     }));

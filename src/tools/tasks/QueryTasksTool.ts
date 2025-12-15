@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import {
-  buildListTasksScriptV4,
-  TODAYS_AGENDA_SCRIPT,
-  GET_TASK_COUNT_SCRIPT,
-} from '../../omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT, GET_TASK_COUNT_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
@@ -35,100 +31,139 @@ import { TaskId, asTaskId } from '../../utils/branded-types.js';
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
   // Primary mode selector
-  mode: z.enum([
-    'all',           // List all tasks (with optional filters)
-    'inbox',         // Tasks in inbox (not assigned to any project)
-    'search',        // Text search in task names
-    'overdue',       // Tasks past their due date
-    'today',         // Today perspective: Due soon (≤3 days) OR flagged
-    'upcoming',      // Tasks due in next N days
-    'available',     // Tasks ready to work on
-    'blocked',       // Tasks waiting on others
-    'flagged',       // High priority tasks
-    'smart_suggest', // AI-powered suggestions for "what should I work on?"
-  ]).default('all')
-    .describe('Query mode: "all" = all tasks with optional filters, "inbox" = tasks in inbox (not assigned to any project), "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks'),
+  mode: z
+    .enum([
+      'all', // List all tasks (with optional filters)
+      'inbox', // Tasks in inbox (not assigned to any project)
+      'search', // Text search in task names
+      'overdue', // Tasks past their due date
+      'today', // Today perspective: Due soon (≤3 days) OR flagged
+      'upcoming', // Tasks due in next N days
+      'available', // Tasks ready to work on
+      'blocked', // Tasks waiting on others
+      'flagged', // High priority tasks
+      'smart_suggest', // AI-powered suggestions for "what should I work on?"
+    ])
+    .default('all')
+    .describe(
+      'Query mode: "all" = all tasks with optional filters, "inbox" = tasks in inbox (not assigned to any project), "search" = find tasks by text, "overdue" = tasks past their due date, "today" = tasks due within 3 days OR flagged, "upcoming" = tasks due in next N days (use daysAhead param), "available" = tasks ready to work on now (not blocked/deferred), "blocked" = tasks waiting on other tasks, "flagged" = high priority flagged tasks',
+    ),
 
   // Common filters (work with most modes)
   id: z.string().optional().describe('Filter by exact task ID (returns single task if found)'),
   search: z.string().optional().describe('Search text to find in task names (for search mode)'),
   project: z.string().optional().describe('Filter by project name or ID'),
   tags: z.array(z.string()).optional().describe('Filter by tag names'),
-  completed: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).optional().describe('Include completed tasks (default: false)'),
+  completed: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .optional()
+    .describe('Include completed tasks (default: false)'),
 
   // Date filters (natural language supported)
-  dueBy: z.string().optional().describe('Show tasks due by this date. Use YYYY-MM-DD format (e.g., "2025-03-15"). Basic terms like "today" or "tomorrow" also work.'),
-  daysAhead: z.union([
-    z.number(),
-    z.string().transform(val => parseInt(val, 10)),
-  ]).pipe(z.number().min(1).max(30)).optional().describe('For upcoming mode: number of days to look ahead (default: 7)'),
+  dueBy: z
+    .string()
+    .optional()
+    .describe(
+      'Show tasks due by this date. Use YYYY-MM-DD format (e.g., "2025-03-15"). Basic terms like "today" or "tomorrow" also work.',
+    ),
+  daysAhead: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .pipe(z.number().min(1).max(30))
+    .optional()
+    .describe('For upcoming mode: number of days to look ahead (default: 7)'),
 
   // Response control - with type coercion for MCP bridge compatibility
-  limit: z.union([
-    z.number(),
-    z.string().transform(val => parseInt(val, 10)),
-  ]).pipe(z.number().min(1).max(200)).default(25).describe('Maximum tasks to return (default: 25)'),
-  details: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).default(false).describe('Include full task details (default: false for speed)'),
-  fastSearch: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).default(false).describe('Fast search mode: only search task names, not notes (improves performance)'),
-  countOnly: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).default(false).describe('Return only task count, not full task data (33x faster - ideal for "how many" questions)'),
+  limit: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .pipe(z.number().min(1).max(200))
+    .default(25)
+    .describe('Maximum tasks to return (default: 25)'),
+  details: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .default(false)
+    .describe('Include full task details (default: false for speed)'),
+  fastSearch: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .default(false)
+    .describe('Fast search mode: only search task names, not notes (improves performance)'),
+  countOnly: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .default(false)
+    .describe('Return only task count, not full task data (33x faster - ideal for "how many" questions)'),
 
   // Field selection for response optimization
-  fields: z.array(z.enum([
-    'id',
-    'name',
-    'completed',
-    'flagged',
-    'blocked',
-    'available',
-    'estimatedMinutes',
-    'dueDate',
-    'deferDate',
-    'plannedDate',
-    'completionDate',
-    'added',
-    'modified',
-    'dropDate',
-    'note',
-    'projectId',
-    'project',
-    'tags',
-    'repetitionRule',
-    'parentTaskId',
-    'parentTaskName',
-    'inInbox',
-  ])).optional().describe('Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox. NOTE: "added", "modified", and "dropDate" fields are technically exposed in the OmniFocus API and are accessible in OmniJS, but cannot be reliably retrieved through the JXA-to-OmniJS bridge used by this tool - they will return null when requested.'),
+  fields: z
+    .array(
+      z.enum([
+        'id',
+        'name',
+        'completed',
+        'flagged',
+        'blocked',
+        'available',
+        'estimatedMinutes',
+        'dueDate',
+        'deferDate',
+        'plannedDate',
+        'completionDate',
+        'added',
+        'modified',
+        'dropDate',
+        'note',
+        'projectId',
+        'project',
+        'tags',
+        'repetitionRule',
+        'parentTaskId',
+        'parentTaskName',
+        'inInbox',
+      ]),
+    )
+    .optional()
+    .describe(
+      'Select specific fields to return (improves performance). If not specified, returns all fields. Available fields: id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox. NOTE: "added", "modified", and "dropDate" fields are technically exposed in the OmniFocus API and are accessible in OmniJS, but cannot be reliably retrieved through the JXA-to-OmniJS bridge used by this tool - they will return null when requested.',
+    ),
 
   // Advanced filtering (optional - for complex queries)
   // Handle both object and stringified JSON (Claude Desktop converts to string)
-  filters: z.union([
-    z.string().transform(val => {
-      // Try to parse as JSON first (Claude Desktop may stringify it)
-      try {
-        return JSON.parse(val) as unknown;
-      } catch {
-        return val as unknown;  // Return as-is if not valid JSON
-      }
-    }),
-    z.unknown(),  // Direct object when called from tests or Node.js
-  ]).optional().describe('Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.'),
+  filters: z
+    .union([
+      z.string().transform((val) => {
+        // Try to parse as JSON first (Claude Desktop may stringify it)
+        try {
+          return JSON.parse(val) as unknown;
+        } catch {
+          return val as unknown; // Return as-is if not valid JSON
+        }
+      }),
+      z.unknown(), // Direct object when called from tests or Node.js
+    ])
+    .optional()
+    .describe(
+      'Advanced filters with operator support. Use for complex queries like OR/AND tag logic, date ranges with operators, string matching. Structure: { tags: { operator: "OR", values: ["work", "urgent"] }, dueDate: { operator: "<=", value: "2025-12-31" } }. Simple filters (project, tags as array, completed) take precedence if both are specified.',
+    ),
 
   // Sorting options (optional)
-  sort: z.array(z.object({
-    field: z.enum(['dueDate', 'deferDate', 'name', 'flagged', 'estimatedMinutes', 'added', 'modified', 'completionDate']),
-    direction: z.enum(['asc', 'desc']),
-  })).optional().describe('Sort results by one or more fields. Example: [{ field: "dueDate", direction: "asc" }, { field: "flagged", direction: "desc" }]. Applied after filtering.'),
+  sort: z
+    .array(
+      z.object({
+        field: z.enum([
+          'dueDate',
+          'deferDate',
+          'name',
+          'flagged',
+          'estimatedMinutes',
+          'added',
+          'modified',
+          'completionDate',
+        ]),
+        direction: z.enum(['asc', 'desc']),
+      }),
+    )
+    .optional()
+    .describe(
+      'Sort results by one or more fields. Example: [{ field: "dueDate", direction: "asc" }, { field: "flagged", direction: "desc" }]. Applied after filtering.',
+    ),
 });
 
 // Convert string ID to branded TaskId for type safety
@@ -224,7 +259,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       // Debug: Log incoming args
       this.logger.debug('[TAG_FILTER_DEBUG] executeValidated received args:', {
         hasFilters: !!args.filters,
-        filterKeys: args.filters && typeof args.filters === 'object' && args.filters !== null ? Object.keys(args.filters) : [],
+        filterKeys:
+          args.filters && typeof args.filters === 'object' && args.filters !== null ? Object.keys(args.filters) : [],
         filters: args.filters,
       });
 
@@ -320,21 +356,16 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
         suggestion = 'Use natural language dates like "tomorrow" or "next week", or ISO format';
       }
 
-      return createErrorResponseV2(
-        'tasks',
-        'EXECUTION_ERROR',
-        errorMessage,
-        suggestion,
-        error,
-        timer.toMetadata(),
-      );
+      return createErrorResponseV2('tasks', 'EXECUTION_ERROR', errorMessage, suggestion, error, timer.toMetadata());
     }
   }
 
-  private getSpecificErrorResponse(error: unknown, _operation: string, timer: OperationTimerV2): TasksResponseV2 | null {
-    const errorMessage = error && typeof error === 'object' && 'error' in error
-      ? String(error.error)
-      : String(error);
+  private getSpecificErrorResponse(
+    error: unknown,
+    _operation: string,
+    timer: OperationTimerV2,
+  ): TasksResponseV2 | null {
+    const errorMessage = error && typeof error === 'object' && 'error' in error ? String(error.error) : String(error);
 
     // Check for permission errors
     if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
@@ -697,7 +728,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
     const filter = {
       id: taskId,
-      limit: 1,  // Only need one result for exact ID match
+      limit: 1, // Only need one result for exact ID match
       includeDetails: args.details,
     };
 
@@ -754,17 +785,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     // Apply field projection if requested
     const projectedTasks = this.projectFields(tasks, args.fields);
 
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'id_lookup',
-        filters_applied: filter,
-        sort_applied: false,
-      },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'id_lookup',
+      filters_applied: filter,
+      sort_applied: false,
+    });
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -774,11 +801,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'overdue' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'overdue',
+      });
     }
 
     // Execute optimized overdue script
@@ -808,11 +835,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as { summary?: unknown }).summary });
 
     const projectedTasks = this.projectFields(tasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'overdue' },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: false, mode: 'overdue' });
   }
 
   private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -823,11 +846,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'upcoming', days_ahead: days },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'upcoming',
+        days_ahead: days,
+      });
     }
 
     // Execute optimized upcoming script
@@ -858,11 +882,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks });
 
     const projectedTasks = this.projectFields(tasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'upcoming', days_ahead: days },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'upcoming',
+      days_ahead: days,
+    });
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -873,11 +898,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'today' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: true, mode: 'today' });
     }
 
     // Use the ultra-fast single-pass algorithm
@@ -911,9 +932,18 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     }
 
     // Unwrap nested data structure (script returns { ok: true, v: '1', data: { tasks: [...] } })
-    type TodayDataStructure = { tasks?: unknown[]; overdueCount?: number; dueTodayCount?: number; flaggedCount?: number; processedCount?: number; totalTasks?: number; optimizationUsed?: string };
+    type TodayDataStructure = {
+      tasks?: unknown[];
+      overdueCount?: number;
+      dueTodayCount?: number;
+      flaggedCount?: number;
+      processedCount?: number;
+      totalTasks?: number;
+      optimizationUsed?: string;
+    };
     const envelope = result.data as { ok?: boolean; v?: string; data?: TodayDataStructure } | TodayDataStructure;
-    const data: TodayDataStructure = ('data' in envelope && envelope.data) ? envelope.data : envelope as TodayDataStructure;
+    const data: TodayDataStructure =
+      'data' in envelope && envelope.data ? envelope.data : (envelope as TodayDataStructure);
 
     const todayTasks = this.parseTasks(data.tasks || []);
 
@@ -965,17 +995,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       // Apply sorting if requested (cache may not have sorted results)
       const sortedTasks = this.sortTasks(cached?.tasks || [], args.sort);
       const projectedTasks = this.projectFields(sortedTasks, args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        {
-          ...timer.toMetadata(),
-          from_cache: true,
-          mode: 'search',
-          search_term: args.search,
-          sort_applied: args.sort ? true : false,
-        },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'search',
+        search_term: args.search,
+        sort_applied: args.sort ? true : false,
+      });
     }
 
     // Execute search using V4 AST-powered script
@@ -1009,17 +1035,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
 
     const projectedTasks = this.projectFields(sortedTasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'search',
-        search_term: args.search,
-        sort_applied: args.sort ? true : false,
-      },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'search',
+      search_term: args.search,
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleAvailableTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1041,11 +1063,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'available' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'available',
+      });
     }
 
     // Execute query using V4 AST-powered script
@@ -1077,11 +1099,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
 
     const projectedTasks = this.projectFields(sortedTasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'available', sort_applied: args.sort ? true : false },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'available',
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleBlockedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1103,11 +1126,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'blocked' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'blocked',
+      });
     }
 
     // Execute query using V4 AST-powered script
@@ -1139,11 +1162,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
 
     const projectedTasks = this.projectFields(sortedTasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'blocked', sort_applied: args.sort ? true : false },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'blocked',
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1153,11 +1177,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'flagged' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'flagged',
+      });
     }
 
     // Use perspective-based flagged script for best performance
@@ -1186,11 +1210,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks });
 
     const projectedTasks = this.projectFields(tasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      { ...timer.toMetadata(), from_cache: false, mode: 'flagged' },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: false, mode: 'flagged' });
   }
 
   private async handleInboxTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1235,17 +1255,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const sortedTasks = this.sortTasks(tasks, args.sort);
     const projectedTasks = this.projectFields(sortedTasks, args.fields);
 
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'inbox',
-        filters_applied: filter,
-        sort_applied: args.sort ? true : false,
-      },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'inbox',
+      filters_applied: filter,
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleAllTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1290,17 +1306,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const sortedTasks = this.sortTasks(tasks, args.sort);
     const projectedTasks = this.projectFields(sortedTasks, args.fields);
 
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'all',
-        filters_applied: filter,
-        sort_applied: args.sort ? true : false,
-      },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'all',
+      filters_applied: filter,
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleSmartSuggest(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
@@ -1313,11 +1325,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2(
-        'tasks',
-        projectedTasks,
-        { ...timer.toMetadata(), from_cache: true, mode: 'smart_suggest' },
-      );
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'smart_suggest',
+      });
     }
 
     // Gather data from multiple sources for intelligent suggestions
@@ -1357,7 +1369,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     todayEnd.setHours(23, 59, 59, 999);
 
     // Smart prioritization algorithm
-    const scoredTasks = allTasks.map(task => {
+    const scoredTasks = allTasks.map((task) => {
       let score = 0;
 
       // Overdue tasks get highest priority
@@ -1387,15 +1399,17 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
     // Sort by score and take top items
     let suggestedTasks = scoredTasks
-      .filter(t => t._score > 0) // Only tasks with positive score
+      .filter((t) => t._score > 0) // Only tasks with positive score
       .sort((a, b) => b._score - a._score)
       .slice(0, args.limit)
       .map(({ _score, ...task }) => task); // Remove score from output
 
     // Ensure at least one due-today task is surfaced if available
-    const dueTodayCandidate = allTasks.find(t => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString());
+    const dueTodayCandidate = allTasks.find(
+      (t) => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString(),
+    );
     if (dueTodayCandidate) {
-      const alreadyIncluded = suggestedTasks.some(t => t.id === dueTodayCandidate.id);
+      const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.id);
       if (!alreadyIncluded) {
         if (suggestedTasks.length < args.limit) {
           suggestedTasks.push(dueTodayCandidate);
@@ -1409,23 +1423,19 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
 
     const projectedTasks = this.projectFields(suggestedTasks, args.fields);
-    return createTaskResponseV2(
-      'tasks',
-      projectedTasks,
-      {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'smart_suggest',
-        algorithm: 'priority_score_v1',
-      },
-    );
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'smart_suggest',
+      algorithm: 'priority_score_v1',
+    });
   }
 
   private parseTasks(tasks: unknown[]): OmniFocusTask[] {
     if (!tasks || !Array.isArray(tasks)) {
       return [];
     }
-    return tasks.map(task => {
+    return tasks.map((task) => {
       const t = task as {
         dueDate?: string | Date;
         deferDate?: string | Date;
@@ -1463,7 +1473,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     }
 
     // Project each task to only include selected fields
-    return tasks.map(task => {
+    return tasks.map((task) => {
       const projectedTask: Partial<OmniFocusTask> = {};
 
       // Always include id if not explicitly excluded (needed for identification)
@@ -1472,7 +1482,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       }
 
       // Project only requested fields
-      selectedFields.forEach(field => {
+      selectedFields.forEach((field) => {
         if (field in task) {
           const typedField = field as keyof OmniFocusTask;
           (projectedTask as Record<string, unknown>)[field] = task[typedField];

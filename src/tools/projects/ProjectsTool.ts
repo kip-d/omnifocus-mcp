@@ -22,51 +22,56 @@ import { ProjectId, asProjectId } from '../../utils/branded-types.js';
 // Unified schema for all project operations
 const ProjectsToolSchemaV2 = z.object({
   // Operation selector
-  operation: z.enum([
-    'list',      // List/query projects
-    'create',    // Create new project
-    'update',    // Update existing project
-    'complete',  // Mark project as done
-    'delete',    // Delete project
-    'review',    // Get projects needing review
-    'active',    // Get active projects only
-    'stats',     // Get accurate project statistics with available rates
-  ]).describe('Operation to perform'),
+  operation: z
+    .enum([
+      'list', // List/query projects
+      'create', // Create new project
+      'update', // Update existing project
+      'complete', // Mark project as done
+      'delete', // Delete project
+      'review', // Get projects needing review
+      'active', // Get active projects only
+      'stats', // Get accurate project statistics with available rates
+    ])
+    .describe('Operation to perform'),
 
   // For list/query operations
-  status: z.enum(['active', 'on-hold', 'done', 'dropped', 'all']).optional()
+  status: z
+    .enum(['active', 'on-hold', 'done', 'dropped', 'all'])
+    .optional()
     .describe('Filter by project status (for list operation)'),
   folder: z.string().optional().describe('Filter by folder name'),
   search: z.string().optional().describe('Search by project name or note content'),
-  needsReview: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).optional().describe('Only show projects needing review'),
+  needsReview: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .optional()
+    .describe('Only show projects needing review'),
 
   // For create/update operations
   projectId: z.string().optional().describe('Project ID (required for update/complete/delete)'),
   name: z.string().optional().describe('Project name'),
   note: z.string().optional().describe('Project note/description'),
   dueDate: z.string().optional().describe('Due date in YYYY-MM-DD or "YYYY-MM-DD HH:mm" format'),
-  reviewInterval: z.union([
-    z.number(),
-    z.string().transform(val => parseInt(val, 10)),
-  ]).optional().describe('Review interval in days'),
+  reviewInterval: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .optional()
+    .describe('Review interval in days'),
   tags: z.array(z.string()).optional().describe('Tags to assign'),
-  flagged: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).optional().describe('Mark as flagged/important'),
+  flagged: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .optional()
+    .describe('Mark as flagged/important'),
 
   // Response control - with type coercion for MCP bridge compatibility
-  limit: z.union([
-    z.number(),
-    z.string().transform(val => parseInt(val, 10)),
-  ]).pipe(z.number().min(1).max(200)).default(50).describe('Maximum projects to return'),
-  details: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true' || val === '1'),
-  ]).default(true).describe('Include full project details'),
+  limit: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .pipe(z.number().min(1).max(200))
+    .default(50)
+    .describe('Maximum projects to return'),
+  details: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
+    .default(true)
+    .describe('Include full project details'),
 });
 
 // Convert string ID to branded ProjectId for type safety
@@ -76,12 +81,16 @@ const convertToProjectId = (id: string): ProjectId => {
 
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;
 
-export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, ProjectsResponseV2 | ProjectOperationResponseV2> {
+export class ProjectsTool extends BaseTool<
+  typeof ProjectsToolSchemaV2,
+  ProjectsResponseV2 | ProjectOperationResponseV2
+> {
   constructor(cache: CacheManager) {
     super(cache);
   }
   name = 'projects';
-  description = 'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
+  description =
+    'Manage OmniFocus projects. Operations: list (query projects), create, update, complete, delete, review (needing review), active (only active). Returns summary with key insights.';
   schema = ProjectsToolSchemaV2;
   meta = {
     // Phase 1: Essential metadata
@@ -209,10 +218,12 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     }
   }
 
-  private getSpecificErrorResponse(error: unknown, _operation: string, timer: OperationTimerV2): ProjectsResponseV2 | null {
-    const errorMessage = error && typeof error === 'object' && 'error' in error
-      ? String(error.error)
-      : String(error);
+  private getSpecificErrorResponse(
+    error: unknown,
+    _operation: string,
+    timer: OperationTimerV2,
+  ): ProjectsResponseV2 | null {
+    const errorMessage = error && typeof error === 'object' && 'error' in error ? String(error.error) : String(error);
 
     // Check for permission errors
     if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
@@ -300,19 +311,19 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
 
     // Use simple cache keys that match cache warming
     // This ensures cache hits for common queries
-    const cacheKey = args.status === 'active' && !args.folder
-      ? 'projects_active'  // Matches cache warming key
-      : `projects_list_${JSON.stringify(filter)}`;
+    const cacheKey =
+      args.status === 'active' && !args.folder
+        ? 'projects_active' // Matches cache warming key
+        : `projects_list_${JSON.stringify(filter)}`;
 
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
-      return createListResponseV2(
-        'projects',
-        cached.projects,
-        'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'list' },
-      ) as unknown as ProjectsResponseV2;
+      return createListResponseV2('projects', cached.projects, 'projects', {
+        ...timer.toMetadata(),
+        from_cache: true,
+        operation: 'list',
+      }) as unknown as ProjectsResponseV2;
     }
 
     // Execute query using fast OmniJS v3 pattern (15x faster than old helper-based)
@@ -354,15 +365,17 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
-    return createListResponseV2(
-      'projects',
-      projects,
-      'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'list' },
-    ) as unknown as ProjectsResponseV2;
+    return createListResponseV2('projects', projects, 'projects', {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'list',
+    }) as unknown as ProjectsResponseV2;
   }
 
-  private async handleCreateProject(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
+  private async handleCreateProject(
+    args: ProjectsArgsV2,
+    timer: OperationTimerV2,
+  ): Promise<ProjectOperationResponseV2> {
     if (!args.name) {
       return createErrorResponseV2(
         'projects',
@@ -436,7 +449,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleUpdateProject(args: ProjectsArgsV2, projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
+  private async handleUpdateProject(
+    args: ProjectsArgsV2,
+    projectId: ProjectId,
+    timer: OperationTimerV2,
+  ): Promise<ProjectOperationResponseV2> {
     if (!args.projectId) {
       return createErrorResponseV2(
         'projects',
@@ -455,11 +472,13 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       dueDate?: string;
       flagged?: boolean;
       tags?: string[];
-      reviewInterval?: {
-        unit: string;
-        steps: number;
-        fixed: boolean;
-      } | number;
+      reviewInterval?:
+        | {
+            unit: string;
+            steps: number;
+            fixed: boolean;
+          }
+        | number;
       status?: string;
     } = {};
     if (args.name !== undefined) updates.name = args.name;
@@ -467,7 +486,8 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
     // Ensure flagged is a boolean, not a string
     if (args.flagged !== undefined) {
-      updates.flagged = typeof args.flagged === 'boolean' ? args.flagged : args.flagged === 'true' || args.flagged === true;
+      updates.flagged =
+        typeof args.flagged === 'boolean' ? args.flagged : args.flagged === 'true' || args.flagged === true;
     }
     if (args.tags !== undefined) updates.tags = args.tags;
 
@@ -487,17 +507,19 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     if (args.status !== undefined) {
       // Map status values from tool schema to contract types
       const statusMap: Record<string, 'active' | 'on_hold' | 'completed' | 'dropped'> = {
-        'active': 'active',
+        active: 'active',
         'on-hold': 'on_hold',
-        'done': 'completed',
-        'dropped': 'dropped',
+        done: 'completed',
+        dropped: 'dropped',
       };
       updates.status = statusMap[args.status];
     }
 
     // Use AST-powered mutation builder (Phase 2 consolidation)
     // Cast to ProjectUpdateData since status mapping ensures type compatibility
-    const script = (await buildUpdateProjectScript(projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData)).script;
+    const script = (
+      await buildUpdateProjectScript(projectId!, updates as import('../../contracts/mutations.js').ProjectUpdateData)
+    ).script;
     const result = await this.execJson(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
@@ -518,14 +540,18 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
       'projects',
       {
         operation: 'update',
-        project: (updated && (updated as { project?: unknown }).project) ? (updated as { project: unknown }).project : updated,
+        project:
+          updated && (updated as { project?: unknown }).project ? (updated as { project: unknown }).project : updated,
       },
       undefined,
       { ...timer.toMetadata(), operation: 'update' },
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleCompleteProject(projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
+  private async handleCompleteProject(
+    projectId: ProjectId,
+    timer: OperationTimerV2,
+  ): Promise<ProjectOperationResponseV2> {
     // Execute completion
     const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, {
       projectId: projectId,
@@ -538,7 +564,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
         'projects',
         'COMPLETE_FAILED',
         result.error || 'Script execution failed',
-        'Check the project ID and ensure it\'s not already completed',
+        "Check the project ID and ensure it's not already completed",
         result.details,
         timer.toMetadata(),
       );
@@ -556,7 +582,10 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-  private async handleDeleteProject(projectId: ProjectId, timer: OperationTimerV2): Promise<ProjectOperationResponseV2> {
+  private async handleDeleteProject(
+    projectId: ProjectId,
+    timer: OperationTimerV2,
+  ): Promise<ProjectOperationResponseV2> {
     // Execute deletion
     const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
       projectId: projectId,
@@ -587,19 +616,17 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     ) as unknown as ProjectOperationResponseV2;
   }
 
-
   private async handleReviewProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
     const cacheKey = 'projects_review';
 
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
-      return createListResponseV2(
-        'projects',
-        cached.projects,
-        'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'review' },
-      ) as unknown as ProjectsResponseV2;
+      return createListResponseV2('projects', cached.projects, 'projects', {
+        ...timer.toMetadata(),
+        from_cache: true,
+        operation: 'review',
+      }) as unknown as ProjectsResponseV2;
     }
 
     // Execute query using fast OmniJS v3 pattern
@@ -627,7 +654,7 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     // Filter for review and cache
     const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
-    const needingReview = projects.filter(p => {
+    const needingReview = projects.filter((p) => {
       const project = p as { nextReviewDate?: string };
       if (!project.nextReviewDate) return false;
       return new Date(project.nextReviewDate) < new Date();
@@ -635,12 +662,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
 
     this.cache.set('projects', cacheKey, { projects: needingReview });
 
-    return createListResponseV2(
-      'projects',
-      needingReview,
-      'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'review' },
-    ) as unknown as ProjectsResponseV2;
+    return createListResponseV2('projects', needingReview, 'projects', {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'review',
+    }) as unknown as ProjectsResponseV2;
   }
 
   private async handleActiveProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
@@ -649,12 +675,11 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
     if (cached) {
-      return createListResponseV2(
-        'projects',
-        cached.projects,
-        'projects',
-        { ...timer.toMetadata(), from_cache: true, operation: 'active' },
-      ) as unknown as ProjectsResponseV2;
+      return createListResponseV2('projects', cached.projects, 'projects', {
+        ...timer.toMetadata(),
+        from_cache: true,
+        operation: 'active',
+      }) as unknown as ProjectsResponseV2;
     }
 
     // Execute query using fast OmniJS v3 pattern (15x faster than old helper-based)
@@ -685,15 +710,18 @@ export class ProjectsTool extends BaseTool<typeof ProjectsToolSchemaV2, Projects
     const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
     this.cache.set('projects', cacheKey, { projects });
 
-    return createListResponseV2(
-      'projects',
-      projects,
-      'projects',
-      { ...timer.toMetadata(), from_cache: false, operation: 'active' },
-    ) as unknown as ProjectsResponseV2;
+    return createListResponseV2('projects', projects, 'projects', {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'active',
+    }) as unknown as ProjectsResponseV2;
   }
 
-  private async handleProjectStats(args: ProjectsArgsV2, projectId: ProjectId | undefined, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
+  private async handleProjectStats(
+    args: ProjectsArgsV2,
+    projectId: ProjectId | undefined,
+    timer: OperationTimerV2,
+  ): Promise<ProjectsResponseV2> {
     const cacheKey = `projects_stats_${projectId || 'all'}`;
 
     // Check cache
