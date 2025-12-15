@@ -14,14 +14,13 @@ import {
   isRecoverableError,
   getErrorSeverity,
 } from '../utils/error-taxonomy.js';
-import {
-  recordToolExecution,
-  ToolExecutionMetrics,
-} from '../utils/metrics.js';
+import { recordToolExecution, ToolExecutionMetrics } from '../utils/metrics.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { ScriptResult, createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
+import { CircuitBreaker } from '../utils/circuit-breaker.js';
+import { classifyErrorWithContext } from '../utils/error-recovery.js';
 
 // Type for raw data structure from OmniFocus scripts (used in execJson)
 interface RawOmniFocusData {
@@ -41,15 +40,18 @@ interface RawOmniFocusData {
  * @template TSchema - The Zod schema type for input validation
  * @template TResponse - The response type returned by executeValidated (defaults to unknown for flexibility)
  */
-export abstract class BaseTool<
-  TSchema extends z.ZodType = z.ZodType,
-  TResponse = unknown
-> {
+export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse = unknown> {
   private _omniAutomation: OmniAutomation;
   protected cache: CacheManager;
   protected logger: Logger;
 
-  constructor(cache: CacheManager, private correlationId?: string) {
+  // Circuit breaker for OmniFocus connectivity
+  private circuitBreaker: CircuitBreaker;
+
+  constructor(
+    cache: CacheManager,
+    private correlationId?: string,
+  ) {
     this.cache = cache;
     this._omniAutomation = new OmniAutomation();
 
@@ -59,6 +61,23 @@ export abstract class BaseTool<
     } else {
       this.logger = createLogger(this.constructor.name);
     }
+
+    // Initialize circuit breaker with OmniFocus-specific configuration
+    this.circuitBreaker = new CircuitBreaker({
+      threshold: 3, // Open circuit after 3 consecutive failures
+      timeout: 30000, // 30 seconds before attempting reset
+      shouldCountError: (error) => {
+        // Only count OmniFocus-specific errors toward circuit breaker threshold
+        const errorMessage = String(error).toLowerCase();
+        return (
+          errorMessage.includes('not running') ||
+          errorMessage.includes('not responding') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('-1743')
+        ); // Permission error
+      },
+    });
   }
 
   abstract name: string;
@@ -226,7 +245,7 @@ export abstract class BaseTool<
       };
 
       return {
-        oneOf: def.options.map(option => this.zodTypeToJsonSchema(option)),
+        oneOf: def.options.map((option) => this.zodTypeToJsonSchema(option)),
         discriminator: {
           propertyName: def.discriminator,
         },
@@ -273,9 +292,7 @@ export abstract class BaseTool<
       const validated = this.schema.parse(args) as z.infer<TSchema>;
 
       // Count parameters for metrics
-      const parameterCount = typeof args === 'object' && args !== null
-        ? Object.keys(args).length
-        : 0;
+      const parameterCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
 
       // Log the validated input
       this.logger.debug(`Executing ${this.name} with validated args:`, validated);
@@ -303,15 +320,16 @@ export abstract class BaseTool<
 
       return result;
     } catch (error) {
-
       if (error instanceof z.ZodError) {
         errorType = 'VALIDATION_ERROR';
 
         // Convert Zod errors to MCP errors with helpful messages
-        const issues = error.issues.map(issue => {
-          const path = issue.path.join('.');
-          return `${path}: ${issue.message}`;
-        }).join(', ');
+        const issues = error.issues
+          .map((issue) => {
+            const path = issue.path.join('.');
+            return `${path}: ${issue.message}`;
+          })
+          .join(', ');
 
         // Log validation failure for analysis
         this.logToolFailure(args, 'VALIDATION_ERROR', issues, error.issues);
@@ -327,13 +345,9 @@ export abstract class BaseTool<
           parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
         });
 
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          `Invalid parameters: ${issues}`,
-          {
-            validation_errors: error.issues,
-          },
-        );
+        throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${issues}`, {
+          validation_errors: error.issues,
+        });
       }
 
       // Re-throw McpErrors directly (from throwMcpError calls)
@@ -417,13 +431,15 @@ export abstract class BaseTool<
         inputArgs: redactArgs(args),
         schemaDescription: this.description,
         // Enhanced categorization data
-        categorization: categorizedError ? {
-          errorType: categorizedError.errorType,
-          severity: getErrorSeverity(categorizedError.errorType),
-          recoverable: isRecoverableError(categorizedError.errorType),
-          actionable: categorizedError.actionable,
-          context: categorizedError.context,
-        } : undefined,
+        categorization: categorizedError
+          ? {
+              errorType: categorizedError.errorType,
+              severity: getErrorSeverity(categorizedError.errorType),
+              recoverable: isRecoverableError(categorizedError.errorType),
+              actionable: categorizedError.actionable,
+              context: categorizedError.context,
+            }
+          : undefined,
       };
 
       // Append to daily log file
@@ -460,7 +476,6 @@ export abstract class BaseTool<
     return new ctor(this.cache, correlationId);
   }
 
-
   get omniAutomation(): OmniAutomation {
     return this._omniAutomation;
   }
@@ -470,106 +485,330 @@ export abstract class BaseTool<
   }
 
   /**
-   * Type-safe wrapper for script execution that returns ScriptResult<T>
-   * Centralizes the logic from individual tool execJson helpers
+   * Create an enhanced error response with recovery suggestions and technical details
    */
-  protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
-    try {
-      const omni = this.omniAutomation as { executeJson?: (script: string) => Promise<unknown>; execute?: (script: string) => Promise<unknown> };
-      const res = typeof omni.executeJson === 'function'
-        ? await omni.executeJson(script)
-        : typeof omni.execute === 'function'
-        ? await omni.execute(script)
-        : null;
+  protected createEnhancedErrorResponse(
+    error: unknown,
+    _operation: string,
+    context: {
+      toolName?: string;
+      operationType?: string;
+      inputSummary?: Record<string, unknown>;
+    } = {},
+  ): Error & { recovery_suggestions?: string[]; related_documentation?: string[] } {
+    const enhancedError = new Error(error instanceof Error ? error.message : String(error)) as Error & {
+      recovery_suggestions?: string[];
+      related_documentation?: string[];
+    };
 
-      // Handle null/undefined results
-      if (res === null || res === undefined) {
-        return createScriptError('NULL_RESULT', 'Script returned null or undefined');
-      }
-
-      // If already in ScriptResult format, inspect for nested legacy errors before returning
-      if (res && typeof res === 'object' && 'success' in res) {
-        const scriptResult = res as ScriptResult<T>;
-
-        if (scriptResult.success === true) {
-          const data = scriptResult.data as unknown;
-          if (data && typeof data === 'object') {
-            const maybeError = data as { error?: unknown; success?: unknown; message?: unknown };
-            const errorValue = maybeError.error;
-            if (errorValue === true || errorValue === 'true' || maybeError.success === false) {
-              const message = typeof maybeError.message === 'string'
-                ? maybeError.message
-                : 'Script execution failed';
-              return createScriptError(message, 'Legacy script error', data);
-            }
-          }
-        }
-
-        return scriptResult;
-      }
-
-      // Handle raw string results (try to parse JSON)
-      if (typeof res === 'string') {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const parsed = JSON.parse(res);
-
-          if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-            const errorValue = (parsed as { error?: unknown }).error;
-            if (errorValue === true || errorValue === 'true') {
-              const message = typeof (parsed as { message?: unknown }).message === 'string'
-                ? (parsed as { message: string }).message
-                : 'Script execution failed';
-              return createScriptError(message, 'Legacy script error', parsed);
-            }
-          }
-
-          if (parsed && typeof parsed === 'object' && 'success' in parsed && (parsed as { success?: unknown }).success === false) {
-            const message = typeof (parsed as { message?: unknown }).message === 'string'
-              ? (parsed as { message: string }).message
-              : 'Script execution failed';
-            const parsedRecord = parsed as Record<string, unknown>;
-            const details: unknown = parsedRecord.details !== undefined ? parsedRecord.details : parsed;
-            return createScriptError(message, 'Legacy script error', details);
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-          return createScriptSuccess<T>(parsed);
-        } catch {
-          return createScriptSuccess<T>(res as T);
-        }
-      }
-
-      // Handle object responses that indicate success patterns
-      if (res && typeof res === 'object') {
-        const obj = res as RawOmniFocusData & { folders?: unknown[]; items?: unknown[]; ok?: boolean; updated?: number; success?: boolean; context?: unknown; details?: unknown };
-        // Check for common success indicators
-        if (Array.isArray(obj.folders) || Array.isArray(obj.items) ||
-            obj.ok === true || typeof obj.updated === 'number' ||
-            Array.isArray(obj.tasks) || Array.isArray(obj.projects)) {
-          return createScriptSuccess<T>(obj as T);
-        }
-        // Check for explicit error indication
-        if (obj.success === false || obj.error) {
-          return createScriptError(
-            (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
-            obj.context as string | undefined,
-            obj.details,
-          );
-        }
-      }
-
-      // Default: wrap as success
-      return createScriptSuccess<T>(res as T);
-    } catch (error) {
-      return createScriptError(
-        error instanceof Error ? error.message : String(error),
-        'Script execution exception',
-        error,
-      );
+    // Copy all properties from original error
+    if (error instanceof Error) {
+      Object.assign(enhancedError, error);
     }
+
+    // Add enhanced context based on error type
+    const errorMessage = String(error).toLowerCase();
+
+    // Permission errors
+    if (errorMessage.includes('permission') || errorMessage.includes('-1743')) {
+      enhancedError.recovery_suggestions = [
+        'Grant OmniFocus automation permissions in System Settings',
+        'Restart OmniFocus after granting permissions',
+        'Ensure OmniFocus is not blocked by macOS privacy settings',
+      ];
+      enhancedError.related_documentation = ['https://docs.omnifocus.com/automation-permissions'];
+    }
+
+    // Timeout errors
+    else if (errorMessage.includes('timeout')) {
+      enhancedError.recovery_suggestions = [
+        'Reduce the scope of your query',
+        'Try again with smaller data sets',
+        'Check system performance and available resources',
+        'Restart OmniFocus if it becomes unresponsive',
+      ];
+    }
+
+    // Connection errors
+    else if (errorMessage.includes('connection') || errorMessage.includes('not running')) {
+      enhancedError.recovery_suggestions = [
+        'Ensure OmniFocus is running and responsive',
+        'Close any blocking dialogs in OmniFocus',
+        'Restart OmniFocus if needed',
+        'Check Activity Monitor for OmniFocus process status',
+      ];
+    }
+
+    // Circuit breaker errors
+    else if (errorMessage.includes('circuit breaker')) {
+      enhancedError.recovery_suggestions = [
+        'Wait for the circuit breaker to reset automatically',
+        'Check OmniFocus application status',
+        'Restart OmniFocus to reset connectivity',
+        'Reduce query complexity if failures persist',
+      ];
+    }
+
+    // Add operation-specific context
+    if (context.toolName || context.operationType) {
+      const operationDetails = [];
+      if (context.toolName) operationDetails.push(`Tool: ${context.toolName}`);
+      if (context.operationType) operationDetails.push(`Operation: ${context.operationType}`);
+
+      enhancedError.message += ` (${operationDetails.join(', ')})`;
+    }
+
+    return enhancedError;
   }
 
+  /**
+   * Execute an operation with retry logic for transient errors
+   */
+  protected async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    options: {
+      maxRetries?: number;
+      initialDelay?: number;
+      maxDelay?: number;
+      isTransientError?: (error: unknown) => boolean;
+      onRetry?: (attempt: number, error: unknown) => void;
+    } = {},
+  ): Promise<T> {
+    const {
+      maxRetries = 2,
+      initialDelay = 200,
+      maxDelay = 2000,
+      isTransientError = (error) => {
+        const errorMessage = String(error).toLowerCase();
+        return (
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('busy') ||
+          errorMessage.includes('not responding') ||
+          errorMessage.includes('temporarily unavailable')
+        );
+      },
+      onRetry = (attempt, error) => {
+        this.logger.warn(`Retry attempt ${attempt} for operation`, {
+          error: error instanceof Error ? error.message : String(error),
+          attempt,
+        });
+      },
+    } = options;
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        // Don't retry if this is the last attempt or error is not transient
+        if (attempt > maxRetries || !isTransientError(error)) {
+          throw error;
+        }
+
+        // Calculate exponential backoff delay
+        const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
+
+        // Call onRetry callback
+        onRetry(attempt, error);
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    // This should never be reached, but makes TypeScript happy
+    throw lastError;
+  }
+
+  /**
+   * Type-safe wrapper for script execution that returns ScriptResult<T>
+   * Centralizes the logic from individual tool execJson helpers
+   * Now includes circuit breaker protection and error recovery
+   */
+  protected async execJson<T = unknown>(script: string): Promise<ScriptResult<T>> {
+    // Extract the core execution logic for circuit breaker wrapping
+    const executeCoreOperation = async (): Promise<ScriptResult<T>> => {
+      try {
+        const omni = this.omniAutomation as {
+          executeJson?: (script: string) => Promise<unknown>;
+          execute?: (script: string) => Promise<unknown>;
+        };
+        const res =
+          typeof omni.executeJson === 'function'
+            ? await omni.executeJson(script)
+            : typeof omni.execute === 'function'
+              ? await omni.execute(script)
+              : null;
+
+        // Handle null/undefined results
+        if (res === null || res === undefined) {
+          return createScriptError('NULL_RESULT', 'Script returned null or undefined');
+        }
+
+        // If already in ScriptResult format, inspect for nested legacy errors before returning
+        if (res && typeof res === 'object' && 'success' in res) {
+          const scriptResult = res as ScriptResult<T>;
+
+          if (scriptResult.success === true) {
+            const data = scriptResult.data as unknown;
+            if (data && typeof data === 'object') {
+              const maybeError = data as { error?: unknown; success?: unknown; message?: unknown };
+              const errorValue = maybeError.error;
+              if (errorValue === true || errorValue === 'true' || maybeError.success === false) {
+                const message = typeof maybeError.message === 'string' ? maybeError.message : 'Script execution failed';
+                return createScriptError(message, 'Legacy script error', data);
+              }
+            }
+          }
+
+          return scriptResult;
+        }
+
+        // Handle raw string results (try to parse JSON)
+        if (typeof res === 'string') {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const parsed = JSON.parse(res);
+
+            if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+              const errorValue = (parsed as { error?: unknown }).error;
+              if (errorValue === true || errorValue === 'true') {
+                const message =
+                  typeof (parsed as { message?: unknown }).message === 'string'
+                    ? (parsed as { message: string }).message
+                    : 'Script execution failed';
+                return createScriptError(message, 'Legacy script error', parsed);
+              }
+            }
+
+            if (
+              parsed &&
+              typeof parsed === 'object' &&
+              'success' in parsed &&
+              (parsed as { success?: unknown }).success === false
+            ) {
+              const message =
+                typeof (parsed as { message?: unknown }).message === 'string'
+                  ? (parsed as { message: string }).message
+                  : 'Script execution failed';
+              const parsedRecord = parsed as Record<string, unknown>;
+              const details: unknown = parsedRecord.details !== undefined ? parsedRecord.details : parsed;
+              return createScriptError(message, 'Legacy script error', details);
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            return createScriptSuccess<T>(parsed);
+          } catch {
+            return createScriptSuccess<T>(res as T);
+          }
+        }
+
+        // Handle object responses that indicate success patterns
+        if (res && typeof res === 'object') {
+          const obj = res as RawOmniFocusData & {
+            folders?: unknown[];
+            items?: unknown[];
+            ok?: boolean;
+            updated?: number;
+            success?: boolean;
+            context?: unknown;
+            details?: unknown;
+          };
+          // Check for common success indicators
+          if (
+            Array.isArray(obj.folders) ||
+            Array.isArray(obj.items) ||
+            obj.ok === true ||
+            typeof obj.updated === 'number' ||
+            Array.isArray(obj.tasks) ||
+            Array.isArray(obj.projects)
+          ) {
+            return createScriptSuccess<T>(obj as T);
+          }
+          // Check for explicit error indication
+          if (obj.success === false || obj.error) {
+            return createScriptError(
+              (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
+              obj.context as string | undefined,
+              obj.details,
+            );
+          }
+        }
+
+        // Default: wrap as success
+        return createScriptSuccess<T>(res as T);
+      } catch (error) {
+        return createScriptError(
+          error instanceof Error ? error.message : String(error),
+          'Script execution exception',
+          error,
+        );
+      }
+    };
+
+    // Execute the core operation
+    const result = await executeCoreOperation();
+
+    // Track failures for circuit breaker
+    if (!result.success) {
+      // Check if this error should count toward circuit breaker threshold
+      const errorMessage = String(result.error || result.context || 'unknown error').toLowerCase();
+      const shouldCountError =
+        errorMessage.includes('not running') ||
+        errorMessage.includes('not responding') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('connection') ||
+        errorMessage.includes('-1743');
+
+      if (shouldCountError) {
+        // Manually track the failure since circuit breaker works with thrown errors
+        const state = this.circuitBreaker.getState();
+        const newFailureCount = state.failureCount + 1;
+
+        if (newFailureCount >= 3) {
+          // Open the circuit
+          (this.circuitBreaker as any).state = {
+            isOpen: true,
+            isHalfOpen: false,
+            failureCount: newFailureCount,
+            lastFailureTime: Date.now(),
+            nextAttemptTime: Date.now() + 30000,
+          };
+        } else {
+          // Update failure count
+          (this.circuitBreaker as any).state = {
+            ...state,
+            failureCount: newFailureCount,
+            lastFailureTime: Date.now(),
+          };
+        }
+      }
+    } else {
+      // Reset on success
+      this.circuitBreaker.reset();
+    }
+
+    // Check if circuit is open and this is a critical error
+    const circuitState = this.circuitBreaker.getState();
+    if (circuitState.isOpen && !result.success) {
+      const context = classifyErrorWithContext(
+        result.error || result.context || 'unknown',
+        'OmniFocus script execution',
+      );
+
+      this.logger.error('Circuit breaker is open - OmniFocus connectivity issues detected', {
+        error: result.error || result.context,
+        circuit_state: circuitState,
+        recovery_suggestions: context.recovery_suggestions,
+        related_documentation: context.related_documentation,
+      });
+    }
+
+    return result;
+  }
 
   /**
    * V2 error handler: enhanced categorization with V2 response format
@@ -582,18 +821,16 @@ export abstract class BaseTool<
     const categorizedError = categorizeError(error, this.name);
 
     // Log the failure with categorization information
-    this.logToolFailure(
-      {},
-      categorizedError.errorType,
-      categorizedError.message,
-      undefined,
-      categorizedError,
-    );
+    this.logToolFailure({}, categorizedError.errorType, categorizedError.message, undefined, categorizedError);
 
     // Merge original error details with enhanced categorization
-    const originalErrorDetails = categorizedError.originalError && typeof categorizedError.originalError === 'object' &&
-      'details' in categorizedError.originalError && categorizedError.originalError.details ?
-      categorizedError.originalError.details as Record<string, unknown> : {};
+    const originalErrorDetails =
+      categorizedError.originalError &&
+      typeof categorizedError.originalError === 'object' &&
+      'details' in categorizedError.originalError &&
+      categorizedError.originalError.details
+        ? (categorizedError.originalError.details as Record<string, unknown>)
+        : {};
 
     // Return enhanced V2 error response with categorization
     return createErrorResponseV2<T>(
@@ -624,38 +861,26 @@ export abstract class BaseTool<
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('-1743') || errorMessage.includes('not allowed')) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        'Not authorized to send Apple events to OmniFocus',
-        {
-          code: 'PERMISSION_DENIED',
-          instructions: `To grant permissions:
+      throw new McpError(ErrorCode.InternalError, 'Not authorized to send Apple events to OmniFocus', {
+        code: 'PERMISSION_DENIED',
+        instructions: `To grant permissions:
 1. You may see a permission dialog - click "OK" to grant access
 2. Or manually grant permissions:
    - Open System Settings → Privacy & Security → Automation
    - Find the app using this MCP server (Claude Desktop, Terminal, etc.)
    - Enable the checkbox next to OmniFocus
 3. After granting permissions, try your request again`,
-        },
-      );
+      });
     }
 
     if (error instanceof Error && error.name === 'OmniAutomationError') {
       const omniError = error as { details?: { script?: string; stderr?: string } }; // Type assertion for OmniAutomationError
-      throw new McpError(
-        ErrorCode.InternalError,
-        error.message,
-        {
-          script: omniError.details?.script,
-          stderr: omniError.details?.stderr,
-        },
-      );
+      throw new McpError(ErrorCode.InternalError, error.message, {
+        script: omniError.details?.script,
+        stderr: omniError.details?.stderr,
+      });
     }
 
-    throw new McpError(
-      ErrorCode.InternalError,
-      error instanceof Error ? error.message : 'An unknown error occurred',
-    );
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'An unknown error occurred');
   }
-
 }
