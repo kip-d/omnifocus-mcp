@@ -234,11 +234,17 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     const { operation, taskId, ...params} = args;
 
     // Convert string IDs to branded types for internal use
+    // IMPORTANT: Only set projectId if explicitly provided (not undefined)
+    // - projectId: null or "" = Move task to inbox (explicit intent)
+    // - projectId: <id> = Move task to project
+    // - projectId: undefined = Don't change project (preserve current)
     const brandedArgs: BrandedTaskArgs = {
       ...args,
       taskId: args.taskId ? asTaskId(args.taskId) : undefined,
       taskIds: args.taskIds ? args.taskIds.map(id => asTaskId(id)) : undefined,
-      projectId: args.projectId !== undefined && args.projectId !== null ? asProjectId(args.projectId) : null,
+      projectId: args.projectId !== undefined
+        ? (args.projectId === null || args.projectId === '' ? null : asProjectId(args.projectId))
+        : undefined,
       parentTaskId: args.parentTaskId ? asTaskId(args.parentTaskId) : undefined,
     };
 
