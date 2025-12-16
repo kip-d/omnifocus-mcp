@@ -447,7 +447,10 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ## ⚠️ Important Notes
 
 1.  **Date Format:** Always convert natural language ("tomorrow") to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"
-2.  **Inbox:** Use `project: null` (not empty string)
+2.  **Project Assignment:**
+    - Omit `project` field = keep task in current location (no change)
+    - `project: null` = explicitly move task to inbox
+    - `project: "projectId"` = move task to specified project
 3.  **Tag Operations:** Use `tags` (replace all), `addTags` (add), or `removeTags` (remove)
 4.  **Discriminated Unions:** The `operation` and `type` fields determine which other fields are required/valid
 5.  **String Coercion:** All parameters stringified by Claude Desktop MCP bridge
