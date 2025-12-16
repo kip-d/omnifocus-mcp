@@ -307,7 +307,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               dueDate: createArgs.dueDate ? localToUTC(createArgs.dueDate, 'due') : undefined,
               deferDate: createArgs.deferDate ? localToUTC(createArgs.deferDate, 'defer') : undefined,
               plannedDate: createArgs.plannedDate ? localToUTC(createArgs.plannedDate, 'planned') : undefined,
+              // Map projectId to project for mutation contract compatibility
+              project: createArgs.projectId,
             };
+            // Remove projectId since mutation contract uses 'project'
+            delete convertedTaskData.projectId;
           } catch (dateError) {
             const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : dateError instanceof Error && dateError.message.includes('planned') ? 'plannedDate' : 'dueDate';
             const errorDetails = invalidDateError(fieldName, createArgs[fieldName] || '');
@@ -587,7 +591,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
           this.cache.invalidateForTaskChange({
             operation: 'update',
-            projectId: typeof safeUpdates.projectId === 'string' ? safeUpdates.projectId : undefined,
+            projectId: typeof safeUpdates.project === 'string' ? safeUpdates.project : undefined,
             tags: affectedTags.length > 0 ? affectedTags : undefined,
             affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueToday(safeUpdates.dueDate) : false,
             affectsOverdue: false, // Updates don't automatically make things overdue
@@ -633,7 +637,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
                 taskId,
                 fields_updated: Object.keys(safeUpdates),
                 has_date_changes: !!(safeUpdates.dueDate || safeUpdates.deferDate || safeUpdates.clearDueDate || safeUpdates.clearDeferDate),
-                has_project_change: safeUpdates.projectId !== undefined,
+                has_project_change: safeUpdates.project !== undefined,
               },
             },
           ) as TaskOperationResponseV2;
@@ -929,8 +933,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     }
 
     // Handle project ID (allow null/empty string)
+    // Map projectId to project for mutation contract compatibility
     if (updates.projectId !== undefined) {
-      sanitized.projectId = updates.projectId;
+      sanitized.project = updates.projectId;
     }
 
     // Handle tags array (replaces all tags)
