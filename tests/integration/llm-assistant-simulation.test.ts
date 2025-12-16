@@ -57,7 +57,8 @@ class LLMAssistantSimulator {
     });
 
     expect(initResponse.result).toBeDefined();
-    expect(initResponse.result.protocolVersion).toBe('2025-06-18');
+    // SDK 1.17+ uses protocol version 2025-11-25
+    expect(initResponse.result.protocolVersion).toBe('2025-11-25');
     this.initialized = true;
   }
 

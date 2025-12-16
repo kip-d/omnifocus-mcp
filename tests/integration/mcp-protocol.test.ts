@@ -37,7 +37,8 @@ d('MCP Protocol Compliance Tests', () => {
       });
 
       expect(result.result).toBeDefined();
-      expect(result.result.protocolVersion).toBe('2025-06-18');
+      // SDK 1.17+ uses protocol version 2025-11-25
+      expect(result.result.protocolVersion).toBe('2025-11-25');
       expect(result.result.serverInfo.name).toBe('omnifocus-mcp-cached');
     });
   });
