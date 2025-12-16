@@ -62,6 +62,20 @@ Validate that recent improvements to the OmniFocus MCP server are working correc
    - ✅ Response should show `"has_project_change": true`
    - ✅ Task should appear in inbox in OmniFocus
 
+5. **Task Update WITHOUT Project Change (Bug Fix d6cd413)**
+   ```json
+   {
+     "tool": "manage_task",
+     "operation": "update",
+     "taskId": "YOUR_TASK_ID_HERE",
+     "dueDate": "2025-12-31"
+   }
+   ```
+   - ✅ Task should stay in its current project (NOT move to inbox)
+   - ✅ Response should show `"has_project_change": false`
+   - ✅ Only the specified field (dueDate) should change
+   - ⚠️ **Previous bug**: Tasks were silently moved to inbox when updating without projectId
+
 **Expected Results**:
 - ✅ All project assignments work correctly
 - ✅ Response metadata accurately reflects project operations
@@ -238,7 +252,8 @@ The project assignment fix is CRITICAL for core GTD workflows. Please test these
 
 ### 🔥 CRITICAL: Project Assignment Fix (Test First!)
 - [ ] Task creation with projectId works
-- [ ] Task update with projectId works  
+- [ ] Task update with projectId works
+- [ ] Task update WITHOUT projectId keeps task in current project (Bug Fix d6cd413)
 - [ ] Response metadata shows correct has_project values
 - [ ] Tasks appear in correct projects in OmniFocus
 - [ ] No silent failures to inbox
