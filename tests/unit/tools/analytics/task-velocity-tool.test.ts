@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() })),
 }));
 
 describe('TaskVelocityTool', () => {
@@ -38,10 +38,10 @@ describe('TaskVelocityTool', () => {
       velocity: {
         period: '7 days',
         tasksCompleted: 42,
-        averagePerDay: 6
+        averagePerDay: 6,
       },
       patterns: {},
-      insights: ['Steady velocity']
+      insights: ['Steady velocity'],
     };
     mockCache.get.mockReturnValue(cached);
 
@@ -57,7 +57,7 @@ describe('TaskVelocityTool', () => {
     mockOmni.executeJson.mockResolvedValue({
       success: false,
       error: 'Failed to calculate velocity',
-      details: 'OmniFocus error'
+      details: 'OmniFocus error',
     });
 
     const res: any = await tool.execute({ days: 7 } as any);
@@ -78,33 +78,33 @@ describe('TaskVelocityTool', () => {
           averageCompleted: '6.5',
           averageCreated: '7.2',
           dailyVelocity: '6.5',
-          backlogGrowthRate: '+0.7'
+          backlogGrowthRate: '+0.7',
         },
         throughput: {
           intervals: [
             { start: new Date('2025-11-01'), end: new Date('2025-11-02'), created: 8, completed: 7, label: 'Day 1' },
-            { start: new Date('2025-11-02'), end: new Date('2025-11-03'), created: 6, completed: 5, label: 'Day 2' }
+            { start: new Date('2025-11-02'), end: new Date('2025-11-03'), created: 6, completed: 5, label: 'Day 2' },
           ],
           totalCompleted: 45,
-          totalCreated: 50
+          totalCreated: 50,
         },
         breakdown: {
           medianCompletionHours: '3.5',
-          tasksAnalyzed: 150
+          tasksAnalyzed: 150,
         },
         projections: {
           tasksPerDay: '6.5',
           tasksPerWeek: '45.5',
-          tasksPerMonth: '195'
+          tasksPerMonth: '195',
         },
-        optimization: 'Current velocity is sustainable'
-      }
+        optimization: 'Current velocity is sustainable',
+      },
     });
 
     const res: any = await tool.execute({
       days: 7,
       groupBy: 'day',
-      includeWeekends: true
+      includeWeekends: true,
     } as any);
 
     expect(res.success).toBe(true);
@@ -127,24 +127,24 @@ describe('TaskVelocityTool', () => {
           averageCompleted: '8.2',
           averageCreated: '7.5',
           dailyVelocity: '8.2',
-          backlogGrowthRate: '-0.7'
+          backlogGrowthRate: '-0.7',
         },
         throughput: {
           intervals: [],
           totalCompleted: 246,
-          totalCreated: 225
+          totalCreated: 225,
         },
         breakdown: {
           medianCompletionHours: '4.0',
-          tasksAnalyzed: 500
+          tasksAnalyzed: 500,
         },
         projections: {
           tasksPerDay: '8.2',
           tasksPerWeek: '57.4',
-          tasksPerMonth: '246'
+          tasksPerMonth: '246',
         },
-        optimization: 'Excellent velocity - backlog decreasing'
-      }
+        optimization: 'Excellent velocity - backlog decreasing',
+      },
     });
 
     const res: any = await tool.execute({ days: 30 } as any);
@@ -164,8 +164,8 @@ describe('TaskVelocityTool', () => {
         throughput: { intervals: [], totalCompleted: 35, totalCreated: 30 },
         breakdown: { medianCompletionHours: '3', tasksAnalyzed: 100 },
         projections: { tasksPerDay: '5', tasksPerWeek: '35', tasksPerMonth: '150' },
-        optimization: 'Normal velocity'
-      }
+        optimization: 'Normal velocity',
+      },
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
@@ -188,8 +188,8 @@ describe('TaskVelocityTool', () => {
         throughput: { intervals: [], totalCompleted: 300, totalCreated: 280 },
         breakdown: { medianCompletionHours: '2.5', tasksAnalyzed: 500 },
         projections: { tasksPerDay: '10', tasksPerWeek: '70', tasksPerMonth: '300' },
-        optimization: 'High velocity'
-      }
+        optimization: 'High velocity',
+      },
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
@@ -212,8 +212,8 @@ describe('TaskVelocityTool', () => {
         throughput: { intervals: [], totalCompleted: 35, totalCreated: 30 },
         breakdown: { medianCompletionHours: '3', tasksAnalyzed: 100 },
         projections: { tasksPerDay: '5', tasksPerWeek: '35', tasksPerMonth: '150' },
-        optimization: 'Normal'
-      }
+        optimization: 'Normal',
+      },
     });
 
     await tool.execute({ days: 7, groupBy: 'day' } as any);
@@ -234,8 +234,8 @@ describe('TaskVelocityTool', () => {
         throughput: { intervals: [], totalCompleted: 35, totalCreated: 35 },
         breakdown: { medianCompletionHours: '4', tasksAnalyzed: 100 },
         projections: { tasksPerDay: '7', tasksPerWeek: '35', tasksPerMonth: '150' },
-        optimization: 'Weekday velocity'
-      }
+        optimization: 'Weekday velocity',
+      },
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
@@ -253,24 +253,24 @@ describe('TaskVelocityTool', () => {
         velocity: {
           period: '7 days',
           averageCompleted: '0',
-          dailyVelocity: '0'
+          dailyVelocity: '0',
         },
         throughput: {
           intervals: [],
           totalCompleted: 0,
-          totalCreated: 5
+          totalCreated: 5,
         },
         breakdown: {
           medianCompletionHours: 'N/A',
-          tasksAnalyzed: 0
+          tasksAnalyzed: 0,
         },
         projections: {
           tasksPerDay: '0',
           tasksPerWeek: '0',
-          tasksPerMonth: '0'
+          tasksPerMonth: '0',
         },
-        optimization: 'Insufficient data for velocity calculation'
-      }
+        optimization: 'Insufficient data for velocity calculation',
+      },
     });
 
     const res: any = await tool.execute({ days: 7 } as any);

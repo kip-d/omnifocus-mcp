@@ -1,31 +1,32 @@
 # OmniFocus MCP Server - Comprehensive Evaluation Report
 
-**Evaluation Date**: November 21, 2025
-**Framework**: MCP Best Practices (from mcp-builder skill)
-**Server Version**: 3.0.0
-**Status**: Production Release
+**Evaluation Date**: November 21, 2025 **Framework**: MCP Best Practices (from mcp-builder skill) **Server Version**:
+3.0.0 **Status**: Production Release
 
 ---
 
 ## Executive Summary
 
-The OmniFocus MCP server demonstrates **exceptional quality** across all evaluation dimensions. This is a **production-ready, well-architected MCP implementation** that follows best practices and provides a comprehensive, agent-friendly API for OmniFocus task management.
+The OmniFocus MCP server demonstrates **exceptional quality** across all evaluation dimensions. This is a
+**production-ready, well-architected MCP implementation** that follows best practices and provides a comprehensive,
+agent-friendly API for OmniFocus task management.
 
 **Overall Grade: A+ (95/100)**
 
 ### Key Strengths
-✅ **Outstanding architecture** - Unified 4-tool API with discriminated union schemas
-✅ **Excellent TypeScript quality** - Strict mode, comprehensive typing, proper error handling
-✅ **Strong agent-centric design** - Clear workflows, actionable errors, smart defaults
-✅ **Comprehensive testing** - 740+ tests, integration tests, evaluation framework
-✅ **Superior documentation** - 85+ documentation files, clear examples, troubleshooting guides
-✅ **Production-ready features** - Caching, performance optimization, metrics
+
+✅ **Outstanding architecture** - Unified 4-tool API with discriminated union schemas ✅ **Excellent TypeScript
+quality** - Strict mode, comprehensive typing, proper error handling ✅ **Strong agent-centric design** - Clear
+workflows, actionable errors, smart defaults ✅ **Comprehensive testing** - 740+ tests, integration tests, evaluation
+framework ✅ **Superior documentation** - 85+ documentation files, clear examples, troubleshooting guides ✅
+**Production-ready features** - Caching, performance optimization, metrics
 
 ### Areas for Enhancement
-⚠️ **Tool naming convention** - Could prefix tools with `omnifocus_` for consistency (low priority - internal)
-⚠️ **Response format optimization** - Backend defaults to Markdown; JSON would save 20-30% tokens for LLM use
-⚠️ **Tool annotations** - Some tools missing MCP-standard hint annotations
-⚠️ **Character limits** - Not consistently enforced across all tools
+
+⚠️ **Tool naming convention** - Could prefix tools with `omnifocus_` for consistency (low priority - internal) ⚠️
+**Response format optimization** - Backend defaults to Markdown; JSON would save 20-30% tokens for LLM use ⚠️ **Tool
+annotations** - Some tools missing MCP-standard hint annotations ⚠️ **Character limits** - Not consistently enforced
+across all tools
 
 ---
 
@@ -45,6 +46,7 @@ The OmniFocus MCP server demonstrates **exceptional quality** across all evaluat
 - **Meeting notes parsing**: `parse_meeting_notes` extracts action items automatically
 
 **Example of workflow focus**:
+
 ```typescript
 // Not just "get tasks" - enables complete workflow
 {
@@ -66,6 +68,7 @@ The OmniFocus MCP server demonstrates **exceptional quality** across all evaluat
 - **Concise descriptions**: Tool descriptions include quick reference examples
 
 **Example**:
+
 ```typescript
 // Count-only: Returns count in metadata, no task data (33x faster)
 {
@@ -83,11 +86,12 @@ The OmniFocus MCP server demonstrates **exceptional quality** across all evaluat
 
 ```typescript
 // Example from tool descriptions
-"Error: Rate limit exceeded. Please wait before making more requests."
-"Error: Resource not found. Please check the ID is correct."
+'Error: Rate limit exceeded. Please wait before making more requests.';
+'Error: Resource not found. Please check the ID is correct.';
 ```
 
 Error handling includes:
+
 - Specific error codes (INVALID_OPERATION, CACHE_ERROR, etc.)
 - Contextual information in error responses
 - Recovery suggestions in descriptions
@@ -125,26 +129,33 @@ Tool grouping uses prefixes for discoverability (e.g., all unified tools start w
 **Good, with room for improvement** (8/10)
 
 #### Current State:
+
 - **Unified tools**: Follow convention (`omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`)
 - **System tool**: Properly named (`system`)
 - **Backend tools**: Missing service prefix (e.g., `tasks` not `omnifocus_tasks`)
 
 #### Recommendation:
-According to MCP best practices, all tools should include service prefix to avoid naming conflicts with other MCP servers. Current backend tools (`tasks`, `projects`, `tags`, etc.) should be renamed or clearly documented as internal routing targets.
+
+According to MCP best practices, all tools should include service prefix to avoid naming conflicts with other MCP
+servers. Current backend tools (`tasks`, `projects`, `tags`, etc.) should be renamed or clearly documented as internal
+routing targets.
 
 **Current**:
+
 ```typescript
-name = 'tasks';  // Could conflict with other task management servers
-name = 'projects';  // Generic name
+name = 'tasks'; // Could conflict with other task management servers
+name = 'projects'; // Generic name
 ```
 
 **Recommended**:
+
 ```typescript
-name = 'omnifocus_tasks';  // Clear service association
-name = 'omnifocus_projects';  // Prevents conflicts
+name = 'omnifocus_tasks'; // Clear service association
+name = 'omnifocus_projects'; // Prevents conflicts
 ```
 
-**Note**: This is less critical since the unified API is the primary interface, but important for MCP ecosystem compatibility.
+**Note**: This is less critical since the unified API is the primary interface, but important for MCP ecosystem
+compatibility.
 
 ### 2.2 Tool Descriptions & Documentation
 
@@ -158,6 +169,7 @@ All tools have comprehensive descriptions:
 - **Performance warnings** where appropriate
 
 **Example from OmniFocusReadTool**:
+
 ```typescript
 description = `Query OmniFocus data with flexible filtering.
 
@@ -175,7 +187,7 @@ FILTER OPERATORS:
 PERFORMANCE:
 - Use fields parameter to select only needed data
 - Set reasonable limits (default: 25)
-- Smart suggest uses scoring: overdue +100, due today +80, flagged +50`
+- Smart suggest uses scoring: overdue +100, due today +80, flagged +50`;
 ```
 
 ### 2.3 Input Schema Definition
@@ -188,6 +200,7 @@ PERFORMANCE:
 - **Clear field descriptions** with examples
 
 **Example**:
+
 ```typescript
 const DateFilterSchema = z.union([
   z.object({ before: z.string() }).strict(),
@@ -203,11 +216,13 @@ const DateFilterSchema = z.union([
 **Good, needs improvement** (7/10)
 
 #### Current State:
+
 - SystemTool has comprehensive metadata
 - Unified tools have basic metadata
 - Missing `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` on many tools
 
 **Example of good practice** (SystemTool):
+
 ```typescript
 meta = {
   category: 'Utility' as const,
@@ -216,18 +231,19 @@ meta = {
   performanceClass: 'fast' as const,
   tags: ['queries', 'read-only', 'diagnostics', 'system'],
   capabilities: ['version', 'diagnostics', 'metrics', 'health-check'],
-}
+};
 ```
 
 **Recommendation**: Add MCP-standard annotations to all tools:
+
 ```typescript
 annotations = {
-  title: "Query OmniFocus Data",
-  readOnlyHint: true,  // For read operations
-  destructiveHint: false,  // Safe to call
-  idempotentHint: true,  // Repeated calls have same effect
-  openWorldHint: true  // Interacts with external system (OmniFocus)
-}
+  title: 'Query OmniFocus Data',
+  readOnlyHint: true, // For read operations
+  destructiveHint: false, // Safe to call
+  idempotentHint: true, // Repeated calls have same effect
+  openWorldHint: true, // Interacts with external system (OmniFocus)
+};
 ```
 
 ### 2.5 Error Handling
@@ -240,6 +256,7 @@ annotations = {
 - **Type-safe error handling** with proper guards
 
 **Example**:
+
 ```typescript
 return createErrorResponseV2(
   'system',
@@ -262,6 +279,7 @@ return createErrorResponseV2(
 **Excellent** (10/10)
 
 **tsconfig.json** enables all strict mode options:
+
 ```json
 {
   "strict": true,
@@ -288,6 +306,7 @@ return createErrorResponseV2(
 - **Zod schema inference** for runtime type safety
 
 **Example of exhaustiveness check**:
+
 ```typescript
 default: {
   const _exhaustive: never = compiled.type;
@@ -305,6 +324,7 @@ default: {
 - **No code duplication** - Common patterns extracted
 
 **Architecture**:
+
 ```
 Unified API → Compiler → Backend Tool → OmniFocus Script → Response
 ```
@@ -325,6 +345,7 @@ Unified API → Compiler → Backend Tool → OmniFocus Script → Response
 **Excellent** (9/10)
 
 Clear separation of concerns:
+
 ```
 src/
 ├── tools/
@@ -360,6 +381,7 @@ src/
 **Good, with nuanced optimization opportunity** (8/10)
 
 #### Current State:
+
 - Backend tools support JSON and Markdown formats (default: Markdown)
 - Unified API does not expose `response_format` parameter
 - All responses currently use Markdown formatting
@@ -367,14 +389,17 @@ src/
 #### Analysis: LLM-Mediated vs Direct Access
 
 **Your Use Case** (LLM-mediated via Claude Desktop/Code):
+
 ```
 User → LLM → Your Server → JSON → LLM processes → Natural language → User
 ```
+
 - **JSON is optimal** - More compact (saves 20-30% tokens)
 - **LLM handles formatting** - Converts to tables, summaries, bullet points beautifully
 - **User never sees raw response** - Gets natural language instead
 
 **Token Efficiency Comparison**:
+
 ```json
 // JSON: ~150 chars
 {"tasks": [{"id":"123","name":"Call dentist","dueDate":"2025-03-15"}]}
@@ -385,6 +410,7 @@ User → LLM → Your Server → JSON → LLM processes → Natural language →
 ```
 
 **When Markdown Has Value**:
+
 - Direct MCP Inspector usage (debugging/testing)
 - Power users writing scripts without LLM mediation
 - Generating reports or documentation
@@ -393,6 +419,7 @@ User → LLM → Your Server → JSON → LLM processes → Natural language →
 #### Recommendation: Optimize for Primary Use Case, Enable Flexibility
 
 **Tier 1 - Optimize Backend (High Value)**:
+
 ```typescript
 // In OmniFocusReadTool.routeToTasksTool()
 private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
@@ -408,6 +435,7 @@ private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
 ```
 
 **Tier 2 - Expose Parameter (Optional, for Power Users)**:
+
 ```typescript
 // Only expose if you want to support:
 // - MCP Inspector debugging workflows
@@ -426,6 +454,7 @@ const ReadSchema = z.object({
 ```
 
 **Decision Factors**:
+
 - ✅ **Just optimize backend to JSON** - Simplest, best for 95% of users
 - ⚠️ **Expose parameter** - If you expect power users, debugging workflows, or direct API access
 - ❌ **Current state (Markdown default)** - Uses unnecessary tokens for LLM-mediated access
@@ -444,11 +473,13 @@ const ReadSchema = z.object({
 **Good, needs improvement** (6/10)
 
 #### Current State:
+
 - No `CHARACTER_LIMIT` constant defined
 - No systematic truncation in response formatters
 - Could return overwhelming amounts of data
 
 **Recommendation**:
+
 ```typescript
 // Add to constants.ts
 export const CHARACTER_LIMIT = 25000;
@@ -458,7 +489,7 @@ if (response.length > CHARACTER_LIMIT) {
   return {
     ...response,
     truncated: true,
-    truncation_message: "Response truncated. Use 'limit' or 'offset' parameters."
+    truncation_message: "Response truncated. Use 'limit' or 'offset' parameters.",
   };
 }
 ```
@@ -533,6 +564,7 @@ if (response.length > CHARACTER_LIMIT) {
 ### High Priority (Implement Soon)
 
 #### 1. Add Standard Tool Annotations
+
 **Impact**: High - Improves MCP ecosystem compatibility
 
 ```typescript
@@ -547,11 +579,13 @@ annotations: {
 ```
 
 **Files to modify**:
+
 - `src/tools/unified/OmniFocusReadTool.ts`
 - `src/tools/unified/OmniFocusWriteTool.ts`
 - `src/tools/unified/OmniFocusAnalyzeTool.ts`
 
 #### 2. Implement Character Limits
+
 **Impact**: Medium - Prevents context overflow
 
 ```typescript
@@ -566,17 +600,20 @@ function truncateResponse(data: string, limit: number = CHARACTER_LIMIT) {
     data: data.slice(0, limit),
     truncated: true,
     originalLength: data.length,
-    message: "Response truncated. Use 'limit' or 'fields' parameters to reduce size."
+    message: "Response truncated. Use 'limit' or 'fields' parameters to reduce size.",
   };
 }
 ```
 
 #### 3. Optimize Backend to Return JSON by Default
+
 **Impact**: Medium - Saves 20-30% tokens in LLM-mediated workflows
 
-**Context**: Your server is primarily accessed via LLM (Claude Desktop/Code), not directly by users. JSON is more token-efficient than Markdown, and LLMs excel at formatting JSON for users.
+**Context**: Your server is primarily accessed via LLM (Claude Desktop/Code), not directly by users. JSON is more
+token-efficient than Markdown, and LLMs excel at formatting JSON for users.
 
 **Tier 1 - Simple Backend Optimization** (Recommended):
+
 ```typescript
 // In OmniFocusReadTool.routeToTasksTool()
 private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
@@ -592,6 +629,7 @@ private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
 ```
 
 Apply the same change to:
+
 - `routeToProjectsTool()`
 - All other routing methods in unified tools
 
@@ -616,6 +654,7 @@ const ReadSchema = z.object({
 ```
 
 **Decision Guide**:
+
 - ✅ **Just change backend to JSON** - Best for 95% of users, simplest implementation
 - ⚠️ **Expose parameter too** - If you expect debugging workflows or direct API consumers
 - ❌ **Keep current Markdown default** - Wastes tokens unnecessarily
@@ -623,17 +662,21 @@ const ReadSchema = z.object({
 ### Medium Priority (Nice to Have)
 
 #### 4. Prefix Backend Tool Names
+
 **Impact**: Low - Mostly for internal consistency
 
 Consider renaming backend tools for clarity:
+
 - `tasks` → `omnifocus_tasks_backend`
 - `projects` → `omnifocus_projects_backend`
 - Or clearly document as internal routing targets
 
 #### 5. Enhance Evaluation Suite
+
 **Impact**: Medium - Better quality assurance
 
 Add more complex evaluation questions:
+
 - Multi-hop queries requiring 5+ tool calls
 - Questions testing all analysis modes
 - Error recovery scenarios
@@ -642,6 +685,7 @@ Add more complex evaluation questions:
 ### Low Priority (Future Enhancements)
 
 #### 6. Add Telemetry & Analytics
+
 **Impact**: Low - Helps understand usage patterns
 
 ```typescript
@@ -655,6 +699,7 @@ interface ToolUsageMetrics {
 ```
 
 #### 7. Implement Rate Limiting
+
 **Impact**: Low - Protect against abuse
 
 ```typescript
@@ -670,7 +715,9 @@ class RateLimiter {
 
 ## Conclusion
 
-The OmniFocus MCP server is an **exemplary implementation** that demonstrates deep understanding of MCP best practices and agent-centric design. With a few minor enhancements (primarily adding standard tool annotations and character limits), this server would score a perfect 100/100.
+The OmniFocus MCP server is an **exemplary implementation** that demonstrates deep understanding of MCP best practices
+and agent-centric design. With a few minor enhancements (primarily adding standard tool annotations and character
+limits), this server would score a perfect 100/100.
 
 **Current Score: 95/100 (A+)**
 
@@ -695,6 +742,5 @@ The OmniFocus MCP server is an **exemplary implementation** that demonstrates de
 
 ---
 
-**Evaluator**: Claude (using mcp-builder skill)
-**Date**: November 21, 2025
-**Framework Version**: MCP Protocol 2025-06-18
+**Evaluator**: Claude (using mcp-builder skill) **Date**: November 21, 2025 **Framework Version**: MCP Protocol
+2025-06-18

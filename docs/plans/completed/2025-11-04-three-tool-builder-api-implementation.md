@@ -2,9 +2,12 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Consolidate 17 MCP tools into 3 builder-pattern tools (read/write/analyze) while reusing all existing backend infrastructure.
+**Goal:** Consolidate 17 MCP tools into 3 builder-pattern tools (read/write/analyze) while reusing all existing backend
+infrastructure.
 
-**Architecture:** Create translation layer that maps builder JSON to existing JXA/OmniJS scripts. Each tool (OmniFocusReadTool, OmniFocusWriteTool, OmniFocusAnalyzeTool) has compiler that routes to appropriate existing script handlers. Maximum code reuse, minimal new implementation.
+**Architecture:** Create translation layer that maps builder JSON to existing JXA/OmniJS scripts. Each tool
+(OmniFocusReadTool, OmniFocusWriteTool, OmniFocusAnalyzeTool) has compiler that routes to appropriate existing script
+handlers. Maximum code reuse, minimal new implementation.
 
 **Tech Stack:** TypeScript, Zod (schema validation), existing JXA/OmniJS scripts, MCP SDK
 
@@ -17,6 +20,7 @@
 ### Task 1: Create Read Tool Schema
 
 **Files:**
+
 - Create: `src/tools/unified/schemas/read-schema.ts`
 - Test: `tests/unit/tools/unified/schemas/read-schema.test.ts`
 
@@ -34,8 +38,8 @@ describe('ReadSchema', () => {
       query: {
         type: 'tasks',
         filters: { status: 'active' },
-        limit: 25
-      }
+        limit: 25,
+      },
     };
 
     const result = ReadSchema.safeParse(input);
@@ -48,9 +52,9 @@ describe('ReadSchema', () => {
         type: 'tasks',
         filters: {
           tags: { any: ['work', 'urgent'] },
-          dueDate: { before: '2025-01-31' }
-        }
-      }
+          dueDate: { before: '2025-01-31' },
+        },
+      },
     };
 
     const result = ReadSchema.safeParse(input);
@@ -61,8 +65,8 @@ describe('ReadSchema', () => {
     const input = {
       query: {
         type: 'invalid',
-        filters: {}
-      }
+        filters: {},
+      },
     };
 
     const result = ReadSchema.safeParse(input);
@@ -73,8 +77,7 @@ describe('ReadSchema', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/unit/tools/unified/schemas/read-schema.test.ts`
-Expected: FAIL with "Cannot find module" error
+Run: `npm test tests/unit/tools/unified/schemas/read-schema.test.ts` Expected: FAIL with "Cannot find module" error
 
 **Step 3: Write minimal implementation**
 
@@ -123,26 +126,30 @@ type FilterType = z.ZodType<{
   NOT?: any;
 }>;
 
-const FilterSchema: FilterType = z.lazy(() => z.object({
-  // Task filters
-  status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
-  tags: TagFilterSchema.optional(),
-  project: z.union([z.string(), z.null()]).optional(),
-  dueDate: DateFilterSchema.optional(),
-  deferDate: DateFilterSchema.optional(),
-  flagged: z.boolean().optional(),
-  blocked: z.boolean().optional(),
-  available: z.boolean().optional(),
-  text: TextFilterSchema.optional(),
+const FilterSchema: FilterType = z.lazy(() =>
+  z
+    .object({
+      // Task filters
+      status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
+      tags: TagFilterSchema.optional(),
+      project: z.union([z.string(), z.null()]).optional(),
+      dueDate: DateFilterSchema.optional(),
+      deferDate: DateFilterSchema.optional(),
+      flagged: z.boolean().optional(),
+      blocked: z.boolean().optional(),
+      available: z.boolean().optional(),
+      text: TextFilterSchema.optional(),
 
-  // Project filters
-  folder: z.string().optional(),
+      // Project filters
+      folder: z.string().optional(),
 
-  // Logical operators
-  AND: z.array(FilterSchema).optional(),
-  OR: z.array(FilterSchema).optional(),
-  NOT: FilterSchema.optional(),
-}).passthrough());
+      // Logical operators
+      AND: z.array(FilterSchema).optional(),
+      OR: z.array(FilterSchema).optional(),
+      NOT: FilterSchema.optional(),
+    })
+    .passthrough(),
+);
 
 // Sort options
 const SortSchema = z.object({
@@ -168,8 +175,7 @@ export type ReadInput = z.infer<typeof ReadSchema>;
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/unit/tools/unified/schemas/read-schema.test.ts`
-Expected: 3 tests PASS
+Run: `npm test tests/unit/tools/unified/schemas/read-schema.test.ts` Expected: 3 tests PASS
 
 **Step 5: Commit**
 
@@ -183,6 +189,7 @@ git commit -m "feat(unified): add read tool schema with filter validation"
 ### Task 2: Create Write Tool Schema
 
 **Files:**
+
 - Create: `src/tools/unified/schemas/write-schema.ts`
 - Test: `tests/unit/tools/unified/schemas/write-schema.test.ts`
 
@@ -201,9 +208,9 @@ describe('WriteSchema', () => {
         data: {
           name: 'Test task',
           tags: ['work'],
-          dueDate: '2025-01-15'
-        }
-      }
+          dueDate: '2025-01-15',
+        },
+      },
     };
 
     const result = WriteSchema.safeParse(input);
@@ -218,9 +225,9 @@ describe('WriteSchema', () => {
         id: 'task-id-123',
         changes: {
           flagged: true,
-          addTags: ['urgent']
-        }
-      }
+          addTags: ['urgent'],
+        },
+      },
     };
 
     const result = WriteSchema.safeParse(input);
@@ -231,9 +238,9 @@ describe('WriteSchema', () => {
     const input = {
       mutation: {
         operation: 'create',
-        target: 'task'
+        target: 'task',
         // Missing data
-      }
+      },
     };
 
     const result = WriteSchema.safeParse(input);
@@ -244,8 +251,7 @@ describe('WriteSchema', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/unit/tools/unified/schemas/write-schema.test.ts`
-Expected: FAIL with "Cannot find module"
+Run: `npm test tests/unit/tools/unified/schemas/write-schema.test.ts` Expected: FAIL with "Cannot find module"
 
 **Step 3: Write minimal implementation**
 
@@ -279,19 +285,21 @@ const CreateDataSchema = z.object({
 });
 
 // Update changes schema
-const UpdateChangesSchema = z.object({
-  name: z.string().optional(),
-  note: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  addTags: z.array(z.string()).optional(),
-  removeTags: z.array(z.string()).optional(),
-  dueDate: z.union([z.string(), z.null()]).optional(),
-  deferDate: z.union([z.string(), z.null()]).optional(),
-  flagged: z.boolean().optional(),
-  status: z.enum(['completed', 'dropped']).optional(),
-  project: z.union([z.string(), z.null()]).optional(),
-  estimatedMinutes: z.number().optional(),
-}).passthrough();
+const UpdateChangesSchema = z
+  .object({
+    name: z.string().optional(),
+    note: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    addTags: z.array(z.string()).optional(),
+    removeTags: z.array(z.string()).optional(),
+    dueDate: z.union([z.string(), z.null()]).optional(),
+    deferDate: z.union([z.string(), z.null()]).optional(),
+    flagged: z.boolean().optional(),
+    status: z.enum(['completed', 'dropped']).optional(),
+    project: z.union([z.string(), z.null()]).optional(),
+    estimatedMinutes: z.number().optional(),
+  })
+  .passthrough();
 
 // Batch operation schema
 const BatchOperationSchema = z.object({
@@ -303,59 +311,60 @@ const BatchOperationSchema = z.object({
 });
 
 // Main write schema
-export const WriteSchema = z.object({
-  mutation: z.object({
-    operation: z.enum(['create', 'update', 'complete', 'delete', 'batch']),
-    target: z.enum(['task', 'project']),
-    data: CreateDataSchema.optional(),
-    id: z.string().optional(),
-    changes: UpdateChangesSchema.optional(),
-    operations: z.array(BatchOperationSchema).optional(),
-  }),
-}).superRefine((data, ctx) => {
-  const { operation, data: createData, id, changes, operations } = data.mutation;
+export const WriteSchema = z
+  .object({
+    mutation: z.object({
+      operation: z.enum(['create', 'update', 'complete', 'delete', 'batch']),
+      target: z.enum(['task', 'project']),
+      data: CreateDataSchema.optional(),
+      id: z.string().optional(),
+      changes: UpdateChangesSchema.optional(),
+      operations: z.array(BatchOperationSchema).optional(),
+    }),
+  })
+  .superRefine((data, ctx) => {
+    const { operation, data: createData, id, changes, operations } = data.mutation;
 
-  // Validation rules per operation
-  if (operation === 'create' && !createData) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'data is required for create operation',
-      path: ['mutation', 'data'],
-    });
-  }
+    // Validation rules per operation
+    if (operation === 'create' && !createData) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'data is required for create operation',
+        path: ['mutation', 'data'],
+      });
+    }
 
-  if ((operation === 'update' || operation === 'complete' || operation === 'delete') && !id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'id is required for update/complete/delete operations',
-      path: ['mutation', 'id'],
-    });
-  }
+    if ((operation === 'update' || operation === 'complete' || operation === 'delete') && !id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'id is required for update/complete/delete operations',
+        path: ['mutation', 'id'],
+      });
+    }
 
-  if (operation === 'update' && !changes) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'changes is required for update operation',
-      path: ['mutation', 'changes'],
-    });
-  }
+    if (operation === 'update' && !changes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'changes is required for update operation',
+        path: ['mutation', 'changes'],
+      });
+    }
 
-  if (operation === 'batch' && !operations) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'operations is required for batch operation',
-      path: ['mutation', 'operations'],
-    });
-  }
-});
+    if (operation === 'batch' && !operations) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'operations is required for batch operation',
+        path: ['mutation', 'operations'],
+      });
+    }
+  });
 
 export type WriteInput = z.infer<typeof WriteSchema>;
 ```
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/unit/tools/unified/schemas/write-schema.test.ts`
-Expected: 3 tests PASS
+Run: `npm test tests/unit/tools/unified/schemas/write-schema.test.ts` Expected: 3 tests PASS
 
 **Step 5: Commit**
 
@@ -369,6 +378,7 @@ git commit -m "feat(unified): add write tool schema with mutation validation"
 ### Task 3: Create Analyze Tool Schema
 
 **Files:**
+
 - Create: `src/tools/unified/schemas/analyze-schema.ts`
 - Test: `tests/unit/tools/unified/schemas/analyze-schema.test.ts`
 
@@ -386,14 +396,14 @@ describe('AnalyzeSchema', () => {
         scope: {
           dateRange: {
             start: '2025-01-01',
-            end: '2025-01-31'
-          }
+            end: '2025-01-31',
+          },
         },
         params: {
           groupBy: 'week',
-          metrics: ['completed', 'velocity']
-        }
-      }
+          metrics: ['completed', 'velocity'],
+        },
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);
@@ -406,9 +416,9 @@ describe('AnalyzeSchema', () => {
         type: 'parse_meeting_notes',
         params: {
           text: 'Follow up with Sarah',
-          extractTasks: true
-        }
-      }
+          extractTasks: true,
+        },
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);
@@ -418,8 +428,8 @@ describe('AnalyzeSchema', () => {
   it('should reject invalid type', () => {
     const input = {
       analysis: {
-        type: 'invalid_type'
-      }
+        type: 'invalid_type',
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);
@@ -430,8 +440,7 @@ describe('AnalyzeSchema', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/unit/tools/unified/schemas/analyze-schema.test.ts`
-Expected: FAIL with "Cannot find module"
+Run: `npm test tests/unit/tools/unified/schemas/analyze-schema.test.ts` Expected: FAIL with "Cannot find module"
 
 **Step 3: Write minimal implementation**
 
@@ -440,10 +449,12 @@ import { z } from 'zod';
 
 // Scope schema for filtering analysis
 const AnalysisScopeSchema = z.object({
-  dateRange: z.object({
-    start: z.string(),
-    end: z.string(),
-  }).optional(),
+  dateRange: z
+    .object({
+      start: z.string(),
+      end: z.string(),
+    })
+    .optional(),
   tags: z.array(z.string()).optional(),
   projects: z.array(z.string()).optional(),
   includeCompleted: z.boolean().optional(),
@@ -451,28 +462,30 @@ const AnalysisScopeSchema = z.object({
 });
 
 // Analysis-type-specific parameters
-const AnalysisParamsSchema = z.object({
-  // productivity_stats / task_velocity
-  groupBy: z.enum(['day', 'week', 'month']).optional(),
-  metrics: z.array(z.string()).optional(),
+const AnalysisParamsSchema = z
+  .object({
+    // productivity_stats / task_velocity
+    groupBy: z.enum(['day', 'week', 'month']).optional(),
+    metrics: z.array(z.string()).optional(),
 
-  // pattern_analysis
-  insights: z.array(z.string()).optional(),
+    // pattern_analysis
+    insights: z.array(z.string()).optional(),
 
-  // recurring_tasks
-  operation: z.enum(['analyze', 'patterns']).optional(),
-  sortBy: z.enum(['nextDue', 'frequency', 'name']).optional(),
+    // recurring_tasks
+    operation: z.enum(['analyze', 'patterns']).optional(),
+    sortBy: z.enum(['nextDue', 'frequency', 'name']).optional(),
 
-  // parse_meeting_notes
-  text: z.string().optional(),
-  extractTasks: z.boolean().optional(),
-  defaultProject: z.string().optional(),
-  defaultTags: z.array(z.string()).optional(),
+    // parse_meeting_notes
+    text: z.string().optional(),
+    extractTasks: z.boolean().optional(),
+    defaultProject: z.string().optional(),
+    defaultTags: z.array(z.string()).optional(),
 
-  // manage_reviews
-  projectId: z.string().optional(),
-  reviewDate: z.string().optional(),
-}).passthrough();
+    // manage_reviews
+    projectId: z.string().optional(),
+    reviewDate: z.string().optional(),
+  })
+  .passthrough();
 
 // Main analyze schema
 export const AnalyzeSchema = z.object({
@@ -497,8 +510,7 @@ export type AnalyzeInput = z.infer<typeof AnalyzeSchema>;
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/unit/tools/unified/schemas/analyze-schema.test.ts`
-Expected: 3 tests PASS
+Run: `npm test tests/unit/tools/unified/schemas/analyze-schema.test.ts` Expected: 3 tests PASS
 
 **Step 5: Commit**
 
@@ -514,6 +526,7 @@ git commit -m "feat(unified): add analyze tool schema with type validation"
 ### Task 4: Create Query Compiler Foundation
 
 **Files:**
+
 - Create: `src/tools/unified/compilers/QueryCompiler.ts`
 - Test: `tests/unit/tools/unified/compilers/QueryCompiler.test.ts`
 
@@ -536,7 +549,7 @@ describe('QueryCompiler', () => {
           project: null,
         },
         limit: 25,
-      }
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -554,7 +567,7 @@ describe('QueryCompiler', () => {
         type: 'tasks',
         mode: 'smart_suggest',
         limit: 10,
-      }
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -570,8 +583,8 @@ describe('QueryCompiler', () => {
         type: 'tasks',
         filters: {
           tags: { any: ['work', 'urgent'] },
-        }
-      }
+        },
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -583,8 +596,7 @@ describe('QueryCompiler', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/unit/tools/unified/compilers/QueryCompiler.test.ts`
-Expected: FAIL with "Cannot find module"
+Run: `npm test tests/unit/tools/unified/compilers/QueryCompiler.test.ts` Expected: FAIL with "Cannot find module"
 
 **Step 3: Write minimal implementation**
 
@@ -631,8 +643,7 @@ export class QueryCompiler {
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/unit/tools/unified/compilers/QueryCompiler.test.ts`
-Expected: 3 tests PASS
+Run: `npm test tests/unit/tools/unified/compilers/QueryCompiler.test.ts` Expected: 3 tests PASS
 
 **Step 5: Commit**
 
@@ -648,6 +659,7 @@ git commit -m "feat(unified): add query compiler for read tool"
 ### Task 5: Create OmniFocusReadTool
 
 **Files:**
+
 - Create: `src/tools/unified/OmniFocusReadTool.ts`
 - Test: `tests/integration/tools/unified/OmniFocusReadTool.test.ts`
 
@@ -681,7 +693,7 @@ describe('OmniFocusReadTool Integration', () => {
           status: 'active' as const,
         },
         limit: 5,
-      }
+      },
     };
 
     const result = await tool.execute(input);
@@ -696,7 +708,7 @@ describe('OmniFocusReadTool Integration', () => {
         type: 'tasks' as const,
         mode: 'smart_suggest' as const,
         limit: 10,
-      }
+      },
     };
 
     const result = await tool.execute(input);
@@ -710,8 +722,7 @@ describe('OmniFocusReadTool Integration', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/integration/tools/unified/OmniFocusReadTool.test.ts`
-Expected: FAIL with "Cannot find module"
+Run: `npm test tests/integration/tools/unified/OmniFocusReadTool.test.ts` Expected: FAIL with "Cannot find module"
 
 **Step 3: Write minimal implementation**
 
@@ -850,7 +861,7 @@ PERFORMANCE:
       filters.text ||
       filters.OR ||
       filters.AND ||
-      filters.NOT
+      filters.NOT,
     );
   }
 
@@ -888,8 +899,7 @@ PERFORMANCE:
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/integration/tools/unified/OmniFocusReadTool.test.ts`
-Expected: 3 tests PASS
+Run: `npm test tests/integration/tools/unified/OmniFocusReadTool.test.ts` Expected: 3 tests PASS
 
 **Step 5: Commit**
 
@@ -905,6 +915,7 @@ git commit -m "feat(unified): add OmniFocusReadTool routing to existing tools"
 ### Task 6: Create Mutation Compiler
 
 **Files:**
+
 - Create: `src/tools/unified/compilers/MutationCompiler.ts`
 - Test: `tests/unit/tools/unified/compilers/MutationCompiler.test.ts`
 
@@ -927,8 +938,8 @@ describe('MutationCompiler', () => {
           name: 'Test task',
           tags: ['work'],
           dueDate: '2025-01-15',
-        }
-      }
+        },
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -947,9 +958,9 @@ describe('MutationCompiler', () => {
         id: 'task-123',
         changes: {
           flagged: true,
-          addTags: ['urgent']
-        }
-      }
+          addTags: ['urgent'],
+        },
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -963,8 +974,7 @@ describe('MutationCompiler', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/unit/tools/unified/compilers/MutationCompiler.test.ts`
-Expected: FAIL
+Run: `npm test tests/unit/tools/unified/compilers/MutationCompiler.test.ts` Expected: FAIL
 
 **Step 3: Write minimal implementation**
 
@@ -1021,8 +1031,7 @@ export class MutationCompiler {
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/unit/tools/unified/compilers/MutationCompiler.test.ts`
-Expected: 2 tests PASS
+Run: `npm test tests/unit/tools/unified/compilers/MutationCompiler.test.ts` Expected: 2 tests PASS
 
 **Step 5: Commit**
 
@@ -1036,6 +1045,7 @@ git commit -m "feat(unified): add mutation compiler for write tool"
 ### Task 7: Create OmniFocusWriteTool
 
 **Files:**
+
 - Create: `src/tools/unified/OmniFocusWriteTool.ts`
 - Test: `tests/integration/tools/unified/OmniFocusWriteTool.test.ts`
 
@@ -1068,8 +1078,8 @@ describe('OmniFocusWriteTool Integration', () => {
         data: {
           name: 'Builder API test task',
           tags: ['test'],
-        }
-      }
+        },
+      },
     };
 
     const result = await tool.execute(input);
@@ -1083,8 +1093,7 @@ describe('OmniFocusWriteTool Integration', () => {
 
 **Step 2: Run test to verify it fails**
 
-Run: `npm test tests/integration/tools/unified/OmniFocusWriteTool.test.ts`
-Expected: FAIL
+Run: `npm test tests/integration/tools/unified/OmniFocusWriteTool.test.ts` Expected: FAIL
 
 **Step 3: Implement OmniFocusWriteTool**
 
@@ -1183,7 +1192,7 @@ SAFETY:
         type: op.target,
         name: op.data?.name,
         ...op.data,
-      }))
+      })),
     };
 
     return this.batchTool.execute(batchArgs);
@@ -1193,8 +1202,8 @@ SAFETY:
 
 **Step 4: Run test to verify it passes**
 
-Run: `npm test tests/integration/tools/unified/OmniFocusWriteTool.test.ts`
-Expected: 2 tests PASS (may need OmniFocus running)
+Run: `npm test tests/integration/tools/unified/OmniFocusWriteTool.test.ts` Expected: 2 tests PASS (may need OmniFocus
+running)
 
 **Step 5: Commit**
 
@@ -1210,6 +1219,7 @@ git commit -m "feat(unified): add OmniFocusWriteTool routing to manage_task"
 ### Task 8: Create Analysis Compiler
 
 **Files:**
+
 - Create: `src/tools/unified/compilers/AnalysisCompiler.ts`
 - Test: `tests/unit/tools/unified/compilers/AnalysisCompiler.test.ts`
 
@@ -1229,6 +1239,7 @@ export class AnalysisCompiler {
 ```
 
 **Commit message:**
+
 ```
 feat(unified): add analysis compiler for analyze tool
 ```
@@ -1238,6 +1249,7 @@ feat(unified): add analysis compiler for analyze tool
 ### Task 9: Create OmniFocusAnalyzeTool
 
 **Files:**
+
 - Create: `src/tools/unified/OmniFocusAnalyzeTool.ts`
 - Test: `tests/integration/tools/unified/OmniFocusAnalyzeTool.test.ts`
 
@@ -1291,6 +1303,7 @@ SCOPE FILTERING:
 ```
 
 **Commit:**
+
 ```
 feat(unified): add OmniFocusAnalyzeTool routing to analysis tools
 ```
@@ -1302,6 +1315,7 @@ feat(unified): add OmniFocusAnalyzeTool routing to analysis tools
 ### Task 10: Register New Tools
 
 **Files:**
+
 - Modify: `src/tools/index.ts`
 
 **Step 1: Add imports for new tools**
@@ -1329,13 +1343,12 @@ const tools: Tool[] = [
 
 **Step 3: Run build to verify no errors**
 
-Run: `npm run build`
-Expected: Clean build
+Run: `npm run build` Expected: Clean build
 
 **Step 4: Test server starts**
 
-Run: `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js`
-Expected: See all 20 tools listed (17 old + 3 new)
+Run: `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js` Expected: See all 20 tools listed (17
+old + 3 new)
 
 **Step 5: Commit**
 
@@ -1351,9 +1364,11 @@ git commit -m "feat(unified): register three new builder API tools in parallel w
 ### Task 11: End-to-End Integration Tests
 
 **Files:**
+
 - Create: `tests/integration/tools/unified/builder-api-e2e.test.ts`
 
 **Test scenarios:**
+
 1. Read tool queries inbox and returns tasks
 2. Write tool creates task with tags
 3. Analyze tool runs productivity stats
@@ -1362,6 +1377,7 @@ git commit -m "feat(unified): register three new builder API tools in parallel w
 6. Migration hints appear in old tool responses
 
 **Commit:**
+
 ```
 test(unified): add comprehensive integration tests for builder API
 ```
@@ -1373,6 +1389,7 @@ test(unified): add comprehensive integration tests for builder API
 ### Task 12: Add Migration Hints to Old Tools
 
 **Files:**
+
 - Modify: All existing tool response formatters
 
 Add migration hints to responses from old tools:
@@ -1390,6 +1407,7 @@ Add migration hints to responses from old tools:
 ```
 
 **Commit:**
+
 ```
 feat(unified): add migration hints to existing tools
 ```
@@ -1399,11 +1417,13 @@ feat(unified): add migration hints to existing tools
 ### Task 13: Update CLAUDE.md
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 Add section documenting new tools and migration path.
 
 **Commit:**
+
 ```
 docs: update CLAUDE.md with builder API tools and migration guide
 ```

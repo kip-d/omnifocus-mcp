@@ -1,6 +1,7 @@
 # OmniFocus MCP API Reference v2.1.0
 
-This document provides comprehensive documentation for all 17 tools in the OmniFocus MCP server v2.2.0 (Self-Contained Architecture + Smart Capture).
+This document provides comprehensive documentation for all 17 tools in the OmniFocus MCP server v2.2.0 (Self-Contained
+Architecture + Smart Capture).
 
 ## Table of Contents
 
@@ -31,23 +32,24 @@ This document provides comprehensive documentation for all 17 tools in the OmniF
 
 ### tasks
 
-Query OmniFocus tasks with various modes and filters. Returns a summary first for quick answers, then detailed task data.
+Query OmniFocus tasks with various modes and filters. Returns a summary first for quick answers, then detailed task
+data.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `mode` | string | **Yes** | Query mode (see modes below) |
-| `limit` | string | **Yes** | Maximum tasks to return (default: "25") |
-| `details` | string | **Yes** | Include full details (default: "false") |
-| `fastSearch` | string | **Yes** | Fast search mode for performance (default: "true") |
-| `fields` | string[] | No | Select specific fields to return for performance optimization |
-| `search` | string | No | Search text for task names (search mode only) |
-| `project` | string | No | Filter by project name or ID |
-| `tags` | string[] | No | Filter by tag names |
-| `completed` | string | No | Include completed tasks (default: "false") |
-| `dueBy` | string | No | Tasks due by date (e.g., "tomorrow", "2025-03-15") |
-| `daysAhead` | string | No | Days to look ahead (upcoming mode, default: "7") |
+| Parameter    | Type     | Required | Description                                                   |
+| ------------ | -------- | -------- | ------------------------------------------------------------- |
+| `mode`       | string   | **Yes**  | Query mode (see modes below)                                  |
+| `limit`      | string   | **Yes**  | Maximum tasks to return (default: "25")                       |
+| `details`    | string   | **Yes**  | Include full details (default: "false")                       |
+| `fastSearch` | string   | **Yes**  | Fast search mode for performance (default: "true")            |
+| `fields`     | string[] | No       | Select specific fields to return for performance optimization |
+| `search`     | string   | No       | Search text for task names (search mode only)                 |
+| `project`    | string   | No       | Filter by project name or ID                                  |
+| `tags`       | string[] | No       | Filter by tag names                                           |
+| `completed`  | string   | No       | Include completed tasks (default: "false")                    |
+| `dueBy`      | string   | No       | Tasks due by date (e.g., "tomorrow", "2025-03-15")            |
+| `daysAhead`  | string   | No       | Days to look ahead (upcoming mode, default: "7")              |
 
 #### Available Modes
 
@@ -63,6 +65,7 @@ Query OmniFocus tasks with various modes and filters. Returns a summary first fo
 #### Available Fields (for performance optimization)
 
 When using the `fields` parameter, you can select specific fields to return:
+
 - **`id`** - Task identifier
 - **`name`** - Task title
 - **`completed`** - Completion status
@@ -78,11 +81,13 @@ When using the `fields` parameter, you can select specific fields to return:
 - **`project`** - Project name
 - **`tags`** - Associated tags
 
-If `fields` is not specified, all fields are returned. Using field selection can significantly improve performance and reduce response size.
+If `fields` is not specified, all fields are returned. Using field selection can significantly improve performance and
+reduce response size.
 
 #### Example Requests
 
 **Basic query:**
+
 ```json
 {
   "mode": "overdue",
@@ -93,6 +98,7 @@ If `fields` is not specified, all fields are returned. Using field selection can
 ```
 
 **With field selection for performance:**
+
 ```json
 {
   "mode": "today",
@@ -111,27 +117,27 @@ Unified task management tool for all CRUD operations (Create, Read, Update, Dele
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation: create/update/complete/delete |
-| `taskId` | string | No* | Task ID (*required for update/complete/delete) |
-| `name` | string | No* | Task name (*required for create) |
-| `projectId` | string | **Yes** | Project ID (null/"" for inbox) |
-| `dueDate` | string | **Yes** | Due date ("" if none) |
-| `deferDate` | string | **Yes** | Defer date ("" if none) |
-| `note` | string | No | Task description |
-| `parentTaskId` | string | No | Parent task ID for subtasks |
-| `flagged` | string | No | Flagged status ("true"/"false") |
-| `sequential` | string | No | Sequential subtasks ("true"/"false") |
-| `estimatedMinutes` | string | No | Time estimate in minutes |
-| `tags` | string[] | No | Tags to assign |
-| `repeatRule` | object | No | Recurrence rule (see below) |
-| `completionDate` | string | No | Completion date (complete operation) |
-| `minimalResponse` | string | No | Return minimal response for bulk ops |
-| `clearDueDate` | boolean | No | Clear existing due date |
-| `clearDeferDate` | boolean | No | Clear existing defer date |
-| `clearEstimatedMinutes` | boolean | No | Clear existing estimate |
-| `clearRepeatRule` | boolean | No | Remove existing repeat rule |
+| Parameter               | Type     | Required | Description                                     |
+| ----------------------- | -------- | -------- | ----------------------------------------------- |
+| `operation`             | string   | **Yes**  | Operation: create/update/complete/delete        |
+| `taskId`                | string   | No\*     | Task ID (\*required for update/complete/delete) |
+| `name`                  | string   | No\*     | Task name (\*required for create)               |
+| `projectId`             | string   | **Yes**  | Project ID (null/"" for inbox)                  |
+| `dueDate`               | string   | **Yes**  | Due date ("" if none)                           |
+| `deferDate`             | string   | **Yes**  | Defer date ("" if none)                         |
+| `note`                  | string   | No       | Task description                                |
+| `parentTaskId`          | string   | No       | Parent task ID for subtasks                     |
+| `flagged`               | string   | No       | Flagged status ("true"/"false")                 |
+| `sequential`            | string   | No       | Sequential subtasks ("true"/"false")            |
+| `estimatedMinutes`      | string   | No       | Time estimate in minutes                        |
+| `tags`                  | string[] | No       | Tags to assign                                  |
+| `repeatRule`            | object   | No       | Recurrence rule (see below)                     |
+| `completionDate`        | string   | No       | Completion date (complete operation)            |
+| `minimalResponse`       | string   | No       | Return minimal response for bulk ops            |
+| `clearDueDate`          | boolean  | No       | Clear existing due date                         |
+| `clearDeferDate`        | boolean  | No       | Clear existing defer date                       |
+| `clearEstimatedMinutes` | boolean  | No       | Clear existing estimate                         |
+| `clearRepeatRule`       | boolean  | No       | Remove existing repeat rule                     |
 
 #### Operations
 
@@ -144,13 +150,14 @@ Unified task management tool for all CRUD operations (Create, Read, Update, Dele
 
 ```json
 {
-  "unit": "week",           // minute/hour/day/week/month/year
-  "steps": "1",             // Interval (every X units)
-  "method": "fixed",        // fixed/start-after-completion/due-after-completion
-  "weekdays": ["monday", "wednesday", "friday"],  // For weekly repeats
-  "weekPosition": "1",      // For monthly (1st, 2nd, 3rd, 4th, "last")
-  "weekday": "tuesday",     // For monthly positional (e.g., "1st Tuesday")
-  "deferAnother": {         // Optional defer before due
+  "unit": "week", // minute/hour/day/week/month/year
+  "steps": "1", // Interval (every X units)
+  "method": "fixed", // fixed/start-after-completion/due-after-completion
+  "weekdays": ["monday", "wednesday", "friday"], // For weekly repeats
+  "weekPosition": "1", // For monthly (1st, 2nd, 3rd, 4th, "last")
+  "weekday": "tuesday", // For monthly positional (e.g., "1st Tuesday")
+  "deferAnother": {
+    // Optional defer before due
     "unit": "day",
     "steps": 3
   }
@@ -160,6 +167,7 @@ Unified task management tool for all CRUD operations (Create, Read, Update, Dele
 #### Example Requests
 
 **Create Task**:
+
 ```json
 {
   "operation": "create",
@@ -177,15 +185,16 @@ Unified task management tool for all CRUD operations (Create, Read, Update, Dele
 ```
 
 **Update Task**:
+
 ```json
 {
   "operation": "update",
   "taskId": "xyz789",
-  "projectId": "",  // Move to inbox
+  "projectId": "", // Move to inbox
   "dueDate": "2025-03-16",
   "deferDate": "",
   "tags": ["urgent", "work"],
-  "minimalResponse": "true"  // For bulk operations
+  "minimalResponse": "true" // For bulk operations
 }
 ```
 
@@ -199,21 +208,21 @@ Manage OmniFocus projects with various operations. Returns summary with key insi
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation to perform (see below) |
-| `limit` | string | **Yes** | Maximum projects to return |
-| `details` | string | **Yes** | Include full project details |
-| `status` | string | No | Filter by status (active/on-hold/done/dropped/all) |
-| `folder` | string | No | Filter by folder name |
-| `needsReview` | string | No | Only show projects needing review |
-| `projectId` | string | No* | Project ID (*required for update/complete/delete) |
-| `name` | string | No | Project name (for create/update) |
-| `note` | string | No | Project description |
-| `dueDate` | string | No | Due date (natural language supported) |
-| `reviewInterval` | string | No | Review interval in days |
-| `tags` | string[] | No | Tags to assign |
-| `flagged` | string | No | Mark as flagged/important |
+| Parameter        | Type     | Required | Description                                        |
+| ---------------- | -------- | -------- | -------------------------------------------------- |
+| `operation`      | string   | **Yes**  | Operation to perform (see below)                   |
+| `limit`          | string   | **Yes**  | Maximum projects to return                         |
+| `details`        | string   | **Yes**  | Include full project details                       |
+| `status`         | string   | No       | Filter by status (active/on-hold/done/dropped/all) |
+| `folder`         | string   | No       | Filter by folder name                              |
+| `needsReview`    | string   | No       | Only show projects needing review                  |
+| `projectId`      | string   | No\*     | Project ID (\*required for update/complete/delete) |
+| `name`           | string   | No       | Project name (for create/update)                   |
+| `note`           | string   | No       | Project description                                |
+| `dueDate`        | string   | No       | Due date (natural language supported)              |
+| `reviewInterval` | string   | No       | Review interval in days                            |
+| `tags`           | string[] | No       | Tags to assign                                     |
+| `flagged`        | string   | No       | Mark as flagged/important                          |
 
 #### Operations
 
@@ -236,19 +245,19 @@ Query and manage OmniFocus folders with full hierarchy support.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation to perform |
-| `folderId` | string | No* | Folder ID (*required for specific operations) |
-| `folderName` | string | No | Folder name (alternative to folderId) |
-| `name` | string | No | New folder name (for create/update) |
-| `parentFolderId` | string | No | Parent folder ID (for create/move) |
-| `searchQuery` | string | No | Search query (for search operation) |
-| `includeProjects` | boolean | No | Include projects in folders |
-| `includeSubfolders` | boolean | No | Include subfolders |
-| `status` | string | No | New status (for set_status operation) |
-| `includeContents` | boolean | No | Apply to contents (for set_status) |
-| `duplicateName` | string | No | Name for duplicated folder |
+| Parameter           | Type    | Required | Description                                    |
+| ------------------- | ------- | -------- | ---------------------------------------------- |
+| `operation`         | string  | **Yes**  | Operation to perform                           |
+| `folderId`          | string  | No\*     | Folder ID (\*required for specific operations) |
+| `folderName`        | string  | No       | Folder name (alternative to folderId)          |
+| `name`              | string  | No       | New folder name (for create/update)            |
+| `parentFolderId`    | string  | No       | Parent folder ID (for create/move)             |
+| `searchQuery`       | string  | No       | Search query (for search operation)            |
+| `includeProjects`   | boolean | No       | Include projects in folders                    |
+| `includeSubfolders` | boolean | No       | Include subfolders                             |
+| `status`            | string  | No       | New status (for set_status operation)          |
+| `includeContents`   | boolean | No       | Apply to contents (for set_status)             |
+| `duplicateName`     | string  | No       | Name for duplicated folder                     |
 
 #### Operations
 
@@ -271,21 +280,21 @@ Comprehensive tag management with hierarchy support.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation: list/active/manage |
-| `sortBy` | string | **Yes** | Sort order (name/count/usage) |
-| `includeEmpty` | string | **Yes** | Include tags with no tasks |
-| `includeUsageStats` | string | **Yes** | Calculate usage statistics |
-| `includeTaskCounts` | string | **Yes** | Include task counts |
-| `fastMode` | string | **Yes** | Skip hierarchy (faster) |
-| `namesOnly` | string | **Yes** | Return only names (fastest) |
-| `action` | string | No* | Management action (*required for manage) |
-| `tagName` | string | No* | Tag name (*required for manage) |
-| `newName` | string | No | New name (for rename) |
-| `targetTag` | string | No | Target tag (for merge) |
-| `parentTagName` | string | No | Parent tag name |
-| `parentTagId` | string | No | Parent tag ID |
+| Parameter           | Type   | Required | Description                               |
+| ------------------- | ------ | -------- | ----------------------------------------- |
+| `operation`         | string | **Yes**  | Operation: list/active/manage             |
+| `sortBy`            | string | **Yes**  | Sort order (name/count/usage)             |
+| `includeEmpty`      | string | **Yes**  | Include tags with no tasks                |
+| `includeUsageStats` | string | **Yes**  | Calculate usage statistics                |
+| `includeTaskCounts` | string | **Yes**  | Include task counts                       |
+| `fastMode`          | string | **Yes**  | Skip hierarchy (faster)                   |
+| `namesOnly`         | string | **Yes**  | Return only names (fastest)               |
+| `action`            | string | No\*     | Management action (\*required for manage) |
+| `tagName`           | string | No\*     | Tag name (\*required for manage)          |
+| `newName`           | string | No       | New name (for rename)                     |
+| `targetTag`         | string | No       | Target tag (for merge)                    |
+| `parentTagName`     | string | No       | Parent tag name                           |
+| `parentTagId`       | string | No       | Parent tag ID                             |
 
 #### Operations
 
@@ -336,11 +345,11 @@ Generate comprehensive productivity statistics and GTD health metrics.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `period` | string | **Yes** | Time period (today/week/month/quarter/year) |
-| `includeProjectStats` | string | **Yes** | Include project-level statistics |
-| `includeTagStats` | string | **Yes** | Include tag-level statistics |
+| Parameter             | Type   | Required | Description                                 |
+| --------------------- | ------ | -------- | ------------------------------------------- |
+| `period`              | string | **Yes**  | Time period (today/week/month/quarter/year) |
+| `includeProjectStats` | string | **Yes**  | Include project-level statistics            |
+| `includeTagStats`     | string | **Yes**  | Include tag-level statistics                |
 
 Returns summary insights first, then detailed statistics.
 
@@ -352,11 +361,11 @@ Analyze task completion velocity and predict workload capacity.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `days` | string | **Yes** | Number of days to analyze |
-| `groupBy` | string | **Yes** | How to group data (day/week/project/tag) |
-| `includeWeekends` | string | **Yes** | Include weekend days |
+| Parameter         | Type   | Required | Description                              |
+| ----------------- | ------ | -------- | ---------------------------------------- |
+| `days`            | string | **Yes**  | Number of days to analyze                |
+| `groupBy`         | string | **Yes**  | How to group data (day/week/project/tag) |
+| `includeWeekends` | string | **Yes**  | Include weekend days                     |
 
 Returns key velocity metrics first, then detailed trends.
 
@@ -368,11 +377,11 @@ Analyze overdue tasks for patterns and bottlenecks.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `includeRecentlyCompleted` | string | **Yes** | Include tasks completed after due date |
-| `groupBy` | string | **Yes** | How to group (project/age/priority) |
-| `limit` | string | **Yes** | Maximum tasks to analyze |
+| Parameter                  | Type   | Required | Description                            |
+| -------------------------- | ------ | -------- | -------------------------------------- |
+| `includeRecentlyCompleted` | string | **Yes**  | Include tasks completed after due date |
+| `groupBy`                  | string | **Yes**  | How to group (project/age/priority)    |
+| `limit`                    | string | **Yes**  | Maximum tasks to analyze               |
 
 Returns summary with key findings first, then detailed analysis.
 
@@ -384,12 +393,12 @@ Deep analysis of OmniFocus workflow health and system efficiency.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `analysisDepth` | string | **Yes** | Analysis depth (quick/standard/deep) |
-| `focusAreas` | string | **Yes** | Specific areas to focus analysis on |
-| `includeRawData` | string | **Yes** | Include raw data for LLM exploration |
-| `maxInsights` | string | **Yes** | Maximum number of insights to generate |
+| Parameter        | Type   | Required | Description                            |
+| ---------------- | ------ | -------- | -------------------------------------- |
+| `analysisDepth`  | string | **Yes**  | Analysis depth (quick/standard/deep)   |
+| `focusAreas`     | string | **Yes**  | Specific areas to focus analysis on    |
+| `includeRawData` | string | **Yes**  | Include raw data for LLM exploration   |
+| `maxInsights`    | string | **Yes**  | Maximum number of insights to generate |
 
 Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization.
 
@@ -401,10 +410,10 @@ Analyze patterns across entire OmniFocus database for insights and improvements.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `patterns` | string[] | **Yes** | Which patterns to analyze (see below) |
-| `options` | string | **Yes** | Options object with threshold settings |
+| Parameter  | Type     | Required | Description                            |
+| ---------- | -------- | -------- | -------------------------------------- |
+| `patterns` | string[] | **Yes**  | Which patterns to analyze (see below)  |
+| `options`  | string   | **Yes**  | Options object with threshold settings |
 
 #### Available Patterns
 
@@ -428,16 +437,16 @@ Unified export functionality for all OmniFocus data types.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `type` | string | **Yes** | What to export (tasks/projects/all) |
-| `format` | string | **Yes** | Export format (json/csv/markdown) |
-| `filter` | object | No | Filter criteria (for tasks) |
-| `fields` | string[] | No | Fields to include (for tasks) |
-| `includeCompleted` | boolean | No | Include completed items |
-| `includeStats` | boolean | No | Include statistics (for projects) |
-| `includeProjectStats` | boolean | No | Include project statistics (for all) |
-| `outputDirectory` | string | No* | Directory to save files (*required for type="all") |
+| Parameter             | Type     | Required | Description                                         |
+| --------------------- | -------- | -------- | --------------------------------------------------- |
+| `type`                | string   | **Yes**  | What to export (tasks/projects/all)                 |
+| `format`              | string   | **Yes**  | Export format (json/csv/markdown)                   |
+| `filter`              | object   | No       | Filter criteria (for tasks)                         |
+| `fields`              | string[] | No       | Fields to include (for tasks)                       |
+| `includeCompleted`    | boolean  | No       | Include completed items                             |
+| `includeStats`        | boolean  | No       | Include statistics (for projects)                   |
+| `includeProjectStats` | boolean  | No       | Include project statistics (for all)                |
+| `outputDirectory`     | string   | No\*     | Directory to save files (\*required for type="all") |
 
 #### Export Types
 
@@ -459,14 +468,14 @@ Analyze recurring tasks and patterns.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation (analyze/patterns) |
-| `activeOnly` | string | **Yes** | Only active tasks (default: "true") |
-| `includeCompleted` | string | **Yes** | Include completed tasks |
-| `includeDropped` | string | **Yes** | Include dropped tasks |
-| `includeHistory` | boolean | No | Include completion history (analyze) |
-| `sortBy` | string | No | Sort order (nextDue/frequency/name) |
+| Parameter          | Type    | Required | Description                          |
+| ------------------ | ------- | -------- | ------------------------------------ |
+| `operation`        | string  | **Yes**  | Operation (analyze/patterns)         |
+| `activeOnly`       | string  | **Yes**  | Only active tasks (default: "true")  |
+| `includeCompleted` | string  | **Yes**  | Include completed tasks              |
+| `includeDropped`   | string  | **Yes**  | Include dropped tasks                |
+| `includeHistory`   | boolean | No       | Include completion history (analyze) |
+| `sortBy`           | string  | No       | Sort order (nextDue/frequency/name)  |
 
 #### Operations
 
@@ -481,14 +490,14 @@ Manage OmniFocus perspectives and query their contents.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation (list/query) |
-| `perspectiveName` | string | No* | Perspective name (*required for query) |
-| `limit` | string | **Yes** | Maximum tasks to return (query) |
-| `includeDetails` | string | **Yes** | Include task details (query) |
-| `includeFilterRules` | string | **Yes** | Include filter rules (list) |
-| `sortBy` | string | **Yes** | Sort order (list) |
+| Parameter            | Type   | Required | Description                             |
+| -------------------- | ------ | -------- | --------------------------------------- |
+| `operation`          | string | **Yes**  | Operation (list/query)                  |
+| `perspectiveName`    | string | No\*     | Perspective name (\*required for query) |
+| `limit`              | string | **Yes**  | Maximum tasks to return (query)         |
+| `includeDetails`     | string | **Yes**  | Include task details (query)            |
+| `includeFilterRules` | string | **Yes**  | Include filter rules (list)             |
+| `sortBy`             | string | **Yes**  | Sort order (list)                       |
 
 #### Operations
 
@@ -503,10 +512,10 @@ System utilities for version information and diagnostics.
 
 #### Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `operation` | string | **Yes** | Operation (version/diagnostics) |
-| `testScript` | string | **Yes** | Optional custom script for diagnostics |
+| Parameter    | Type   | Required | Description                            |
+| ------------ | ------ | -------- | -------------------------------------- |
+| `operation`  | string | **Yes**  | Operation (version/diagnostics)        |
+| `testScript` | string | **Yes**  | Optional custom script for diagnostics |
 
 #### Operations
 
@@ -587,7 +596,7 @@ System utilities for version information and diagnostics.
   "arguments": {
     "operation": "update",
     "taskId": "xyz789",
-    "projectId": "",  // Empty string moves to inbox
+    "projectId": "", // Empty string moves to inbox
     "dueDate": "",
     "deferDate": ""
   }
@@ -638,6 +647,7 @@ All tools return consistent error formats:
 ```
 
 Common error codes:
+
 - `PARAMETER_MISSING` - Required parameter not provided
 - `INVALID_MODE` - Invalid mode specified
 - `TASK_NOT_FOUND` - Task ID doesn't exist
@@ -660,5 +670,4 @@ Common error codes:
 
 ---
 
-*Generated for OmniFocus MCP v2.0.0*
-*Last updated: 2025-09-02*
+_Generated for OmniFocus MCP v2.0.0_ _Last updated: 2025-09-02_

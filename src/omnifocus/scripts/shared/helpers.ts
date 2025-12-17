@@ -236,7 +236,6 @@ export const ERROR_HANDLING = `
   }
 `;
 
-
 /**
  * ===========================================================================
  * UNIFIED HELPER BUNDLE - SIMPLIFIED ARCHITECTURE (v2.2+)
@@ -278,4 +277,3 @@ export function getUnifiedHelpers(context?: HelperContext): string {
     '// ===== END HELPERS =====',
   ].join('\n');
 }
-

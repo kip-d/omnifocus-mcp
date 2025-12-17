@@ -37,7 +37,7 @@ async function main() {
   const taskId = createResult.taskId;
 
   // Wait for task to be persisted
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Step 2: Query tags via bridge (should be empty)
   console.log('\n🔍 Step 2: Querying tags (should be empty)...');
@@ -59,7 +59,7 @@ async function main() {
   console.log('📊 Tags before update:', query1);
 
   // Wait before update
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Step 3: Set tags via bridge
   console.log('\n🏷️  Step 3: Setting tags via bridge...');
@@ -93,7 +93,7 @@ async function main() {
 
   // Wait for persistence
   console.log('\n⏱️  Waiting 2 seconds for OmniFocus to persist changes...');
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   // Step 4: Query tags again via bridge
   console.log('\n🔍 Step 4: Querying tags after update...');

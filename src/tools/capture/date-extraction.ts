@@ -88,7 +88,9 @@ function findDeferDate(text: string): string | undefined {
 
   // Pattern: "follow up [with X]" - treat as defer date with natural language date
   if (/\bfollow up\b/i.test(text)) {
-    const followUpMatch = text.match(/follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
+    const followUpMatch = text.match(
+      /follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+    );
     if (followUpMatch) {
       const parsed = parseRelativeDate(followUpMatch[1]);
       if (parsed) {
@@ -241,22 +243,25 @@ function parseSpecificDate(dateStr: string): Date | undefined {
   if (slashMatch) {
     const [, month, day, year] = slashMatch;
     const currentYear = new Date().getFullYear();
-    return new Date(
-      year ? parseInt(year) : currentYear,
-      parseInt(month) - 1,
-      parseInt(day),
-    );
+    return new Date(year ? parseInt(year) : currentYear, parseInt(month) - 1, parseInt(day));
   }
 
   // Month name format: "October 15", "Oct 15"
   const monthNames = [
-    'january', 'february', 'march', 'april', 'may', 'june',
-    'july', 'august', 'september', 'october', 'november', 'december',
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
   ];
-  const monthAbbr = [
-    'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-    'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
-  ];
+  const monthAbbr = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
   for (let i = 0; i < monthNames.length; i++) {
     const fullPattern = new RegExp(`\\b${monthNames[i]}\\s+(\\d{1,2})\\b`, 'i');
@@ -287,4 +292,3 @@ function formatDate(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-

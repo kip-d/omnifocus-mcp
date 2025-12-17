@@ -18,11 +18,11 @@ const tests = [
         name: 'list_projects',
         arguments: {
           status: ['active'],
-          limit: 5
-        }
+          limit: 5,
+        },
       },
-      id: 1
-    }
+      id: 1,
+    },
   },
   {
     name: 'Invalid project status',
@@ -32,11 +32,11 @@ const tests = [
       params: {
         name: 'list_projects',
         arguments: {
-          status: ['active', 'invalid_status']
-        }
+          status: ['active', 'invalid_status'],
+        },
       },
-      id: 2
-    }
+      id: 2,
+    },
   },
   {
     name: 'Invalid create_project - missing name',
@@ -46,11 +46,11 @@ const tests = [
       params: {
         name: 'create_project',
         arguments: {
-          folder: 'Work'
-        }
+          folder: 'Work',
+        },
       },
-      id: 3
-    }
+      id: 3,
+    },
   },
   {
     name: 'Invalid update_project - no updates',
@@ -61,18 +61,18 @@ const tests = [
         name: 'update_project',
         arguments: {
           projectId: 'abc123',
-          updates: {}
-        }
+          updates: {},
+        },
       },
-      id: 4
-    }
-  }
+      id: 4,
+    },
+  },
 ];
 
 async function runTest() {
   const proc = spawn('node', [serverPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, LOG_LEVEL: 'error' }
+    env: { ...process.env, LOG_LEVEL: 'error' },
   });
 
   let output = '';
@@ -86,34 +86,34 @@ async function runTest() {
     method: 'initialize',
     params: {
       protocolVersion: '2024-11-05',
-      capabilities: {}
+      capabilities: {},
     },
-    id: 0
+    id: 0,
   };
-  
+
   proc.stdin.write(JSON.stringify(initRequest) + '\n');
 
   // Wait for initialization
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Run tests
   for (const test of tests) {
     console.log(`\n📝 Test: ${test.name}`);
     console.log('Request:', JSON.stringify(test.request.params, null, 2));
-    
+
     output = '';
     proc.stdin.write(JSON.stringify(test.request) + '\n');
-    
+
     // Wait for response
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     // Parse last response
     const lines = output.trim().split('\n');
     const lastLine = lines[lines.length - 1];
-    
+
     try {
       const response = JSON.parse(lastLine);
-      
+
       if (response.error) {
         console.log('❌ Error:', response.error.message);
         if (response.error.data?.validation_errors) {

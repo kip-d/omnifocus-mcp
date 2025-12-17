@@ -1,6 +1,7 @@
 # Using Xcode Instruments to Profile the OmniFocus MCP Server
 
-This guide explains how to use Apple's Xcode Instruments to understand the *actual* workload patterns and validate our multi-tasking analysis for the OmniFocus MCP server.
+This guide explains how to use Apple's Xcode Instruments to understand the _actual_ workload patterns and validate our
+multi-tasking analysis for the OmniFocus MCP server.
 
 ## Table of Contents
 
@@ -45,11 +46,13 @@ xctrace help
 ### A. Time Profiler (Most Important)
 
 **What it shows:**
+
 - Exact breakdown of where CPU time is spent
 - Call trees showing function hierarchies
 - Per-thread CPU usage
 
 **How to use it:**
+
 ```bash
 # Add Time Profiler instrument to your trace
 # Run several MCP operations while recording:
@@ -59,6 +62,7 @@ xctrace help
 ```
 
 **What to look for:**
+
 ```
 Expected pattern:
 ├─ Node.js event loop: ~5-10% (handling MCP protocol)
@@ -68,19 +72,22 @@ Expected pattern:
 Actual osascript CPU time won't show here (it's a separate process)!
 ```
 
-**Key insight:** Time Profiler will show you that the MCP server itself is mostly *waiting*, not computing. The real work happens in osascript child processes.
+**Key insight:** Time Profiler will show you that the MCP server itself is mostly _waiting_, not computing. The real
+work happens in osascript child processes.
 
 ---
 
 ### B. System Trace (Validates Multi-Tasking Analysis)
 
 **What it shows:**
+
 - CPU core utilization per core
 - Context switches and thread scheduling
 - Which cores are running which processes
 - Scheduler delays and preemption
 
 **How to use it:**
+
 ```bash
 # Start System Trace
 # Simulate heavy multi-tasking:
@@ -93,6 +100,7 @@ Actual osascript CPU time won't show here (it's a separate process)!
 **What to look for:**
 
 **Light load scenario (<8 cores active):**
+
 ```
 Cores 0-7:   ████░░░░░░░░ (50% utilized)
 MCP request arrives
@@ -101,6 +109,7 @@ Result:      No scheduling delays, full turbo frequency
 ```
 
 **Heavy load scenario (>14 cores active on M4 Pro):**
+
 ```
 All 14 cores: ████████████ (100% utilized)
 MCP request arrives
@@ -108,19 +117,22 @@ Cores 0-13:  ████████████ (MCP must wait for available c
 Result:      Context switching overhead, reduced clock speed, delays
 ```
 
-**Key insight:** System Trace will *visually show* the core contention we documented. You'll see the MCP server process waiting in the scheduler queue when all cores are busy.
+**Key insight:** System Trace will _visually show_ the core contention we documented. You'll see the MCP server process
+waiting in the scheduler queue when all cores are busy.
 
 ---
 
 ### C. CPU Counters (Advanced - Validates Architecture Claims)
 
 **What it shows:**
+
 - Instructions per cycle (IPC)
 - Cache hit/miss rates
 - Branch mispredictions
 - Memory stalls
 
 **How to use it:**
+
 ```bash
 # Requires selecting specific CPU performance counters
 # M4 vs M2 comparison:
@@ -130,6 +142,7 @@ Result:      Context switching overhead, reduced clock speed, delays
 ```
 
 **What to look for:**
+
 ```
 M4 Pro (better IPC):
 - Instructions/Cycle: ~4.5-5.0
@@ -142,18 +155,21 @@ M2 Ultra (better bandwidth):
 - Memory bandwidth: 800 GB/s utilized during cache warming
 ```
 
-**Key insight:** This validates our claim that M4's superior cache hierarchy and IPC matter more than raw bandwidth for compute operations.
+**Key insight:** This validates our claim that M4's superior cache hierarchy and IPC matter more than raw bandwidth for
+compute operations.
 
 ---
 
 ### D. Activity Monitor Integration
 
 **What it shows:**
+
 - Real-time CPU usage per core
 - Energy impact
 - Thermal pressure
 
 **How to use it:**
+
 ```bash
 # Open Activity Monitor alongside Instruments
 # View → CPU History → Show CPU History in Window
@@ -165,6 +181,7 @@ M2 Ultra (better bandwidth):
 ```
 
 **What to look for:**
+
 ```
 M4 Pro under light load:
 - MCP server runs on P-core (cores 0-9)
@@ -207,6 +224,7 @@ npm run benchmark -- --machine-name instruments-test
 ```
 
 **Expected findings:**
+
 - Most time in `child_process.spawn` (waiting for osascript)
 - osascript processes show up as separate entries
 - CPU usage spikes when osascript returns (JSON parsing)
@@ -237,12 +255,14 @@ npm run benchmark -- --machine-name instruments-test
 ```
 
 **Expected findings on M4 Pro (14 cores):**
+
 - MCP process frequently preempted
 - Bounces between cores (poor cache locality)
 - Lower sustained clock speeds
 - Many red gaps (waiting for CPU time)
 
 **Expected findings on M2 Ultra (24 cores):**
+
 - MCP process stays on same core
 - Minimal preemption
 - Full turbo clock speeds maintained
@@ -252,7 +272,8 @@ npm run benchmark -- --machine-name instruments-test
 
 ### Scenario 3: Profile osascript Separately
 
-**The Challenge:** Instruments attached to Node.js won't profile the osascript child processes where the real work happens.
+**The Challenge:** Instruments attached to Node.js won't profile the osascript child processes where the real work
+happens.
 
 **Solution: Profile osascript directly**
 
@@ -277,6 +298,7 @@ xctrace record --template 'Time Profiler' --launch osascript -- -l JavaScript te
 ```
 
 **What to look for:**
+
 ```
 Call tree will show:
 ├─ osascript startup: ~100ms
@@ -288,7 +310,8 @@ Call tree will show:
 └─ JSON serialization: ~50ms
 ```
 
-**Key insight:** This shows *exactly* where the JXA execution time goes and validates that property access (not API calls) is the bottleneck.
+**Key insight:** This shows _exactly_ where the JXA execution time goes and validates that property access (not API
+calls) is the bottleneck.
 
 ---
 
@@ -305,6 +328,7 @@ Call tree will show:
 ```
 
 **What to measure:**
+
 ```
 Operation: Heavy analytics (productivity stats)
 
@@ -324,7 +348,8 @@ M2 Ultra (heavy multi-tasking):
 - Energy: ~185 joules
 ```
 
-**Key insight:** Under heavy multi-tasking, M4 Pro not only gets slower but also less efficient (uses more energy per operation).
+**Key insight:** Under heavy multi-tasking, M4 Pro not only gets slower but also less efficient (uses more energy per
+operation).
 
 ---
 
@@ -406,6 +431,7 @@ This validates our 20-50% slowdown claim!
 # Instruments Profiling Results
 
 ## Methodology
+
 - Tool: Xcode Instruments 15.x
 - Template: Time Profiler + System Trace
 - Duration: 60 seconds per scenario
@@ -414,36 +440,43 @@ This validates our 20-50% slowdown claim!
 ## Key Findings
 
 ### CPU Time Distribution
+
 [Screenshot from Time Profiler]
 
 ### Core Utilization Patterns
+
 [Screenshot from System Trace]
 
 ### Multi-Tasking Impact
+
 [Before/after comparison]
 
 ## Validation of Architecture Claims
+
 - ✅ JXA property access is 75% of execution time
 - ✅ M4 Pro shows 2-5x context switches under load
 - ✅ Energy consumption increases 60% under contention
 
 ## Data Tables
 
-| Scenario | Context Switches | Avg Clock Speed | Duration |
-|----------|-----------------|-----------------|----------|
-| Isolated | 3 | 3.9 GHz | 2.7s |
-| Light load | 12 | 3.8 GHz | 2.8s |
-| Heavy load | 143 | 3.4 GHz | 3.6s |
+| Scenario   | Context Switches | Avg Clock Speed | Duration |
+| ---------- | ---------------- | --------------- | -------- |
+| Isolated   | 3                | 3.9 GHz         | 2.7s     |
+| Light load | 12               | 3.8 GHz         | 2.8s     |
+| Heavy load | 143              | 3.4 GHz         | 3.6s     |
 
 ## Screenshots
 
 ### Time Profiler - Call Tree
+
 [Insert screenshot showing Node.js call stack]
 
 ### System Trace - Core Utilization
+
 [Insert screenshot showing all cores with MCP operation highlighted]
 
 ### Energy Log - Power Consumption
+
 [Insert screenshot showing power usage over time]
 ```
 
@@ -510,21 +543,25 @@ open -a Instruments
 ## Summary: What You'll Learn
 
 ### Time Profiler
+
 - Exact breakdown of where MCP server spends time
 - Validates that most time is waiting for osascript
 - Shows JSON parsing overhead
 
 ### System Trace
+
 - Visual proof of core contention under multi-tasking
 - Shows scheduler delays and context switching
 - Validates M2 Ultra's advantage when cores are busy
 
 ### CPU Counters
+
 - Confirms M4's superior IPC
 - Shows cache efficiency differences
 - Validates architectural advantages
 
 ### Energy Log
+
 - Real power consumption data
 - Thermal pressure under sustained load
 - Efficiency comparison between machines
@@ -534,6 +571,7 @@ open -a Instruments
 ## Common Instruments Templates
 
 ### Quick Performance Check
+
 ```
 Template: Time Profiler
 Duration: 30 seconds
@@ -541,6 +579,7 @@ Use case: Fast validation of where time is spent
 ```
 
 ### Deep Multi-tasking Analysis
+
 ```
 Template: System Trace + Activity Monitor
 Duration: 120 seconds
@@ -548,6 +587,7 @@ Use case: Understanding core contention and scheduling
 ```
 
 ### Architecture Validation
+
 ```
 Template: CPU Counters + Time Profiler
 Duration: 60 seconds
@@ -555,6 +595,7 @@ Use case: Validating IPC and cache performance claims
 ```
 
 ### Energy Efficiency Study
+
 ```
 Template: Energy Log + System Trace
 Duration: 300 seconds (5 minutes)
@@ -568,6 +609,7 @@ Use case: Comparing power consumption across machines
 ### Issue: Can't attach to Node.js process
 
 **Solution:**
+
 ```bash
 # Give Terminal/Instruments permissions in:
 # System Preferences → Security & Privacy → Developer Tools
@@ -576,6 +618,7 @@ Use case: Comparing power consumption across machines
 ### Issue: osascript processes don't show up
 
 **Solution:**
+
 - osascript child processes are ephemeral
 - Use System Trace to see all processes
 - Or profile osascript directly (Scenario 3)
@@ -583,6 +626,7 @@ Use case: Comparing power consumption across machines
 ### Issue: Too much data, trace file huge
 
 **Solution:**
+
 ```bash
 # Limit recording time
 xctrace record --time-limit 30s ...
@@ -594,6 +638,7 @@ xctrace record --time-limit 30s ...
 ### Issue: Can't see individual cores
 
 **Solution:**
+
 ```bash
 # In Instruments:
 # View → Inspector → Recording Options

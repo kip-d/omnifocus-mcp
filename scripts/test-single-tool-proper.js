@@ -24,18 +24,18 @@ const toolName = args[0];
 const toolArgs = args[1] ? JSON.parse(args[1]) : {};
 
 console.log(`🔧 Testing Tool: ${toolName} (Proper MCP Initialization)`);
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 console.log(`Arguments: ${JSON.stringify(toolArgs, null, 2)}`);
 console.log('');
 
 // Launch MCP server
 const server = spawn('node', ['dist/index.js'], {
-  stdio: ['pipe', 'pipe', 'inherit']
+  stdio: ['pipe', 'pipe', 'inherit'],
 });
 
 const rl = createInterface({
   input: server.stdout,
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
 let requestId = 1;
@@ -46,10 +46,10 @@ let testStartTime;
 const cleanup = () => {
   if (cleanupDone) return;
   cleanupDone = true;
-  
+
   server.stdin.end();
   server.kill('SIGTERM');
-  
+
   setTimeout(() => {
     if (!server.killed) {
       server.kill('SIGKILL');
@@ -64,9 +64,9 @@ const sendRequest = (method, params = {}) => {
     jsonrpc: '2.0',
     method,
     params,
-    id: requestId++
+    id: requestId++,
   };
-  
+
   console.log(`📨 Sending: ${method}${params.name ? ` (${params.name})` : ''}`);
   server.stdin.write(JSON.stringify(request) + '\n');
 };
@@ -75,43 +75,43 @@ const sendRequest = (method, params = {}) => {
 rl.on('line', (line) => {
   try {
     const response = JSON.parse(line);
-    
+
     if (response.id === 1) {
       // After initialize, call our target tool
       console.log('✅ MCP server initialized');
       console.log('⏱️  Starting tool test...');
       testStartTime = Date.now();
-      
+
       sendRequest('tools/call', {
         name: toolName,
-        arguments: toolArgs
+        arguments: toolArgs,
       });
     } else if (response.id === 2) {
       // Our tool response
       const executionTime = Date.now() - testStartTime;
       console.log(`✅ Tool completed in ${executionTime}ms`);
       console.log('');
-      
+
       console.log('📋 MCP Response:');
       console.log(JSON.stringify(response, null, 2));
       console.log('');
-      
+
       if (response.result && response.result.content && response.result.content[0]) {
         console.log('🔍 Tool Response:');
         try {
           const toolResponse = JSON.parse(response.result.content[0].text);
           console.log(JSON.stringify(toolResponse, null, 2));
-          
+
           // Analysis
           console.log('');
           console.log('📊 Analysis:');
           if (toolResponse.success) {
             console.log('✅ Status: SUCCESS');
-            
+
             if (toolResponse.summary) {
               console.log(`📊 Summary: ${JSON.stringify(toolResponse.summary, null, 2)}`);
             }
-            
+
             if (toolResponse.data) {
               if (Array.isArray(toolResponse.data)) {
                 console.log(`📝 Data: Array with ${toolResponse.data.length} items`);
@@ -119,7 +119,7 @@ rl.on('line', (line) => {
                 console.log(`📝 Data: Object with keys: ${Object.keys(toolResponse.data).join(', ')}`);
               }
             }
-            
+
             if (toolResponse.metadata) {
               const meta = toolResponse.metadata;
               console.log(`⏱️  Query time: ${meta.query_time_ms || meta.operation_time_ms || 'N/A'}ms`);
@@ -131,7 +131,6 @@ rl.on('line', (line) => {
             console.log(`🚫 Error: ${toolResponse.error?.message || toolResponse.message || 'Unknown error'}`);
             console.log(`📍 Code: ${toolResponse.error?.code || 'N/A'}`);
           }
-          
         } catch (e) {
           console.log('❌ Could not parse tool response as JSON:');
           console.log(`Error: ${e.message}`);
@@ -142,7 +141,7 @@ rl.on('line', (line) => {
         console.log(`Message: ${response.error.message}`);
         console.log(`Code: ${response.error.code}`);
       }
-      
+
       // Test complete
       cleanup();
     }
@@ -157,8 +156,8 @@ sendRequest('initialize', {
   capabilities: {},
   clientInfo: {
     name: 'mcp-test-client',
-    version: '1.0.0'
-  }
+    version: '1.0.0',
+  },
 });
 
 // Timeout after 15 seconds

@@ -52,13 +52,15 @@ function getRecommendations(data: OverdueDataUnion): string[] {
   return data.recommendations || [];
 }
 
-function getPatternsWithValue(data: OverdueDataUnion): Array<{ type: string; value: string; count: number; percentage: number; }> {
+function getPatternsWithValue(
+  data: OverdueDataUnion,
+): Array<{ type: string; value: string; count: number; percentage: number }> {
   if (isTestMockOverdueFormat(data)) {
     return data.patterns;
   }
 
   // Production format has PatternData which already includes type and value
-  return (data.patterns || []).map(p => ({
+  return (data.patterns || []).map((p) => ({
     type: p.type || 'unknown',
     value: p.value || 'unknown',
     count: p.count || 0,
@@ -82,7 +84,8 @@ function getTaskDaysOverdue(task: OverdueDataUnion['overdueTasks'][0]): number {
 
 export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2> {
   name = 'analyze_overdue';
-  description = 'Analyze overdue tasks for patterns and bottlenecks. Returns summary with key findings first, then detailed analysis.';
+  description =
+    'Analyze overdue tasks for patterns and bottlenecks. Returns summary with key findings first, then detailed analysis.';
   schema = OverdueAnalysisSchemaV2;
   meta = {
     // Phase 1: Essential metadata
@@ -110,11 +113,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
     const timer = new OperationTimerV2();
 
     try {
-      const {
-        includeRecentlyCompleted = true,
-        groupBy = 'project',
-        limit = 100,
-      } = args;
+      const { includeRecentlyCompleted = true, groupBy = 'project', limit = 100 } = args;
 
       // Create cache key
       const cacheKey = `overdue_v2_${includeRecentlyCompleted}_${groupBy}_${limit}`;
@@ -142,12 +141,20 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
       const result = await this.execJson<OverdueDataUnion>(script);
 
       if (isScriptError(result)) {
-        return createErrorResponseV2('analyze_overdue', 'ANALYSIS_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
+        return createErrorResponseV2(
+          'analyze_overdue',
+          'ANALYSIS_ERROR',
+          result.error || 'Script execution failed',
+          undefined,
+          result.details,
+          timer.toMetadata(),
+        );
       }
 
       // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
       const envelope = result.data as { ok?: boolean; v?: string; data?: OverdueDataUnion } | OverdueDataUnion;
-      const scriptData: OverdueDataUnion = ('data' in envelope && envelope.data) ? envelope.data : (envelope as OverdueDataUnion);
+      const scriptData: OverdueDataUnion =
+        'data' in envelope && envelope.data ? envelope.data : (envelope as OverdueDataUnion);
       // Remove unused total variable
       const responseData: OverdueAnalysisDataV2 = {
         stats: {
@@ -157,7 +164,7 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
             averageDaysOverdue: Number(scriptData.summary.averageDaysOverdue ?? 0),
             oldestOverdueDate: scriptData.summary.oldestOverdueDate ?? '',
           },
-          overdueTasks: (scriptData.overdueTasks ?? []).map(task => ({
+          overdueTasks: (scriptData.overdueTasks ?? []).map((task) => ({
             id: String(task.id || ''),
             name: String(task.name || ''),
             dueDate: task.dueDate ?? null,
@@ -175,7 +182,10 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
               // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               count: typeof value === 'object' && value !== null && 'count' in value ? (value as any).count || 0 : 0,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-              averageDaysOverdue: typeof value === 'object' && value !== null && 'averageDaysOverdue' in value ? (value as any).averageDaysOverdue : undefined,
+              averageDaysOverdue:
+                typeof value === 'object' && value !== null && 'averageDaysOverdue' in value
+                  ? (value as any).averageDaysOverdue
+                  : undefined,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               tasks: typeof value === 'object' && value !== null && 'tasks' in value ? (value as any).tasks : undefined,
             },
@@ -189,18 +199,12 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
       // Generate key findings
       const keyFindings = this.extractKeyFindings(responseData);
 
-      return createAnalyticsResponseV2(
-        'analyze_overdue',
-        responseData,
-        'Overdue Task Analysis',
-        keyFindings,
-        {
-          from_cache: false,
-          groupBy,
-          includeCompleted: includeRecentlyCompleted,
-          ...timer.toMetadata(),
-        },
-      );
+      return createAnalyticsResponseV2('analyze_overdue', responseData, 'Overdue Task Analysis', keyFindings, {
+        from_cache: false,
+        groupBy,
+        includeCompleted: includeRecentlyCompleted,
+        ...timer.toMetadata(),
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -248,13 +252,23 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
     // Add pattern insights with defensive null checks
     if (data?.stats?.patterns && Array.isArray(data.stats.patterns) && data.stats.patterns.length > 0) {
       const topPattern = data.stats.patterns[0];
-      if (topPattern && typeof topPattern === 'object' && topPattern.type && typeof topPattern.count === 'number' && topPattern.count > 0) {
+      if (
+        topPattern &&
+        typeof topPattern === 'object' &&
+        topPattern.type &&
+        typeof topPattern.count === 'number' &&
+        topPattern.count > 0
+      ) {
         findings.push(`Most overdue in: ${topPattern.type} (${topPattern.count} tasks)`);
       }
     }
 
     // Add grouped analysis insights with defensive null checks
-    if (data?.groupedAnalysis && typeof data.groupedAnalysis === 'object' && Object.keys(data.groupedAnalysis).length > 0) {
+    if (
+      data?.groupedAnalysis &&
+      typeof data.groupedAnalysis === 'object' &&
+      Object.keys(data.groupedAnalysis).length > 0
+    ) {
       const groups = Object.entries(data.groupedAnalysis)
         .filter(([_, info]) => info && typeof info === 'object' && typeof info.count === 'number')
         .sort((a, b) => (b[1].count || 0) - (a[1].count || 0))
@@ -268,7 +282,11 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
     }
 
     // Add recommendations if available with defensive null checks
-    if (data?.stats?.insights?.topRecommendations && Array.isArray(data.stats.insights.topRecommendations) && data.stats.insights.topRecommendations.length > 0) {
+    if (
+      data?.stats?.insights?.topRecommendations &&
+      Array.isArray(data.stats.insights.topRecommendations) &&
+      data.stats.insights.topRecommendations.length > 0
+    ) {
       const recommendations = data.stats.insights.topRecommendations;
       // Type assertion is safe here - we've verified it's a non-empty array
       const firstRecommendation = recommendations[0] as unknown;
@@ -279,5 +297,4 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
 
     return findings.length > 0 ? findings : ['No overdue tasks found'];
   }
-
 }

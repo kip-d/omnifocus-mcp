@@ -4,7 +4,8 @@ Welcome! This guide will help you start using your AI assistant as your personal
 
 ## What This Does
 
-This MCP server lets you talk to your AI assistant (like Claude) in plain English about your tasks, and it handles all the OmniFocus complexity for you. Think of it as having an executive assistant who:
+This MCP server lets you talk to your AI assistant (like Claude) in plain English about your tasks, and it handles all
+the OmniFocus complexity for you. Think of it as having an executive assistant who:
 
 - Knows what's on your plate
 - Reminds you what's urgent
@@ -17,6 +18,7 @@ You don't need to be an OmniFocus expert - just ask questions naturally.
 ## Prerequisites
 
 Before you begin, make sure you have:
+
 - **OmniFocus 4.6+** installed on your Mac
 - **Node.js 18+** installed ([download here](https://nodejs.org/))
 - **An MCP-compatible AI assistant** (Claude Desktop, Claude Code, Cursor, Windsurf, etc.)
@@ -57,7 +59,8 @@ npm run build
 - **Claude Code**: Add to VS Code settings (`.vscode/settings.json` or User Settings)
 - **Cursor**: Settings > MCP or create `.cursor/mcp.json`
 - **Windsurf**: Configure via MCP settings
-- **Cline**: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- **Cline**:
+  `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 
 All use the same configuration format - see [Configuration Details](./claude-desktop-config.md) for specifics.
 
@@ -66,6 +69,7 @@ All use the same configuration format - see [Configuration Details](./claude-des
 When you first use the server, macOS will ask for permission to control OmniFocus. Click "OK" to allow this.
 
 **If you don't see the permission prompt:**
+
 1. Open **System Settings** > **Privacy & Security** > **Automation**
 2. Find your AI assistant (Terminal, Code, etc.)
 3. Enable **OmniFocus** access
@@ -78,9 +82,11 @@ Now comes the fun part. Open your AI assistant (like Claude Desktop) and try the
 
 > **You:** "What's in my OmniFocus inbox?"
 
-**What should happen:** Claude will list any tasks currently in your OmniFocus inbox. If your inbox is empty, Claude will tell you that too.
+**What should happen:** Claude will list any tasks currently in your OmniFocus inbox. If your inbox is empty, Claude
+will tell you that too.
 
-**If Claude says:** "I don't have access to OmniFocus" or gives an error → See [Troubleshooting](#quick-troubleshooting) below.
+**If Claude says:** "I don't have access to OmniFocus" or gives an error → See [Troubleshooting](#quick-troubleshooting)
+below.
 
 ### Test 2: See Today's Tasks
 
@@ -129,6 +135,7 @@ Just talk naturally! Here are examples, but don't memorize these - ask in your o
 ### Capturing Meeting Notes
 
 > **You:** "I just got out of a meeting. Here are my notes:
+>
 > - Send proposal to client by Friday
 > - Call Sarah about the budget
 > - Review Q4 metrics before next week
@@ -156,7 +163,8 @@ Your AI assistant understands these OmniFocus terms, so you can use them natural
 - **Parallel Projects**: Tasks can be done in any order
 - **Perspectives**: Saved views of your tasks (like "Today", "Flagged", "Overdue")
 
-**Don't worry if you don't know all these!** Just describe what you want in plain English, and Claude will figure out the OmniFocus details.
+**Don't worry if you don't know all these!** Just describe what you want in plain English, and Claude will figure out
+the OmniFocus details.
 
 ## Tips for Natural Conversation
 
@@ -170,12 +178,8 @@ Your AI assistant understands these OmniFocus terms, so you can use them natural
 
 You can have a natural back-and-forth:
 
-> **You:** "What's due today?"
-> **Claude:** *[shows 5 tasks]*
-> **You:** "Flag the budget review one as urgent"
-> **Claude:** *[flags it]*
-> **You:** "Actually, move it to tomorrow instead"
-> **Claude:** *[reschedules it]*
+> **You:** "What's due today?" **Claude:** _[shows 5 tasks]_ **You:** "Flag the budget review one as urgent" **Claude:**
+> _[flags it]_ **You:** "Actually, move it to tomorrow instead" **Claude:** _[reschedules it]_
 
 ### Be as Casual or Detailed as You Want
 
@@ -183,13 +187,15 @@ Both of these work fine:
 
 **Casual:** "Remind me to email John"
 
-**Detailed:** "Create a task in my Work project to email John about the Q4 budget, tag it as urgent, and make it due this Friday at 5pm"
+**Detailed:** "Create a task in my Work project to email John about the Q4 budget, tag it as urgent, and make it due
+this Friday at 5pm"
 
 ## Quick Troubleshooting
 
 ### "I don't have access to OmniFocus" or Permission Errors
 
 **Fix:**
+
 1. Make sure OmniFocus is running
 2. Check System Settings > Privacy & Security > Automation
 3. Enable OmniFocus for your AI assistant's app
@@ -198,6 +204,7 @@ Both of these work fine:
 ### Claude says "Tool not found" or doesn't see OmniFocus
 
 **Fix:**
+
 1. Make sure you ran `npm run build`
 2. Check your configuration file has the correct path
 3. **Fully quit and restart** your AI assistant (don't just refresh)
@@ -205,6 +212,7 @@ Both of these work fine:
 ### OmniFocus is running but nothing works
 
 **Fix:**
+
 1. Close any dialog boxes in OmniFocus (they can block access)
 2. Make sure OmniFocus isn't showing a dialog asking for sync resolution
 3. Try: "Check if OmniFocus is accessible" (Claude will run diagnostics)
@@ -212,6 +220,7 @@ Both of these work fine:
 ### Tasks appear in Claude but not in OmniFocus
 
 **Fix:**
+
 - Wait 30 seconds for cache to sync
 - Check OmniFocus isn't filtered to hide the task
 - Look in Inbox if you can't find it elsewhere
@@ -238,7 +247,26 @@ Your AI assistant has access to several pre-built workflows:
 
 **In Claude Desktop:** Click the "+" button and select "Add from omnifocus" to see available prompts.
 
-**In Claude Code or other assistants:** Just ask naturally - for example, "Help me process my inbox using the GTD method"
+**In Claude Code or other assistants:** Just ask naturally - for example, "Help me process my inbox using the GTD
+method"
+
+### Remote Access (Windows to Mac)
+
+Want to use Claude Desktop on a Windows PC to access OmniFocus on your Mac? The HTTP transport mode enables this:
+
+```bash
+# On your Mac - start in HTTP mode
+node dist/index.js --http --port 3000
+```
+
+Then configure Claude Desktop on Windows to connect to your Mac's IP address or Tailscale hostname.
+
+See **[HTTP Transport Guide](./HTTP-TRANSPORT.md)** for complete setup instructions including:
+
+- Secure access with authentication tokens
+- Tailscale/VPN configuration
+- Running as a background service
+- Troubleshooting remote connections
 
 ### Advanced Features
 
@@ -249,7 +277,7 @@ Once you're comfortable with basics, you can explore:
 - **Analytics**: "Show me my productivity stats for this week"
 - **Perspective queries**: "Show me my custom 'Evening Review' perspective"
 
-See [API Reference for LLMs](./API-REFERENCE-LLM.md) for complete capabilities.
+See [API Reference for LLMs](../api/API-REFERENCE-LLM.md) for complete capabilities.
 
 ## For Developers
 
@@ -280,6 +308,7 @@ If you run into issues:
 
 ## Remember
 
-**This is your executive assistant.** Just talk naturally about what you need to do, and let the AI handle the OmniFocus complexity. You don't need to learn every feature - discover them as you need them.
+**This is your executive assistant.** Just talk naturally about what you need to do, and let the AI handle the OmniFocus
+complexity. You don't need to learn every feature - discover them as you need them.
 
 Start simple, and explore more as you get comfortable. Enjoy having a personal productivity assistant!

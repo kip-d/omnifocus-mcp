@@ -1,7 +1,9 @@
 # OmniFocus Query Alternatives to flattenedTasks()
+
 ## Performance Optimization Guide
 
-**Problem:** `doc.flattenedTasks()` returns ALL tasks (1,599 in your case) and requires linear scanning to filter. This is slow, especially on thermally-constrained hardware like M2 Air.
+**Problem:** `doc.flattenedTasks()` returns ALL tasks (1,599 in your case) and requires linear scanning to filter. This
+is slow, especially on thermally-constrained hardware like M2 Air.
 
 ---
 
@@ -11,12 +13,13 @@
 
 ```javascript
 // OmniJS (in evaluateJavascript)
-inbox.forEach(task => {
+inbox.forEach((task) => {
   // Only inbox tasks, no scanning needed
 });
 ```
 
 **Use cases:**
+
 - "What's in my inbox?"
 - "Show me unprocessed tasks"
 
@@ -40,6 +43,7 @@ tag.remainingTasks.forEach(task => { ... });
 ```
 
 **Use cases:**
+
 - "Show me @Work tasks"
 - "What tasks are tagged with @Waiting?"
 
@@ -47,7 +51,8 @@ tag.remainingTasks.forEach(task => { ... });
 
 **Currently:** ❌ Not implemented - we scan all tasks then filter by tag
 
-**Potential improvement:** If user asks for tasks with specific tags, query via `tag.remainingTasks` instead of scanning flattenedTasks
+**Potential improvement:** If user asks for tasks with specific tags, query via `tag.remainingTasks` instead of scanning
+flattenedTasks
 
 ---
 
@@ -64,6 +69,7 @@ project.tasks.forEach(task => { ... });
 ```
 
 **Use cases:**
+
 - "Show me tasks in Project X"
 - "What's left in this project?"
 
@@ -80,12 +86,13 @@ project.tasks.forEach(task => { ... });
 ```javascript
 // Built-in perspectives have native collections
 const perspectives = {
-  Inbox: "inbox",
+  Inbox: 'inbox',
   // Others use custom filtering
 };
 ```
 
 **Use cases:**
+
 - "Show me my Forecast"
 - "What's in my Today perspective?"
 
@@ -100,15 +107,16 @@ const perspectives = {
 ### 5. **Folder-Based Queries** (Filter by folder hierarchy)
 
 ```javascript
-const folder = doc.flattenedFolders.byName("Folder Name");
+const folder = doc.flattenedFolders.byName('Folder Name');
 
 // Projects in this folder
-folder.flattenedProjects.forEach(project => {
+folder.flattenedProjects.forEach((project) => {
   // Then get tasks from each project
 });
 ```
 
 **Use cases:**
+
 - "Show me everything in the Work folder"
 
 **Performance:** Reduces project scope before getting tasks
@@ -123,7 +131,7 @@ folder.flattenedProjects.forEach(project => {
 
 ```javascript
 // This doesn't exist:
-doc.tasksWithDueDateBetween(startDate, endDate)
+doc.tasksWithDueDateBetween(startDate, endDate);
 ```
 
 **Workaround:** Still need to scan flattenedTasks and filter by date
@@ -132,7 +140,7 @@ doc.tasksWithDueDateBetween(startDate, endDate)
 
 ```javascript
 // This doesn't exist:
-doc.availableTasks
+doc.availableTasks;
 ```
 
 **Workaround:** Scan flattenedTasks and check `task.taskStatus === Task.Status.Available`
@@ -141,7 +149,7 @@ doc.availableTasks
 
 ```javascript
 // This doesn't exist:
-doc.flaggedTasks
+doc.flaggedTasks;
 ```
 
 **Workaround:** Scan flattenedTasks and check `task.flagged === true`
@@ -150,7 +158,7 @@ doc.flaggedTasks
 
 ```javascript
 // This doesn't exist:
-doc.tasksWhere({ flagged: true, dueDate: "<today" })
+doc.tasksWhere({ flagged: true, dueDate: '<today' });
 ```
 
 **Workaround:** Must scan and filter manually
@@ -162,6 +170,7 @@ doc.tasksWhere({ flagged: true, dueDate: "<today" })
 ### Problem: "Today's tasks" query (overdue OR due_today OR flagged)
 
 **Current implementation (slow):**
+
 ```javascript
 const allTasks = doc.flattenedTasks(); // Get ALL 1,599 tasks
 for (let i = 0; i < allTasks.length; i++) {
@@ -174,25 +183,26 @@ for (let i = 0; i < allTasks.length; i++) {
 ### Optimization Option 1: **Tag-based segmentation**
 
 If user consistently tags time-sensitive work:
+
 ```javascript
 // Get tag for urgent/today work
-const todayTag = flattenedTags.byName("Today");
+const todayTag = flattenedTags.byName('Today');
 const availableTasks = todayTag.availableTasks;
 
 // Much smaller set to scan
 ```
 
-**Pros:** Dramatically reduces scan size
-**Cons:** Requires user to tag appropriately
-**Applicability:** Limited - not how most people use OmniFocus
+**Pros:** Dramatically reduces scan size **Cons:** Requires user to tag appropriately **Applicability:** Limited - not
+how most people use OmniFocus
 
 ### Optimization Option 2: **Multi-pass filtered scanning**
 
 Instead of one linear scan, do multiple targeted scans:
+
 ```javascript
 // Pass 1: Get flagged tasks (usually small set)
 const flaggedTasks = [];
-flattenedTasks.forEach(task => {
+flattenedTasks.forEach((task) => {
   if (task.flagged && !task.completed) {
     flaggedTasks.push(task);
   }
@@ -200,7 +210,7 @@ flattenedTasks.forEach(task => {
 
 // Pass 2: Scan for due dates only
 const dueSoonTasks = [];
-flattenedTasks.forEach(task => {
+flattenedTasks.forEach((task) => {
   if (!task.completed && task.dueDate) {
     const dueTime = task.dueDate.getTime();
     if (dueTime < tomorrow.getTime()) {
@@ -212,13 +222,13 @@ flattenedTasks.forEach(task => {
 // Merge and deduplicate
 ```
 
-**Pros:** Can early-exit on flagged pass if enough results
-**Cons:** Still scans all tasks, just in multiple passes
+**Pros:** Can early-exit on flagged pass if enough results **Cons:** Still scans all tasks, just in multiple passes
 **Applicability:** ❌ Actually SLOWER - scanning twice!
 
 ### Optimization Option 3: **OmniJS bridge for better performance**
 
 Use evaluateJavascript with OmniJS for faster property access:
+
 ```javascript
 const script = `
   const results = [];
@@ -251,9 +261,8 @@ const script = `
 const results = app.evaluateJavascript(script);
 ```
 
-**Pros:** Faster property access in OmniJS (you're already using this!)
-**Cons:** Still scans all tasks, can't truly early-exit from forEach
-**Applicability:** ✅ Already implemented - this is what you're using!
+**Pros:** Faster property access in OmniJS (you're already using this!) **Cons:** Still scans all tasks, can't truly
+early-exit from forEach **Applicability:** ✅ Already implemented - this is what you're using!
 
 ---
 
@@ -262,11 +271,13 @@ const results = app.evaluateJavascript(script);
 ### For "Today's tasks" type queries, there's NO way to avoid scanning all tasks
 
 **Why OmniFocus doesn't provide filtered collections:**
+
 1. **Dynamic nature** - "Due today" changes every day at midnight
 2. **Complex rules** - Deferred dates, project availability, tags, etc.
 3. **Database architecture** - Likely not indexed by arbitrary date ranges
 
 **The only real optimization is:**
+
 - ✅ Use OmniJS bridge (faster than JXA) - **Already doing this**
 - ✅ Early exit when limit reached - **Can't with forEach**
 - ✅ Skip completed tasks immediately - **Already doing this**
@@ -279,15 +290,15 @@ const results = app.evaluateJavascript(script);
 ### 1. **Project-filtered queries**
 
 **Current code (hypothetical):**
+
 ```javascript
 // If user asks for tasks in specific project
 const allTasks = doc.flattenedTasks();
-const filtered = allTasks.filter(task =>
-  task.containingProject?.id === projectId
-);
+const filtered = allTasks.filter((task) => task.containingProject?.id === projectId);
 ```
 
 **Optimized:**
+
 ```javascript
 // Query project directly
 const project = doc.flattenedProjects.byIdentifier(projectId);
@@ -299,18 +310,18 @@ const tasks = project ? project.flattenedTasks : [];
 ### 2. **Tag-filtered queries**
 
 **Current code:**
+
 ```javascript
 // If user asks for tasks with specific tag
 const allTasks = doc.flattenedTasks();
-const filtered = allTasks.filter(task =>
-  task.tags.some(t => t.name === "Work")
-);
+const filtered = allTasks.filter((task) => task.tags.some((t) => t.name === 'Work'));
 ```
 
 **Optimized:**
+
 ```javascript
 // Query tag directly
-const tag = doc.flattenedTags.byName("Work");
+const tag = doc.flattenedTags.byName('Work');
 const tasks = tag ? tag.remainingTasks : [];
 ```
 
@@ -319,36 +330,40 @@ const tasks = tag ? tag.remainingTasks : [];
 ### 3. **Inbox queries**
 
 **Current code:**
+
 ```javascript
 // If mode === 'inbox'
 const allTasks = doc.flattenedTasks();
-const inboxTasks = allTasks.filter(task => task.inInbox);
+const inboxTasks = allTasks.filter((task) => task.inInbox);
 ```
 
 **Optimized:**
+
 ```javascript
 // Use inbox collection directly
 const inboxTasks = inbox; // OmniJS global
 ```
 
-**Impact:** Scans 10-100 tasks instead of 1,599
-**Status:** ✅ Already implemented in perspectives
+**Impact:** Scans 10-100 tasks instead of 1,599 **Status:** ✅ Already implemented in perspectives
 
 ---
 
 ## Recommendations for Your MCP Server
 
 ### ✅ Already Optimized
+
 - Inbox queries via `inbox` collection
 - OmniJS bridge for fast property access
 - Early exits on completed tasks
 
 ### 🔄 Can Be Optimized
+
 1. **When `project` parameter provided:** Query `project.flattenedTasks` directly
 2. **When `tags` parameter provided:** Query `tag.remainingTasks` directly
 3. **When `mode=available`:** Could use `tag.availableTasks` if tags specified
 
 ### ❌ Cannot Be Optimized (API Limitation)
+
 - Date-based queries (overdue, due_today, upcoming)
 - Flagged-only queries
 - Complex combined queries ("today's tasks")
@@ -362,6 +377,7 @@ const inboxTasks = inbox; // OmniJS global
 Since we **cannot avoid scanning all tasks** for date/flag queries, we need other solutions:
 
 ### 1. **Chunked processing with cooling breaks** (Transparent to client)
+
 ```typescript
 async function scanTasksWithCooling(tasks: Task[], limit: number) {
   const results = [];
@@ -380,7 +396,7 @@ async function scanTasksWithCooling(tasks: Task[], limit: number) {
 
     // Brief cooling pause between chunks (not between tasks)
     if (i + chunkSize < tasks.length && results.length < limit) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
 
@@ -388,10 +404,11 @@ async function scanTasksWithCooling(tasks: Task[], limit: number) {
 }
 ```
 
-**Impact:** Prevents sustained CPU load, allows cooling
-**Downside:** Adds ~50ms delay per 200 tasks (small price for M2 Air usability)
+**Impact:** Prevents sustained CPU load, allows cooling **Downside:** Adds ~50ms delay per 200 tasks (small price for M2
+Air usability)
 
 ### 2. **Cache results and reuse**
+
 - Cache "Today's tasks" query result
 - Invalidate cache at midnight or on task changes
 - M2 Air reads from cache (no heavy computation)
@@ -399,6 +416,7 @@ async function scanTasksWithCooling(tasks: Task[], limit: number) {
 **Impact:** First query slow, subsequent queries instant
 
 ### 3. **Accept limitations**
+
 - M2 Air is fundamentally unsuited for sustained task scanning
 - Use for quick lookups only
 - Heavy queries run on desktop machines
@@ -408,17 +426,20 @@ async function scanTasksWithCooling(tasks: Task[], limit: number) {
 ## Summary
 
 **What you CAN use instead of `flattenedTasks()` linear scans:**
+
 - ✅ `inbox` - For inbox-only queries
 - ✅ `tag.remainingTasks` - For tag-specific queries
 - ✅ `tag.availableTasks` - For available tasks with tag
 - ✅ `project.flattenedTasks` - For project-specific queries
 
 **What you CANNOT avoid scanning for:**
+
 - ❌ Date-range queries (overdue, due today, upcoming)
 - ❌ Flagged-only queries
 - ❌ Combined queries ("today's tasks" = overdue OR due_today OR flagged)
 
 **For your specific "Today's tasks" query:**
+
 - Already optimized with OmniJS bridge
 - Linear scan is unavoidable (OmniFocus API limitation)
 - M2 Air thermal throttling needs chunked processing or caching

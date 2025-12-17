@@ -1,10 +1,14 @@
 # Multi-Machine Session Sync Implementation Plan
 
-> **For Claude:** Use `${SUPERPOWERS_SKILLS_ROOT}/skills/collaboration/executing-plans/SKILL.md` to implement this plan task-by-task.
+> **For Claude:** Use `${SUPERPOWERS_SKILLS_ROOT}/skills/collaboration/executing-plans/SKILL.md` to implement this plan
+> task-by-task.
 
-**Goal:** Enable seamless work continuation across 3 macOS machines by syncing `~/.claude/` via iCloud and implementing session checkpoint/resume functionality for **historical work logging and context switching**.
+**Goal:** Enable seamless work continuation across 3 macOS machines by syncing `~/.claude/` via iCloud and implementing
+session checkpoint/resume functionality for **historical work logging and context switching**.
 
-**Architecture:** Symlink `~/.claude/` to iCloud Drive for automatic cross-machine sync, maintain session state in JSON checkpoints (machine, branch, todos, test results), implement shell functions to save/restore sessions. No code changes to Claude Code itself—purely filesystem and shell layer.
+**Architecture:** Symlink `~/.claude/` to iCloud Drive for automatic cross-machine sync, maintain session state in JSON
+checkpoints (machine, branch, todos, test results), implement shell functions to save/restore sessions. No code changes
+to Claude Code itself—purely filesystem and shell layer.
 
 **Tech Stack:** macOS symlinks, iCloud Drive, JSON (session checkpoint), bash/zsh shell functions
 
@@ -12,9 +16,11 @@
 
 ## Design Rationale (Session Checkpoint Purpose)
 
-**Decision (Oct 21, 2025):** Implement session checkpoint for **Option 2: Historical work logs for analysis/patterns**, not as primary state synchronization.
+**Decision (Oct 21, 2025):** Implement session checkpoint for **Option 2: Historical work logs for analysis/patterns**,
+not as primary state synchronization.
 
-**Key Insight:** The iCloud symlink already handles 95% of actual state sync (code, todos, test results all sync automatically). The checkpoint file serves a different purpose:
+**Key Insight:** The iCloud symlink already handles 95% of actual state sync (code, todos, test results all sync
+automatically). The checkpoint file serves a different purpose:
 
 1. **Historical Work Log** - `session-history.md` creates a record of what you worked on when, from which machine
    - Example: "2025-10-18 10:30 [macbook-kip-main] Fixed tag assignment issue (branch: main)"
@@ -26,9 +32,11 @@
    - Last commit hash
    - Which machine you were on (useful for understanding hardware context)
 
-3. **Not Primary State** - The checkpoint is informational/metadata, not the source of truth. All actual work state (code, configs, agents) syncs via iCloud automatically.
+3. **Not Primary State** - The checkpoint is informational/metadata, not the source of truth. All actual work state
+   (code, configs, agents) syncs via iCloud automatically.
 
 **Recommended Workflow:**
+
 - Before switching machines: `save-session "Description of what you were doing"`
 - On new machine after iCloud sync: `restore-session` to see context
 - Optional: `session-log` to view recent work history across machines
@@ -38,12 +46,14 @@
 ## Task 1: Set up iCloud directory structure
 
 **Files:**
+
 - Create: `~/Library/Mobile Documents/com~apple~CloudDocs/.claude/`
 - Create: Shell script helpers in your dotfiles
 
 **Step 1: Verify iCloud Drive is synced on all 3 machines**
 
 Run on each machine:
+
 ```bash
 ls -la ~/Library/Mobile\ Documents/com~apple~CloudDocs/
 ```
@@ -120,6 +130,7 @@ rm -rf ~/.claude.backup
 ## Task 2: Create session checkpoint schema and helpers
 
 **Files:**
+
 - Create: `~/.claude/session-checkpoint.json` (template)
 - Create: `~/.claude/session-manifest.md` (documentation)
 
@@ -153,7 +164,7 @@ Create `~/.claude/session-checkpoint.json`:
 
 Create `~/.claude/session-manifest.md`:
 
-```markdown
+````markdown
 # Session Checkpoint Guide
 
 ## File Structure
@@ -178,11 +189,14 @@ Create `~/.claude/session-manifest.md`:
 ## Usage
 
 Save session before leaving a machine:
+
 ```bash
 save-session "Debugging planned dates timeout"
 ```
+````
 
 Resume on new machine:
+
 ```bash
 claude --resume  # or restore-session
 ```
@@ -190,17 +204,19 @@ claude --resume  # or restore-session
 ## Machine Names
 
 Add to your shell profile to identify machines:
+
 ```bash
 export MACHINE_NAME="macbook-kip-main"  # or similar
 ```
-```
+
+````
 
 **Step 3: Verify files created**
 
 ```bash
 cat ~/.claude/session-checkpoint.json
 cat ~/.claude/session-manifest.md
-```
+````
 
 Expected: Both files readable with valid JSON and markdown
 
@@ -209,6 +225,7 @@ Expected: Both files readable with valid JSON and markdown
 ## Task 3: Create session management shell functions
 
 **Files:**
+
 - Modify: `~/.zshrc` (or `~/.bashrc`)
 - Create: `~/.claude/session-functions.sh` (shared functions)
 
@@ -328,13 +345,14 @@ Expected: Shows checkpoint from machine 1
 ## Task 4: Add claude --resume mock (documentation)
 
 **Files:**
+
 - Create: `~/.claude/RESUME_USAGE.md`
 
 **Step 1: Document expected CLI integration**
 
 Create `~/.claude/RESUME_USAGE.md`:
 
-```markdown
+````markdown
 # Claude Code Resume Integration
 
 ## Goal
@@ -346,8 +364,10 @@ When Claude Code adds `--resume` flag support, these session checkpoints will fe
 ```bash
 claude --resume ~/src/omnifocus-mcp
 ```
+````
 
 This would:
+
 1. Read `~/.claude/session-checkpoint.json`
 2. Verify machine name matches (warn if different)
 3. Load last branch/commit state
@@ -376,17 +396,19 @@ restore-session  # Shows what you were doing
 ## Future Enhancement
 
 Could extend to:
+
 ```bash
 claude --resume --execute-next-todo  # Auto-run next pending task
 claude --resume --show-diff          # Show changes since last session
 ```
-```
+
+````
 
 **Step 2: Verify documentation**
 
 ```bash
 cat ~/.claude/RESUME_USAGE.md
-```
+````
 
 Expected: Markdown readable, explains both current workaround and future integration
 
@@ -395,6 +417,7 @@ Expected: Markdown readable, explains both current workaround and future integra
 ## Task 5: Test full cycle on all 3 machines
 
 **Files:**
+
 - None (integration test only)
 
 **Step 1: Full test on Machine A**
@@ -486,12 +509,14 @@ git commit -m "docs: add multi-machine session sync implementation plan"
 **Plan complete!** Two execution options:
 
 **1. Self-Guided (Recommended for this)**
+
 - You implement each task sequentially on your 3 machines
 - Leverage the shell functions immediately
 - Tailor machine names to your setup
 - Monitor iCloud sync between steps
 
 **2. Fresh Subagent Per Step**
+
 - Launch subagent-driven execution with this plan
 - Each task gets reviewed before proceeding
 - More formal audit trail

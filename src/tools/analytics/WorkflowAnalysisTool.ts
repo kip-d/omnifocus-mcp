@@ -2,35 +2,48 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { createLogger } from '../../utils/logger.js';
-import { createAnalyticsResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
+import {
+  createAnalyticsResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+  StandardResponseV2,
+} from '../../utils/response-format.js';
 import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow-analysis-v3.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { WorkflowAnalysisData } from '../../omnifocus/script-response-types.js';
 
 // Schema for the workflow analysis tool
 const WorkflowAnalysisSchema = z.object({
-  analysisDepth: z.enum(['quick', 'standard', 'deep'])
+  analysisDepth: z
+    .enum(['quick', 'standard', 'deep'])
     .default('standard')
     .describe('Analysis depth: quick (insights only), standard (insights + key data), deep (insights + full dataset)'),
 
-  focusAreas: z.union([
-    z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])),
-    z.string().transform(val => val.split(',').map(s => s.trim()).filter(s => s)),
-  ]).pipe(z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])))
+  focusAreas: z
+    .union([
+      z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])),
+      z.string().transform((val) =>
+        val
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s),
+      ),
+    ])
+    .pipe(
+      z.array(z.enum(['productivity', 'workload', 'project_health', 'time_patterns', 'bottlenecks', 'opportunities'])),
+    )
     .default(['productivity', 'workload', 'bottlenecks'])
     .describe('Specific areas to focus analysis on'),
 
-  includeRawData: z.union([
-    z.boolean(),
-    z.string().transform(val => val === 'true'),
-  ]).pipe(z.boolean())
+  includeRawData: z
+    .union([z.boolean(), z.string().transform((val) => val === 'true')])
+    .pipe(z.boolean())
     .default(false)
     .describe('Include raw task/project data for LLM exploration (increases token usage)'),
 
-  maxInsights: z.union([
-    z.number(),
-    z.string().transform(val => parseInt(val, 10)),
-  ]).pipe(z.number().min(5).max(50))
+  maxInsights: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .pipe(z.number().min(5).max(50))
     .default(15)
     .describe('Maximum number of insights to generate'),
 });
@@ -39,7 +52,8 @@ type WorkflowAnalysisArgs = z.infer<typeof WorkflowAnalysisSchema>;
 
 export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema> {
   name = 'workflow_analysis';
-  description = 'Deep analysis of your OmniFocus workflow health and system efficiency. Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization. Focuses on how well your GTD system is working rather than completion metrics. Use for occasional deep dives into your workflow patterns.';
+  description =
+    'Deep analysis of your OmniFocus workflow health and system efficiency. Returns actionable insights about workflow patterns, momentum, bottlenecks, and system optimization. Focuses on how well your GTD system is working rather than completion metrics. Use for occasional deep dives into your workflow patterns.';
   schema = WorkflowAnalysisSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -79,7 +93,12 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       const cacheKey = `workflow_analysis_${args.analysisDepth}_${args.focusAreas.sort().join('_')}_${args.maxInsights}`;
 
       // Check cache (2 hours TTL for deep analysis)
-      const cached = this.cache.get<{ insights?: Array<string | { insight?: string; message?: string }>; recommendations?: Array<string | { recommendation?: string; message?: string }>; patterns?: unknown[]; metadata?: Record<string, unknown> }>('analytics', cacheKey);
+      const cached = this.cache.get<{
+        insights?: Array<string | { insight?: string; message?: string }>;
+        recommendations?: Array<string | { recommendation?: string; message?: string }>;
+        patterns?: unknown[];
+        metadata?: Record<string, unknown>;
+      }>('analytics', cacheKey);
       if (cached) {
         logger.debug('Returning cached workflow analysis');
         return createAnalyticsResponseV2(
@@ -201,19 +220,12 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
       // Generate key findings
       const keyFindings = this.extractKeyFindings(responseData);
 
-      return createAnalyticsResponseV2(
-        'workflow_analysis',
-        responseData,
-        'Workflow Analysis Results',
-        keyFindings,
-        {
-          analysis_depth: args.analysisDepth,
-          focus_areas: args.focusAreas,
-          include_raw_data: args.includeRawData,
-          ...timer.toMetadata(),
-        },
-      );
-
+      return createAnalyticsResponseV2('workflow_analysis', responseData, 'Workflow Analysis Results', keyFindings, {
+        analysis_depth: args.analysisDepth,
+        focus_areas: args.focusAreas,
+        include_raw_data: args.includeRawData,
+        ...timer.toMetadata(),
+      });
     } catch (error) {
       logger.error('Workflow analysis failed', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -249,7 +261,9 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
 
   private extractKeyFindings(data: {
     insights?: Array<string | { category?: string; insight?: string; message?: string; priority?: string }>;
-    recommendations?: Array<string | { category?: string; recommendation?: string; message?: string; priority?: string }>;
+    recommendations?: Array<
+      string | { category?: string; recommendation?: string; message?: string; priority?: string }
+    >;
     patterns?: unknown;
     metadata?: {
       score?: number;
@@ -261,28 +275,34 @@ export class WorkflowAnalysisTool extends BaseTool<typeof WorkflowAnalysisSchema
 
     // V3 format: insights are objects with category, insight, priority
     if (data.insights && Array.isArray(data.insights)) {
-      findings.push(...data.insights.slice(0, 3).map(i => {
-        if (typeof i === 'string') return i;
-        if (typeof i === 'object' && i !== null) {
-          const insight = (i as { category?: string; insight?: string; message?: string }).insight ||
-                         (i as { category?: string; insight?: string; message?: string }).message;
-          return insight || JSON.stringify(i);
-        }
-        return JSON.stringify(i);
-      }));
+      findings.push(
+        ...data.insights.slice(0, 3).map((i) => {
+          if (typeof i === 'string') return i;
+          if (typeof i === 'object' && i !== null) {
+            const insight =
+              (i as { category?: string; insight?: string; message?: string }).insight ||
+              (i as { category?: string; insight?: string; message?: string }).message;
+            return insight || JSON.stringify(i);
+          }
+          return JSON.stringify(i);
+        }),
+      );
     }
 
     // V3 format: recommendations are objects with category, recommendation, priority
     if (data.recommendations && Array.isArray(data.recommendations)) {
-      findings.push(...data.recommendations.slice(0, 2).map(r => {
-        if (typeof r === 'string') return r;
-        if (typeof r === 'object' && r !== null) {
-          const rec = (r as { category?: string; recommendation?: string; message?: string }).recommendation ||
-                      (r as { category?: string; recommendation?: string; message?: string }).message;
-          return rec || JSON.stringify(r);
-        }
-        return JSON.stringify(r);
-      }));
+      findings.push(
+        ...data.recommendations.slice(0, 2).map((r) => {
+          if (typeof r === 'string') return r;
+          if (typeof r === 'object' && r !== null) {
+            const rec =
+              (r as { category?: string; recommendation?: string; message?: string }).recommendation ||
+              (r as { category?: string; recommendation?: string; message?: string }).message;
+            return rec || JSON.stringify(r);
+          }
+          return JSON.stringify(r);
+        }),
+      );
     }
 
     // V3 format: patterns is an object, not an array

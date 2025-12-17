@@ -50,19 +50,19 @@ function logError(message) {
 async function runMcpTool(toolName, args) {
   return new Promise((resolve, reject) => {
     const serverPath = join(projectRoot, 'dist', 'index.js');
-    
+
     const child = spawn('node', [serverPath], {
       env: { ...process.env, LOG_LEVEL: 'error' },
     });
-    
+
     let output = '';
     let errorOutput = '';
     let responseReceived = false;
-    
+
     child.stdout.on('data', (data) => {
       const text = data.toString();
       output += text;
-      
+
       // Look for tool response
       const lines = text.split('\n');
       for (const line of lines) {
@@ -81,17 +81,17 @@ async function runMcpTool(toolName, args) {
         }
       }
     });
-    
+
     child.stderr.on('data', (data) => {
       errorOutput += data.toString();
     });
-    
+
     child.on('close', (code) => {
       if (!responseReceived) {
         reject(new Error(`No response received. Exit code: ${code}\nStderr: ${errorOutput}`));
       }
     });
-    
+
     // Send MCP protocol messages
     const messages = [
       {
@@ -114,14 +114,14 @@ async function runMcpTool(toolName, args) {
         id: 2,
       },
     ];
-    
+
     setTimeout(() => {
-      messages.forEach(msg => {
+      messages.forEach((msg) => {
         child.stdin.write(JSON.stringify(msg) + '\n');
       });
       child.stdin.end();
     }, 100);
-    
+
     // Timeout after 10 seconds
     setTimeout(() => {
       if (!responseReceived) {
@@ -134,7 +134,7 @@ async function runMcpTool(toolName, args) {
 
 async function testV2TasksTool() {
   logSection('Testing v2.0.0 Tasks Tool');
-  
+
   const tests = [
     {
       name: 'Overdue tasks with summary',
@@ -149,47 +149,46 @@ async function testV2TasksTool() {
       args: { mode: 'all', dueBy: 'tomorrow', limit: 3 },
     },
   ];
-  
+
   for (const test of tests) {
     logTest(test.name);
-    
+
     const startTime = Date.now();
     try {
       const response = await runMcpTool('tasks', test.args);
       const elapsed = Date.now() - startTime;
-      
+
       // Parse the text content
       const content = response.content?.[0]?.text;
       if (!content) {
         throw new Error('No content in response');
       }
-      
+
       const result = JSON.parse(content);
-      
+
       logSuccess(`Completed in ${elapsed}ms`);
-      
+
       // Check for v2 features
       if (result.summary) {
         log(`📊 Summary:`, colors.blue);
         console.log(result.summary);
         logSuccess('Has summary for quick LLM processing');
       }
-      
+
       if (result.insights) {
         log(`💡 Insights:`, colors.blue);
-        result.insights.forEach(insight => console.log(`  • ${insight}`));
+        result.insights.forEach((insight) => console.log(`  • ${insight}`));
         logSuccess('Has insights for immediate value');
       }
-      
+
       if (result.data?.preview) {
         log(`👀 Preview: ${result.data.preview.length} items`, colors.blue);
         logSuccess('Has preview for fast response');
       }
-      
+
       if (result.error?.suggestion) {
         log(`💡 Error suggestion: ${result.error.suggestion}`, colors.yellow);
       }
-      
     } catch (error) {
       logError(`Failed: ${error.message}`);
     }
@@ -198,7 +197,7 @@ async function testV2TasksTool() {
 
 async function testV2ProjectsTool() {
   logSection('Testing v2.0.0 Projects Tool');
-  
+
   const tests = [
     {
       name: 'List active projects',
@@ -209,34 +208,33 @@ async function testV2ProjectsTool() {
       args: { operation: 'review', limit: 3 },
     },
   ];
-  
+
   for (const test of tests) {
     logTest(test.name);
-    
+
     const startTime = Date.now();
     try {
       const response = await runMcpTool('projects', test.args);
       const elapsed = Date.now() - startTime;
-      
+
       const content = response.content?.[0]?.text;
       if (!content) {
         throw new Error('No content in response');
       }
-      
+
       const result = JSON.parse(content);
-      
+
       logSuccess(`Completed in ${elapsed}ms`);
-      
+
       if (result.summary) {
         log(`📊 Summary:`, colors.blue);
         console.log(result.summary);
         logSuccess('Has project summary');
       }
-      
+
       if (result.data?.preview) {
         logSuccess('Has preview data');
       }
-      
     } catch (error) {
       logError(`Failed: ${error.message}`);
     }
@@ -245,13 +243,13 @@ async function testV2ProjectsTool() {
 
 async function testErrorHandling() {
   logSection('Testing v2.0.0 Error Prevention');
-  
+
   logTest('Missing search term (should give helpful error)');
   try {
     const response = await runMcpTool('tasks', { mode: 'search' });
     const content = response.content?.[0]?.text;
     const result = JSON.parse(content);
-    
+
     if (result.error) {
       log(`Error: ${result.error.message}`, colors.yellow);
       if (result.error.suggestion) {
@@ -261,17 +259,17 @@ async function testErrorHandling() {
   } catch (error) {
     logError(`Unexpected error: ${error.message}`);
   }
-  
+
   logTest('String boolean conversion');
   try {
-    const response = await runMcpTool('tasks', { 
-      mode: 'all', 
-      completed: 'false',  // String instead of boolean
-      limit: 3 
+    const response = await runMcpTool('tasks', {
+      mode: 'all',
+      completed: 'false', // String instead of boolean
+      limit: 3,
     });
     const content = response.content?.[0]?.text;
     const result = JSON.parse(content);
-    
+
     if (result.success) {
       logSuccess('Successfully converted string "false" to boolean');
     }
@@ -283,12 +281,12 @@ async function testErrorHandling() {
 async function main() {
   log('OmniFocus MCP v2.0.0-alpha.1 Test Suite', colors.bright + colors.cyan);
   log('Testing new consolidated tools optimized for LLM experience\n', colors.yellow);
-  
+
   try {
     await testV2TasksTool();
     await testV2ProjectsTool();
     await testErrorHandling();
-    
+
     logSection('Test Summary');
     logSuccess('v2.0.0-alpha.1 tools are working!');
     log('\nKey features validated:', colors.green);
@@ -297,7 +295,6 @@ async function main() {
     console.log('  ✅ Natural language support');
     console.log('  ✅ Helpful error suggestions');
     console.log('  ✅ Preview data for quick responses');
-    
   } catch (error) {
     logError(`Test suite failed: ${error.message}`);
     console.error(error);

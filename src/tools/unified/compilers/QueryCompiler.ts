@@ -6,8 +6,18 @@ export type QueryFilter = FilterValue;
 
 export interface CompiledQuery {
   type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders';
-  mode?: 'all' | 'inbox' | 'search' | 'overdue' | 'today' | 'upcoming' | 'available' | 'blocked' | 'flagged' | 'smart_suggest';
-  filters: TaskFilter;  // Changed from QueryFilter to TaskFilter
+  mode?:
+    | 'all'
+    | 'inbox'
+    | 'search'
+    | 'overdue'
+    | 'today'
+    | 'upcoming'
+    | 'available'
+    | 'blocked'
+    | 'flagged'
+    | 'smart_suggest';
+  filters: TaskFilter; // Changed from QueryFilter to TaskFilter
   fields?: string[];
   sort?: Array<{ field: string; direction: 'asc' | 'desc' }>;
   limit?: number;
@@ -27,9 +37,7 @@ export class QueryCompiler {
     const { query } = input;
 
     // Transform filters from API schema to internal contract
-    const filters: TaskFilter = query.filters
-      ? this.transformFilters(query.filters)
-      : {};
+    const filters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
 
     return {
       type: query.type,
@@ -68,7 +76,7 @@ export class QueryCompiler {
       // Log warning and use first condition only
       console.warn(
         '[QueryCompiler] OR operator not yet supported - using first condition only. ' +
-        'If you need OR logic, please open an issue with your use case.',
+          'If you need OR logic, please open an issue with your use case.',
       );
       if (input.OR.length > 0) {
         return this.transformFilters(input.OR[0] as QueryFilter);
@@ -84,10 +92,7 @@ export class QueryCompiler {
       } else if (notFilter.status === 'active') {
         result.completed = true;
       } else {
-        console.warn(
-          '[QueryCompiler] Complex NOT operator simplified. Original: ' +
-          JSON.stringify(notFilter),
-        );
+        console.warn('[QueryCompiler] Complex NOT operator simplified. Original: ' + JSON.stringify(notFilter));
       }
       return result;
     }

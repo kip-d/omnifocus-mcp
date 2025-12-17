@@ -80,21 +80,21 @@ class GherkinTestRunner {
     scenarios: [],
     passed: 0,
     failed: 0,
-    startTime: Date.now()
+    startTime: Date.now(),
   };
 
   async start(): Promise<void> {
     console.log('🥒 Gherkin Test Runner for OmniFocus MCP');
     console.log('========================================\n');
-    
+
     this.server = spawn('node', ['./dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' }
+      env: { ...process.env, NODE_ENV: 'test' },
     });
 
     const rl: Interface = createInterface({
       input: this.server.stdout!,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     });
 
     rl.on('line', (line: string) => {
@@ -126,23 +126,25 @@ class GherkinTestRunner {
         capabilities: {},
         clientInfo: {
           name: 'gherkin-test-runner',
-          version: '1.0.0'
-        }
-      }
+          version: '1.0.0',
+        },
+      },
     };
 
     const response = await this.sendRequest(initRequest);
-    
+
     if (!response.result) {
       throw new Error('Failed to initialize MCP connection');
     }
 
     // Send initialized notification
-    this.server!.stdin!.write(JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    }) + '\n');
-    
+    this.server!.stdin!.write(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }) + '\n',
+    );
+
     await this.delay(100);
   }
 
@@ -152,7 +154,7 @@ class GherkinTestRunner {
       steps: [],
       passed: true,
       error: null,
-      duration: 0
+      duration: 0,
     };
 
     const startTime = Date.now();
@@ -174,7 +176,6 @@ class GherkinTestRunner {
       result.duration = Date.now() - startTime;
       console.log(`✅ Scenario passed (${result.duration}ms)\n`);
       this.results.passed++;
-      
     } catch (error) {
       result.passed = false;
       result.error = (error as Error).message;
@@ -192,17 +193,16 @@ class GherkinTestRunner {
       type: step.type,
       text: step.text,
       passed: true,
-      error: null
+      error: null,
     };
 
     try {
       console.log(`   ${step.type} ${step.text}`);
-      
+
       // Execute step based on type and pattern
       await this.executeStep(step);
-      
+
       stepResult.passed = true;
-      
     } catch (error) {
       stepResult.passed = false;
       stepResult.error = (error as Error).message;
@@ -220,7 +220,7 @@ class GherkinTestRunner {
       // Already connected in start()
       return;
     }
-    
+
     if (type === 'Given' && text.includes('task with known ID')) {
       const tasks = await this.callTool('list_tasks', { limit: 1 });
       this.context.taskId = tasks.tasks[0].id;
@@ -268,7 +268,7 @@ class GherkinTestRunner {
 
     if (type === 'When' && text.includes('complete the task')) {
       this.context.response = await this.callTool('complete_task', {
-        taskId: this.context.taskId
+        taskId: this.context.taskId,
       });
       return;
     }
@@ -293,7 +293,7 @@ class GherkinTestRunner {
       return;
     }
 
-    if (type === 'When' && text.includes('request today\'s agenda')) {
+    if (type === 'When' && text.includes("request today's agenda")) {
       this.context.response = await this.callTool('todays_agenda', {});
       return;
     }
@@ -311,7 +311,7 @@ class GherkinTestRunner {
       if (propsMatch) {
         const props = propsMatch[1].split(', ');
         this.context.response.tasks.forEach((task: any) => {
-          props.forEach(prop => {
+          props.forEach((prop) => {
             if (!task.hasOwnProperty(prop)) {
               throw new Error(`Task missing property: ${prop}`);
             }
@@ -332,10 +332,10 @@ class GherkinTestRunner {
       if (!this.context.response?.stats) {
         throw new Error('Expected response to have stats property');
       }
-      
+
       if (data) {
-        const expectedMetrics = data.rows.map(row => row[0]);
-        expectedMetrics.forEach(metric => {
+        const expectedMetrics = data.rows.map((row) => row[0]);
+        expectedMetrics.forEach((metric) => {
           if (!this.context.response.stats.hasOwnProperty(metric)) {
             throw new Error(`Missing expected metric: ${metric}`);
           }
@@ -369,12 +369,12 @@ class GherkinTestRunner {
       method: 'tools/call',
       params: {
         name: toolName,
-        arguments: params
-      }
+        arguments: params,
+      },
     };
 
     const response = await this.sendRequest(request, 30000);
-    
+
     if (response.error) {
       throw new Error(`Tool error: ${response.error.message}`);
     }
@@ -390,12 +390,12 @@ class GherkinTestRunner {
 
   parseDataTable(data: { rows: Array<[string, string]> }): any {
     const result: any = {};
-    
+
     if (data.rows) {
-      data.rows.forEach(row => {
+      data.rows.forEach((row) => {
         const key = row[0];
         let value: any = row[1];
-        
+
         // Parse JSON values
         if (value.startsWith('[') || value.startsWith('{')) {
           value = JSON.parse(value);
@@ -406,21 +406,21 @@ class GherkinTestRunner {
         } else if (!isNaN(value)) {
           value = Number(value);
         }
-        
+
         result[key] = value;
       });
     }
-    
+
     return result;
   }
 
   async sendRequest(request: MCPRequest, timeout: number = 10000): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
       const requestId = request.id!;
-      
+
       this.pendingRequests.set(requestId, resolve);
       this.server!.stdin!.write(JSON.stringify(request) + '\n');
-      
+
       setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId);
@@ -443,12 +443,12 @@ class GherkinTestRunner {
   }
 
   delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   printSummary(): void {
     const duration = Date.now() - this.results.startTime;
-    
+
     console.log('\n========================================');
     console.log('Test Summary');
     console.log('========================================');
@@ -456,12 +456,12 @@ class GherkinTestRunner {
     console.log(`Passed: ${this.results.passed} ✅`);
     console.log(`Failed: ${this.results.failed} ❌`);
     console.log(`Duration: ${(duration / 1000).toFixed(2)}s`);
-    
+
     if (this.results.failed > 0) {
       console.log('\nFailed Scenarios:');
       this.results.scenarios
-        .filter(s => !s.passed)
-        .forEach(s => {
+        .filter((s) => !s.passed)
+        .forEach((s) => {
           console.log(`  ❌ ${s.name}`);
           console.log(`     Error: ${s.error}`);
         });
@@ -482,76 +482,83 @@ const scenarios: GherkinScenario[] = [
     steps: [
       { type: 'When', text: 'I request tasks with filter "completed: false"' },
       { type: 'Then', text: 'I should receive a list of tasks' },
-      { type: 'Then', text: 'each task should have properties: id, name, project, tags' }
-    ]
+      { type: 'Then', text: 'each task should have properties: id, name, project, tags' },
+    ],
   },
   {
-    name: 'Get today\'s agenda',
+    name: "Get today's agenda",
     steps: [
-      { type: 'When', text: 'I request today\'s agenda' },
-      { type: 'Then', text: 'I should receive a list of tasks' }
-    ]
+      { type: 'When', text: "I request today's agenda" },
+      { type: 'Then', text: 'I should receive a list of tasks' },
+    ],
   },
   {
     name: 'Create a simple task',
     steps: [
-      { type: 'When', text: 'I create a task with:', data: {
-        rows: [['name', 'Gherkin test task']]
-      }},
-      { type: 'Then', text: 'the task should be created successfully' }
-    ]
+      {
+        type: 'When',
+        text: 'I create a task with:',
+        data: {
+          rows: [['name', 'Gherkin test task']],
+        },
+      },
+      { type: 'Then', text: 'the task should be created successfully' },
+    ],
   },
   {
     name: 'Get productivity statistics',
     steps: [
       { type: 'When', text: 'I request productivity stats for "period: \\"week\\""' },
-      { type: 'Then', text: 'I should receive statistics including:', data: {
-        rows: [
-          ['totalTasks'],
-          ['completedTasks'],
-          ['completionRate']
-        ]
-      }}
-    ]
+      {
+        type: 'Then',
+        text: 'I should receive statistics including:',
+        data: {
+          rows: [['totalTasks'], ['completedTasks'], ['completionRate']],
+        },
+      },
+    ],
   },
   {
     name: 'List all tags',
     steps: [
       { type: 'When', text: 'I request all tags sorted by "name"' },
-      { type: 'Then', text: 'I should receive a list of tags' }
-    ]
+      { type: 'Then', text: 'I should receive a list of tags' },
+    ],
   },
   {
     name: 'Export tasks as JSON',
     steps: [
-      { type: 'When', text: 'I export tasks with:', data: {
-        rows: [
-          ['format', 'json'],
-          ['filter', '{"flagged": true}']
-        ]
-      }},
-      { type: 'Then', text: 'I should receive export data' }
-    ]
-  }
+      {
+        type: 'When',
+        text: 'I export tasks with:',
+        data: {
+          rows: [
+            ['format', 'json'],
+            ['filter', '{"flagged": true}'],
+          ],
+        },
+      },
+      { type: 'Then', text: 'I should receive export data' },
+    ],
+  },
 ];
 
 // Run tests
 async function runTests(): Promise<void> {
   const runner = new GherkinTestRunner();
-  
+
   try {
     await runner.start();
-    
+
     // Run each scenario
     for (const scenario of scenarios) {
       await runner.runScenario(scenario);
     }
-    
+
     runner.printSummary();
-    
+
     await runner.cleanup();
     process.exit(runner.results.failed > 0 ? 1 : 0);
-    
   } catch (error) {
     console.error('Test runner failed:', error);
     await runner.cleanup();

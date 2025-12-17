@@ -10,13 +10,10 @@ export class SchemaTestHelper {
   /**
    * Generate valid parameters from a schema with defaults
    */
-  static generateValidParams<T extends ZodSchema>(
-    schema: T,
-    overrides: Partial<z.infer<T>> = {}
-  ): z.infer<T> {
+  static generateValidParams<T extends ZodSchema>(schema: T, overrides: Partial<z.infer<T>> = {}): z.infer<T> {
     // Parse empty object to get defaults
     const defaults = schema.parse({});
-    
+
     // Merge with overrides
     return { ...defaults, ...overrides };
   }
@@ -30,7 +27,7 @@ export class SchemaTestHelper {
       cache?: any;
       omniAutomation?: any;
       logger?: any;
-    } = {}
+    } = {},
   ): T {
     const mockCache = options.cache || {
       get: vi.fn(),
@@ -54,23 +51,20 @@ export class SchemaTestHelper {
     const tool = new Tool(mockCache);
     tool['omniAutomation'] = mockOmniAutomation;
     tool['logger'] = mockLogger;
-    
+
     return tool;
   }
 
   /**
    * Validate test data against a schema
    */
-  static validateTestData<T extends ZodSchema>(
-    schema: T,
-    data: unknown
-  ): { valid: boolean; errors?: z.ZodError } {
+  static validateTestData<T extends ZodSchema>(schema: T, data: unknown): { valid: boolean; errors?: z.ZodError } {
     const result = schema.safeParse(data);
-    
+
     if (!result.success) {
       return { valid: false, errors: result.error };
     }
-    
+
     return { valid: true };
   }
 
@@ -78,13 +72,10 @@ export class SchemaTestHelper {
    * Create parameters that will pass schema validation
    * Handles coercion for Claude Desktop string conversion
    */
-  static createValidParams<T extends ZodSchema>(
-    schema: T,
-    params: Record<string, any>
-  ): z.infer<T> {
+  static createValidParams<T extends ZodSchema>(schema: T, params: Record<string, any>): z.infer<T> {
     // Convert params to strings as Claude Desktop would
     const stringified = this.stringifyParams(params);
-    
+
     // Parse through schema to apply coercion
     return schema.parse(stringified);
   }
@@ -94,16 +85,14 @@ export class SchemaTestHelper {
    */
   static stringifyParams(params: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {};
-    
+
     for (const [key, value] of Object.entries(params)) {
       if (value === null || value === undefined) {
         result[key] = value;
       } else if (typeof value === 'object' && !Array.isArray(value)) {
         result[key] = this.stringifyParams(value);
       } else if (Array.isArray(value)) {
-        result[key] = value.map(v => 
-          typeof v === 'object' ? this.stringifyParams(v) : String(v)
-        );
+        result[key] = value.map((v) => (typeof v === 'object' ? this.stringifyParams(v) : String(v)));
       } else if (typeof value === 'boolean') {
         result[key] = String(value);
       } else if (typeof value === 'number') {
@@ -112,7 +101,7 @@ export class SchemaTestHelper {
         result[key] = value;
       }
     }
-    
+
     return result;
   }
 
@@ -123,18 +112,20 @@ export class SchemaTestHelper {
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape;
       const required: string[] = [];
-      
+
       for (const [key, value] of Object.entries(shape)) {
-        if (!(value instanceof z.ZodOptional) && 
-            !(value instanceof z.ZodDefault) &&
-            !(value instanceof z.ZodNullable)) {
+        if (
+          !(value instanceof z.ZodOptional) &&
+          !(value instanceof z.ZodDefault) &&
+          !(value instanceof z.ZodNullable)
+        ) {
           required.push(key);
         }
       }
-      
+
       return required;
     }
-    
+
     return [];
   }
 
@@ -157,7 +148,7 @@ export class SchemaTestHelper {
     if (schema instanceof z.ZodObject) {
       const result: any = {};
       const shape = schema.shape;
-      
+
       for (const [key, value] of Object.entries(shape)) {
         if (value instanceof z.ZodDefault) {
           // Use default value
@@ -170,7 +161,7 @@ export class SchemaTestHelper {
           result[key] = this.generateExample(value as ZodSchema);
         }
       }
-      
+
       return result;
     }
     if (schema instanceof z.ZodEnum) {
@@ -181,7 +172,7 @@ export class SchemaTestHelper {
       const options = schema._def.options;
       return this.generateExample(options[0]);
     }
-    
+
     // Default fallback
     return {} as any;
   }
@@ -189,14 +180,11 @@ export class SchemaTestHelper {
   /**
    * Create a mock that validates inputs against schema
    */
-  static createValidatingMock<T extends ZodSchema>(
-    schema: T,
-    mockImplementation: (params: z.infer<T>) => any
-  ) {
+  static createValidatingMock<T extends ZodSchema>(schema: T, mockImplementation: (params: z.infer<T>) => any) {
     return vi.fn().mockImplementation((params) => {
       // Validate params match schema
       const validated = schema.parse(params);
-      
+
       // Call mock implementation with validated params
       return mockImplementation(validated);
     });

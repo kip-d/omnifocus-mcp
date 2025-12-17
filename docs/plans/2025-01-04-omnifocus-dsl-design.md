@@ -1,33 +1,34 @@
 # OmniFocus DSL Design Document
 
-**Status:** ~~Exploratory Design~~ → **Partially Implemented (v3.0.0)**
-**Date:** 2025-01-04
-**Updated:** 2025-11-24
-**Purpose:** Define a custom Domain-Specific Language for OmniFocus operations that can serve multiple use cases including MCP servers, CLI tools, web APIs, and automation workflows.
+**Status:** ~~Exploratory Design~~ → **Partially Implemented (v3.0.0)** **Date:** 2025-01-04 **Updated:** 2025-11-24
+**Purpose:** Define a custom Domain-Specific Language for OmniFocus operations that can serve multiple use cases
+including MCP servers, CLI tools, web APIs, and automation workflows.
 
 ---
 
 ## Implementation Status (November 2025)
 
-> **This design was incrementally implemented through v3.0.0's Unified API, though the path differed from the original plan.**
+> **This design was incrementally implemented through v3.0.0's Unified API, though the path differed from the original
+> plan.**
 
 ### What Was Built
 
-| DSL Design Goal | Implementation | Status |
-|-----------------|----------------|--------|
-| Replace 17 tools with 1-3 | Unified API: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system` | ✅ Shipped v3.0.0 |
-| JSON-based query syntax | `{ query: { type: "tasks", filters: {...} } }` | ✅ Exact syntax implemented |
-| JSON-based mutations | `{ mutation: { operation: "create", target: "task", data: {...} } }` | ✅ Implemented |
-| JSON-based analysis | `{ analysis: { type: "productivity_stats", params: {...} } }` | ✅ Implemented |
-| QueryCompiler | Routes unified API to backend tools | ✅ Implemented |
-| MutationCompiler | Routes mutations to manage_task/batch_create | ✅ Implemented |
-| AnalysisCompiler | Routes to 8 analysis tools | ✅ Implemented |
+| DSL Design Goal           | Implementation                                                                  | Status                      |
+| ------------------------- | ------------------------------------------------------------------------------- | --------------------------- |
+| Replace 17 tools with 1-3 | Unified API: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system` | ✅ Shipped v3.0.0           |
+| JSON-based query syntax   | `{ query: { type: "tasks", filters: {...} } }`                                  | ✅ Exact syntax implemented |
+| JSON-based mutations      | `{ mutation: { operation: "create", target: "task", data: {...} } }`            | ✅ Implemented              |
+| JSON-based analysis       | `{ analysis: { type: "productivity_stats", params: {...} } }`                   | ✅ Implemented              |
+| QueryCompiler             | Routes unified API to backend tools                                             | ✅ Implemented              |
+| MutationCompiler          | Routes mutations to manage_task/batch_create                                    | ✅ Implemented              |
+| AnalysisCompiler          | Routes to 8 analysis tools                                                      | ✅ Implemented              |
 
 ### Key Difference: Routing vs. Generation
 
 **Original Design:** Compilers would generate JXA/OmniJS scripts from scratch.
 
-**Actual Implementation:** Compilers route to existing backend tools (maximum code reuse, faster delivery, proven reliability).
+**Actual Implementation:** Compilers route to existing backend tools (maximum code reuse, faster delivery, proven
+reliability).
 
 ```
 Design assumed:    DSL → Compiler → Generated JXA → OmniFocus
@@ -43,6 +44,7 @@ After shipping v3.0.0, we found 15+ bugs sharing a common pattern: **property na
 Example: API sends `status: 'completed'`, script checks `filter.completed === true`.
 
 **Solution:** Shared Contracts System (November 2025)
+
 - `src/contracts/filters.ts` - TaskFilter as single source of truth
 - `src/contracts/responses.ts` - Response structure contracts
 - `src/contracts/generator.ts` - OmniJS code generator (for future migration)
@@ -52,21 +54,24 @@ See: `docs/plans/2025-11-24-querycompiler-taskfilter-integration.md`
 
 ### Remaining from Original Design
 
-| Feature | Status | Priority |
-|---------|--------|----------|
-| Text syntax layer (human-friendly) | Not started | Low - JSON works well for LLMs |
-| REPL/CLI tool | Not started | Medium |
-| Query optimization engine | Partial (countOnly, fastSearch) | Low |
-| Transaction support | Not started | Low |
-| Dry-run mode for bulk ops | Not started | Medium |
+| Feature                            | Status                          | Priority                       |
+| ---------------------------------- | ------------------------------- | ------------------------------ |
+| Text syntax layer (human-friendly) | Not started                     | Low - JSON works well for LLMs |
+| REPL/CLI tool                      | Not started                     | Medium                         |
+| Query optimization engine          | Partial (countOnly, fastSearch) | Low                            |
+| Transaction support                | Not started                     | Low                            |
+| Dry-run mode for bulk ops          | Not started                     | Medium                         |
 
 ### Lessons Learned
 
-1. **Incremental beats big-bang.** Building routing layer on existing tools was faster and safer than rewriting everything.
+1. **Incremental beats big-bang.** Building routing layer on existing tools was faster and safer than rewriting
+   everything.
 
-2. **External API ≠ internal consistency.** The DSL design focused on what users see but missed internal type safety. We added contracts to fix this.
+2. **External API ≠ internal consistency.** The DSL design focused on what users see but missed internal type safety. We
+   added contracts to fix this.
 
-3. **JSON is fine for LLMs.** The "human-friendly text syntax" (Phase 2 in original design) hasn't been needed - LLMs handle JSON well.
+3. **JSON is fine for LLMs.** The "human-friendly text syntax" (Phase 2 in original design) hasn't been needed - LLMs
+   handle JSON well.
 
 4. **The 17→4 tool reduction worked.** LLMs find the unified API easier to use than remembering 17 tool names.
 
@@ -74,15 +79,18 @@ See: `docs/plans/2025-11-24-querycompiler-taskfilter-integration.md`
 
 ## Original Design (January 2025)
 
-*The following sections represent the original exploratory design. See above for what was actually implemented.*
+_The following sections represent the original exploratory design. See above for what was actually implemented._
 
 ---
 
 ## Executive Summary
 
-This document proposes a custom DSL (Domain-Specific Language) for OmniFocus that provides a higher-level, more maintainable abstraction over JXA/OmniJS scripting. While initially motivated by reducing API surface area in an MCP server, a well-designed DSL has broader applications across the OmniFocus automation ecosystem.
+This document proposes a custom DSL (Domain-Specific Language) for OmniFocus that provides a higher-level, more
+maintainable abstraction over JXA/OmniJS scripting. While initially motivated by reducing API surface area in an MCP
+server, a well-designed DSL has broader applications across the OmniFocus automation ecosystem.
 
 **Key Benefits:**
+
 - **Simplified LLM Integration:** Cleaner syntax for AI assistants to learn and generate
 - **Context Window Efficiency:** Compact language reduces token consumption
 - **Type Safety:** Built-in validation prevents malformed operations
@@ -115,17 +123,20 @@ This document proposes a custom DSL (Domain-Specific Language) for OmniFocus tha
 ### Motivating Use Cases
 
 **Primary: MCP Server Simplification**
+
 - Replace 17 tools with 1-3 tools (download_raw_data, execute_dsl, take_gated_actions)
 - LLM learns DSL syntax (compact) instead of 17 tool schemas (verbose)
 - Server focuses on auth, security boundaries, execution - not business logic
 
 **Secondary: Standalone DSL Interpreter**
+
 - CLI tool for OmniFocus automation without MCP overhead
 - Web API endpoint that accepts DSL queries
 - Scriptable automation workflows
 - Testing and validation tool for OmniFocus data
 
 **Tertiary: Cross-Platform Abstraction**
+
 - Abstract layer over JXA (current) and potential future APIs
 - Could support OmniFocus Web when available
 - Portable between Mac automation and server environments
@@ -135,6 +146,7 @@ This document proposes a custom DSL (Domain-Specific Language) for OmniFocus tha
 ## Design Goals
 
 ### Must Have
+
 1. **Expressiveness:** Support common OmniFocus operations (query, create, update, delete)
 2. **Safety:** Prevent destructive operations without explicit confirmation
 3. **Clarity:** Self-documenting syntax that humans and LLMs can read
@@ -142,6 +154,7 @@ This document proposes a custom DSL (Domain-Specific Language) for OmniFocus tha
 5. **Type Safety:** Validate operations before execution
 
 ### Should Have
+
 6. **Composability:** Combine operations into workflows
 7. **Extensibility:** Easy to add new operations
 8. **Error Handling:** Clear error messages with recovery suggestions
@@ -149,6 +162,7 @@ This document proposes a custom DSL (Domain-Specific Language) for OmniFocus tha
 10. **Testability:** DSL operations should be easily unit-testable
 
 ### Nice to Have
+
 11. **REPL/Interactive Mode:** Explore OmniFocus data interactively
 12. **Query Optimization:** Automatically apply performance patterns
 13. **Dry-Run Mode:** Preview operations before execution
@@ -161,6 +175,7 @@ This document proposes a custom DSL (Domain-Specific Language) for OmniFocus tha
 ### Option 1: Declarative Query Language (SQL-like)
 
 **Example Syntax:**
+
 ```sql
 -- Read operations
 SELECT id, name, tags, dueDate
@@ -188,12 +203,14 @@ WHERE tag = 'quick-wins'
 ```
 
 **Pros:**
+
 - Familiar to developers
 - Clear read vs. write separation
 - Natural for data querying
 - Many existing parsers/tools
 
 **Cons:**
+
 - SQL syntax can be verbose
 - Doesn't naturally express hierarchical data (projects/folders)
 - May feel awkward for object creation
@@ -204,6 +221,7 @@ WHERE tag = 'quick-wins'
 ### Option 2: JSON-Based Declarative (Configuration-style)
 
 **Example Syntax:**
+
 ```json
 {
   "query": {
@@ -248,6 +266,7 @@ WHERE tag = 'quick-wins'
 ```
 
 **Pros:**
+
 - Native to JavaScript/TypeScript ecosystem
 - Type-safe with JSON Schema or Zod
 - Easy for LLMs to generate
@@ -255,6 +274,7 @@ WHERE tag = 'quick-wins'
 - No parser needed (built-in JSON parsing)
 
 **Cons:**
+
 - More verbose than custom syntax
 - Harder for humans to read/write
 - Nesting can get deep
@@ -265,6 +285,7 @@ WHERE tag = 'quick-wins'
 ### Option 3: Custom Text-Based DSL (Purpose-Built)
 
 **Example Syntax:**
+
 ```
 # Read operations
 query tasks where:
@@ -293,6 +314,7 @@ set:
 ```
 
 **Pros:**
+
 - Clean, minimal syntax
 - Purpose-built for OmniFocus domain
 - Human-readable and writable
@@ -300,6 +322,7 @@ set:
 - Can include comments/documentation
 
 **Cons:**
+
 - Requires custom parser implementation
 - Tooling needs to be built from scratch
 - Syntax must be taught (not familiar)
@@ -311,13 +334,14 @@ set:
 ### Option 4: Embedded DSL in TypeScript/JavaScript
 
 **Example Syntax:**
+
 ```typescript
 // Fluent API style
 const results = await of()
   .tasks()
-  .where(t => t.status === 'active')
-  .and(t => t.tags.includes('work') || t.tags.includes('urgent'))
-  .and(t => t.dueDate < addDays(new Date(), 7))
+  .where((t) => t.status === 'active')
+  .and((t) => t.tags.includes('work') || t.tags.includes('urgent'))
+  .and((t) => t.dueDate < addDays(new Date(), 7))
   .select(['id', 'name', 'tags', 'dueDate'])
   .orderBy('dueDate', 'asc')
   .limit(50)
@@ -326,8 +350,8 @@ const results = await of()
 // Builder pattern
 const newTask = of()
   .createTask()
-  .name("Review quarterly goals")
-  .project("Planning")
+  .name('Review quarterly goals')
+  .project('Planning')
   .tags(['work', 'review'])
   .dueDate('2025-01-15 17:00')
   .deferDate('2025-01-10 08:00')
@@ -336,15 +360,16 @@ const newTask = of()
 // Bulk operations
 await of()
   .tasks()
-  .where(t => t.tags.includes('quick-wins'))
-  .where(t => !t.completed)
+  .where((t) => t.tags.includes('quick-wins'))
+  .where((t) => !t.completed)
   .update({
     status: 'completed',
-    completionDate: new Date()
+    completionDate: new Date(),
   });
 ```
 
 **Pros:**
+
 - Type-safe with TypeScript
 - IDE autocomplete and validation
 - Familiar to developers
@@ -352,6 +377,7 @@ await of()
 - No parser needed
 
 **Cons:**
+
 - Not truly a separate DSL
 - Verbose for simple operations
 - May not save much context vs. current tools
@@ -365,18 +391,21 @@ await of()
 **Rationale:** Start with JSON for MVP (fast iteration, type safety, no parser), provide optional text syntax later.
 
 ### Phase 1: JSON-Based DSL (MVP)
+
 - Define JSON schema for all operations
 - Implement interpreter that generates JXA/OmniJS
 - Validate with Zod schemas
 - Support in MCP server via `execute_dsl(json)` tool
 
 ### Phase 2: Text Syntax Layer (Enhancement)
+
 - Design human-friendly text syntax
 - Build parser that converts text → JSON
 - Add REPL/CLI tool for interactive use
 - Provide syntax highlighting extensions
 
 ### Phase 3: Advanced Features
+
 - Query optimization
 - Transaction support
 - Workflow composition
@@ -389,6 +418,7 @@ await of()
 ### Query Operations
 
 **Task Queries**
+
 ```json
 {
   "query": {
@@ -425,6 +455,7 @@ await of()
 ```
 
 **Project Queries**
+
 ```json
 {
   "query": {
@@ -442,13 +473,14 @@ await of()
 ```
 
 **Tag Queries**
+
 ```json
 {
   "query": {
     "type": "tags",
     "filters": {
-      "text": {"contains": "work"},
-      "active": true  // Only tags with active tasks
+      "text": { "contains": "work" },
+      "active": true // Only tags with active tasks
     },
     "fields": ["id", "name", "available", "remainingTaskCount"]
   }
@@ -456,6 +488,7 @@ await of()
 ```
 
 **Perspective Queries**
+
 ```json
 {
   "query": {
@@ -471,6 +504,7 @@ await of()
 ### Create Operations
 
 **Create Task**
+
 ```json
 {
   "create": {
@@ -496,6 +530,7 @@ await of()
 ```
 
 **Create Project**
+
 ```json
 {
   "create": {
@@ -514,13 +549,29 @@ await of()
 ```
 
 **Batch Create**
+
 ```json
 {
   "batch": {
     "create": [
-      {"type": "task", "data": { /* task 1 */ }},
-      {"type": "task", "data": { /* task 2 */ }},
-      {"type": "project", "data": { /* project */ }}
+      {
+        "type": "task",
+        "data": {
+          /* task 1 */
+        }
+      },
+      {
+        "type": "task",
+        "data": {
+          /* task 2 */
+        }
+      },
+      {
+        "type": "project",
+        "data": {
+          /* project */
+        }
+      }
     ]
   }
 }
@@ -531,6 +582,7 @@ await of()
 ### Update Operations
 
 **Update Task**
+
 ```json
 {
   "update": {
@@ -550,20 +602,21 @@ await of()
 ```
 
 **Bulk Update**
+
 ```json
 {
   "update": {
     "type": "tasks",
     "filters": {
-      "tags": {"any": ["review"]},
-      "dueDate": {"before": "now"}
+      "tags": { "any": ["review"] },
+      "dueDate": { "before": "now" }
     },
     "changes": {
       "addTags": ["overdue"],
       "flagged": true
     },
-    "limit": 100,  // Safety limit for bulk operations
-    "dryRun": false  // Preview before executing
+    "limit": 100, // Safety limit for bulk operations
+    "dryRun": false // Preview before executing
   }
 }
 ```
@@ -573,6 +626,7 @@ await of()
 ### Delete/Complete Operations
 
 **Complete Task**
+
 ```json
 {
   "complete": {
@@ -584,6 +638,7 @@ await of()
 ```
 
 **Drop Task/Project**
+
 ```json
 {
   "drop": {
@@ -594,6 +649,7 @@ await of()
 ```
 
 **Delete (Destructive)**
+
 ```json
 {
   "delete": {
@@ -609,6 +665,7 @@ await of()
 ### Analysis Operations
 
 **Productivity Stats**
+
 ```json
 {
   "analyze": {
@@ -624,6 +681,7 @@ await of()
 ```
 
 **Pattern Analysis**
+
 ```json
 {
   "analyze": {
@@ -681,28 +739,33 @@ await of()
 ### Key Components
 
 **1. DSL Validator (`src/dsl/validator.ts`)**
+
 - Zod schemas for all operation types
 - Type-safe parsing and validation
 - Clear error messages with suggestions
 
 **2. Query Compiler (`src/dsl/compilers/query.ts`)**
+
 - Converts DSL filters to JXA filter logic
 - Applies performance optimizations automatically
 - Generates efficient bridge scripts when needed
 - Reuses existing helper functions
 
 **3. Mutation Compiler (`src/dsl/compilers/mutation.ts`)**
+
 - Handles create/update/delete operations
 - Generates tag bridge scripts automatically
 - Enforces safety constraints
 - Batch operation support
 
 **4. Analysis Engine (`src/dsl/compilers/analysis.ts`)**
+
 - Specialized for productivity/pattern analysis
 - Uses bridge for bulk property access
 - Caches results appropriately
 
 **5. Execution Engine (`src/dsl/executor.ts`)**
+
 - Runs generated JXA/OmniJS scripts via osascript
 - Handles async operations with pending tracking
 - Error recovery and retry logic
@@ -715,23 +778,27 @@ await of()
 ### Safety Tiers
 
 **Tier 1: Read-Only Operations (Unrestricted)**
+
 - Queries for tasks, projects, tags, perspectives
 - Analysis operations
 - No confirmation required
 
 **Tier 2: Safe Write Operations (Auto-Approved)**
+
 - Create new tasks/projects
 - Update task properties (name, due date, tags)
 - Complete/defer individual tasks
 - Low risk, reversible operations
 
 **Tier 3: Bulk Operations (Confirmation Required)**
+
 - Bulk updates affecting >10 items
 - Bulk complete/drop operations
 - Requires explicit user confirmation
 - Dry-run mode mandatory preview
 
 **Tier 4: Destructive Operations (Gated)**
+
 - Delete (permanent removal)
 - Drop projects (affects multiple tasks)
 - Requires separate `take_sensitive_gated_actions()` tool
@@ -760,24 +827,28 @@ await of()
 ## Migration Path from Current MCP Server
 
 ### Phase 1: Parallel Implementation (Week 1-2)
+
 1. Add new `execute_dsl` tool alongside existing 17 tools
 2. Implement core DSL interpreter for query operations
 3. Test DSL queries against current tool outputs
 4. Document DSL syntax in MCP tool description
 
 ### Phase 2: Feature Parity (Week 3-4)
+
 1. Implement create/update/delete operations
 2. Add analysis operations
 3. Achieve functional parity with existing tools
 4. Performance testing and optimization
 
 ### Phase 3: Migration Guidance (Week 5)
+
 1. Create migration guide for existing users
 2. Add deprecation notices to old tools
 3. Provide examples mapping old → new syntax
 4. Monitor usage patterns
 
 ### Phase 4: Sunset Old Tools (Week 6+)
+
 1. Remove deprecated tools from MCP server
 2. Update documentation to DSL-first approach
 3. Archive old tool implementations
@@ -788,18 +859,21 @@ await of()
 ## Success Metrics
 
 ### Technical Metrics
+
 - **Context Window Savings:** Measure token reduction in tool definitions
 - **Response Time:** DSL execution should match or beat current tools
 - **Error Rate:** DSL validation should catch errors before execution
 - **Code Coverage:** Comprehensive test suite for DSL operations
 
 ### User Experience Metrics
+
 - **Learning Curve:** Time for new users to perform common operations
 - **Task Success Rate:** Percentage of DSL operations that succeed first try
 - **Query Expressiveness:** Can users express complex queries easily?
 - **Error Message Quality:** How quickly do users recover from errors?
 
 ### Maintenance Metrics
+
 - **Lines of Code:** Reduction in total codebase size
 - **Test Maintenance:** Reduction in test code to maintain
 - **Documentation Burden:** Reduction in documentation required
@@ -844,6 +918,7 @@ await of()
 ## Next Steps for Implementation
 
 ### Immediate (Week 1)
+
 1. **Spike: Proof of Concept**
    - Implement basic query DSL in JSON
    - Build simple interpreter that generates JXA
@@ -856,6 +931,7 @@ await of()
    - Ensure type safety end-to-end
 
 ### Short Term (Weeks 2-4)
+
 3. **Core Implementation**
    - Query compiler with filter support
    - Create/update operations
@@ -869,6 +945,7 @@ await of()
    - Example gallery
 
 ### Medium Term (Months 2-3)
+
 5. **Advanced Features**
    - Analysis operations
    - Bulk operations with safety gates
@@ -881,6 +958,7 @@ await of()
    - Syntax highlighting extensions
 
 ### Long Term (Months 4+)
+
 7. **Ecosystem Growth**
    - Community contributions
    - Plugin system
@@ -892,16 +970,19 @@ await of()
 ## Alternative Approaches Not Pursued
 
 ### GraphQL-Based API
+
 - **Pro:** Industry standard, great tooling
 - **Con:** Overkill for local MCP server, requires GraphQL server infrastructure
 - **Decision:** Too heavyweight for this use case
 
 ### REST-ful API Design
+
 - **Pro:** Familiar HTTP semantics
 - **Con:** Doesn't fit MCP transport model, not optimized for LLM interaction
 - **Decision:** MCP already handles transport layer
 
 ### Natural Language Interface
+
 - **Pro:** Most intuitive for users
 - **Con:** Requires NLP parsing, ambiguity, error-prone for programmatic use
 - **Decision:** Let LLM handle NL→DSL translation, keep DSL precise
@@ -911,53 +992,56 @@ await of()
 ## Appendix: Example Use Cases
 
 ### Use Case 1: Daily Review
+
 **Goal:** Get all tasks due today or overdue, grouped by project
 
-**Current Approach (MCP):** Call `tasks` tool with filters
-**DSL Approach:**
+**Current Approach (MCP):** Call `tasks` tool with filters **DSL Approach:**
+
 ```json
 {
   "query": {
     "type": "tasks",
     "filters": {
       "status": "active",
-      "dueDate": {"before": {"days": 1, "from": "now"}}
+      "dueDate": { "before": { "days": 1, "from": "now" } }
     },
     "fields": ["id", "name", "project", "dueDate", "tags"],
-    "sort": [{"field": "project"}, {"field": "dueDate"}]
+    "sort": [{ "field": "project" }, { "field": "dueDate" }]
   }
 }
 ```
 
 ### Use Case 2: Weekly Planning
+
 **Goal:** Create 5 tasks for next week's priorities
 
-**Current Approach (MCP):** Call `manage_task` 5 times with create operation
-**DSL Approach:**
+**Current Approach (MCP):** Call `manage_task` 5 times with create operation **DSL Approach:**
+
 ```json
 {
   "batch": {
     "create": [
-      {"type": "task", "data": {"name": "Plan sprint", "tags": ["work"], "due": "2025-01-08"}},
-      {"type": "task", "data": {"name": "Review PRs", "tags": ["work"], "due": "2025-01-09"}},
-      {"type": "task", "data": {"name": "Team sync", "tags": ["work"], "due": "2025-01-10"}},
-      {"type": "task", "data": {"name": "Write docs", "tags": ["work"], "due": "2025-01-11"}},
-      {"type": "task", "data": {"name": "Deploy feature", "tags": ["work"], "due": "2025-01-12"}}
+      { "type": "task", "data": { "name": "Plan sprint", "tags": ["work"], "due": "2025-01-08" } },
+      { "type": "task", "data": { "name": "Review PRs", "tags": ["work"], "due": "2025-01-09" } },
+      { "type": "task", "data": { "name": "Team sync", "tags": ["work"], "due": "2025-01-10" } },
+      { "type": "task", "data": { "name": "Write docs", "tags": ["work"], "due": "2025-01-11" } },
+      { "type": "task", "data": { "name": "Deploy feature", "tags": ["work"], "due": "2025-01-12" } }
     ]
   }
 }
 ```
 
 ### Use Case 3: Productivity Analysis
+
 **Goal:** See completion trends for the last month
 
-**Current Approach (MCP):** Call `productivity_stats` tool
-**DSL Approach:**
+**Current Approach (MCP):** Call `productivity_stats` tool **DSL Approach:**
+
 ```json
 {
   "analyze": {
     "type": "productivity",
-    "period": {"start": "2024-12-04", "end": "2025-01-04"},
+    "period": { "start": "2024-12-04", "end": "2025-01-04" },
     "groupBy": "day",
     "metrics": ["completed", "created", "velocity"]
   }
@@ -965,21 +1049,22 @@ await of()
 ```
 
 ### Use Case 4: Bulk Cleanup
+
 **Goal:** Mark all "someday" tasks as dropped if older than 6 months
 
-**Current Approach (MCP):** Query with `tasks`, then loop calling `manage_task` update
-**DSL Approach:**
+**Current Approach (MCP):** Query with `tasks`, then loop calling `manage_task` update **DSL Approach:**
+
 ```json
 {
   "update": {
     "type": "tasks",
     "filters": {
-      "tags": {"any": ["someday"]},
-      "deferDate": {"before": {"days": 180, "from": "now"}},
+      "tags": { "any": ["someday"] },
+      "deferDate": { "before": { "days": 180, "from": "now" } },
       "status": "active"
     },
-    "changes": {"status": "dropped"},
-    "dryRun": true  // Preview first
+    "changes": { "status": "dropped" },
+    "dryRun": true // Preview first
   }
 }
 ```
@@ -996,9 +1081,11 @@ A custom DSL for OmniFocus represents a significant investment but offers substa
 4. **Maintainability:** Centralized logic easier to update and test
 5. **Type Safety:** Built-in validation prevents entire classes of errors
 
-**Recommended path forward:** Start with JSON-based MVP for quick validation, then enhance with text syntax if adoption warrants the investment.
+**Recommended path forward:** Start with JSON-based MVP for quick validation, then enhance with text syntax if adoption
+warrants the investment.
 
-This design provides enough detail for another developer to begin implementation while leaving room for refinement through real-world usage and feedback.
+This design provides enough detail for another developer to begin implementation while leaving room for refinement
+through real-world usage and feedback.
 
 ---
 

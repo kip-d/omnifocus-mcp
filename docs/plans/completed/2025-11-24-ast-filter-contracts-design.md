@@ -1,12 +1,11 @@
 # AST-Based Filter Contracts Design
 
-**Date:** 2025-11-24
-**Status:** Approved Design
-**Author:** Brainstorming session
+**Date:** 2025-11-24 **Status:** Approved Design **Author:** Brainstorming session
 
 ## Overview
 
-Transform the contracts system from string-based code generation to an AST (Abstract Syntax Tree) representation. This enables static analysis, validation, testing, and multi-target code emission.
+Transform the contracts system from string-based code generation to an AST (Abstract Syntax Tree) representation. This
+enables static analysis, validation, testing, and multi-target code emission.
 
 ## Goals
 
@@ -28,12 +27,14 @@ TaskFilter  →  buildAST()  →  FilterAST  →  validate()  →  emit(target) 
 ### Why AST Instead of String Generation?
 
 **String generation limitations:**
+
 - Generated code is opaque strings - no static analysis
 - Can't use TypeScript to verify the generated JS is correct
-- Hard to unit test the *logic* vs just "does it produce a string"
+- Hard to unit test the _logic_ vs just "does it produce a string"
 - Can't transform to different targets
 
 **AST benefits:**
+
 - Testable: Unit test the AST structure, not string output
 - Verifiable: Static analysis tools can check the AST
 - Extensible: Add new output targets without rewriting logic
@@ -44,12 +45,7 @@ TaskFilter  →  buildAST()  →  FilterAST  →  validate()  →  emit(target) 
 ```typescript
 // src/contracts/ast/types.ts
 
-type FilterNode =
-  | AndNode
-  | OrNode
-  | NotNode
-  | ComparisonNode
-  | ExistsNode;
+type FilterNode = AndNode | OrNode | NotNode | ComparisonNode | ExistsNode;
 
 interface AndNode {
   type: 'and';
@@ -68,26 +64,28 @@ interface NotNode {
 
 interface ComparisonNode {
   type: 'comparison';
-  field: string;           // 'task.completed', 'task.flagged', etc.
+  field: string; // 'task.completed', 'task.flagged', etc.
   operator: '==' | '!=' | '<' | '>' | '<=' | '>=' | 'includes' | 'some' | 'every';
-  value: unknown;          // The value to compare against
+  value: unknown; // The value to compare against
 }
 
 interface ExistsNode {
   type: 'exists';
   field: string;
-  exists: boolean;         // true = must exist, false = must not exist
+  exists: boolean; // true = must exist, false = must not exist
 }
 ```
 
 ## Example Transformation
 
 **Input: TaskFilter**
+
 ```typescript
 { completed: false, flagged: true, tags: ['work'], tagsOperator: 'OR' }
 ```
 
 **Output: FilterAST**
+
 ```typescript
 {
   type: 'and',
@@ -197,12 +195,12 @@ interface TaskMutation {
   operation: 'create' | 'update' | 'complete' | 'delete';
   target: 'task' | 'project';
   data?: TaskCreateData | TaskUpdateData;
-  id?: string;  // Required for update/complete/delete
+  id?: string; // Required for update/complete/delete
 }
 
 interface TaskCreateData {
   name: string;
-  project?: string | null;  // null = inbox
+  project?: string | null; // null = inbox
   tags?: string[];
   dueDate?: string;
   deferDate?: string;

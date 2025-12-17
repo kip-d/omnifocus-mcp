@@ -1,13 +1,13 @@
 # OmniJS-First Script Pattern
 
-**Created:** 2025-11-27
-**Status:** Standard for all new scripts
+**Created:** 2025-11-27 **Status:** Standard for all new scripts
 
 ---
 
 ## Why OmniJS-First?
 
-Based on our investigation ([JXA vs OmniJS Investigation](../plans/things-to-check-out.md#4-jxa-vs-omnijs-investigation-2025-11-27--complete)):
+Based on our investigation
+([JXA vs OmniJS Investigation](../plans/things-to-check-out.md#4-jxa-vs-omnijs-investigation-2025-11-27--complete)):
 
 1. **JXA is "legacy/sunset mode"** - Per Omni Group forums
 2. **Performance** - OmniJS runs inside OmniFocus (no Apple Events overhead)
@@ -103,12 +103,12 @@ const dueDate = task.dueDate;
 const project = task.containingProject;
 const projectName = project ? project.name : null;
 const tags = task.tags;
-const tagNames = tags.map(t => t.name);
+const tagNames = tags.map((t) => t.name);
 
 // Parent relationships - all work!
-const parentFolder = folder.parent;           // ✅ Works
-const projectFolder = project.parentFolder;   // ✅ Works
-const parentTask = task.parent;               // ✅ Works
+const parentFolder = folder.parent; // ✅ Works
+const projectFolder = project.parentFolder; // ✅ Works
+const parentTask = task.parent; // ✅ Works
 
 // Writing properties - direct assignment
 task.name = 'New Name';

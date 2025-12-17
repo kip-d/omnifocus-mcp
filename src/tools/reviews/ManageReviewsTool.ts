@@ -4,7 +4,13 @@ import {
   MARK_PROJECT_REVIEWED_SCRIPT,
   SET_REVIEW_SCHEDULE_SCRIPT,
 } from '../../omnifocus/scripts/reviews.js';
-import { createListResponseV2, createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
+import {
+  createListResponseV2,
+  createSuccessResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+  StandardResponseV2,
+} from '../../utils/response-format.js';
 import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated-schemas.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';
@@ -16,7 +22,8 @@ const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, ReviewsResponseV2> {
   name = 'manage_reviews';
-  description = 'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
+  description =
+    'Consolidated tool for all project review operations. Supports listing projects for review, marking projects as reviewed, setting/clearing review schedules. Essential for GTD weekly reviews.';
   schema = ManageReviewsSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -76,10 +83,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     }
   }
 
-  private async listForReview(
-    args: ManageReviewsInput,
-    timer: OperationTimerV2,
-  ): Promise<StandardResponseV2<unknown>> {
+  private async listForReview(args: ManageReviewsInput, timer: OperationTimerV2): Promise<StandardResponseV2<unknown>> {
     // Extract parameters with defaults
     const daysAhead = args.daysAhead ?? 7;
 
@@ -108,12 +112,22 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     });
     const result = await this.execJson<ReviewListData>(script);
     if (isScriptError(result)) {
-      return createErrorResponseV2('manage_reviews', result.error === 'NULL_RESULT' ? 'NULL_RESULT' : 'SCRIPT_ERROR', result.error || 'Script error', undefined, result.details, timer.toMetadata());
+      return createErrorResponseV2(
+        'manage_reviews',
+        result.error === 'NULL_RESULT' ? 'NULL_RESULT' : 'SCRIPT_ERROR',
+        result.error || 'Script error',
+        undefined,
+        result.details,
+        timer.toMetadata(),
+      );
     }
 
     // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
     const envelope = result.data as { ok?: boolean; v?: string; data?: ReviewListData } | ReviewListData;
-    const data: ReviewListData = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : (envelope as ReviewListData);
+    const data: ReviewListData =
+      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data
+        ? envelope.data
+        : (envelope as ReviewListData);
     // Ensure projects array exists (accept both wrapped and raw)
     const src = data?.projects || data?.items || [];
     if (!Array.isArray(src)) {
@@ -170,8 +184,9 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
         nextReviewDate,
         reviewStatus,
         daysUntilReview,
-        daysSinceLastReview: lastReviewDate ?
-          Math.floor((now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24)) : null,
+        daysSinceLastReview: lastReviewDate
+          ? Math.floor((now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24))
+          : null,
       } as {
         id?: string;
         name?: string;
@@ -183,24 +198,22 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     });
 
     // Create standardized response
-    const standardResponse = createListResponseV2(
-      'manage_reviews',
-      parsedProjects,
-      'projects',
-      {
-        ...timer.toMetadata(),
-        operation: 'list_for_review',
-        filters_applied: args,
-        review_summary: {
-          total_projects: parsedProjects.length,
-          overdue: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'overdue').length,
-          due_today: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_today').length,
-          due_soon: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_soon').length,
-          no_schedule: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'no_schedule').length,
-        },
-        ...(data && typeof data === 'object' && 'metadata' in data ? (data as { metadata?: Record<string, unknown> }).metadata : {}),
+    const standardResponse = createListResponseV2('manage_reviews', parsedProjects, 'projects', {
+      ...timer.toMetadata(),
+      operation: 'list_for_review',
+      filters_applied: args,
+      review_summary: {
+        total_projects: parsedProjects.length,
+        overdue: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'overdue').length,
+        due_today: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_today').length,
+        due_soon: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'due_soon').length,
+        no_schedule: parsedProjects.filter((p) => (p as { reviewStatus?: string }).reviewStatus === 'no_schedule')
+          .length,
       },
-    );
+      ...(data && typeof data === 'object' && 'metadata' in data
+        ? (data as { metadata?: Record<string, unknown> }).metadata
+        : {}),
+    });
 
     // Cache results
     this.cache.set('reviews', cacheKey, standardResponse);
@@ -208,10 +221,7 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     return standardResponse;
   }
 
-  private async markReviewed(
-    args: ManageReviewsInput,
-    timer: OperationTimerV2,
-  ): Promise<StandardResponseV2<unknown>> {
+  private async markReviewed(args: ManageReviewsInput, timer: OperationTimerV2): Promise<StandardResponseV2<unknown>> {
     const { projectId, reviewDate, updateNextReviewDate } = args;
 
     // Convert to branded ProjectId for type safety
@@ -245,15 +255,20 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
 
     // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
     const envelope = result.data as unknown;
-    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
 
-    return createSuccessResponseV2('manage_reviews', { project: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'mark_reviewed', reviewed_id: projectId, review_date: actualReviewDate, next_review_calculated: updateNextReviewDate, input_params: { projectId, reviewDate: actualReviewDate, updateNextReviewDate } });
+    return createSuccessResponseV2('manage_reviews', { project: parsedResult }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'mark_reviewed',
+      reviewed_id: projectId,
+      review_date: actualReviewDate,
+      next_review_calculated: updateNextReviewDate,
+      input_params: { projectId, reviewDate: actualReviewDate, updateNextReviewDate },
+    });
   }
 
-  private async setSchedule(
-    args: ManageReviewsInput,
-    timer: OperationTimerV2,
-  ): Promise<StandardResponseV2<unknown>> {
+  private async setSchedule(args: ManageReviewsInput, timer: OperationTimerV2): Promise<StandardResponseV2<unknown>> {
     const { projectIds, reviewInterval, nextReviewDate } = args;
 
     // Convert to branded ProjectIds for type safety
@@ -284,15 +299,20 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
 
     // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
     const envelope = result.data as unknown;
-    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
 
-    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'set_schedule', projects_updated: projectIds?.length ?? 0, review_interval: reviewInterval, next_review_date: nextReviewDate, input_params: { projectIds, reviewInterval, nextReviewDate } });
+    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'set_schedule',
+      projects_updated: projectIds?.length ?? 0,
+      review_interval: reviewInterval,
+      next_review_date: nextReviewDate,
+      input_params: { projectIds, reviewInterval, nextReviewDate },
+    });
   }
 
-  private async clearSchedule(
-    args: ManageReviewsInput,
-    timer: OperationTimerV2,
-  ): Promise<StandardResponseV2<unknown>> {
+  private async clearSchedule(args: ManageReviewsInput, timer: OperationTimerV2): Promise<StandardResponseV2<unknown>> {
     const { projectIds } = args;
 
     // Convert to branded ProjectIds for type safety
@@ -323,9 +343,15 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
 
     // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
     const envelope = result.data as unknown;
-    const parsedResult = (envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data) ? envelope.data : envelope;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && envelope.data ? envelope.data : envelope;
 
-    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, { ...timer.toMetadata(), operation: 'clear_schedule', projects_updated: projectIds?.length ?? 0, input_params: { projectIds } });
+    return createSuccessResponseV2('manage_reviews', { batch: parsedResult }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'clear_schedule',
+      projects_updated: projectIds?.length ?? 0,
+      input_params: { projectIds },
+    });
   }
 
   // Claude Desktop sends parameters as strings, requiring runtime conversion
@@ -370,5 +396,4 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
 
     return normalized as ManageReviewsInput;
   }
-
 }

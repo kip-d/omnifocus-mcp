@@ -13,9 +13,9 @@ describe('Bridge Template', () => {
         NAME: 'John Doe',
         TITLE: 'Engineer',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const name = "John Doe"; const title = "Engineer";');
     });
 
@@ -24,9 +24,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         MESSAGE: 'Hello "World"\nNew Line\t Tab',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const message = "Hello \\"World\\"\\nNew Line\\t Tab";');
     });
 
@@ -36,9 +36,9 @@ describe('Bridge Template', () => {
         FLAGGED: true,
         COMPLETED: false,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const flagged = true; const completed = false;');
     });
 
@@ -48,9 +48,9 @@ describe('Bridge Template', () => {
         COUNT: 42,
         PRICE: 19.99,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const count = 42; const price = 19.99;');
     });
 
@@ -60,9 +60,9 @@ describe('Bridge Template', () => {
         NULL_VAL: null,
         UNDEFINED_VAL: undefined,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const nullVal = null; const undefinedVal = null;');
     });
 
@@ -72,9 +72,9 @@ describe('Bridge Template', () => {
         TAGS: ['work', 'urgent', 'review'],
         NUMBERS: [1, 2, 3],
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const tags = ["work","urgent","review"]; const numbers = [1,2,3];');
     });
 
@@ -87,9 +87,9 @@ describe('Bridge Template', () => {
           count: 5,
         },
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const config = {"name":"Test","enabled":true,"count":5};');
     });
 
@@ -98,9 +98,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         VALUE: 'test',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const a = "test"; const b = "test"; const c = "test";');
     });
 
@@ -109,7 +109,7 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         NAME: 'John',
       };
-      
+
       expect(() => formatBridgeScript(template, params)).toThrow('Missing template parameters: $AGE$');
     });
 
@@ -118,9 +118,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         UNUSED: 'value',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('');
     });
 
@@ -129,9 +129,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         UNUSED: 'value',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const x = 5; return x * 2;');
     });
 
@@ -146,9 +146,9 @@ describe('Bridge Template', () => {
         TASK_ID: '12345',
         NAME: 'Updated Task',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toContain('\n    const task = "12345";\n');
       expect(result).toContain('      task.name = "Updated Task";\n');
     });
@@ -158,9 +158,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         VALUE_1: 'test',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const val = "test";');
     });
 
@@ -169,9 +169,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         COMMAND: '"; maliciousCode(); "',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       // Should properly escape the malicious input
       expect(result).toBe('const cmd = "\\"; maliciousCode(); \\"";');
     });
@@ -182,9 +182,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         TEXT: longString,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe(`const text = "${longString}";`);
     });
 
@@ -193,9 +193,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         TEXT: '😀 Unicode 文字 Test',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const text = "😀 Unicode 文字 Test";');
     });
 
@@ -204,9 +204,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         HTML: '<div class="container" id=\'main\'>Content</div>',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const html = "<div class=\\"container\\" id=\'main\'>Content</div>";');
     });
 
@@ -215,9 +215,8 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         B: 'value',
       };
-      
-      expect(() => formatBridgeScript(template, params))
-        .toThrow('Missing template parameters: $A$, $C$');
+
+      expect(() => formatBridgeScript(template, params)).toThrow('Missing template parameters: $A$, $C$');
     });
   });
 
@@ -240,9 +239,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         TASK_ID: 'abc123',
       };
-      
+
       const result = formatBridgeScript(BridgeTemplates.GET_TASK, params);
-      
+
       expect(result).toContain('Task.byIdentifier("abc123")');
       expect(result).toContain('JSON.stringify({ success: true');
       expect(result).toContain('JSON.stringify({ success: false');
@@ -253,9 +252,9 @@ describe('Bridge Template', () => {
         TASK_ID: 'xyz789',
         TAGS: ['work', 'urgent'],
       };
-      
+
       const result = formatBridgeScript(BridgeTemplates.ASSIGN_TAGS, params);
-      
+
       expect(result).toContain('Task.byIdentifier("xyz789")');
       expect(result).toContain('const tagNames = ["work","urgent"]');
       expect(result).toContain('flattenedTags.byName(name)');
@@ -268,9 +267,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         SCRIPT: 'rm -rf /"; echo "pwned',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       // The dangerous command should be safely escaped as a string
       expect(result).toBe('app.doShellScript("rm -rf /\\"; echo \\"pwned");');
     });
@@ -282,9 +281,9 @@ describe('Bridge Template', () => {
           value: '"); alert("XSS"); //',
         },
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       // Should be safely JSON stringified
       expect(result).toBe('const config = {"value":"\\"); alert(\\"XSS\\"); //"};');
     });
@@ -294,9 +293,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         PATH: 'C:\\Users\\Test\\File.txt',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const path = "C:\\\\Users\\\\Test\\\\File.txt";');
     });
 
@@ -305,9 +304,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         TEXT: 'Line 1\nLine 2\rLine 3\tTabbed',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const text = "Line 1\\nLine 2\\rLine 3\\tTabbed";');
     });
   });
@@ -318,9 +317,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         EMPTY: '',
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const empty = "";');
     });
 
@@ -329,9 +328,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         ZERO: 0,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const zero = 0;');
     });
 
@@ -340,9 +339,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         NEG: -42.5,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const negative = -42.5;');
     });
 
@@ -351,9 +350,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         EMPTY_ARRAY: [],
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const empty = [];');
     });
 
@@ -362,9 +361,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         EMPTY_OBJ: {},
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const empty = {};');
     });
 
@@ -373,9 +372,9 @@ describe('Bridge Template', () => {
       const params: BridgeTemplateParams = {
         SCI: 1.23e-10,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       expect(result).toBe('const sci = 1.23e-10;');
     });
 
@@ -385,9 +384,9 @@ describe('Bridge Template', () => {
         INF: Infinity,
         NAN: NaN,
       };
-      
+
       const result = formatBridgeScript(template, params);
-      
+
       // Numbers are converted to strings directly, including Infinity and NaN
       expect(result).toBe('const inf = Infinity; const nan = NaN;');
     });

@@ -72,7 +72,13 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
 
         if (code !== 0) {
           this.log('Script execution failed with non-zero code', { code, stderr });
-          reject(new OmniAutomationError(`Script execution failed with code ${code}`, { script, stderr, code: code || undefined }));
+          reject(
+            new OmniAutomationError(`Script execution failed with code ${code}`, {
+              script,
+              stderr,
+              code: code || undefined,
+            }),
+          );
           return;
         }
 
@@ -95,7 +101,11 @@ export class DiagnosticOmniAutomation extends OmniAutomation {
           this.log('Successfully parsed output', {
             resultType: typeof result,
             hasError: ((): boolean => {
-              return !!result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result as Record<string, unknown>, 'error');
+              return (
+                !!result &&
+                typeof result === 'object' &&
+                Object.prototype.hasOwnProperty.call(result as Record<string, unknown>, 'error')
+              );
             })(),
           });
 

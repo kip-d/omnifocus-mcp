@@ -9,7 +9,7 @@ interface TestCase {
 
 const testCases: TestCase[] = [
   {
-    name: "Basic whose() with boolean property",
+    name: 'Basic whose() with boolean property',
     script: `
       const tasks = doc.flattenedTasks.whose({completed: false})();
       return JSON.stringify({
@@ -17,10 +17,10 @@ const testCases: TestCase[] = [
         count: tasks.length,
         sample: tasks.length > 0 ? tasks[0].name() : null
       });
-    `
+    `,
   },
   {
-    name: "whose() with multiple boolean properties",
+    name: 'whose() with multiple boolean properties',
     script: `
       const tasks = doc.flattenedTasks.whose({completed: false, flagged: true})();
       return JSON.stringify({
@@ -28,10 +28,10 @@ const testCases: TestCase[] = [
         count: tasks.length,
         sample: tasks.length > 0 ? tasks[0].name() : null
       });
-    `
+    `,
   },
   {
-    name: "whose() with null comparison (!=)",
+    name: 'whose() with null comparison (!=)',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({dueDate: {'!=': null}})();
@@ -46,10 +46,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() with null comparison (direct)",
+    name: 'whose() with null comparison (direct)',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({dueDate: null})();
@@ -64,10 +64,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() with date comparison (>)",
+    name: 'whose() with date comparison (>)',
     script: `
       try {
         const today = new Date();
@@ -83,10 +83,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() with string property",
+    name: 'whose() with string property',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({name: 'Test Task'})();
@@ -101,10 +101,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() with contains operator",
+    name: 'whose() with contains operator',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({name: {'contains': 'email'}})();
@@ -119,10 +119,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() _and operator",
+    name: 'whose() _and operator',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({
@@ -142,10 +142,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "whose() _or operator",
+    name: 'whose() _or operator',
     script: `
       try {
         const tasks = doc.flattenedTasks.whose({
@@ -165,10 +165,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "flattenedTasks as property vs method",
+    name: 'flattenedTasks as property vs method',
     script: `
       try {
         // Test if flattenedTasks is a property or method
@@ -218,10 +218,10 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
+    `,
   },
   {
-    name: "Testing different whose() call patterns",
+    name: 'Testing different whose() call patterns',
     script: `
       try {
         const results = {};
@@ -273,8 +273,8 @@ const testCases: TestCase[] = [
           error: e.toString()
         });
       }
-    `
-  }
+    `,
+  },
 ];
 
 async function runWhoseTests() {
@@ -284,10 +284,10 @@ async function runWhoseTests() {
   for (const test of testCases) {
     console.log(`\nTest: ${test.name}`);
     console.log('-'.repeat(test.name.length + 6));
-    
+
     try {
       const result = await omni.execute(test.script);
-      
+
       if (result) {
         console.log('Result:', JSON.stringify(result, null, 2));
       } else {
@@ -299,11 +299,11 @@ async function runWhoseTests() {
         console.log('Stderr:', error.stderr);
       }
     }
-    
+
     // Add delay between tests
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  
+
   console.log('\n' + '='.repeat(80));
   console.log('Testing complete!');
 }

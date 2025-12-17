@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() })),
 }));
 
 describe('WorkflowAnalysisTool', () => {
@@ -28,7 +28,12 @@ describe('WorkflowAnalysisTool', () => {
     const cached = { insights: [{ insight: 'Cache' }], recommendations: [], patterns: {} };
     mockCache.get.mockReturnValue(cached);
 
-    const res: any = await tool.execute({ analysisDepth: 'quick', focusAreas: ['productivity'], includeRawData: false, maxInsights: 10 } as any);
+    const res: any = await tool.execute({
+      analysisDepth: 'quick',
+      focusAreas: ['productivity'],
+      includeRawData: false,
+      maxInsights: 10,
+    } as any);
     expect(res.success).toBe(true);
     expect(res.metadata.from_cache).toBe(true);
   });
@@ -36,7 +41,7 @@ describe('WorkflowAnalysisTool', () => {
   it('handles script error result with structured error', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');
-    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'Failed' , details: 'Test error' });
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'Failed', details: 'Test error' });
 
     const res: any = await tool.execute({} as any);
     expect(res.success).toBe(false);

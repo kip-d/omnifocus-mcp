@@ -7,7 +7,7 @@ import { writeFileSync } from 'fs';
 function parseTextResponse(response) {
   const content = response?.result?.content;
   if (!Array.isArray(content)) return null;
-  const textEntry = content.find(item => item.type === 'text');
+  const textEntry = content.find((item) => item.type === 'text');
   if (!textEntry) return null;
   try {
     return JSON.parse(textEntry.text);

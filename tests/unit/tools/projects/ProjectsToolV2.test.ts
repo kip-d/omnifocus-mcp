@@ -11,7 +11,7 @@ describe('ProjectsTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn(),
       set: vi.fn(),
@@ -23,9 +23,9 @@ describe('ProjectsTool', () => {
       invalidateForTaskChange: vi.fn(),
       invalidateTaskQueries: vi.fn(),
     } as any;
-    
+
     tool = new ProjectsTool(mockCache);
-    
+
     // Mock the OmniAutomation instance
     mockOmni = {
       executeJson: vi.fn(),
@@ -123,7 +123,7 @@ describe('ProjectsTool', () => {
         summary: { total_projects: 2 },
         projects: [{ id: 'p1', name: 'Cached' }],
       };
-      
+
       mockCache.get.mockReturnValue(cachedData);
 
       const result = await tool.execute({
@@ -143,7 +143,7 @@ describe('ProjectsTool', () => {
         items: [{ id: 'p1', name: 'Project' }],
         summary: { total: 1 },
       };
-      
+
       mockCache.get.mockReturnValue(null);
       mockOmni.executeJson.mockResolvedValue({ success: true, data: projectData });
 
@@ -157,8 +157,8 @@ describe('ProjectsTool', () => {
         'projects',
         expect.any(String), // cache key
         expect.objectContaining({
-          projects: expect.any(Array)
-        })
+          projects: expect.any(Array),
+        }),
       );
     });
   });
@@ -190,7 +190,7 @@ describe('ProjectsTool', () => {
     it('should validate required name for create', async () => {
       // Mock should not be called, but set it up to prevent errors
       mockOmni.executeJson.mockResolvedValue(null);
-      
+
       const result = await tool.execute({
         operation: 'create',
         // name is missing
@@ -206,7 +206,7 @@ describe('ProjectsTool', () => {
     });
 
     it('should handle tags during creation', async () => {
-      mockOmni.executeJson.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { id: 'p1', name: 'Tagged Project', tags: ['work', 'important'] },
       });
@@ -226,7 +226,7 @@ describe('ProjectsTool', () => {
 
   describe('update operation', () => {
     it('should update an existing project', async () => {
-      mockOmni.executeJson.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { success: true, project: { id: 'p1', name: 'Updated Name', status: 'active' } },
       });
@@ -246,7 +246,7 @@ describe('ProjectsTool', () => {
 
     it('should validate required projectId for update', async () => {
       mockOmni.executeJson.mockResolvedValue(null);
-      
+
       const result = await tool.execute({
         operation: 'update',
         name: 'New Name',
@@ -262,7 +262,7 @@ describe('ProjectsTool', () => {
     });
 
     it('should update project due date', async () => {
-      mockOmni.executeJson.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { success: true, project: { id: 'p1', name: 'Project', dueDate: '2025-03-31' } },
       });
@@ -282,7 +282,7 @@ describe('ProjectsTool', () => {
 
   describe('complete operation', () => {
     it('should complete a project', async () => {
-      mockOmni.executeJson.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { id: 'p1', name: 'Completed Project', status: 'done' },
       });
@@ -302,7 +302,7 @@ describe('ProjectsTool', () => {
 
     it('should validate required projectId for complete', async () => {
       mockOmni.executeJson.mockResolvedValue(null);
-      
+
       const result = await tool.execute({
         operation: 'complete',
         // projectId is missing
@@ -319,7 +319,7 @@ describe('ProjectsTool', () => {
 
   describe('delete operation', () => {
     it('should delete a project', async () => {
-      mockOmni.executeJson.mockResolvedValue({ 
+      mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { id: 'p1', deleted: true },
       });
@@ -339,7 +339,7 @@ describe('ProjectsTool', () => {
 
     it('should validate required projectId for delete', async () => {
       mockOmni.executeJson.mockResolvedValue(null);
-      
+
       const result = await tool.execute({
         operation: 'delete',
         // projectId is missing
@@ -358,7 +358,7 @@ describe('ProjectsTool', () => {
     it('should list projects needing review', async () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 10); // 10 days ago
-      
+
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: {
@@ -406,7 +406,7 @@ describe('ProjectsTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.items).toHaveLength(3);
-      expect(result.data.items.every(p => p.status === 'active')).toBe(true);
+      expect(result.data.items.every((p) => p.status === 'active')).toBe(true);
     });
   });
 
@@ -453,17 +453,21 @@ describe('ProjectsTool', () => {
     });
 
     it('should validate limit bounds', async () => {
-      await expect(tool.execute({
-        operation: 'list',
-        limit: 0,
-        details: false,
-      })).rejects.toThrow('Invalid parameters');
-      
-      await expect(tool.execute({
-        operation: 'list',
-        limit: 501,
-        details: false,
-      })).rejects.toThrow('Invalid parameters');
+      await expect(
+        tool.execute({
+          operation: 'list',
+          limit: 0,
+          details: false,
+        }),
+      ).rejects.toThrow('Invalid parameters');
+
+      await expect(
+        tool.execute({
+          operation: 'list',
+          limit: 501,
+          details: false,
+        }),
+      ).rejects.toThrow('Invalid parameters');
     });
   });
 
@@ -504,11 +508,13 @@ describe('ProjectsTool', () => {
     });
 
     it('should handle invalid operation gracefully', async () => {
-      await expect(tool.execute({
-        operation: 'invalid_op' as any,
-        limit: 50,
-        details: false,
-      })).rejects.toThrow('Invalid parameters');
+      await expect(
+        tool.execute({
+          operation: 'invalid_op' as any,
+          limit: 50,
+          details: false,
+        }),
+      ).rejects.toThrow('Invalid parameters');
     });
 
     it('should handle project not found errors', async () => {
@@ -565,7 +571,7 @@ describe('ProjectsTool', () => {
     it('should generate comprehensive summary for list operations', async () => {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 10);
-      
+
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: {

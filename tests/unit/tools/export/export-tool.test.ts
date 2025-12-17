@@ -4,7 +4,7 @@ import { CacheManager } from '../../../../src/cache/CacheManager.js';
 
 // Mock deps
 vi.mock('../../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../../src/utils/logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -12,15 +12,15 @@ vi.mock('../../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 // Mock the export scripts since we're testing the self-contained implementation
 vi.mock('../../../../src/omnifocus/scripts/export/export-tasks.js', () => ({
-  EXPORT_TASKS_SCRIPT: 'mock-tasks-export-script'
+  EXPORT_TASKS_SCRIPT: 'mock-tasks-export-script',
 }));
 vi.mock('../../../../src/omnifocus/scripts/export/export-projects.js', () => ({
-  EXPORT_PROJECTS_SCRIPT: 'mock-projects-export-script'
+  EXPORT_PROJECTS_SCRIPT: 'mock-projects-export-script',
 }));
 
 // Mock TagsTool for bulk export
@@ -29,9 +29,9 @@ vi.mock('../../../../src/tools/tags/TagsTool.js', () => ({
     execute: vi.fn(async () => ({
       success: true,
       data: { items: [{ id: 't1', name: 'Work' }] },
-      metadata: { total_count: 1 }
-    }))
-  }))
+      metadata: { total_count: 1 },
+    })),
+  })),
 }));
 
 vi.mock('../../../../src/utils/response-format-v2.js', () => ({
@@ -56,7 +56,7 @@ vi.mock('fs', () => ({
 }));
 
 vi.mock('path', () => ({
-  join: vi.fn((...args: string[]) => args.join('/'))
+  join: vi.fn((...args: string[]) => args.join('/')),
 }));
 
 describe('ExportTool (self-contained implementation)', () => {
@@ -68,7 +68,7 @@ describe('ExportTool (self-contained implementation)', () => {
     vi.clearAllMocks();
     mockCache = { get: vi.fn(), set: vi.fn(), invalidate: vi.fn() };
     mockOmni = { buildScript: vi.fn(), execute: vi.fn(), executeJson: vi.fn() };
-    
+
     (CacheManager as any).mockImplementation(() => mockCache);
     tool = new ExportTool(mockCache);
     (tool as any).omniAutomation = mockOmni;
@@ -78,13 +78,13 @@ describe('ExportTool (self-contained implementation)', () => {
     it('handles task export with direct script execution', async () => {
       mockOmni.executeJson.mockResolvedValue({
         success: true,
-        data: { format: 'json', data: [{ id: 't1', name: 'Test Task' }], count: 1 }
+        data: { format: 'json', data: [{ id: 't1', name: 'Test Task' }], count: 1 },
       });
 
-      const res: any = await tool.executeValidated({ 
-        type: 'tasks', 
-        format: 'json', 
-        filter: { search: 'test' } 
+      const res: any = await tool.executeValidated({
+        type: 'tasks',
+        format: 'json',
+        filter: { search: 'test' },
       } as any);
 
       expect(res.success).toBe(true);
@@ -93,14 +93,14 @@ describe('ExportTool (self-contained implementation)', () => {
       expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-tasks-export-script', {
         format: 'json',
         filter: { search: 'test' },
-        fields: undefined
+        fields: undefined,
       });
     });
 
     it('handles task export failures', async () => {
       mockOmni.executeJson.mockResolvedValue({
         success: false,
-        error: 'Export failed'
+        error: 'Export failed',
       });
 
       const res: any = await tool.executeValidated({ type: 'tasks' } as any);
@@ -117,14 +117,14 @@ describe('ExportTool (self-contained implementation)', () => {
         data: {
           format: 'json',
           data: [{ id: 'p1', name: 'Test Project' }],
-          count: 1
-        }
+          count: 1,
+        },
       });
 
-      const res: any = await tool.executeValidated({ 
-        type: 'projects', 
+      const res: any = await tool.executeValidated({
+        type: 'projects',
         format: 'json',
-        includeStats: true 
+        includeStats: true,
       } as any);
 
       expect(res.success).toBe(true);
@@ -133,7 +133,7 @@ describe('ExportTool (self-contained implementation)', () => {
       expect(res.data.includeStats).toBe(true);
       expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-projects-export-script', {
         format: 'json',
-        includeStats: true
+        includeStats: true,
       });
     });
 
@@ -141,7 +141,7 @@ describe('ExportTool (self-contained implementation)', () => {
       mockOmni.buildScript.mockReturnValue('mock-script');
       mockOmni.executeJson.mockResolvedValue({
         success: false,
-        error: 'Projects export failed'
+        error: 'Projects export failed',
       });
 
       const res: any = await tool.executeValidated({ type: 'projects' } as any);
@@ -164,15 +164,15 @@ describe('ExportTool (self-contained implementation)', () => {
       // Mock both task and project exports with executeJson
       mockOmni.executeJson.mockResolvedValue({
         success: true,
-        data: { format: 'json', data: [{ id: 't1' }], count: 1 }
+        data: { format: 'json', data: [{ id: 't1' }], count: 1 },
       });
 
-      const res: any = await tool.executeValidated({ 
+      const res: any = await tool.executeValidated({
         type: 'all',
         outputDirectory: '/tmp/export',
         format: 'json',
         includeCompleted: true,
-        includeProjectStats: true
+        includeProjectStats: true,
       } as any);
 
       expect(res.success).toBe(true);
@@ -193,12 +193,14 @@ describe('ExportTool (self-contained implementation)', () => {
     it('handles directory creation failures', async () => {
       // Mock fs import to throw error
       vi.doMock('fs', () => ({
-        mkdirSync: vi.fn(() => { throw new Error('EACCES: permission denied'); })
+        mkdirSync: vi.fn(() => {
+          throw new Error('EACCES: permission denied');
+        }),
       }));
 
-      const res: any = await tool.executeValidated({ 
+      const res: any = await tool.executeValidated({
         type: 'all',
-        outputDirectory: '/protected/path'
+        outputDirectory: '/protected/path',
       } as any);
 
       expect(res.success).toBe(false);
@@ -219,20 +221,20 @@ describe('ExportTool (self-contained implementation)', () => {
     it('builds task export script with correct parameters', async () => {
       mockOmni.executeJson.mockResolvedValue({
         success: true,
-        data: { format: 'csv', data: 'id,name\nt1,Task1', count: 1 }
+        data: { format: 'csv', data: 'id,name\nt1,Task1', count: 1 },
       });
 
-      await tool.executeValidated({ 
+      await tool.executeValidated({
         type: 'tasks',
         format: 'csv',
         filter: { completed: false },
-        fields: ['id', 'name']
+        fields: ['id', 'name'],
       } as any);
 
       expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-tasks-export-script', {
         format: 'csv',
         filter: { completed: false },
-        fields: ['id', 'name']
+        fields: ['id', 'name'],
       });
     });
 
@@ -243,19 +245,19 @@ describe('ExportTool (self-contained implementation)', () => {
         data: {
           format: 'markdown',
           data: '# Projects\n## Project 1',
-          count: 1
-        }
+          count: 1,
+        },
       });
 
-      await tool.executeValidated({ 
+      await tool.executeValidated({
         type: 'projects',
         format: 'markdown',
-        includeStats: false
+        includeStats: false,
       } as any);
 
       expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-projects-export-script', {
         format: 'markdown',
-        includeStats: false
+        includeStats: false,
       });
     });
   });

@@ -4,7 +4,7 @@ import { CacheManager } from '../../../../src/cache/CacheManager.js';
 
 // Mock deps
 vi.mock('../../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../../src/utils/logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -12,18 +12,18 @@ vi.mock('../../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 // Mock the script creation functions since we're testing the self-contained implementation
 vi.mock('../../../../src/omnifocus/scripts/folders/list-folders.js', () => ({
-  createListFoldersScript: vi.fn(() => 'mock-list-script')
+  createListFoldersScript: vi.fn(() => 'mock-list-script'),
 }));
 vi.mock('../../../../src/omnifocus/scripts/folders/create-folder.js', () => ({
-  CREATE_FOLDER_SCRIPT: 'mock-create-script'
+  CREATE_FOLDER_SCRIPT: 'mock-create-script',
 }));
 vi.mock('../../../../src/omnifocus/scripts/folders/update-folder.js', () => ({
-  UPDATE_FOLDER_SCRIPT: 'mock-update-script'
+  UPDATE_FOLDER_SCRIPT: 'mock-update-script',
 }));
 
 vi.mock('../../../../src/utils/response-format-v2.js', () => ({
@@ -50,11 +50,11 @@ describe('FoldersTool (self-contained implementation)', () => {
     vi.clearAllMocks();
     mockCache = { get: vi.fn(), set: vi.fn(), invalidate: vi.fn() };
     mockOmni = { buildScript: vi.fn(), execute: vi.fn(), executeJson: vi.fn() };
-    
+
     (CacheManager as any).mockImplementation(() => mockCache);
     tool = new FoldersTool(mockCache);
     (tool as any).omniAutomation = mockOmni;
-    
+
     // Mock the execJson method that the consolidated tool uses
     (tool as any).execJson = vi.fn();
   });
@@ -146,7 +146,7 @@ describe('FoldersTool (self-contained implementation)', () => {
       mockCache.get.mockReturnValue(null); // No cache
       (tool as any).execJson.mockResolvedValue({
         success: true,
-        data: { items: [{ id: 'f1', name: 'Work' }] }
+        data: { items: [{ id: 'f1', name: 'Work' }] },
       });
 
       const res: any = await tool.executeValidated({ operation: 'list' } as any);
@@ -158,7 +158,7 @@ describe('FoldersTool (self-contained implementation)', () => {
     it('handles script execution failures', async () => {
       (tool as any).execJson.mockResolvedValue({
         success: false,
-        error: 'Script execution failed'
+        error: 'Script execution failed',
       });
 
       const res: any = await tool.executeValidated({ operation: 'get', folderId: 'f1' } as any);
@@ -169,11 +169,11 @@ describe('FoldersTool (self-contained implementation)', () => {
     it('invalidates cache after successful mutations', async () => {
       (tool as any).execJson.mockResolvedValue({
         success: true,
-        data: { id: 'f1', name: 'Updated Folder' }
+        data: { id: 'f1', name: 'Updated Folder' },
       });
 
       await tool.executeValidated({ operation: 'update', folderId: 'f1', name: 'Updated' } as any);
-      
+
       expect(mockCache.invalidate).toHaveBeenCalledWith('folders');
       expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
     });

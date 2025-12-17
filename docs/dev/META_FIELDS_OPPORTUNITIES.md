@@ -2,7 +2,9 @@
 
 ## Overview
 
-Meta fields are optional, tool-level metadata that can be attached to tool definitions in the MCP specification (v1.18.0+). They provide a way to embed machine-readable information about tools that goes beyond the standard `name`, `description`, and `inputSchema` properties.
+Meta fields are optional, tool-level metadata that can be attached to tool definitions in the MCP specification
+(v1.18.0+). They provide a way to embed machine-readable information about tools that goes beyond the standard `name`,
+`description`, and `inputSchema` properties.
 
 **Feature Status**: Available in @modelcontextprotocol/sdk@^1.20.1 (we just upgraded!)
 
@@ -10,12 +12,14 @@ Meta fields are optional, tool-level metadata that can be attached to tool defin
 
 ## What Are Meta Fields?
 
-Meta fields are an optional object that can be added to tool definitions to provide structured metadata about the tool. They are:
+Meta fields are an optional object that can be added to tool definitions to provide structured metadata about the tool.
+They are:
 
 - **Machine-readable**: Can be parsed and processed by tools, clients, or automation
 - **Optional**: Not required for MCP compliance; purely additive
 - **Flexible**: Can contain any key-value pairs as custom metadata
-- **Untrustworthy in strict mode**: According to MCP spec, should be considered untrusted unless from a trusted server (but this is your own server)
+- **Untrustworthy in strict mode**: According to MCP spec, should be considered untrusted unless from a trusted server
+  (but this is your own server)
 
 ### Standard Structure
 
@@ -53,12 +57,14 @@ meta: {
 ```
 
 **Benefits**:
+
 - Claude Desktop can group tools by category in UI
 - LLM can understand tool relationships and hierarchies
 - Programmatic discovery: "show me all task management tools"
 - Better documentation generation
 
 **Applicable To**: All 17 tools
+
 - Task Management: `tasks`, `manage_task`, `batch_create`
 - Organization: `projects`, `folders`, `tags`
 - Analytics: `productivity_stats`, `task_velocity`, `analyze_overdue`, etc.
@@ -79,6 +85,7 @@ meta: {
 ```
 
 **Example Application**:
+
 ```typescript
 // For productivity_stats (currently slow - 60s+)
 meta: {
@@ -98,12 +105,14 @@ meta: {
 ```
 
 **Benefits**:
+
 - LLMs can prioritize fast tools when time is critical
 - Helps with token budgeting in multi-step queries
 - Enables intelligent fallback strategies
 - Supports cost-conscious deployments
 
 **Applicable To**: All tools, especially analytics
+
 - Fast: `tasks` (with filters), `projects` (list)
 - Moderate: `workflow_analysis`, `patterns`
 - Slow: `productivity_stats`, `task_velocity`
@@ -124,12 +133,14 @@ meta: {
 ```
 
 **Benefits**:
+
 - Clients can warn users about beta tools
 - Deprecation path for future versions
 - Version tracking independent of server version
 - Migration guidance when tools change
 
 **Application**:
+
 ```typescript
 // Stable tools (17 core tools)
 meta: { stability: "stable", version: "2.2.0" }
@@ -167,12 +178,14 @@ meta: {
 ```
 
 **Benefits**:
+
 - LLMs understand hard limits before calling tools
 - Reduces failed queries and retry storms
 - Enables intelligent query optimization
 - Helps with error prediction
 
 **Application**:
+
 ```typescript
 // For manage_task
 meta: {
@@ -210,12 +223,14 @@ meta: {
 ```
 
 **Benefits**:
+
 - Clients can proactively check permissions
 - Enables permission-based tool filtering
 - Supports security-conscious deployments
 - Compliance documentation
 
 **Application**:
+
 ```typescript
 // Read-only tools
 meta: {
@@ -253,6 +268,7 @@ meta: {
 ```
 
 **Benefits**:
+
 - Applications can estimate query costs before execution
 - Supports token budgeting in multi-step workflows
 - Helps with rate limiting decisions
@@ -279,6 +295,7 @@ meta: {
 ```
 
 **Benefits**:
+
 - Multi-step workflows become more intelligent
 - Reduces irrelevant tool calls
 - Improves accuracy of complex queries
@@ -302,6 +319,7 @@ meta: {
 ```
 
 **Benefits**:
+
 - Gradual rollout of new features
 - A/B testing support
 - Feature opt-in/opt-out
@@ -312,23 +330,24 @@ meta: {
 ## Implementation Strategy
 
 ### Phase 1: Essential Metadata (v2.3.0)
+
 - Add `category` to all tools
 - Add `stability` to all tools
 - Add `complexity` to analytical tools
 - Add `performanceClass` to all tools
 
-**Effort**: ~20 minutes
-**Impact**: High (immediate tool organization benefits)
+**Effort**: ~20 minutes **Impact**: High (immediate tool organization benefits)
 
 ### Phase 2: Capability Documentation (v2.4.0)
+
 - Add `limitations` and `capabilities`
 - Add `maxResults` and `maxQueryDuration`
 - Add `requiresPermission`
 
-**Effort**: ~30 minutes
-**Impact**: Very High (reduces failed queries)
+**Effort**: ~30 minutes **Impact**: Very High (reduces failed queries)
 
 ### Phase 3: Advanced Features (Future)
+
 - Token estimation
 - Tool relationships
 - Feature flags
@@ -371,11 +390,11 @@ Update `src/tools/index.ts`:
 // Register handlers
 server.setRequestHandler(ListToolsRequestSchema, () => {
   return {
-    tools: tools.map(t => ({
+    tools: tools.map((t) => ({
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
-      meta: t.meta,  // NEW: Include meta fields
+      meta: t.meta, // NEW: Include meta fields
     })),
   };
 });
@@ -386,18 +405,21 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
 ## Strategic Value
 
 ### For Users/Developers
+
 - **Better tool discovery**: Know what each tool does and costs
 - **Intelligent querying**: LLMs can make smarter tool selection
 - **Error prevention**: Know tool limits before hitting them
 - **Documentation**: Auto-generated, accurate, always current
 
 ### For LLMs
+
 - **Reasoning**: Understand tool capabilities and limitations
 - **Planning**: Optimize queries based on cost/performance
 - **Recovery**: Better error handling with capability information
 - **Efficiency**: Avoid tools that can't handle the query
 
 ### For Your Codebase
+
 - **Type safety**: TypeScript interfaces for metadata
 - **Maintainability**: Metadata stays with tool implementation
 - **Scalability**: Easy to add new metadata as needs evolve
@@ -408,12 +430,14 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
 ## Recommendation
 
 **Implement Phase 1 now** (20 minutes):
+
 - Add category, stability, version to all tools
 - This provides immediate value with minimal effort
 - Enables better tool organization in UI
 - Helps LLMs understand tool landscape
 
 **Save Phase 2 for next iteration** (30 minutes):
+
 - Add limitations and capability information
 - This reduces failed queries significantly
 - Can be data-driven (analyze logs first)
@@ -435,4 +459,3 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
 - **MCP Specification**: https://modelcontextprotocol.io/specification/2025-06-18/
 - **SDK Support**: Available in @modelcontextprotocol/sdk@^1.18.0+
 - **Current Version**: 1.20.1 ✅
-

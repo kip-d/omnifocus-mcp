@@ -41,7 +41,7 @@ const RECOMMENDED_MODELS: TestModel[] = [
   {
     name: 'llama3.2:1b',
     size: '1.3GB',
-    description: 'Llama 3.2 1B - Meta\'s efficient model',
+    description: "Llama 3.2 1B - Meta's efficient model",
     recommended: false,
   },
   {
@@ -77,7 +77,7 @@ class RealLLMSetup {
   async listAvailableModels(): Promise<string[]> {
     try {
       const models = await this.ollama.list();
-      return models.models.map(model => model.name);
+      return models.models.map((model) => model.name);
     } catch (error) {
       console.error('Failed to list models:', error);
       return [];
@@ -90,7 +90,7 @@ class RealLLMSetup {
 
       // Use ollama pull command for better progress indication
       const pullProcess = spawn('ollama', ['pull', modelName], {
-        stdio: 'inherit'
+        stdio: 'inherit',
       });
 
       return new Promise((resolve) => {
@@ -119,8 +119,8 @@ class RealLLMSetup {
         messages: [
           {
             role: 'user',
-            content: 'Respond with exactly: "Test successful"'
-          }
+            content: 'Respond with exactly: "Test successful"',
+          },
         ],
         stream: false,
       });
@@ -146,7 +146,7 @@ class RealLLMSetup {
     const availableModels = await this.listAvailableModels();
     console.log('Available models:', availableModels.length > 0 ? availableModels.join(', ') : 'None');
 
-    for (const model of RECOMMENDED_MODELS.filter(m => m.recommended)) {
+    for (const model of RECOMMENDED_MODELS.filter((m) => m.recommended)) {
       console.log(`\n📦 Processing ${model.name} (${model.size})`);
       console.log(`   ${model.description}`);
 
@@ -173,9 +173,9 @@ class RealLLMSetup {
 
     // Check for at least one working model
     const availableModels = await this.listAvailableModels();
-    const recommendedAvailable = RECOMMENDED_MODELS
-      .filter(m => m.recommended)
-      .filter(m => availableModels.includes(m.name));
+    const recommendedAvailable = RECOMMENDED_MODELS.filter((m) => m.recommended).filter((m) =>
+      availableModels.includes(m.name),
+    );
 
     if (recommendedAvailable.length === 0) {
       console.log('⚠️  No recommended models available. Consider running setup first.');

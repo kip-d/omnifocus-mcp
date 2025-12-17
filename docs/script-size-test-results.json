@@ -5,15 +5,8 @@
     "maxSize": 524288,
     "tolerance": 1024,
     "timeout": 15000,
-    "testPatterns": [
-      "pure-js",
-      "jxa-api",
-      "mixed-content"
-    ],
-    "executionMethods": [
-      "node-stdin",
-      "file"
-    ]
+    "testPatterns": ["pure-js", "jxa-api", "mixed-content"],
+    "executionMethods": ["node-stdin", "file"]
   },
   "results": [
     {

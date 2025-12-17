@@ -2,7 +2,8 @@
 
 ## Executive Summary
 
-The test suite is **NOT broken** and doesn't need rework. The slowness is due to **intentional design** for comprehensive coverage:
+The test suite is **NOT broken** and doesn't need rework. The slowness is due to **intentional design** for
+comprehensive coverage:
 
 - **47 unit tests** run in parallel via 8 vitest worker threads (~2-3s per file)
 - **7 integration tests** spawn 1-2 MCP server processes per test file
@@ -13,16 +14,17 @@ The test suite is **NOT broken** and doesn't need rework. The slowness is due to
 
 ### Unit Test Infrastructure
 
-| Component | Details |
-|-----------|---------|
-| **Test Files** | 47 unit test files |
-| **Worker Threads** | 8 (default vitest config, no VITEST_SAFE override) |
-| **Mock Strategy** | Full mock via `setup-unit.ts` - disables real JXA by default |
-| **Per-File Overhead** | ~2-3 seconds (TypeScript compilation + vitest init) |
-| **Cache Warming** | **NONE** - unit tests use mocks, not real OmniFocus |
-| **Total Unit Time** | ~30-40 seconds (47 files ÷ 8 workers = ~6 batches × 5s per batch) |
+| Component             | Details                                                           |
+| --------------------- | ----------------------------------------------------------------- |
+| **Test Files**        | 47 unit test files                                                |
+| **Worker Threads**    | 8 (default vitest config, no VITEST_SAFE override)                |
+| **Mock Strategy**     | Full mock via `setup-unit.ts` - disables real JXA by default      |
+| **Per-File Overhead** | ~2-3 seconds (TypeScript compilation + vitest init)               |
+| **Cache Warming**     | **NONE** - unit tests use mocks, not real OmniFocus               |
+| **Total Unit Time**   | ~30-40 seconds (47 files ÷ 8 workers = ~6 batches × 5s per batch) |
 
 **Key Evidence - setup-unit.ts:**
+
 ```typescript
 // Unit tests use MOCKS, not real automation
 vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(
@@ -32,21 +34,22 @@ vi.spyOn(OmniAutomation.prototype, 'executeJson').mockImplementation(
 
 ### Integration Test Infrastructure
 
-| Component | Details |
-|-----------|---------|
-| **Test Files** | 7 integration tests |
-| **MCP Servers** | 1 per `MCPTestClient` instance, shared across tests in same file |
-| **MCP Server Count** | 2 total (mcp-protocol.test.ts + data-lifecycle.test.ts create separate clients) |
-| **Cache Warming** | **NONE** - servers initialize with empty cache, queries populate on-demand |
-| **Per-Test Overhead** | 20-60 seconds (MCP server spawn + OmniFocus queries) |
-| **Total Integration Time** | ~3-5 minutes (sequential files, shared server per file) |
+| Component                  | Details                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| **Test Files**             | 7 integration tests                                                             |
+| **MCP Servers**            | 1 per `MCPTestClient` instance, shared across tests in same file                |
+| **MCP Server Count**       | 2 total (mcp-protocol.test.ts + data-lifecycle.test.ts create separate clients) |
+| **Cache Warming**          | **NONE** - servers initialize with empty cache, queries populate on-demand      |
+| **Per-Test Overhead**      | 20-60 seconds (MCP server spawn + OmniFocus queries)                            |
+| **Total Integration Time** | ~3-5 minutes (sequential files, shared server per file)                         |
 
 **Key Architecture - MCPTestClient:**
+
 ```typescript
 // 1 MCP server spawned PER CLIENT INSTANCE
 this.server = spawn('node', ['./dist/index.js'], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, NODE_ENV: 'test' }
+  env: { ...process.env, NODE_ENV: 'test' },
 });
 
 // Tests in same file reuse this server
@@ -67,6 +70,7 @@ this.server = spawn('node', ['./dist/index.js'], {
 ```
 
 **Why 8 worker threads?**
+
 - Default vitest behavior (CPU-aware default)
 - Optimal for 47 unit tests (6-7 batches, minimal overhead)
 - Safe for integration tests (runs one at a time when detected)
@@ -98,27 +102,26 @@ Timeline for: npm test -- tests/unit/tools/tags-tool-v2.test.ts --run
 
 ### What's NOT Happening
 
-✅ **Cache warming**: Disabled - unit tests use mocks
-✅ **Redundant MCP servers**: Shared per test file
-✅ **Multiple JXA automations**: Unit tests mock everything
-✅ **Inefficient parallelization**: 8 workers is correct for 47 files
-✅ **Leaked processes**: Vitest cleans up properly on stdin close
+✅ **Cache warming**: Disabled - unit tests use mocks ✅ **Redundant MCP servers**: Shared per test file ✅ **Multiple
+JXA automations**: Unit tests mock everything ✅ **Inefficient parallelization**: 8 workers is correct for 47 files ✅
+**Leaked processes**: Vitest cleans up properly on stdin close
 
 ## Test Command Behavior
 
 ### When You Run Different Commands
 
-| Command | What Runs | Time |
-|---------|-----------|------|
-| `npm test` | Full suite (unit + integration + coverage) | 3-5 min |
-| `npm test -- tests/unit/tools/tags-tool-v2.test.ts --run` | Full unit suite (47 files) | 30-45 sec |
-| `npm run test:unit` | Only unit tests | 30-45 sec |
-| `npm run test:integration` | Only integration tests | 3-5 min |
-| `VITEST_SAFE=1 npm test -- tests/unit/...` | Single-threaded (debug mode) | 60-90 sec |
+| Command                                                   | What Runs                                  | Time      |
+| --------------------------------------------------------- | ------------------------------------------ | --------- |
+| `npm test`                                                | Full suite (unit + integration + coverage) | 3-5 min   |
+| `npm test -- tests/unit/tools/tags-tool-v2.test.ts --run` | Full unit suite (47 files)                 | 30-45 sec |
+| `npm run test:unit`                                       | Only unit tests                            | 30-45 sec |
+| `npm run test:integration`                                | Only integration tests                     | 3-5 min   |
+| `VITEST_SAFE=1 npm test -- tests/unit/...`                | Single-threaded (debug mode)               | 60-90 sec |
 
 ### Our New Test File Performance
 
 **tags-tool-v2.test.ts specifically:**
+
 - 21 unit tests
 - All mocked (no OmniFocus calls)
 - Runs in ~100-200ms as part of batch
@@ -129,12 +132,14 @@ Timeline for: npm test -- tests/unit/tools/tags-tool-v2.test.ts --run
 ### Decision 1: Mock All Unit Tests
 
 **Pros:**
+
 - Fast: mocks execute in microseconds vs 1-2s per OmniFocus call
 - Isolated: changes to OmniFocus don't break unit tests
 - Deterministic: no flakiness from OmniFocus delays
 - Safe: can run without OmniFocus running
 
 **Cons:**
+
 - Requires careful mock setup
 - Doesn't test actual OmniFocus integration
 - (Addressed by: integration tests with real MCP server)
@@ -142,22 +147,26 @@ Timeline for: npm test -- tests/unit/tools/tags-tool-v2.test.ts --run
 ### Decision 2: Shared MCP Server Per Integration Test File
 
 **Pros:**
+
 - Reduces startup time (spawn once instead of per-test)
 - Reuses OmniFocus session (more realistic)
 - Shared cleanup session tracking
 
 **Cons:**
+
 - Test pollution if state not cleaned properly
 - (Addressed by: rigorous cleanup with session IDs)
 
 ### Decision 3: Parallel Unit Tests via Vitest Workers
 
 **Pros:**
+
 - Automatic optimal worker count (based on CPU cores)
 - Scales with test count automatically
 - Safe - workers are isolated processes
 
 **Cons:**
+
 - Can't debug easily (need `VITEST_SAFE=1`)
 - Memory usage higher (8 processes vs 1)
 
@@ -192,9 +201,11 @@ npm run test:integration  # ~5min - Real integration
 **The test suite architecture is well-designed and not broken.**
 
 The apparent "slowness" is:
+
 - ✅ **Expected**: 47 files need compilation time
 - ✅ **Optimized**: 8-worker parallelization is correct
 - ✅ **Intentional**: Integration tests properly isolate MCP servers
 - ✅ **Clean**: No redundant cache warming or process spawning
 
-Our new `tags-tool-v2.test.ts` follows the exact same patterns as existing tests and performs identically. The 3-minute wait was vitest running the full suite, not an issue with our implementation.
+Our new `tags-tool-v2.test.ts` follows the exact same patterns as existing tests and performs identically. The 3-minute
+wait was vitest running the full suite, not an issue with our implementation.

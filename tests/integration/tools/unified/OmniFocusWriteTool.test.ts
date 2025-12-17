@@ -12,11 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { OmniFocusWriteTool } from '../../../../src/tools/unified/OmniFocusWriteTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
-import {
-  fullCleanup,
-  TEST_INBOX_PREFIX,
-  TEST_TAG_PREFIX,
-} from '../../helpers/sandbox-manager.js';
+import { fullCleanup, TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../../helpers/sandbox-manager.js';
 
 describe('OmniFocusWriteTool Integration', () => {
   let tool: OmniFocusWriteTool;
@@ -45,8 +41,8 @@ describe('OmniFocusWriteTool Integration', () => {
         data: {
           name: `${TEST_INBOX_PREFIX} Builder API test task`,
           tags: [`${TEST_TAG_PREFIX}write-tool`],
-        }
-      }
+        },
+      },
     };
 
     const result = await tool.execute(input);

@@ -28,11 +28,7 @@ export class PermissionChecker {
   async checkPermissions(): Promise<PermissionStatus> {
     // Return cached result if within TTL
     const now = Date.now();
-    if (
-      this.permissionStatus !== null &&
-      this.lastCheckedAt !== null &&
-      now - this.lastCheckedAt < this.ttlMs
-    ) {
+    if (this.permissionStatus !== null && this.lastCheckedAt !== null && now - this.lastCheckedAt < this.ttlMs) {
       return this.permissionStatus;
     }
 
@@ -78,7 +74,9 @@ export class PermissionChecker {
       });
 
       // Safety: kill process on hard timeout to avoid hangs
-      child.on('error', () => {/* handled in callback */});
+      child.on('error', () => {
+        /* handled in callback */
+      });
     });
 
     // Log concise status
@@ -111,4 +109,3 @@ export class PermissionChecker {
 3. After granting permissions, try your request again`;
   }
 }
-

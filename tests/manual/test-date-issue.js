@@ -63,7 +63,7 @@ const testScript = `(() => {
 console.log('Testing date handling issue...\n');
 
 const proc = spawn('osascript', ['-l', 'JavaScript'], {
-  timeout: 5000
+  timeout: 5000,
 });
 
 let stdout = '';

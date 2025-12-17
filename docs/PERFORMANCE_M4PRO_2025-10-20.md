@@ -1,9 +1,9 @@
 # OmniFocus MCP Performance Analysis
+
 ## M2 MacBook Air (24GB) vs M4 Pro Mac mini (64GB)
 
-**Test Date**: October 20, 2025
-**Baseline Hardware**: M2 MacBook Air, 24GB RAM
-**Target Hardware**: M4 Pro Mac mini, 64GB RAM
+**Test Date**: October 20, 2025 **Baseline Hardware**: M2 MacBook Air, 24GB RAM **Target Hardware**: M4 Pro Mac mini,
+64GB RAM
 
 ---
 
@@ -18,7 +18,10 @@ The M4 Pro (64GB) delivers **excellent performance characteristics** for develop
 - **Cache warming**: 1.6s (very manageable)
 
 ### Verdict
-The M4 Pro is an **excellent development/testing machine**. The 4-core CPU upgrade (10 → 14 cores) makes a significant difference for parallel test execution. The extra RAM (24GB → 64GB) doesn't impact single-tool performance but provides headroom for CI workflows.
+
+The M4 Pro is an **excellent development/testing machine**. The 4-core CPU upgrade (10 → 14 cores) makes a significant
+difference for parallel test execution. The extra RAM (24GB → 64GB) doesn't impact single-tool performance but provides
+headroom for CI workflows.
 
 ---
 
@@ -26,15 +29,16 @@ The M4 Pro is an **excellent development/testing machine**. The 4-core CPU upgra
 
 ### 1. Full Test Suite Performance
 
-| Metric | M2 Air (24GB) | M4 Pro (64GB) | Improvement |
-|--------|---------------|---------------|-------------|
-| **Total Duration** | 106s | 22.4s | **4.7x faster** ⚡ |
-| Unit Tests | ~50s | ~12s | 4.2x faster |
-| Integration Tests | ~34s | ~22.4s | 1.5x faster |
-| Test Count | 45 passed | 45 passed | ✅ All pass |
-| Skipped Tests | 30 | 30 | Consistent |
+| Metric             | M2 Air (24GB) | M4 Pro (64GB) | Improvement        |
+| ------------------ | ------------- | ------------- | ------------------ |
+| **Total Duration** | 106s          | 22.4s         | **4.7x faster** ⚡ |
+| Unit Tests         | ~50s          | ~12s          | 4.2x faster        |
+| Integration Tests  | ~34s          | ~22.4s        | 1.5x faster        |
+| Test Count         | 45 passed     | 45 passed     | ✅ All pass        |
+| Skipped Tests      | 30            | 30            | Consistent         |
 
-**Key Finding**: The M4 Pro's 14-core CPU is optimal for parallel test execution. Vitest runs multiple test files in parallel across worker threads. The extra cores reduce contention and wall-clock time significantly.
+**Key Finding**: The M4 Pro's 14-core CPU is optimal for parallel test execution. Vitest runs multiple test files in
+parallel across worker threads. The extra cores reduce contention and wall-clock time significantly.
 
 ---
 
@@ -43,6 +47,7 @@ The M4 Pro is an **excellent development/testing machine**. The 4-core CPU upgra
 Cold cache simulates a fresh server startup with no data cached in memory.
 
 **M2 Air Results** (baseline - from previous runs):
+
 ```
 Today's tasks:           ~2700ms
 Overdue tasks:           ~4400ms
@@ -56,6 +61,7 @@ Task velocity:           ~1100ms
 ```
 
 **M4 Pro Results** (current):
+
 ```
 Today's tasks:           2725ms  (no change - I/O bound)
 Overdue tasks:           4441ms  (no change - I/O bound)
@@ -68,7 +74,8 @@ Productivity stats:      1028ms  (✅ 3% slower - variance)
 Task velocity:           1059ms  (✅ 5% faster)
 ```
 
-**Analysis**: Cold cache performance is **nearly identical** because the bottleneck is OmniFocus AppleScript I/O operations, not CPU cores. This is expected and healthy.
+**Analysis**: Cold cache performance is **nearly identical** because the bottleneck is OmniFocus AppleScript I/O
+operations, not CPU cores. This is expected and healthy.
 
 ---
 
@@ -77,6 +84,7 @@ Task velocity:           1059ms  (✅ 5% faster)
 Warm cache represents production usage where data is pre-loaded in memory.
 
 **M4 Pro Results**:
+
 ```
 Cache warming:           1585ms (1.6s)
 → Today's tasks:           14ms  (vs ~2700ms cold) = 194x faster ✨
@@ -91,6 +99,7 @@ Cache warming:           1585ms (1.6s)
 ```
 
 **Analysis**:
+
 - Cache warming overhead is minimal (1.6s)
 - Cached task queries are **incredibly fast** (2-14ms)
 - Non-cached operations (stats, velocity) perform the same
@@ -103,14 +112,15 @@ Cache warming:           1585ms (1.6s)
 
 Integration tests execute real MCP workflows with actual OmniFocus operations.
 
-| Metric | M2 Air | M4 Pro | Improvement |
-|--------|--------|--------|-------------|
-| **Total Time** | ~34s | ~22.4s | **1.5x faster** |
-| Test Count | 21 passed | 21 passed | ✅ All pass |
-| Avg Per Test | ~1.6s | ~1.1s | 1.5x faster |
-| OmniFocus Operations | 100% success | 100% success | ✅ Consistent |
+| Metric               | M2 Air       | M4 Pro       | Improvement     |
+| -------------------- | ------------ | ------------ | --------------- |
+| **Total Time**       | ~34s         | ~22.4s       | **1.5x faster** |
+| Test Count           | 21 passed    | 21 passed    | ✅ All pass     |
+| Avg Per Test         | ~1.6s        | ~1.1s        | 1.5x faster     |
+| OmniFocus Operations | 100% success | 100% success | ✅ Consistent   |
 
 **Detailed breakdown** (M4 Pro):
+
 - OmniFocus 4.7+ Features: 19.9s (15 tests)
   - First planned date task: 5s (includes OmniFocus setup)
   - Subsequent operations: 0.7-2.3s each
@@ -125,6 +135,7 @@ Integration tests execute real MCP workflows with actual OmniFocus operations.
 ## Hardware Specifications
 
 ### M2 MacBook Air (Baseline)
+
 ```
 CPU: Apple M2 (8 cores: 4 P + 4 E)
 RAM: 24 GB
@@ -134,6 +145,7 @@ Date: ~September 2025
 ```
 
 ### M4 Pro Mac mini (New)
+
 ```
 CPU: Apple M4 Pro (14 cores: 12 P + 2 E)
 RAM: 64 GB
@@ -143,6 +155,7 @@ Date: October 20, 2025
 ```
 
 **Key Differences**:
+
 - CPU cores: 8 → 14 (+75% cores)
 - Performance cores: 4 → 12 (+200% P-cores!)
 - RAM: 24GB → 64GB (+167%)
@@ -175,37 +188,44 @@ Date: October 20, 2025
 
 ### 📊 Performance Characteristics
 
-| Operation | Cold Cache | Warm Cache | CPU Bound? |
-|-----------|-----------|-----------|-----------|
-| Task queries | 2-4s | 2-14ms | No (I/O) |
-| Project stats | 280ms | 305ms | No (I/O) |
-| Tag operations | 160-1100ms | 160-1100ms | No (I/O) |
-| Productivity stats | 1000ms | 1060ms | No (I/O) |
-| Task velocity | 1100ms | 1125ms | No (I/O) |
-| Test suite | 106s | 22.4s | Yes (parallelization) |
+| Operation          | Cold Cache | Warm Cache | CPU Bound?            |
+| ------------------ | ---------- | ---------- | --------------------- |
+| Task queries       | 2-4s       | 2-14ms     | No (I/O)              |
+| Project stats      | 280ms      | 305ms      | No (I/O)              |
+| Tag operations     | 160-1100ms | 160-1100ms | No (I/O)              |
+| Productivity stats | 1000ms     | 1060ms     | No (I/O)              |
+| Task velocity      | 1100ms     | 1125ms     | No (I/O)              |
+| Test suite         | 106s       | 22.4s      | Yes (parallelization) |
 
-**Key Finding**: MCP operations are **I/O bound** (limited by AppleScript), but **test execution is CPU bound** (benefits from more cores).
+**Key Finding**: MCP operations are **I/O bound** (limited by AppleScript), but **test execution is CPU bound**
+(benefits from more cores).
 
 ---
 
 ## Recommendations
 
 ### For Development Use
+
 ✅ **M4 Pro is excellent**
+
 - 4.7x faster test runs (quick iteration)
 - 64GB RAM provides headroom
 - 14 cores handle parallel work well
 - Same cold-start characteristics as M2
 
 ### For CI/CD Pipeline
+
 ✅ **Suitable for self-hosted runner**
+
 - Can run full test suite in ~22s
 - Integration tests in ~22s
 - Enough cores for future parallel expansions
 - 64GB RAM avoids memory pressure
 
 ### For Performance Testing
+
 ✅ **Use M4 Pro as new baseline**
+
 - Consistent with previous cold-start results
 - Warm cache performance exceptional
 - Ready for production workloads
@@ -218,11 +238,13 @@ Date: October 20, 2025
 From IMPROVEMENT_ROADMAP.md and profiling work (September 2025):
 
 **M2 Air Full Suite**: 106 seconds total
+
 - This was measured with cache warming enabled
 - 45 tests passed, 30 skipped
 - Comparable to current M4 Pro results
 
 **M4 Pro Full Suite**: 22.4 seconds total
+
 - 4.7x faster
 - Same test count (45 passed, 30 skipped)
 - Improved parallelization efficiency
@@ -241,6 +263,7 @@ The **M4 Pro Mac mini (64GB) is ideal for development and testing**:
 6. ✅ Extra RAM and cores provide **headroom for growth**
 
 **Ready to use for:**
+
 - Daily development workflows
 - Full integration testing
 - Self-hosted CI/CD runner
@@ -286,15 +309,15 @@ Overhead:
 
 ## Summary Table
 
-| Category | Result |
-|----------|--------|
-| **Full Test Suite** | 22.4s (4.7x faster than M2 Air) |
-| **Unit Tests** | ~12s |
-| **Integration Tests** | ~22.4s |
+| Category                  | Result                             |
+| ------------------------- | ---------------------------------- |
+| **Full Test Suite**       | 22.4s (4.7x faster than M2 Air)    |
+| **Unit Tests**            | ~12s                               |
+| **Integration Tests**     | ~22.4s                             |
 | **Cold Cache Operations** | Consistent with M2 Air (I/O bound) |
 | **Warm Cache Operations** | 194x-2200x faster (2-14ms queries) |
-| **Cache Warming** | 1.6s (minimal overhead) |
-| **Test Success Rate** | 100% (45/45 pass) |
-| **Hardware Utilization** | Excellent (14 cores well-utilized) |
+| **Cache Warming**         | 1.6s (minimal overhead)            |
+| **Test Success Rate**     | 100% (45/45 pass)                  |
+| **Hardware Utilization**  | Excellent (14 cores well-utilized) |
 
 **Status**: ✅ **Production Ready** - M4 Pro validated for development, testing, and CI use.

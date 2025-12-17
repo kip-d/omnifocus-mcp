@@ -32,10 +32,10 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            text: { contains: searchTerm }
+            text: { contains: searchTerm },
           },
-          limit: 100
-        }
+          limit: 100,
+        },
       });
 
       // ✅ Validate response structure
@@ -57,7 +57,7 @@ describe('Filter Results Validation', () => {
               id: task.id,
               name: task.name,
               note: task.note?.substring(0, 50),
-              searchTerm
+              searchTerm,
             });
           }
         });
@@ -80,10 +80,10 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            dueDate: { between: [startStr, endStr] }
+            dueDate: { between: [startStr, endStr] },
           },
-          limit: 100
-        }
+          limit: 100,
+        },
       });
 
       expect(data.success).toBe(true);
@@ -105,7 +105,7 @@ describe('Filter Results Validation', () => {
               id: task.id,
               name: task.name,
               dueDate: task.dueDate,
-              expected: `${startStr} to ${endStr}`
+              expected: `${startStr} to ${endStr}`,
             });
           }
         });
@@ -130,10 +130,10 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            dueDate: { between: [startStr, endStr] }
+            dueDate: { between: [startStr, endStr] },
           },
-          limit: 100
-        }
+          limit: 100,
+        },
       });
 
       if (data.data?.tasks?.length > 0) {
@@ -154,11 +154,11 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            tags: { any: requiredTags }
+            tags: { any: requiredTags },
           },
           fields: ['id', 'name', 'tags'],
-          limit: 50
-        }
+          limit: 50,
+        },
       });
 
       expect(data.success).toBe(true);
@@ -169,9 +169,7 @@ describe('Filter Results Validation', () => {
         data.data.tasks.forEach((task: any, index: number) => {
           expect(Array.isArray(task.tags)).toBe(true);
 
-          const hasRequiredTag = task.tags.some((tag: string) =>
-            requiredTags.includes(tag)
-          );
+          const hasRequiredTag = task.tags.some((tag: string) => requiredTags.includes(tag));
 
           expect(hasRequiredTag).toBe(true);
 
@@ -181,7 +179,7 @@ describe('Filter Results Validation', () => {
               id: task.id,
               name: task.name,
               actualTags: task.tags,
-              requiredTags
+              requiredTags,
             });
           }
         });
@@ -195,11 +193,11 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            tags: { all: requiredTags }
+            tags: { all: requiredTags },
           },
           fields: ['id', 'name', 'tags'],
-          limit: 50
-        }
+          limit: 50,
+        },
       });
 
       expect(data.success).toBe(true);
@@ -210,23 +208,19 @@ describe('Filter Results Validation', () => {
         data.data.tasks.forEach((task: any, index: number) => {
           expect(Array.isArray(task.tags)).toBe(true);
 
-          const hasAllTags = requiredTags.every((requiredTag: string) =>
-            task.tags.includes(requiredTag)
-          );
+          const hasAllTags = requiredTags.every((requiredTag: string) => task.tags.includes(requiredTag));
 
           expect(hasAllTags).toBe(true);
 
           // If this fails, show which task and missing tags
           if (!hasAllTags) {
-            const missingTags = requiredTags.filter((tag: string) =>
-              !task.tags.includes(tag)
-            );
+            const missingTags = requiredTags.filter((tag: string) => !task.tags.includes(tag));
             console.error(`Task ${index} missing required tags:`, {
               id: task.id,
               name: task.name,
               actualTags: task.tags,
               requiredTags,
-              missingTags
+              missingTags,
             });
           }
         });
@@ -240,11 +234,11 @@ describe('Filter Results Validation', () => {
         query: {
           type: 'tasks',
           filters: {
-            tags: { none: excludedTags }
+            tags: { none: excludedTags },
           },
           fields: ['id', 'name', 'tags'],
-          limit: 50
-        }
+          limit: 50,
+        },
       });
 
       expect(data.success).toBe(true);
@@ -255,23 +249,19 @@ describe('Filter Results Validation', () => {
         data.data.tasks.forEach((task: any, index: number) => {
           expect(Array.isArray(task.tags)).toBe(true);
 
-          const hasExcludedTag = task.tags.some((tag: string) =>
-            excludedTags.includes(tag)
-          );
+          const hasExcludedTag = task.tags.some((tag: string) => excludedTags.includes(tag));
 
           expect(hasExcludedTag).toBe(false);
 
           // If this fails, show which task has excluded tags
           if (hasExcludedTag) {
-            const foundExcludedTags = task.tags.filter((tag: string) =>
-              excludedTags.includes(tag)
-            );
+            const foundExcludedTags = task.tags.filter((tag: string) => excludedTags.includes(tag));
             console.error(`Task ${index} has excluded tags:`, {
               id: task.id,
               name: task.name,
               actualTags: task.tags,
               excludedTags,
-              foundExcludedTags
+              foundExcludedTags,
             });
           }
         });
@@ -296,10 +286,10 @@ describe('Filter Results Validation', () => {
           type: 'tasks',
           filters: {
             text: { contains: searchTerm },
-            dueDate: { between: [startStr, endStr] }
+            dueDate: { between: [startStr, endStr] },
           },
-          limit: 50
-        }
+          limit: 50,
+        },
       });
 
       expect(data.success).toBe(true);

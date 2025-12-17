@@ -2,7 +2,7 @@
 
 /**
  * JXA Performance Profiling Script
- * 
+ *
  * This script profiles different aspects of JXA performance to identify
  * the actual bottlenecks and optimization potential.
  */
@@ -226,10 +226,10 @@ proc.on('close', (code) => {
     console.error('❌ Profiling failed:', error);
     process.exit(1);
   }
-  
+
   try {
     const results = JSON.parse(output);
-    
+
     console.log('✅ Profiling Complete!\n');
     console.log('='.repeat(60));
     console.log('DATABASE SIZE');
@@ -238,7 +238,7 @@ proc.on('close', (code) => {
     console.log(`Incomplete tasks: ${results.counts.incomplete_via_manual}`);
     console.log(`Overdue tasks: ${results.counts.overdue_tasks}`);
     console.log('');
-    
+
     console.log('='.repeat(60));
     console.log('TIMING BREAKDOWN');
     console.log('='.repeat(60));
@@ -247,48 +247,53 @@ proc.on('close', (code) => {
       console.log(`${name.padEnd(35)} ${String(data.ms + 'ms').padStart(8)} (${data.percent})`);
     }
     console.log('');
-    
+
     console.log('='.repeat(60));
     console.log('KEY INSIGHTS');
     console.log('='.repeat(60));
     console.log(`Per-task enumeration cost: ${results.insights.ms_per_task_enumeration}ms`);
     console.log(`Per-property access cost: ${results.insights.ms_per_property_access}ms`);
     console.log(`Full task read (5 props): ${results.insights.ms_per_task_full_read}ms`);
-    console.log(`SafeGet overhead: ${results.insights.safget_overhead_ms}ms (${results.insights.safget_overhead_percent})`);
+    console.log(
+      `SafeGet overhead: ${results.insights.safget_overhead_ms}ms (${results.insights.safget_overhead_percent})`,
+    );
     console.log(`whose() vs manual filter: ${results.insights.whose_vs_manual_ratio}`);
     console.log('');
-    
+
     console.log('='.repeat(60));
     console.log('OPTIMIZATION POTENTIAL');
     console.log('='.repeat(60));
-    
+
     const totalMs = Object.values(results.timings).reduce((a, b) => a + b, 0);
     const safeGetSavings = results.insights.safget_overhead_ms;
     const potentialPercent = ((safeGetSavings / totalMs) * 100).toFixed(1);
-    
+
     console.log(`Removing safeGet could save: ${safeGetSavings}ms (${potentialPercent}% of total)`);
-    
+
     // Extrapolate to full query
     const tasksPerQuery = 100;
     const propsPerTask = 10; // Typical full query
     const estimatedSafeGetOverhead = (safeGetSavings / 100) * tasksPerQuery * (propsPerTask / 5);
-    console.log(`Estimated savings for ${tasksPerQuery} tasks with ${propsPerTask} properties: ${estimatedSafeGetOverhead.toFixed(0)}ms`);
-    
+    console.log(
+      `Estimated savings for ${tasksPerQuery} tasks with ${propsPerTask} properties: ${estimatedSafeGetOverhead.toFixed(0)}ms`,
+    );
+
     // Show where time is really spent
     const enumPercent = ((results.timings['1_enumerate_all_tasks'] / totalMs) * 100).toFixed(1);
     const propAccessPercent = ((results.timings['2_single_prop_all_tasks'] / totalMs) * 100).toFixed(1);
-    
+
     console.log('');
     console.log('Where time is REALLY spent:');
     console.log(`- Task enumeration: ${enumPercent}%`);
     console.log(`- Property access: ${propAccessPercent}%`);
-    console.log(`- JavaScript processing: ~${(100 - parseFloat(enumPercent) - parseFloat(propAccessPercent)).toFixed(1)}%`);
-    
+    console.log(
+      `- JavaScript processing: ~${(100 - parseFloat(enumPercent) - parseFloat(propAccessPercent)).toFixed(1)}%`,
+    );
+
     // Save detailed results
     const resultsPath = join(__dirname, 'profile-results.json');
     writeFileSync(resultsPath, JSON.stringify(results, null, 2));
     console.log(`\n📊 Detailed results saved to: ${resultsPath}`);
-    
   } catch (e) {
     console.error('Failed to parse results:', e);
     console.log('Raw output:', output);

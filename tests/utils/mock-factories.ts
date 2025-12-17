@@ -1,10 +1,10 @@
 import { vi } from 'vitest';
 import { z } from 'zod';
-import { 
-  createEntityResponse, 
-  createErrorResponse, 
+import {
+  createEntityResponse,
+  createErrorResponse,
   createSuccessResponse,
-  OperationTimer 
+  OperationTimer,
 } from '../../src/utils/response-format.js';
 import { SchemaTestHelper } from './schema-helpers.js';
 
@@ -18,7 +18,7 @@ import { SchemaTestHelper } from './schema-helpers.js';
 export function createManageFolderMock(defaultResponses: Record<string, any> = {}) {
   // Keep track of what was passed to buildScript to determine operation
   let lastOperation: string | null = null;
-  
+
   return {
     buildScript: vi.fn().mockImplementation((script: string, params: any) => {
       // Track operation from params for use in execute
@@ -39,65 +39,77 @@ export function createManageFolderMock(defaultResponses: Record<string, any> = {
       // Return operation-specific responses based on what buildScript was called with
       switch (lastOperation) {
         case 'create':
-          return defaultResponses.create || {
-            folder: { 
-              id: 'folder-1',
-              name: 'Test Folder',
-              status: 'active'
+          return (
+            defaultResponses.create || {
+              folder: {
+                id: 'folder-1',
+                name: 'Test Folder',
+                status: 'active',
+              },
             }
-          };
-          
+          );
+
         case 'update':
-          return defaultResponses.update || {
-            folder: { 
-              id: 'folder-1',
-              name: 'Updated Folder',
-              status: 'active'
+          return (
+            defaultResponses.update || {
+              folder: {
+                id: 'folder-1',
+                name: 'Updated Folder',
+                status: 'active',
+              },
             }
-          };
-          
+          );
+
         case 'delete':
-          return defaultResponses.delete || {
-            success: true,
-            deletedFolder: { 
-              id: 'folder-1',
-              name: 'Deleted Folder'
+          return (
+            defaultResponses.delete || {
+              success: true,
+              deletedFolder: {
+                id: 'folder-1',
+                name: 'Deleted Folder',
+              },
             }
-          };
-          
+          );
+
         case 'move':
-          return defaultResponses.move || {
-            folder: {
-              id: 'folder-1',
-              name: 'Moved Folder',
-              parent: 'folder-2'
+          return (
+            defaultResponses.move || {
+              folder: {
+                id: 'folder-1',
+                name: 'Moved Folder',
+                parent: 'folder-2',
+              },
             }
-          };
-          
+          );
+
         case 'set_status':
-          return defaultResponses.set_status || {
-            folder: {
-              id: 'folder-1',
-              name: 'Status Folder',
-              status: 'dropped'
+          return (
+            defaultResponses.set_status || {
+              folder: {
+                id: 'folder-1',
+                name: 'Status Folder',
+                status: 'dropped',
+              },
             }
-          };
-          
+          );
+
         case 'duplicate':
-          return defaultResponses.duplicate || {
-            folder: {
-              id: 'folder-2',
-              name: 'Test Folder (Copy)'
+          return (
+            defaultResponses.duplicate || {
+              folder: {
+                id: 'folder-2',
+                name: 'Test Folder (Copy)',
+              },
             }
-          };
-          
+          );
+
         default:
           return {
             error: true,
-            message: `Unsupported operation: ${operation}`
+            message: `Unsupported operation: ${operation}`,
           };
       }
-    })
+    }),
   };
 }
 
@@ -109,57 +121,59 @@ export function createQueryFoldersMock(defaultResponses: Record<string, any> = {
     buildScript: vi.fn().mockReturnValue('test script'),
     execute: vi.fn().mockImplementation(async (params: any) => {
       const operation = params.operation || 'list';
-      
+
       switch (operation) {
         case 'list':
-          return defaultResponses.list || {
-            folders: [
-              { id: '1', name: 'Test Folder', status: 'active' }
-            ],
-            metadata: {
-              total_count: 1,
-              timestamp: new Date().toISOString()
+          return (
+            defaultResponses.list || {
+              folders: [{ id: '1', name: 'Test Folder', status: 'active' }],
+              metadata: {
+                total_count: 1,
+                timestamp: new Date().toISOString(),
+              },
             }
-          };
-          
+          );
+
         case 'get':
-          return defaultResponses.get || {
-            folder: {
-              id: params.folderId,
-              name: 'Retrieved Folder',
-              status: 'active'
+          return (
+            defaultResponses.get || {
+              folder: {
+                id: params.folderId,
+                name: 'Retrieved Folder',
+                status: 'active',
+              },
             }
-          };
-          
+          );
+
         case 'search':
-          return defaultResponses.search || {
-            folders: [
-              { id: '1', name: 'Search Result', status: 'active' }
-            ],
-            metadata: {
-              total_count: 1,
-              query: params.query
+          return (
+            defaultResponses.search || {
+              folders: [{ id: '1', name: 'Search Result', status: 'active' }],
+              metadata: {
+                total_count: 1,
+                query: params.query,
+              },
             }
-          };
-          
+          );
+
         case 'get_projects':
-          return defaultResponses.get_projects || {
-            projects: [
-              { id: 'p1', name: 'Project in Folder' }
-            ],
-            folder: {
-              id: params.folderId,
-              name: 'Folder with Projects'
+          return (
+            defaultResponses.get_projects || {
+              projects: [{ id: 'p1', name: 'Project in Folder' }],
+              folder: {
+                id: params.folderId,
+                name: 'Folder with Projects',
+              },
             }
-          };
-          
+          );
+
         default:
           return {
             error: true,
-            message: `Unsupported operation: ${operation}`
+            message: `Unsupported operation: ${operation}`,
           };
       }
-    })
+    }),
   };
 }
 
@@ -171,40 +185,40 @@ export function createExportTasksMock(defaultResponse: any = null) {
     buildScript: vi.fn().mockReturnValue('test script'),
     execute: vi.fn().mockImplementation(async (params: any) => {
       const format = params.format || 'json';
-      
+
       if (defaultResponse) {
         return defaultResponse;
       }
-      
+
       switch (format) {
         case 'json':
           return {
             format: 'json',
             data: '[]',
-            count: 0
+            count: 0,
           };
-          
+
         case 'csv':
           return {
             format: 'csv',
             data: 'id,name,completed\n',
-            count: 0
+            count: 0,
           };
-          
+
         case 'markdown':
           return {
             format: 'markdown',
             data: '# Tasks\n\nNo tasks found.',
-            count: 0
+            count: 0,
           };
-          
+
         default:
           return {
             error: true,
-            message: `Unsupported format: ${format}`
+            message: `Unsupported format: ${format}`,
           };
       }
-    })
+    }),
   };
 }
 
@@ -218,34 +232,34 @@ export function createRecurringTasksMock(defaultResponse: any = null) {
       if (defaultResponse) {
         return defaultResponse;
       }
-      
+
       return {
         tasks: [],
         summary: {
           total: 0,
           active: 0,
-          patterns: {}
+          patterns: {},
         },
         metadata: {
           timestamp: new Date().toISOString(),
-          options: params
-        }
+          options: params,
+        },
       };
-    })
+    }),
   };
 }
 
 /**
  * Create a tool with all necessary mocks injected
  */
-export function createMockedTool<T extends { new(cache: any): any }>(
+export function createMockedTool<T extends { new (cache: any): any }>(
   ToolClass: T,
   options: {
     cache?: any;
     omniAutomation?: any;
     logger?: any;
     mockResponses?: Record<string, any>;
-  } = {}
+  } = {},
 ): InstanceType<T> {
   const mockCache = options.cache || {
     get: vi.fn(),
@@ -274,7 +288,7 @@ export function createMockedTool<T extends { new(cache: any): any }>(
   const tool = new ToolClass(mockCache);
   tool['omniAutomation'] = mockOmniAutomation;
   tool['logger'] = mockLogger;
-  
+
   return tool;
 }
 
@@ -291,11 +305,11 @@ export class ResponseBuilder {
         timestamp: new Date().toISOString(),
         from_cache: false,
         query_time_ms: 100,
-        ...metadata
-      }
+        ...metadata,
+      },
     };
   }
-  
+
   static error(code: string, message: string, details: any = null) {
     return {
       success: false,
@@ -303,17 +317,17 @@ export class ResponseBuilder {
       error: {
         code,
         message,
-        details
+        details,
       },
       metadata: {
         operation: 'test',
         timestamp: new Date().toISOString(),
         from_cache: false,
-        query_time_ms: 0
-      }
+        query_time_ms: 0,
+      },
     };
   }
-  
+
   static entity(operation: string, entity: any, metadata: any = {}) {
     return createEntityResponse(operation, entity, metadata);
   }
@@ -322,13 +336,11 @@ export class ResponseBuilder {
 /**
  * Create a mock that simulates Claude Desktop string coercion
  */
-export function createClaudeDesktopMock(
-  innerMock: (params: any) => any
-) {
+export function createClaudeDesktopMock(innerMock: (params: any) => any) {
   return vi.fn().mockImplementation((params: any) => {
     // Simulate Claude Desktop string conversion
     const stringified = SchemaTestHelper.stringifyParams(params);
-    
+
     // Call inner mock with stringified params
     return innerMock(stringified);
   });

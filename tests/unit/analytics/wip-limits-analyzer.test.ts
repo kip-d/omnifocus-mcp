@@ -14,9 +14,9 @@ describe('analyzeWipLimits', () => {
           { id: 't3', completed: false, blocked: false, deferDate: null },
           { id: 't4', completed: false, blocked: false, deferDate: null },
           { id: 't5', completed: false, blocked: false, deferDate: null },
-          { id: 't6', completed: false, blocked: false, deferDate: null } // 6 available
-        ]
-      }
+          { id: 't6', completed: false, blocked: false, deferDate: null }, // 6 available
+        ],
+      },
     ];
 
     const result = analyzeWipLimits(projects, { wipLimit: 5 });
@@ -35,11 +35,11 @@ describe('analyzeWipLimits', () => {
         status: 'active',
         tasks: [
           { id: 't1', completed: false, blocked: false, deferDate: null }, // available
-          { id: 't2', completed: false, blocked: true, deferDate: null },  // blocked
+          { id: 't2', completed: false, blocked: true, deferDate: null }, // blocked
           { id: 't3', completed: false, blocked: false, deferDate: futureDate }, // deferred
-          { id: 't4', completed: true, blocked: false, deferDate: null }   // completed
-        ]
-      }
+          { id: 't4', completed: true, blocked: false, deferDate: null }, // completed
+        ],
+      },
     ];
 
     const result = analyzeWipLimits(projects, { wipLimit: 5 });
@@ -51,7 +51,7 @@ describe('analyzeWipLimits', () => {
   it('skips dropped and completed projects', () => {
     const projects = [
       { id: 'p1', name: 'Dropped', status: 'dropped', tasks: [] },
-      { id: 'p2', name: 'Done', status: 'done', tasks: [] }
+      { id: 'p2', name: 'Done', status: 'done', tasks: [] },
     ];
 
     const result = analyzeWipLimits(projects, { wipLimit: 5 });
@@ -69,9 +69,9 @@ describe('analyzeWipLimits', () => {
         sequential: true,
         tasks: [
           { id: 't1', completed: false, blocked: false, deferDate: null },
-          { id: 't2', completed: false, blocked: true, deferDate: null } // Only first is available
-        ]
-      }
+          { id: 't2', completed: false, blocked: true, deferDate: null }, // Only first is available
+        ],
+      },
     ];
 
     const result = analyzeWipLimits(projects, { wipLimit: 5 });

@@ -15,9 +15,9 @@ describe('Script Builder', () => {
         numberParam: 42,
         booleanParam: true,
       };
-      
+
       const result = buildParameterDeclarations(params);
-      
+
       expect(result).toContain('const booleanParam = {{booleanParam}};');
       expect(result).toContain('const numberParam = {{numberParam}};');
       expect(result).toContain('const stringParam = {{stringParam}};');
@@ -29,10 +29,10 @@ describe('Script Builder', () => {
         apple: 'a',
         monkey: 'm',
       };
-      
+
       const result = buildParameterDeclarations(params);
       const lines = result.split('\n');
-      
+
       expect(lines[0]).toContain('apple');
       expect(lines[1]).toContain('monkey');
       expect(lines[2]).toContain('zebra');
@@ -41,7 +41,7 @@ describe('Script Builder', () => {
     it('should handle empty parameters', () => {
       const params: ScriptParameters = {};
       const result = buildParameterDeclarations(params);
-      
+
       expect(result).toBe('');
     });
 
@@ -52,9 +52,9 @@ describe('Script Builder', () => {
         nullParam: null,
         undefinedParam: undefined,
       };
-      
+
       const result = buildParameterDeclarations(params);
-      
+
       expect(result).toContain('const arrayParam = {{arrayParam}};');
       expect(result).toContain('const objectParam = {{objectParam}};');
       expect(result).toContain('const nullParam = {{nullParam}};');
@@ -67,9 +67,9 @@ describe('Script Builder', () => {
         MY_PARAM: 'VALUE',
         myParam: 'camelCase',
       };
-      
+
       const result = buildParameterDeclarations(params);
-      
+
       expect(result).toMatch(/const MY_PARAM = \{\{MY_PARAM\}\};/);
       expect(result).toMatch(/const myParam = \{\{myParam\}\};/);
       expect(result).toMatch(/const my_param = \{\{my_param\}\};/);
@@ -82,9 +82,9 @@ describe('Script Builder', () => {
       const params: ScriptParameters = {
         message: 'Hello World',
       };
-      
+
       const result = buildScriptWithParameters(scriptBody, params);
-      
+
       expect(result).toContain('(() => {');
       expect(result).toContain('})();');
       expect(result).toContain('const message = {{message}};');
@@ -97,9 +97,9 @@ describe('Script Builder', () => {
         a: 10,
         b: 20,
       };
-      
+
       const result = buildScriptWithParameters(scriptBody, params);
-      
+
       expect(result).toContain('const a = {{a}};');
       expect(result).toContain('const b = {{b}};');
       expect(result).toContain('return a + b;');
@@ -114,9 +114,9 @@ describe('Script Builder', () => {
       const params: ScriptParameters = {
         condition: true,
       };
-      
+
       const result = buildScriptWithParameters(scriptBody, params);
-      
+
       expect(result).toContain('if (condition) {');
       expect(result).toContain('  doSomething();');
     });
@@ -124,9 +124,9 @@ describe('Script Builder', () => {
     it('should handle empty script body', () => {
       const scriptBody = '';
       const params: ScriptParameters = {};
-      
+
       const result = buildScriptWithParameters(scriptBody, params);
-      
+
       expect(result).toContain('(() => {');
       expect(result).toContain('})();');
     });
@@ -135,9 +135,9 @@ describe('Script Builder', () => {
   describe('extractExpectedParameters', () => {
     it('should extract simple parameters', () => {
       const template = 'const name = {{name}}; const age = {{age}};';
-      
+
       const result = extractExpectedParameters(template);
-      
+
       expect(result).toEqual(['age', 'name']);
     });
 
@@ -150,9 +150,9 @@ describe('Script Builder', () => {
           task.flagged = {{flagged}};
         }
       `;
-      
+
       const result = extractExpectedParameters(template);
-      
+
       expect(result).toEqual(['flagged', 'taskId', 'taskName', 'taskNote']);
     });
 
@@ -162,33 +162,33 @@ describe('Script Builder', () => {
         alert({{message}});
         return {{message}};
       `;
-      
+
       const result = extractExpectedParameters(template);
-      
+
       expect(result).toEqual(['message']);
     });
 
     it('should handle templates with no parameters', () => {
       const template = 'console.log("Hello World");';
-      
+
       const result = extractExpectedParameters(template);
-      
+
       expect(result).toEqual([]);
     });
 
     it('should handle parameters with underscores', () => {
       const template = 'const {{user_id}} = {{USER_ID}}; const {{snake_case}} = true;';
-      
+
       const result = extractExpectedParameters(template);
-      
+
       expect(result).toEqual(['USER_ID', 'snake_case', 'user_id']);
     });
 
     it('should not extract partial matches', () => {
       const template = 'const {{{triple}}} = true; const {single} = false;';
-      
+
       const result = extractExpectedParameters(template);
-      
+
       // The regex \{\{(\w+)\}\} will match {{triple}} within {{{triple}}}
       expect(result).toEqual(['triple']); // Matches the {{triple}} part of {{{triple}}}
     });
@@ -201,9 +201,9 @@ describe('Script Builder', () => {
         name: 'John',
         age: 30,
       };
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(true);
       expect(result.missing).toEqual([]);
       expect(result.extra).toEqual([]);
@@ -214,9 +214,9 @@ describe('Script Builder', () => {
       const params: ScriptParameters = {
         name: 'John',
       };
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(false);
       expect(result.missing).toEqual(['age', 'city']);
       expect(result.extra).toEqual([]);
@@ -229,9 +229,9 @@ describe('Script Builder', () => {
         age: 30,
         city: 'NYC',
       };
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(true); // Valid because all required params are present
       expect(result.missing).toEqual([]);
       expect(result.extra).toEqual(['age', 'city']);
@@ -244,9 +244,9 @@ describe('Script Builder', () => {
         c: 3,
         d: 4,
       };
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(false);
       expect(result.missing).toEqual(['a']);
       expect(result.extra).toEqual(['c', 'd']);
@@ -257,9 +257,9 @@ describe('Script Builder', () => {
       const params: ScriptParameters = {
         unused: 'value',
       };
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(true);
       expect(result.missing).toEqual([]);
       expect(result.extra).toEqual(['unused']);
@@ -268,9 +268,9 @@ describe('Script Builder', () => {
     it('should handle empty parameters', () => {
       const template = 'const x = {{x}};';
       const params: ScriptParameters = {};
-      
+
       const result = validateScriptParameters(template, params);
-      
+
       expect(result.valid).toBe(false);
       expect(result.missing).toEqual(['x']);
       expect(result.extra).toEqual([]);
@@ -285,20 +285,20 @@ describe('Script Builder', () => {
         task.completed = {{completed}};
         return task;
       `;
-      
+
       const params: ScriptParameters = {
         taskId: '12345',
         name: 'Updated Task',
         completed: false,
       };
-      
+
       // Validate parameters
       const validation = validateScriptParameters(template, params);
       expect(validation.valid).toBe(true);
-      
+
       // Build script with parameters
       const script = buildScriptWithParameters(template, params);
-      
+
       // Verify structure
       expect(script).toContain('const taskId = {{taskId}};');
       expect(script).toContain('const name = {{name}};');
@@ -315,16 +315,16 @@ describe('Script Builder', () => {
           processItem(item, config.{{setting}});
         });
       `;
-      
+
       const params: ScriptParameters = {
         config: { setting: 'value', option: true },
         items: [1, 2, 3],
         setting: 'settingName',
       };
-      
+
       const validation = validateScriptParameters(template, params);
       expect(validation.valid).toBe(true);
-      
+
       const script = buildScriptWithParameters(template, params);
       expect(script).toContain('const config = {{config}};');
       expect(script).toContain('const items = {{items}};');

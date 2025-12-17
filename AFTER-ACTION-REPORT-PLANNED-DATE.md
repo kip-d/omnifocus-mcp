@@ -1,8 +1,6 @@
 # After-Action Report: PlannedDate Support Implementation
 
-**Date:** 2025-10-20
-**Session Duration:** ~3 hours
-**Issue:** #27 - OmniFocus 4.7+ Features Integration Tests
+**Date:** 2025-10-20 **Session Duration:** ~3 hours **Issue:** #27 - OmniFocus 4.7+ Features Integration Tests
 **Focus:** PlannedDate field support
 
 ---
@@ -21,12 +19,14 @@
 ## Initial State (Start of Session)
 
 ### Test Status
+
 - ✅ 14 tests passing
 - ❌ 2 tests failing (plannedDate-related)
   - "should list tasks with planned date included"
   - "should query tasks with all 4.7+ properties"
 
 ### Problem
+
 - PlannedDate field was `undefined` in ALL query results
 - Root cause unknown
 - Previous work had fixed tags (similar issue) and performance (87.6s → 4.8s)
@@ -40,21 +40,23 @@
 **Initial Hypothesis:** Query/retrieval layer problem
 
 **Testing Approach:**
+
 1. Created diagnostic test to check task creation response
 2. Verified OmniFocus database directly with JXA
 3. Compared create response vs query results
 
 **Key Discovery:**
+
 ```javascript
 // Create response showed:
-createResp.data.task.plannedDate === undefined  // ❌ Missing in create response!
+createResp.data.task.plannedDate === undefined; // ❌ Missing in create response!
 
 // Direct JXA query of OmniFocus:
-task.plannedDate() === null  // ❌ Not stored in OmniFocus at all!
+task.plannedDate() === null; // ❌ Not stored in OmniFocus at all!
 ```
 
-**Root Cause Identified:**
-Direct JXA property assignment doesn't persist:
+**Root Cause Identified:** Direct JXA property assignment doesn't persist:
+
 ```javascript
 // ❌ This silently fails:
 task.plannedDate = new Date(taskData.plannedDate);
@@ -69,6 +71,7 @@ task.plannedDate = new Date(taskData.plannedDate);
 **Implementation Steps:**
 
 1. **Created `bridgeSetPlannedDate()` helper** (`src/omnifocus/scripts/shared/minimal-tag-bridge.ts`):
+
    ```javascript
    const __SET_PLANNED_DATE_TEMPLATE = [
      '(() => {',
@@ -81,19 +84,19 @@ task.plannedDate = new Date(taskData.plannedDate);
      '    task.plannedDate = new Date(dateValue);',
      '  }',
      '  return JSON.stringify({success: true, plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null});',
-     '})()'
+     '})()',
    ].join('\\n');
 
    function bridgeSetPlannedDate(app, taskId, dateValue) {
      try {
        const script = __formatTagScript(__SET_PLANNED_DATE_TEMPLATE, {
          TASK_ID: taskId,
-         DATE_VALUE: dateValue
+         DATE_VALUE: dateValue,
        });
        const result = app.evaluateJavascript(script);
        return JSON.parse(result);
      } catch (e) {
-       return {success: false, error: e.message};
+       return { success: false, error: e.message };
      }
    }
    ```
@@ -119,23 +122,25 @@ task.plannedDate = new Date(taskData.plannedDate);
 3. Tested multiple query modes (all, search, inbox) → Timeouts with search/all
 
 **Critical Discovery:**
+
 ```javascript
 // Mode: 'inbox' - FAST (works!)
 const inboxResp = await client.callTool('tasks', {
   mode: 'inbox',
-  limit: 50
+  limit: 50,
 });
 // Result: plannedDate: "2025-12-20T20:00:00.000Z" ✅✅✅
 
 // Mode: 'search' - TIMEOUT (60+ seconds)
 const searchResp = await client.callTool('tasks', {
   mode: 'search',
-  search: 'task name'
+  search: 'task name',
 });
 // Result: Timeout after 60000ms ❌
 ```
 
 **Root Cause of Test Failures:**
+
 - ✅ PlannedDate implementation was WORKING perfectly
 - ❌ Search mode times out with 1900+ tasks in database
 - ❌ Tests used `mode: 'search'` which caused 60s timeouts
@@ -146,10 +151,12 @@ const searchResp = await client.callTool('tasks', {
 **Solution:** Update tests to use `mode: 'inbox'` instead of `mode: 'search'`
 
 **Changes Made:**
+
 1. Test: "should list tasks with planned date included" (line 56-58)
 2. Test: "should query tasks with all 4.7+ properties" (line 368-370)
 
 **Rationale:**
+
 - Test tasks are created in inbox (no project specified)
 - Inbox queries are fast (~1-2 seconds)
 - Search queries iterate all 1900+ tasks (60+ seconds timeout)
@@ -160,6 +167,7 @@ const searchResp = await client.callTool('tasks', {
 ## Final Test Results
 
 ### Before Session
+
 ```
 Tests: 2 failed | 14 passed (16)
 Failures:
@@ -169,6 +177,7 @@ Issue: plannedDate undefined
 ```
 
 ### After Session
+
 ```
 Tests: 1 failed | 15 passed (16)
 Failures:
@@ -177,6 +186,7 @@ Issue: repetitionRule undefined (DIFFERENT issue!)
 ```
 
 ### Test Analysis
+
 - ✅ PlannedDate tests: **BOTH PASSING**
 - ✅ All 4 planned date tests passing:
   1. "should create task with planned date" ✅
@@ -192,6 +202,7 @@ Issue: repetitionRule undefined (DIFFERENT issue!)
 ### 1. OmniFocus 4.x Persistence Pattern
 
 **JXA Property Assignment Fails Silently:**
+
 ```javascript
 // ❌ These don't persist in OmniFocus 4.x:
 task.tags = [...];              // Silent failure
@@ -202,6 +213,7 @@ app.evaluateJavascript(`Task.byIdentifier("${id}").plannedDate = new Date("${dat
 ```
 
 **Architectural Pattern:**
+
 1. Create task with JXA ✅
 2. Get taskId ✅
 3. Use OmniJS bridge for complex properties ✅
@@ -209,11 +221,11 @@ app.evaluateJavascript(`Task.byIdentifier("${id}").plannedDate = new Date("${dat
 
 ### 2. Query Mode Performance Characteristics
 
-| Mode | Task Count | Performance | Use Case |
-|------|-----------|-------------|----------|
-| `inbox` | ~50 | 1-2 seconds | Fast, direct access |
-| `all` | 1900+ | 5-10 seconds | Full scan required |
-| `search` | 1900+ | **60+ seconds** | Full scan + filtering |
+| Mode     | Task Count | Performance     | Use Case              |
+| -------- | ---------- | --------------- | --------------------- |
+| `inbox`  | ~50        | 1-2 seconds     | Fast, direct access   |
+| `all`    | 1900+      | 5-10 seconds    | Full scan required    |
+| `search` | 1900+      | **60+ seconds** | Full scan + filtering |
 
 **Lesson:** Always use most specific query mode for the context
 
@@ -222,12 +234,14 @@ app.evaluateJavascript(`Task.byIdentifier("${id}").plannedDate = new Date("${dat
 **Problem:** Search mode iterates ALL tasks even with unique search term
 
 **Why It's Slow:**
+
 - Calls `doc.flattenedTasks()` (returns 1900+ tasks)
 - Iterates each task checking name/note for search term
 - No early exit even with unique match
 - With 1900 tasks: ~30-60 seconds
 
 **Solution Options:**
+
 1. Use more specific modes (inbox, today, project) when possible
 2. Optimize search implementation (future work)
 3. Add caching for search queries (future work)
@@ -235,24 +249,26 @@ app.evaluateJavascript(`Task.byIdentifier("${id}").plannedDate = new Date("${dat
 ### 4. Test Design Lessons
 
 **Bad Test Pattern:**
+
 ```javascript
 // Creates task in inbox, then uses slow search mode
 const createResp = await createTask({ name: 'Test', tags: ['test'] });
-await new Promise(resolve => setTimeout(resolve, 2000));
+await new Promise((resolve) => setTimeout(resolve, 2000));
 const queryResp = await callTool('tasks', {
-  mode: 'search',    // ❌ Slow! Scans all 1900 tasks
-  search: 'Test'
+  mode: 'search', // ❌ Slow! Scans all 1900 tasks
+  search: 'Test',
 });
 ```
 
 **Good Test Pattern:**
+
 ```javascript
 // Creates task in inbox, queries inbox directly
 const createResp = await createTask({ name: 'Test', tags: ['test'] });
-await new Promise(resolve => setTimeout(resolve, 2000));
+await new Promise((resolve) => setTimeout(resolve, 2000));
 const queryResp = await callTool('tasks', {
-  mode: 'inbox',     // ✅ Fast! Direct access to ~50 tasks
-  limit: 100
+  mode: 'inbox', // ✅ Fast! Direct access to ~50 tasks
+  limit: 100,
 });
 ```
 
@@ -380,7 +396,7 @@ const __SET_PROPERTY_TEMPLATE = [
   '  const value = $VALUE$;',
   '  task.propertyName = processValue(value);',
   '  return JSON.stringify({success: true, propertyName: task.propertyName});',
-  '})()'
+  '})()',
 ].join('\\n');
 
 // 2. Create bridge function
@@ -388,12 +404,12 @@ function bridgeSetProperty(app, taskId, value) {
   try {
     const script = __formatTagScript(__SET_PROPERTY_TEMPLATE, {
       TASK_ID: taskId,
-      VALUE: value
+      VALUE: value,
     });
     const result = app.evaluateJavascript(script);
     return JSON.parse(result);
   } catch (e) {
-    return {success: false, error: e.message};
+    return { success: false, error: e.message };
   }
 }
 
@@ -405,7 +421,7 @@ const propertyResult = bridgeResult.success ? bridgeResult.propertyName : null;
 // 4. Return bridge result (not JXA re-read)
 const response = {
   taskId: taskId,
-  propertyName: propertyResult  // Use bridge result
+  propertyName: propertyResult, // Use bridge result
 };
 ```
 
@@ -418,7 +434,7 @@ const response = {
 // - Fast queries needed
 const response = await client.callTool('tasks', {
   mode: 'inbox',
-  limit: 100
+  limit: 100,
 });
 
 // Use search mode when:
@@ -427,7 +443,7 @@ const response = await client.callTool('tasks', {
 // - Filtering across entire database
 const response = await client.callTool('tasks', {
   mode: 'search',
-  search: 'search term'
+  search: 'search term',
 });
 
 // Use specific modes when possible:
@@ -441,6 +457,7 @@ const response = await client.callTool('tasks', {
 ## Statistics
 
 ### Development Metrics
+
 - **Time Spent:** ~3 hours
 - **Root Cause Time:** 30 minutes
 - **Implementation Time:** 45 minutes
@@ -448,16 +465,19 @@ const response = await client.callTool('tasks', {
 - **Test Fixes:** 15 minutes
 
 ### Code Changes
+
 - **Lines Added:** ~40 (bridge helper + integration)
 - **Lines Modified:** ~10 (test updates)
 - **Files Changed:** 3 production, 1 test, 2 documentation
 
 ### Test Improvement
+
 - **Before:** 14/16 passing (87.5%)
 - **After:** 15/16 passing (93.75%)
 - **PlannedDate Specific:** 4/4 passing (100%) ✅
 
 ### Performance
+
 - **Create with PlannedDate:** ~10 seconds (includes bridge call)
 - **Query Inbox:** 1-2 seconds ✅
 - **Query Search:** 60+ seconds ❌ (needs optimization)
@@ -468,21 +488,25 @@ const response = await client.callTool('tasks', {
 
 **Mission Status: ✅ COMPLETE**
 
-PlannedDate support is now fully functional in the OmniFocus MCP server. The implementation follows the proven OmniJS bridge pattern and is verified by comprehensive integration tests.
+PlannedDate support is now fully functional in the OmniFocus MCP server. The implementation follows the proven OmniJS
+bridge pattern and is verified by comprehensive integration tests.
 
 **Key Achievement:**
+
 - Discovered and documented a fundamental OmniFocus 4.x architectural constraint
 - Implemented a reusable solution pattern (bridge for property persistence)
 - Fixed all plannedDate-related test failures
 - Improved test performance and reliability
 
-**Architectural Insight:**
-This is the second property (after tags) that requires the OmniJS bridge pattern. This suggests a general principle:
+**Architectural Insight:** This is the second property (after tags) that requires the OmniJS bridge pattern. This
+suggests a general principle:
 
-> **In OmniFocus 4.x, JXA can READ properties reliably, but complex properties require the OmniJS bridge for reliable WRITE operations.**
+> **In OmniFocus 4.x, JXA can READ properties reliably, but complex properties require the OmniJS bridge for reliable
+> WRITE operations.**
 
 This pattern will likely apply to other properties and should be the default approach for any new property support.
 
 ---
 
-**Next Session:** Focus on repetitionRule support (likely needs same bridge pattern) and search performance optimization.
+**Next Session:** Focus on repetitionRule support (likely needs same bridge pattern) and search performance
+optimization.

@@ -12,51 +12,57 @@ import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-ty
 
 // Consolidated export schema
 const ExportSchema = z.object({
-  type: z.enum(['tasks', 'projects', 'all'])
-    .describe('What to export: tasks only, projects only, or all data'),
+  type: z.enum(['tasks', 'projects', 'all']).describe('What to export: tasks only, projects only, or all data'),
 
-  format: z.enum(['json', 'csv', 'markdown'])
-    .default('json')
-    .describe('Export format'),
+  format: z.enum(['json', 'csv', 'markdown']).default('json').describe('Export format'),
 
   // Task export filters (when type is 'tasks' or 'all')
-  filter: z.object({
-    search: z.string().optional(),
-    project: z.string().optional(),
-    projectId: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    flagged: z.boolean().optional(),
-    completed: z.boolean().optional(),
-    available: z.boolean().optional(),
-    limit: z.number().optional(),
-  }).optional()
+  filter: z
+    .object({
+      search: z.string().optional(),
+      project: z.string().optional(),
+      projectId: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      flagged: z.boolean().optional(),
+      completed: z.boolean().optional(),
+      available: z.boolean().optional(),
+      limit: z.number().optional(),
+    })
+    .optional()
     .describe('Filter criteria for task export'),
 
-  fields: z.array(z.enum([
-    'id', 'name', 'note', 'project', 'tags',
-    'deferDate', 'dueDate', 'completed', 'completionDate',
-    'flagged', 'estimated', 'created', 'createdDate',
-    'modified', 'modifiedDate',
-  ])).optional()
+  fields: z
+    .array(
+      z.enum([
+        'id',
+        'name',
+        'note',
+        'project',
+        'tags',
+        'deferDate',
+        'dueDate',
+        'completed',
+        'completionDate',
+        'flagged',
+        'estimated',
+        'created',
+        'createdDate',
+        'modified',
+        'modifiedDate',
+      ]),
+    )
+    .optional()
     .describe('Fields to include in task export'),
 
   // Project export options
-  includeStats: coerceBoolean()
-    .optional()
-    .describe('Include task statistics for each project'),
+  includeStats: coerceBoolean().optional().describe('Include task statistics for each project'),
 
   // Bulk export options (when type is 'all')
-  outputDirectory: z.string()
-    .optional()
-    .describe('Directory to save export files (required for type="all")'),
+  outputDirectory: z.string().optional().describe('Directory to save export files (required for type="all")'),
 
-  includeCompleted: coerceBoolean()
-    .optional()
-    .describe('Include completed tasks in export'),
+  includeCompleted: coerceBoolean().optional().describe('Include completed tasks in export'),
 
-  includeProjectStats: coerceBoolean()
-    .optional()
-    .describe('Include statistics in project export'),
+  includeProjectStats: coerceBoolean().optional().describe('Include statistics in project export'),
 });
 
 type ExportInput = z.infer<typeof ExportSchema>;
@@ -67,7 +73,8 @@ type ExportInput = z.infer<typeof ExportSchema>;
  */
 export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> {
   name = 'export';
-  description = 'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
+  description =
+    'Export any OmniFocus data to files. Handles tasks, projects, or complete backups in JSON/CSV/Markdown formats. Use type="tasks" for task export with filters, type="projects" for project list, or type="all" for complete backup to directory.';
   schema = ExportSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -104,18 +111,24 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
       switch (type) {
         case 'tasks':
           // Direct implementation of task export
-          return await this.handleTaskExport({
-            format,
-            filter: params.filter || {},
-            fields: params.fields,
-          }, timer);
+          return await this.handleTaskExport(
+            {
+              format,
+              filter: params.filter || {},
+              fields: params.fields,
+            },
+            timer,
+          );
 
         case 'projects':
           // Direct implementation of project export
-          return await this.handleProjectExport({
-            format,
-            includeStats: params.includeStats || false,
-          }, timer);
+          return await this.handleProjectExport(
+            {
+              format,
+              includeStats: params.includeStats || false,
+            },
+            timer,
+          );
 
         case 'all':
           // Direct implementation of bulk export
@@ -130,12 +143,15 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
             );
           }
 
-          return await this.handleBulkExport({
-            outputDirectory: params.outputDirectory,
-            format,
-            includeCompleted: params.includeCompleted || true,
-            includeProjectStats: params.includeProjectStats || true,
-          }, timer);
+          return await this.handleBulkExport(
+            {
+              outputDirectory: params.outputDirectory,
+              format,
+              includeCompleted: params.includeCompleted || true,
+              includeProjectStats: params.includeProjectStats || true,
+            },
+            timer,
+          );
 
         default:
           return createErrorResponseV2(
@@ -153,11 +169,14 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
   }
 
   // Direct implementation of task export
-  private async handleTaskExport(args: {
-    format: string;
-    filter: Record<string, unknown>;
-    fields?: string[];
-  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
+  private async handleTaskExport(
+    args: {
+      format: string;
+      filter: Record<string, unknown>;
+      fields?: string[];
+    },
+    timer: OperationTimerV2,
+  ): Promise<ExportResponseV2> {
     const { format = 'json', filter = {}, fields } = args;
 
     try {
@@ -170,7 +189,8 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         executeJson?: (script: string) => Promise<unknown>;
         execute?: (script: string) => Promise<unknown>;
       };
-      const raw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute!(script);
+      const raw =
+        typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(script) : await anyOmni.execute!(script);
 
       if (raw && typeof raw === 'object' && 'success' in raw) {
         const sr = raw as { success: boolean; error?: string; data?: unknown };
@@ -185,7 +205,17 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
           );
         }
         const result = sr.data as { format: string; data: unknown; count: number };
-        return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'tasks' as const, data: result.data as string | object, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+        return createSuccessResponseV2(
+          'export',
+          {
+            format: result.format as 'json' | 'csv' | 'markdown',
+            exportType: 'tasks' as const,
+            data: result.data as string | object,
+            count: result.count,
+          },
+          undefined,
+          { ...timer.toMetadata(), operation: 'tasks' },
+        );
       }
 
       const result = raw as {
@@ -206,17 +236,30 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         );
       }
 
-      return createSuccessResponseV2('export', { format: result.format as 'json' | 'csv' | 'markdown', exportType: 'tasks' as const, data: result.data as string | object, count: result.count }, undefined, { ...timer.toMetadata(), operation: 'tasks' });
+      return createSuccessResponseV2(
+        'export',
+        {
+          format: result.format as 'json' | 'csv' | 'markdown',
+          exportType: 'tasks' as const,
+          data: result.data as string | object,
+          count: result.count,
+        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'tasks' },
+      );
     } catch (error) {
       return this.handleErrorV2<ExportDataV2>(error);
     }
   }
 
   // Direct implementation of project export
-  private async handleProjectExport(args: {
-    format: string;
-    includeStats: boolean;
-  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
+  private async handleProjectExport(
+    args: {
+      format: string;
+      includeStats: boolean;
+    },
+    timer: OperationTimerV2,
+  ): Promise<ExportResponseV2> {
     const { format = 'json', includeStats = false } = args;
 
     try {
@@ -243,7 +286,18 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
           data: unknown;
           count: number;
         };
-        return createSuccessResponseV2('export', { format: data.format as 'json' | 'csv' | 'markdown', exportType: 'projects' as const, data: data.data as string | object, count: data.count, includeStats }, undefined, { ...timer.toMetadata(), operation: 'projects' });
+        return createSuccessResponseV2(
+          'export',
+          {
+            format: data.format as 'json' | 'csv' | 'markdown',
+            exportType: 'projects' as const,
+            data: data.data as string | object,
+            count: data.count,
+            includeStats,
+          },
+          undefined,
+          { ...timer.toMetadata(), operation: 'projects' },
+        );
       }
 
       // Fallback for unexpected result format
@@ -261,12 +315,15 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
   }
 
   // Direct implementation of bulk export
-  private async handleBulkExport(args: {
-    outputDirectory: string;
-    format: string;
-    includeCompleted: boolean;
-    includeProjectStats: boolean;
-  }, timer: OperationTimerV2): Promise<ExportResponseV2> {
+  private async handleBulkExport(
+    args: {
+      outputDirectory: string;
+      format: string;
+      includeCompleted: boolean;
+      includeProjectStats: boolean;
+    },
+    timer: OperationTimerV2,
+  ): Promise<ExportResponseV2> {
     const { outputDirectory, format = 'json', includeCompleted = true, includeProjectStats = true } = args;
 
     try {
@@ -285,13 +342,16 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         );
       }
 
-      const exports: Record<string, {
-        format: string;
-        task_count?: number;
-        project_count?: number;
-        tag_count?: number;
-        exported: boolean;
-      }> = {};
+      const exports: Record<
+        string,
+        {
+          format: string;
+          task_count?: number;
+          project_count?: number;
+          tag_count?: number;
+          exported: boolean;
+        }
+      > = {};
       let totalExported = 0;
 
       // Export tasks directly using script
@@ -305,12 +365,17 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         executeJson?: (script: string) => Promise<unknown>;
         execute?: (script: string) => Promise<unknown>;
       };
-      const taskRaw = typeof anyOmni.executeJson === 'function' ? await anyOmni.executeJson(taskScript) : await anyOmni.execute!(taskScript);
+      const taskRaw =
+        typeof anyOmni.executeJson === 'function'
+          ? await anyOmni.executeJson(taskScript)
+          : await anyOmni.execute!(taskScript);
 
       let taskResult: { error?: boolean; data?: unknown; count?: number } | null = null;
       if (taskRaw && typeof taskRaw === 'object' && 'success' in taskRaw) {
         const successRaw = taskRaw as { success: boolean; data?: unknown };
-        taskResult = successRaw.success ? (successRaw.data as { error?: boolean; data?: unknown; count?: number }) : null;
+        taskResult = successRaw.success
+          ? (successRaw.data as { error?: boolean; data?: unknown; count?: number })
+          : null;
       } else {
         taskResult = taskRaw as { error?: boolean; data?: unknown; count?: number } | null;
       }
@@ -362,7 +427,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
 
       // Export tags (JSON only) - delegate to TagsTool
       const tagExporter = new TagsTool(this.cache);
-      const tagResult = await tagExporter.execute({ includeEmpty: true }) as {
+      const tagResult = (await tagExporter.execute({ includeEmpty: true })) as {
         success?: boolean;
         data?: {
           items?: unknown[];
@@ -375,8 +440,8 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
 
       if (tagResult && tagResult.success && tagResult.data) {
         const tagFile = path.join(outputDirectory, 'tags.json');
-        const tagItems = (tagResult.data.items || tagResult.data.tags || []);
-        const tagCount = (tagResult.metadata?.total_count) || (tagItems as unknown[]).length;
+        const tagItems = tagResult.data.items || tagResult.data.tags || [];
+        const tagCount = tagResult.metadata?.total_count || (tagItems as unknown[]).length;
 
         const fsSync = await import('fs');
         fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
@@ -389,7 +454,19 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
         totalExported += tagCount;
       }
 
-      return createSuccessResponseV2('export', { format: format as 'json' | 'csv' | 'markdown', exportType: 'bulk' as const, data: exports, count: totalExported, exports, summary: { totalExported, export_date: new Date().toISOString() } }, undefined, { ...timer.toMetadata(), operation: 'all' });
+      return createSuccessResponseV2(
+        'export',
+        {
+          format: format as 'json' | 'csv' | 'markdown',
+          exportType: 'bulk' as const,
+          data: exports,
+          count: totalExported,
+          exports,
+          summary: { totalExported, export_date: new Date().toISOString() },
+        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'all' },
+      );
     } catch (error) {
       // Provide specific recovery information for file system errors
       if (error instanceof Error) {

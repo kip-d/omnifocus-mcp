@@ -1,15 +1,14 @@
 # Dry-Run Mode for Bulk Operations
 
-**Date:** 2025-11-26
-**Status:** Design Complete
-**Priority:** MEDIUM
-**Effort:** LOW-MEDIUM (1-2 hours)
+**Date:** 2025-11-26 **Status:** Design Complete **Priority:** MEDIUM **Effort:** LOW-MEDIUM (1-2 hours)
 
 ## Problem Statement
 
-Bulk operations (`batch`, `bulk_delete`, `bulk_complete`) execute immediately without preview capability. Users cannot verify what will be affected before committing destructive changes.
+Bulk operations (`batch`, `bulk_delete`, `bulk_complete`) execute immediately without preview capability. Users cannot
+verify what will be affected before committing destructive changes.
 
 **Risk Scenarios:**
+
 - `bulk_delete` with wrong criteria permanently removes tasks
 - `batch` create with 100 items creates unwanted hierarchy
 - `bulk_complete` marks wrong tasks as done
@@ -17,6 +16,7 @@ Bulk operations (`batch`, `bulk_delete`, `bulk_complete`) execute immediately wi
 ## Proposed Solution
 
 Add `dryRun: boolean` flag to mutation schema. When `true`:
+
 1. Validate all inputs normally
 2. Resolve criteria to concrete items (if using bulkCriteria)
 3. Build preview response without executing changes
@@ -59,11 +59,11 @@ interface DryRunResponse {
     wouldAffect: {
       count: number;
       items: Array<{
-        id?: string;        // For existing items
-        tempId?: string;    // For batch creates
+        id?: string; // For existing items
+        tempId?: string; // For batch creates
         name: string;
         action: 'create' | 'update' | 'complete' | 'delete';
-        details?: Record<string, unknown>;  // Proposed changes
+        details?: Record<string, unknown>; // Proposed changes
       }>;
     };
     validation: {
@@ -74,7 +74,7 @@ interface DryRunResponse {
   };
   metadata: {
     query_time_ms: number;
-    message: string;  // "DRY RUN: No changes made"
+    message: string; // "DRY RUN: No changes made"
   };
 }
 ```
@@ -180,16 +180,19 @@ private async previewBulkDelete(
 ## Implementation Phases
 
 ### Phase 1: Core Infrastructure (30 min)
+
 1. Add `dryRun` field to `write-schema.ts` for batch and bulk_delete
 2. Add `handleDryRun()` method to OmniFocusWriteTool
 3. Update MutationCompiler to pass through dryRun flag
 
 ### Phase 2: Preview Implementation (45 min)
+
 1. Implement `previewBulkDelete()` - fetch task details for IDs
 2. Implement `previewBatch()` - validate hierarchy, return planned items
 3. Implement `previewBulkComplete()` (optional - lower risk operation)
 
 ### Phase 3: Testing (30 min)
+
 1. Unit tests for dry-run response format
 2. Integration test: dry-run → verify → execute pattern
 3. Update TESTING_PROMPT_LIGHTWEIGHT.md with dry-run scenario
@@ -212,11 +215,11 @@ private async previewBulkDelete(
 
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-|------|------------|
-| Dry-run state differs from execution | Use same validation code path |
-| Preview fetches slow for many items | Limit preview to 100 items, warn if more |
-| User forgets to execute after preview | Response message prompts next action |
+| Risk                                  | Mitigation                               |
+| ------------------------------------- | ---------------------------------------- |
+| Dry-run state differs from execution  | Use same validation code path            |
+| Preview fetches slow for many items   | Limit preview to 100 items, warn if more |
+| User forgets to execute after preview | Response message prompts next action     |
 
 ## Future Enhancements
 

@@ -30,11 +30,7 @@ export async function setup() {
   try {
     const report = await fullCleanup();
 
-    const totalCleaned =
-      report.inboxTasksDeleted +
-      report.projectsDeleted +
-      report.foldersDeleted +
-      report.tagsDeleted;
+    const totalCleaned = report.inboxTasksDeleted + report.projectsDeleted + report.foldersDeleted + report.tagsDeleted;
 
     if (totalCleaned > 0) {
       console.log(`[Integration Setup] Cleaned up ${totalCleaned} orphaned items:`);
@@ -73,11 +69,7 @@ export async function teardown() {
   try {
     const report = await fullCleanup();
 
-    const totalCleaned =
-      report.inboxTasksDeleted +
-      report.projectsDeleted +
-      report.foldersDeleted +
-      report.tagsDeleted;
+    const totalCleaned = report.inboxTasksDeleted + report.projectsDeleted + report.foldersDeleted + report.tagsDeleted;
 
     if (totalCleaned > 0) {
       console.log(`[Integration Teardown] Cleaned up ${totalCleaned} test items.`);

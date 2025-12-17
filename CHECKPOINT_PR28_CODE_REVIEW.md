@@ -1,41 +1,46 @@
 # Checkpoint: PR #28 Code Review Response
 
-**Date:** 2025-11-06
-**PR:** #28 - Unified API: Production-Ready 4-Tool Interface
-**Status:** 🔴 Code review identified critical documentation issues
-**Branch:** `feature/unified-api`
+**Date:** 2025-11-06 **PR:** #28 - Unified API: Production-Ready 4-Tool Interface **Status:** 🔴 Code review identified
+critical documentation issues **Branch:** `feature/unified-api`
 
 ---
 
 ## Code Review Summary
 
-External review identified **3 critical blocking issues** that must be fixed before merge. All three are **technically correct** after verification.
+External review identified **3 critical blocking issues** that must be fixed before merge. All three are **technically
+correct** after verification.
 
 ### ✅ Verified Issues
 
 #### Issue #1: FALSE CLAIM - "No Breaking Changes"
+
 **Status:** CONFIRMED - This IS a breaking change
 
 **Evidence:**
+
 ```bash
 $ git log --oneline --grep="remove 17 legacy tools"
 f826702 refactor: consolidate to 3 unified tools, remove 17 legacy tools
 ```
 
 **Current State:**
+
 - Only 4 tools registered: omnifocus_read, omnifocus_write, omnifocus_analyze, system
 - 17 legacy tools removed 27 commits before my session started (commit f826702)
 - PR_DESCRIPTION.md incorrectly claims "No breaking changes" and "Legacy 17-tool interface still works"
 
 **Impact:**
+
 - Users calling individual tools (tasks, manage_task, projects, tags, etc.) will get failures
 - Claude Desktop configs with old tool names will break
 - Violates semantic versioning (breaking change without major version bump)
 
 #### Issue #2: Inconsistent Documentation - CLAUDE.md
+
 **Status:** CONFIRMED - Line 25 is incorrect
 
 **Evidence:**
+
 ```bash
 $ grep -n "20 total tools" CLAUDE.md
 25:- Both APIs operate simultaneously: 20 total tools (3 new + 17 legacy)
@@ -46,9 +51,11 @@ $ grep -n "20 total tools" CLAUDE.md
 **What I Did:** Updated CLAUDE.md to mark API as "stable" but MISSED line 25 claiming "20 tools"
 
 #### Issue #3: ID Filtering Validation Gap
+
 **Status:** CONFIRMED - Technical concern is valid
 
 **Current Code:** (QueryTasksTool.ts:623-672)
+
 ```typescript
 private async handleTaskById(args, timer) {
   const filter = { id: args.id, limit: 1 };
@@ -116,6 +123,7 @@ private async handleTaskById(args, timer) {
 ## Context: What Happened
 
 ### My Session (Nov 6, 2025)
+
 - Fixed ID filtering bug (returns 1 task instead of 25)
 - Removed V2/V3 versioning (9 tool classes, 5 scripts)
 - Updated API terminology (experimental → stable)
@@ -124,12 +132,15 @@ private async handleTaskById(args, timer) {
 - **Missed:** Breaking changes from earlier commits
 
 ### Earlier in Branch (27 commits before)
+
 - Commit f826702: Removed all 17 legacy tools
 - This WAS documented as BREAKING CHANGE in that commit
 - But PR description I wrote claimed "no breaking changes"
 
 ### The Disconnect
-I wrote the PR description based on MY session's changes, which had no breaking changes. I didn't review the FULL branch history going back 27+ commits to see that legacy tools were removed.
+
+I wrote the PR description based on MY session's changes, which had no breaking changes. I didn't review the FULL branch
+history going back 27+ commits to see that legacy tools were removed.
 
 ---
 
@@ -174,13 +185,15 @@ All 17 removed tools need similar mappings documented.
 ### Reviewer Accuracy: ✅ 100% Correct
 
 All three critical issues were verified against codebase:
+
 1. Breaking changes exist (git log confirms)
 2. CLAUDE.md claims 20 tools (grep confirms)
 3. ID validation missing (code inspection confirms)
 
 ### Not Performative Agreement
 
-This isn't "you're absolutely right" - this is: I verified each claim against the codebase and they're factually correct.
+This isn't "you're absolutely right" - this is: I verified each claim against the codebase and they're factually
+correct.
 
 ---
 
@@ -217,6 +230,7 @@ Before implementing fixes, clarify with user:
 ## Files to Modify
 
 ### Must Change
+
 - `PR_DESCRIPTION.md` (lines 187-194)
 - `CLAUDE.md` (line 25 + version compat notes)
 - `src/tools/tasks/QueryTasksTool.ts` (add validation)
@@ -225,6 +239,7 @@ Before implementing fixes, clarify with user:
 - `CHANGELOG.md` (update)
 
 ### Maybe Change (if requested)
+
 - Test files (add ID validation tests)
 - `src/tools/unified/OmniFocusAnalyzeTool.ts` (semantic mappings)
 
@@ -242,6 +257,7 @@ Before implementing fixes, clarify with user:
 ## Estimation
 
 **Time to fix critical issues:** 2-3 hours
+
 - Update documentation: 1 hour
 - Add validation + tests: 1 hour
 - Create migration guide: 30-60 min
@@ -250,5 +266,5 @@ Before implementing fixes, clarify with user:
 
 ---
 
-**Status:** Awaiting user decision on v3.0.0 vs restore legacy tools
-**Next:** Get clarification, then implement fixes in clean session
+**Status:** Awaiting user decision on v3.0.0 vs restore legacy tools **Next:** Get clarification, then implement fixes
+in clean session

@@ -37,12 +37,12 @@ export class McpTestRunner {
     console.log('Starting MCP server for testing...\n');
 
     this.server = spawn('node', [this.options.serverPath], {
-      stdio: ['pipe', 'pipe', 'inherit']
+      stdio: ['pipe', 'pipe', 'inherit'],
     });
 
     this.rl = createInterface({
       input: this.server.stdout,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     });
 
     // Handle responses
@@ -50,7 +50,7 @@ export class McpTestRunner {
       try {
         const response = JSON.parse(line);
         console.log(`← Response for ${response.id}:`, JSON.stringify(response, null, 2));
-        
+
         if (this.options.onResponse) {
           this.options.onResponse(response, response.id);
         }
@@ -72,7 +72,7 @@ export class McpTestRunner {
       jsonrpc: '2.0',
       method,
       params,
-      id: this.requestId++
+      id: this.requestId++,
     };
 
     console.log(`→ Sending: ${method}`);
@@ -82,7 +82,7 @@ export class McpTestRunner {
   async sendToolCall(toolName: string, args: any): Promise<void> {
     this.sendRequest('tools/call', {
       name: toolName,
-      arguments: args
+      arguments: args,
     });
   }
 
@@ -156,25 +156,28 @@ export async function testToolCall(toolName: string, args: any, options: McpTest
   const runner = new McpTestRunner({
     ...options,
     onResponse: (response, requestId) => {
-      if (requestId === 2) { // After initialize
+      if (requestId === 2) {
+        // After initialize
         runner.sendRequest('tools/list');
-      } else if (requestId === 3) { // After tools list
+      } else if (requestId === 3) {
+        // After tools list
         runner.sendToolCall(toolName, args);
-      } else if (requestId === 4) { // After tool call
+      } else if (requestId === 4) {
+        // After tool call
         runner.complete();
       }
-    }
+    },
   });
 
   await runner.start();
-  
+
   // Initialize the MCP protocol
   runner.sendRequest('initialize', {
     protocolVersion: '0.1.0',
     capabilities: {},
     clientInfo: {
       name: 'mcp-test-client',
-      version: '1.0.0'
-    }
+      version: '1.0.0',
+    },
   });
 }

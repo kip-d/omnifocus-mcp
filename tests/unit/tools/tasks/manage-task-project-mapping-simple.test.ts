@@ -6,7 +6,7 @@ describe('ManageTaskTool project parameter mapping - simple test', () => {
     const createArgs = {
       name: 'Test Task',
       projectId: 'test-project-id',
-      note: 'Test note'
+      note: 'Test note',
     };
 
     // This is the transformation logic from ManageTaskTool

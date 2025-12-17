@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverPath = join(__dirname, '..', 'dist', 'index.js');
 
 const server = spawn('node', [serverPath], {
-  stdio: ['pipe', 'pipe', 'pipe']
+  stdio: ['pipe', 'pipe', 'pipe'],
 });
 
 // Send initialize request
@@ -21,9 +21,9 @@ const initializeRequest = {
     capabilities: {},
     clientInfo: {
       name: 'test-client',
-      version: '1.0.0'
-    }
-  }
+      version: '1.0.0',
+    },
+  },
 };
 
 // Send list prompts request
@@ -31,16 +31,19 @@ const listPromptsRequest = {
   jsonrpc: '2.0',
   id: 2,
   method: 'prompts/list',
-  params: {}
+  params: {},
 };
 
 server.stdout.on('data', (data) => {
-  const lines = data.toString().split('\n').filter(line => line.trim());
-  lines.forEach(line => {
+  const lines = data
+    .toString()
+    .split('\n')
+    .filter((line) => line.trim());
+  lines.forEach((line) => {
     try {
       const response = JSON.parse(line);
       console.log('Response:', JSON.stringify(response, null, 2));
-      
+
       if (response.id === 1) {
         // After initialization, list prompts
         server.stdin.write(JSON.stringify(listPromptsRequest) + '\n');
@@ -58,8 +61,11 @@ server.stdout.on('data', (data) => {
 });
 
 server.stderr.on('data', (data) => {
-  const lines = data.toString().split('\n').filter(line => line.trim());
-  lines.forEach(line => {
+  const lines = data
+    .toString()
+    .split('\n')
+    .filter((line) => line.trim());
+  lines.forEach((line) => {
     if (line.includes('prompt') || line.includes('Prompt')) {
       console.error('Debug:', line);
     }

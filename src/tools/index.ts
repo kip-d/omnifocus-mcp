@@ -1,12 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { CacheManager } from '../cache/CacheManager.js';
-import {
-  createLogger,
-  createCorrelatedLogger,
-  redactArgs,
-  generateCorrelationId,
-} from '../utils/logger.js';
+import { createLogger, createCorrelatedLogger, redactArgs, generateCorrelationId } from '../utils/logger.js';
 
 // v3.0.0 Unified Builder API - 3 tools + system diagnostics
 import { OmniFocusReadTool } from './unified/OmniFocusReadTool.js';
@@ -33,25 +28,26 @@ interface Tool {
 
 // Type guard to check if a tool supports correlation
 function supportsCorrelation(tool: Tool): tool is Tool & CorrelationCapable {
-  return 'withCorrelation' in tool &&
-    typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
+  return 'withCorrelation' in tool && typeof (tool as Tool & Record<string, unknown>).withCorrelation === 'function';
 }
 
 export function registerTools(server: Server, cache: CacheManager, pendingOperations?: Set<Promise<unknown>>): void {
-  logger.info('OmniFocus MCP v3.0.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)');
+  logger.info(
+    'OmniFocus MCP v3.0.0 - Unified Builder API: 4 tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)',
+  );
 
   // Unified Builder API + system diagnostics
   const tools: Tool[] = [
-    new OmniFocusReadTool(cache),       // 'omnifocus_read' - Query tasks, projects, tags, perspectives, folders
-    new OmniFocusWriteTool(cache),      // 'omnifocus_write' - Create, update, complete, delete operations
-    new OmniFocusAnalyzeTool(cache),    // 'omnifocus_analyze' - All analytics and analysis operations
-    new SystemTool(cache),            // 'system' - Version info and diagnostics
+    new OmniFocusReadTool(cache), // 'omnifocus_read' - Query tasks, projects, tags, perspectives, folders
+    new OmniFocusWriteTool(cache), // 'omnifocus_write' - Create, update, complete, delete operations
+    new OmniFocusAnalyzeTool(cache), // 'omnifocus_analyze' - All analytics and analysis operations
+    new SystemTool(cache), // 'system' - Version info and diagnostics
   ];
 
   // Register handlers
   server.setRequestHandler(ListToolsRequestSchema, () => {
     return {
-      tools: tools.map(t => {
+      tools: tools.map((t) => {
         const toolDef: Record<string, unknown> = {
           name: t.name,
           description: t.description,
@@ -78,19 +74,13 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
     const startTime = Date.now();
 
     // Create correlated logger for this tool execution
-    const correlatedLogger = createCorrelatedLogger(
-      'tools',
-      correlationId,
-      name,
-      name,
-      {
-        requestId: correlationId,
-        toolName: name,
-        startTime: startTime,
-      },
-    );
+    const correlatedLogger = createCorrelatedLogger('tools', correlationId, name, name, {
+      requestId: correlationId,
+      toolName: name,
+      startTime: startTime,
+    });
 
-    const tool = tools.find(t => t.name === name);
+    const tool = tools.find((t) => t.name === name);
     if (!tool) {
       correlatedLogger.error(`Tool not found: ${name}`);
       throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
@@ -98,11 +88,14 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
 
     // Enhanced logging with correlation ID
     correlatedLogger.info(`Executing tool: ${name}`);
-    correlatedLogger.debug(`Args for ${name}:`, redactArgs({
-      argsType: typeof args,
-      argsKeys: args ? Object.keys(args as Record<string, unknown>) : [],
-      args,
-    }));
+    correlatedLogger.debug(
+      `Args for ${name}:`,
+      redactArgs({
+        argsType: typeof args,
+        argsKeys: args ? Object.keys(args as Record<string, unknown>) : [],
+        args,
+      }),
+    );
 
     // Create execution promise and track it to prevent premature server exit
     const executionPromise = (async () => {
@@ -149,10 +142,7 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
         }
 
         // Wrap all other errors as McpError with InternalError code
-        throw new McpError(
-          ErrorCode.InternalError,
-          error instanceof Error ? error.message : String(error),
-        );
+        throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : String(error));
       }
     })();
 
@@ -170,5 +160,4 @@ export function registerTools(server: Server, cache: CacheManager, pendingOperat
 
     return executionPromise;
   });
-
 }

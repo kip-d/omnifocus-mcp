@@ -29,7 +29,7 @@ async function measureHelperSizes() {
     'getAllHelpers',
     'getValidationHelpers',
     'getSerializationHelpers',
-    'getRecurrenceHelpers'
+    'getRecurrenceHelpers',
   ];
 
   const helperSizes = {};
@@ -64,12 +64,12 @@ function measureScriptTemplates() {
     'src/omnifocus/scripts/tasks/list-tasks.ts',
     'src/omnifocus/scripts/projects/create-project.ts',
     'src/omnifocus/scripts/projects/update-project.ts',
-    'src/omnifocus/scripts/analytics/workflow-analysis.ts'
+    'src/omnifocus/scripts/analytics/workflow-analysis.ts',
   ];
 
   const templateSizes = {};
 
-  scriptFiles.forEach(filePath => {
+  scriptFiles.forEach((filePath) => {
     try {
       const content = readFileSync(filePath, 'utf8');
 
@@ -103,17 +103,19 @@ async function simulateExpandedSizes(templateSizes, helperSizes) {
     'list-tasks.ts': 'getBasicHelpers',
     'create-project.ts': 'getRecurrenceHelpers',
     'update-project.ts': 'getValidationHelpers',
-    'workflow-analysis.ts': 'getAllHelpers'
+    'workflow-analysis.ts': 'getAllHelpers',
   };
 
   Object.entries(expansionScenarios).forEach(([script, helperFunc]) => {
-    const scriptKey = Object.keys(templateSizes).find(key => key.includes(script));
+    const scriptKey = Object.keys(templateSizes).find((key) => key.includes(script));
     if (scriptKey && templateSizes[scriptKey] && helperSizes[helperFunc]) {
       const templateSize = templateSizes[scriptKey];
       const helperSize = helperSizes[helperFunc];
       const expandedSize = templateSize + helperSize;
 
-      console.log(`   ${script.padEnd(25)}: ${templateSize.toLocaleString()} + ${helperSize.toLocaleString()} = ${expandedSize.toLocaleString()} chars`);
+      console.log(
+        `   ${script.padEnd(25)}: ${templateSize.toLocaleString()} + ${helperSize.toLocaleString()} = ${expandedSize.toLocaleString()} chars`,
+      );
 
       // Check against our empirical limits
       const jxaStatus = expandedSize < 523266 ? '✅' : '❌';
@@ -133,22 +135,22 @@ function findLargestScripts() {
     'src/omnifocus/scripts/tasks',
     'src/omnifocus/scripts/projects',
     'src/omnifocus/scripts/analytics',
-    'src/omnifocus/scripts/shared'
+    'src/omnifocus/scripts/shared',
   ];
 
   const allScripts = [];
 
-  scriptDirs.forEach(dir => {
+  scriptDirs.forEach((dir) => {
     try {
       const files = readdirSync(dir);
-      files.forEach(file => {
+      files.forEach((file) => {
         if (file.endsWith('.ts')) {
           const filePath = join(dir, file);
           const content = readFileSync(filePath, 'utf8');
           allScripts.push({
             file: filePath,
             size: content.length,
-            name: file
+            name: file,
           });
         }
       });
@@ -162,7 +164,9 @@ function findLargestScripts() {
 
   console.log('   Top 10 Largest Scripts:');
   allScripts.slice(0, 10).forEach((script, index) => {
-    console.log(`   ${(index + 1).toString().padStart(2)}. ${script.name.padEnd(35)}: ${script.size.toLocaleString()} chars`);
+    console.log(
+      `   ${(index + 1).toString().padStart(2)}. ${script.name.padEnd(35)}: ${script.size.toLocaleString()} chars`,
+    );
   });
 
   return allScripts;
@@ -179,13 +183,13 @@ function investigateAssumptions() {
     '19KB': 19456,
     '19000 chars': 19000,
     '20KB': 20480,
-    'ARG_MAX portion': 65536  // 1/4 of 256KB ARG_MAX
+    'ARG_MAX portion': 65536, // 1/4 of 256KB ARG_MAX
   };
 
   Object.entries(referenceSizes).forEach(([name, size]) => {
     console.log(`   ${name.padEnd(20)}: ${size.toLocaleString()} chars`);
-    console.log(`      vs JXA actual: ${(size / 523266 * 100).toFixed(1)}% of real limit`);
-    console.log(`      vs OmniJS actual: ${(size / 261124 * 100).toFixed(1)}% of real limit`);
+    console.log(`      vs JXA actual: ${((size / 523266) * 100).toFixed(1)}% of real limit`);
+    console.log(`      vs OmniJS actual: ${((size / 261124) * 100).toFixed(1)}% of real limit`);
   });
 }
 
@@ -209,15 +213,15 @@ async function analyzeScriptSizes() {
   console.log(`Empirical OmniJS Limit:  ${(261124).toLocaleString()} chars (~255KB)`);
   console.log(`Assumed "Limit":         ${(19000).toLocaleString()} chars (~19KB)`);
   console.log('');
-  console.log(`Assumption was:          ${(19000 / 523266 * 100).toFixed(1)}% of actual JXA limit`);
-  console.log(`                         ${(19000 / 261124 * 100).toFixed(1)}% of actual OmniJS limit`);
+  console.log(`Assumption was:          ${((19000 / 523266) * 100).toFixed(1)}% of actual JXA limit`);
+  console.log(`                         ${((19000 / 261124) * 100).toFixed(1)}% of actual OmniJS limit`);
 
   // Find scripts that exceed the old assumption but are still valid
-  const exceedsAssumption = allScripts.filter(script => script.size > 19000);
+  const exceedsAssumption = allScripts.filter((script) => script.size > 19000);
 
   if (exceedsAssumption.length > 0) {
     console.log('\n🎯 Scripts that exceed "19KB assumption" but should work:');
-    exceedsAssumption.forEach(script => {
+    exceedsAssumption.forEach((script) => {
       const jxaStatus = script.size < 523266 ? '✅ JXA OK' : '❌ JXA TOO BIG';
       const omniJSStatus = script.size < 261124 ? '✅ OmniJS OK' : '❌ OmniJS TOO BIG';
       console.log(`   ${script.name.padEnd(35)}: ${script.size.toLocaleString()} chars - ${jxaStatus} ${omniJSStatus}`);
@@ -230,9 +234,9 @@ async function analyzeScriptSizes() {
     allScripts,
     empiricalLimits: {
       jxa: 523266,
-      omniJS: 261124
+      omniJS: 261124,
     },
-    assumedLimit: 19000
+    assumedLimit: 19000,
   };
 }
 

@@ -1,10 +1,12 @@
 # Real LLM Testing with Ollama
 
-This guide covers the Real LLM Testing feature that validates our MCP server with actual AI models instead of just scripted simulations.
+This guide covers the Real LLM Testing feature that validates our MCP server with actual AI models instead of just
+scripted simulations.
 
 ## Overview
 
-Real LLM Testing uses **Ollama** to run local AI models that interact with our MCP server through natural language queries. This validates:
+Real LLM Testing uses **Ollama** to run local AI models that interact with our MCP server through natural language
+queries. This validates:
 
 - **Tool descriptions guide AI decisions correctly**
 - **Natural language understanding works as expected**
@@ -52,31 +54,32 @@ ENABLE_REAL_LLM_TESTS=true npx vitest tests/integration/real-llm-integration.tes
 
 **Real LLM tests are hardware-intensive!** Performance varies significantly by system:
 
-| Hardware | phi3.5:3.8b | qwen2.5:0.5b | Status |
-|----------|-------------|--------------|---------|
-| **M2 MacBook Air (24GB)** | 30-60s | 10-20s | ✅ Tested baseline |
-| **M2 Ultra Studio (192GB)** | ~5-15s | ~2-5s | 🚀 Expected excellent |
-| **M1 MacBook Pro (16GB)** | 45-90s | 15-30s | ⚠️ Usable but slow |
-| **Intel Mac (16GB)** | 120-300s | 60-120s | ❌ Too slow for dev |
+| Hardware                    | phi3.5:3.8b | qwen2.5:0.5b | Status                |
+| --------------------------- | ----------- | ------------ | --------------------- |
+| **M2 MacBook Air (24GB)**   | 30-60s      | 10-20s       | ✅ Tested baseline    |
+| **M2 Ultra Studio (192GB)** | ~5-15s      | ~2-5s        | 🚀 Expected excellent |
+| **M1 MacBook Pro (16GB)**   | 45-90s      | 15-30s       | ⚠️ Usable but slow    |
+| **Intel Mac (16GB)**        | 120-300s    | 60-120s      | ❌ Too slow for dev   |
 
-**See [PERFORMANCE_EXPECTATIONS.md](PERFORMANCE_EXPECTATIONS.md) for detailed hardware guidance and timeout recommendations.**
+**See [PERFORMANCE_EXPECTATIONS.md](PERFORMANCE_EXPECTATIONS.md) for detailed hardware guidance and timeout
+recommendations.**
 
 ## Model Recommendations
 
 ### ⭐ Recommended Models
 
-| Model | Size | Description | Use Case |
-|-------|------|-------------|----------|
-| **phi3.5:3.8b** | 2.2GB | Microsoft Phi-3.5 | Best balance of performance and speed |
-| **qwen2.5:0.5b** | 352MB | Qwen2.5 0.5B | Ultra-fast for CI/CD testing |
+| Model            | Size  | Description       | Use Case                              |
+| ---------------- | ----- | ----------------- | ------------------------------------- |
+| **phi3.5:3.8b**  | 2.2GB | Microsoft Phi-3.5 | Best balance of performance and speed |
+| **qwen2.5:0.5b** | 352MB | Qwen2.5 0.5B      | Ultra-fast for CI/CD testing          |
 
 ### Optional Models
 
-| Model | Size | Description |
-|-------|------|-------------|
+| Model        | Size  | Description                       |
+| ------------ | ----- | --------------------------------- |
 | qwen2.5:1.5b | 934MB | Good performance, reasonable size |
-| llama3.2:1b | 1.3GB | Meta's efficient model |
-| llama3.2:3b | 2.0GB | Better reasoning capabilities |
+| llama3.2:1b  | 1.3GB | Meta's efficient model            |
+| llama3.2:3b  | 2.0GB | Better reasoning capabilities     |
 
 ### Installation
 
@@ -104,6 +107,7 @@ npm run setup-real-llm setup
 #### Test Case 1: "What should I work on today?"
 
 **AI Analysis:**
+
 ```
 1. tasks - First tool to be used is `tasks` with mode="today" to query all tasks due for the current day. I will set parameters as follows:
    - mode: "today"
@@ -115,6 +119,7 @@ The plan is set out in the following order of tool usage - starting with `tasks`
 ```
 
 **AI Execution Plan:**
+
 ```
 Certainly! To find out what tasks are available for you to work on today, here's how I will use the `tasks` query:
 
@@ -124,6 +129,7 @@ This command sets up a task search with these specific parameters: it requests a
 ```
 
 **Actual Tool Call:**
+
 ```json
 {
   "tool": "tasks",
@@ -135,11 +141,13 @@ This command sets up a task search with these specific parameters: it requests a
 }
 ```
 
-**Result:** ✅ **PERFECT** - AI correctly understood the query and made intelligent tool selection with appropriate parameters.
+**Result:** ✅ **PERFECT** - AI correctly understood the query and made intelligent tool selection with appropriate
+parameters.
 
 #### Test Case 2: "How productive was I this week?"
 
 **AI Analysis:**
+
 ```
 To analyze how productive an individual has been over a specific period such as one week, we will need to gather task completion statistics along with any relevant project progress updates or reviews that might have taken place during this time frame. Here are the steps and tools in order of operation:
 
@@ -155,6 +163,7 @@ To analyze how productive an individual has been over a specific period such as 
 ```
 
 **Actual Tool Call:**
+
 ```json
 {
   "tool": "productivity_stats",
@@ -167,6 +176,7 @@ To analyze how productive an individual has been over a specific period such as 
 ```
 
 **Result:** ✅ **EXCELLENT** - AI demonstrated sophisticated understanding by:
+
 - Analyzing the multi-faceted nature of "productivity"
 - Selecting the most appropriate tool (`productivity_stats`)
 - Setting logical parameters for weekly analysis
@@ -213,12 +223,14 @@ Real AI testing revealed sophisticated behaviors not seen in simulations:
 ### 🔧 Recent Improvements (September 2025)
 
 **Enhanced Tool Selection Reliability:**
+
 - **Multiple regex patterns** now capture AI tool intentions more reliably
 - **Improved fallback logic** prioritizes specific keywords (e.g., "overdue" → `analyze_overdue`)
 - **Simplified AI prompts** reduce verbosity and prevent 120-second timeouts
 - **Better error handling** for edge cases in natural language interpretation
 
 **Key Fixes:**
+
 - ✅ "Show me my overdue tasks" now correctly uses `analyze_overdue` tool
 - ✅ "How productive was I this week?" properly calls `productivity_stats`
 - ✅ Reasoning reduced from paragraphs to concise, actionable plans
@@ -261,17 +273,20 @@ The test harness provides:
 ```typescript
 class RealLLMTestHarness {
   // Initialize MCP server connection and Ollama
-  async initialize(): Promise<void>
+  async initialize(): Promise<void>;
 
   // Send natural language query and get AI response + tool usage
-  async askLLM(query: string, model?: string): Promise<{
-    response: string;           // AI's natural language response
-    toolCalls: ToolCall[];      // Actual MCP tool calls made
-    reasoning: string[];        // AI's reasoning process
-  }>
+  async askLLM(
+    query: string,
+    model?: string,
+  ): Promise<{
+    response: string; // AI's natural language response
+    toolCalls: ToolCall[]; // Actual MCP tool calls made
+    reasoning: string[]; // AI's reasoning process
+  }>;
 
   // Discover available MCP tools
-  async discoverTools(): Promise<MCPTool[]>
+  async discoverTools(): Promise<MCPTool[]>;
 }
 ```
 
@@ -304,14 +319,15 @@ class RealLLMTestHarness {
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ENABLE_REAL_LLM_TESTS` | `false` | Enable real LLM tests (required) |
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
+| Variable                | Default                  | Description                      |
+| ----------------------- | ------------------------ | -------------------------------- |
+| `ENABLE_REAL_LLM_TESTS` | `false`                  | Enable real LLM tests (required) |
+| `OLLAMA_HOST`           | `http://localhost:11434` | Ollama server URL                |
 
 ## Comparison: Simulation vs Real LLM Testing
 
 ### LLM Simulation Tests (Existing)
+
 - ✅ **Fast & Deterministic** - Perfect for CI/CD
 - ✅ **No external dependencies** - Always available
 - ✅ **Predictable behavior** - Tests specific scenarios
@@ -319,6 +335,7 @@ class RealLLMTestHarness {
 - ❌ **Limited discovery** - Can't find emergent behaviors
 
 ### Real LLM Tests (New)
+
 - ✅ **Actual AI reasoning** - Tests real-world usage
 - ✅ **Natural language** - Tests tool descriptions
 - ✅ **Emergent discovery** - Finds unexpected behaviors
@@ -331,11 +348,13 @@ class RealLLMTestHarness {
 ### Development Workflow
 
 1. **Use simulation tests for rapid development**
+
    ```bash
    npm run test:llm-simulation
    ```
 
 2. **Use real LLM tests for validation**
+
    ```bash
    npm run test:real-llm
    ```
@@ -362,12 +381,10 @@ it('should understand complex queries', async () => {
   expect(result.toolCalls.length).toBeGreaterThan(1);
 
   // Check reasoning quality
-  expect(result.reasoning.some(r =>
-    r.includes('overwhelm') || r.includes('prioritize')
-  )).toBe(true);
+  expect(result.reasoning.some((r) => r.includes('overwhelm') || r.includes('prioritize'))).toBe(true);
 
   // Verify expected tools were used
-  const toolNames = result.toolCalls.map(c => c.tool);
+  const toolNames = result.toolCalls.map((c) => c.tool);
   expect(toolNames).toContain('tasks');
 
   // Log for debugging

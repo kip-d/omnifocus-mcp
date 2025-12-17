@@ -2,7 +2,8 @@
 
 ## Summary
 
-This PR introduces the **unified API** - a streamlined, production-ready interface that consolidates the OmniFocus MCP server into 4 stable tools. This replaces the previous 17-tool interface with a cleaner, more LLM-friendly API.
+This PR introduces the **unified API** - a streamlined, production-ready interface that consolidates the OmniFocus MCP
+server into 4 stable tools. This replaces the previous 17-tool interface with a cleaner, more LLM-friendly API.
 
 **Status:** ✅ Production ready - 100% user testing success, all tests passing, ID filtering bug fixed
 
@@ -36,6 +37,7 @@ This PR introduces the **unified API** - a streamlined, production-ready interfa
 ### 🎨 Clean, Confident Naming
 
 **Removed all V2/V3 version suffixes:**
+
 - `QueryTasksToolV2` → `QueryTasksTool`
 - `list-tasks-v3-omnijs.ts` → `list-tasks-omnijs.ts`
 - 9 tool classes renamed
@@ -49,16 +51,19 @@ This PR introduces the **unified API** - a streamlined, production-ready interfa
 **Problem:** ID queries returned 25 tasks instead of 1 (User Testing issue)
 
 **Root Cause:** Three-layer issue:
+
 - `OmniFocusReadTool` didn't map `id` filter
 - `QueryTasksTool` had no `id` parameter
 - Script had no ID lookup mode
 
 **Solution:** Added complete ID filtering support
+
 - New `handleTaskById()` method
 - ID lookup mode in OmniJS script
 - Proper filter routing
 
 **Verification:**
+
 ```bash
 # Before: 25 tasks (wrong)
 # After: 1 task (correct)
@@ -70,11 +75,13 @@ This PR introduces the **unified API** - a streamlined, production-ready interfa
 ## Architecture
 
 ### Routing Pattern
+
 ```
 Unified Tool → Compiler → Backend Tool → OmniJS Script → OmniFocus
 ```
 
 **Example:**
+
 ```
 omnifocus_read(query)
   → QueryCompiler.compile()
@@ -84,11 +91,13 @@ omnifocus_read(query)
 ```
 
 ### Type Safety
+
 - Discriminated union schemas (Zod)
 - Compile-time validation
 - MCP-compliant error handling
 
 ### Architecture Benefits
+
 - Clean routing layer with discriminated unions
 - Reuses all existing backend infrastructure
 - No changes to OmniFocus scripts
@@ -99,7 +108,9 @@ omnifocus_read(query)
 ## Testing & Validation
 
 ### User Testing Results
+
 ✅ **100% success rate** across all test scenarios
+
 - Tasks: Create, read, update, delete
 - Projects: List, filter, batch operations
 - Analytics: Productivity, velocity, patterns
@@ -107,6 +118,7 @@ omnifocus_read(query)
 - Edge cases: Empty results, invalid IDs
 
 ### Automated Testing
+
 ```
 ✅ TypeScript compilation: PASS
 ✅ Type checking: PASS
@@ -116,6 +128,7 @@ omnifocus_read(query)
 ```
 
 ### End-to-End Validation
+
 - MCP protocol compliance verified
 - OmniFocus 4.7+ features tested
 - Planned dates, enhanced repeats working
@@ -126,6 +139,7 @@ omnifocus_read(query)
 ## API Usage
 
 ### Unified Interface
+
 ```javascript
 // Clean, type-safe unified API
 {
@@ -137,18 +151,21 @@ omnifocus_read(query)
 }
 ```
 
-**LLM Integration:** The unified API provides a cleaner interface for LLM assistants to interact with OmniFocus. End users continue using natural language - the LLM handles the API calls.
+**LLM Integration:** The unified API provides a cleaner interface for LLM assistants to interact with OmniFocus. End
+users continue using natural language - the LLM handles the API calls.
 
 ---
 
 ## Performance
 
 ### Context Window Optimization
+
 - **Before:** 17 tools in context → verbose prompts
 - **After:** 4 tools in context → 76% reduction
 - **Result:** More efficient LLM usage, clearer interfaces
 
 ### Execution Performance
+
 - No performance regression (pure routing)
 - Same OmniJS scripts used
 - Maintains all existing optimizations
@@ -158,6 +175,7 @@ omnifocus_read(query)
 ## Files Changed
 
 ### Core Implementation (46 files)
+
 - **Added:** Unified tools (3 files)
 - **Added:** Schemas (3 files)
 - **Added:** Compilers (3 files)
@@ -166,11 +184,13 @@ omnifocus_read(query)
 - **Updated:** 180+ import statements
 
 ### Tests (10 files)
+
 - **Added:** End-to-end unified API tests
 - **Updated:** Integration test references
 - **Removed:** Unreliable synthetic tests
 
 ### Documentation (5 files)
+
 - **Updated:** CLAUDE.md (stable status)
 - **Updated:** USER_TESTING_INSTRUCTIONS.md
 - **Updated:** package.json description
@@ -184,38 +204,49 @@ omnifocus_read(query)
 **BREAKING:** This release consolidates from 17 individual tools to 4 unified tools.
 
 ### What Changed
+
 - **Removed:** 17 individual tool interfaces (tasks, manage_task, projects, tags, etc.)
 - **Added:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
 - **Impact:** LLM assistants using this MCP server will use the new unified API
 - **Backend:** All OmniFocus scripts remain unchanged - this is a pure API refactoring
 
 ### Why v3.0.0
-This is a major version bump due to the API consolidation. The unified interface provides better type safety, cleaner tool schemas, and improved LLM usability.
+
+This is a major version bump due to the API consolidation. The unified interface provides better type safety, cleaner
+tool schemas, and improved LLM usability.
 
 ---
 
 ## Commits
 
 ### Phase 1: ID Filter Fix + Terminology
+
 **`db12cbe`** - fix: add ID filtering support to unified API and update terminology
+
 - Fixed critical ID filter bug
 - Updated package.json, USER_TESTING_INSTRUCTIONS.md
 - Changed tool stability from experimental → stable
 
 ### Phase 2: V2/V3 Removal
+
 **`d069afc`** - refactor: remove V2/V3 versioning from all tool and script names
+
 - Renamed 9 tool classes
 - Renamed 5 script files
 - Updated 180+ imports
 - Deleted 1 legacy file
 
 ### Phase 3: Test Cleanup
+
 **`4312be3`** - test: remove synthetic ID filter test (unreliable without MCP)
+
 - Removed investigative test
 - ID filtering verified via end-to-end tests
 
 ### Phase 4: Documentation
+
 **`04d8f7c`** - docs: update CLAUDE.md to reflect stable unified API
+
 - Updated status indicators
 - Removed experimental warnings
 - Added checkpoint document
@@ -289,6 +320,7 @@ This is a major version bump due to the API consolidation. The unified interface
 ## Questions?
 
 See:
+
 - `CHECKPOINT_2025-11-06.md` - Detailed session notes
 - `docs/DOCS_MAP.md` - Complete documentation index
 - `tests/integration/tools/unified/` - Test examples

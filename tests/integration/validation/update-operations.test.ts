@@ -17,11 +17,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
-import {
-  fullCleanup,
-  TEST_INBOX_PREFIX,
-  TEST_TAG_PREFIX,
-} from '../helpers/sandbox-manager.js';
+import { fullCleanup, TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../helpers/sandbox-manager.js';
 
 describe('Update Operations - Read-Back Validation', () => {
   let client: MCPTestClient;
@@ -41,8 +37,8 @@ describe('Update Operations - Read-Back Validation', () => {
           mutation: {
             operation: 'bulk_delete',
             target: 'task',
-            ids: createdTaskIds
-          }
+            ids: createdTaskIds,
+          },
         });
       } catch (err) {
         console.warn('Failed to cleanup tasks via bulk_delete:', err);
@@ -62,7 +58,7 @@ describe('Update Operations - Read-Back Validation', () => {
 
     // Ensure tags have __test- prefix
     const tags = properties.tags
-      ? (properties.tags as string[]).map(t => t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`)
+      ? (properties.tags as string[]).map((t) => (t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`))
       : [TEST_TAG];
 
     const result = await client.callTool('omnifocus_write', {
@@ -74,8 +70,8 @@ describe('Update Operations - Read-Back Validation', () => {
           tags,
           ...properties,
           tags, // Ensure our processed tags override any in properties
-        }
-      }
+        },
+      },
     });
 
     expect(result.success).toBe(true);
@@ -90,8 +86,8 @@ describe('Update Operations - Read-Back Validation', () => {
     const result = await client.callTool('omnifocus_read', {
       query: {
         type: 'tasks',
-        filters: { id: taskId }
-      }
+        filters: { id: taskId },
+      },
     });
 
     expect(result.success).toBe(true);
@@ -104,18 +100,18 @@ describe('Update Operations - Read-Back Validation', () => {
     const processedChanges = { ...changes };
 
     if (processedChanges.tags) {
-      processedChanges.tags = (processedChanges.tags as string[]).map(t =>
-        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
+      processedChanges.tags = (processedChanges.tags as string[]).map((t) =>
+        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`,
       );
     }
     if (processedChanges.addTags) {
-      processedChanges.addTags = (processedChanges.addTags as string[]).map(t =>
-        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
+      processedChanges.addTags = (processedChanges.addTags as string[]).map((t) =>
+        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`,
       );
     }
     if (processedChanges.removeTags) {
-      processedChanges.removeTags = (processedChanges.removeTags as string[]).map(t =>
-        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
+      processedChanges.removeTags = (processedChanges.removeTags as string[]).map((t) =>
+        t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`,
       );
     }
 
@@ -124,8 +120,8 @@ describe('Update Operations - Read-Back Validation', () => {
         operation: 'update',
         target: 'task',
         id: taskId,
-        changes: processedChanges
-      }
+        changes: processedChanges,
+      },
     });
 
     return result;
@@ -201,12 +197,12 @@ describe('Update Operations - Read-Back Validation', () => {
     it('should support tags (full replacement)', async () => {
       // Create task with initial tags
       const taskId = await createTask('Test tags replacement', {
-        tags: [TEST_TAG, `${TEST_TAG_PREFIX}initial1`, `${TEST_TAG_PREFIX}initial2`]
+        tags: [TEST_TAG, `${TEST_TAG_PREFIX}initial1`, `${TEST_TAG_PREFIX}initial2`],
       });
 
       // Replace tags
       const updateResult = await updateTask(taskId, {
-        tags: [TEST_TAG, 'replaced1', 'replaced2', 'replaced3']
+        tags: [TEST_TAG, 'replaced1', 'replaced2', 'replaced3'],
       });
       expect(updateResult.success).toBe(true);
 
@@ -223,12 +219,12 @@ describe('Update Operations - Read-Back Validation', () => {
     it('should support addTags (append to existing)', async () => {
       // Create task with initial tags
       const taskId = await createTask('Test addTags', {
-        tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing1`, `${TEST_TAG_PREFIX}existing2`]
+        tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing1`, `${TEST_TAG_PREFIX}existing2`],
       });
 
       // Add more tags
       const updateResult = await updateTask(taskId, {
-        addTags: ['new1', 'new2']
+        addTags: ['new1', 'new2'],
       });
       expect(updateResult.success).toBe(true);
 
@@ -245,12 +241,18 @@ describe('Update Operations - Read-Back Validation', () => {
     it('should support removeTags (filter out specified)', async () => {
       // Create task with multiple tags
       const taskId = await createTask('Test removeTags', {
-        tags: [TEST_TAG, `${TEST_TAG_PREFIX}keep1`, `${TEST_TAG_PREFIX}remove1`, `${TEST_TAG_PREFIX}keep2`, `${TEST_TAG_PREFIX}remove2`]
+        tags: [
+          TEST_TAG,
+          `${TEST_TAG_PREFIX}keep1`,
+          `${TEST_TAG_PREFIX}remove1`,
+          `${TEST_TAG_PREFIX}keep2`,
+          `${TEST_TAG_PREFIX}remove2`,
+        ],
       });
 
       // Remove specific tags
       const updateResult = await updateTask(taskId, {
-        removeTags: ['remove1', 'remove2']
+        removeTags: ['remove1', 'remove2'],
       });
       expect(updateResult.success).toBe(true);
 
@@ -265,12 +267,12 @@ describe('Update Operations - Read-Back Validation', () => {
 
     it('should handle addTags with deduplication', async () => {
       const taskId = await createTask('Test addTags dedup', {
-        tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing`]
+        tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing`],
       });
 
       // Try to add tags that already exist
       const updateResult = await updateTask(taskId, {
-        addTags: ['existing', 'new']
+        addTags: ['existing', 'new'],
       });
       expect(updateResult.success).toBe(true);
 
@@ -287,7 +289,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const taskId = await createTask('Test update note');
 
       const updateResult = await updateTask(taskId, {
-        note: 'This is an updated note'
+        note: 'This is an updated note',
       });
       expect(updateResult.success).toBe(true);
 
@@ -328,7 +330,7 @@ describe('Update Operations - Read-Back Validation', () => {
         note: 'Updated note',
         flagged: true,
         estimatedMinutes: 45,
-        addTags: ['urgent', 'priority']
+        addTags: ['urgent', 'priority'],
       });
       expect(updateResult.success).toBe(true);
 

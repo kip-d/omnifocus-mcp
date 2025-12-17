@@ -1,14 +1,15 @@
 # OmniFocus MCP Benchmark Analysis
+
 ## Cross-Machine Performance Investigation
 
-**Date:** October 27, 2025
-**Commit:** 53fb862
+**Date:** October 27, 2025 **Commit:** 53fb862
 
 ---
 
 ## Executive Summary
 
-Benchmark results across three Apple Silicon machines reveal surprising performance patterns that challenge assumptions about hardware performance scaling.
+Benchmark results across three Apple Silicon machines reveal surprising performance patterns that challenge assumptions
+about hardware performance scaling.
 
 ### Key Findings
 
@@ -22,39 +23,39 @@ Benchmark results across three Apple Silicon machines reveal surprising performa
 
 ### M4 Pro (14 cores, 64GB RAM, Node v24.10.0)
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Today's tasks | **12,036ms** | ⚠️ ANOMALY |
-| Overdue tasks | 3,424ms | Normal |
-| Upcoming tasks | 3,378ms | Normal |
-| Project stats | 252ms | ✅ Excellent |
-| Tags (full) | 855ms | ✅ Excellent |
-| Productivity stats | 809ms | ✅ Excellent |
-| Task velocity | 812ms | ✅ Excellent |
+| Operation          | Time         | Notes        |
+| ------------------ | ------------ | ------------ |
+| Today's tasks      | **12,036ms** | ⚠️ ANOMALY   |
+| Overdue tasks      | 3,424ms      | Normal       |
+| Upcoming tasks     | 3,378ms      | Normal       |
+| Project stats      | 252ms        | ✅ Excellent |
+| Tags (full)        | 855ms        | ✅ Excellent |
+| Productivity stats | 809ms        | ✅ Excellent |
+| Task velocity      | 812ms        | ✅ Excellent |
 
 ### M2 Ultra (24 cores, 192GB RAM, Node v24.9.0)
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Today's tasks | 2,864ms | ✅ Fast |
-| Overdue tasks | 3,731ms | Normal |
-| Upcoming tasks | 6,781ms | Normal |
-| Project stats | 1,195ms | Slower than M4 |
-| Tags (full) | 5,477ms | 6.4x slower than M4 |
+| Operation          | Time    | Notes               |
+| ------------------ | ------- | ------------------- |
+| Today's tasks      | 2,864ms | ✅ Fast             |
+| Overdue tasks      | 3,731ms | Normal              |
+| Upcoming tasks     | 6,781ms | Normal              |
+| Project stats      | 1,195ms | Slower than M4      |
+| Tags (full)        | 5,477ms | 6.4x slower than M4 |
 | Productivity stats | 5,315ms | 6.6x slower than M4 |
-| Task velocity | 5,150ms | 6.3x slower than M4 |
+| Task velocity      | 5,150ms | 6.3x slower than M4 |
 
 ### M2 Air (8 cores, 24GB RAM, Node v24.10.0)
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Today's tasks | **173,147ms** | ⚠️ CATASTROPHIC |
-| Overdue tasks | 190,674ms | ⚠️ CATASTROPHIC |
-| Upcoming tasks | 191,414ms | ⚠️ CATASTROPHIC |
-| Project stats | 1,415ms | Normal |
-| Tags (full) | 3,379ms | Normal |
-| Productivity stats | 5,650ms | Normal |
-| Task velocity | 5,714ms | Normal |
+| Operation          | Time          | Notes           |
+| ------------------ | ------------- | --------------- |
+| Today's tasks      | **173,147ms** | ⚠️ CATASTROPHIC |
+| Overdue tasks      | 190,674ms     | ⚠️ CATASTROPHIC |
+| Upcoming tasks     | 191,414ms     | ⚠️ CATASTROPHIC |
+| Project stats      | 1,415ms       | Normal          |
+| Tags (full)        | 3,379ms       | Normal          |
+| Productivity stats | 5,650ms       | Normal          |
+| Task velocity      | 5,714ms       | Normal          |
 
 ---
 
@@ -69,6 +70,7 @@ Benchmark results across three Apple Silicon machines reveal surprising performa
 - Extra cores on M2 Ultra don't help with serial property access
 
 **Evidence:**
+
 - Tags (full mode): M4 Pro 855ms vs M2 Ultra 5,477ms (6.4x faster)
 - Productivity stats: M4 Pro 809ms vs M2 Ultra 5,315ms (6.6x faster)
 - Project stats: M4 Pro 252ms vs M2 Ultra 1,195ms (4.7x faster)
@@ -80,8 +82,9 @@ Benchmark results across three Apple Silicon machines reveal surprising performa
 **Root Cause Hypothesis:** Linear database scan + task distribution differences
 
 The `TODAYS_AGENDA_SCRIPT` uses a linear scan:
+
 ```javascript
-const allTasks = doc.flattenedTasks();  // Get ALL tasks
+const allTasks = doc.flattenedTasks(); // Get ALL tasks
 for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
   // Scan until finding 25 tasks that match:
   // - Overdue, OR
@@ -91,11 +94,13 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
 ```
 
 **Why this creates variance:**
+
 - Performance depends on WHERE qualifying tasks are located in the database
 - If M4 Pro's database has qualifying tasks deeper in the array, it must scan more tasks
 - Different sync states or database organization could cause this
 
 **Supporting evidence:**
+
 - All other task queries (overdue, upcoming) have similar performance between machines
 - Only "today's tasks" (which combines multiple criteria) shows the anomaly
 - The scan is O(n) worst case, where n = "tasks scanned until finding 25 matches"
@@ -107,6 +112,7 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
 **Root Cause:** Passive cooling + sustained CPU load = thermal throttling
 
 **Evidence for thermal throttling:**
+
 1. **Bimodal performance pattern:**
    - Task queries: 173-191s (catastrophic)
    - Analytics: 5-6s (normal, similar to M2 Ultra)
@@ -122,11 +128,13 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
    - Throttles to prevent overheating
 
 **Why analytics are normal:**
+
 - Operations complete in 5-6 seconds
 - Not enough time for thermal throttling to engage
 - Single burst of work, then CPU idle
 
 **Why task queries are catastrophic:**
+
 - Linear scan requires sustained CPU usage
 - 3+ minutes of continuous work
 - Throttling engages within first 30 seconds
@@ -141,6 +149,7 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
 **Current state:** Generally excellent performance, but "Today's tasks" query has unexplained slowdown.
 
 **Hypothesis to test:**
+
 1. Check if "Today's tasks" count is significantly lower than on M2 Ultra
 2. Examine database organization (recently synced vs. long-standing database)
 3. Test if clearing and re-syncing OmniFocus database changes performance
@@ -154,6 +163,7 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
 **Root cause:** Thermal throttling during sustained operations.
 
 **Solutions:**
+
 1. **Immediate:** Use caching - warm cache on desktop machine, access via sync
 2. **Query optimization:** Add pagination to break large queries into smaller chunks
 3. **Architecture change:** Move from linear scan to indexed queries (requires OmniFocus API changes)
@@ -229,17 +239,20 @@ for (let i = 0; i < taskCount && tasks.length < maxTasks; i++) {
 ## Methodology Notes
 
 **Benchmark configuration:**
+
 - Mode: COLD CACHE (no cache warming)
 - Timeout: 240 seconds (4 minutes)
 - Queries: Same parameters across all machines
 - Commit: 53fb862 (identical code)
 
 **Limitations:**
+
 - Single run per machine (no statistical variance)
 - Cold cache only (doesn't reflect production usage)
 - No database state verification (assuming "substantially the same")
 
 **Follow-up needed:**
+
 - Multiple runs to establish variance
 - Warm cache benchmarks
 - Database state diagnostics

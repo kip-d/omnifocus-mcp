@@ -58,11 +58,15 @@ async function measureToolSizes() {
 
   for (const tool of tools) {
     // Serialize tool definition as it would be sent via MCP
-    const toolDef = JSON.stringify({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    }, null, 2);
+    const toolDef = JSON.stringify(
+      {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      },
+      null,
+      2,
+    );
 
     const sizeBytes = Buffer.byteLength(toolDef, 'utf8');
     const sizeChars = toolDef.length;
@@ -91,7 +95,9 @@ async function measureToolSizes() {
 
   for (const tool of toolSizes) {
     const percentage = ((tool.sizeChars / totalSize) * 100).toFixed(1);
-    console.log(`| ${tool.name.padEnd(30)} | ${String(tool.sizeChars).padStart(10)} | ${String(tool.estimatedTokens).padStart(11)} | ${String(tool.descriptionLines).padStart(10)} | ${percentage.padStart(9)}% |`);
+    console.log(
+      `| ${tool.name.padEnd(30)} | ${String(tool.sizeChars).padStart(10)} | ${String(tool.estimatedTokens).padStart(11)} | ${String(tool.descriptionLines).padStart(10)} | ${percentage.padStart(9)}% |`,
+    );
   }
 
   console.log('\n## Summary Statistics\n');
@@ -103,34 +109,31 @@ async function measureToolSizes() {
   // Categorize tools
   console.log('\n## Tool Categorization (for 3-tool redesign)\n');
 
-  const readTools = toolSizes.filter(t =>
-    t.name === 'tasks' ||
-    t.name === 'projects' ||
-    t.name === 'tags' ||
-    t.name === 'perspectives' ||
-    t.name === 'folders' ||
-    t.name === 'export' ||
-    t.name === 'recurring_tasks'
+  const readTools = toolSizes.filter(
+    (t) =>
+      t.name === 'tasks' ||
+      t.name === 'projects' ||
+      t.name === 'tags' ||
+      t.name === 'perspectives' ||
+      t.name === 'folders' ||
+      t.name === 'export' ||
+      t.name === 'recurring_tasks',
   );
 
-  const writeTools = toolSizes.filter(t =>
-    t.name === 'manage_task' ||
-    t.name === 'batch_create'
+  const writeTools = toolSizes.filter((t) => t.name === 'manage_task' || t.name === 'batch_create');
+
+  const analyzeTools = toolSizes.filter(
+    (t) =>
+      t.name === 'productivity_stats' ||
+      t.name === 'task_velocity' ||
+      t.name === 'analyze_overdue' ||
+      t.name === 'pattern_analysis' ||
+      t.name === 'workflow_analysis' ||
+      t.name === 'parse_meeting_notes' ||
+      t.name === 'manage_reviews',
   );
 
-  const analyzeTools = toolSizes.filter(t =>
-    t.name === 'productivity_stats' ||
-    t.name === 'task_velocity' ||
-    t.name === 'analyze_overdue' ||
-    t.name === 'pattern_analysis' ||
-    t.name === 'workflow_analysis' ||
-    t.name === 'parse_meeting_notes' ||
-    t.name === 'manage_reviews'
-  );
-
-  const otherTools = toolSizes.filter(t =>
-    t.name === 'system'
-  );
+  const otherTools = toolSizes.filter((t) => t.name === 'system');
 
   const readSize = readTools.reduce((sum, t) => sum + t.sizeChars, 0);
   const writeSize = writeTools.reduce((sum, t) => sum + t.sizeChars, 0);
@@ -138,23 +141,31 @@ async function measureToolSizes() {
   const otherSize = otherTools.reduce((sum, t) => sum + t.sizeChars, 0);
 
   console.log(`### Read Operations (${readTools.length} tools → consolidate into 1 tool)`);
-  console.log(`- Current tools: ${readTools.map(t => t.name).join(', ')}`);
-  console.log(`- Current total size: ${readSize.toLocaleString()} chars (~${Math.ceil(readSize / 4).toLocaleString()} tokens)`);
+  console.log(`- Current tools: ${readTools.map((t) => t.name).join(', ')}`);
+  console.log(
+    `- Current total size: ${readSize.toLocaleString()} chars (~${Math.ceil(readSize / 4).toLocaleString()} tokens)`,
+  );
   console.log(`- Avg per tool: ${Math.round(readSize / readTools.length).toLocaleString()} chars`);
 
   console.log(`\n### Write Operations (${writeTools.length} tools → consolidate into 1 tool)`);
-  console.log(`- Current tools: ${writeTools.map(t => t.name).join(', ')}`);
-  console.log(`- Current total size: ${writeSize.toLocaleString()} chars (~${Math.ceil(writeSize / 4).toLocaleString()} tokens)`);
+  console.log(`- Current tools: ${writeTools.map((t) => t.name).join(', ')}`);
+  console.log(
+    `- Current total size: ${writeSize.toLocaleString()} chars (~${Math.ceil(writeSize / 4).toLocaleString()} tokens)`,
+  );
   console.log(`- Avg per tool: ${Math.round(writeSize / writeTools.length).toLocaleString()} chars`);
 
   console.log(`\n### Analyze/Specialized (${analyzeTools.length} tools → consolidate into 1 tool)`);
-  console.log(`- Current tools: ${analyzeTools.map(t => t.name).join(', ')}`);
-  console.log(`- Current total size: ${analyzeSize.toLocaleString()} chars (~${Math.ceil(analyzeSize / 4).toLocaleString()} tokens)`);
+  console.log(`- Current tools: ${analyzeTools.map((t) => t.name).join(', ')}`);
+  console.log(
+    `- Current total size: ${analyzeSize.toLocaleString()} chars (~${Math.ceil(analyzeSize / 4).toLocaleString()} tokens)`,
+  );
   console.log(`- Avg per tool: ${Math.round(analyzeSize / analyzeTools.length).toLocaleString()} chars`);
 
   console.log(`\n### System (${otherTools.length} tool → keep separate)`);
-  console.log(`- Current tools: ${otherTools.map(t => t.name).join(', ')}`);
-  console.log(`- Current total size: ${otherSize.toLocaleString()} chars (~${Math.ceil(otherSize / 4).toLocaleString()} tokens)`);
+  console.log(`- Current tools: ${otherTools.map((t) => t.name).join(', ')}`);
+  console.log(
+    `- Current total size: ${otherSize.toLocaleString()} chars (~${Math.ceil(otherSize / 4).toLocaleString()} tokens)`,
+  );
 
   console.log('\n## Consolidation Impact Estimate\n');
   console.log(`**Current state:** 17 tools consuming ~${Math.ceil(totalSize / 4).toLocaleString()} tokens`);

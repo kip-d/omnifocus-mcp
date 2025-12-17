@@ -195,7 +195,8 @@ Remember: The system is only as good as your weekly review!
 
 export class GTDPrinciplesPrompt extends BasePrompt {
   name = 'gtd_principles';
-  description = 'Core GTD (Getting Things Done) principles and how to implement them with OmniFocus MCP. Based on David Allen\'s methodology.';
+  description =
+    "Core GTD (Getting Things Done) principles and how to implement them with OmniFocus MCP. Based on David Allen's methodology.";
   arguments = [];
 
   generateMessages(_args: Record<string, unknown>): PromptMessage[] {

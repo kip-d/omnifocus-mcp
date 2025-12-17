@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { COMPLETE_TASK_SCRIPT, buildBulkCompleteTasksScript, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT, buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
+import {
+  COMPLETE_TASK_SCRIPT,
+  buildBulkCompleteTasksScript,
+  DELETE_TASK_SCRIPT,
+  BULK_DELETE_TASKS_SCRIPT,
+  buildListTasksScriptV4,
+} from '../../omnifocus/scripts/tasks.js';
 import { buildCreateTaskScript, buildUpdateTaskScript } from '../../contracts/ast/mutation-script-builder.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -12,11 +18,7 @@ import {
   ScriptExecutionResult,
 } from '../../omnifocus/script-response-types.js';
 import { CacheManager } from '../../cache/CacheManager.js';
-import {
-  parsingError,
-  formatErrorWithRecovery,
-  invalidDateError,
-} from '../../utils/error-messages.js';
+import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import type { TaskOperationResponseV2, TaskOperationDataV2 } from '../response-types-v2.js';
 import { RepeatRuleUserIntentSchema } from '../schemas/repeat-schemas.js';
 import { TaskId, ProjectId } from '../../utils/branded-types.js';
@@ -41,7 +43,7 @@ type BrandedTaskArgs = {
   taskId?: TaskId;
   taskIds?: TaskId[];
   projectId?: ProjectId | null;
-  project?: string | null;  // Alias for unified API compatibility
+  project?: string | null; // Alias for unified API compatibility
   parentTaskId?: TaskId;
   completionDate?: string | null;
   minimalResponse?: string | boolean;
@@ -55,150 +57,152 @@ type BrandedTaskArgs = {
 
 // Consolidated schema that combines all task CRUD operations
 const ManageTaskSchema = z.object({
-  operation: z.enum(['create', 'update', 'complete', 'delete', 'bulk_complete', 'bulk_delete'])
-    .describe('The operation to perform on the task. Use bulk_complete or bulk_delete for operations on multiple tasks.'),
+  operation: z
+    .enum(['create', 'update', 'complete', 'delete', 'bulk_complete', 'bulk_delete'])
+    .describe(
+      'The operation to perform on the task. Use bulk_complete or bulk_delete for operations on multiple tasks.',
+    ),
 
   // Task identification (for update/complete/delete)
-  taskId: z.string()
-    .optional()
-    .describe('ID of the task (required for update/complete/delete operations)'),
+  taskId: z.string().optional().describe('ID of the task (required for update/complete/delete operations)'),
 
   // Bulk operations support
-  taskIds: z.array(z.string())
-    .optional()
-    .describe('Array of task IDs for bulk operations (bulk_complete/bulk_delete)'),
+  taskIds: z.array(z.string()).optional().describe('Array of task IDs for bulk operations (bulk_complete/bulk_delete)'),
 
-  bulkCriteria: z.object({
-    tags: z.array(z.string()).optional().describe('Match tasks with all these tags'),
-    projectName: z.string().optional().describe('Match tasks in this project'),
-    search: z.string().optional().describe('Match tasks containing this text'),
-    completed: z.boolean().optional().describe('Match completed/incomplete tasks'),
-  })
+  bulkCriteria: z
+    .object({
+      tags: z.array(z.string()).optional().describe('Match tasks with all these tags'),
+      projectName: z.string().optional().describe('Match tasks in this project'),
+      search: z.string().optional().describe('Match tasks containing this text'),
+      completed: z.boolean().optional().describe('Match completed/incomplete tasks'),
+    })
     .optional()
     .describe('Search criteria for bulk operations (alternative to taskIds)'),
 
   // Create/Update parameters
-  name: z.string()
-    .optional()
-    .describe('Task name (required for create, optional for update)'),
+  name: z.string().optional().describe('Task name (required for create, optional for update)'),
 
-  note: z.string()
-    .optional()
-    .describe('Task note/description'),
+  note: z.string().optional().describe('Task note/description'),
 
-  projectId: z.union([z.string(), z.null()])
+  projectId: z
+    .union([z.string(), z.null()])
     .optional()
     .nullable()
-    .transform(val => val === '' || val === null ? null : val)
+    .transform((val) => (val === '' || val === null ? null : val))
     .describe('Project ID to assign the task to (null/empty to move to inbox)'),
 
   // Alias for unified API compatibility (uses 'project' instead of 'projectId')
-  project: z.union([z.string(), z.null()])
+  project: z
+    .union([z.string(), z.null()])
     .optional()
     .nullable()
-    .transform(val => val === '' || val === null ? null : val)
+    .transform((val) => (val === '' || val === null ? null : val))
     .describe('Project ID (alias for projectId, used by unified API)'),
 
-  parentTaskId: z.union([z.string().min(1), z.literal(''), z.null()])
+  parentTaskId: z
+    .union([z.string().min(1), z.literal(''), z.null()])
     .optional()
-    .transform(val => val === '' ? undefined : val)
+    .transform((val) => (val === '' ? undefined : val))
     .describe('Parent task ID to create this as a subtask'),
 
-  dueDate: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
-    z.literal(''),
-    z.null(),
-  ])
+  dueDate: z
+    .union([
+      z
+        .string()
+        .regex(
+          /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/,
+          'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm',
+        ),
+      z.literal(''),
+      z.null(),
+    ])
     .optional()
     .nullable()
-    .transform(val => val === '' ? null : val)
+    .transform((val) => (val === '' ? null : val))
     .describe('Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
-  deferDate: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
-    z.literal(''),
-    z.null(),
-  ])
+  deferDate: z
+    .union([
+      z
+        .string()
+        .regex(
+          /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/,
+          'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm',
+        ),
+      z.literal(''),
+      z.null(),
+    ])
     .optional()
     .nullable()
-    .transform(val => val === '' ? null : val)
+    .transform((val) => (val === '' ? null : val))
     .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm format)'),
 
-  plannedDate: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
-    z.literal(''),
-    z.null(),
-  ])
+  plannedDate: z
+    .union([
+      z
+        .string()
+        .regex(
+          /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/,
+          'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm',
+        ),
+      z.literal(''),
+      z.null(),
+    ])
     .optional()
     .nullable()
-    .transform(val => val === '' ? null : val)
+    .transform((val) => (val === '' ? null : val))
     .describe('Planned date (YYYY-MM-DD or YYYY-MM-DD HH:mm format) - OmniFocus 4.7+'),
 
-  clearPlannedDate: z.boolean()
-    .optional()
-    .describe('Clear the existing planned date'),
+  clearPlannedDate: z.boolean().optional().describe('Clear the existing planned date'),
 
-  flagged: z.union([z.boolean(), z.string()])
-    .optional()
-    .describe('Whether the task is flagged'),
+  flagged: z.union([z.boolean(), z.string()]).optional().describe('Whether the task is flagged'),
 
-  estimatedMinutes: z.union([z.number(), z.string()])
-    .optional()
-    .describe('Estimated duration in minutes'),
+  estimatedMinutes: z.union([z.number(), z.string()]).optional().describe('Estimated duration in minutes'),
 
-  tags: z.array(z.string())
-    .optional()
-    .describe('Tags to assign to the task (replaces all existing tags)'),
+  tags: z.array(z.string()).optional().describe('Tags to assign to the task (replaces all existing tags)'),
 
-  addTags: z.array(z.string())
-    .optional()
-    .describe('Tags to add to existing tags (for update operations)'),
+  addTags: z.array(z.string()).optional().describe('Tags to add to existing tags (for update operations)'),
 
-  removeTags: z.array(z.string())
-    .optional()
-    .describe('Tags to remove from existing tags (for update operations)'),
+  removeTags: z.array(z.string()).optional().describe('Tags to remove from existing tags (for update operations)'),
 
-  sequential: z.union([z.boolean(), z.string()])
-    .optional()
-    .describe('Whether subtasks must be completed in order'),
+  sequential: z.union([z.boolean(), z.string()]).optional().describe('Whether subtasks must be completed in order'),
 
   // Clear field options (for update)
-  clearDueDate: z.boolean()
-    .optional()
-    .describe('Clear the existing due date'),
+  clearDueDate: z.boolean().optional().describe('Clear the existing due date'),
 
-  clearDeferDate: z.boolean()
-    .optional()
-    .describe('Clear the existing defer date'),
+  clearDeferDate: z.boolean().optional().describe('Clear the existing defer date'),
 
-  clearEstimatedMinutes: z.boolean()
-    .optional()
-    .describe('Clear the existing time estimate'),
+  clearEstimatedMinutes: z.boolean().optional().describe('Clear the existing time estimate'),
 
-  clearRepeatRule: z.boolean()
-    .optional()
-    .describe('Remove the existing repeat rule'),
+  clearRepeatRule: z.boolean().optional().describe('Remove the existing repeat rule'),
 
   // Completion date (for complete operation)
-  completionDate: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm'),
-    z.literal(''),
-    z.null(),
-  ])
+  completionDate: z
+    .union([
+      z
+        .string()
+        .regex(
+          /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/,
+          'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm',
+        ),
+      z.literal(''),
+      z.null(),
+    ])
     .optional()
     .nullable()
-    .transform(val => val === '' ? null : val)
+    .transform((val) => (val === '' ? null : val))
     .describe('Completion date (defaults to now)'),
 
   // Minimal response option (for update)
-  minimalResponse: z.union([z.boolean(), z.string()])
+  minimalResponse: z
+    .union([z.boolean(), z.string()])
     .optional()
     .describe('Return minimal response for bulk operations'),
 
   // Repeat rule - LLM-friendly format (OmniFocus 4.7+)
-  repeatRule: RepeatRuleUserIntentSchema
-    .optional()
-    .describe('Repeat/recurrence rule for the task. Specify frequency (RRULE format), anchorTo (when-due/when-deferred/when-marked-done/planned-date), and skipMissed. Examples: frequency="FREQ=DAILY", frequency="FREQ=WEEKLY;BYDAY=MO,WE,FR"'),
+  repeatRule: RepeatRuleUserIntentSchema.optional().describe(
+    'Repeat/recurrence rule for the task. Specify frequency (RRULE format), anchorTo (when-due/when-deferred/when-marked-done/planned-date), and skipMissed. Examples: frequency="FREQ=DAILY", frequency="FREQ=WEEKLY;BYDAY=MO,WE,FR"',
+  ),
 });
 
 type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
@@ -210,7 +214,8 @@ type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
  */
 export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperationResponseV2> {
   name = 'manage_task';
-  description = 'Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).\n\nNOTE: An experimental unified API (omnifocus_write) is available for testing builder-style mutations. The \'manage_task\' tool remains the stable, recommended option for production use.';
+  description =
+    "Create, update, complete, or delete tasks. Use this for ANY modification to existing tasks or creating new ones. Set operation to specify the action: create (new task), update (modify task), complete (mark done), or delete (remove task).\n\nNOTE: An experimental unified API (omnifocus_write) is available for testing builder-style mutations. The 'manage_task' tool remains the stable, recommended option for production use.";
   schema = ManageTaskSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -240,7 +245,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
   async executeValidated(args: ManageTaskInput): Promise<TaskOperationResponseV2> {
     const timer = new OperationTimerV2();
-    const { operation, taskId, ...params} = args;
+    const { operation, taskId, ...params } = args;
 
     // Convert string IDs to branded types for internal use
     // IMPORTANT: Only set projectId if explicitly provided (not undefined)
@@ -250,10 +255,13 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     const brandedArgs: BrandedTaskArgs = {
       ...args,
       taskId: args.taskId ? convertToTaskId(args.taskId) : undefined,
-      taskIds: args.taskIds ? args.taskIds.map(id => convertToTaskId(id)) : undefined,
-      projectId: args.projectId !== undefined
-        ? (args.projectId === null || args.projectId === '' ? null : convertToProjectId(args.projectId))
-        : undefined,
+      taskIds: args.taskIds ? args.taskIds.map((id) => convertToTaskId(id)) : undefined,
+      projectId:
+        args.projectId !== undefined
+          ? args.projectId === null || args.projectId === ''
+            ? null
+            : convertToProjectId(args.projectId)
+          : undefined,
       parentTaskId: args.parentTaskId ? convertToTaskId(args.parentTaskId) : undefined,
     };
 
@@ -309,10 +317,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           if (brandedParams.dueDate) createArgs.dueDate = brandedParams.dueDate;
           if (brandedParams.deferDate) createArgs.deferDate = brandedParams.deferDate;
           if (brandedParams.plannedDate) createArgs.plannedDate = brandedParams.plannedDate;
-          if (brandedParams.flagged !== undefined) createArgs.flagged = typeof brandedParams.flagged === 'string' ? brandedParams.flagged === 'true' : brandedParams.flagged;
-          if (brandedParams.estimatedMinutes !== undefined) createArgs.estimatedMinutes = typeof brandedParams.estimatedMinutes === 'string' ? parseInt(brandedParams.estimatedMinutes, 10) : brandedParams.estimatedMinutes;
+          if (brandedParams.flagged !== undefined)
+            createArgs.flagged =
+              typeof brandedParams.flagged === 'string' ? brandedParams.flagged === 'true' : brandedParams.flagged;
+          if (brandedParams.estimatedMinutes !== undefined)
+            createArgs.estimatedMinutes =
+              typeof brandedParams.estimatedMinutes === 'string'
+                ? parseInt(brandedParams.estimatedMinutes, 10)
+                : brandedParams.estimatedMinutes;
           if (brandedParams.tags) createArgs.tags = brandedParams.tags;
-          if (brandedParams.sequential !== undefined) createArgs.sequential = typeof brandedParams.sequential === 'string' ? brandedParams.sequential === 'true' : brandedParams.sequential;
+          if (brandedParams.sequential !== undefined)
+            createArgs.sequential =
+              typeof brandedParams.sequential === 'string'
+                ? brandedParams.sequential === 'true'
+                : brandedParams.sequential;
           const repeatRuleForUpdate = this.normalizeRepeatRuleInput(brandedParams.repeatRule);
           if (repeatRuleForUpdate) {
             this.logger.debug('Normalized repeat rule for creation', { repeatRule: repeatRuleForUpdate });
@@ -333,7 +351,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             // Remove projectId since mutation contract uses 'project'
             delete convertedTaskData.projectId;
           } catch (dateError) {
-            const fieldName = dateError instanceof Error && dateError.message.includes('defer') ? 'deferDate' : dateError instanceof Error && dateError.message.includes('planned') ? 'plannedDate' : 'dueDate';
+            const fieldName =
+              dateError instanceof Error && dateError.message.includes('defer')
+                ? 'deferDate'
+                : dateError instanceof Error && dateError.message.includes('planned')
+                  ? 'plannedDate'
+                  : 'dueDate';
             const errorDetails = invalidDateError(fieldName, createArgs[fieldName] || '');
             return createErrorResponseV2(
               'manage_task',
@@ -352,7 +375,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
           // Use AST-powered mutation builder (Phase 2 consolidation)
           // Note: name is guaranteed to exist due to validation at line 221
-          const script = (await buildCreateTaskScript(convertedTaskData as import('../../contracts/mutations.js').TaskCreateData)).script;
+          const script = (
+            await buildCreateTaskScript(convertedTaskData as import('../../contracts/mutations.js').TaskCreateData)
+          ).script;
           let createResult: unknown;
 
           try {
@@ -377,7 +402,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
           this.logger.debug('Processing script result', { createResult });
 
-          if (createResult && typeof createResult === 'object' && 'error' in createResult && (createResult as { error: unknown }).error) {
+          if (
+            createResult &&
+            typeof createResult === 'object' &&
+            'error' in createResult &&
+            (createResult as { error: unknown }).error
+          ) {
             // Enhanced error response with recovery suggestions
             const errorMessage = (createResult as { message?: string }).message || 'Failed to create task';
             const recovery = [];
@@ -438,7 +468,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           }
 
           // Check if parsedResult is valid
-          if (!parsedCreateResult || typeof parsedCreateResult !== 'object' || (!(parsedCreateResult as Record<string, unknown>).taskId && !(parsedCreateResult as Record<string, unknown>).id)) {
+          if (
+            !parsedCreateResult ||
+            typeof parsedCreateResult !== 'object' ||
+            (!(parsedCreateResult as Record<string, unknown>).taskId &&
+              !(parsedCreateResult as Record<string, unknown>).id)
+          ) {
             return createErrorResponseV2(
               'manage_task',
               'INTERNAL_ERROR',
@@ -449,7 +484,10 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             );
           }
 
-          const createdTaskId = (parsedCreateResult as { taskId?: string; id?: string }).taskId || (parsedCreateResult as { id?: string }).id || null;
+          const createdTaskId =
+            (parsedCreateResult as { taskId?: string; id?: string }).taskId ||
+            (parsedCreateResult as { id?: string }).id ||
+            null;
           this.logger.debug('Post-create task ID', { createdTaskId });
 
           if (repeatRuleForUpdate && createdTaskId) {
@@ -490,8 +528,8 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             'manage_task',
             {
               task: parsedCreateResult,
-              id: createdTaskId,  // Expose id at top level for convenience
-              name: (parsedCreateResult as Record<string, unknown>).name,  // Expose name at top level
+              id: createdTaskId, // Expose id at top level for convenience
+              name: (parsedCreateResult as Record<string, unknown>).name, // Expose name at top level
               operation: 'create' as const,
             },
             undefined,
@@ -525,18 +563,24 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             updates: {
               ...updates,
               // Explicitly log the types and values of date fields
-              dueDate: updates.dueDate !== undefined ? {
-                value: updates.dueDate,
-                type: typeof updates.dueDate,
-                isNull: updates.dueDate === null,
-                isUndefined: updates.dueDate === undefined,
-              } : 'not provided',
-              deferDate: updates.deferDate !== undefined ? {
-                value: updates.deferDate,
-                type: typeof updates.deferDate,
-                isNull: updates.deferDate === null,
-                isUndefined: updates.deferDate === undefined,
-              } : 'not provided',
+              dueDate:
+                updates.dueDate !== undefined
+                  ? {
+                      value: updates.dueDate,
+                      type: typeof updates.dueDate,
+                      isNull: updates.dueDate === null,
+                      isUndefined: updates.dueDate === undefined,
+                    }
+                  : 'not provided',
+              deferDate:
+                updates.deferDate !== undefined
+                  ? {
+                      value: updates.deferDate,
+                      type: typeof updates.deferDate,
+                      isNull: updates.deferDate === null,
+                      isUndefined: updates.deferDate === undefined,
+                    }
+                  : 'not provided',
             },
           });
 
@@ -566,7 +610,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           const updateResult = await this.execJson(updateScript);
           if (isScriptError(updateResult)) {
             this.logger.error(`Update task script error: ${updateResult.error}`);
-            return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', updateResult.error || 'Script execution failed', 'Verify task exists and params are valid', updateResult.details, timer.toMetadata());
+            return createErrorResponseV2(
+              'manage_task',
+              'SCRIPT_ERROR',
+              updateResult.error || 'Script execution failed',
+              'Verify task exists and params are valid',
+              updateResult.details,
+              timer.toMetadata(),
+            );
           }
 
           if (isScriptSuccess(updateResult)) {
@@ -575,11 +626,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               const errorValue = rawData.error;
               const subSuccess = rawData.success;
               if (errorValue || subSuccess === false) {
-                const errorMessage = typeof rawData.message === 'string'
-                  ? rawData.message
-                  : typeof errorValue === 'string'
-                    ? errorValue
-                    : 'Script execution failed';
+                const errorMessage =
+                  typeof rawData.message === 'string'
+                    ? rawData.message
+                    : typeof errorValue === 'string'
+                      ? errorValue
+                      : 'Script execution failed';
                 return createErrorResponseV2(
                   'manage_task',
                   'SCRIPT_ERROR',
@@ -634,33 +686,37 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           }
 
           // Transform new schema-validated result to expected format
-          const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task || parsedUpdateResult || { id: taskId, name: 'Unknown' };
+          const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task ||
+            parsedUpdateResult || { id: taskId, name: 'Unknown' };
           const transformedResult = {
             id: (taskData as { id?: string }).id || taskId,
             name: (taskData as { name?: string }).name || 'Unknown',
             updated: true,
-            changes: Object.keys(safeUpdates).reduce((acc, key) => {
-              acc[key] = safeUpdates[key];
-              return acc;
-            }, {} as Record<string, unknown>),
+            changes: Object.keys(safeUpdates).reduce(
+              (acc, key) => {
+                acc[key] = safeUpdates[key];
+                return acc;
+              },
+              {} as Record<string, unknown>,
+            ),
           };
 
           // Return standardized response with proper typing
-          result = createSuccessResponseV2(
-            'manage_task',
-            { task: transformedResult },
-            undefined,
-            {
-              ...timer.toMetadata(),
-              updated_id: taskId,
-              input_params: {
-                taskId,
-                fields_updated: Object.keys(safeUpdates),
-                has_date_changes: !!(safeUpdates.dueDate || safeUpdates.deferDate || safeUpdates.clearDueDate || safeUpdates.clearDeferDate),
-                has_project_change: safeUpdates.project !== undefined,
-              },
+          result = createSuccessResponseV2('manage_task', { task: transformedResult }, undefined, {
+            ...timer.toMetadata(),
+            updated_id: taskId,
+            input_params: {
+              taskId,
+              fields_updated: Object.keys(safeUpdates),
+              has_date_changes: !!(
+                safeUpdates.dueDate ||
+                safeUpdates.deferDate ||
+                safeUpdates.clearDueDate ||
+                safeUpdates.clearDeferDate
+              ),
+              has_project_change: safeUpdates.project !== undefined,
             },
-          ) as TaskOperationResponseV2;
+          }) as TaskOperationResponseV2;
           break;
         }
 
@@ -669,32 +725,56 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Convert completionDate if provided
           const processedCompleteArgs = {
             taskId: brandedTaskId!,
-            completionDate: brandedParams.completionDate ? localToUTC(brandedParams.completionDate, 'completion') : undefined,
+            completionDate: brandedParams.completionDate
+              ? localToUTC(brandedParams.completionDate, 'completion')
+              : undefined,
           };
 
           // Try JXA first, fall back to URL scheme if access denied
           try {
-            const completeScript = this.omniAutomation.buildScript(COMPLETE_TASK_SCRIPT, processedCompleteArgs as unknown as Record<string, unknown>);
+            const completeScript = this.omniAutomation.buildScript(
+              COMPLETE_TASK_SCRIPT,
+              processedCompleteArgs as unknown as Record<string, unknown>,
+            );
             const anyOmniComplete = this.omniAutomation as {
               executeJson?: (script: string) => Promise<unknown>;
               execute?: (script: string) => Promise<unknown>;
             };
             // Use flexible executeJson without strict schema to support unit mocks
-            const res = typeof anyOmniComplete.executeJson === 'function' ? await anyOmniComplete.executeJson(completeScript) : await anyOmniComplete.execute!(completeScript);
-            const completeResult = (res && typeof res === 'object' && 'success' in res) ? res as TaskOperationResult : { success: true, data: res };
+            const res =
+              typeof anyOmniComplete.executeJson === 'function'
+                ? await anyOmniComplete.executeJson(completeScript)
+                : await anyOmniComplete.execute!(completeScript);
+            const completeResult =
+              res && typeof res === 'object' && 'success' in res
+                ? (res as TaskOperationResult)
+                : { success: true, data: res };
 
             if (typeof completeResult === 'object' && 'success' in completeResult && !completeResult.success) {
-
               // If error contains "access not allowed", use URL scheme
               const error = (completeResult as { error?: string }).error;
               if (error && typeof error === 'string' && error.toLowerCase().includes('access not allowed')) {
                 this.logger.info('JXA access denied, falling back to URL scheme for task completion');
                 // Note: URL scheme fallback would be implemented here if needed
-                return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
+                return createErrorResponseV2(
+                  'manage_task',
+                  'SCRIPT_ERROR',
+                  'Access denied and URL scheme not implemented',
+                  'Grant OmniFocus automation access',
+                  {},
+                  timer.toMetadata(),
+                );
               }
               const errorMsg = (completeResult as { error?: string }).error || 'Unknown error';
               const details = (completeResult as { details?: unknown }).details;
-              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', errorMsg, 'Verify task ID and OmniFocus state', details, timer.toMetadata());
+              return createErrorResponseV2(
+                'manage_task',
+                'SCRIPT_ERROR',
+                errorMsg,
+                'Verify task ID and OmniFocus state',
+                details,
+                timer.toMetadata(),
+              );
             }
 
             this.logger.info(`Completed task via JXA: ${taskId}`);
@@ -708,18 +788,32 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               affectsOverdue: true, // And overdue view
             });
 
-            result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, { ...timer.toMetadata(), completed_id: taskId, method: 'jxa', input_params: { taskId: taskId } }) as TaskOperationResponseV2;
+            result = createSuccessResponseV2('manage_task', { task: parsedCompleteResult }, undefined, {
+              ...timer.toMetadata(),
+              completed_id: taskId,
+              method: 'jxa',
+              input_params: { taskId: taskId },
+            }) as TaskOperationResponseV2;
           } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-            if ((jxaError as any).message &&
+            if (
+              (jxaError as any).message &&
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+              ((jxaError as any).message.toLowerCase().includes('parameter is missing') ||
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-                ((jxaError as any).message.toLowerCase().includes('parameter is missing') ||
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-                 (jxaError as any).message.toLowerCase().includes('access not allowed'))) {
+                (jxaError as any).message.toLowerCase().includes('access not allowed'))
+            ) {
               this.logger.info('JXA failed, falling back to URL scheme for task completion');
               // Note: URL scheme fallback would be implemented here if needed
-              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
+              return createErrorResponseV2(
+                'manage_task',
+                'SCRIPT_ERROR',
+                'Access denied and URL scheme not implemented',
+                'Grant OmniFocus automation access',
+                {},
+                timer.toMetadata(),
+              );
             }
             return this.handleErrorV2<TaskOperationDataV2>(jxaError);
           }
@@ -730,27 +824,52 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Direct implementation of task deletion
           // Try JXA first, fall back to URL scheme if access denied
           try {
-            const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: brandedTaskId! } as unknown as Record<string, unknown>);
+            const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, {
+              taskId: brandedTaskId!,
+            } as unknown as Record<string, unknown>);
             const anyOmniDelete = this.omniAutomation as {
               executeJson?: (script: string) => Promise<unknown>;
               execute?: (script: string) => Promise<unknown>;
             };
-            const res = typeof anyOmniDelete.executeJson === 'function' ? await anyOmniDelete.executeJson(deleteScript) : await anyOmniDelete.execute!(deleteScript);
-            const deleteResult = (res && typeof res === 'object' && 'success' in res) ? res as TaskOperationResult : { success: true, data: res };
+            const res =
+              typeof anyOmniDelete.executeJson === 'function'
+                ? await anyOmniDelete.executeJson(deleteScript)
+                : await anyOmniDelete.execute!(deleteScript);
+            const deleteResult =
+              res && typeof res === 'object' && 'success' in res
+                ? (res as TaskOperationResult)
+                : { success: true, data: res };
 
             if (typeof deleteResult === 'object' && 'success' in deleteResult && !deleteResult.success) {
               // If error contains "parameter is missing" or "access not allowed", use URL scheme
               const error = (deleteResult as { error?: string }).error;
-              if (error && typeof error === 'string' &&
-                  (error.toLowerCase().includes('parameter is missing') ||
-                   error.toLowerCase().includes('access not allowed'))) {
+              if (
+                error &&
+                typeof error === 'string' &&
+                (error.toLowerCase().includes('parameter is missing') ||
+                  error.toLowerCase().includes('access not allowed'))
+              ) {
                 this.logger.info('JXA failed, falling back to URL scheme for task deletion');
                 // Note: URL scheme fallback would be implemented here if needed
-                return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
+                return createErrorResponseV2(
+                  'manage_task',
+                  'SCRIPT_ERROR',
+                  'Access denied and URL scheme not implemented',
+                  'Grant OmniFocus automation access',
+                  {},
+                  timer.toMetadata(),
+                );
               }
               const errorMsg = (deleteResult as { error?: string }).error || 'Unknown error';
               const details = (deleteResult as { details?: unknown }).details;
-              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', errorMsg, 'Verify task ID and permissions', details, timer.toMetadata());
+              return createErrorResponseV2(
+                'manage_task',
+                'SCRIPT_ERROR',
+                errorMsg,
+                'Verify task ID and permissions',
+                details,
+                timer.toMetadata(),
+              );
             }
 
             const parsedDeleteResult = (deleteResult as { data?: unknown }).data;
@@ -767,15 +886,29 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             this.cache.invalidate('tags');
 
             this.logger.info(`Deleted task via JXA: ${taskId}`);
-            result = createSuccessResponseV2('manage_task', { task: parsedDeleteResult }, undefined, { ...timer.toMetadata(), deleted_id: taskId, method: 'jxa', input_params: { taskId: taskId } }) as TaskOperationResponseV2;
+            result = createSuccessResponseV2('manage_task', { task: parsedDeleteResult }, undefined, {
+              ...timer.toMetadata(),
+              deleted_id: taskId,
+              method: 'jxa',
+              input_params: { taskId: taskId },
+            }) as TaskOperationResponseV2;
           } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
-            if ((jxaError as Error).message &&
-                ((jxaError as Error).message.toLowerCase().includes('parameter is missing') ||
-                 (jxaError as Error).message.toLowerCase().includes('access not allowed'))) {
+            if (
+              (jxaError as Error).message &&
+              ((jxaError as Error).message.toLowerCase().includes('parameter is missing') ||
+                (jxaError as Error).message.toLowerCase().includes('access not allowed'))
+            ) {
               this.logger.info('JXA failed, falling back to URL scheme for task deletion');
               // Note: URL scheme fallback would be implemented here if needed
-              return createErrorResponseV2('manage_task', 'SCRIPT_ERROR', 'Access denied and URL scheme not implemented', 'Grant OmniFocus automation access', {}, timer.toMetadata());
+              return createErrorResponseV2(
+                'manage_task',
+                'SCRIPT_ERROR',
+                'Access denied and URL scheme not implemented',
+                'Grant OmniFocus automation access',
+                {},
+                timer.toMetadata(),
+              );
             }
             return this.handleErrorV2<TaskOperationDataV2>(jxaError);
           }
@@ -805,7 +938,6 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       const finalResult = this.formatForCLI(result, operation, 'success');
       this.logger.debug('Final result after formatForCLI', { finalResult });
       return finalResult;
-
     } catch (error) {
       this.logger.error('ERROR caught in executeValidated', { error });
       const errorResult = this.handleErrorV2<TaskOperationDataV2>(error);
@@ -821,7 +953,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     try {
       const dueDate = new Date(dueDateStr);
       const now = new Date();
-      const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
+      const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
       return dueDate <= threeDaysFromNow;
     } catch {
       return false;
@@ -1031,11 +1163,14 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
         console.error(`[CLI_DEBUG] Task name: ${resultData.data.task.name}`);
       }
 
-      console.error(`[CLI_DEBUG] Operation completed in ${(result as { metadata?: { query_time_ms?: number } })?.metadata?.query_time_ms || 'unknown'}ms`);
-
+      console.error(
+        `[CLI_DEBUG] Operation completed in ${(result as { metadata?: { query_time_ms?: number } })?.metadata?.query_time_ms || 'unknown'}ms`,
+      );
     } else {
       console.error(`[CLI_DEBUG] manage_task ${operation} operation: ERROR`);
-      console.error(`[CLI_DEBUG] Error: ${(result as { error?: { message?: string } })?.error?.message || 'Unknown error'}`);
+      console.error(
+        `[CLI_DEBUG] Error: ${(result as { error?: { message?: string } })?.error?.message || 'Unknown error'}`,
+      );
     }
 
     // Still return the original result for MCP protocol compliance
@@ -1093,11 +1228,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       const defer = raw.deferAnother as Record<string, unknown>;
       if (typeof defer.unit === 'string') {
         const stepsValue = defer.steps;
-        const stepsNumber = typeof stepsValue === 'number'
-          ? stepsValue
-          : typeof stepsValue === 'string'
-            ? parseInt(stepsValue, 10)
-            : undefined;
+        const stepsNumber =
+          typeof stepsValue === 'number'
+            ? stepsValue
+            : typeof stepsValue === 'string'
+              ? parseInt(stepsValue, 10)
+              : undefined;
         if (stepsNumber && Number.isFinite(stepsNumber) && stepsNumber > 0) {
           type DeferAnother = NonNullable<RepeatRule['deferAnother']>;
           normalized.deferAnother = {
@@ -1117,7 +1253,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
    *
    * The RepetitionRule frequency maps to ICS RRULE FREQ values used by OmniFocus.
    */
-  private convertToRepetitionRule(rule: TaskCreationArgs['repeatRule']): import('../../contracts/mutations.js').RepetitionRule | undefined {
+  private convertToRepetitionRule(
+    rule: TaskCreationArgs['repeatRule'],
+  ): import('../../contracts/mutations.js').RepetitionRule | undefined {
     if (!rule) return undefined;
 
     const unitToFrequency: Record<string, 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
@@ -1200,7 +1338,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
         const data = result.data as { tasks?: { id: string }[]; items?: { id: string }[] };
         const tasks = data.tasks || data.items || [];
-        targetTaskIds = tasks.map(task => convertToTaskId(task.id));
+        targetTaskIds = tasks.map((task) => convertToTaskId(task.id));
 
         if (targetTaskIds.length === 0) {
           const error = createErrorResponseV2(
@@ -1247,14 +1385,19 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       // This executes one script that iterates flattenedTasks ONCE and deletes all tasks
       // vs N iterations for N individual deletes (81% performance improvement achieved)
       try {
-        const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, { taskIds: targetTaskIds.map(id => id as string) });
+        const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, {
+          taskIds: targetTaskIds.map((id) => id as string),
+        });
         const result = await this.execJson(script);
 
         if (isScriptError(result)) {
           // Script-level error
           errors.push({ error: result.error || 'Bulk delete failed' });
         } else if (result.data && typeof result.data === 'object') {
-          const bulkResult = result.data as { deleted?: Array<{ id: string; name: string }>; errors?: Array<{ taskId: string; error: string }> };
+          const bulkResult = result.data as {
+            deleted?: Array<{ id: string; name: string }>;
+            errors?: Array<{ taskId: string; error: string }>;
+          };
 
           // Process successfully deleted tasks
           if (Array.isArray(bulkResult.deleted)) {
@@ -1278,14 +1421,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       // OPTIMIZATION: OmniJS-first bulk complete using Task.byIdentifier() direct lookup
       // No iteration needed - direct task lookup is faster than building a map
       try {
-        const script = buildBulkCompleteTasksScript({ taskIds: targetTaskIds.map(id => id as string), completionDate: null });
+        const script = buildBulkCompleteTasksScript({
+          taskIds: targetTaskIds.map((id) => id as string),
+          completionDate: null,
+        });
         const result = await this.execJson(script);
 
         if (isScriptError(result)) {
           // Script-level error
           errors.push({ error: result.error || 'Bulk complete failed' });
         } else if (result.data && typeof result.data === 'object') {
-          const bulkResult = result.data as { completed?: Array<{ id: string; name: string }>; errors?: Array<{ taskId: string; error: string }> };
+          const bulkResult = result.data as {
+            completed?: Array<{ id: string; name: string }>;
+            errors?: Array<{ taskId: string; error: string }>;
+          };
 
           // Process successfully completed tasks
           if (Array.isArray(bulkResult.completed)) {
@@ -1327,5 +1476,5 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(item => typeof item === 'string');
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }

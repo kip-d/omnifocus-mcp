@@ -24,9 +24,9 @@ function extractHelperFunction(content, functionName) {
   let pos = backtickStart;
 
   while (pos < content.length && depth > 0) {
-    if (content[pos] === '`' && content[pos-1] !== '\\') {
+    if (content[pos] === '`' && content[pos - 1] !== '\\') {
       depth--;
-    } else if (content[pos] === '`' && content[pos+1] === '{') {
+    } else if (content[pos] === '`' && content[pos + 1] === '{') {
       // Template literal interpolation - need to handle this
       depth++;
     }

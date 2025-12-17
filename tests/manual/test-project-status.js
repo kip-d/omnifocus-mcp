@@ -83,7 +83,7 @@ const testScript = `(() => {
 console.log('Testing project status values...\n');
 
 const proc = spawn('osascript', ['-l', 'JavaScript'], {
-  timeout: 10000
+  timeout: 10000,
 });
 
 let stdout = '';

@@ -63,49 +63,49 @@ interface BatchOperation {
 // Discriminated union for compiled mutations
 export type CompiledMutation =
   | {
-    operation: 'create';
-    target: 'task' | 'project';
-    data: CreateData;
-    minimalResponse?: boolean; // Bug #21: Reduce response size
-  }
+      operation: 'create';
+      target: 'task' | 'project';
+      data: CreateData;
+      minimalResponse?: boolean; // Bug #21: Reduce response size
+    }
   | {
-    operation: 'update';
-    target: 'task' | 'project';
-    taskId?: string;
-    projectId?: string;
-    changes: UpdateChanges;
-    minimalResponse?: boolean; // Bug #21: Reduce response size
-  }
+      operation: 'update';
+      target: 'task' | 'project';
+      taskId?: string;
+      projectId?: string;
+      changes: UpdateChanges;
+      minimalResponse?: boolean; // Bug #21: Reduce response size
+    }
   | {
-    operation: 'complete';
-    target: 'task' | 'project';
-    taskId?: string;
-    projectId?: string;
-    completionDate?: string; // Bug #20: Allow custom completion date
-    minimalResponse?: boolean; // Bug #21: Reduce response size
-  }
+      operation: 'complete';
+      target: 'task' | 'project';
+      taskId?: string;
+      projectId?: string;
+      completionDate?: string; // Bug #20: Allow custom completion date
+      minimalResponse?: boolean; // Bug #21: Reduce response size
+    }
   | {
-    operation: 'delete';
-    target: 'task' | 'project';
-    taskId?: string;
-    projectId?: string;
-  }
+      operation: 'delete';
+      target: 'task' | 'project';
+      taskId?: string;
+      projectId?: string;
+    }
   | {
-    operation: 'batch';
-    target: 'task' | 'project';
-    operations: BatchOperation[];
-    createSequentially?: boolean;
-    atomicOperation?: boolean;
-    returnMapping?: boolean;
-    stopOnError?: boolean;
-    dryRun?: boolean;
-  }
+      operation: 'batch';
+      target: 'task' | 'project';
+      operations: BatchOperation[];
+      createSequentially?: boolean;
+      atomicOperation?: boolean;
+      returnMapping?: boolean;
+      stopOnError?: boolean;
+      dryRun?: boolean;
+    }
   | {
-    operation: 'bulk_delete';
-    target: 'task' | 'project';
-    ids: string[];
-    dryRun?: boolean;
-  };
+      operation: 'bulk_delete';
+      target: 'task' | 'project';
+      ids: string[];
+      dryRun?: boolean;
+    };
 
 export class MutationCompiler {
   compile(input: WriteInput): CompiledMutation {

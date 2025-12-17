@@ -43,11 +43,11 @@ function createTestMetrics(overrides: Partial<AnalysisMetrics> = {}): AnalysisMe
 describe('PRODUCTIVITY_INSIGHTS', () => {
   it('exports 5 productivity insight configs', () => {
     expect(PRODUCTIVITY_INSIGHTS).toHaveLength(5);
-    expect(PRODUCTIVITY_INSIGHTS.every(c => c.category === 'productivity')).toBe(true);
+    expect(PRODUCTIVITY_INSIGHTS.every((c) => c.category === 'productivity')).toBe(true);
   });
 
   describe('available-rate insight', () => {
-    const config = PRODUCTIVITY_INSIGHTS.find(c => c.id === 'available-rate')!;
+    const config = PRODUCTIVITY_INSIGHTS.find((c) => c.id === 'available-rate')!;
 
     it('triggers when tasks exist', () => {
       const metrics = createTestMetrics({ tasks: { total: 100, available: 30 } });
@@ -68,7 +68,7 @@ describe('PRODUCTIVITY_INSIGHTS', () => {
   });
 
   describe('overdue-tasks insight', () => {
-    const config = PRODUCTIVITY_INSIGHTS.find(c => c.id === 'overdue-tasks')!;
+    const config = PRODUCTIVITY_INSIGHTS.find((c) => c.id === 'overdue-tasks')!;
 
     it('triggers when tasks are overdue', () => {
       const metrics = createTestMetrics({ tasks: { overdue: 5 } });
@@ -82,17 +82,13 @@ describe('PRODUCTIVITY_INSIGHTS', () => {
 
     it('has high priority for many overdue tasks', () => {
       const metrics = createTestMetrics({ tasks: { overdue: 15 } });
-      const priority = typeof config.priority === 'function'
-        ? config.priority(metrics)
-        : config.priority;
+      const priority = typeof config.priority === 'function' ? config.priority(metrics) : config.priority;
       expect(priority).toBe('high');
     });
 
     it('has medium priority for few overdue tasks', () => {
       const metrics = createTestMetrics({ tasks: { overdue: 5 } });
-      const priority = typeof config.priority === 'function'
-        ? config.priority(metrics)
-        : config.priority;
+      const priority = typeof config.priority === 'function' ? config.priority(metrics) : config.priority;
       expect(priority).toBe('medium');
     });
   });
@@ -105,11 +101,11 @@ describe('PRODUCTIVITY_INSIGHTS', () => {
 describe('BOTTLENECK_INSIGHTS', () => {
   it('exports 2 bottleneck insight configs', () => {
     expect(BOTTLENECK_INSIGHTS).toHaveLength(2);
-    expect(BOTTLENECK_INSIGHTS.every(c => c.category === 'bottlenecks')).toBe(true);
+    expect(BOTTLENECK_INSIGHTS.every((c) => c.category === 'bottlenecks')).toBe(true);
   });
 
   describe('blocked-tasks insight', () => {
-    const config = BOTTLENECK_INSIGHTS.find(c => c.id === 'blocked-tasks')!;
+    const config = BOTTLENECK_INSIGHTS.find((c) => c.id === 'blocked-tasks')!;
 
     it('triggers when tasks are blocked', () => {
       const metrics = createTestMetrics({ tasks: { blocked: 3 } });
@@ -136,11 +132,11 @@ describe('BOTTLENECK_INSIGHTS', () => {
 describe('PROJECT_HEALTH_INSIGHTS', () => {
   it('exports 3 project health insight configs', () => {
     expect(PROJECT_HEALTH_INSIGHTS).toHaveLength(3);
-    expect(PROJECT_HEALTH_INSIGHTS.every(c => c.category === 'project_health')).toBe(true);
+    expect(PROJECT_HEALTH_INSIGHTS.every((c) => c.category === 'project_health')).toBe(true);
   });
 
   describe('healthy-projects insight', () => {
-    const config = PROJECT_HEALTH_INSIGHTS.find(c => c.id === 'healthy-projects')!;
+    const config = PROJECT_HEALTH_INSIGHTS.find((c) => c.id === 'healthy-projects')!;
 
     it('generates correct message', () => {
       const metrics = createTestMetrics({
@@ -163,7 +159,7 @@ describe('WORKFLOW_RECOMMENDATIONS', () => {
   });
 
   describe('high-overdue-rate recommendation', () => {
-    const config = WORKFLOW_RECOMMENDATIONS.find(c => c.id === 'high-overdue-rate')!;
+    const config = WORKFLOW_RECOMMENDATIONS.find((c) => c.id === 'high-overdue-rate')!;
 
     it('triggers when overdue rate exceeds 15%', () => {
       const metrics = createTestMetrics({ tasks: { total: 100, overdue: 20 } });
@@ -182,7 +178,7 @@ describe('WORKFLOW_RECOMMENDATIONS', () => {
   });
 
   describe('good-deferral-practice recommendation', () => {
-    const config = WORKFLOW_RECOMMENDATIONS.find(c => c.id === 'good-deferral-practice')!;
+    const config = WORKFLOW_RECOMMENDATIONS.find((c) => c.id === 'good-deferral-practice')!;
 
     it('triggers when strategic > 2x problematic', () => {
       const metrics = createTestMetrics({
@@ -223,7 +219,7 @@ describe('ALL_WORKFLOW_INSIGHTS', () => {
   });
 
   it('contains insights from all categories', () => {
-    const categories = new Set(ALL_WORKFLOW_INSIGHTS.map(c => c.category));
+    const categories = new Set(ALL_WORKFLOW_INSIGHTS.map((c) => c.category));
     expect(categories.has('productivity')).toBe(true);
     expect(categories.has('workload')).toBe(true);
     expect(categories.has('bottlenecks')).toBe(true);
@@ -242,9 +238,7 @@ describe('getInsightsForFocusAreas', () => {
     const configs = getInsightsForFocusAreas(['productivity', 'bottlenecks']);
 
     expect(configs.length).toBe(PRODUCTIVITY_INSIGHTS.length + BOTTLENECK_INSIGHTS.length);
-    expect(configs.every(c =>
-      c.category === 'productivity' || c.category === 'bottlenecks'
-    )).toBe(true);
+    expect(configs.every((c) => c.category === 'productivity' || c.category === 'bottlenecks')).toBe(true);
   });
 
   it('returns empty array for unknown focus areas', () => {
@@ -260,11 +254,7 @@ describe('getInsightsForFocusAreas', () => {
 
 describe('sortByPriority', () => {
   it('sorts high priority first', () => {
-    const items = [
-      { priority: 'low' as const },
-      { priority: 'high' as const },
-      { priority: 'medium' as const },
-    ];
+    const items = [{ priority: 'low' as const }, { priority: 'high' as const }, { priority: 'medium' as const }];
     const sorted = sortByPriority(items);
 
     expect(sorted[0].priority).toBe('high');
@@ -273,10 +263,7 @@ describe('sortByPriority', () => {
   });
 
   it('does not mutate original array', () => {
-    const items = [
-      { priority: 'low' as const },
-      { priority: 'high' as const },
-    ];
+    const items = [{ priority: 'low' as const }, { priority: 'high' as const }];
     const sorted = sortByPriority(items);
 
     expect(items[0].priority).toBe('low'); // Original unchanged
@@ -295,7 +282,7 @@ describe('highPriorityOnly', () => {
     const filtered = highPriorityOnly(items);
 
     expect(filtered).toHaveLength(2);
-    expect(filtered.every(i => i.priority === 'high')).toBe(true);
+    expect(filtered.every((i) => i.priority === 'high')).toBe(true);
   });
 });
 
@@ -313,7 +300,7 @@ describe('Integration with generateInsights', () => {
     const insights = generateInsights(metrics, ALL_WORKFLOW_INSIGHTS);
 
     expect(insights.length).toBeGreaterThan(0);
-    expect(insights.every(i => i.category && i.insight && i.priority)).toBe(true);
+    expect(insights.every((i) => i.category && i.insight && i.priority)).toBe(true);
   });
 
   it('filters insights by category', () => {
@@ -323,7 +310,7 @@ describe('Integration with generateInsights', () => {
 
     const insights = generateInsights(metrics, ALL_WORKFLOW_INSIGHTS, ['productivity']);
 
-    expect(insights.every(i => i.category === 'productivity')).toBe(true);
+    expect(insights.every((i) => i.category === 'productivity')).toBe(true);
   });
 });
 
@@ -336,7 +323,7 @@ describe('Integration with generateRecommendations', () => {
     const recommendations = generateRecommendations(metrics, WORKFLOW_RECOMMENDATIONS);
 
     expect(recommendations.length).toBeGreaterThan(0);
-    expect(recommendations.every(r => r.category && r.recommendation && r.priority)).toBe(true);
+    expect(recommendations.every((r) => r.category && r.recommendation && r.priority)).toBe(true);
   });
 
   it('includes actionable flag', () => {
@@ -345,7 +332,7 @@ describe('Integration with generateRecommendations', () => {
     });
 
     const recommendations = generateRecommendations(metrics, WORKFLOW_RECOMMENDATIONS);
-    const highOverdue = recommendations.find(r => r.category === 'workflow_management');
+    const highOverdue = recommendations.find((r) => r.category === 'workflow_management');
 
     expect(highOverdue?.actionable).toBe(true);
   });

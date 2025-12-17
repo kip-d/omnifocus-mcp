@@ -1,10 +1,12 @@
 # Pattern Analysis Tool Guide
 
-The `analyze_patterns` tool provides database-wide insights by detecting patterns, inefficiencies, and opportunities for improvement across your entire OmniFocus system.
+The `analyze_patterns` tool provides database-wide insights by detecting patterns, inefficiencies, and opportunities for
+improvement across your entire OmniFocus system.
 
 ## Overview
 
 This tool analyzes your tasks and projects to identify:
+
 - Duplicate or near-duplicate tasks
 - Dormant projects that haven't been updated
 - Tag usage patterns and inefficiencies
@@ -19,32 +21,35 @@ This tool analyzes your tasks and projects to identify:
 ```javascript
 // Analyze all patterns
 await mcp.analyze_patterns({
-  patterns: ['all']
+  patterns: ['all'],
 });
 
 // Analyze specific patterns
 await mcp.analyze_patterns({
-  patterns: ['duplicates', 'dormant_projects', 'tag_audit']
+  patterns: ['duplicates', 'dormant_projects', 'tag_audit'],
 });
 ```
 
 ## Pattern Types
 
 ### 1. Duplicate Detection (`duplicates`)
+
 Finds tasks with similar names that might be duplicates.
 
 **Example Request:**
+
 ```javascript
 await mcp.analyze_patterns({
   patterns: ['duplicates'],
   options: {
     duplicate_similarity_threshold: '0.85', // 85% similarity
-    max_tasks: '500'
-  }
+    max_tasks: '500',
+  },
 });
 ```
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -56,8 +61,8 @@ await mcp.analyze_patterns({
         {
           "cluster_size": 2,
           "tasks": [
-            {"id": "abc123", "name": "Review quarterly report", "project": "Q4 Planning"},
-            {"id": "def456", "name": "Review quarterly reports", "project": "Admin"}
+            { "id": "abc123", "name": "Review quarterly report", "project": "Q4 Planning" },
+            { "id": "def456", "name": "Review quarterly reports", "project": "Admin" }
           ]
         }
       ],
@@ -68,19 +73,22 @@ await mcp.analyze_patterns({
 ```
 
 ### 2. Dormant Projects (`dormant_projects`)
+
 Identifies projects that haven't been modified recently.
 
 **Example Request:**
+
 ```javascript
 await mcp.analyze_patterns({
   patterns: ['dormant_projects'],
   options: {
-    dormant_threshold_days: '60' // Projects inactive for 60+ days
-  }
+    dormant_threshold_days: '60', // Projects inactive for 60+ days
+  },
 });
 ```
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -105,16 +113,19 @@ await mcp.analyze_patterns({
 ```
 
 ### 3. Tag Audit (`tag_audit`)
+
 Analyzes tag usage patterns, finds underused tags, and identifies potential synonyms.
 
 **Example Request:**
+
 ```javascript
 await mcp.analyze_patterns({
-  patterns: ['tag_audit']
+  patterns: ['tag_audit'],
 });
 ```
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -125,15 +136,11 @@ await mcp.analyze_patterns({
       "items": {
         "total_tags": 25,
         "underused_tags": [
-          {"tag": "someday", "count": 2},
-          {"tag": "waiting-for", "count": 1}
+          { "tag": "someday", "count": 2 },
+          { "tag": "waiting-for", "count": 1 }
         ],
-        "overused_tags": [
-          {"tag": "email", "count": 156, "project_spread": 23}
-        ],
-        "potential_synonyms": [
-          {"tag1": "email", "tag2": "e-mail", "similarity": 0.86, "combined_usage": 170}
-        ],
+        "overused_tags": [{ "tag": "email", "count": 156, "project_spread": 23 }],
+        "potential_synonyms": [{ "tag1": "email", "tag2": "e-mail", "similarity": 0.86, "combined_usage": 170 }],
         "entropy": "3.24",
         "entropy_interpretation": "Moderate diversity"
       },
@@ -144,16 +151,19 @@ await mcp.analyze_patterns({
 ```
 
 ### 4. Deadline Health (`deadline_health`)
+
 Analyzes overdue tasks and deadline clustering.
 
 **Example Request:**
+
 ```javascript
 await mcp.analyze_patterns({
-  patterns: ['deadline_health']
+  patterns: ['deadline_health'],
 });
 ```
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -163,14 +173,10 @@ await mcp.analyze_patterns({
       "count": 12,
       "items": {
         "overdue_count": 12,
-        "overdue_samples": [
-          {"id": "task001", "name": "Submit expense report", "days_overdue": 5}
-        ],
+        "overdue_samples": [{ "id": "task001", "name": "Submit expense report", "days_overdue": 5 }],
         "due_today_count": 3,
         "due_this_week_count": 18,
-        "bunched_dates": [
-          {"date": "2025-08-30", "task_count": 8}
-        ]
+        "bunched_dates": [{ "date": "2025-08-30", "task_count": 8 }]
       },
       "recommendation": "12 tasks are overdue. Prioritize or reschedule them. 2 dates have 5+ tasks due. Consider spreading deadlines more evenly."
     }
@@ -179,9 +185,11 @@ await mcp.analyze_patterns({
 ```
 
 ### 5. Waiting For Analysis (`waiting_for`)
+
 Identifies tasks that appear to be waiting or blocked.
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -205,9 +213,11 @@ Identifies tasks that appear to be waiting or blocked.
 ```
 
 ### 6. Next Actions Clarity (`next_actions`)
+
 Finds tasks with vague or unclear action items.
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -235,9 +245,11 @@ Finds tasks with vague or unclear action items.
 ```
 
 ### 7. Review Gaps (`review_gaps`)
+
 Identifies projects that need review attention.
 
 **Example Response:**
+
 ```json
 {
   "findings": {
@@ -269,24 +281,25 @@ Identifies projects that need review attention.
 
 All options are optional and have sensible defaults:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `dormant_threshold_days` | string | "90" | Days without activity to consider a project dormant |
-| `duplicate_similarity_threshold` | string | "0.85" | Similarity threshold for duplicate detection (0.5-1.0) |
-| `include_completed` | string | "false" | Include completed tasks in analysis |
-| `max_tasks` | string | "3000" | Maximum number of tasks to analyze |
+| Option                           | Type   | Default | Description                                            |
+| -------------------------------- | ------ | ------- | ------------------------------------------------------ |
+| `dormant_threshold_days`         | string | "90"    | Days without activity to consider a project dormant    |
+| `duplicate_similarity_threshold` | string | "0.85"  | Similarity threshold for duplicate detection (0.5-1.0) |
+| `include_completed`              | string | "false" | Include completed tasks in analysis                    |
+| `max_tasks`                      | string | "3000"  | Maximum number of tasks to analyze                     |
 
 ## Complete Examples
 
 ### Weekly Review Helper
+
 ```javascript
 // Get a comprehensive weekly review analysis
 const weeklyReview = await mcp.analyze_patterns({
   patterns: ['dormant_projects', 'review_gaps', 'deadline_health', 'waiting_for'],
   options: {
     dormant_threshold_days: '30',
-    include_completed: 'false'
-  }
+    include_completed: 'false',
+  },
 });
 
 // The response will include:
@@ -297,14 +310,15 @@ const weeklyReview = await mcp.analyze_patterns({
 ```
 
 ### GTD Cleanup Session
+
 ```javascript
 // Find inefficiencies and cleanup opportunities
 const cleanup = await mcp.analyze_patterns({
   patterns: ['duplicates', 'tag_audit', 'next_actions'],
   options: {
     duplicate_similarity_threshold: '0.8',
-    max_tasks: '1000'
-  }
+    max_tasks: '1000',
+  },
 });
 
 // The response will identify:
@@ -314,6 +328,7 @@ const cleanup = await mcp.analyze_patterns({
 ```
 
 ### Project Health Check
+
 ```javascript
 // Analyze overall system health
 const healthCheck = await mcp.analyze_patterns({
@@ -321,8 +336,8 @@ const healthCheck = await mcp.analyze_patterns({
   options: {
     dormant_threshold_days: '45',
     include_completed: 'false',
-    max_tasks: '5000'
-  }
+    max_tasks: '5000',
+  },
 });
 
 // Returns comprehensive analysis with health score
@@ -338,17 +353,21 @@ Each pattern analysis returns:
 3. **Metadata**: Performance metrics and analysis scope
 
 ### Severity Levels
+
 - **`info`**: Normal findings, no action required
 - **`warning`**: Issues that should be addressed
 - **`critical`**: Urgent issues requiring immediate attention
 
 ### Health Score
+
 The overall health score (0-100) is calculated based on:
+
 - Number and severity of issues found
 - Ratio of problematic items to total items
 - Specific pattern thresholds
 
 **Score Interpretation:**
+
 - 80-100: Good - System is well-maintained
 - 60-79: Fair - Some attention needed
 - Below 60: Needs Attention - Multiple issues requiring action
@@ -363,28 +382,36 @@ The overall health score (0-100) is calculated based on:
 ## Use Cases
 
 ### 1. Weekly GTD Review
+
 Run pattern analysis during your weekly review to identify:
+
 - Projects needing review
 - Stale or dormant projects
 - Overdue and upcoming deadlines
 - Waiting/blocked items to follow up
 
 ### 2. Quarterly Cleanup
+
 Use for periodic maintenance:
+
 - Merge duplicate tasks
 - Consolidate similar tags
 - Archive dormant projects
 - Clarify vague next actions
 
 ### 3. System Optimization
+
 Improve your GTD implementation:
+
 - Identify workflow bottlenecks
 - Find deadline clustering
 - Analyze tag effectiveness
 - Improve task clarity
 
 ### 4. Onboarding Analysis
+
 When taking over or auditing a system:
+
 - Get quick overview of system health
 - Identify immediate issues
 - Find cleanup opportunities
@@ -420,7 +447,7 @@ Combine with other MCP tools for a complete workflow:
 ```javascript
 // 1. Analyze patterns
 const analysis = await mcp.analyze_patterns({
-  patterns: ['duplicates', 'dormant_projects']
+  patterns: ['duplicates', 'dormant_projects'],
 });
 
 // 2. Complete a dormant project
@@ -428,7 +455,7 @@ if (analysis.findings.dormant_projects.count > 0) {
   const dormantProject = analysis.findings.dormant_projects.items[0];
   await mcp.projects({
     operation: 'complete',
-    projectId: dormantProject.id
+    projectId: dormantProject.id,
   });
 }
 
@@ -439,7 +466,7 @@ if (analysis.findings.tag_audit.items.potential_synonyms.length > 0) {
     operation: 'manage',
     action: 'merge',
     tagName: synonyms.tag2,
-    targetTag: synonyms.tag1
+    targetTag: synonyms.tag1,
   });
 }
 ```
@@ -447,20 +474,24 @@ if (analysis.findings.tag_audit.items.potential_synonyms.length > 0) {
 ## Troubleshooting
 
 **Tool times out on large databases:**
+
 - Reduce `max_tasks` option
 - Analyze fewer patterns at once
 - Run during off-peak hours
 
 **Too many false positive duplicates:**
+
 - Increase `duplicate_similarity_threshold` to 0.9 or higher
 - Review naming conventions for consistency
 
 **Not finding expected patterns:**
+
 - Check `include_completed` setting
 - Verify `max_tasks` isn't too restrictive
 - Ensure OmniFocus has a document open
 
 **Unexpected results:**
+
 - Pattern detection uses heuristics that may not match your workflow
 - Adjust thresholds and options to fit your needs
 - Some patterns may be intentional (e.g., similar task names in templates)

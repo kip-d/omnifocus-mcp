@@ -1,11 +1,12 @@
 # Shared Contract System - Design
 
-**Status:** Phase 1 approved, ready for implementation
-**Detailed Plan:** See `docs/plans/2025-11-24-querycompiler-taskfilter-integration.md`
+**Status:** Phase 1 approved, ready for implementation **Detailed Plan:** See
+`docs/plans/2025-11-24-querycompiler-taskfilter-integration.md`
 
 ## Problem Statement
 
 15+ bugs in git history share common patterns:
+
 1. Filter property name mismatches between layers
 2. Filter logic duplicated across modes, missing in some
 3. Response structure confusion (double-unwrap saga)
@@ -37,8 +38,8 @@ Catch these bugs at **compile time**, not during user testing.
 
 ## Key Insight
 
-The OmniJS scripts are **generated strings**. We can generate them from
-typed specifications instead of hand-writing and hoping names match.
+The OmniJS scripts are **generated strings**. We can generate them from typed specifications instead of hand-writing and
+hoping names match.
 
 ---
 
@@ -60,12 +61,12 @@ See detailed plan: `docs/plans/2025-11-24-querycompiler-taskfilter-integration.m
 
 ## Benefits
 
-| Bug Type | How Contract Catches It |
-|----------|------------------------|
-| `completed` vs `includeCompleted` | Single FilterSpec defines the name |
+| Bug Type                           | How Contract Catches It                      |
+| ---------------------------------- | -------------------------------------------- |
+| `completed` vs `includeCompleted`  | Single FilterSpec defines the name           |
 | Missing `matchesTagFilter` in mode | Generator includes all filters automatically |
-| Double-unwrap confusion | ResponseSpec defines exact structure |
-| Limit not passed through | ParameterSpec enforces all params |
+| Double-unwrap confusion            | ResponseSpec defines exact structure         |
+| Limit not passed through           | ParameterSpec enforces all params            |
 
 ## Migration Strategy
 

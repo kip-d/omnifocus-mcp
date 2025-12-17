@@ -25,13 +25,13 @@ describe('ManageTaskTool branded types integration', () => {
     vi.spyOn(tool as any, 'execJson').mockResolvedValue({
       success: true,
       data: {
-        task: { 
+        task: {
           id: 'test-task-id',
           name: 'Updated Task',
           updated: true,
-          changes: { name: 'Updated Task' }
-        }
-      }
+          changes: { name: 'Updated Task' },
+        },
+      },
     });
 
     const stringTaskId = 'test-task-id';
@@ -48,14 +48,14 @@ describe('ManageTaskTool branded types integration', () => {
   it('should demonstrate branded types prevent ID mixing at compile time', async () => {
     // This test demonstrates the compile-time safety of branded types
     // The following code would cause compile-time errors if uncommented:
-    
+
     // const taskId: TaskId = 'task-123';
     // const projectId: ProjectId = 'project-456';
-    
+
     // These would be compile-time errors:
     // useTaskId(projectId); // ❌ Type error: ProjectId is not TaskId
     // useProjectId(taskId); // ❌ Type error: TaskId is not ProjectId
-    
+
     // This test passes if it compiles successfully
     expect(true).toBe(true);
   });

@@ -114,11 +114,11 @@ export class CacheWarmer {
     const results = await this.executeWithTimeout(operations);
     const totalTime = Date.now() - startTime;
 
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter((r) => r.success).length;
     const totalCount = results.length;
 
     // Log individual operation timings for debugging
-    results.forEach(result => {
+    results.forEach((result) => {
       logger.info(`  • ${result.operation}: ${result.duration}ms ${result.success ? '✓' : '✗'}`);
     });
 
@@ -145,9 +145,7 @@ export class CacheWarmer {
       logger.debug('Warming all task caches (today, overdue, upcoming) using OmniJS bridge...');
 
       // Execute unified cache warming script via OmniJS bridge
-      const script = WARM_TASK_CACHES_SCRIPT
-        .replace('{{limit}}', '25')
-        .replace('{{upcomingDays}}', '7');
+      const script = WARM_TASK_CACHES_SCRIPT.replace('{{limit}}', '25').replace('{{upcomingDays}}', '7');
 
       const omni = new OmniAutomation();
 
@@ -414,8 +412,8 @@ export class CacheWarmer {
 
     try {
       return await Promise.race([
-        Promise.allSettled(operations).then(results =>
-          results.map(result =>
+        Promise.allSettled(operations).then((results) =>
+          results.map((result) =>
             result.status === 'fulfilled'
               ? result.value
               : {

@@ -9,7 +9,7 @@ import { createInterface } from 'readline';
 
 const server = spawn('node', ['./dist/index.js'], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, NODE_ENV: 'test' }
+  env: { ...process.env, NODE_ENV: 'test' },
 });
 
 let messageId = 1;
@@ -17,7 +17,7 @@ const pendingRequests = new Map();
 
 const rl = createInterface({
   input: server.stdout,
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
 rl.on('line', (line) => {
@@ -40,7 +40,7 @@ function sendRequest(method, params = {}, timeout = 60000) {
       jsonrpc: '2.0',
       id: requestId,
       method,
-      params
+      params,
     };
 
     pendingRequests.set(requestId, resolve);
@@ -79,17 +79,19 @@ async function main() {
     const initResponse = await sendRequest('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'tag-test', version: '1.0.0' }
+      clientInfo: { name: 'tag-test', version: '1.0.0' },
     });
     console.log('✅ Server initialized');
 
     // Send initialized notification
-    server.stdin.write(JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    }) + '\n');
+    server.stdin.write(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }) + '\n',
+    );
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Create a task with a tag
     const uniqueName = `Tag Test ${Date.now()}`;
@@ -100,8 +102,8 @@ async function main() {
       arguments: {
         operation: 'create',
         name: uniqueName,
-        tags: ['test-tag']
-      }
+        tags: ['test-tag'],
+      },
     });
 
     const createResult = await parseResponse(createResponse);
@@ -113,7 +115,7 @@ async function main() {
       console.log(`   Tags in create response: ${JSON.stringify(createResult.data.task.tags)}`);
 
       // Wait a moment for OmniFocus to process
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Query the task by name
       console.log(`\n🔍 Querying task "${uniqueName}"...`);
@@ -123,15 +125,15 @@ async function main() {
           mode: 'search',
           search: uniqueName,
           limit: 10,
-          details: true
-        }
+          details: true,
+        },
       });
 
       const queryResult = await parseResponse(queryResponse);
       console.log('📊 Query result:', JSON.stringify(queryResult, null, 2));
 
       if (queryResult.success && queryResult.data?.tasks?.length > 0) {
-        const foundTask = queryResult.data.tasks.find(t => t.id === taskId);
+        const foundTask = queryResult.data.tasks.find((t) => t.id === taskId);
         if (foundTask) {
           console.log(`✅ Task found in query`);
           console.log(`   Tags in query response: ${JSON.stringify(foundTask.tags)}`);
@@ -152,8 +154,8 @@ async function main() {
         name: 'manage_task',
         arguments: {
           operation: 'delete',
-          taskId
-        }
+          taskId,
+        },
       });
       console.log('✅ Cleanup complete');
     }
@@ -168,7 +170,6 @@ async function main() {
       }
       process.exit(0);
     }, 2000);
-
   } catch (error) {
     console.error('❌ Error:', error);
     server.kill('SIGTERM');

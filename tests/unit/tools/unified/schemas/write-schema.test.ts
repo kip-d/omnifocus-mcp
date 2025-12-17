@@ -10,9 +10,9 @@ describe('WriteSchema', () => {
         data: {
           name: 'Test task',
           tags: ['work'],
-          dueDate: '2025-01-15'
-        }
-      }
+          dueDate: '2025-01-15',
+        },
+      },
     };
 
     const result = WriteSchema.safeParse(input);
@@ -27,9 +27,9 @@ describe('WriteSchema', () => {
         id: 'task-id-123',
         changes: {
           flagged: true,
-          addTags: ['urgent']
-        }
-      }
+          addTags: ['urgent'],
+        },
+      },
     };
 
     const result = WriteSchema.safeParse(input);
@@ -40,9 +40,9 @@ describe('WriteSchema', () => {
     const input = {
       mutation: {
         operation: 'create',
-        target: 'task'
+        target: 'task',
         // Missing data
-      }
+      },
     };
 
     const result = WriteSchema.safeParse(input);

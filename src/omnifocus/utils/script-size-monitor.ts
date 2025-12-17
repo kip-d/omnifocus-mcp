@@ -28,17 +28,17 @@ export interface ScriptSizeThresholds {
  * Empirically determined limits from binary search testing
  */
 export const EMPIRICAL_LIMITS: ScriptSizeLimits = {
-  jxaDirect: 523266,    // ~511KB
-  omniJsBridge: 261124,  // ~255KB
+  jxaDirect: 523266, // ~511KB
+  omniJsBridge: 261124, // ~255KB
 };
 
 /**
  * Conservative thresholds for monitoring (75% of empirical limits)
  */
 export const DEFAULT_THRESHOLDS: ScriptSizeThresholds = {
-  infoThreshold: 100000,    // 100KB - Large script notification
-  warnThreshold: 300000,    // 300KB - Getting close to OmniJS bridge limit
-  errorThreshold: 400000,    // 400KB - Approaching JXA limit
+  infoThreshold: 100000, // 100KB - Large script notification
+  warnThreshold: 300000, // 300KB - Getting close to OmniJS bridge limit
+  errorThreshold: 400000, // 400KB - Approaching JXA limit
 };
 
 /**
@@ -138,4 +138,3 @@ export function monitorScriptSize(
   logScriptSize(analysis);
   return analysis;
 }
-

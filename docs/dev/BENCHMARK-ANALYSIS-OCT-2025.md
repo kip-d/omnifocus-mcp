@@ -1,29 +1,31 @@
 # Benchmark Analysis - October 20, 2025
 
 ## Test Configuration
+
 - **Mode**: Warmed cache (production performance)
 - **Hardware**: Apple M2, 8 cores, 24GB RAM
 - **Cache warming time**: 12.1 seconds
 
 ## Benchmark Results
 
-| Operation | Time | Status | Optimization Potential |
-|-----------|------|--------|----------------------|
-| Task velocity | **67,592ms** | Critical | High - 67x slower than target |
-| Productivity stats | **7,841ms** | Slow | High - Could be <1s |
-| Tags (full mode) | **8,366ms** | Slow | High - Bulk property access |
-| Tags (fast mode) | **6,937ms** | Slow | Medium - Already "fast" mode |
-| Project statistics | **6,936ms** | Slow | High - Bulk operations |
-| Tags (names only) | **3,548ms** | Moderate | Medium - Simple query |
-| Today's tasks | **2ms** | Excellent | None - Already optimized |
-| Overdue tasks | **1ms** | Excellent | None - Already optimized |
-| Upcoming tasks | **0ms** | Excellent | None - Cached |
+| Operation          | Time         | Status    | Optimization Potential        |
+| ------------------ | ------------ | --------- | ----------------------------- |
+| Task velocity      | **67,592ms** | Critical  | High - 67x slower than target |
+| Productivity stats | **7,841ms**  | Slow      | High - Could be <1s           |
+| Tags (full mode)   | **8,366ms**  | Slow      | High - Bulk property access   |
+| Tags (fast mode)   | **6,937ms**  | Slow      | Medium - Already "fast" mode  |
+| Project statistics | **6,936ms**  | Slow      | High - Bulk operations        |
+| Tags (names only)  | **3,548ms**  | Moderate  | Medium - Simple query         |
+| Today's tasks      | **2ms**      | Excellent | None - Already optimized      |
+| Overdue tasks      | **1ms**      | Excellent | None - Already optimized      |
+| Upcoming tasks     | **0ms**      | Excellent | None - Cached                 |
 
 ## Analysis
 
 ### Critical Performance Issues
 
 **1. Task Velocity (67.6 seconds)**
+
 - **Current**: 67,592ms for 7-day velocity calculation
 - **Target**: <1 second
 - **Problem**: Likely processing all completed tasks with JXA per-property access
@@ -31,6 +33,7 @@
 - **Expected improvement**: 50-100x faster
 
 **2. Productivity Stats (7.8 seconds)**
+
 - **Current**: 7,841ms for weekly statistics
 - **Target**: <1 second
 - **Problem**: Multiple task queries with property access overhead
@@ -38,6 +41,7 @@
 - **Expected improvement**: 10-20x faster
 
 **3. Tags Operations (3.5-8.4 seconds)**
+
 - **Full mode**: 8,366ms (includes usage stats)
 - **Fast mode**: 6,937ms (excludes some stats)
 - **Names only**: 3,548ms (minimal data)
@@ -46,6 +50,7 @@
 - **Expected improvement**: 10-20x faster
 
 **4. Project Statistics (6.9 seconds)**
+
 - **Current**: 6,936ms
 - **Target**: <1 second
 - **Problem**: Iterating through all projects with JXA
@@ -55,38 +60,45 @@
 ### Operations Already Optimized
 
 **Today's tasks (2ms)**
+
 - Using optimized scripts or cache
 - No further optimization needed
 
 **Overdue tasks (1ms)**
+
 - Using optimized scripts or cache
 - No further optimization needed
 
 **Upcoming tasks (0ms)**
+
 - Cached response
 - No optimization needed
 
 ## Optimization Priority
 
 ### Priority 1: Task Velocity (Immediate)
+
 - **Impact**: 67.6s → <1s (67x improvement)
 - **Effort**: Medium
 - **Pattern**: Apply OmniJS-first to completed tasks query
 - **Files**: `src/omnifocus/scripts/analytics/task-velocity.ts`
 
 ### Priority 2: Productivity Stats (High)
+
 - **Impact**: 7.8s → <1s (8x improvement)
 - **Effort**: Medium
 - **Pattern**: Consolidate multiple queries into single OmniJS call
 - **Files**: `src/omnifocus/scripts/analytics/productivity-stats.ts`
 
 ### Priority 3: Tags Operations (High)
+
 - **Impact**: 8.4s → <1s (8x improvement)
 - **Effort**: Medium
 - **Pattern**: Use flattenedTags OmniJS collection
 - **Files**: `src/omnifocus/scripts/tags/list-tags.ts`
 
 ### Priority 4: Project Statistics (Medium)
+
 - **Impact**: 6.9s → <1s (7x improvement)
 - **Effort**: Medium
 - **Pattern**: Use flattenedProjects OmniJS collection
@@ -95,21 +107,24 @@
 ## Implementation Strategy
 
 ### Phase 1: Task Velocity Optimization
+
 Task velocity is the slowest operation by far (67.6s). Fixing this provides immediate user value.
 
 **Current approach (estimated):**
+
 ```javascript
 // JXA iteration through completed tasks
 for (let i = 0; i < allTasks.length; i++) {
   if (task.completed()) {
-    const completionDate = task.completionDate();  // 16.662ms
-    const name = task.name();                      // 16.662ms
+    const completionDate = task.completionDate(); // 16.662ms
+    const name = task.name(); // 16.662ms
     // More property accesses...
   }
 }
 ```
 
 **OmniJS-first approach:**
+
 ```javascript
 const velocityScript = `
   (() => {
@@ -135,14 +150,17 @@ const velocityScript = `
 ```
 
 ### Phase 2: Analytics Suite
+
 After task velocity, optimize the analytics suite (productivity stats, project stats).
 
 ### Phase 3: Tags Operations
+
 Tags are used frequently, so optimizing these provides broad user benefit.
 
 ## Expected Total Impact
 
 **Before optimization:**
+
 - Task velocity: 67.6s
 - Productivity stats: 7.8s
 - Tags operations: 3.5-8.4s
@@ -150,6 +168,7 @@ Tags are used frequently, so optimizing these provides broad user benefit.
 - **Total slow operations**: ~100 seconds
 
 **After optimization (estimated):**
+
 - Task velocity: <1s (67x faster)
 - Productivity stats: <1s (8x faster)
 - Tags operations: <1s (8x faster)
@@ -160,9 +179,11 @@ Tags are used frequently, so optimizing these provides broad user benefit.
 
 ## Recommendation
 
-Start with task velocity optimization. It's the slowest operation and will provide the most immediate user impact. The pattern from list-tasks-v3 can be directly applied.
+Start with task velocity optimization. It's the slowest operation and will provide the most immediate user impact. The
+pattern from list-tasks-v3 can be directly applied.
 
-After task velocity, proceed with the analytics suite since these operations are related and can share OmniJS query patterns.
+After task velocity, proceed with the analytics suite since these operations are related and can share OmniJS query
+patterns.
 
 ## Files to Review
 

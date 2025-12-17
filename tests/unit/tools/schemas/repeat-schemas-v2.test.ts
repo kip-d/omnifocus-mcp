@@ -3,7 +3,7 @@ import {
   RepeatAnchorIntentSchema,
   RepeatEndConditionSchema,
   RepeatRuleUserIntentSchema,
-  RepeatRuleResponseSchema
+  RepeatRuleResponseSchema,
 } from '../../../../src/tools/schemas/repeat-schemas';
 
 describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
@@ -52,7 +52,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should accept afterDate type with valid date', () => {
       const input = {
         type: 'afterDate',
-        date: '2025-12-31'
+        date: '2025-12-31',
       };
       const result = RepeatEndConditionSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -61,7 +61,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should accept afterDate with time', () => {
       const input = {
         type: 'afterDate',
-        date: '2025-12-31 23:59'
+        date: '2025-12-31 23:59',
       };
       const result = RepeatEndConditionSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -70,7 +70,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should accept afterOccurrences with count', () => {
       const input = {
         type: 'afterOccurrences',
-        count: 10
+        count: 10,
       };
       const result = RepeatEndConditionSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -79,7 +79,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should coerce count to number', () => {
       const input = {
         type: 'afterOccurrences',
-        count: '10'
+        count: '10',
       };
       const result = RepeatEndConditionSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -117,7 +117,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
       const input = {
         frequency: 'daily',
         anchorTo: 'when-due',
-        skipMissed: false
+        skipMissed: false,
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -125,7 +125,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
 
     it('should use default anchorTo', () => {
       const input = {
-        frequency: 'every 3 days'
+        frequency: 'every 3 days',
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -136,7 +136,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
 
     it('should use default skipMissed', () => {
       const input = {
-        frequency: 'weekly'
+        frequency: 'weekly',
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -148,7 +148,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should coerce skipMissed to boolean', () => {
       const input = {
         frequency: 'daily',
-        skipMissed: 'true'
+        skipMissed: 'true',
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -162,8 +162,8 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
         frequency: 'daily',
         endCondition: {
           type: 'afterOccurrences',
-          count: 30
-        }
+          count: 30,
+        },
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -173,7 +173,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
       const input = {
         frequency: 'every 2 days',
         anchorTo: 'when-marked-done',
-        skipMissed: true
+        skipMissed: true,
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(true);
@@ -181,7 +181,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
 
     it('should reject missing frequency', () => {
       const input = {
-        anchorTo: 'when-due'
+        anchorTo: 'when-due',
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(false);
@@ -190,7 +190,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
     it('should reject invalid anchorTo', () => {
       const input = {
         frequency: 'daily',
-        anchorTo: 'invalid-anchor'
+        anchorTo: 'invalid-anchor',
       };
       const result = RepeatRuleUserIntentSchema.safeParse(input);
       expect(result.success).toBe(false);
@@ -202,7 +202,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
       const response = {
         frequency: 'daily',
         anchorTo: 'when-due',
-        skipMissed: false
+        skipMissed: false,
       };
       const result = RepeatRuleResponseSchema.safeParse(response);
       expect(result.success).toBe(true);
@@ -218,8 +218,8 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
           method: 'Fixed',
           scheduleType: 'Regularly',
           anchorDateKey: 'DueDate',
-          catchUpAutomatically: false
-        }
+          catchUpAutomatically: false,
+        },
       };
       const result = RepeatRuleResponseSchema.safeParse(response);
       expect(result.success).toBe(true);
@@ -231,8 +231,8 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
         anchorTo: 'when-due',
         skipMissed: false,
         _details: {
-          ruleString: 'FREQ=DAILY'
-        }
+          ruleString: 'FREQ=DAILY',
+        },
       };
       const result = RepeatRuleResponseSchema.safeParse(response);
       expect(result.success).toBe(true);
@@ -242,7 +242,7 @@ describe('Repeat Schemas - LLM-Optimized (4.7+ support)', () => {
       const response = {
         frequency: 'daily',
         anchorTo: 'when-due',
-        skipMissed: false
+        skipMissed: false,
       };
       const result = RepeatRuleResponseSchema.safeParse(response);
       expect(result.success).toBe(true);

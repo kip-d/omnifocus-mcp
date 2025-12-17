@@ -14,8 +14,8 @@ describe('MutationCompiler', () => {
           name: 'Test task',
           tags: ['work'],
           dueDate: '2025-01-15',
-        }
-      }
+        },
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -34,9 +34,9 @@ describe('MutationCompiler', () => {
         id: 'task-123',
         changes: {
           flagged: true,
-          addTags: ['urgent']
-        }
-      }
+          addTags: ['urgent'],
+        },
+      },
     };
 
     const compiled = compiler.compile(input);

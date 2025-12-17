@@ -1,7 +1,7 @@
 (() => {
   const app = Application('OmniFocus');
   app.includeStandardAdditions = true;
-  
+
   try {
     // Try to get tasks from a specific perspective using evaluateJavascript
     const jsCode = `
@@ -88,12 +88,12 @@
         return JSON.stringify(result);
       })()
     `;
-    
+
     const resultJson = app.evaluateJavascript(jsCode);
     const result = JSON.parse(resultJson);
-    
+
     return JSON.stringify(result, null, 2);
   } catch (e) {
     return JSON.stringify({ error: e.toString() });
   }
-})()
+})();

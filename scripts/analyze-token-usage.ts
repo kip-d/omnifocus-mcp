@@ -94,14 +94,14 @@ class TokenAnalyzer {
 
   async startServer(): Promise<void> {
     console.log('🚀 Starting MCP server for analysis...');
-    
+
     this.server = spawn('node', ['./dist/index.js'], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     const rl = createInterface({
       input: this.server.stdout,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     });
 
     rl.on('line', (line) => {
@@ -126,14 +126,16 @@ class TokenAnalyzer {
     return new Promise((resolve, reject) => {
       const requestId = ++this.messageId;
       this.pendingRequests.set(requestId, resolve);
-      
-      this.server.stdin.write(JSON.stringify({
-        jsonrpc: '2.0',
-        id: requestId,
-        method,
-        params
-      }) + '\n');
-      
+
+      this.server.stdin.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: requestId,
+          method,
+          params,
+        }) + '\n',
+      );
+
       setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId);
@@ -144,7 +146,7 @@ class TokenAnalyzer {
   }
 
   async delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async analyzeDatabase(): Promise<void> {
@@ -153,15 +155,17 @@ class TokenAnalyzer {
       await this.callTool('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'token-analyzer', version: '1.0.0' }
+        clientInfo: { name: 'token-analyzer', version: '1.0.0' },
       });
-      
+
       // Send initialized notification
-      this.server.stdin.write(JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized'
-      }) + '\n');
-      
+      this.server.stdin.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+        }) + '\n',
+      );
+
       await this.delay(100);
 
       console.log('\n📊 Analyzing OmniFocus Database...\n');
@@ -170,7 +174,7 @@ class TokenAnalyzer {
       console.log('🔍 Getting system info...');
       const systemInfo = await this.callTool('tools/call', {
         name: 'system',
-        arguments: { operation: 'version' }
+        arguments: { operation: 'version' },
       });
       console.log('✅ System info received');
 
@@ -182,10 +186,24 @@ class TokenAnalyzer {
           type: 'tasks',
           format: 'json',
           filter: {
-            limit: 2000 // Override default 1000 limit to get all actions
+            limit: 2000, // Override default 1000 limit to get all actions
           },
-          fields: ['id', 'name', 'note', 'project', 'tags', 'deferDate', 'dueDate', 'completed', 'completionDate', 'flagged', 'estimated', 'created', 'modified']
-        }
+          fields: [
+            'id',
+            'name',
+            'note',
+            'project',
+            'tags',
+            'deferDate',
+            'dueDate',
+            'completed',
+            'completionDate',
+            'flagged',
+            'estimated',
+            'created',
+            'modified',
+          ],
+        },
       });
       console.log('✅ Task data received');
 
@@ -196,8 +214,8 @@ class TokenAnalyzer {
         arguments: {
           type: 'projects',
           format: 'json',
-          includeStats: true
-        }
+          includeStats: true,
+        },
       });
       console.log('✅ Project data received');
 
@@ -212,8 +230,8 @@ class TokenAnalyzer {
           includeUsageStats: 'false',
           includeTaskCounts: 'true',
           fastMode: 'false',
-          namesOnly: 'false'
-        }
+          namesOnly: 'false',
+        },
       });
       console.log('✅ Tag data received');
 
@@ -226,13 +244,17 @@ class TokenAnalyzer {
 
       // Analyze the data
       this.analyzeTokenUsage(systemInfo, taskCounts, projectCounts, tagCounts);
-
     } catch (error) {
       console.error('❌ Analysis failed:', error.message);
     }
   }
 
-  analyzeTokenUsage(systemInfo: MCPResponse, taskCounts: MCPResponse, projectCounts: MCPResponse, tagCounts: MCPResponse): void {
+  analyzeTokenUsage(
+    systemInfo: MCPResponse,
+    taskCounts: MCPResponse,
+    projectCounts: MCPResponse,
+    tagCounts: MCPResponse,
+  ): void {
     console.log('🔍 Database Overview:');
 
     // Parse responses to get actual data
@@ -323,7 +345,7 @@ class TokenAnalyzer {
 
     // Recommendations
     this.provideRecommendations(rawExport, smartSummary, hierarchical, queryBased);
-    
+
     console.log('\n🎯 Analysis Complete!');
     console.log('💡 Next steps: Use these actual token counts to plan LLM export strategies.');
     console.log('🚀 Consider implementing query-based export for immediate AI assistance.');
@@ -332,7 +354,7 @@ class TokenAnalyzer {
   estimateRawExport(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Raw export includes all fields, notes, metadata
     const fullData = {
-      tasks: tasks.map(t => ({
+      tasks: tasks.map((t) => ({
         id: t.id,
         name: t.name,
         note: t.note || '',
@@ -349,9 +371,9 @@ class TokenAnalyzer {
         blocked: t.blocked,
         next: t.next,
         available: t.available,
-        recurringStatus: t.recurringStatus
+        recurringStatus: t.recurringStatus,
       })),
-      projects: projects.map(p => ({
+      projects: projects.map((p) => ({
         id: p.id,
         name: p.name,
         note: p.note || '',
@@ -363,13 +385,13 @@ class TokenAnalyzer {
         nextReviewDate: p.nextReviewDate,
         reviewInterval: p.reviewInterval,
         completedByChildren: p.completedByChildren,
-        singleton: p.singleton
+        singleton: p.singleton,
       })),
-      tags: tags.map(t => ({
+      tags: tags.map((t) => ({
         id: t.id,
         name: t.name,
-        taskCount: t.taskCount || 0
-      }))
+        taskCount: t.taskCount || 0,
+      })),
     };
 
     const fullJson = JSON.stringify(fullData, null, 2);
@@ -379,7 +401,7 @@ class TokenAnalyzer {
       actualTokens: estimate.tokens,
       chars: estimate.chars,
       kilobytes: estimate.kilobytes,
-      contextUsage: Math.round((estimate.tokens / 200000) * 100)
+      contextUsage: Math.round((estimate.tokens / 200000) * 100),
     };
   }
 
@@ -388,21 +410,30 @@ class TokenAnalyzer {
     const summary = {
       system_summary: {
         total_tasks: tasks.length,
-        active_projects: projects.filter(p => p.status === 'active').length,
-        overdue_count: tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).length,
-        flagged_count: tasks.filter(t => t.flagged).length,
-        completion_rate: "68%" // Placeholder
+        active_projects: projects.filter((p) => p.status === 'active').length,
+        overdue_count: tasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date()).length,
+        flagged_count: tasks.filter((t) => t.flagged).length,
+        completion_rate: '68%', // Placeholder
       },
       priority_analysis: {
-        high_priority: tasks.filter(t => t.flagged).slice(0, 3).map(t => t.name),
-        blocked_tasks: tasks.filter(t => t.blocked).slice(0, 3).map(t => t.name),
-        next_actions: tasks.filter(t => t.next).slice(0, 3).map(t => t.name)
+        high_priority: tasks
+          .filter((t) => t.flagged)
+          .slice(0, 3)
+          .map((t) => t.name),
+        blocked_tasks: tasks
+          .filter((t) => t.blocked)
+          .slice(0, 3)
+          .map((t) => t.name),
+        next_actions: tasks
+          .filter((t) => t.next)
+          .slice(0, 3)
+          .map((t) => t.name),
       },
       project_status: {
-        active: projects.filter(p => p.status === 'active').length,
-        on_hold: projects.filter(p => p.status === 'onHold').length,
-        completed: projects.filter(p => p.status === 'completed').length
-      }
+        active: projects.filter((p) => p.status === 'active').length,
+        on_hold: projects.filter((p) => p.status === 'onHold').length,
+        completed: projects.filter((p) => p.status === 'completed').length,
+      },
     };
 
     const fullJson = JSON.stringify(summary, null, 2);
@@ -412,29 +443,31 @@ class TokenAnalyzer {
       actualTokens: estimate.tokens,
       chars: estimate.chars,
       kilobytes: estimate.kilobytes,
-      contextUsage: Math.round((estimate.tokens / 200000) * 100)
+      contextUsage: Math.round((estimate.tokens / 200000) * 100),
     };
   }
 
   estimateHierarchical(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Hierarchical compression preserves relationships but flattens structure
     const hierarchical = {
-      projects: projects.map(p => ({
+      projects: projects.map((p) => ({
         id: p.id,
         name: p.name,
         status: p.status,
-        tasks: tasks.filter(t => t.projectId === p.id).map(t => ({
-          id: t.id,
-          name: t.name,
-          status: t.completed ? 'completed' : 'active',
-          due: t.dueDate,
-          flagged: t.flagged
-        }))
+        tasks: tasks
+          .filter((t) => t.projectId === p.id)
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            status: t.completed ? 'completed' : 'active',
+            due: t.dueDate,
+            flagged: t.flagged,
+          })),
       })),
-      tags: tags.map(t => ({
+      tags: tags.map((t) => ({
         name: t.name,
-        count: t.taskCount || 0
-      }))
+        count: t.taskCount || 0,
+      })),
     };
 
     const fullJson = JSON.stringify(hierarchical, null, 2);
@@ -444,36 +477,45 @@ class TokenAnalyzer {
       actualTokens: estimate.tokens,
       chars: estimate.chars,
       kilobytes: estimate.kilobytes,
-      contextUsage: Math.round((estimate.tokens / 200000) * 100)
+      contextUsage: Math.round((estimate.tokens / 200000) * 100),
     };
   }
 
   estimateQueryBased(tasks: Task[], projects: Project[], tags: Tag[]): EstimateResult {
     // Query-based focuses on specific analysis needs
     const queryResults = {
-      query: "overdue_and_blocked_analysis",
+      query: 'overdue_and_blocked_analysis',
       data: {
-        overdue: tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).slice(0, 5).map(t => ({
-          id: t.id,
-          name: t.name,
-          days_overdue: Math.floor((new Date() - new Date(t.dueDate)) / (1000 * 60 * 60 * 24))
-        })),
-        blocked: tasks.filter(t => t.blocked).slice(0, 5).map(t => ({
-          id: t.id,
-          name: t.name,
-          project: t.project
-        })),
-        next_actions: tasks.filter(t => t.next).slice(0, 5).map(t => ({
-          id: t.id,
-          name: t.name,
-          project: t.project
-        }))
+        overdue: tasks
+          .filter((t) => t.dueDate && new Date(t.dueDate) < new Date())
+          .slice(0, 5)
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            days_overdue: Math.floor((new Date() - new Date(t.dueDate)) / (1000 * 60 * 60 * 24)),
+          })),
+        blocked: tasks
+          .filter((t) => t.blocked)
+          .slice(0, 5)
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            project: t.project,
+          })),
+        next_actions: tasks
+          .filter((t) => t.next)
+          .slice(0, 5)
+          .map((t) => ({
+            id: t.id,
+            name: t.name,
+            project: t.project,
+          })),
       },
       summary: {
-        total_overdue: tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).length,
-        total_blocked: tasks.filter(t => t.blocked).length,
-        total_next: tasks.filter(t => t.next).length
-      }
+        total_overdue: tasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date()).length,
+        total_blocked: tasks.filter((t) => t.blocked).length,
+        total_next: tasks.filter((t) => t.next).length,
+      },
     };
 
     const fullJson = JSON.stringify(queryResults, null, 2);
@@ -483,7 +525,7 @@ class TokenAnalyzer {
       actualTokens: estimate.tokens,
       chars: estimate.chars,
       kilobytes: estimate.kilobytes,
-      contextUsage: Math.round((estimate.tokens / 200000) * 100)
+      contextUsage: Math.round((estimate.tokens / 200000) * 100),
     };
   }
 
@@ -497,11 +539,16 @@ class TokenAnalyzer {
     return {
       tokens,
       chars,
-      kilobytes: (chars / 1024).toFixed(2)
+      kilobytes: (chars / 1024).toFixed(2),
     };
   }
 
-  provideRecommendations(raw: EstimateResult, smart: EstimateResult, hierarchical: EstimateResult, query: EstimateResult): void {
+  provideRecommendations(
+    raw: EstimateResult,
+    smart: EstimateResult,
+    hierarchical: EstimateResult,
+    query: EstimateResult,
+  ): void {
     console.log('\n💡 Recommendations:\n');
 
     if (raw.contextUsage > 100) {
@@ -548,12 +595,12 @@ class TokenAnalyzer {
     console.log('\n📝 Note Size Analysis:\n');
 
     // Analyze task notes
-    const tasksWithNotes = tasks.filter(t => t.note && t.note.length > 0);
+    const tasksWithNotes = tasks.filter((t) => t.note && t.note.length > 0);
     const taskNoteChars = tasksWithNotes.reduce((sum, t) => sum + t.note.length, 0);
     const taskNoteTokens = Math.round(taskNoteChars / 3.5);
 
     // Analyze project notes
-    const projectsWithNotes = projects.filter(p => p.note && p.note.length > 0);
+    const projectsWithNotes = projects.filter((p) => p.note && p.note.length > 0);
     const projectNoteChars = projectsWithNotes.reduce((sum, p) => sum + p.note.length, 0);
     const projectNoteTokens = Math.round(projectNoteChars / 3.5);
 
@@ -565,29 +612,33 @@ class TokenAnalyzer {
     console.log('📊 Overall Note Statistics:');
     console.log(`   Total note size: ${totalNoteKB} KB (${totalNoteChars.toLocaleString()} chars)`);
     console.log(`   Estimated tokens: ${totalNoteTokens.toLocaleString()}`);
-    console.log(`   Tasks with notes: ${tasksWithNotes.length} of ${tasks.length} (${Math.round(tasksWithNotes.length/tasks.length*100)}%)`);
-    console.log(`   Projects with notes: ${projectsWithNotes.length} of ${projects.length} (${Math.round(projectsWithNotes.length/projects.length*100)}%)`);
+    console.log(
+      `   Tasks with notes: ${tasksWithNotes.length} of ${tasks.length} (${Math.round((tasksWithNotes.length / tasks.length) * 100)}%)`,
+    );
+    console.log(
+      `   Projects with notes: ${projectsWithNotes.length} of ${projects.length} (${Math.round((projectsWithNotes.length / projects.length) * 100)}%)`,
+    );
 
     // Pareto Analysis: Combine tasks and projects, find 80% threshold
     const allItems = [
-      ...tasksWithNotes.map(t => ({
+      ...tasksWithNotes.map((t) => ({
         type: 'task',
         id: t.id,
         name: t.name,
         noteLength: t.note.length,
-        tokens: Math.round(t.note.length / 3.5)
+        tokens: Math.round(t.note.length / 3.5),
       })),
-      ...projectsWithNotes.map(p => ({
+      ...projectsWithNotes.map((p) => ({
         type: 'project',
         id: p.id,
         name: p.name,
         noteLength: p.note.length,
-        tokens: Math.round(p.note.length / 3.5)
-      }))
+        tokens: Math.round(p.note.length / 3.5),
+      })),
     ].sort((a, b) => b.noteLength - a.noteLength);
 
     // Calculate cumulative percentage and find 80% threshold
-    const target80Percent = totalNoteTokens * 0.80;
+    const target80Percent = totalNoteTokens * 0.8;
     let cumulativeTokens = 0;
     let paretoIndex = 0;
 
@@ -601,19 +652,23 @@ class TokenAnalyzer {
 
     const paretoItems = allItems.slice(0, paretoIndex + 1);
     const paretoTokens = paretoItems.reduce((sum, item) => sum + item.tokens, 0);
-    const paretoPercentage = Math.round(paretoTokens / totalNoteTokens * 100);
+    const paretoPercentage = Math.round((paretoTokens / totalNoteTokens) * 100);
 
     console.log('\n🎯 Pareto Analysis (80/20 Rule):');
     console.log(`   Optimizing ${paretoItems.length} items would reduce notes by ${paretoPercentage}%`);
-    console.log(`   These ${paretoItems.length} items contain ${paretoTokens.toLocaleString()} tokens of ${totalNoteTokens.toLocaleString()} total`);
-    console.log(`   That's ${Math.round(paretoItems.length / allItems.length * 100)}% of items with notes, covering ${paretoPercentage}% of note size`);
+    console.log(
+      `   These ${paretoItems.length} items contain ${paretoTokens.toLocaleString()} tokens of ${totalNoteTokens.toLocaleString()} total`,
+    );
+    console.log(
+      `   That's ${Math.round((paretoItems.length / allItems.length) * 100)}% of items with notes, covering ${paretoPercentage}% of note size`,
+    );
 
     console.log('\n📊 Optimization Priority List (Biggest Wins First):\n');
 
     let runningTotal = 0;
     paretoItems.forEach((item, i) => {
       runningTotal += item.tokens;
-      const percentOfTotal = Math.round(runningTotal / totalNoteTokens * 100);
+      const percentOfTotal = Math.round((runningTotal / totalNoteTokens) * 100);
       const icon = item.type === 'task' ? '📋' : '📁';
 
       console.log(`   ${i + 1}. ${icon} "${item.name.substring(0, 60)}${item.name.length > 60 ? '...' : ''}"`);
@@ -622,7 +677,7 @@ class TokenAnalyzer {
 
       // Add visual progress bar
       const barLength = 50;
-      const filledLength = Math.round(percentOfTotal / 100 * barLength);
+      const filledLength = Math.round((percentOfTotal / 100) * barLength);
       const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
       console.log(`      Progress: [${bar}] ${percentOfTotal}%\n`);
     });
@@ -631,23 +686,27 @@ class TokenAnalyzer {
     const potentialSavingsTokens = paretoTokens;
     const potentialSavingsKB = paretoItems.reduce((sum, item) => sum + item.noteLength, 0) / 1024;
     const newTotalTokens = 211638 - potentialSavingsTokens; // Current total - note savings
-    const newContextUsage = Math.round(newTotalTokens / 200000 * 100);
+    const newContextUsage = Math.round((newTotalTokens / 200000) * 100);
 
     console.log('💰 Potential Savings:');
     console.log(`   If you optimize these ${paretoItems.length} items:`);
     console.log(`   - Save: ~${potentialSavingsTokens.toLocaleString()} tokens (${potentialSavingsKB.toFixed(2)} KB)`);
     console.log(`   - Database would shrink to: ~${newTotalTokens.toLocaleString()} tokens`);
-    console.log(`   - Context window usage: ${newContextUsage}% (${newContextUsage > 100 ? '❌ still too large' : '✅ would fit!'})`);
+    console.log(
+      `   - Context window usage: ${newContextUsage}% (${newContextUsage > 100 ? '❌ still too large' : '✅ would fit!'})`,
+    );
 
     // Recommendations based on note sizes
     console.log('\n💡 Note Optimization Recommendations:');
     if (totalNoteTokens > 50000) {
-      console.log(`   ⚠️  Notes consume ${totalNoteTokens.toLocaleString()} tokens (${Math.round(totalNoteTokens/211638*100)}% of total database)`);
+      console.log(
+        `   ⚠️  Notes consume ${totalNoteTokens.toLocaleString()} tokens (${Math.round((totalNoteTokens / 211638) * 100)}% of total database)`,
+      );
       console.log('   💡 Consider moving reference material to external links (Obsidian, wiki, etc.)');
     }
 
-    const bloatedTasks = tasksWithNotes.filter(t => t.note.length > 500).length;
-    const bloatedProjects = projectsWithNotes.filter(p => p.note.length > 1000).length;
+    const bloatedTasks = tasksWithNotes.filter((t) => t.note.length > 500).length;
+    const bloatedProjects = projectsWithNotes.filter((p) => p.note.length > 1000).length;
 
     if (bloatedTasks > 0) {
       console.log(`   📋 ${bloatedTasks} tasks have notes >500 chars (consider external references)`);
@@ -671,7 +730,7 @@ class TokenAnalyzer {
 
 async function main() {
   const analyzer = new TokenAnalyzer();
-  
+
   try {
     await analyzer.startServer();
     await analyzer.analyzeDatabase();

@@ -77,11 +77,11 @@ const results: BenchmarkResult[] = [];
 // Spawn server with cache warming enabled (production mode)
 // Cache warming time is included in benchmark results for realistic performance measurement
 const server = spawn('node', ['dist/index.js'], {
-  stdio: ['pipe', 'pipe', 'pipe'],  // Pipe stderr so we can detect cache warming completion
+  stdio: ['pipe', 'pipe', 'pipe'], // Pipe stderr so we can detect cache warming completion
   env: {
     ...process.env,
-    NO_CACHE_WARMING: 'false',  // Always enable cache warming for realistic benchmarks
-    OMNIFOCUS_SCRIPT_TIMEOUT: '240000',  // 240 second (4 minute) timeout (vs default 120s)
+    NO_CACHE_WARMING: 'false', // Always enable cache warming for realistic benchmarks
+    OMNIFOCUS_SCRIPT_TIMEOUT: '240000', // 240 second (4 minute) timeout (vs default 120s)
   },
 });
 
@@ -181,7 +181,7 @@ const getMachineName = (): string => {
 
 const getSystemInfo = (): string => {
   const cpus = os.cpus();
-  const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(0);
+  const totalMem = (os.totalmem() / 1024 ** 3).toFixed(0);
 
   return `Hardware Information:
   Machine: ${os.platform()} ${os.arch()}
@@ -194,7 +194,7 @@ const getSystemInfo = (): string => {
 
 const writeSummaryFile = (): string => {
   const cpus = os.cpus();
-  const totalMem = (os.totalmem() / (1024 ** 3)).toFixed(0);
+  const totalMem = (os.totalmem() / 1024 ** 3).toFixed(0);
   const machineName = getMachineName();
   const totalTime = performance.now() - benchmarkOverallStart;
 
@@ -243,7 +243,7 @@ const writeSummaryFile = (): string => {
       duration_ms: Math.round(cacheWarmingDuration),
       enabled: true,
     },
-    operations: results.map(r => ({
+    operations: results.map((r) => ({
       name: r.operation,
       iterations: r.iterations,
       avg_ms: Math.round(r.avgTime),
@@ -282,7 +282,7 @@ const displayResults = () => {
       const stats = calculateStats(label, times[label]);
       const op = stats.operation.padEnd(28);
       console.log(
-        `${op}| ${stats.avgTime.toFixed(0).padStart(8)}ms | ${stats.minTime.toFixed(0).padStart(8)}ms | ${stats.maxTime.toFixed(0).padStart(8)}ms | ${stats.percentile95.toFixed(0).padStart(8)}ms | ${stats.iterations.toString().padStart(10)}`
+        `${op}| ${stats.avgTime.toFixed(0).padStart(8)}ms | ${stats.minTime.toFixed(0).padStart(8)}ms | ${stats.maxTime.toFixed(0).padStart(8)}ms | ${stats.percentile95.toFixed(0).padStart(8)}ms | ${stats.iterations.toString().padStart(10)}`,
       );
       results.push(stats);
     }
@@ -299,7 +299,9 @@ const displayResults = () => {
     const avgFull = tagsFull.reduce((a, b) => a + b, 0) / tagsFull.length;
     const improvement = ((avgFull - avgNamesOnly) / avgFull) * 100;
 
-    console.log(`Tags (namesOnly vs full): ${improvement.toFixed(1)}% faster (${avgFull.toFixed(0)}ms → ${avgNamesOnly.toFixed(0)}ms)`);
+    console.log(
+      `Tags (namesOnly vs full): ${improvement.toFixed(1)}% faster (${avgFull.toFixed(0)}ms → ${avgNamesOnly.toFixed(0)}ms)`,
+    );
   }
 
   const tagsFast = times['Tags (fast mode)'];
@@ -308,7 +310,9 @@ const displayResults = () => {
     const avgFull = tagsFull.reduce((a, b) => a + b, 0) / tagsFull.length;
     const improvement = ((avgFull - avgFast) / avgFull) * 100;
 
-    console.log(`Tags (fast vs full): ${improvement.toFixed(1)}% faster (${avgFull.toFixed(0)}ms → ${avgFast.toFixed(0)}ms)`);
+    console.log(
+      `Tags (fast vs full): ${improvement.toFixed(1)}% faster (${avgFull.toFixed(0)}ms → ${avgFast.toFixed(0)}ms)`,
+    );
   }
 
   // Cache warming info (always included in production benchmarks)
@@ -351,7 +355,7 @@ rl.on('line', (line) => {
         if (cacheWarmingComplete) {
           clearInterval(checkInterval);
           console.log('Running benchmarks...\n');
-          process.stdout.write('  Running: Today\'s tasks... ');
+          process.stdout.write("  Running: Today's tasks... ");
           sendToolCall('tasks', { mode: 'today', limit: '25', details: 'false' });
         }
       }, 500);
@@ -361,7 +365,7 @@ rl.on('line', (line) => {
     case 2: {
       // Today's tasks
       const elapsed = performance.now() - benchmarkStartTime;
-      recordTime('Today\'s tasks', elapsed);
+      recordTime("Today's tasks", elapsed);
       console.log(`${elapsed.toFixed(0)}ms`);
 
       process.stdout.write('  Running: Overdue tasks... ');
@@ -398,7 +402,15 @@ rl.on('line', (line) => {
       console.log(`${elapsed.toFixed(0)}ms`);
 
       process.stdout.write('  Running: Tags (names only)... ');
-      sendToolCall('tags', { operation: 'list', namesOnly: 'true', sortBy: 'name', includeEmpty: 'false', includeUsageStats: 'false', includeTaskCounts: 'false', fastMode: 'false' });
+      sendToolCall('tags', {
+        operation: 'list',
+        namesOnly: 'true',
+        sortBy: 'name',
+        includeEmpty: 'false',
+        includeUsageStats: 'false',
+        includeTaskCounts: 'false',
+        fastMode: 'false',
+      });
       break;
     }
 
@@ -409,7 +421,15 @@ rl.on('line', (line) => {
       console.log(`${elapsed.toFixed(0)}ms`);
 
       process.stdout.write('  Running: Tags (fast mode)... ');
-      sendToolCall('tags', { operation: 'list', namesOnly: 'false', sortBy: 'name', includeEmpty: 'false', includeUsageStats: 'false', includeTaskCounts: 'false', fastMode: 'true' });
+      sendToolCall('tags', {
+        operation: 'list',
+        namesOnly: 'false',
+        sortBy: 'name',
+        includeEmpty: 'false',
+        includeUsageStats: 'false',
+        includeTaskCounts: 'false',
+        fastMode: 'true',
+      });
       break;
     }
 
@@ -420,7 +440,15 @@ rl.on('line', (line) => {
       console.log(`${elapsed.toFixed(0)}ms`);
 
       process.stdout.write('  Running: Tags (full mode)... ');
-      sendToolCall('tags', { operation: 'list', namesOnly: 'false', sortBy: 'name', includeEmpty: 'false', includeUsageStats: 'true', includeTaskCounts: 'false', fastMode: 'false' });
+      sendToolCall('tags', {
+        operation: 'list',
+        namesOnly: 'false',
+        sortBy: 'name',
+        includeEmpty: 'false',
+        includeUsageStats: 'true',
+        includeTaskCounts: 'false',
+        fastMode: 'false',
+      });
       break;
     }
 

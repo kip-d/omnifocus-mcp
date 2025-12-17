@@ -12,12 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
-import {
-  ensureSandboxFolder,
-  fullCleanup,
-  SANDBOX_FOLDER_NAME,
-  TEST_TAG_PREFIX,
-} from './helpers/sandbox-manager.js';
+import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 // Only run on macOS with OmniFocus and real JXA enabled
 const RUN_INTEGRATION_TESTS =
@@ -69,7 +64,9 @@ d('Batch Operations Integration (Unified API)', () => {
 
     expect(response).toHaveProperty('success', true);
     expect(response).toHaveProperty('data');
-    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+    const result = (
+      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
+    ).data;
 
     expect(result.success).toBe(true);
     expect(result.created).toBe(1);
@@ -111,7 +108,9 @@ d('Batch Operations Integration (Unified API)', () => {
     });
 
     expect(response).toHaveProperty('success', true);
-    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+    const result = (
+      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
+    ).data;
     expect(result.created).toBe(2);
     expect(result.results).toHaveLength(2);
   }, 30000);
@@ -158,7 +157,9 @@ d('Batch Operations Integration (Unified API)', () => {
     });
 
     expect(response).toHaveProperty('success', true);
-    const result = (response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }).data;
+    const result = (
+      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
+    ).data;
     expect(result.created).toBe(3);
   }, 30000);
 

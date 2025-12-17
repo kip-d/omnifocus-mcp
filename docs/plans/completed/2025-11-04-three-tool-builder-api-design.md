@@ -1,29 +1,34 @@
 # Three-Tool Builder API Design
 
-**Status:** ~~Approved Design~~ → **Fully Implemented (v3.0.0)**
-**Date:** 2025-11-04
-**Implemented:** November 2025
-**Purpose:** Simplify OmniFocus MCP server from 17 tools to 3 tools using builder API pattern, reducing complexity while maintaining full functionality.
+**Status:** ~~Approved Design~~ → **Fully Implemented (v3.0.0)** **Date:** 2025-11-04 **Implemented:** November 2025
+**Purpose:** Simplify OmniFocus MCP server from 17 tools to 3 tools using builder API pattern, reducing complexity while
+maintaining full functionality.
 
-> **Implementation Note (Nov 2025):** This design was fully implemented as the v3.0.0 Unified API. The actual implementation uses 4 tools (added `system` tool) and routes to existing backend tools rather than generating scripts from scratch. See `src/tools/unified/` for implementation.
+> **Implementation Note (Nov 2025):** This design was fully implemented as the v3.0.0 Unified API. The actual
+> implementation uses 4 tools (added `system` tool) and routes to existing backend tools rather than generating scripts
+> from scratch. See `src/tools/unified/` for implementation.
 
 ---
 
 ## Executive Summary
 
 This design consolidates the current 17-tool MCP server into 3 core tools using a builder API pattern:
+
 - **`omnifocus_read`** - Query builder for all read operations (tasks, projects, tags, perspectives, folders)
 - **`omnifocus_write`** - Mutation builder for all write operations (create, update, complete, delete, batch)
-- **`omnifocus_analyze`** - Analysis operations (productivity stats, velocity, patterns, recurring tasks, meeting notes, reviews)
+- **`omnifocus_analyze`** - Analysis operations (productivity stats, velocity, patterns, recurring tasks, meeting notes,
+  reviews)
 
 **Key Benefits:**
+
 - **Simpler mental model** for LLMs (3 tools vs 17)
 - **Easier maintenance** (single schema per operation type)
 - **Better flexibility** (LLMs compose complex queries via filters)
 - **Minimal new code** (reuses all existing JXA/OmniJS infrastructure)
 - **Token savings** (realistic: 0-23% reduction, ~7,000-9,200 tokens vs current 9,220)
 
-**Implementation Strategy:** Phased rollout with parallel operation, automatic migration suggestions, then cleanup of deprecated tools.
+**Implementation Strategy:** Phased rollout with parallel operation, automatic migration suggestions, then cleanup of
+deprecated tools.
 
 ---
 
@@ -33,12 +38,12 @@ This design consolidates the current 17-tool MCP server into 3 core tools using 
 
 **17 tools consuming ~9,480 tokens** (~38K characters) in tool definitions:
 
-| Category | Tools | Tokens | Notes |
-|----------|-------|--------|-------|
-| **Read** | tasks, projects, tags, perspectives, folders, export | ~5,099 | tasks alone is 1,907 tokens (20%!) |
-| **Write** | manage_task, batch_create | ~1,615 | Relatively simple |
+| Category    | Tools                                                                                                                                          | Tokens | Notes                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------ |
+| **Read**    | tasks, projects, tags, perspectives, folders, export                                                                                           | ~5,099 | tasks alone is 1,907 tokens (20%!)   |
+| **Write**   | manage_task, batch_create                                                                                                                      | ~1,615 | Relatively simple                    |
 | **Analyze** | productivity_stats, task_velocity, overdue_analysis, pattern_analysis, workflow_analysis, recurring_tasks, parse_meeting_notes, manage_reviews | ~2,350 | Low-frequency, can absorb complexity |
-| **System** | system | ~256 | Keep as-is |
+| **System**  | system                                                                                                                                         | ~256   | Keep as-is                           |
 
 ### Key Issues
 
@@ -53,7 +58,8 @@ This design consolidates the current 17-tool MCP server into 3 core tools using 
    - Documentation sprawl
 
 3. **Excessive Modes**
-   - `tasks` tool has 10 modes (all, inbox, search, overdue, today, upcoming, available, blocked, flagged, smart_suggest)
+   - `tasks` tool has 10 modes (all, inbox, search, overdue, today, upcoming, available, blocked, flagged,
+     smart_suggest)
    - 7 modes are just filter shortcuts (inbox, overdue, today, upcoming, flagged, blocked, available)
    - Could be simplified to 2-3 modes with proper filtering
 
@@ -70,6 +76,7 @@ This design consolidates the current 17-tool MCP server into 3 core tools using 
 **Chosen:** Nested JSON builder pattern with clear separation of concerns
 
 **Rationale:**
+
 - Most structured approach
 - Clear namespacing (query, mutation, analysis)
 - Type-safe with Zod validation
@@ -95,6 +102,7 @@ filters: {
 ```
 
 **Rationale:**
+
 - More readable for LLMs (clear intent: "any", "before", "after")
 - Not tied to external DSL (MongoDB)
 - Easier to extend with custom operators
@@ -119,6 +127,7 @@ filters: {
 **Decision:** `smart_suggest` mode stays in `omnifocus_read` tool
 
 **Rationale:**
+
 - Fundamentally a read operation (queries and filters tasks)
 - Scoring algorithm is simple (overdue +100, due today +80, flagged +50, available +30, quick wins +20)
 - Likely high-frequency usage ("what should I work on?")
@@ -129,6 +138,7 @@ filters: {
 **Decision:** `omnifocus_analyze` does NOT require confirmation for expensive operations
 
 **Rationale:**
+
 - Tool descriptions warn LLM about expensive operations
 - LLM can decide whether to seek user confirmation
 - Keeps tool simple, delegates intelligence to LLM
@@ -143,6 +153,7 @@ filters: {
 **Purpose:** Query builder for all read operations
 
 **Schema:**
+
 ```typescript
 {
   query: {
@@ -196,6 +207,7 @@ filters: {
 ```
 
 **Example - Simple inbox query:**
+
 ```json
 {
   "query": {
@@ -210,6 +222,7 @@ filters: {
 ```
 
 **Example - Complex query with OR logic:**
+
 ```json
 {
   "query": {
@@ -217,30 +230,31 @@ filters: {
     "filters": {
       "OR": [
         {
-          "dueDate": {"before": "now+3days"},
+          "dueDate": { "before": "now+3days" },
           "status": "active"
         },
         {
           "flagged": true
         }
       ],
-      "tags": {"any": ["work", "urgent"]}
+      "tags": { "any": ["work", "urgent"] }
     },
     "fields": ["id", "name", "dueDate", "tags"],
-    "sort": [{"field": "dueDate", "order": "asc"}],
+    "sort": [{ "field": "dueDate", "order": "asc" }],
     "limit": 10
   }
 }
 ```
 
 **Example - Smart suggestions:**
+
 ```json
 {
   "query": {
     "type": "tasks",
     "mode": "smart_suggest",
     "filters": {
-      "tags": {"any": ["work"]}
+      "tags": { "any": ["work"] }
     },
     "limit": 10
   }
@@ -248,6 +262,7 @@ filters: {
 ```
 
 **Description (for LLM):**
+
 ```
 Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, or folders based on type.
 
@@ -280,6 +295,7 @@ EXAMPLES: [include 5-10 common examples]
 **Purpose:** Mutation builder for all write operations
 
 **Schema:**
+
 ```typescript
 {
   mutation: {
@@ -336,6 +352,7 @@ EXAMPLES: [include 5-10 common examples]
 ```
 
 **Example - Create task:**
+
 ```json
 {
   "mutation": {
@@ -354,6 +371,7 @@ EXAMPLES: [include 5-10 common examples]
 ```
 
 **Example - Update task (move to inbox and flag):**
+
 ```json
 {
   "mutation": {
@@ -370,6 +388,7 @@ EXAMPLES: [include 5-10 common examples]
 ```
 
 **Example - Batch create:**
+
 ```json
 {
   "mutation": {
@@ -378,12 +397,12 @@ EXAMPLES: [include 5-10 common examples]
       {
         "operation": "create",
         "target": "task",
-        "data": {"name": "Task 1", "tags": ["work"]}
+        "data": { "name": "Task 1", "tags": ["work"] }
       },
       {
         "operation": "create",
         "target": "task",
-        "data": {"name": "Task 2", "tags": ["work"]}
+        "data": { "name": "Task 2", "tags": ["work"] }
       }
     ]
   }
@@ -391,6 +410,7 @@ EXAMPLES: [include 5-10 common examples]
 ```
 
 **Description (for LLM):**
+
 ```
 Create, update, complete, or delete OmniFocus tasks and projects.
 
@@ -436,6 +456,7 @@ EXAMPLES: [include 8-12 common examples]
 **Purpose:** Analysis and specialized operations
 
 **Schema:**
+
 ```typescript
 {
   analysis: {
@@ -486,6 +507,7 @@ EXAMPLES: [include 8-12 common examples]
 ```
 
 **Example - Productivity stats:**
+
 ```json
 {
   "analysis": {
@@ -505,6 +527,7 @@ EXAMPLES: [include 8-12 common examples]
 ```
 
 **Example - Parse meeting notes:**
+
 ```json
 {
   "analysis": {
@@ -520,6 +543,7 @@ EXAMPLES: [include 8-12 common examples]
 ```
 
 **Description (for LLM):**
+
 ```
 Analyze OmniFocus data for insights, patterns, and specialized operations.
 
@@ -606,6 +630,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 **Example 1: Simple inbox query**
 
 **Input:**
+
 ```json
 {
   "query": {
@@ -617,6 +642,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 ```
 
 **Compiler logic:**
+
 ```typescript
 // Recognize pattern: inbox query
 // Route to: existing INBOX mode handler
@@ -627,6 +653,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 **Example 2: Smart suggest**
 
 **Input:**
+
 ```json
 {
   "query": {
@@ -638,6 +665,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 ```
 
 **Compiler logic:**
+
 ```typescript
 // Recognize: smart_suggest mode
 // Route to: existing handleSmartSuggest()
@@ -648,6 +676,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 **Example 3: Create task with tags**
 
 **Input:**
+
 ```json
 {
   "mutation": {
@@ -663,6 +692,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 ```
 
 **Compiler logic:**
+
 ```typescript
 // Map to: CREATE_TASK_SCRIPT
 // Include: getMinimalTagBridge() (already exists)
@@ -673,6 +703,7 @@ Keep existing system tool as-is (~256 tokens) for version info and diagnostics.
 ### Implementation Files
 
 **New files to create:**
+
 ```
 src/tools/unified/
 ├── OmniFocusReadTool.ts          (~300 lines - routing logic)
@@ -701,6 +732,7 @@ src/tools/unified/
 **Goal:** Add 3 new tools alongside existing 17 tools
 
 **Tasks:**
+
 1. Create new tool classes (OmniFocusReadTool, OmniFocusWriteTool, OmniFocusAnalyzeTool)
 2. Implement compilers (query, mutation, analysis)
 3. Define Zod schemas for builder API
@@ -709,6 +741,7 @@ src/tools/unified/
 6. Deploy parallel to production
 
 **Success criteria:**
+
 - All 3 new tools functional
 - Pass existing integration test suite
 - Performance matches or beats current tools
@@ -718,6 +751,7 @@ src/tools/unified/
 **Goal:** Verify feature parity and create migration docs
 
 **Tasks:**
+
 1. Test matrix: every current tool operation → new tool equivalent
 2. Performance benchmarking
 3. Write migration guide with examples
@@ -725,11 +759,20 @@ src/tools/unified/
    ```json
    {
      "success": true,
-     "data": { /* ... */ },
+     "data": {
+       /* ... */
+     },
      "_migration": {
        "deprecated": true,
        "replacement": "omnifocus_read",
-       "example": { "query": { "type": "tasks", "filters": { /* ... */ } } }
+       "example": {
+         "query": {
+           "type": "tasks",
+           "filters": {
+             /* ... */
+           }
+         }
+       }
      }
    }
    ```
@@ -737,6 +780,7 @@ src/tools/unified/
 6. Real-world usage testing with Claude Desktop
 
 **Success criteria:**
+
 - 100% feature parity verified
 - Migration docs complete
 - No performance regressions
@@ -747,6 +791,7 @@ src/tools/unified/
 **Goal:** Remove deprecated tools, finalize
 
 **Tasks:**
+
 1. Monitor usage of old vs new tools
 2. Once new tools proven stable:
    - Remove old 17 tools from src/tools/
@@ -756,6 +801,7 @@ src/tools/unified/
 4. Celebrate reduced maintenance burden!
 
 **Success criteria:**
+
 - Codebase reduced by ~5,000-8,000 lines
 - Tool definitions reduced to ~7,000-9,000 tokens
 - Simpler mental model for LLM users
@@ -770,6 +816,7 @@ src/tools/unified/
 **Current:** 9,220 tokens (17 tools)
 
 **Projected:**
+
 - **omnifocus_read:** ~2,500-3,500 tokens
 - **omnifocus_write:** ~1,800-2,500 tokens
 - **omnifocus_analyze:** ~2,500-3,500 tokens
@@ -802,16 +849,19 @@ src/tools/unified/
 ### Risks & Mitigations
 
 **Risk 1: Increased per-tool complexity**
+
 - Mitigation: Comprehensive examples in descriptions
 - Mitigation: Clear error messages with suggestions
 - Mitigation: Keep high-frequency operations simple
 
 **Risk 2: LLM confusion with builder syntax**
+
 - Mitigation: Test extensively with Claude Desktop
 - Mitigation: Provide migration examples from old→new
 - Mitigation: Schema validation catches mistakes early
 
 **Risk 3: Performance regression**
+
 - Mitigation: Reuse existing optimized scripts
 - Mitigation: Benchmark before/after
 - Mitigation: Same caching strategies
@@ -840,16 +890,19 @@ src/tools/unified/
 ### Testing Strategy
 
 **Unit tests:**
+
 - Query compiler: filter translation
 - Mutation compiler: operation routing
 - Schema validation: Zod schemas
 
 **Integration tests:**
+
 - Every current tool operation has equivalent new tool call
 - Performance benchmarks (should match current)
 - Cache behavior (should be identical)
 
 **Real-world testing:**
+
 - Use with Claude Desktop for 1-2 weeks
 - Monitor error rates
 - Gather feedback on usability
@@ -857,12 +910,14 @@ src/tools/unified/
 ### Success Metrics
 
 **Quantitative:**
+
 - [ ] All 17 current operations work via new tools
 - [ ] Performance within 10% of current tools
 - [ ] Token count: 7,000-9,000 tokens
 - [ ] Test coverage: >90%
 
 **Qualitative:**
+
 - [ ] LLM successfully uses new tools without confusion
 - [ ] Error messages help LLM recover from mistakes
 - [ ] Maintenance burden reduced (fewer files to update)
@@ -896,7 +951,8 @@ src/tools/unified/
 
 ## Conclusion
 
-The three-tool builder API design reduces complexity while maintaining full functionality. By consolidating 17 tools into 3 well-structured tools with a builder pattern, we achieve:
+The three-tool builder API design reduces complexity while maintaining full functionality. By consolidating 17 tools
+into 3 well-structured tools with a builder pattern, we achieve:
 
 - **Simpler for LLMs** (3 clear choices vs 17 options)
 - **Easier to maintain** (single schema per operation type)
@@ -904,6 +960,7 @@ The three-tool builder API design reduces complexity while maintaining full func
 - **Minimal risk** (reuses all existing infrastructure)
 
 **Next Steps:**
+
 1. Implement Phase 1 (parallel rollout)
 2. Test extensively with Claude Desktop
 3. Gather feedback and iterate

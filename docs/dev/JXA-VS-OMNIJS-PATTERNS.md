@@ -1,7 +1,6 @@
 # JXA vs OmniJS Bridge - Property Access Patterns
 
-**Last Updated:** 2025-11-27
-**Critical Reference:** Use this guide when working with OmniFocus automation
+**Last Updated:** 2025-11-27 **Critical Reference:** Use this guide when working with OmniFocus automation
 
 ---
 
@@ -24,15 +23,18 @@
 
 Per the [Omni Group forums](https://discourse.omnigroup.com/t/how-to-get-going-with-javascript-and-omnifocus/66578):
 
-> "osascript (JXA) and omniJS are completely different programming interfaces, and two quite different JavaScript interpreter instances."
+> "osascript (JXA) and omniJS are completely different programming interfaces, and two quite different JavaScript
+> interpreter instances."
 >
-> The osascript interface is described as **"legacy / sunset mode"** with slower performance due to external interface traffic overhead.
+> The osascript interface is described as **"legacy / sunset mode"** with slower performance due to external interface
+> traffic overhead.
 
 ### Why OmniJS Exists
 
 Omni Group created OmniJS (Omni Automation) for three key reasons:
 
-1. **Performance**: OmniJS runs *inside* OmniFocus with direct object access. JXA runs *outside* via Apple Events (RPC), requiring inter-process communication for every property access.
+1. **Performance**: OmniJS runs _inside_ OmniFocus with direct object access. JXA runs _outside_ via Apple Events (RPC),
+   requiring inter-process communication for every property access.
 
 2. **Cross-platform support**: JXA only exists on macOS. OmniJS works identically on macOS, iOS, and iPadOS.
 
@@ -47,13 +49,15 @@ JXA uses Apple's Open Scripting Architecture (OSA) which implements RPC-style co
 > Each `.property()` access in JXA translates to a separate Apple Event request to OmniFocus.
 
 This explains why:
+
 - **Bulk operations are slow**: N property accesses = N round-trips
 - **Some relationships fail**: Complex object references don't serialize well across processes
 - **Folder→folder parent access fails**: Apple Events can't marshal folder parent references
 
 ### Official Recommendation
 
-The official [Omni Automation documentation](https://omni-automation.com/jxa-applescript.html) recommends using JXA as a *wrapper* to launch OmniJS scripts via URL encoding, not as a direct scripting interface.
+The official [Omni Automation documentation](https://omni-automation.com/jxa-applescript.html) recommends using JXA as a
+_wrapper_ to launch OmniJS scripts via URL encoding, not as a direct scripting interface.
 
 ---
 
@@ -66,6 +70,7 @@ The official [Omni Automation documentation](https://omni-automation.com/jxa-app
 **File pattern:** `src/omnifocus/scripts/**/*.ts` files that get wrapped in JXA
 
 **Execution:**
+
 ```typescript
 const script = `
   (() => {
@@ -84,6 +89,7 @@ await execScript(script);
 **File pattern:** Bridge operations, typically in helper files
 
 **Execution:**
+
 ```typescript
 const omniJsCode = `
   (() => {
@@ -102,15 +108,15 @@ const result = app.evaluateJavascript(omniJsCode);
 
 In JXA context, almost **all properties must be accessed as method calls** with parentheses.
 
-| Property Type | JXA Pattern | Example |
-|---------------|-------------|---------|
-| **ID** | `obj.id()` | `task.id()` → `"abc123"` |
-| **String** | `obj.name()` | `task.name()` → `"Task name"` |
-| **Boolean** | `obj.completed()` | `task.completed()` → `true` |
-| **Date** | `obj.dueDate()` | `task.dueDate()` → `Date object` |
-| **Object** | `obj.containingProject()` | `task.containingProject()` → `Project object` |
-| **Array** | `obj.tags()` | `task.tags()` → `[Tag, Tag]` |
-| **Complex** | `obj.repetitionRule()` | `task.repetitionRule()` → `{recurrence: "...", ...}` |
+| Property Type | JXA Pattern               | Example                                              |
+| ------------- | ------------------------- | ---------------------------------------------------- |
+| **ID**        | `obj.id()`                | `task.id()` → `"abc123"`                             |
+| **String**    | `obj.name()`              | `task.name()` → `"Task name"`                        |
+| **Boolean**   | `obj.completed()`         | `task.completed()` → `true`                          |
+| **Date**      | `obj.dueDate()`           | `task.dueDate()` → `Date object`                     |
+| **Object**    | `obj.containingProject()` | `task.containingProject()` → `Project object`        |
+| **Array**     | `obj.tags()`              | `task.tags()` → `[Tag, Tag]`                         |
+| **Complex**   | `obj.repetitionRule()`    | `task.repetitionRule()` → `{recurrence: "...", ...}` |
 
 ### ❌ JXA: Property Access Fails
 
@@ -118,10 +124,10 @@ These patterns **will throw errors** in JXA:
 
 ```javascript
 // ❌ WRONG - These all fail in JXA:
-task.id.primaryKey      // ERROR: "Can't convert types"
-task.name               // ERROR: Not a method
-task.completed          // ERROR: Not a method
-task.dueDate            // ERROR: Not a method
+task.id.primaryKey; // ERROR: "Can't convert types"
+task.name; // ERROR: Not a method
+task.completed; // ERROR: Not a method
+task.dueDate; // ERROR: Not a method
 ```
 
 ### ✅ OmniJS: Use Property Access
@@ -143,21 +149,21 @@ task.plannedDate = new Date()  // Sets date (works!)
 
 ### What Works in JXA ✅
 
-| Method | Result | Sample Output |
-|--------|--------|---------------|
+| Method                     | Result     | Sample Output                              |
+| -------------------------- | ---------- | ------------------------------------------ |
 | `task.containingProject()` | ✅ SUCCESS | Returns Project object, can call `.name()` |
-| `task.parentTask()` | ✅ SUCCESS | Returns parent Task for subtasks |
-| `project.folder()` | ✅ SUCCESS | Returns Folder object, can call `.name()` |
-| `folder.folders()` | ✅ SUCCESS | Returns array of child Folders |
-| `doc.folders()` | ✅ SUCCESS | Returns top-level Folders |
+| `task.parentTask()`        | ✅ SUCCESS | Returns parent Task for subtasks           |
+| `project.folder()`         | ✅ SUCCESS | Returns Folder object, can call `.name()`  |
+| `folder.folders()`         | ✅ SUCCESS | Returns array of child Folders             |
+| `doc.folders()`            | ✅ SUCCESS | Returns top-level Folders                  |
 
 ### What Fails in JXA ❌
 
-| Method | Error | Workaround |
-|--------|-------|------------|
-| `folder.parent()` | "Can't convert types" | Use OmniJS bridge or hierarchical traversal |
+| Method                      | Error                 | Workaround                                  |
+| --------------------------- | --------------------- | ------------------------------------------- |
+| `folder.parent()`           | "Can't convert types" | Use OmniJS bridge or hierarchical traversal |
 | `folder.containingFolder()` | "Can't convert types" | Use OmniJS bridge or hierarchical traversal |
-| `project.parentFolder()` | "Can't convert types" | Use `project.folder()` instead (it works!) |
+| `project.parentFolder()`    | "Can't convert types" | Use `project.folder()` instead (it works!)  |
 
 ### The Pattern
 
@@ -168,7 +174,8 @@ The specific failure is **folder→folder parent relationships**:
 - ✅ `project → folder` works (project.folder())
 - ❌ `folder → folder` fails (folder.parent())
 
-**Root cause**: Apple Events has trouble serializing folder parent references back to JXA. This is an OSA limitation, not an OmniFocus bug.
+**Root cause**: Apple Events has trouble serializing folder parent references back to JXA. This is an OSA limitation,
+not an OmniFocus bug.
 
 ### Test Code (Verified)
 
@@ -181,7 +188,7 @@ The specific failure is **folder→folder parent relationships**:
   // ✅ WORKS - project.folder()
   const projects = doc.flattenedProjects();
   for (let i = 0; i < projects.length; i++) {
-    const folder = projects[i].folder();  // Works!
+    const folder = projects[i].folder(); // Works!
     if (folder) {
       console.log(projects[i].name() + ' in ' + folder.name());
     }
@@ -191,12 +198,12 @@ The specific failure is **folder→folder parent relationships**:
   const folders = doc.flattenedFolders();
   for (let i = 0; i < folders.length; i++) {
     try {
-      const parent = folders[i].parent();  // "Can't convert types"
+      const parent = folders[i].parent(); // "Can't convert types"
     } catch (e) {
       console.log('Error: ' + e.message);
     }
   }
-})()
+})();
 ```
 
 ---
@@ -234,11 +241,11 @@ function buildTaskObject(omniJsTask) {
 
   // ✅ Arrays - use method call to get array, then iterate
   const tags = omniJsTask.tags();
-  task.tags = tags ? tags.map(t => t.name()) : [];
+  task.tags = tags ? tags.map((t) => t.name()) : [];
 
   // ✅ Complex objects - use method call, get plain object
   const rule = omniJsTask.repetitionRule();
-  task.repetitionRule = rule || null;  // Already a plain object
+  task.repetitionRule = rule || null; // Already a plain object
 
   return task;
 }
@@ -250,17 +257,17 @@ function buildTaskObject(omniJsTask) {
 
 ```javascript
 // ❌ WRONG - These silently fail in JXA:
-task.tags = [tag1, tag2];            // Doesn't persist
-task.plannedDate = new Date();        // Doesn't persist
+task.tags = [tag1, tag2]; // Doesn't persist
+task.plannedDate = new Date(); // Doesn't persist
 ```
 
 **✅ CORRECT - Use OmniJS bridge:**
 
 ```javascript
 // Create task in JXA
-const task = app.Task({name: "Test"});
+const task = app.Task({ name: 'Test' });
 inbox.push(task);
-const taskId = task.id();  // Get ID with method call
+const taskId = task.id(); // Get ID with method call
 
 // Use bridge to set complex properties
 const bridgeScript = `
@@ -285,11 +292,12 @@ if (dueDate) {
 // ✅ For arrays, check if array exists
 const tags = task.tags();
 if (tags && Array.isArray(tags)) {
-  taskData.tags = tags.map(t => t.name());
+  taskData.tags = tags.map((t) => t.name());
 }
 
 // ❌ WRONG - Checking method itself
-if (task.dueDate) {  // This checks if METHOD exists, not if date exists
+if (task.dueDate) {
+  // This checks if METHOD exists, not if date exists
   // ...
 }
 ```
@@ -325,45 +333,51 @@ if (task.dueDate) {  // This checks if METHOD exists, not if date exists
 ### Error: "Can't convert types"
 
 **Symptom:**
+
 ```javascript
 const id = task.id.primaryKey;
 // ERROR: Can't convert types
 ```
 
 **Fix:**
+
 ```javascript
-const id = task.id();  // ✅ Use method call
+const id = task.id(); // ✅ Use method call
 ```
 
 ### Parent/Folder "Can't convert types" (CORRECTED - 2025-11-27)
 
 **Symptom:**
+
 ```javascript
 // In JXA - ONLY folder→folder parent access fails
-const parentFolder = folder.parent();     // ❌ "Can't convert types" error
-const containingFolder = folder.containingFolder();  // ❌ "Can't convert types"
-const parentFolderAlt = project.parentFolder();  // ❌ "Can't convert types"
+const parentFolder = folder.parent(); // ❌ "Can't convert types" error
+const containingFolder = folder.containingFolder(); // ❌ "Can't convert types"
+const parentFolderAlt = project.parentFolder(); // ❌ "Can't convert types"
 ```
 
 **What Actually Works (Empirically Verified):**
+
 ```javascript
 // ✅ THESE ALL WORK IN JXA:
-const project = task.containingProject();   // ✅ Works!
-const parentTask = task.parentTask();       // ✅ Works!
-const folder = project.folder();            // ✅ Works! (use this, not parentFolder)
-const children = folder.folders();          // ✅ Works!
+const project = task.containingProject(); // ✅ Works!
+const parentTask = task.parentTask(); // ✅ Works!
+const folder = project.folder(); // ✅ Works! (use this, not parentFolder)
+const children = folder.folders(); // ✅ Works!
 ```
 
-**Root Cause:** Apple Events has a specific issue marshaling folder→folder parent references. Other parent relationships (task→project, task→task, project→folder) work fine.
+**Root Cause:** Apple Events has a specific issue marshaling folder→folder parent references. Other parent relationships
+(task→project, task→task, project→folder) work fine.
 
 **Solutions:**
 
 1. **For project folders**: Use `project.folder()` not `project.parentFolder()`:
+
 ```javascript
 // ✅ CORRECT - use folder(), not parentFolder()
 const projects = doc.flattenedProjects();
 for (let i = 0; i < projects.length; i++) {
-  const folder = projects[i].folder();  // Works!
+  const folder = projects[i].folder(); // Works!
   if (folder) {
     console.log(projects[i].name() + ' in ' + folder.name());
   }
@@ -371,6 +385,7 @@ for (let i = 0; i < projects.length; i++) {
 ```
 
 2. **For folder hierarchy**: Build paths during traversal or use OmniJS bridge:
+
 ```javascript
 // JXA - Manual hierarchy traversal
 function processFolder(folder, parentPath = '') {
@@ -391,6 +406,7 @@ for (let i = 0; i < topFolders.length; i++) {
 ```
 
 3. **For full parent access in folders**: Use OmniJS bridge:
+
 ```javascript
 // OmniJS (inside evaluateJavascript) - WORKS
 const omniJsScript = `
@@ -402,30 +418,35 @@ const omniJsScript = `
 const result = app.evaluateJavascript(omniJsScript);
 ```
 
-**Scripts affected:** Only scripts needing folder→folder parent relationships. Most parent relationships work fine in JXA.
+**Scripts affected:** Only scripts needing folder→folder parent relationships. Most parent relationships work fine in
+JXA.
 
 ### Error: "X is not a function"
 
 **Symptom:**
+
 ```javascript
 const name = task.name;
 // ERROR: task.name is not a function
 ```
 
 **Fix:**
+
 ```javascript
-const name = task.name();  // ✅ Add parentheses
+const name = task.name(); // ✅ Add parentheses
 ```
 
 ### Property Sets But Doesn't Persist
 
 **Symptom:**
+
 ```javascript
 task.tags = [tag1, tag2];
 // No error, but tags don't appear in OmniFocus
 ```
 
 **Fix:**
+
 ```javascript
 // Use bridge for complex properties
 const script = `
@@ -438,15 +459,17 @@ app.evaluateJavascript(script);
 ### repetitionRule Returns [object Object]
 
 **Symptom:**
+
 ```javascript
 const rule = task.repetitionRule();
-console.log(rule);  // [object Object]
+console.log(rule); // [object Object]
 ```
 
 **Fix:**
+
 ```javascript
 const rule = task.repetitionRule();
-console.log(JSON.stringify(rule));  // Full object with properties
+console.log(JSON.stringify(rule)); // Full object with properties
 // Returns: {"recurrence": "FREQ=DAILY", "repetitionMethod": "...", ...}
 ```
 
@@ -581,7 +604,7 @@ function bridgeSetPlannedDate(app, taskId, dateValue) {
     const result = app.evaluateJavascript(script);
     return JSON.parse(result);
   } catch (e) {
-    return {success: false, error: e.message};
+    return { success: false, error: e.message };
   }
 }
 ```
@@ -590,17 +613,17 @@ function bridgeSetPlannedDate(app, taskId, dateValue) {
 
 ## Quick Reference Card
 
-| Task | JXA Pattern | OmniJS Pattern |
-|------|-------------|----------------|
-| **Get ID** | `task.id()` | `task.id.primaryKey` |
-| **Get name** | `task.name()` | `task.name` |
-| **Get date** | `task.dueDate()` | `task.dueDate` |
-| **Get tags** | `task.tags()` | `task.tags` |
-| **Get project** | `task.containingProject()` | `task.containingProject` |
-| **Get project ID** | `project.id()` | `project.id.primaryKey` |
-| **Set tags** | ❌ Use bridge | `task.tags = [...]` |
-| **Set plannedDate** | ❌ Use bridge | `task.plannedDate = date` |
-| **Create task** | ✅ `app.Task({...})` | ✅ `new Task(...)` |
+| Task                | JXA Pattern                | OmniJS Pattern            |
+| ------------------- | -------------------------- | ------------------------- |
+| **Get ID**          | `task.id()`                | `task.id.primaryKey`      |
+| **Get name**        | `task.name()`              | `task.name`               |
+| **Get date**        | `task.dueDate()`           | `task.dueDate`            |
+| **Get tags**        | `task.tags()`              | `task.tags`               |
+| **Get project**     | `task.containingProject()` | `task.containingProject`  |
+| **Get project ID**  | `project.id()`             | `project.id.primaryKey`   |
+| **Set tags**        | ❌ Use bridge              | `task.tags = [...]`       |
+| **Set plannedDate** | ❌ Use bridge              | `task.plannedDate = date` |
+| **Create task**     | ✅ `app.Task({...})`       | ✅ `new Task(...)`        |
 
 ---
 

@@ -265,7 +265,7 @@ function generateTestReport(testResults: TestResults): string {
             </div>
             <div class="summary-card">
                 <h3>Coverage</h3>
-                <div class="value">${Math.round((testResults.toolsTested || 0) / 22 * 100)}%</div>
+                <div class="value">${Math.round(((testResults.toolsTested || 0) / 22) * 100)}%</div>
                 <small>${testResults.toolsTested || 0} of 22 tools tested</small>
             </div>
         </div>
@@ -340,36 +340,41 @@ function generateToolCards(): string {
     { name: 'export_projects', category: 'Export', tested: false },
     { name: 'bulk_export', category: 'Export', tested: false },
     { name: 'analyze_recurring_tasks', category: 'Recurring', tested: false },
-    { name: 'get_recurring_patterns', category: 'Recurring', tested: false }
+    { name: 'get_recurring_patterns', category: 'Recurring', tested: false },
   ];
 
-  const categories = [...new Set(tools.map(t => t.category))];
-  
-  return categories.map(category => {
-    const categoryTools = tools.filter(t => t.category === category);
-    const testedCount = categoryTools.filter(t => t.tested).length;
-    const status = testedCount === categoryTools.length ? 'passed' : 
-                   testedCount === 0 ? 'untested' : 'partial';
-    
-    return `
+  const categories = [...new Set(tools.map((t) => t.category))];
+
+  return categories
+    .map((category) => {
+      const categoryTools = tools.filter((t) => t.category === category);
+      const testedCount = categoryTools.filter((t) => t.tested).length;
+      const status = testedCount === categoryTools.length ? 'passed' : testedCount === 0 ? 'untested' : 'partial';
+
+      return `
         <div class="tool-card">
             <h3>
                 <span class="status-icon ${status}"></span>
                 ${category} (${testedCount}/${categoryTools.length})
             </h3>
             <ul class="test-list">
-                ${categoryTools.map(tool => `
+                ${categoryTools
+                  .map(
+                    (tool) => `
                     <li>
                         <span class="${tool.tested ? 'check' : 'dash'}">
                             ${tool.tested ? '✓' : '−'}
                         </span>
                         <code>${tool.name}</code>
                     </li>
-                `).join('')}
+                `,
+                  )
+                  .join('')}
             </ul>
         </div>
     `;
-  }).join('');
+    })
+    .join('');
 }
 
 function generateScenarioItems(type: 'core' | 'advanced'): string {
@@ -377,9 +382,9 @@ function generateScenarioItems(type: 'core' | 'advanced'): string {
     core: [
       { name: 'List and filter tasks', status: 'passed' },
       { name: 'Create and update tasks', status: 'passed' },
-      { name: 'Today\'s agenda view', status: 'passed' },
+      { name: "Today's agenda view", status: 'passed' },
       { name: 'Project listing', status: 'passed' },
-      { name: 'Basic search functionality', status: 'passed' }
+      { name: 'Basic search functionality', status: 'passed' },
     ],
     advanced: [
       { name: 'Complete task lifecycle', status: 'pending' },
@@ -387,20 +392,24 @@ function generateScenarioItems(type: 'core' | 'advanced'): string {
       { name: 'Tag management', status: 'pending' },
       { name: 'Export functionality', status: 'pending' },
       { name: 'Recurring task analysis', status: 'pending' },
-      { name: 'Performance analytics', status: 'passed' }
-    ]
+      { name: 'Performance analytics', status: 'passed' },
+    ],
   };
 
-  return scenarios[type].map(scenario => `
+  return scenarios[type]
+    .map(
+      (scenario) => `
     <div class="scenario-item ${scenario.status}">
         <strong>${scenario.name}</strong>
         <div style="color: #7f8c8d; font-size: 0.9em;">
-            Status: ${scenario.status === 'passed' ? '✅ Passed' : 
-                     scenario.status === 'failed' ? '❌ Failed' : 
-                     '⏳ Pending'}
+            Status: ${
+              scenario.status === 'passed' ? '✅ Passed' : scenario.status === 'failed' ? '❌ Failed' : '⏳ Pending'
+            }
         </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 }
 
 function generatePerformanceBars(): string {
@@ -409,28 +418,32 @@ function generatePerformanceBars(): string {
     { name: 'get_task_count', time: 800 },
     { name: 'todays_agenda', time: 3500 },
     { name: 'get_productivity_stats', time: 4500 },
-    { name: 'create_task', time: 1500 }
+    { name: 'create_task', time: 1500 },
   ];
 
-  const maxTime = Math.max(...metrics.map(m => m.time));
+  const maxTime = Math.max(...metrics.map((m) => m.time));
 
-  return metrics.map(metric => `
+  return metrics
+    .map(
+      (metric) => `
     <div class="perf-bar">
         <div class="perf-label">${metric.name}</div>
         <div class="perf-value">
-            <div class="perf-fill" style="width: ${(metric.time / maxTime * 100)}%">
+            <div class="perf-fill" style="width: ${(metric.time / maxTime) * 100}%">
                 ${metric.time}ms
             </div>
         </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join('');
 }
 
 function generateGherkinScenarios(): string {
   const scenarios: GherkinScenario[] = [
     { name: 'List incomplete tasks', tested: true },
     { name: 'Search for tasks by keyword', tested: true },
-    { name: 'Get today\'s agenda', tested: true },
+    { name: "Get today's agenda", tested: true },
     { name: 'Create a simple task', tested: true },
     { name: 'Create a task with full properties', tested: false },
     { name: 'Update an existing task', tested: false },
@@ -447,17 +460,21 @@ function generateGherkinScenarios(): string {
     { name: 'Analyze task velocity', tested: false },
     { name: 'Export tasks as JSON/CSV', tested: false },
     { name: 'Bulk export all data', tested: false },
-    { name: 'Test cache performance', tested: false }
+    { name: 'Test cache performance', tested: false },
   ];
 
-  return scenarios.map(scenario => `
+  return scenarios
+    .map(
+      (scenario) => `
     <li>
         <span class="${scenario.tested ? 'check' : 'dash'}">
             ${scenario.tested ? '✓' : '−'}
         </span>
         ${scenario.name}
     </li>
-  `).join('');
+  `,
+    )
+    .join('');
 }
 
 // Generate report with sample data
@@ -465,7 +482,7 @@ const sampleResults: TestResults = {
   passed: 6,
   failed: 0,
   toolsTested: 7,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
 };
 
 const report = generateTestReport(sampleResults);

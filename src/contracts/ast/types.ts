@@ -23,10 +23,10 @@ export type ComparisonOperator =
   | '>'
   | '<='
   | '>='
-  | 'includes'  // String contains substring
-  | 'matches'   // Regex match
-  | 'some'      // Array: at least one matches
-  | 'every';    // Array: all match
+  | 'includes' // String contains substring
+  | 'matches' // Regex match
+  | 'some' // Array: at least one matches
+  | 'every'; // Array: all match
 
 // =============================================================================
 // AST NODE TYPES
@@ -66,9 +66,9 @@ export interface NotNode {
  */
 export interface ComparisonNode {
   type: 'comparison';
-  field: string;           // e.g., 'task.completed', 'task.flagged', 'taskTags'
+  field: string; // e.g., 'task.completed', 'task.flagged', 'taskTags'
   operator: ComparisonOperator;
-  value: unknown;          // The value to compare against
+  value: unknown; // The value to compare against
 }
 
 /**
@@ -95,13 +95,7 @@ export interface LiteralNode {
 /**
  * Union of all filter node types
  */
-export type FilterNode =
-  | AndNode
-  | OrNode
-  | NotNode
-  | ComparisonNode
-  | ExistsNode
-  | LiteralNode;
+export type FilterNode = AndNode | OrNode | NotNode | ComparisonNode | ExistsNode | LiteralNode;
 
 // =============================================================================
 // TYPE GUARDS
@@ -148,8 +142,8 @@ export const KNOWN_FIELDS = [
   'task.effectiveInInbox',
 
   // Status properties
-  'task.taskStatus',     // TaskStatus enum: active, completed, dropped
-  'task.dropped',        // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
+  'task.taskStatus', // TaskStatus enum: active, completed, dropped
+  'task.dropped', // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
 
   // Date properties
   'task.dueDate',
@@ -164,11 +158,11 @@ export const KNOWN_FIELDS = [
 
   // Relationship properties
   'task.containingProject',
-  'task.repetitionRule',  // RepetitionRule object or null
-  'taskTags',             // Special: array of tag names
+  'task.repetitionRule', // RepetitionRule object or null
+  'taskTags', // Special: array of tag names
 ] as const;
 
-export type KnownField = typeof KNOWN_FIELDS[number];
+export type KnownField = (typeof KNOWN_FIELDS)[number];
 
 // =============================================================================
 // FACTORY FUNCTIONS (for convenient AST construction)
@@ -186,11 +180,7 @@ export function not(child: FilterNode): NotNode {
   return { type: 'not', child };
 }
 
-export function compare(
-  field: string,
-  operator: ComparisonOperator,
-  value: unknown,
-): ComparisonNode {
+export function compare(field: string, operator: ComparisonOperator, value: unknown): ComparisonNode {
   return { type: 'comparison', field, operator, value };
 }
 

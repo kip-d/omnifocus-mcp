@@ -58,13 +58,13 @@ export function formatErrorWithRecovery(error: ErrorWithRecovery): string {
   const suggestions = error.recovery_suggestions || error.recovery;
   if (suggestions && suggestions.length > 0) {
     parts.push('', 'How to fix:');
-    parts.push(...suggestions.map(step => `  • ${step}`));
+    parts.push(...suggestions.map((step) => `  • ${step}`));
   }
 
   // Add related documentation
   if (error.related_documentation && error.related_documentation.length > 0) {
     parts.push('', 'Related documentation:');
-    parts.push(...error.related_documentation.map(doc => `  • ${doc}`));
+    parts.push(...error.related_documentation.map((doc) => `  • ${doc}`));
   }
 
   // Add support contact
@@ -80,4 +80,3 @@ export function formatErrorWithRecovery(error: ErrorWithRecovery): string {
 
   return parts.join('\n');
 }
-

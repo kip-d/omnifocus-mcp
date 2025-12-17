@@ -1,11 +1,14 @@
 # OmniFocus MCP Testing Tools Documentation
 
 ## Overview
-This document describes the comprehensive testing toolkit developed for debugging and validating the OmniFocus MCP server. These tools provide direct MCP server testing without requiring Claude Desktop.
+
+This document describes the comprehensive testing toolkit developed for debugging and validating the OmniFocus MCP
+server. These tools provide direct MCP server testing without requiring Claude Desktop.
 
 ## Testing Kit Components
 
 ### 1. Emergency Diagnostic (`emergency-diagnostic.js`)
+
 **Purpose**: Quick diagnostic tool to test all 16 tools and identify which are working.
 
 ```bash
@@ -13,6 +16,7 @@ node emergency-diagnostic.js
 ```
 
 **Features**:
+
 - Tests all tools with minimal parameters
 - Shows execution time for each tool
 - Parses MCP responses correctly (handles 'text' type responses)
@@ -20,6 +24,7 @@ node emergency-diagnostic.js
 - Graceful MCP termination handling
 
 **Sample Output**:
+
 ```
 === OmniFocus MCP Emergency Diagnostic ===
 Testing all tools...
@@ -34,6 +39,7 @@ Summary: 2/16 tools working
 ```
 
 ### 2. Single Tool Tester (`test-single-tool.js`)
+
 **Purpose**: Detailed testing of individual tools with custom parameters and comprehensive output analysis.
 
 ```bash
@@ -41,11 +47,12 @@ node test-single-tool.js <tool_name> [json_params]
 ```
 
 **Examples**:
+
 ```bash
 # Test tasks tool with limit
 node test-single-tool.js tasks '{"limit": 5}'
 
-# Test system tool 
+# Test system tool
 node test-single-tool.js system '{"operation": "version"}'
 
 # Test manage_task with minimal params
@@ -53,6 +60,7 @@ node test-single-tool.js manage_task '{"action": "create", "name": "Test task"}'
 ```
 
 **Features**:
+
 - Shows full MCP request being sent
 - Reports exact execution time
 - Displays complete response (including errors)
@@ -60,6 +68,7 @@ node test-single-tool.js manage_task '{"action": "create", "name": "Test task"}'
 - Validates JSON response format
 
 ### 3. Comprehensive Test Suite (`test-suite-comprehensive.js`)
+
 **Purpose**: Runs complete test suite across all tools with realistic parameters.
 
 ```bash
@@ -67,12 +76,14 @@ node test-suite-comprehensive.js
 ```
 
 **Features**:
+
 - Tests all 16 tools with appropriate parameters
 - Shows pass/fail summary
 - Reports which tools are producing output vs executing silently
 - Identifies systematic issues (like the current 90% failure rate)
 
 **Current Results** (as of investigation):
+
 ```
 === Comprehensive MCP Tool Test Suite ===
 Results Summary:
@@ -90,6 +101,7 @@ CRITICAL: 1/11 tools passing (90% failure rate)
 ### Understanding MCP Success vs Failure
 
 **✅ SUCCESS Pattern**:
+
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 [INFO] [tools] Executing tool: tasks
@@ -98,6 +110,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 ```
 
 **❌ FAILURE Pattern**:
+
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 [INFO] [tools] Executing tool: tasks
@@ -106,16 +119,19 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 ```
 
 **🚨 SILENT EXECUTION (Current Issue)**:
+
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 [INFO] [tools] Executing tool: tasks
 [INFO] [server] stdin closed, exiting gracefully per MCP specification
 ```
-*Tool executes (~400ms) but produces no stdout - this is the current systematic issue*
+
+_Tool executes (~400ms) but produces no stdout - this is the current systematic issue_
 
 ### Key Testing Insights
 
-1. **Graceful Exit ≠ Failure**: Quick exit (3-400ms) with "graceful" message indicates successful MCP protocol compliance
+1. **Graceful Exit ≠ Failure**: Quick exit (3-400ms) with "graceful" message indicates successful MCP protocol
+   compliance
 2. **No stdout ≠ Timeout**: Tools that execute but produce no output are failing silently, not timing out
 3. **Response Format**: All responses use `type: 'text'` with JSON strings inside (not `type: 'json'`)
 4. **MCP Compliance**: Server properly exits on stdin close per MCP specification
@@ -125,7 +141,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | node dist/index.js
 ### When to Use Each Tool
 
 1. **Emergency Diagnostic**: First step for any widespread issues
-2. **Single Tool Tester**: Deep dive into specific tool failures  
+2. **Single Tool Tester**: Deep dive into specific tool failures
 3. **Comprehensive Suite**: Validation after fixes, regression testing
 
 ### Integration with Development Workflow

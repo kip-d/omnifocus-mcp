@@ -13,7 +13,8 @@ import { ProductivityStatsData } from '../../omnifocus/script-response-types.js'
 
 export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSchemaV2> {
   name = 'productivity_stats';
-  description = 'Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.\n\nNOTE: An experimental unified API (omnifocus_analyze) is available for testing builder-style analysis. The \'productivity_stats\' tool remains the stable, recommended option for production use.';
+  description =
+    "Generate comprehensive productivity statistics and GTD health metrics. Returns summary insights first, then detailed stats.\n\nNOTE: An experimental unified API (omnifocus_analyze) is available for testing builder-style analysis. The 'productivity_stats' tool remains the stable, recommended option for production use.";
   schema = ProductivityStatsSchemaV2;
   meta = {
     // Phase 1: Essential metadata
@@ -41,17 +42,16 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
     const timer = new OperationTimerV2();
 
     try {
-      const {
-        period = 'week',
-        includeProjectStats = true,
-        includeTagStats = true,
-      } = args;
+      const { period = 'week', includeProjectStats = true, includeTagStats = true } = args;
 
       // Create cache key
       const cacheKey = `productivity_v2_${period}_${includeProjectStats}_${includeTagStats}`;
 
       // Check cache (1 hour TTL for analytics)
-      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; healthScore?: number }>('analytics', cacheKey);
+      const cached = this.cache.get<{ period?: string; stats?: Record<string, unknown>; healthScore?: number }>(
+        'analytics',
+        cacheKey,
+      );
       if (cached) {
         this.logger.debug('Returning cached productivity stats');
         return createAnalyticsResponseV2(
@@ -73,7 +73,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
           period,
           includeProjectStats,
           includeTagStats,
-          includeInactive: false,  // Only active projects by default for performance
+          includeInactive: false, // Only active projects by default for performance
         },
       });
       const result = await this.execJson<ProductivityStatsData>(script);
@@ -112,14 +112,20 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
       if (result && typeof result === 'object' && result !== null) {
         // First unwrap: execJson wrapper {success: true, data: ...}
         if ('data' in result) {
-          actualData = (result as {data: unknown}).data;
+          actualData = (result as { data: unknown }).data;
         } else {
           actualData = result;
         }
 
         // Second unwrap: script wrapper {ok: true, v: "1", data: ...}
-        if (actualData && typeof actualData === 'object' && actualData !== null && 'ok' in actualData && 'data' in actualData) {
-          actualData = (actualData as {ok: boolean, data: unknown}).data;
+        if (
+          actualData &&
+          typeof actualData === 'object' &&
+          actualData !== null &&
+          'ok' in actualData &&
+          'data' in actualData
+        ) {
+          actualData = (actualData as { ok: boolean; data: unknown }).data;
         }
       } else {
         actualData = result;
@@ -127,7 +133,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
 
       // Handle the actual script response format
       let overview: ScriptOverview;
-      let projectStatsArray: Array<{ name: string; completedCount: number; }> | Record<string, unknown>;
+      let projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
       let tagStatsArray: Record<string, unknown>;
       let insights: string[];
 
@@ -144,8 +150,8 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
           overdueCount: summary.overdueCount || 0,
         };
 
-        projectStatsArray = includeProjectStats ? (typedScriptData.projectStats || []) : [];
-        tagStatsArray = includeTagStats ? (typedScriptData.tagStats || {}) : {};
+        projectStatsArray = includeProjectStats ? typedScriptData.projectStats || [] : [];
+        tagStatsArray = includeTagStats ? typedScriptData.tagStats || {} : {};
         insights = typedScriptData.insights || [];
       } else {
         // Fallback for empty/error cases
@@ -167,11 +173,14 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
           overview,
           daily: [],
           weekly: {},
-          projectStats: Array.isArray(projectStatsArray) ? projectStatsArray : Object.entries(projectStatsArray || {}).map(([name, data]) => ({
-            name,
-            completedCount: (data && typeof data === 'object' && 'completedCount' in data) ? Number(data.completedCount) || 0 : 0,
-            ...(data && typeof data === 'object' ? data as Record<string, unknown> : {}),
-          })),
+          projectStats: Array.isArray(projectStatsArray)
+            ? projectStatsArray
+            : Object.entries(projectStatsArray || {}).map(([name, data]) => ({
+                name,
+                completedCount:
+                  data && typeof data === 'object' && 'completedCount' in data ? Number(data.completedCount) || 0 : 0,
+                ...(data && typeof data === 'object' ? (data as Record<string, unknown>) : {}),
+              })),
           tagStats: tagStatsArray,
         },
         insights: { recommendations: insights },
@@ -184,19 +193,13 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
       // Generate key findings
       const keyFindings = this.extractKeyFindings(responseData);
 
-      return createAnalyticsResponseV2(
-        'productivity_stats',
-        responseData,
-        'Productivity Analysis',
-        keyFindings,
-        {
-          from_cache: false,
-          period,
-          includeProjectStats,
-          includeTagStats,
-          ...timer.toMetadata(),
-        },
-      );
+      return createAnalyticsResponseV2('productivity_stats', responseData, 'Productivity Analysis', keyFindings, {
+        from_cache: false,
+        period,
+        includeProjectStats,
+        includeTagStats,
+        ...timer.toMetadata(),
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -228,7 +231,6 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
       );
     }
   }
-
 
   private extractKeyFindings(data: {
     period?: string;
@@ -274,8 +276,7 @@ export class ProductivityStatsTool extends BaseTool<typeof ProductivityStatsSche
 
     // Add top performing project
     if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
-      const topProject = data.stats.projectStats
-        .sort((a, b) => (b.completedCount || 0) - (a.completedCount || 0))[0];
+      const topProject = data.stats.projectStats.sort((a, b) => (b.completedCount || 0) - (a.completedCount || 0))[0];
       if (topProject && topProject.completedCount > 0) {
         findings.push(`Most productive project: ${topProject.name} (${topProject.completedCount} completed)`);
       }

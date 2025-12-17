@@ -3,7 +3,7 @@ import {
   LocalDateTimeSchema,
   createDateField,
   createClearDateField,
-  dateSchemaHelpers
+  dateSchemaHelpers,
 } from '../../../../src/tools/schemas/date-schemas';
 
 describe('Date Schemas', () => {

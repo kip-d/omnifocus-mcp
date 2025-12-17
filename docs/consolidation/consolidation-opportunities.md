@@ -1,19 +1,15 @@
 # Consolidation Opportunities
 
-**Created:** 2025-11-07
-**Purpose:** Detailed migration plans for Phase 2B execution
-**Phase:** 2A.4 - Consolidation Planning
-**Related:** Phase 2A.1-3 analysis documents
+**Created:** 2025-11-07 **Purpose:** Detailed migration plans for Phase 2B execution **Phase:** 2A.4 - Consolidation
+Planning **Related:** Phase 2A.1-3 analysis documents
 
 ## Executive Summary
 
-**Quick Wins Identified:** 2 opportunities (3-5 hours total, zero/low risk)
-**Easy Migrations:** 6 scripts (Tier 1 - 2-4 hours each)
-**Medium Migrations:** 28 scripts (Tier 2 - 3-5 hours each)
-**Complex Migrations:** 2 scripts (Tier 3 - 4-6 hours each)
+**Quick Wins Identified:** 2 opportunities (3-5 hours total, zero/low risk) **Easy Migrations:** 6 scripts (Tier 1 - 2-4
+hours each) **Medium Migrations:** 28 scripts (Tier 2 - 3-5 hours each) **Complex Migrations:** 2 scripts (Tier 3 - 4-6
+hours each)
 
-**Total Estimated Effort:** 60-120 hours (3-6 weeks)
-**Total Impact:** 815KB reduction, 10-100x performance gain
+**Total Estimated Effort:** 60-120 hours (3-6 weeks) **Total Impact:** 815KB reduction, 10-100x performance gain
 
 ## Quick Wins (Do First)
 
@@ -61,6 +57,7 @@
    - `bridgeGetDateFields()` - Need to verify usage
 
 **Verified Zero-Usage Functions (5 functions):**
+
 1. serializeTask() - 53 LOC
 2. isTaskBlocked() - 77 LOC
 3. isTaskNext() - 30 LOC
@@ -70,6 +67,7 @@
 **Total:** ~271 LOC to delete (updated from 364 LOC)
 
 **Verification Commands:**
+
 ```bash
 # Verify each function has zero usage
 grep -r "serializeTask" src/omnifocus/scripts/ --include="*.ts" | grep -v "shared/"
@@ -80,6 +78,7 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
 ```
 
 **Steps:**
+
 1. Run verification commands above
 2. Delete functions from source files:
    - helpers.ts: Remove from SAFE_UTILITIES bundle
@@ -90,9 +89,8 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
 5. Run tests: `npm test && npm run test:integration`
 6. Commit: "refactor: delete 5 zero-usage functions (~271 LOC)"
 
-**Risk:** ZERO - functions aren't used anywhere
-**Impact:** ~271 LOC deleted, ~9KB smaller bundles
-**Priority:** HIGHEST (easy win, zero risk, immediate cleanup)
+**Risk:** ZERO - functions aren't used anywhere **Impact:** ~271 LOC deleted, ~9KB smaller bundles **Priority:** HIGHEST
+(easy win, zero risk, immediate cleanup)
 
 ---
 
@@ -135,12 +133,15 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
 **Total:** ~79 LOC to delete from helpers.ts
 
 **Impact on Scripts:**
+
 - Scripts using getUnifiedHelpers() will need to import from repeat-helpers.ts if they use these functions
 - Only 2 scripts actually use repeat functions: create-task.ts, update-task.ts
 
 **Steps:**
+
 1. Delete RECURRENCE_APPLY_FUNCTIONS constant from helpers.ts
 2. Update getUnifiedHelpers() to import from repeat-helpers.ts instead:
+
    ```typescript
    // In helpers.ts
    import { REPEAT_HELPERS } from './repeat-helpers.js';
@@ -155,13 +156,13 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
      `;
    }
    ```
+
 3. Verify create-task.ts and update-task.ts still work
 4. Run build + tests
 5. Commit: "refactor: consolidate repeat functions to repeat-helpers.ts (~79 LOC removed)"
 
-**Risk:** LOW (keeping the better implementation, tests will catch issues)
-**Impact:** ~79 LOC deleted, single source of truth for repeat operations
-**Priority:** MEDIUM (cleanup, improves maintainability)
+**Risk:** LOW (keeping the better implementation, tests will catch issues) **Impact:** ~79 LOC deleted, single source of
+truth for repeat operations **Priority:** MEDIUM (cleanup, improves maintainability)
 
 ---
 
@@ -169,13 +170,13 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
 
 ### Structure
 
-**File:** `src/omnifocus/scripts/shared/essential-bridge.ts`
-**Size:** ~3KB (vs 18KB current getUnifiedHelpers)
+**File:** `src/omnifocus/scripts/shared/essential-bridge.ts` **Size:** ~3KB (vs 18KB current getUnifiedHelpers)
 **Purpose:** Minimal bridge operations for JXA limitations only
 
 **Included Functions (7 essential operations):**
 
 #### Tag Operations (2 functions)
+
 1. **`bridgeSetTags(app, taskId, tagNames)`** - minimal-tag-bridge.ts
    - Purpose: Assign tags (JXA limitation - tags don't persist without bridge)
    - LOC: ~16
@@ -187,6 +188,7 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
    - Used by: bridgeSetTags()
 
 #### Repeat Rule Operations (4 functions)
+
 3. **`prepareRepetitionRuleData(rule)`** - repeat-helpers.ts
    - Purpose: Format repeat rule data for bridge
    - LOC: ~23
@@ -208,6 +210,7 @@ grep -r "extractRepeatRuleInfo" src/omnifocus/scripts/ --include="*.ts" | grep -
    - Used by: prepareRepetitionRuleData()
 
 #### Date Operations (1 function)
+
 7. **`bridgeSetPlannedDate(app, taskId, date)`** - minimal-tag-bridge.ts
    - Purpose: Set planned date via bridge (OmniFocus 4.7+)
    - LOC: ~12
@@ -273,6 +276,7 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Scripts Using Essential Bridge (2 scripts)
 
 **1. `/tasks/create-task.ts`**
+
 - Current: getUnifiedHelpers() (18KB) + getMinimalTagBridge()
 - New: getEssentialBridge() (3KB)
 - **Savings: 15KB per execution**
@@ -283,6 +287,7 @@ export const FUNCTIONS_INCLUDED = 7;
   - bridgeSetPlannedDate() - Planned date
 
 **2. `/tasks/update-task.ts`**
+
 - Current: getUnifiedHelpers() (18KB) + embedded bridge functions
 - New: getEssentialBridge() (3KB)
 - **Savings: 15KB per execution**
@@ -293,11 +298,13 @@ export const FUNCTIONS_INCLUDED = 7;
   - moveTaskViaBridge() - Task movement (currently embedded)
   - bridgeSetPlannedDate() - Planned date
 
-**Note:** update-task.ts currently has embedded copies of __formatBridgeScript() and moveTaskViaBridge(). These should be included in essential bridge bundle.
+**Note:** update-task.ts currently has embedded copies of \_\_formatBridgeScript() and moveTaskViaBridge(). These should
+be included in essential bridge bundle.
 
 ### Migration Steps
 
 **Phase 1: Create Essential Bridge Bundle (2-3 hours)**
+
 1. Create essential-bridge.ts file
 2. Implement extractFunction() helper
 3. Test bundle generation
@@ -305,6 +312,7 @@ export const FUNCTIONS_INCLUDED = 7;
 5. Verify size is ~3KB
 
 **Phase 2: Migrate create-task.ts (1-2 hours)**
+
 1. Replace getUnifiedHelpers() with getEssentialBridge()
 2. Remove getMinimalTagBridge() import (now included)
 3. Test task creation with tags
@@ -313,17 +321,17 @@ export const FUNCTIONS_INCLUDED = 7;
 6. Verify all tests pass
 
 **Phase 3: Migrate update-task.ts (1-2 hours)**
+
 1. Replace getUnifiedHelpers() with getEssentialBridge()
-2. Remove embedded __formatBridgeScript() and moveTaskViaBridge()
+2. Remove embedded \_\_formatBridgeScript() and moveTaskViaBridge()
 3. Add moveTaskViaBridge() to essential bridge bundle
 4. Test task updates with tags
 5. Test task updates with repeat rules
 6. Test task movement operations
 7. Verify all tests pass
 
-**Total Effort:** 4-7 hours
-**Total Savings:** 2 scripts × 15KB = **30KB reduction**
-**Performance Impact:** Neutral to slightly positive (smaller bundles = faster parsing)
+**Total Effort:** 4-7 hours **Total Savings:** 2 scripts × 15KB = **30KB reduction** **Performance Impact:** Neutral to
+slightly positive (smaller bundles = faster parsing)
 
 ---
 
@@ -331,14 +339,13 @@ export const FUNCTIONS_INCLUDED = 7;
 
 ### Tier 1: Easy - Analytics Scripts (Follow v3 Pattern)
 
-**Pattern:** Pure OmniJS bridge, no helpers
-**Proven:** Phase 1 showed 13-67x performance gains
-**Time:** 2-4 hours per script
-**Total Scripts:** 2 analytics scripts still using helpers
+**Pattern:** Pure OmniJS bridge, no helpers **Proven:** Phase 1 showed 13-67x performance gains **Time:** 2-4 hours per
+script **Total Scripts:** 2 analytics scripts still using helpers
 
 **Scripts to Convert:**
 
 #### 1. `/analytics/analyze-overdue.ts`
+
 - **Current:** Uses getUnifiedHelpers() (18KB)
 - **Target:** Pure OmniJS v3 pattern
 - **Strategy:**
@@ -352,6 +359,7 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Priority:** HIGH (proven pattern, big gain)
 
 #### 2. `/analytics/workflow-analysis.ts`
+
 - **Current:** Uses getUnifiedHelpers() (18KB)
 - **Target:** Pure OmniJS v3 pattern
 - **Strategy:**
@@ -364,12 +372,14 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Priority:** HIGH
 
 **Tier 1 Total:**
+
 - Scripts: 2
 - Time: 6-8 hours total
 - Savings: 2 scripts × 18KB = 36KB
 - Performance: 10-30x faster
 
 **Already Complete (6 pure OmniJS v3 scripts):**
+
 1. productivity-stats-v3.ts - 67x faster
 2. task-velocity-v3.ts - 13x faster
 3. wip-limits-analyzer.ts - Pure OmniJS
@@ -381,14 +391,14 @@ export const FUNCTIONS_INCLUDED = 7;
 
 ### Tier 2: Medium - Non-Bridge Scripts
 
-**Pattern:** Scripts using helpers but don't need bridge operations
-**Strategy:** Convert to pure OmniJS v3 following analytics pattern
-**Time:** 3-5 hours per script
-**Total Scripts:** ~28 scripts using getUnifiedHelpers() without bridge dependency
+**Pattern:** Scripts using helpers but don't need bridge operations **Strategy:** Convert to pure OmniJS v3 following
+analytics pattern **Time:** 3-5 hours per script **Total Scripts:** ~28 scripts using getUnifiedHelpers() without bridge
+dependency
 
 **Script Categories:**
 
 #### A. CRUD Operations - Projects (5 scripts)
+
 1. `/projects/create-project.ts`
 2. `/projects/update-project.ts`
 3. `/projects/complete-project.ts`
@@ -396,12 +406,14 @@ export const FUNCTIONS_INCLUDED = 7;
 5. `/projects/list-projects.ts`
 
 **Strategy:**
+
 - Projects don't need tags or repeat rules
 - Likely using helpers for validation/error handling only
 - Convert to pure OmniJS with inline error handling
 - Estimated: 3-4 hours each
 
 #### B. CRUD Operations - Folders (5 scripts)
+
 1. `/folders/create-folder.ts`
 2. `/folders/update-folder.ts`
 3. `/folders/delete-folder.ts`
@@ -409,71 +421,85 @@ export const FUNCTIONS_INCLUDED = 7;
 5. `/folders/list-folders.ts`
 
 **Strategy:**
+
 - Simple operations, no bridge needed
 - Convert to pure OmniJS
 - Estimated: 2-3 hours each (simpler than projects)
 
 #### C. CRUD Operations - Tasks (Simple) (4 scripts)
+
 1. `/tasks/complete-task.ts`
 2. `/tasks/complete-tasks-bulk.ts`
 3. `/tasks/delete-task.ts`
 4. `/tasks/delete-tasks-bulk.ts`
 
 **Strategy:**
+
 - Simple completion/deletion operations
 - No tags or repeat rules involved
 - Convert to pure OmniJS
 - Estimated: 2-3 hours each
 
 #### D. Query Operations (4 scripts)
+
 1. `/tasks/get-task-count.ts`
 2. `/tasks/todays-agenda.ts`
 3. `/perspectives/list-perspectives.ts`
 4. `/date-range-queries.ts`
 
 **Strategy:**
+
 - Read-only queries, no bridge needed
 - Convert to pure OmniJS
 - Estimated: 2-4 hours each
 
 #### E. Export Operations (2 scripts)
+
 1. `/export/export-tasks.ts`
 2. `/export/export-projects.ts`
 
 **Strategy:**
+
 - Bulk read operations, perfect for OmniJS bridge
 - Follow cache warming pattern (125x faster proven)
 - Estimated: 3-4 hours each
 
 #### F. Reviews (3 scripts)
+
 1. `/reviews/projects-for-review.ts`
 2. `/reviews/mark-project-reviewed.ts`
 3. `/reviews/set-review-schedule.ts`
 
 **Strategy:**
+
 - Review operations, no bridge needed
 - Convert to pure OmniJS
 - Estimated: 2-3 hours each
 
 #### G. Recurring Tasks (2 scripts)
+
 1. `/recurring/analyze-recurring-tasks.ts`
 2. `/recurring/get-recurring-patterns.ts`
 
 **Strategy:**
+
 - Analysis operations, no bridge needed (read-only)
 - Convert to pure OmniJS
 - Estimated: 3-4 hours each
 
 #### H. Tags (1 script)
+
 1. `/tags/manage-tags.ts`
 
 **Strategy:**
+
 - Tag CRUD operations
 - Tag creation doesn't need bridge (only tag assignment to tasks does)
 - Convert to pure OmniJS
 - Estimated: 3 hours
 
 **Tier 2 Total:**
+
 - Scripts: 26 scripts (updated from 28)
 - Time: 60-100 hours total (~2-3 weeks)
 - Savings: 26 scripts × 18KB = 468KB
@@ -485,14 +511,13 @@ export const FUNCTIONS_INCLUDED = 7;
 
 ### Tier 3: Complex - Bridge-Dependent Scripts
 
-**Pattern:** Must use bridge for JXA limitations
-**Strategy:** Switch from getUnifiedHelpers() (18KB) to getEssentialBridge() (3KB)
-**Time:** 4-6 hours per script
-**Total Scripts:** 2 scripts
+**Pattern:** Must use bridge for JXA limitations **Strategy:** Switch from getUnifiedHelpers() (18KB) to
+getEssentialBridge() (3KB) **Time:** 4-6 hours per script **Total Scripts:** 2 scripts
 
 **Scripts:**
 
 #### 1. `/tasks/create-task.ts`
+
 - **Current:** getUnifiedHelpers() (18KB) + getMinimalTagBridge()
 - **Bridge Operations Required:**
   - Tag assignment (JXA can't persist tags)
@@ -508,6 +533,7 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Priority:** MEDIUM (after Tier 1/2 conversions prove pattern)
 
 #### 2. `/tasks/update-task.ts`
+
 - **Current:** getUnifiedHelpers() (18KB) + embedded bridge functions
 - **Bridge Operations Required:**
   - Tag assignment/update
@@ -516,7 +542,7 @@ export const FUNCTIONS_INCLUDED = 7;
   - Planned date updates
 - **Migration:**
   1. Replace getUnifiedHelpers() with getEssentialBridge()
-  2. Remove embedded __formatBridgeScript() and moveTaskViaBridge()
+  2. Remove embedded \_\_formatBridgeScript() and moveTaskViaBridge()
   3. Add moveTaskViaBridge() to essential bridge bundle
   4. Test all bridge operations
   5. Verify integration tests pass
@@ -525,6 +551,7 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Priority:** MEDIUM
 
 **Tier 3 Total:**
+
 - Scripts: 2
 - Time: 10-12 hours total
 - Savings: 2 scripts × 15KB = 30KB
@@ -537,12 +564,14 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Week 1: Foundation & Quick Wins
 
 **Day 1-2: Quick Win 1 - Delete Zero-Usage Functions**
+
 - Delete 5 zero-usage functions (~271 LOC)
 - Run full test suite
 - Commit and push
 - **Deliverable:** ~9KB smaller bundles, cleaner codebase
 
 **Day 3: Quick Win 2 - Consolidate Duplicates**
+
 - Delete 5 duplicate functions from helpers.ts (~79 LOC)
 - Update getUnifiedHelpers() to use repeat-helpers.ts
 - Test create-task.ts and update-task.ts
@@ -550,6 +579,7 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Deliverable:** Single source of truth for repeat operations
 
 **Day 4-5: Create Essential Bridge Bundle**
+
 - Implement essential-bridge.ts
 - Test bundle generation
 - Verify size ~3KB
@@ -563,6 +593,7 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Week 2-3: Major Migrations (Tier 1 + Start Tier 2)
 
 **Week 2, Day 1-2: Tier 1 - Analytics Conversions**
+
 - Convert analyze-overdue.ts to pure OmniJS v3 (3 hours)
 - Convert workflow-analysis.ts to pure OmniJS v3 (4 hours)
 - Test performance improvements
@@ -570,12 +601,14 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Deliverable:** 2 analytics scripts 10-30x faster, 36KB reduction
 
 **Week 2, Day 3-5: Tier 2 - Start CRUD Conversions**
+
 - Convert 3-4 simple scripts (folders, task operations)
 - Focus on simplest conversions first
 - Build conversion momentum
 - **Deliverable:** 3-4 scripts converted, 54-72KB reduction
 
 **Week 3: Continue Tier 2 Conversions**
+
 - Convert 6-8 scripts per week
 - Prioritize by impact/complexity ratio:
   1. Simple task operations (complete, delete) - 2-3 hours each
@@ -591,6 +624,7 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Week 4: Remaining Conversions + Tier 3
 
 **Day 1-3: Complete Tier 2 Conversions**
+
 - Convert remaining 14-17 scripts
 - Focus on:
   - Export operations (2 scripts)
@@ -601,6 +635,7 @@ export const FUNCTIONS_INCLUDED = 7;
 - **Deliverable:** All Tier 2 complete, ~468KB total reduction
 
 **Day 4-5: Tier 3 - Essential Bridge Migration**
+
 - Migrate create-task.ts to essential bridge (4 hours)
 - Migrate update-task.ts to essential bridge (6 hours)
 - Comprehensive testing of bridge operations
@@ -613,18 +648,21 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Week 5: Testing, Documentation, Wrap-Up
 
 **Day 1-2: Comprehensive Testing**
+
 - Run full integration test suite
 - Performance testing (before/after comparisons)
 - Regression testing
 - Edge case testing
 
 **Day 3-4: Documentation**
+
 - Update CLAUDE.md with new patterns
 - Document essential bridge usage
 - Create migration guide for future scripts
 - Update PATTERNS.md with pure OmniJS v3 examples
 
 **Day 5: Final Verification & Deployment**
+
 - Code review
 - Final performance measurements
 - Update Phase 2 results document
@@ -637,14 +675,17 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Size Reduction
 
 **Quick Wins:**
+
 - Zero-usage deletion: ~271 LOC (~9KB)
 - Duplicate consolidation: ~79 LOC (~2.5KB)
 - **Quick wins total: ~11.5KB**
 
 **Minimal Bridge Bundle:**
+
 - 2 scripts × (18KB - 3KB) = **30KB**
 
 **Pure OmniJS Conversions:**
+
 - Tier 1: 2 scripts × 18KB = 36KB
 - Tier 2: 26 scripts × 18KB = 468KB
 - **Tier 1+2 total: 504KB**
@@ -654,17 +695,21 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Performance Improvements
 
 **Tier 1 (Analytics):**
+
 - Expected: 10-30x faster (conservative)
 - Proven: 13-67x in Phase 1
 
 **Tier 2 (CRUD/Query Operations):**
+
 - Expected: 10-100x faster (varies by operation)
 - Conservative average: 20x faster
 
 **Tier 3 (Bridge-Dependent):**
+
 - Expected: Neutral to 10-20% faster (smaller bundles)
 
 **Overall:**
+
 - 28 scripts: 10-100x faster (20x conservative average)
 - 2 scripts: Neutral to 10-20% faster
 - **Weighted average: ~20x performance improvement**
@@ -703,17 +748,20 @@ export const FUNCTIONS_INCLUDED = 7;
 ### For Each Migration
 
 **Before:**
+
 1. Create feature branch from main
 2. Document current performance (if applicable)
 3. Review script's actual helper usage
 
 **During:**
+
 1. Make incremental changes
 2. Test frequently (npm run build && npm test)
 3. Commit after each successful change
 4. Document any issues encountered
 
 **After:**
+
 1. Run full integration test suite
 2. Performance testing (before/after comparison)
 3. Code review
@@ -722,12 +770,14 @@ export const FUNCTIONS_INCLUDED = 7;
 ### Rollback Plan
 
 **If Issues Arise:**
+
 1. Keep old helpers in archive branch
 2. Can revert individual scripts if needed
 3. Essential bridge is additive (doesn't break existing code)
 4. Comprehensive test coverage catches regressions
 
 **For Critical Scripts (create-task, update-task):**
+
 1. Extra testing cycles
 2. Staging environment testing
 3. Gradual rollout
@@ -740,15 +790,15 @@ export const FUNCTIONS_INCLUDED = 7;
 ### 1. Convert 26 Non-Bridge Scripts to Pure OmniJS v3 (Tier 2)
 
 **Impact:**
+
 - Size: 468KB reduction (86% of total savings)
 - Performance: 10-100x faster (20x average)
 - Maintenance: Dramatically simpler code
 
-**Effort:** 60-100 hours (~2-3 weeks)
-**Risk:** LOW (proven pattern from Phase 1)
-**Priority:** HIGHEST
+**Effort:** 60-100 hours (~2-3 weeks) **Risk:** LOW (proven pattern from Phase 1) **Priority:** HIGHEST
 
 **Why This Matters:**
+
 - Biggest size reduction by far
 - Biggest performance gain
 - Proven pattern (6 v3 scripts already exist)
@@ -759,15 +809,15 @@ export const FUNCTIONS_INCLUDED = 7;
 ### 2. Delete Zero-Usage Functions (Quick Win 1)
 
 **Impact:**
+
 - Size: ~271 LOC (~9KB) reduction
 - Maintenance: Less code to understand
 - Clarity: No confusing unused functions
 
-**Effort:** 1-2 hours
-**Risk:** ZERO (literally zero usage)
-**Priority:** HIGHEST
+**Effort:** 1-2 hours **Risk:** ZERO (literally zero usage) **Priority:** HIGHEST
 
 **Why This Matters:**
+
 - Immediate cleanup with zero risk
 - Builds momentum for larger changes
 - Proves the analysis is sound
@@ -778,15 +828,16 @@ export const FUNCTIONS_INCLUDED = 7;
 ### 3. Create Essential Bridge Bundle (Tier 3 Foundation)
 
 **Impact:**
+
 - Size: 30KB reduction for 2 critical scripts
 - Pattern: Clear separation of concerns
 - Future: Template for any new bridge-dependent scripts
 
-**Effort:** 10-12 hours total (3 hours creation + 10 hours migration)
-**Risk:** LOW (keeping functionality, just smaller bundle)
-**Priority:** HIGH
+**Effort:** 10-12 hours total (3 hours creation + 10 hours migration) **Risk:** LOW (keeping functionality, just smaller
+bundle) **Priority:** HIGH
 
 **Why This Matters:**
+
 - Creates sustainable pattern for bridge operations
 - Shows that even bridge-dependent scripts can be optimized
 - 90% size reduction for these scripts (18KB → 3KB)
@@ -797,17 +848,19 @@ export const FUNCTIONS_INCLUDED = 7;
 ## Next Steps
 
 **Immediate Actions (This Week):**
+
 1. Execute Quick Win 1: Delete zero-usage functions (1-2 hours)
 2. Execute Quick Win 2: Consolidate duplicates (2-3 hours)
 3. Begin Tier 1: Convert analyze-overdue.ts to v3 (3 hours)
 
 **This Week's Goal:**
+
 - Quick wins complete (350 LOC removed)
 - 1 analytics script converted to v3
 - Momentum established for Phase 2B
 
-**Decision Point:**
-After Week 1, assess:
+**Decision Point:** After Week 1, assess:
+
 - Were conversions as straightforward as expected?
 - Did performance gains materialize?
 - Should we adjust the timeline?
@@ -818,35 +871,38 @@ After Week 1, assess:
 
 ### Summary by Tier
 
-| Tier | Scripts | Hours per Script | Total Hours | Weeks (40h) |
-|------|---------|------------------|-------------|-------------|
-| Quick Win 1 | - | - | 1-2 | 0.03-0.05 |
-| Quick Win 2 | - | - | 2-3 | 0.05-0.08 |
-| Essential Bridge | - | - | 3 | 0.08 |
-| Tier 1 (Analytics) | 2 | 3-4 | 6-8 | 0.15-0.2 |
-| Tier 2 (Non-Bridge) | 26 | 3-5 | 60-100 | 1.5-2.5 |
-| Tier 3 (Bridge Migration) | 2 | 5-6 | 10-12 | 0.25-0.3 |
-| Testing & Docs | - | - | 16-20 | 0.4-0.5 |
-| **TOTAL** | **30** | **-** | **98-148** | **2.5-3.7** |
+| Tier                      | Scripts | Hours per Script | Total Hours | Weeks (40h) |
+| ------------------------- | ------- | ---------------- | ----------- | ----------- |
+| Quick Win 1               | -       | -                | 1-2         | 0.03-0.05   |
+| Quick Win 2               | -       | -                | 2-3         | 0.05-0.08   |
+| Essential Bridge          | -       | -                | 3           | 0.08        |
+| Tier 1 (Analytics)        | 2       | 3-4              | 6-8         | 0.15-0.2    |
+| Tier 2 (Non-Bridge)       | 26      | 3-5              | 60-100      | 1.5-2.5     |
+| Tier 3 (Bridge Migration) | 2       | 5-6              | 10-12       | 0.25-0.3    |
+| Testing & Docs            | -       | -                | 16-20       | 0.4-0.5     |
+| **TOTAL**                 | **30**  | **-**            | **98-148**  | **2.5-3.7** |
 
-**Conservative Estimate:** 3-4 weeks (120-160 hours)
-**Aggressive Estimate:** 2-3 weeks (80-120 hours) if batching goes smoothly
+**Conservative Estimate:** 3-4 weeks (120-160 hours) **Aggressive Estimate:** 2-3 weeks (80-120 hours) if batching goes
+smoothly
 
 ### Reality Check
 
 **Factors that Could Speed Up:**
+
 - Batching similar scripts together
 - Pattern becomes routine after first few conversions
 - Tooling/templates developed during migration
 - Fewer edge cases than expected
 
 **Factors that Could Slow Down:**
+
 - Unexpected dependencies between scripts
 - Edge cases requiring more testing
 - Integration test failures requiring investigation
 - Performance gains don't materialize (requires investigation)
 
 **Recommended Approach:**
+
 - Plan for 3-4 weeks
 - Execute aggressively
 - Adjust timeline after Week 1 based on actual velocity
@@ -864,12 +920,14 @@ After Week 1, assess:
 5. **Tier 3 migrations** complete the optimization (10-12 hours, final polish)
 
 **Expected Results:**
+
 - 545KB size reduction (98% of overhead eliminated)
 - 20x performance improvement (conservative average)
 - 30 scripts optimized (53% of codebase)
 - Clear patterns for future development
 
 **Phase 2B can now execute with confidence:**
+
 - Detailed migration plans for each script
 - Clear prioritization and risk assessment
 - Realistic effort estimates

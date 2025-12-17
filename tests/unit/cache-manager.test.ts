@@ -9,7 +9,7 @@ vi.mock('../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('CacheManager', () => {
@@ -20,7 +20,7 @@ describe('CacheManager', () => {
     // Mock Date.now() for predictable tests
     mockDate = vi.spyOn(Date, 'now');
     mockDate.mockReturnValue(1000000); // Fixed timestamp
-    
+
     cache = new CacheManager();
     vi.clearAllTimers();
   });
@@ -33,7 +33,7 @@ describe('CacheManager', () => {
   describe('TTL Configuration', () => {
     it('should have correct default TTL values', () => {
       const cache = new CacheManager();
-      
+
       // Test by setting values and checking expiration
       cache.set('tasks', 'test', 'value');
       cache.set('projects', 'test', 'value');
@@ -51,14 +51,14 @@ describe('CacheManager', () => {
         tasks: { ttl: 5000 },
         projects: { ttl: 10000 },
       };
-      
+
       const customCache = new CacheManager(customConfig);
       customCache.set('tasks', 'test', 'value');
-      
+
       // Advance time by 4 seconds - should still be cached
       mockDate.mockReturnValue(1000000 + 4000);
       expect(customCache.get('tasks', 'test')).toBe('value');
-      
+
       // Advance time by 6 seconds - should be expired
       mockDate.mockReturnValue(1000000 + 6000);
       expect(customCache.get('tasks', 'test')).toBeNull();
@@ -68,10 +68,10 @@ describe('CacheManager', () => {
   describe('get/set operations', () => {
     it('should store and retrieve values correctly', () => {
       const testData = { id: 1, name: 'Test Task' };
-      
+
       cache.set('tasks', 'task1', testData);
       const retrieved = cache.get<typeof testData>('tasks', 'task1');
-      
+
       expect(retrieved).toEqual(testData);
     });
 
@@ -85,7 +85,7 @@ describe('CacheManager', () => {
       cache.set('tasks', 'boolean', true);
       cache.set('tasks', 'object', { nested: { value: 123 } });
       cache.set('tasks', 'array', [1, 2, 3]);
-      
+
       expect(cache.get('tasks', 'string')).toBe('test string');
       expect(cache.get('tasks', 'number')).toBe(42);
       expect(cache.get('tasks', 'boolean')).toBe(true);
@@ -98,7 +98,7 @@ describe('CacheManager', () => {
     it('should generate unique keys for different categories', () => {
       cache.set('tasks', 'item1', 'task data');
       cache.set('projects', 'item1', 'project data');
-      
+
       expect(cache.get('tasks', 'item1')).toBe('task data');
       expect(cache.get('projects', 'item1')).toBe('project data');
     });
@@ -108,7 +108,7 @@ describe('CacheManager', () => {
       cache.set('tasks', 'completed:true', 'completed tasks');
       cache.set('tasks', 'completed:false', 'active tasks');
       cache.set('tasks', 'project:work', 'work tasks');
-      
+
       expect(cache.get('tasks', 'completed:true')).toBe('completed tasks');
       expect(cache.get('tasks', 'completed:false')).toBe('active tasks');
       expect(cache.get('tasks', 'project:work')).toBe('work tasks');
@@ -117,7 +117,7 @@ describe('CacheManager', () => {
     it('should handle complex parameter combinations in keys', () => {
       const complexKey = 'completed:false_project:work_limit:50_tags:urgent,important';
       cache.set('tasks', complexKey, 'complex query result');
-      
+
       expect(cache.get('tasks', complexKey)).toBe('complex query result');
     });
   });
@@ -176,7 +176,7 @@ describe('CacheManager', () => {
         evictions: 0,
         size: 0,
         checksumFailures: 0,
-        checksumFailureRate: 0
+        checksumFailureRate: 0,
       });
 
       // Miss
@@ -204,13 +204,13 @@ describe('CacheManager', () => {
 
     it('should track cache size correctly', () => {
       expect(cache.getStats().size).toBe(0);
-      
+
       cache.set('tasks', 'task1', 'value1');
       expect(cache.getStats().size).toBe(1);
-      
+
       cache.set('projects', 'project1', 'value2');
       expect(cache.getStats().size).toBe(2);
-      
+
       cache.invalidate('tasks', 'task1');
       expect(cache.getStats().size).toBe(1);
     });
@@ -254,7 +254,7 @@ describe('CacheManager', () => {
 
     it('should invalidate specific key', () => {
       cache.invalidate('tasks', 'task1');
-      
+
       expect(cache.get('tasks', 'task1')).toBeNull();
       expect(cache.get('tasks', 'task2')).toBe('value2');
       expect(cache.get('projects', 'project1')).toBe('value3');
@@ -262,7 +262,7 @@ describe('CacheManager', () => {
 
     it('should invalidate entire category', () => {
       cache.invalidate('tasks');
-      
+
       expect(cache.get('tasks', 'task1')).toBeNull();
       expect(cache.get('tasks', 'task2')).toBeNull();
       expect(cache.get('projects', 'project1')).toBe('value3');
@@ -271,21 +271,21 @@ describe('CacheManager', () => {
 
     it('should clear all cache when no parameters provided', () => {
       cache.invalidate();
-      
+
       expect(cache.get('tasks', 'task1')).toBeNull();
       expect(cache.get('tasks', 'task2')).toBeNull();
       expect(cache.get('projects', 'project1')).toBeNull();
       expect(cache.get('analytics', 'stats1')).toBeNull();
-      
+
       expect(cache.getStats().size).toBe(0);
     });
 
     it('should update eviction stats on invalidation', () => {
       const initialStats = cache.getStats();
       const initialEvictions = initialStats.evictions;
-      
+
       cache.invalidate('tasks');
-      
+
       const stats = cache.getStats();
       expect(stats.evictions).toBe(initialEvictions + 2); // task1 and task2
     });
@@ -300,7 +300,7 @@ describe('CacheManager', () => {
 
     it('should clear specific category', () => {
       cache.clear('tasks');
-      
+
       expect(cache.get('tasks', 'task1')).toBeNull();
       expect(cache.get('projects', 'project1')).toBe('value2');
       expect(cache.get('analytics', 'stats1')).toBe('value3');
@@ -308,7 +308,7 @@ describe('CacheManager', () => {
 
     it('should clear all cache when no category specified', () => {
       cache.clear();
-      
+
       expect(cache.get('tasks', 'task1')).toBeNull();
       expect(cache.get('projects', 'project1')).toBeNull();
       expect(cache.get('analytics', 'stats1')).toBeNull();
@@ -319,10 +319,10 @@ describe('CacheManager', () => {
   describe('cache warming', () => {
     it('should return cached value if available', async () => {
       cache.set('tasks', 'test', 'cached value');
-      
+
       const fetcher = vi.fn().mockResolvedValue('new value');
       const result = await cache.warm('tasks', 'test', fetcher);
-      
+
       expect(result).toBe('cached value');
       expect(fetcher).not.toHaveBeenCalled();
     });
@@ -330,7 +330,7 @@ describe('CacheManager', () => {
     it('should call fetcher and cache result if not cached', async () => {
       const fetcher = vi.fn().mockResolvedValue('fetched value');
       const result = await cache.warm('tasks', 'test', fetcher);
-      
+
       expect(result).toBe('fetched value');
       expect(fetcher).toHaveBeenCalled();
       expect(cache.get('tasks', 'test')).toBe('fetched value');
@@ -374,13 +374,13 @@ describe('CacheManager', () => {
 
     it('should setup cleanup interval on construction', () => {
       vi.useFakeTimers();
-      
+
       // Create a new cache - this should set up the interval
       const testCache = new CacheManager();
-      
+
       // Verify an interval was set up by advancing time and checking if any timers exist
       expect(vi.getTimerCount()).toBeGreaterThan(0);
-      
+
       vi.useRealTimers();
     });
 
@@ -401,7 +401,7 @@ describe('CacheManager', () => {
 
       // Analytics should still be available
       expect(cache.get('analytics', 'analytics1')).toBe('analyticsValue');
-      
+
       const finalStats = cache.getStats();
       // The size is not updated in get() method when deleting expired entries
       // It only gets updated properly in set(), clear(), and invalidate()

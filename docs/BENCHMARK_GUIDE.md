@@ -1,4 +1,5 @@
 # Benchmark Guide
+
 ## Running Performance Benchmarks Across Multiple Machines
 
 This guide explains how to run benchmarks and compare performance across your Apple Silicon machines.
@@ -16,6 +17,7 @@ npm run benchmark
 ```
 
 **Output**:
+
 - Console: Human-readable table with timings
 - File: `benchmark-summary-{machine}-{date}.json` (~100 lines)
 
@@ -64,19 +66,19 @@ The JSON summary contains all essential data in ~100 lines:
 ```json
 {
   "machine": {
-    "name": "m2-air",              // Auto-detected from CPU model
+    "name": "m2-air", // Auto-detected from CPU model
     "cpu": "Apple M2",
     "cores": 8,
     "memory": "24 GB",
     "nodeVersion": "v24.10.0"
   },
   "benchmarkInfo": {
-    "mode": "warm_cache",          // Always warm_cache for realistic performance
-    "commit": "8f7a55f",           // Git commit hash
+    "mode": "warm_cache", // Always warm_cache for realistic performance
+    "commit": "8f7a55f", // Git commit hash
     "timestamp": "2025-10-28T12:22:00.590Z"
   },
   "cacheWarming": {
-    "duration_ms": 8023,           // Time spent warming caches
+    "duration_ms": 8023, // Time spent warming caches
     "enabled": true
   },
   "operations": [
@@ -92,13 +94,13 @@ The JSON summary contains all essential data in ~100 lines:
   ],
   "comparisons": {
     "tags_names_vs_full": {
-      "improvement_pct": 93.1,     // Performance improvement percentage
-      "baseline_ms": 5444,         // Baseline timing
-      "optimized_ms": 375          // Optimized timing
+      "improvement_pct": 93.1, // Performance improvement percentage
+      "baseline_ms": 5444, // Baseline timing
+      "optimized_ms": 375 // Optimized timing
     }
   },
   "totals": {
-    "total_benchmark_time_ms": 25769,  // Total benchmark duration
+    "total_benchmark_time_ms": 25769, // Total benchmark duration
     "operations_run": 9
   }
 }
@@ -166,6 +168,7 @@ Analyze these benchmark results and create a comparison table:
 ```
 
 **Benefits of LLM analysis:**
+
 - All summary files total <500 lines (manageable token count)
 - LLM can identify patterns, anomalies, and recommendations
 - Generates formatted comparison tables
@@ -180,6 +183,7 @@ Analyze these benchmark results and create a comparison table:
 **What it is**: Pre-scanning all tasks to populate query caches (today/overdue/upcoming buckets)
 
 **Expected times:**
+
 - M4 Pro: 1.2-1.5s
 - M2 Ultra: 1.5-2.0s
 - M2 Air: 2.5-4.0s
@@ -189,24 +193,29 @@ Analyze these benchmark results and create a comparison table:
 ### Query Performance
 
 **With warm cache (post-warming):**
+
 - Task queries: 1-10ms (instant)
 - Analytics: 1-6 seconds (CPU-bound calculations)
 
 **Without cache (first query):**
+
 - Task queries: 1-5 seconds (linear scan of all tasks)
 - M2 Air can take 3+ minutes due to thermal throttling
 
 ### Performance Patterns
 
 **M4 Pro advantages:**
+
 - 35-40% faster per-task than M2 Ultra (single-core IPC improvements)
 - Best for analytics operations (4-6x faster)
 
 **M2 Ultra characteristics:**
+
 - Solid, consistent performance
 - Extra cores don't help with single-threaded JXA operations
 
 **M2 Air limitations:**
+
 - Thermal throttling under sustained load (4-5x degradation)
 - Cache warming is critical for usability
 - First query normal, subsequent queries degrade without cache
@@ -217,13 +226,13 @@ Analyze these benchmark results and create a comparison table:
 
 The benchmark auto-detects machine type from CPU model:
 
-| CPU Model Contains | Machine Name |
-|--------------------|--------------|
-| "M4 Pro" | m4-pro |
-| "M4" (not Pro) | m4 |
-| "M2 Ultra" | m2-ultra |
-| "M2" + contains "Air" | m2-air |
-| "M2" (other) | m2 |
+| CPU Model Contains    | Machine Name |
+| --------------------- | ------------ |
+| "M4 Pro"              | m4-pro       |
+| "M4" (not Pro)        | m4           |
+| "M2 Ultra"            | m2-ultra     |
+| "M2" + contains "Air" | m2-air       |
+| "M2" (other)          | m2           |
 
 If auto-detection fails, uses hostname (e.g., "MacBook-Air.local" → "macbook-air")
 
@@ -236,6 +245,7 @@ If auto-detection fails, uses hostname (e.g., "MacBook-Air.local" → "macbook-a
 **Symptom**: Benchmark hangs or times out after 30 minutes
 
 **Solution**:
+
 - Check OmniFocus isn't blocked by dialogs
 - Ensure OmniFocus is running
 - Try restarting OmniFocus
@@ -245,6 +255,7 @@ If auto-detection fails, uses hostname (e.g., "MacBook-Air.local" → "macbook-a
 **Symptom**: Benchmark completes but no summary file appears
 
 **Check**:
+
 - Write permissions in current directory
 - Console output for error messages
 - Manually inspect benchmark output
@@ -254,6 +265,7 @@ If auto-detection fails, uses hostname (e.g., "MacBook-Air.local" → "macbook-a
 **Symptom**: Summary file has generic name like "unknown" or hostname
 
 **Solution**:
+
 - Machine name detection is based on CPU model string
 - File still contains correct CPU info in machine.cpu field
 - Can manually rename file after generation
@@ -280,6 +292,7 @@ After collecting benchmark data from all machines:
 4. Update documentation with findings
 
 **Example questions for LLM analysis:**
+
 - "Which machine is best for interactive use?"
 - "Why is M4 Pro slower on 'Today's tasks' query?"
 - "Is M2 Air's thermal throttling a concern for typical usage?"

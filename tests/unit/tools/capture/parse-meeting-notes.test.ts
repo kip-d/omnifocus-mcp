@@ -28,10 +28,10 @@ Meeting Notes:
 - Review quarterly report
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.tasks).toHaveLength(3);
@@ -48,10 +48,10 @@ Website Redesign project:
 - User testing
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.projects).toHaveLength(1);
@@ -69,10 +69,10 @@ Action Items:
 - Send report to team
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       // Should only extract the one actionable item
@@ -89,30 +89,24 @@ Action Items:
 - Buy groceries
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestTags: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
       // Email task should have @computer tag
-      const emailTask = result.data.extracted.tasks.find((t: any) =>
-        t.name.includes('email')
-      );
+      const emailTask = result.data.extracted.tasks.find((t: any) => t.name.includes('email'));
       expect(emailTask.suggestedTags).toContain('@computer');
 
       // Call task should have @phone tag
-      const callTask = result.data.extracted.tasks.find((t: any) =>
-        t.name.includes('Call')
-      );
+      const callTask = result.data.extracted.tasks.find((t: any) => t.name.includes('Call'));
       expect(callTask.suggestedTags).toContain('@phone');
 
       // Buy task should have @errands tag
-      const buyTask = result.data.extracted.tasks.find((t: any) =>
-        t.name.includes('Buy')
-      );
+      const buyTask = result.data.extracted.tasks.find((t: any) => t.name.includes('Buy'));
       expect(buyTask.suggestedTags).toContain('@errands');
     });
 
@@ -122,11 +116,11 @@ Action Items:
 - Plan Q4 strategy
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestTags: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -145,11 +139,11 @@ Action Items:
 - Must complete Q4 review
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestTags: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -169,10 +163,10 @@ Action Items:
 - Ask Bob about timeline
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -198,11 +192,11 @@ Action Items:
 - Review by next week
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestDueDates: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -221,11 +215,11 @@ Action Items:
 - Check back after meeting
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestDueDates: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -242,11 +236,11 @@ Action Items:
 - Plan annual strategy
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         suggestEstimates: true,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -272,11 +266,11 @@ Standalone task:
 - Send email to client
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         extractMode: 'action_items',
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.projects).toHaveLength(0);
@@ -293,11 +287,11 @@ Standalone task:
 - Send email to client
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         extractMode: 'projects',
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.projects).toHaveLength(1);
@@ -312,11 +306,11 @@ Standalone task:
 - Review work projects status
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         existingProjects: ['Client Onboarding', 'Work Projects'],
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
 
@@ -336,12 +330,12 @@ Standalone task:
 - Random task with no project match
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         existingProjects: ['Unrelated Project'],
         defaultProject: 'Inbox',
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.tasks[0].suggestedProject).toBe('Inbox');
@@ -358,10 +352,10 @@ Project Alpha:
 Standalone task
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'batch_ready',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.batchItems).toBeDefined();
@@ -386,10 +380,10 @@ Standalone task
 - Send proposal to client by Friday
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.tasks[0].confidence).toBe('high');
@@ -400,10 +394,10 @@ Standalone task
 - Maybe
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       // Short, no tags, no dates = low confidence
@@ -424,10 +418,10 @@ Project A:
 - Standalone task 2
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.summary).toBeDefined();
@@ -440,9 +434,11 @@ Project A:
     it('should reject input that is too short', async () => {
       const input = 'x';
 
-      await expect(tool.execute({
-        input,
-      })).rejects.toThrow('Invalid parameters');
+      await expect(
+        tool.execute({
+          input,
+        }),
+      ).rejects.toThrow('Invalid parameters');
     });
 
     it('should handle empty action items gracefully', async () => {
@@ -454,10 +450,10 @@ Attendees: Everyone
 No actual action items discussed.
       `;
 
-      const result = await tool.execute({
+      const result = (await tool.execute({
         input,
         returnFormat: 'preview',
-      }) as any;
+      })) as any;
 
       expect(result.success).toBe(true);
       expect(result.data.extracted.tasks).toHaveLength(0);

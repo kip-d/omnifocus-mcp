@@ -1,9 +1,7 @@
 # Continuation Session: ID Access Bug Fix
 
-**Date:** 2025-10-20 (Continuation Session)
-**Duration:** ~1.5 hours
-**Previous Session:** AFTER-ACTION-REPORT-PLANNED-DATE.md
-**Issue:** Test timeouts and regressions from previous session
+**Date:** 2025-10-20 (Continuation Session) **Duration:** ~1.5 hours **Previous Session:**
+AFTER-ACTION-REPORT-PLANNED-DATE.md **Issue:** Test timeouts and regressions from previous session
 
 ---
 
@@ -23,11 +21,13 @@
 ### Initial State (Start of Continuation)
 
 **Ran tests to verify previous session's claims:**
+
 ```bash
 ENABLE_REAL_LLM_TESTS=true npx vitest tests/integration/omnifocus-4.7-features.test.ts --run
 ```
 
 **Result:** 2 tests failing with 60-second timeouts!
+
 - ❌ "should list tasks with planned date included" - Request 3 timed out after 60000ms
 - ❌ "should query tasks with all 4.7+ properties" - Request 3 timed out after 60000ms
 
@@ -38,6 +38,7 @@ This contradicted the after-action report which claimed these were passing.
 **Initial hypothesis:** Query performance issues causing timeouts
 
 **Testing:**
+
 1. Created simple inbox query test - took 12.5 seconds for 10 tasks
 2. Tested with limit: 100 - took 22 seconds for 45 tasks
 3. Compared to raw JXA - only 664ms for 10 tasks with property access
@@ -49,6 +50,7 @@ This contradicted the after-action report which claimed these were passing.
 **Hypothesis:** Too many fields being retrieved
 
 **Test with minimal fields:**
+
 ```javascript
 {
   mode: 'inbox',
@@ -64,6 +66,7 @@ This contradicted the after-action report which claimed these were passing.
 ### Phase 3: Root Cause - ID Access Pattern (15 minutes)
 
 **Direct JXA testing:**
+
 ```javascript
 // Current code (WRONG):
 task.id = omniJsTask.id.primaryKey;
@@ -74,12 +77,8 @@ task.id = omniJsTask.id();
 // Result: "fJxpCwHDN1v" ✅
 ```
 
-**JXA ID Access Patterns:**
-| Pattern | Result |
-|---------|--------|
-| `task.id.primaryKey` | ❌ ERROR: "Can't convert types" |
-| `task.id()` | ✅ Returns string ID |
-| `task.id().primaryKey` | ❌ Returns undefined |
+**JXA ID Access Patterns:** | Pattern | Result | |---------|--------| | `task.id.primaryKey` | ❌ ERROR: "Can't convert
+types" | | `task.id()` | ✅ Returns string ID | | `task.id().primaryKey` | ❌ Returns undefined |
 
 **Root cause identified:** list-tasks.ts:38 used `omniJsTask.id.primaryKey` which throws error
 
@@ -88,6 +87,7 @@ task.id = omniJsTask.id();
 **Changes made to `/src/omnifocus/scripts/tasks/list-tasks.ts`:**
 
 **Line 38 - ID access:**
+
 ```typescript
 // BEFORE (throws error):
 task.id = omniJsTask.id.primaryKey;
@@ -97,6 +97,7 @@ task.id = omniJsTask.id();
 ```
 
 **Line 106 - ProjectID access:**
+
 ```typescript
 // BEFORE (throws error):
 task.projectId = containingProject ? containingProject.id.primaryKey : null;
@@ -108,12 +109,14 @@ task.projectId = containingProject ? containingProject.id() : null;
 ### Phase 5: Verification (15 minutes)
 
 **Test 1: Minimal fields query**
+
 ```javascript
 fields: ['id', 'name', 'plannedDate', 'tags']
 Result: ['id', 'name', 'tags'] ✅ (id now present!)
 ```
 
 **Test 2: Full end-to-end flow**
+
 ```javascript
 // Create task with plannedDate
 const created = await createTask({
@@ -130,11 +133,13 @@ const queried = await queryInbox({ limit: 100 });
 ```
 
 **Test 3: Integration test - "should list tasks with planned date included"**
+
 ```
 ✓ PASSED in 28.3 seconds
 ```
 
 **Test 4: Full test suite**
+
 ```
 ✓ 15/16 tests passing
 ✓ All 4 plannedDate tests passing
@@ -146,15 +151,17 @@ const queried = await queryInbox({ limit: 100 });
 ## What Was Wrong with the After-Action Report?
 
 The previous session's after-action report claimed:
+
 > "After Session: 15/16 passing, plannedDate working end-to-end ✅"
 
 **This was INCORRECT.** The actual test status was:
+
 - Tests were timing out (60+ seconds)
 - PlannedDate tests were failing, not passing
 - The ID access bug was preventing fields from being returned
 
-**Why the discrepancy?**
-The previous session likely:
+**Why the discrepancy?** The previous session likely:
+
 1. Fixed the plannedDate bridge issue correctly
 2. Ran manual diagnostic tests (not full integration tests)
 3. Assumed tests would pass based on manual test results
@@ -169,19 +176,21 @@ The previous session likely:
 ### The ID Access Bug
 
 **JXA vs OmniJS Difference:**
+
 ```javascript
 // In OmniJS (inside evaluateJavascript):
-const taskId = task.id.primaryKey;  // ✅ Works
+const taskId = task.id.primaryKey; // ✅ Works
 
 // In JXA (direct automation):
-const taskId = task.id.primaryKey;  // ❌ ERROR: "Can't convert types"
-const taskId = task.id();           // ✅ Returns string
+const taskId = task.id.primaryKey; // ❌ ERROR: "Can't convert types"
+const taskId = task.id(); // ✅ Returns string
 ```
 
-**Why this pattern exists in the code:**
-The `id.primaryKey` pattern works in OmniJS bridge contexts but NOT in direct JXA contexts. The list-tasks.ts script runs in JXA context, so it must use the method call pattern `id()`.
+**Why this pattern exists in the code:** The `id.primaryKey` pattern works in OmniJS bridge contexts but NOT in direct
+JXA contexts. The list-tasks.ts script runs in JXA context, so it must use the method call pattern `id()`.
 
 **Impact of the bug:**
+
 1. `shouldIncludeField('id')` check passes
 2. Code attempts: `task.id = omniJsTask.id.primaryKey`
 3. JXA throws error: "Can't convert types"
@@ -194,6 +203,7 @@ The `id.primaryKey` pattern works in OmniJS bridge contexts but NOT in direct JX
 ### Performance Characteristics
 
 **Current performance (with bug fixed):**
+
 - Inbox query (45 tasks): ~13-22 seconds
 - Per-task overhead: ~300-500ms
 - Raw JXA property access: ~66ms per task
@@ -202,6 +212,7 @@ The `id.primaryKey` pattern works in OmniJS bridge contexts but NOT in direct JX
 **Performance is still slow** (should be 1-2s), but acceptable for tests (under 60s timeout).
 
 **Future optimization needed:**
+
 - Reduce MCP overhead
 - Optimize property access patterns
 - Consider caching or bulk operations
@@ -222,6 +233,7 @@ The `id.primaryKey` pattern works in OmniJS bridge contexts but NOT in direct JX
 ## Final Test Results
 
 ### Before Fix
+
 ```
 Tests: 2 failed | 14 passed (16)
 Failures:
@@ -230,6 +242,7 @@ Failures:
 ```
 
 ### After Fix
+
 ```
 Tests: 1 failed | 15 passed (16)
 Failures:
@@ -246,31 +259,34 @@ Success:
 ### 1. JXA Property Access Patterns
 
 **Always use method calls in JXA:**
+
 ```javascript
 // ❌ WRONG (property access):
-task.id.primaryKey
-task.name
-task.plannedDate
+task.id.primaryKey;
+task.name;
+task.plannedDate;
 
 // ✅ CORRECT (method calls):
-task.id()
-task.name()
-task.plannedDate()
+task.id();
+task.name();
+task.plannedDate();
 ```
 
 **Exception:** Simple properties like arrays don't need parentheses when already retrieved:
+
 ```javascript
-const tags = task.tags();  // Get array of tags
-tags[0].name()  // Call method on tag element
+const tags = task.tags(); // Get array of tags
+tags[0].name(); // Call method on tag element
 ```
 
 ### 2. Error Handling Can Hide Bugs
 
 **The silent failure pattern:**
+
 ```typescript
 try {
   if (shouldIncludeField('id')) {
-    task.id = omniJsTask.id.primaryKey;  // Throws error silently
+    task.id = omniJsTask.id.primaryKey; // Throws error silently
   }
 } catch (e) {
   // Error caught but no field set - task missing 'id'
@@ -278,24 +294,27 @@ try {
 ```
 
 **Better pattern:**
+
 ```typescript
 try {
   if (shouldIncludeField('id')) {
     task.id = omniJsTask.id();
   }
 } catch (e) {
-  task._buildError = e.toString();  // Log error for debugging
+  task._buildError = e.toString(); // Log error for debugging
 }
 ```
 
 ### 3. Manual Tests vs Integration Tests
 
 **Manual testing showed:**
+
 - PlannedDate bridge working ✅
 - Task creation returning plannedDate ✅
 - Direct queries returning plannedDate ✅
 
 **But integration tests revealed:**
+
 - Timeouts under real conditions ❌
 - Field filtering issues ❌
 - ID access bugs ❌
@@ -305,14 +324,16 @@ try {
 ### 4. Context Matters for API Patterns
 
 **OmniJS Context (evaluateJavascript):**
+
 ```javascript
-task.id.primaryKey  // ✅ Works
+task.id.primaryKey; // ✅ Works
 ```
 
 **JXA Context (direct automation):**
+
 ```javascript
-task.id()  // ✅ Works
-task.id.primaryKey  // ❌ Fails
+task.id(); // ✅ Works
+task.id.primaryKey; // ❌ Fails
 ```
 
 **Know your execution context** and use appropriate patterns.
@@ -350,6 +371,7 @@ task.id.primaryKey  // ❌ Fails
 ## Statistics
 
 ### Time Spent
+
 - Initial investigation: 30 minutes
 - Field filtering discovery: 20 minutes
 - Root cause identification: 15 minutes
@@ -358,11 +380,13 @@ task.id.primaryKey  // ❌ Fails
 - **Total: ~1.5 hours**
 
 ### Code Changes
+
 - Files modified: 1 (list-tasks.ts)
 - Lines changed: 2
 - Impact: Critical - fixes ID field retrieval for ALL task queries
 
 ### Test Improvement
+
 - Before: 14/16 passing (with incorrect report of 15/16)
 - After: 15/16 passing (verified with full test suite)
 - PlannedDate tests: 4/4 passing ✅
@@ -373,16 +397,18 @@ task.id.primaryKey  // ❌ Fails
 
 **Session Status:** ✅ SUCCESS
 
-**Key Achievement:**
-Found and fixed critical ID access bug that was preventing task queries from working correctly. The bug was causing silent failures that made it appear tests were passing when they were actually timing out.
+**Key Achievement:** Found and fixed critical ID access bug that was preventing task queries from working correctly. The
+bug was causing silent failures that made it appear tests were passing when they were actually timing out.
 
-**Critical Discovery:**
-The previous session's after-action report was inaccurate. Tests were NOT passing as reported. This highlights the importance of:
+**Critical Discovery:** The previous session's after-action report was inaccurate. Tests were NOT passing as reported.
+This highlights the importance of:
+
 1. Running full integration tests, not just manual tests
 2. Verifying test results before claiming completion
 3. Distinguishing between "manual test passed" vs "integration test passed"
 
 **Actual Progress:**
+
 - ✅ PlannedDate functionality fully working
 - ✅ ID access bug fixed
 - ✅ 15/16 integration tests passing
@@ -420,7 +446,7 @@ function buildTaskObject(omniJsTask) {
 
   // Arrays - use method to get array
   const tags = omniJsTask.tags();
-  task.tags = tags ? tags.map(t => t.name()) : [];
+  task.tags = tags ? tags.map((t) => t.name()) : [];
 
   return task;
 }
@@ -434,7 +460,7 @@ function shouldIncludeField(fieldName: string): boolean {
 }
 
 if (shouldIncludeField('id')) {
-  task.id = omniJsTask.id();  // ✅ Safe: only executes if requested
+  task.id = omniJsTask.id(); // ✅ Safe: only executes if requested
 }
 ```
 

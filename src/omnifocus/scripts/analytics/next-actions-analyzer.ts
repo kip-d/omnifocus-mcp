@@ -17,16 +17,37 @@ interface NextActionsResult {
 }
 
 const ACTION_VERBS = [
-  'call', 'email', 'write', 'review', 'send', 'update', 'create',
-  'fix', 'test', 'deploy', 'schedule', 'research', 'draft', 'finalize',
-  'submit', 'prepare', 'organize', 'order', 'buy', 'read', 'watch',
-  'listen', 'practice', 'clean', 'file', 'backup', 'install', 'configure',
+  'call',
+  'email',
+  'write',
+  'review',
+  'send',
+  'update',
+  'create',
+  'fix',
+  'test',
+  'deploy',
+  'schedule',
+  'research',
+  'draft',
+  'finalize',
+  'submit',
+  'prepare',
+  'organize',
+  'order',
+  'buy',
+  'read',
+  'watch',
+  'listen',
+  'practice',
+  'clean',
+  'file',
+  'backup',
+  'install',
+  'configure',
 ];
 
-const VAGUE_KEYWORDS = [
-  'stuff', 'things', 'maybe', 'ideas', 'misc', 'miscellaneous',
-  'various', 'etc', 'tbd', 'todo',
-];
+const VAGUE_KEYWORDS = ['stuff', 'things', 'maybe', 'ideas', 'misc', 'miscellaneous', 'various', 'etc', 'tbd', 'todo'];
 
 function scoreTaskName(name: string): number {
   let score = 50; // Base score
@@ -34,12 +55,12 @@ function scoreTaskName(name: string): number {
   const words = lowerName.split(/\s+/);
 
   // Bonus: Starts with action verb
-  if (ACTION_VERBS.some(verb => lowerName.startsWith(verb))) {
+  if (ACTION_VERBS.some((verb) => lowerName.startsWith(verb))) {
     score += 30;
   }
 
   // Penalty: Contains vague keywords
-  if (VAGUE_KEYWORDS.some(keyword => lowerName.includes(keyword))) {
+  if (VAGUE_KEYWORDS.some((keyword) => lowerName.includes(keyword))) {
     score -= 30;
   }
 
@@ -65,12 +86,12 @@ function generateSuggestion(taskName: string): string {
   }
 
   // Contains vague keywords
-  if (VAGUE_KEYWORDS.some(keyword => lowerName.includes(keyword))) {
+  if (VAGUE_KEYWORDS.some((keyword) => lowerName.includes(keyword))) {
     return 'Replace with specific action (e.g., "Write down...", "Review...")';
   }
 
   // Missing action verb
-  if (!ACTION_VERBS.some(verb => lowerName.startsWith(verb))) {
+  if (!ACTION_VERBS.some((verb) => lowerName.startsWith(verb))) {
     return `Add action verb at start (e.g., "Review ${taskName}")`;
   }
 
@@ -78,32 +99,30 @@ function generateSuggestion(taskName: string): string {
 }
 
 export function analyzeNextActions(tasks: Task[]): NextActionsResult {
-  const incompleteTasks = tasks.filter(t => !t.completed);
+  const incompleteTasks = tasks.filter((t) => !t.completed);
 
-  const scoredTasks = incompleteTasks.map(task => ({
+  const scoredTasks = incompleteTasks.map((task) => ({
     task: task.name,
     score: scoreTaskName(task.name),
     suggestion: '',
   }));
 
   // Add suggestions for low-scoring tasks
-  scoredTasks.forEach(item => {
+  scoredTasks.forEach((item) => {
     if (item.score < 70) {
       item.suggestion = generateSuggestion(item.task);
     }
   });
 
-  const clearTasks = scoredTasks.filter(t => t.score >= 70).length;
-  const vagueTasks = scoredTasks.filter(t => t.score < 70).length;
+  const clearTasks = scoredTasks.filter((t) => t.score >= 70).length;
+  const vagueTasks = scoredTasks.filter((t) => t.score < 70).length;
 
   const totalScore = scoredTasks.reduce((sum, t) => sum + t.score, 0);
-  const averageScore = scoredTasks.length > 0
-    ? Math.round(totalScore / scoredTasks.length)
-    : 0;
+  const averageScore = scoredTasks.length > 0 ? Math.round(totalScore / scoredTasks.length) : 0;
 
   // Get worst examples for reporting
   const worstExamples = scoredTasks
-    .filter(t => t.score < 70)
+    .filter((t) => t.score < 70)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5);
 

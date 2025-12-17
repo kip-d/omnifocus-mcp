@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
 }));
 
 describe('QueryTasksTool upcoming mode', () => {
@@ -50,4 +50,3 @@ describe('QueryTasksTool upcoming mode', () => {
     expect(res.data.tasks[0].id).toBe('u1');
   });
 });
-

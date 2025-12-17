@@ -23,10 +23,10 @@ describe('OmniFocusAnalyzeTool Integration', () => {
         scope: {
           dateRange: {
             start: '2025-01-01',
-            end: '2025-01-31'
-          }
-        }
-      }
+            end: '2025-01-31',
+          },
+        },
+      },
     };
 
     const result = await tool.execute(input);
@@ -44,8 +44,8 @@ describe('OmniFocusAnalyzeTool Integration', () => {
         params: {
           text: 'Follow up with Sarah tomorrow',
           extractTasks: true,
-        }
-      }
+        },
+      },
     };
 
     const result = await tool.execute(input);

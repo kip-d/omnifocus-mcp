@@ -1,14 +1,14 @@
 # Test Sandbox Design
 
-> **Status:** APPROVED - Ready for implementation
-> **Date:** 2025-12-11
-> **Problem:** Integration tests create real OmniFocus data that's hard to clean up, polluting the production database with orphaned tasks, projects, and tags.
+> **Status:** APPROVED - Ready for implementation **Date:** 2025-12-11 **Problem:** Integration tests create real
+> OmniFocus data that's hard to clean up, polluting the production database with orphaned tasks, projects, and tags.
 
 ---
 
 ## Overview
 
 A sandbox-based approach to integration testing that:
+
 1. Isolates all test data in a dedicated folder
 2. Enforces isolation with runtime guards
 3. Provides reliable cleanup that runs at start and end of test suites
@@ -24,13 +24,13 @@ A sandbox-based approach to integration testing that:
 
 ### Naming Requirements
 
-| Entity | Convention | Example |
-|--------|------------|---------|
-| Sandbox folder | Exactly `__MCP_TEST_SANDBOX__` | — |
-| Test projects | Any name, must be inside sandbox folder | `Batch Operations Test` |
-| Test tasks (in project) | Any name, project must be in sandbox | `verify due date update` |
-| Test tasks (inbox) | Must start with `__TEST__` | `__TEST__ inbox creation test` |
-| Test tags | Must start with `__test-` | `__test-urgent`, `__test-work` |
+| Entity                  | Convention                              | Example                        |
+| ----------------------- | --------------------------------------- | ------------------------------ |
+| Sandbox folder          | Exactly `__MCP_TEST_SANDBOX__`          | —                              |
+| Test projects           | Any name, must be inside sandbox folder | `Batch Operations Test`        |
+| Test tasks (in project) | Any name, project must be in sandbox    | `verify due date update`       |
+| Test tasks (inbox)      | Must start with `__TEST__`              | `__TEST__ inbox creation test` |
+| Test tags               | Must start with `__test-`               | `__test-urgent`, `__test-work` |
 
 ---
 
@@ -46,14 +46,14 @@ Only when `process.env.NODE_ENV === 'test'`
 
 ### Validation Rules
 
-| Operation | Validation | Error Message |
-|-----------|------------|---------------|
-| Create task with project | Query OmniFocus to verify project is inside sandbox folder | `TEST GUARD: Project "X" is not inside sandbox folder` |
-| Create task in inbox | Name must start with `__TEST__` | `TEST GUARD: Inbox tasks must have name starting with "__TEST__"` |
-| Create project | Must specify `__MCP_TEST_SANDBOX__` as parent folder | `TEST GUARD: Projects must be created inside sandbox folder` |
-| Create/use tags | All tags must start with `__test-` | `TEST GUARD: Tags must start with "__test-". Invalid: X, Y` |
-| Update task | Task must be inside sandbox OR have `__TEST__` name prefix | `TEST GUARD: Cannot update task outside sandbox` |
-| Delete task | Task must be inside sandbox OR have `__TEST__` name prefix | `TEST GUARD: Cannot delete task outside sandbox` |
+| Operation                | Validation                                                 | Error Message                                                     |
+| ------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| Create task with project | Query OmniFocus to verify project is inside sandbox folder | `TEST GUARD: Project "X" is not inside sandbox folder`            |
+| Create task in inbox     | Name must start with `__TEST__`                            | `TEST GUARD: Inbox tasks must have name starting with "__TEST__"` |
+| Create project           | Must specify `__MCP_TEST_SANDBOX__` as parent folder       | `TEST GUARD: Projects must be created inside sandbox folder`      |
+| Create/use tags          | All tags must start with `__test-`                         | `TEST GUARD: Tags must start with "__test-". Invalid: X, Y`       |
+| Update task              | Task must be inside sandbox OR have `__TEST__` name prefix | `TEST GUARD: Cannot update task outside sandbox`                  |
+| Delete task              | Task must be inside sandbox OR have `__TEST__` name prefix | `TEST GUARD: Cannot delete task outside sandbox`                  |
 
 ### Performance
 
@@ -77,22 +77,22 @@ Makes it easy to write correct tests by wrapping MCP calls with conveniences.
 ```typescript
 class TestWriteClient {
   // Ensures sandbox folder exists, caches ID
-  async ensureSandbox(): Promise<string>
+  async ensureSandbox(): Promise<string>;
 
   // Creates project inside sandbox, tracks ID for cleanup
-  async createTestProject(name: string, options?: ProjectOptions): Promise<Project>
+  async createTestProject(name: string, options?: ProjectOptions): Promise<Project>;
 
   // Creates task in specified project (must be in sandbox), tracks ID
-  async createTestTask(name: string, projectId: string, options?: TaskOptions): Promise<Task>
+  async createTestTask(name: string, projectId: string, options?: TaskOptions): Promise<Task>;
 
   // Creates inbox task (validates __TEST__ prefix), tracks ID
-  async createInboxTask(name: string, options?: TaskOptions): Promise<Task>
+  async createInboxTask(name: string, options?: TaskOptions): Promise<Task>;
 
   // Creates tag with __test- prefix (adds prefix if missing), tracks name
-  async createTestTag(name: string): Promise<Tag>
+  async createTestTag(name: string): Promise<Tag>;
 
   // Cleanup: deletes all tracked items + full sandbox sweep
-  async cleanup(): Promise<CleanupReport>
+  async cleanup(): Promise<CleanupReport>;
 }
 ```
 
@@ -130,13 +130,13 @@ it('should update task due date', async () => {
 
 Order matters due to OmniFocus constraints (folders must be empty to delete):
 
-| Step | Action | Rationale |
-|------|--------|-----------|
-| 1 | Delete all tasks with `__TEST__` name prefix | Catches inbox tasks first |
-| 2 | Delete all projects inside `__MCP_TEST_SANDBOX__` | Cascades to their tasks automatically |
-| 3 | Delete sub-folders inside sandbox (bottom-up, deepest first) | Folders must be empty to delete |
-| 4 | Delete `__MCP_TEST_SANDBOX__` folder | Now empty |
-| 5 | Delete all tags starting with `__test-` | Safe now that no tasks reference them |
+| Step | Action                                                       | Rationale                             |
+| ---- | ------------------------------------------------------------ | ------------------------------------- |
+| 1    | Delete all tasks with `__TEST__` name prefix                 | Catches inbox tasks first             |
+| 2    | Delete all projects inside `__MCP_TEST_SANDBOX__`            | Cascades to their tasks automatically |
+| 3    | Delete sub-folders inside sandbox (bottom-up, deepest first) | Folders must be empty to delete       |
+| 4    | Delete `__MCP_TEST_SANDBOX__` folder                         | Now empty                             |
+| 5    | Delete all tags starting with `__test-`                      | Safe now that no tasks reference them |
 
 ### Cleanup Report
 
@@ -184,7 +184,9 @@ Runs cleanup without running tests. Useful for recovering from crashes or cleari
 
 ### Phase 4: Legacy Cleanup (Optional, Interactive)
 
-Existing test debris in the production database should be cleaned interactively, not automatically. A future session can:
+Existing test debris in the production database should be cleaned interactively, not automatically. A future session
+can:
+
 1. Query for suspected test artifacts (tasks with "test" in name, orphaned tags, etc.)
 2. Present each item with reasoning for why it appears to be test data
 3. User confirms deletion or skips
@@ -224,12 +226,12 @@ This is NOT part of the automated infrastructure - it's a one-time manual cleanu
 
 ## Design Decisions Log
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Container type | Folder (not project) | Projects inside folder = realistic testing |
-| Naming enforcement | Runtime guard | Documentation-driven conventions get ignored |
-| Guard location | mutation-script-builder.ts | Structured data available, before string generation |
-| Inbox task handling | Require `__TEST__` prefix | Inbox testing is a real need |
-| Prefix style | `__TEST__` / `__test-` | Visually obvious if it leaks, easy to query |
-| Cleanup timing | Start AND end of suite | Catches orphans from crashes |
-| Legacy cleanup | Interactive, not automated | Organic data needs human judgment |
+| Decision            | Choice                     | Rationale                                           |
+| ------------------- | -------------------------- | --------------------------------------------------- |
+| Container type      | Folder (not project)       | Projects inside folder = realistic testing          |
+| Naming enforcement  | Runtime guard              | Documentation-driven conventions get ignored        |
+| Guard location      | mutation-script-builder.ts | Structured data available, before string generation |
+| Inbox task handling | Require `__TEST__` prefix  | Inbox testing is a real need                        |
+| Prefix style        | `__TEST__` / `__test-`     | Visually obvious if it leaks, easy to query         |
+| Cleanup timing      | Start AND end of suite     | Catches orphans from crashes                        |
+| Legacy cleanup      | Interactive, not automated | Organic data needs human judgment                   |

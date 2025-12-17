@@ -1,14 +1,13 @@
 # Streamable HTTP Transport Design
 
-**Date:** 2025-12-04
-**Status:** Approved
-**Author:** Claude (with Kip)
+**Date:** 2025-12-04 **Status:** Approved **Author:** Claude (with Kip)
 
 ---
 
 ## Summary
 
 Add optional Streamable HTTP transport to the OmniFocus MCP server, enabling:
+
 - Remote access to OmniFocus from any device on a Tailscale network (e.g., Windows → Mac)
 - Foundation for streaming tool responses (Phase 2)
 - Multiple concurrent client connections to a single OmniFocus instance
@@ -16,19 +15,20 @@ Add optional Streamable HTTP transport to the OmniFocus MCP server, enabling:
 ## Motivation
 
 The current stdio transport requires the MCP client to run on the same machine as OmniFocus. With Streamable HTTP:
+
 - A Windows machine running Claude Desktop can connect to OmniFocus running on a Mac via Tailscale
 - Beta testers using the server for development task management get better accessibility
 - Future streaming support enables progress updates for long-running analytics
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| CLI interface | `--http --port 3000` flag | Simple, discoverable, consistent with Node conventions |
-| HTTP framework | Native `http` module | Zero dependencies, supply chain security, SDK works with native types |
-| Authentication | Optional bearer token via `MCP_AUTH_TOKEN` | Defense-in-depth for Tailscale users who want it |
-| Session management | Stateful sessions | Required by MCP spec, enables Phase 2 streaming |
-| Streaming | Deferred to Phase 2 | Get transport working first, architecture supports extension |
+| Decision           | Choice                                     | Rationale                                                             |
+| ------------------ | ------------------------------------------ | --------------------------------------------------------------------- |
+| CLI interface      | `--http --port 3000` flag                  | Simple, discoverable, consistent with Node conventions                |
+| HTTP framework     | Native `http` module                       | Zero dependencies, supply chain security, SDK works with native types |
+| Authentication     | Optional bearer token via `MCP_AUTH_TOKEN` | Defense-in-depth for Tailscale users who want it                      |
+| Session management | Stateful sessions                          | Required by MCP spec, enables Phase 2 streaming                       |
+| Streaming          | Deferred to Phase 2                        | Get transport working first, architecture supports extension          |
 
 ## Architecture
 
@@ -65,18 +65,20 @@ The current stdio transport requires the MCP client to run on the same machine a
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key Principle:** The `CacheManager` and registered tools are shared across all sessions. Only the transport layer differs per session. Each session gets its own `Server` instance (MCP SDK requirement).
+**Key Principle:** The `CacheManager` and registered tools are shared across all sessions. Only the transport layer
+differs per session. Each session gets its own `Server` instance (MCP SDK requirement).
 
 ## HTTP Endpoints (MCP Spec 2025-06-18)
 
-| Path | Method | Purpose |
-|------|--------|---------|
-| `/mcp` | POST | JSON-RPC requests/notifications |
-| `/mcp` | GET | SSE stream for server→client messages |
-| `/mcp` | DELETE | Session termination |
-| `/health` | GET | Health check (our addition, returns `{"status":"ok"}`) |
+| Path      | Method | Purpose                                                |
+| --------- | ------ | ------------------------------------------------------ |
+| `/mcp`    | POST   | JSON-RPC requests/notifications                        |
+| `/mcp`    | GET    | SSE stream for server→client messages                  |
+| `/mcp`    | DELETE | Session termination                                    |
+| `/health` | GET    | Health check (our addition, returns `{"status":"ok"}`) |
 
 **Headers (handled by SDK transport):**
+
 - `MCP-Protocol-Version: 2025-06-18` - Client must send
 - `Mcp-Session-Id` - Server assigns on init, client includes thereafter
 - `Accept: application/json, text/event-stream` - Client specifies
@@ -92,19 +94,19 @@ node dist/index.js
 node dist/index.js --http [--port 3000] [--host 0.0.0.0]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--http` | (none) | Enable HTTP transport instead of stdio |
-| `--port` | `3000` | HTTP server port |
+| Flag     | Default   | Description                               |
+| -------- | --------- | ----------------------------------------- |
+| `--http` | (none)    | Enable HTTP transport instead of stdio    |
+| `--port` | `3000`    | HTTP server port                          |
 | `--host` | `0.0.0.0` | Bind address (`127.0.0.1` for local-only) |
 
 **Environment Variables:**
 
-| Variable | Purpose |
-|----------|---------|
+| Variable         | Purpose                                    |
+| ---------------- | ------------------------------------------ |
 | `MCP_AUTH_TOKEN` | Bearer token for authentication (optional) |
-| `MCP_PORT` | Alternative to `--port` flag |
-| `MCP_HOST` | Alternative to `--host` flag |
+| `MCP_PORT`       | Alternative to `--port` flag               |
+| `MCP_HOST`       | Alternative to `--host` flag               |
 
 ## Session Management
 
@@ -119,6 +121,7 @@ interface Session {
 ```
 
 **Session Lifecycle:**
+
 - Created when no `Mcp-Session-Id` header or unknown ID
 - Each session gets its own `Server` instance
 - All sessions share the same `CacheManager`
@@ -126,26 +129,31 @@ interface Session {
 - Explicit DELETE request closes session immediately
 - Server shutdown closes all sessions gracefully
 
-**Concurrent Requests:**
-OmniFocus/osascript operations are inherently serialized. Multiple sessions may queue behind each other for OmniFocus access. This is acceptable - Tailscale latency (~10-50ms) is small compared to osascript execution (~100-500ms).
+**Concurrent Requests:** OmniFocus/osascript operations are inherently serialized. Multiple sessions may queue behind
+each other for OmniFocus access. This is acceptable - Tailscale latency (~10-50ms) is small compared to osascript
+execution (~100-500ms).
 
 ## Authentication
 
 When `MCP_AUTH_TOKEN` environment variable is set:
+
 - All requests must include `Authorization: Bearer <token>` header
 - Requests without valid token receive HTTP 401
 
 When `MCP_AUTH_TOKEN` is not set:
+
 - All requests are allowed (rely on network-level security like Tailscale)
 
 ## Lifecycle & Shutdown
 
 **stdio mode (current):**
+
 - Exit when stdin closes
 - Wait for pending operations
 - Call `server.close()` to flush responses
 
 **HTTP mode (new):**
+
 - Stay running until SIGTERM/SIGINT
 - On shutdown signal:
   1. Stop accepting new connections
@@ -158,10 +166,12 @@ When `MCP_AUTH_TOKEN` is not set:
 The HTTP transport is designed to support streaming tool responses without refactoring.
 
 **Phase 1 (this design):**
+
 - Tools return complete results via `execute() → Promise<Result>`
 - `StreamableHTTPServerTransport` handles protocol
 
 **Phase 2 (future):**
+
 - Add optional `executeStreaming()` method to specific tools
 - Analytics tools yield progress chunks before final result
 - SSE stream delivers chunks to client

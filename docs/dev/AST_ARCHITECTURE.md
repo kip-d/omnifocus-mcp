@@ -2,26 +2,32 @@
 
 ## Overview
 
-The OmniFocus MCP server uses an innovative **AST-Powered Query Architecture** (V4) that represents a significant advancement over traditional template-based approaches. This architecture leverages Abstract Syntax Trees (AST) to generate optimized OmniJS filter predicates at compile-time.
+The OmniFocus MCP server uses an innovative **AST-Powered Query Architecture** (V4) that represents a significant
+advancement over traditional template-based approaches. This architecture leverages Abstract Syntax Trees (AST) to
+generate optimized OmniJS filter predicates at compile-time.
 
 ## Evolution of Query Architectures
 
 ### V1: Template-Based Approach
+
 - **Characteristics**: Simple string templates with inline filter logic
 - **Limitations**: No validation, error-prone, hard to maintain
 - **Performance**: Basic
 
 ### V2: Parameterized Templates
+
 - **Characteristics**: Templates with parameter injection
 - **Limitations**: Still template-based, limited validation
 - **Performance**: Improved
 
 ### V3: Modular Scripts
+
 - **Characteristics**: Separate script files for different query types
 - **Limitations**: Code duplication, inconsistent behavior
 - **Performance**: Good
 
 ### V4: AST-Powered (Current)
+
 - **Characteristics**: Compile-time filter generation using AST
 - **Benefits**: Single source of truth, validated filters, consistent behavior
 - **Performance**: Excellent (40% code reduction, type-safe filters)
@@ -140,26 +146,31 @@ export function buildListTasksScriptV4(params: {
 ## Benefits of AST Architecture
 
 ### 1. Type Safety
+
 - **Compile-time Validation**: Filters are validated before script generation
 - **TypeScript Integration**: Full TypeScript support for filter definitions
 - **Error Prevention**: Catches filter errors early in development
 
 ### 2. Code Reduction
+
 - **40% Smaller Scripts**: AST generation produces optimized code
 - **No Duplication**: Single source of truth for filter logic
 - **Cleaner Code**: Separation of concerns between filter definition and execution
 
 ### 3. Consistency
+
 - **Uniform Behavior**: All query modes use the same filter logic
 - **Predictable Results**: Consistent filtering across different query types
 - **Maintainable**: Changes to filter logic apply everywhere
 
 ### 4. Performance
+
 - **Optimized Predicates**: AST generates efficient OmniJS code
 - **Reduced Overhead**: No runtime filter parsing
 - **Faster Execution**: Compiled filters execute more efficiently
 
 ### 5. Testability
+
 - **Unit Testable**: Filter logic can be tested independently
 - **Mockable**: Easy to test with mock data
 - **Verifiable**: AST structure can be validated
@@ -168,15 +179,15 @@ export function buildListTasksScriptV4(params: {
 
 ### Filter Types Supported
 
-| Filter Type | AST Node Type | OmniJS Example |
-|-------------|---------------|----------------|
-| Boolean | `boolean` | `task.completed === true` |
-| String | `string` | `task.name.includes("search")` |
-| Project | `project` | `task.project.name === "Work"` |
-| Tags | `tags` | `task.tags.some(t => ["urgent"].includes(t.name))` |
-| Date | `date` | `task.dueDate < new Date("2025-12-31")` |
-| Number | `number` | `task.estimatedMinutes <= 30` |
-| Combined | `combined` | `(condition1) AND (condition2)` |
+| Filter Type | AST Node Type | OmniJS Example                                     |
+| ----------- | ------------- | -------------------------------------------------- |
+| Boolean     | `boolean`     | `task.completed === true`                          |
+| String      | `string`      | `task.name.includes("search")`                     |
+| Project     | `project`     | `task.project.name === "Work"`                     |
+| Tags        | `tags`        | `task.tags.some(t => ["urgent"].includes(t.name))` |
+| Date        | `date`        | `task.dueDate < new Date("2025-12-31")`            |
+| Number      | `number`      | `task.estimatedMinutes <= 30`                      |
+| Combined    | `combined`    | `(condition1) AND (condition2)`                    |
 
 ### Query Modes
 
@@ -220,12 +231,12 @@ sequenceDiagram
 
 ### Benchmark Results
 
-| Metric | V3 (Template) | V4 (AST) | Improvement |
-|--------|---------------|----------|-------------|
-| Script Size | 18.7KB | 11.2KB | 40% smaller |
-| Generation Time | 12ms | 8ms | 33% faster |
-| Execution Time | 450ms | 420ms | 7% faster |
-| Memory Usage | 2.1MB | 1.8MB | 14% less |
+| Metric          | V3 (Template) | V4 (AST) | Improvement |
+| --------------- | ------------- | -------- | ----------- |
+| Script Size     | 18.7KB        | 11.2KB   | 40% smaller |
+| Generation Time | 12ms          | 8ms      | 33% faster  |
+| Execution Time  | 450ms         | 420ms    | 7% faster   |
+| Memory Usage    | 2.1MB         | 1.8MB    | 14% less    |
 
 ### Optimization Techniques
 
@@ -251,7 +262,7 @@ describe('FilterAST', () => {
     const filter = {
       completed: false,
       tags: ['urgent', 'work'],
-      dueBefore: '2025-12-31'
+      dueBefore: '2025-12-31',
     };
     const ast = buildAST(filter);
     expect(ast).toMatchSnapshot();
@@ -266,10 +277,7 @@ describe('CodeEmitter', () => {
   });
 
   it('should emit correct OmniJS for combined filters', () => {
-    const node = combineNodes([
-      createBooleanFilter('completed', false),
-      createTagsFilter(['urgent'])
-    ], 'AND');
+    const node = combineNodes([createBooleanFilter('completed', false), createTagsFilter(['urgent'])], 'AND');
     const code = emitOmniJS(node);
     expect(code).toContain('task.completed === false');
     expect(code).toContain('task.tags.some');
@@ -285,10 +293,10 @@ describe('ScriptBuilder', () => {
   it('should generate executable scripts', async () => {
     const filter = { completed: false, project: 'Work' };
     const script = buildListTasksScriptV4({ filter, limit: 10 });
-    
+
     // Verify script is valid JavaScript
     expect(() => new Function(script)).not.toThrow();
-    
+
     // Verify script contains expected components
     expect(script).toContain('Application("OmniFocus")');
     expect(script).toContain('evaluateJavascript');
@@ -331,7 +339,7 @@ try {
     error: true,
     message: error.message || String(error),
     stack: error.stack || '',
-    context: 'ast_v4_execution'
+    context: 'ast_v4_execution',
   });
 }
 ```
@@ -339,21 +347,25 @@ try {
 ## Future Enhancements
 
 ### 1. Query Optimization
+
 - **Predicate Pushdown**: Push filters closer to data source
 - **Index Utilization**: Leverage OmniFocus internal indexes
 - **Parallel Processing**: Process multiple filters concurrently
 
 ### 2. Advanced Filtering
+
 - **Full-text Search**: Enhanced text search capabilities
 - **Fuzzy Matching**: Tolerant matching for user input
 - **Regular Expressions**: Pattern-based filtering
 
 ### 3. Performance Monitoring
+
 - **Query Profiling**: Track query execution metrics
 - **Performance Logging**: Log slow queries for analysis
 - **Automatic Optimization**: Suggest optimizations for slow queries
 
 ### 4. Query Caching
+
 - **Intelligent Caching**: Cache based on filter patterns
 - **Cache Invalidation**: Automatic cache updates on data changes
 - **Cache Statistics**: Monitor cache hit/miss ratios
@@ -363,6 +375,7 @@ try {
 ### From V3 to V4
 
 1. **Update Imports**:
+
    ```typescript
    // Old V3 import
    import { LIST_TASKS_SCRIPT_V3 } from './tasks/list-tasks-v3.js';
@@ -372,6 +385,7 @@ try {
    ```
 
 2. **Update Usage**:
+
    ```typescript
    // Old V3 usage
    const script = buildScript(LIST_TASKS_SCRIPT_V3, { filter, fields, limit });
@@ -398,11 +412,13 @@ try {
 
 ## Conclusion
 
-The AST-Powered Query Architecture represents a significant advancement in OmniFocus automation. By leveraging Abstract Syntax Trees for compile-time filter generation, the V4 architecture delivers:
+The AST-Powered Query Architecture represents a significant advancement in OmniFocus automation. By leveraging Abstract
+Syntax Trees for compile-time filter generation, the V4 architecture delivers:
 
 - **Better Performance**: Smaller, faster scripts
 - **Improved Reliability**: Type-safe, validated filters
 - **Enhanced Maintainability**: Clear separation of concerns
 - **Future-Proof Design**: Easy to extend and optimize
 
-This architecture positions the OmniFocus MCP server for continued innovation while maintaining backward compatibility and excellent performance characteristics.
+This architecture positions the OmniFocus MCP server for continued innovation while maintaining backward compatibility
+and excellent performance characteristics.

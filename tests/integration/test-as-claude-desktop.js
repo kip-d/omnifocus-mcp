@@ -249,7 +249,7 @@ rl.on('line', (line) => {
       const payload = parsePayload(response);
       if (!ensureSuccess(payload, 'Today task query')) return;
       const tasks = payload.data?.tasks || [];
-      const hasTags = tasks.some(t => Array.isArray(t.tags) && t.tags.length > 0);
+      const hasTags = tasks.some((t) => Array.isArray(t.tags) && t.tags.length > 0);
       if (!hasTags) {
         failAndExit('Today view returned without tag data');
         return;
@@ -270,16 +270,14 @@ rl.on('line', (line) => {
       const payload = parsePayload(response);
       if (!ensureSuccess(payload, 'Project task query')) return;
       const tasks = payload.data?.tasks || [];
-      const match = tasks.find(t => t.id === childTaskId || t.name === CHILD_TASK_NAME);
+      const match = tasks.find((t) => t.id === childTaskId || t.name === CHILD_TASK_NAME);
       if (!match) {
         failAndExit('Child task not returned in project results');
         return;
       }
 
-      const parentEntry = tasks.find(t => t.id === parentTaskId || t.name === PARENT_TASK_NAME);
-      const childCounts = parentEntry && typeof parentEntry === 'object'
-        ? parentEntry.childCounts
-        : undefined;
+      const parentEntry = tasks.find((t) => t.id === parentTaskId || t.name === PARENT_TASK_NAME);
+      const childCounts = parentEntry && typeof parentEntry === 'object' ? parentEntry.childCounts : undefined;
       if (!parentEntry || !childCounts || (childCounts.total ?? 0) < 1) {
         failAndExit('Parent task does not reflect child membership');
         return;

@@ -1,15 +1,15 @@
 # Helper Usage Analysis
 
-**Created:** 2025-11-07
-**Purpose:** Analyze which helpers are used across 57 scripts
-**Phase:** 2A.2 - Usage Analysis
+**Created:** 2025-11-07 **Purpose:** Analyze which helpers are used across 57 scripts **Phase:** 2A.2 - Usage Analysis
 **Related:** Phase 2A.1 Helper Inventory (`helper-inventory.md`)
 
 ## Executive Summary
 
-**CRITICAL FINDING:** 30% of scripts (17/57) use ZERO helpers and run pure OmniJS v3. These scripts demonstrate the 13-67x performance gain from Phase 1 and represent the target state.
+**CRITICAL FINDING:** 30% of scripts (17/57) use ZERO helpers and run pure OmniJS v3. These scripts demonstrate the
+13-67x performance gain from Phase 1 and represent the target state.
 
 **Key Statistics:**
+
 - **Total scripts analyzed:** 57 (excluding 9 helper files in `/shared/`)
 - **Scripts using helpers:** 40 (70%)
 - **Scripts pure OmniJS (no helpers):** 17 (30%)
@@ -19,22 +19,22 @@
 
 ## Summary Statistics
 
-| Metric | Count | Percentage |
-|--------|-------|------------|
-| **Total Scripts** | 57 | 100% |
-| **Scripts with helpers** | 40 | 70% |
-| **Scripts pure OmniJS v3** | 17 | 30% |
-| **Helper-only files (excluded)** | 9 | - |
+| Metric                           | Count | Percentage |
+| -------------------------------- | ----- | ---------- |
+| **Total Scripts**                | 57    | 100%       |
+| **Scripts with helpers**         | 40    | 70%        |
+| **Scripts pure OmniJS v3**       | 17    | 30%        |
+| **Helper-only files (excluded)** | 9     | -          |
 
 ### Bundle Usage Breakdown
 
-| Bundle | Scripts | Percentage | Size |
-|--------|---------|------------|------|
-| `getUnifiedHelpers()` | 30 | 53% | ~18KB |
-| `getCoreHelpers()` | 0 | 0% | ~8KB |
-| `getAllHelpers()` | 0 | 0% | ~30KB |
-| Pure OmniJS (no helpers) | 17 | 30% | 0KB |
-| Specific imports only | 10 | 18% | Variable |
+| Bundle                   | Scripts | Percentage | Size     |
+| ------------------------ | ------- | ---------- | -------- |
+| `getUnifiedHelpers()`    | 30      | 53%        | ~18KB    |
+| `getCoreHelpers()`       | 0       | 0%         | ~8KB     |
+| `getAllHelpers()`        | 0       | 0%         | ~30KB    |
+| Pure OmniJS (no helpers) | 17      | 30%        | 0KB      |
+| Specific imports only    | 10      | 18%        | Variable |
 
 ## Import Pattern Analysis
 
@@ -45,6 +45,7 @@
 **Pattern:** Imports entire unified helper bundle with 25+ functions
 
 **Scripts using this pattern:**
+
 1. `/analytics/analyze-overdue.ts`
 2. `/analytics/workflow-analysis.ts`
 3. `/date-range-queries.ts`
@@ -77,6 +78,7 @@
 30. `/tasks/update-task.ts`
 
 **Analysis:**
+
 - Largest group of scripts (53%)
 - Each script carries ~18KB helper overhead
 - Total overhead: 30 scripts × 18KB = ~540KB across codebase
@@ -84,15 +86,13 @@
 
 #### getCoreHelpers() - 0 scripts
 
-**Status:** UNUSED - No scripts use this bundle
-**Size:** ~8KB
-**Recommendation:** This bundle exists but is never imported. Consider deprecating or documenting its purpose.
+**Status:** UNUSED - No scripts use this bundle **Size:** ~8KB **Recommendation:** This bundle exists but is never
+imported. Consider deprecating or documenting its purpose.
 
 #### getAllHelpers() - 0 scripts
 
-**Status:** UNUSED - No scripts use this bundle
-**Size:** ~30KB
-**Recommendation:** This bundle exists but is never imported. Consider deprecating or documenting its purpose.
+**Status:** UNUSED - No scripts use this bundle **Size:** ~30KB **Recommendation:** This bundle exists but is never
+imported. Consider deprecating or documenting its purpose.
 
 ### Specific Helper Imports
 
@@ -101,10 +101,12 @@
 **Pattern:** Imports ONLY tag bridge functions
 
 **Scripts:**
+
 1. `/tasks/create-task.ts` - Used WITH getUnifiedHelpers()
 2. `/tasks/update-task.ts` - Used WITH getUnifiedHelpers()
 
 **Analysis:**
+
 - Bridge-dependent operations (tags REQUIRE bridge for JXA limitation)
 - Always used alongside getUnifiedHelpers(), never alone
 - Essential for task creation/update with tags
@@ -112,6 +114,7 @@
 #### Other Specific Imports - 0 scripts
 
 **Findings:**
+
 - `bridge-helpers.ts` - 0 direct imports
 - `repeat-helpers.ts` - 0 direct imports
 - `date-fields-bridge.ts` - 0 direct imports
@@ -121,13 +124,13 @@
 
 ### Category 1: Pure OmniJS v3 Scripts (No Helpers) - 17 scripts (30%)
 
-**Pattern:** `evaluateJavascript()` only, no helper imports
-**Performance:** 13-67x faster than helper-based equivalents (proven in Phase 1)
-**Overhead:** 0KB per script
+**Pattern:** `evaluateJavascript()` only, no helper imports **Performance:** 13-67x faster than helper-based equivalents
+(proven in Phase 1) **Overhead:** 0KB per script
 
 **Scripts:**
 
 #### Analytics (6 scripts)
+
 1. `/analytics/productivity-stats-v3.ts` - 67x faster than v1 with safeGet()
 2. `/analytics/task-velocity-v3.ts` - 13x faster than v1 with safeGet()
 3. `/analytics/wip-limits-analyzer.ts`
@@ -136,41 +139,50 @@
 6. `/analytics/review-gaps-analyzer.ts`
 
 #### Cache Operations (2 scripts)
+
 7. `/cache/warm-projects-cache.ts` - Pure OmniJS bridge
 8. `/cache/warm-task-caches.ts` - 125x faster with bridge vs JXA
 
 #### Tags (1 script)
+
 9. `/tags/list-tags-v3.ts` - Pure OmniJS
 
 #### Tasks (2 scripts)
+
 10. `/tasks/list-tasks-omnijs.ts` - Pure OmniJS query
 11. `/tasks/flagged-tasks-perspective.ts` - Pure OmniJS perspective
 
 #### Projects (1 script)
+
 12. `/projects/get-project-stats.ts` - Pure OmniJS bulk analysis
 
 #### Perspectives (2 scripts)
+
 13. `/perspectives.ts` - Legacy (possibly replaced by /perspectives/ directory)
 14. `/perspectives/query-perspective.ts` - Pure OmniJS perspective query
 
 #### Reviews (1 script)
+
 15. `/reviews.ts` - Legacy (possibly replaced by /reviews/ directory)
 
 #### Recurring (1 script)
+
 16. `/recurring.ts` - Legacy (possibly replaced by /recurring/ directory)
 
 #### System (1 script)
+
 17. `/system/get-version.ts` - Simple version query
 
-**Key Insight:** The v3 scripts in analytics prove the pattern works. These are the TARGET STATE for all scripts that don't need bridge operations (tags/repeat rules).
+**Key Insight:** The v3 scripts in analytics prove the pattern works. These are the TARGET STATE for all scripts that
+don't need bridge operations (tags/repeat rules).
 
 ### Category 2: Helper-Heavy Scripts (getUnifiedHelpers) - 30 scripts (53%)
 
-**Pattern:** Import `getUnifiedHelpers()` bundle (~18KB)
-**Size overhead:** ~18KB per script
-**Total overhead:** ~540KB across codebase
+**Pattern:** Import `getUnifiedHelpers()` bundle (~18KB) **Size overhead:** ~18KB per script **Total overhead:** ~540KB
+across codebase
 
 **Efficiency Analysis Needed:**
+
 - How many functions does each script actually USE vs IMPORT?
 - Can these scripts be converted to pure OmniJS v3?
 - Which scripts need bridge operations (tags, repeat rules) and which don't?
@@ -178,10 +190,12 @@
 **Subcategories:**
 
 #### Bridge-Dependent (MUST keep helpers) - 2 scripts
+
 1. `/tasks/create-task.ts` - Tags + repeat rules REQUIRE bridge
 2. `/tasks/update-task.ts` - Tags + repeat rules REQUIRE bridge
 
 **Analysis:** These scripts CANNOT eliminate helpers because:
+
 - Tag assignment requires bridge (JXA limitation)
 - Repeat rule setting requires bridge
 - But could they use ONLY bridge functions instead of full bundle?
@@ -189,6 +203,7 @@
 #### Potential Conversion Candidates - 28 scripts
 
 **All other scripts in this category** potentially don't need helpers if they:
+
 - Don't set tags during creation/update
 - Don't set repeat rules
 - Only query/read data
@@ -200,9 +215,11 @@
 
 **Pattern:** Import specific helpers only (variable size)
 
-**Analysis:** This category is SUBSET of Category 2 - these scripts import getUnifiedHelpers() PLUS additional specific imports like getMinimalTagBridge().
+**Analysis:** This category is SUBSET of Category 2 - these scripts import getUnifiedHelpers() PLUS additional specific
+imports like getMinimalTagBridge().
 
 **Actual breakdown:**
+
 - Scripts with ONLY getUnifiedHelpers(): 28
 - Scripts with getUnifiedHelpers() + getMinimalTagBridge(): 2
 - Scripts with NO helpers at all: 17
@@ -211,65 +228,68 @@
 
 ### Category 4: Bridge-Dependent Scripts
 
-**Count:** 2 scripts (both in Category 2)
-**Pattern:** Must use bridge for JXA limitations
-**Required:** Bridge helpers essential, cannot eliminate
+**Count:** 2 scripts (both in Category 2) **Pattern:** Must use bridge for JXA limitations **Required:** Bridge helpers
+essential, cannot eliminate
 
 **Scripts:**
+
 1. `/tasks/create-task.ts` - Tags + repeat rules
 2. `/tasks/update-task.ts` - Tags + repeat rules
 
 **Functions Required:**
+
 - `bridgeSetTags()` - Tag assignment (JXA can't persist)
 - `prepareRepetitionRuleData()` - Format repeat rules
 - `applyRepetitionRuleViaBridge()` - Apply repeat rules
 - `bridgeSetPlannedDate()` - Set planned date
 - `applyDeferAnother()` - Defer date operations
 
-**Question for Phase 2B:** Can we create a MINIMAL bridge-only bundle (~2-3KB) for these scripts instead of full 18KB getUnifiedHelpers()?
+**Question for Phase 2B:** Can we create a MINIMAL bridge-only bundle (~2-3KB) for these scripts instead of full 18KB
+getUnifiedHelpers()?
 
 ## Function Usage Frequency
 
 ### High Usage (50+ uses)
 
-| Function | Usage Count | Purpose | Source File | Can Eliminate? |
-|----------|-------------|---------|-------------|----------------|
-| `safeGet()` | 156 | Try/catch wrapper for property access | helpers.ts | **YES** - Phase 1 proves 50% cost, use direct try/catch |
+| Function    | Usage Count | Purpose                               | Source File | Can Eliminate?                                          |
+| ----------- | ----------- | ------------------------------------- | ----------- | ------------------------------------------------------- |
+| `safeGet()` | 156         | Try/catch wrapper for property access | helpers.ts  | **YES** - Phase 1 proves 50% cost, use direct try/catch |
 
-**CRITICAL FINDING:** `safeGet()` is heavily used BUT Phase 1 proved it causes 50% performance overhead. All 156 uses should be converted to direct try/catch.
+**CRITICAL FINDING:** `safeGet()` is heavily used BUT Phase 1 proved it causes 50% performance overhead. All 156 uses
+should be converted to direct try/catch.
 
 ### Medium Usage (3-9 uses)
 
-| Function | Usage Count | Purpose | Source File | Can Eliminate? |
-|----------|-------------|---------|-------------|----------------|
-| `bridgeSetTags()` | 3 | Tag assignment via bridge | minimal-tag-bridge.ts | **NO** - Required for JXA limitation |
-| `prepareRepetitionRuleData()` | 4 | Format repeat rule data | helpers.ts | **NO** - Required for repeat rules |
-| `applyRepetitionRuleViaBridge()` | 4 | Apply repeat rules | helpers.ts | **NO** - Required for repeat rules |
-| `applyDeferAnother()` | 3 | Defer date operations | helpers.ts | **MAYBE** - Review usage |
-| `validateProject()` | 2 | Validate project ID | helpers.ts | **MAYBE** - Could inline |
+| Function                         | Usage Count | Purpose                   | Source File           | Can Eliminate?                       |
+| -------------------------------- | ----------- | ------------------------- | --------------------- | ------------------------------------ |
+| `bridgeSetTags()`                | 3           | Tag assignment via bridge | minimal-tag-bridge.ts | **NO** - Required for JXA limitation |
+| `prepareRepetitionRuleData()`    | 4           | Format repeat rule data   | helpers.ts            | **NO** - Required for repeat rules   |
+| `applyRepetitionRuleViaBridge()` | 4           | Apply repeat rules        | helpers.ts            | **NO** - Required for repeat rules   |
+| `applyDeferAnother()`            | 3           | Defer date operations     | helpers.ts            | **MAYBE** - Review usage             |
+| `validateProject()`              | 2           | Validate project ID       | helpers.ts            | **MAYBE** - Could inline             |
 
 ### Low Usage (1-2 uses)
 
-| Function | Usage Count | Purpose | Source File | Can Eliminate? |
-|----------|-------------|---------|-------------|----------------|
-| `bridgeSetPlannedDate()` | 1 | Set planned date | date-fields-bridge.ts | **NO** - Required for bridge op |
+| Function                 | Usage Count | Purpose          | Source File           | Can Eliminate?                  |
+| ------------------------ | ----------- | ---------------- | --------------------- | ------------------------------- |
+| `bridgeSetPlannedDate()` | 1           | Set planned date | date-fields-bridge.ts | **NO** - Required for bridge op |
 
 ### Zero Usage - DELETION CANDIDATES
 
 **CRITICAL FINDING:** 9 major functions are defined but NEVER used anywhere!
 
-| Function | Usage Count | Purpose | Source File | LOC | Action |
-|----------|-------------|---------|-------------|-----|--------|
-| `serializeTask()` | 0 | Serialize task to JSON | helpers.ts | ~40 | **DELETE** |
-| `isTaskBlocked()` | 0 | Check if task is blocked | helpers.ts | 77 | **DELETE** |
-| `validateTag()` | 0 | Validate tag name | helpers.ts | ~10 | **DELETE** |
-| `buildTaskObject()` | 0 | Build task object | helpers.ts | ~50 | **DELETE** |
-| `serializeProject()` | 0 | Serialize project to JSON | helpers.ts | ~30 | **DELETE** |
-| `parseRepeatRule()` | 0 | Parse repeat rule string | repeat-helpers.ts | ~40 | **DELETE** |
-| `buildRepeatRuleString()` | 0 | Build repeat rule string | repeat-helpers.ts | ~30 | **DELETE** |
-| `getTagsViaBridge()` | 0 | Get tags via bridge | minimal-tag-bridge.ts | ~30 | **DELETE** |
-| `translateRepeatIntent()` | 0 | Translate repeat intent | repeat-translation.ts | ~20 | **DELETE** |
-| `setDateFieldsViaBridge()` | 0 | Set date fields via bridge | date-fields-bridge.ts | ~30 | **DELETE** |
+| Function                   | Usage Count | Purpose                    | Source File           | LOC | Action     |
+| -------------------------- | ----------- | -------------------------- | --------------------- | --- | ---------- |
+| `serializeTask()`          | 0           | Serialize task to JSON     | helpers.ts            | ~40 | **DELETE** |
+| `isTaskBlocked()`          | 0           | Check if task is blocked   | helpers.ts            | 77  | **DELETE** |
+| `validateTag()`            | 0           | Validate tag name          | helpers.ts            | ~10 | **DELETE** |
+| `buildTaskObject()`        | 0           | Build task object          | helpers.ts            | ~50 | **DELETE** |
+| `serializeProject()`       | 0           | Serialize project to JSON  | helpers.ts            | ~30 | **DELETE** |
+| `parseRepeatRule()`        | 0           | Parse repeat rule string   | repeat-helpers.ts     | ~40 | **DELETE** |
+| `buildRepeatRuleString()`  | 0           | Build repeat rule string   | repeat-helpers.ts     | ~30 | **DELETE** |
+| `getTagsViaBridge()`       | 0           | Get tags via bridge        | minimal-tag-bridge.ts | ~30 | **DELETE** |
+| `translateRepeatIntent()`  | 0           | Translate repeat intent    | repeat-translation.ts | ~20 | **DELETE** |
+| `setDateFieldsViaBridge()` | 0           | Set date fields via bridge | date-fields-bridge.ts | ~30 | **DELETE** |
 
 **Total unused code:** ~357 lines of code (LOC estimate)
 
@@ -279,27 +299,28 @@
 
 ### getUnifiedHelpers() - 18KB Bundle
 
-**Used by:** 30 scripts
-**Contains:** 25+ functions
-**Total size impact:** 30 scripts × 18KB = ~540KB
+**Used by:** 30 scripts **Contains:** 25+ functions **Total size impact:** 30 scripts × 18KB = ~540KB
 
 **Efficiency per script:**
 
 #### High Efficiency (20+ functions used) - 0 scripts identified
+
 **None identified yet.** Detailed per-script analysis needed in Phase 2B.
 
 #### Moderate Efficiency (10-19 functions) - Unknown
+
 **Needs detailed analysis.** Pick representative scripts and analyze actual function calls.
 
 #### Low Efficiency (<10 functions) - Unknown
-**Hypothesis:** Many scripts in this category
-**Evidence needed:** Detailed function call analysis per script
+
+**Hypothesis:** Many scripts in this category **Evidence needed:** Detailed function call analysis per script
 
 **Critical Question:** How many scripts import 18KB but only use 2-3 functions?
 
 ### Efficiency Analysis Method for Phase 2B
 
 For each script using getUnifiedHelpers():
+
 1. Extract all function calls: `grep -oE "[a-zA-Z_][a-zA-Z0-9_]*\(" script.ts`
 2. Cross-reference with functions provided by getUnifiedHelpers()
 3. Calculate: Functions used / Functions provided
@@ -309,22 +330,20 @@ For each script using getUnifiedHelpers():
 
 ### getCoreHelpers() - 8KB Bundle
 
-**Status:** UNUSED
-**Used by:** 0 scripts
-**Contains:** Core utilities
+**Status:** UNUSED **Used by:** 0 scripts **Contains:** Core utilities
 
 **Recommendation:**
+
 - Document purpose or deprecate
 - If intended as "minimal helpers", no script uses this pattern
 - Consider deleting if truly unused
 
 ### getAllHelpers() - 30KB Bundle
 
-**Status:** UNUSED
-**Used by:** 0 scripts
-**Contains:** Full helper suite
+**Status:** UNUSED **Used by:** 0 scripts **Contains:** Full helper suite
 
 **Recommendation:**
+
 - Document purpose or deprecate
 - Was this replaced by getUnifiedHelpers()?
 - Consider deleting if truly unused
@@ -334,6 +353,7 @@ For each script using getUnifiedHelpers():
 ### 1. Over-Inclusion Pattern: 30 scripts import 18KB bundles
 
 **Evidence:**
+
 - 30 scripts (53%) import getUnifiedHelpers() (18KB)
 - Zero-usage analysis shows 9 functions NEVER used anywhere
 - Phase 1 proved safeGet() has 50% performance cost despite 156 uses
@@ -346,11 +366,13 @@ For each script using getUnifiedHelpers():
 ### 2. Bridge Dependency: Only 2 scripts need bridge operations
 
 **Critical Operations Requiring Bridge:**
+
 - Tag assignment (JXA limitation - tags don't persist without bridge)
 - Repeat rule setting (complex rule objects)
 - Possibly date field operations
 
 **Scripts with bridge dependency:**
+
 1. `/tasks/create-task.ts` - Creates tasks with tags + repeat rules
 2. `/tasks/update-task.ts` - Updates tasks with tags + repeat rules
 
@@ -361,11 +383,14 @@ For each script using getUnifiedHelpers():
 **Conversion Candidates:**
 
 #### High Priority (Analytics - proven 13-67x gains)
+
 - Already done: 6 v3 scripts exist
 - Pattern established and validated
 
 #### Medium Priority (CRUD Operations)
+
 All scripts using getUnifiedHelpers() that DON'T need:
+
 - Tag assignment during creation
 - Repeat rule setting
 - Complex bridge operations
@@ -373,6 +398,7 @@ All scripts using getUnifiedHelpers() that DON'T need:
 **Estimated:** 28 scripts could convert to pure OmniJS v3
 
 #### Low Priority (Already Fast Operations)
+
 - System queries
 - Version checks
 - Simple reads
@@ -380,12 +406,14 @@ All scripts using getUnifiedHelpers() that DON'T need:
 ### 4. Consolidation Candidates: Zero-usage functions + inefficient bundles
 
 **Immediate Actions:**
+
 1. **Delete 9 zero-usage functions** - Saves ~357 LOC, reduces bundle size
 2. **Remove safeGet() wrapper** - Replace 156 uses with direct try/catch (50% faster)
 3. **Deprecate unused bundles** - getCoreHelpers(), getAllHelpers() (0 uses)
 4. **Create minimal bridge bundle** - 2-3KB for bridge-dependent scripts vs 18KB
 
 **Bundle Consolidation Strategy:**
+
 - Keep: getUnifiedHelpers() for now (used by 30 scripts)
 - Create: Minimal bridge bundle (~2-3KB) for tag/repeat operations
 - Delete: getCoreHelpers(), getAllHelpers() (unused)
@@ -398,12 +426,14 @@ Based on Phase 1 results and current analysis:
 ### Scenario 1: Convert 28 scripts from helpers to pure OmniJS v3
 
 **Assumptions:**
+
 - 28 scripts currently use getUnifiedHelpers() (18KB each)
 - Don't need bridge operations
 - Phase 1 showed 13-67x performance improvement
 - Conservative estimate: 20x average improvement
 
 **Impact:**
+
 - **Size reduction:** 28 scripts × 18KB = ~504KB eliminated
 - **Performance gain:** 20x faster execution per script
 - **Parse time savings:** ~504KB less JavaScript to parse per execution
@@ -412,6 +442,7 @@ Based on Phase 1 results and current analysis:
 ### Scenario 2: Convert 2 bridge scripts to minimal bridge bundle
 
 **Assumptions:**
+
 - 2 scripts need bridge operations
 - Currently use getUnifiedHelpers() (18KB)
 - Create minimal bridge bundle (3KB) with only:
@@ -422,6 +453,7 @@ Based on Phase 1 results and current analysis:
   - applyDeferAnother()
 
 **Impact:**
+
 - **Size reduction:** 2 scripts × (18KB - 3KB) = ~30KB saved
 - **Performance gain:** Smaller scripts = faster parsing
 - **Maintenance:** Clearer what functions are actually needed
@@ -429,6 +461,7 @@ Based on Phase 1 results and current analysis:
 ### Scenario 3: Delete zero-usage functions
 
 **Impact:**
+
 - **Size reduction:** ~357 LOC removed from helpers
 - **Bundle size:** getUnifiedHelpers() shrinks by ~6KB (estimate)
 - **Cognitive load:** Less code to maintain and understand
@@ -436,14 +469,15 @@ Based on Phase 1 results and current analysis:
 
 ### Combined Impact: All scenarios
 
-**Total size reduction:** ~540KB (504KB + 30KB + 6KB)
-**Scripts optimized:** 30 scripts (53% of codebase)
-**Performance improvement:**
+**Total size reduction:** ~540KB (504KB + 30KB + 6KB) **Scripts optimized:** 30 scripts (53% of codebase) **Performance
+improvement:**
+
 - 28 scripts: 20x faster (conservative)
 - 2 scripts: ~15% faster (smaller bundles)
 - All scripts: Better maintainability
 
 **Conservative estimate:**
+
 - Average improvement across 30 scripts: ~15x faster
 - Total codebase improvement: ~10x faster (weighted by execution frequency)
 
@@ -452,6 +486,7 @@ Based on Phase 1 results and current analysis:
 This analysis informs categorization of helpers as:
 
 ### Essential - Keep (Bridge Operations)
+
 - `bridgeSetTags()` - Tag assignment (JXA limitation)
 - `prepareRepetitionRuleData()` - Format repeat rules
 - `applyRepetitionRuleViaBridge()` - Apply repeat rules
@@ -461,12 +496,14 @@ This analysis informs categorization of helpers as:
 **Action:** Create minimal bridge bundle (~3KB) with only these functions
 
 ### Useful - Review Usage
+
 - `validateProject()` - 2 uses, could inline
 - Any other low-usage functions
 
 **Action:** Analyze cost/benefit per function
 
 ### Overhead - Eliminate
+
 - `safeGet()` - 156 uses BUT 50% performance cost (Phase 1 proof)
 - 9 zero-usage functions (357 LOC)
 - Unused bundles: getCoreHelpers(), getAllHelpers()
@@ -474,6 +511,7 @@ This analysis informs categorization of helpers as:
 **Action:** Phase 2B elimination plan
 
 ### Conversion Targets - Pure OmniJS v3
+
 - 28 scripts using getUnifiedHelpers() without bridge needs
 - Follow v3 analytics pattern (proven 13-67x faster)
 
@@ -484,23 +522,28 @@ This analysis informs categorization of helpers as:
 For Phase 2B, analyze these representative scripts in detail:
 
 ### 1. High Function Usage (estimate)
+
 - `/tasks/create-task.ts` - Bridge-dependent, likely uses many functions
 - `/tasks/update-task.ts` - Bridge-dependent, likely uses many functions
 
 ### 2. Medium Function Usage (estimate)
+
 - `/projects/create-project.ts` - CRUD operation
 - `/export/export-tasks.ts` - Export operation
 
 ### 3. Low Function Usage (estimate)
+
 - `/tasks/complete-task.ts` - Simple operation
 - `/tasks/delete-task.ts` - Simple operation
 - `/folders/delete-folder.ts` - Simple operation
 
 ### 4. Conversion Candidates
+
 - `/analytics/analyze-overdue.ts` - Uses helpers, compare to v3 analytics
 - `/export/export-projects.ts` - Export operation, likely no bridge needed
 
 ### 5. Already Optimized (baseline)
+
 - `/analytics/productivity-stats-v3.ts` - Pure OmniJS v3 (67x faster)
 - `/analytics/task-velocity-v3.ts` - Pure OmniJS v3 (13x faster)
 
@@ -509,6 +552,7 @@ For Phase 2B, analyze these representative scripts in detail:
 ### Script: /tasks/create-task.ts
 
 **Import Pattern:**
+
 ```typescript
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -517,6 +561,7 @@ import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 **Bundle Size:** ~18KB (getUnifiedHelpers) + minimal tag bridge
 
 **Functions Actually Used:** (from earlier analysis)
+
 - `bridgeSetTags()` - ESSENTIAL (bridge operation)
 - `prepareRepetitionRuleData()` - ESSENTIAL (bridge operation)
 - `applyRepetitionRuleViaBridge()` - ESSENTIAL (bridge operation)
@@ -529,11 +574,13 @@ import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 **Efficiency:** Low (~24% utilization)
 
 **Recommendation:**
+
 - Keep bridge operations (essential)
 - Consider minimal bridge bundle (3KB) instead of full 18KB
 - Inline validateProject() or include in minimal bundle
 
 **Estimated Impact:**
+
 - Current: 18KB
 - Optimized: 3KB
 - Savings: 15KB per execution
@@ -565,9 +612,11 @@ Based on this usage analysis, Phase 2A.3 should categorize:
 
 ## Conclusion
 
-**The data is clear:** 30% of scripts already use pure OmniJS v3 with 13-67x performance gains. The remaining 53% using helpers are optimization opportunities, with only 2 scripts actually requiring bridge operations.
+**The data is clear:** 30% of scripts already use pure OmniJS v3 with 13-67x performance gains. The remaining 53% using
+helpers are optimization opportunities, with only 2 scripts actually requiring bridge operations.
 
 **Phase 2B should focus on:**
+
 1. Detailed per-script function usage analysis
 2. Creating minimal bridge bundle for 2 essential scripts
 3. Planning conversion of 28 scripts to pure OmniJS v3

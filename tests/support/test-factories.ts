@@ -30,7 +30,7 @@ export interface MockProject {
 
 export class TestDataFactory {
   private static counter = 0;
-  
+
   static createMockTask(overrides: Partial<MockTask> = {}): MockTask {
     this.counter++;
     return {
@@ -38,10 +38,10 @@ export class TestDataFactory {
       name: `Test Task ${this.counter}`,
       flagged: false,
       completed: false,
-      ...overrides
+      ...overrides,
     };
   }
-  
+
   static createMockProject(overrides: Partial<MockProject> = {}): MockProject {
     this.counter++;
     return {
@@ -50,18 +50,18 @@ export class TestDataFactory {
       status: 'active',
       flagged: false,
       sequential: false,
-      ...overrides
+      ...overrides,
     };
   }
-  
+
   static createMockTaskArray(count: number, overrides: Partial<MockTask> = {}): MockTask[] {
     return Array.from({ length: count }, () => this.createMockTask(overrides));
   }
-  
+
   static createMockProjectArray(count: number, overrides: Partial<MockProject> = {}): MockProject[] {
     return Array.from({ length: count }, () => this.createMockProject(overrides));
   }
-  
+
   static resetCounter(): void {
     this.counter = 0;
   }

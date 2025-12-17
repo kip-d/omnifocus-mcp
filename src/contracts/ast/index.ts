@@ -64,18 +64,10 @@ export {
 
 // Script Builder (generates complete OmniJS scripts with AST filters)
 export type { ScriptOptions, GeneratedScript } from './script-builder.js';
-export {
-  buildFilteredTasksScript,
-  buildInboxScript,
-  buildTaskByIdScript,
-} from './script-builder.js';
+export { buildFilteredTasksScript, buildInboxScript, buildTaskByIdScript } from './script-builder.js';
 
 // Mutation Script Builder (generates complete JXA scripts for mutations)
-export type {
-  GeneratedMutationScript,
-  BatchOptions,
-  BatchOperation,
-} from './mutation-script-builder.js';
+export type { GeneratedMutationScript, BatchOptions, BatchOperation } from './mutation-script-builder.js';
 export {
   buildCreateTaskScript,
   buildCreateProjectScript,

@@ -3,7 +3,8 @@ import { BasePrompt, PromptArgument } from '../base.js';
 
 export class InboxProcessingPrompt extends BasePrompt {
   name = 'gtd_process_inbox';
-  description = 'Comprehensive inbox processing using GTD methodology with step-by-step guidance through the clarify, organize, and engage workflow';
+  description =
+    'Comprehensive inbox processing using GTD methodology with step-by-step guidance through the clarify, organize, and engage workflow';
 
   arguments: PromptArgument[] = [
     {
@@ -47,7 +48,7 @@ export class InboxProcessingPrompt extends BasePrompt {
           role: 'assistant',
           content: {
             type: 'text',
-            text: 'I\'ll help you quickly process your inbox. Let me get your inbox items.',
+            text: "I'll help you quickly process your inbox. Let me get your inbox items.",
           },
         },
         {
@@ -136,12 +137,16 @@ For each item, I'll guide you through these questions:
 - **Single action** → Assign to project, add context tags, set dates
 - **Multiple steps** → ${autoCreateProjects ? "I'll create a project and define next actions" : 'Flag as project and define next actions'}
 
-${suggestContexts ? `### Context Tags I'll Suggest:
+${
+  suggestContexts
+    ? `### Context Tags I'll Suggest:
 **Location:** @computer, @phone, @office, @home, @errands, @anywhere
 **Energy:** @high-energy, @low-energy
 **Time:** @15min, @30min, @1hour, @deep-work
 **People:** @waiting-for, @agenda-{person}
-**Priority:** @urgent, @important, @someday` : ''}
+**Priority:** @urgent, @important, @someday`
+    : ''
+}
 
 Let's start with the first item. I'll analyze it and ask you clarifying questions.`,
         },

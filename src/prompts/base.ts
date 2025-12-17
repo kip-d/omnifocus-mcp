@@ -1,9 +1,4 @@
-import {
-  PromptMessage,
-  PromptReference,
-  GetPromptResult,
-  Prompt,
-} from '@modelcontextprotocol/sdk/types.js';
+import { PromptMessage, PromptReference, GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
 
 export interface PromptArgument {
   name: string;
@@ -29,7 +24,7 @@ export abstract class BasePrompt {
     return {
       name: this.name,
       description: this.description,
-      arguments: this.arguments.map(arg => ({
+      arguments: this.arguments.map((arg) => ({
         name: arg.name,
         description: arg.description,
         required: arg.required ?? false,

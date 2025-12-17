@@ -25,7 +25,7 @@ describe('OmniFocusReadTool Integration', () => {
           status: 'active' as const,
         },
         limit: 5,
-      }
+      },
     };
 
     const result = await tool.execute(input);
@@ -40,7 +40,7 @@ describe('OmniFocusReadTool Integration', () => {
         type: 'tasks' as const,
         mode: 'smart_suggest' as const,
         limit: 10,
-      }
+      },
     };
 
     const result = await tool.execute(input);

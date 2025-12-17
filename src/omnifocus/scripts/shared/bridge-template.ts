@@ -157,11 +157,7 @@ export const BridgeTemplates = {
  * Execute a bridge script template with parameters
  * This is a helper that combines template formatting with common error handling
  */
-export function executeBridgeTemplate(
-  app: any,
-  template: string,
-  params: BridgeTemplateParams,
-): any {
+export function executeBridgeTemplate(app: any, template: string, params: BridgeTemplateParams): any {
   try {
     const script = formatBridgeScript(template, params);
     // JXA Application objects are inherently untyped
@@ -169,8 +165,7 @@ export function executeBridgeTemplate(
     const resultStr = app.evaluateJavascript(script);
 
     // Try to parse as JSON if it looks like JSON
-    if (resultStr && typeof resultStr === 'string' &&
-        (resultStr.startsWith('{') || resultStr.startsWith('['))) {
+    if (resultStr && typeof resultStr === 'string' && (resultStr.startsWith('{') || resultStr.startsWith('['))) {
       try {
         return JSON.parse(resultStr);
       } catch {

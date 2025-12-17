@@ -1,9 +1,9 @@
 # Cache Warming Optimization Analysis
+
 ## Current Implementation Review & Remaining Opportunities
 
-**Date**: October 20, 2025
-**Question**: Have we optimized cache warming as much as reasonably possible?
-**Answer**: YES ✅ with one minor opportunity noted
+**Date**: October 20, 2025 **Question**: Have we optimized cache warming as much as reasonably possible? **Answer**: YES
+✅ with one minor opportunity noted
 
 ---
 
@@ -11,13 +11,13 @@
 
 Your cache warming implementation is **well-optimized** and uses the appropriate strategy:
 
-| Component | Strategy | Performance | Status |
-|-----------|----------|-------------|--------|
-| **Tasks** | OmniJS bridge (unified) | 5,892ms | ✅ Optimal |
-| **Projects** | OmniJS bridge | ~2,000ms | ✅ Optimal |
-| **Tags** | OmniJS bridge via TagsToolV2 | 927ms | ✅ Optimal |
-| **Perspectives** | OmniJS bridge via PerspectivesToolV2 | 6,055ms | ✅ Optimal |
-| **Parallelization** | All run in parallel | Runs concurrently | ✅ Optimal |
+| Component           | Strategy                             | Performance       | Status     |
+| ------------------- | ------------------------------------ | ----------------- | ---------- |
+| **Tasks**           | OmniJS bridge (unified)              | 5,892ms           | ✅ Optimal |
+| **Projects**        | OmniJS bridge                        | ~2,000ms          | ✅ Optimal |
+| **Tags**            | OmniJS bridge via TagsToolV2         | 927ms             | ✅ Optimal |
+| **Perspectives**    | OmniJS bridge via PerspectivesToolV2 | 6,055ms           | ✅ Optimal |
+| **Parallelization** | All run in parallel                  | Runs concurrently | ✅ Optimal |
 
 **Total warming time**: 6,056ms (gated by longest operation: perspectives at 6,055ms)
 
@@ -27,16 +27,17 @@ Your cache warming implementation is **well-optimized** and uses the appropriate
 
 ### 1. Task Cache Warming ✅ (OPTIMAL)
 
-**Strategy**: Unified OmniJS bridge operation
-**File**: `src/omnifocus/scripts/cache/warm-task-caches.ts`
+**Strategy**: Unified OmniJS bridge operation **File**: `src/omnifocus/scripts/cache/warm-task-caches.ts`
 
 **What it does**:
+
 - Single OmniJS bridge call processes ALL tasks (1,500+)
 - Filters into three buckets in one pass: today, overdue, upcoming
 - Early exit patterns for limits
 - Handles flagged separately (lower priority)
 
 **Why it's optimal**:
+
 ```typescript
 // ✅ Using evaluateJavascript() bridge
 // - Bulk property access: ~0.5ms per property
@@ -49,8 +50,9 @@ Your cache warming implementation is **well-optimized** and uses the appropriate
 ```
 
 **Evidence of optimization**:
+
 ```javascript
-flattenedTasks.forEach(task => {
+flattenedTasks.forEach((task) => {
   // Direct OmniJS property access (fast)
   const isFlagged = task.flagged || false;
   const dueDate = task.dueDate;
@@ -65,16 +67,17 @@ flattenedTasks.forEach(task => {
 
 ### 2. Project Cache Warming ✅ (OPTIMAL)
 
-**Strategy**: OmniJS bridge with flattenedProjects
-**File**: `src/omnifocus/scripts/cache/warm-projects-cache.ts`
+**Strategy**: OmniJS bridge with flattenedProjects **File**: `src/omnifocus/scripts/cache/warm-projects-cache.ts`
 
 **What it does**:
+
 - OmniJS bridge iterates flattenedProjects collection
 - Builds full project objects with all properties
 - Status filtering applied
 - Limit enforcement
 
 **Why it's optimal**:
+
 ```typescript
 // ✅ Using evaluateJavascript() bridge
 // - Direct member access to flattenedProjects
@@ -87,6 +90,7 @@ flattenedTasks.forEach(task => {
 ```
 
 **Optimization notes**:
+
 - Using `flattenedProjects` global (faster than filtering)
 - Early exit on limit reached (line 39-40)
 - Processes all properties in single pass
@@ -98,18 +102,18 @@ flattenedTasks.forEach(task => {
 
 ### 3. Tag Cache Warming ✅ (GOOD)
 
-**Strategy**: TagsToolV2.execute() with OmniJS bridge
-**File**: `src/cache/CacheWarmer.ts` lines 283-316
+**Strategy**: TagsToolV2.execute() with OmniJS bridge **File**: `src/cache/CacheWarmer.ts` lines 283-316
 
 **What it does**:
+
 ```typescript
 // Line 295-304: Warm tags using TagsToolV2
 await this.warmSingleOperation('tags', 'list:name:true:false:false:false:false', async () => {
   const result = await tagsTool.execute({
     operation: 'list',
-    fastMode: false,  // ← Uses OmniJS bridge
+    fastMode: false, // ← Uses OmniJS bridge
     includeEmpty: true,
-    includeUsageStats: false,  // ← Skipped for performance
+    includeUsageStats: false, // ← Skipped for performance
     includeTaskCounts: false,
   });
   // ...
@@ -117,12 +121,14 @@ await this.warmSingleOperation('tags', 'list:name:true:false:false:false:false',
 ```
 
 **Why this approach**:
+
 - Delegates to existing TagsToolV2 (code reuse)
 - `fastMode: false` uses OmniJS bridge (faster than `fastMode: true`!)
 - Skips expensive usage stats (smart decision)
 - Caches results in existing cache layer
 
 **Ironic naming note**:
+
 ```typescript
 // Line 302 comment explains:
 // fastMode=false uses OmniJS bridge (10x faster)
@@ -135,10 +141,10 @@ await this.warmSingleOperation('tags', 'list:name:true:false:false:false:false',
 
 ### 4. Perspectives Cache Warming ✅ (GOOD)
 
-**Strategy**: PerspectivesToolV2 via OmniJS bridge
-**File**: `src/cache/CacheWarmer.ts` lines 354-380
+**Strategy**: PerspectivesToolV2 via OmniJS bridge **File**: `src/cache/CacheWarmer.ts` lines 354-380
 
 **What it does**:
+
 ```typescript
 // Line 364-369: Warm perspectives
 await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
@@ -148,6 +154,7 @@ await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
 ```
 
 **Performance characteristic**:
+
 - Queries standard OmniFocus perspectives
 - Enhanced PerspectivesToolV2 has optimized query performance
 - ~340ms for perspective listing, but includes full metadata
@@ -159,24 +166,25 @@ await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
 
 ### 5. Parallelization ✅ (OPTIMAL)
 
-**Strategy**: All warming operations run in parallel
-**File**: `src/cache/CacheWarmer.ts` lines 83-114
+**Strategy**: All warming operations run in parallel **File**: `src/cache/CacheWarmer.ts` lines 83-114
 
 **Code**:
+
 ```typescript
 const operations: Promise<WarmingResult>[] = [];
 
 // All operations added to array
-operations.push(this.warmProjects());      // 2,000ms
-operations.push(this.warmTags());           // 927ms
-operations.push(this.warmAllTaskCaches());  // 5,892ms
-operations.push(this.warmPerspectives());   // 6,055ms
+operations.push(this.warmProjects()); // 2,000ms
+operations.push(this.warmTags()); // 927ms
+operations.push(this.warmAllTaskCaches()); // 5,892ms
+operations.push(this.warmPerspectives()); // 6,055ms
 
 // All executed in parallel
 const results = await this.executeWithTimeout(operations);
 ```
 
 **Total time**: Gated by longest operation (6,055ms), NOT summed!
+
 - Sequential would be: 2,000 + 927 + 5,892 + 6,055 = 14,874ms
 - Parallel is: max(2,000, 927, 5,892, 6,055) = 6,056ms ✅
 - **Improvement: 2.45x faster** through parallelization!
@@ -192,16 +200,19 @@ const results = await this.executeWithTimeout(operations);
 **Current**: 6,055ms (longest operation in warming)
 
 **Analysis**:
+
 - Perspectives query time: ~340ms
 - Rest of time: 5,715ms of overhead?
 - This seems high
 
 **Possible investigation**:
+
 - Check if PerspectivesToolV2 has any non-OmniJS operations
 - Could there be OmniFocus startup cost included?
 - Is this expected for comprehensive perspective metadata?
 
 **Recommendation**: INVESTIGATE but likely acceptable
+
 - Very low priority (would save ~1.3% of total warming)
 - PerspectivesToolV2 already well-optimized
 - Diminishing returns on this last 1%
@@ -213,6 +224,7 @@ const results = await this.executeWithTimeout(operations);
 **Current**: Warm all frequently used data (optimal for most sessions)
 
 **Alternative**: Warm only "today" tasks first, warm others in background
+
 ```typescript
 // Option: Warm only most critical data upfront
 // - Today's tasks (most used)
@@ -226,6 +238,7 @@ const results = await this.executeWithTimeout(operations);
 ```
 
 **Trade-off analysis**:
+
 - **Benefit**: Could reduce blocking startup from 6s → 2-3s
 - **Cost**: First few queries might not have full cache hit
 - **Verdict**: ❌ NOT RECOMMENDED
@@ -258,6 +271,7 @@ const results = await this.executeWithTimeout(operations);
    - **3x difference**
 
 **Why NOT pure JXA for warming**:
+
 ```typescript
 // ❌ This would be 10-50x SLOWER
 const tasks = [];
@@ -313,6 +327,7 @@ for (let i = 0; i < allTasks.length; i++) {  // Per-item overhead
 **YES ✅**
 
 **Current implementation**:
+
 - ✅ Uses OmniJS bridge where appropriate (bulk operations, collections)
 - ✅ Uses JXA only for bridge initialization (correct)
 - ✅ Parallelizes all independent operations (2.45x faster)
@@ -322,12 +337,13 @@ for (let i = 0; i < allTasks.length; i++) {  // Per-item overhead
 - ✅ Single-pass filtering for multi-bucket results
 
 **Reasonable opportunities not pursued**:
+
 - ✅ Perspectives warming optimization (low ROI, ~1% improvement)
 - ✅ Selective/background warming (trades immediate performance for cache hit rate)
 - ✅ Further JXA optimization (already optimal where used)
 
-**Verdict**:
-This is a **well-designed caching warming strategy** that makes appropriate trade-offs between:
+**Verdict**: This is a **well-designed caching warming strategy** that makes appropriate trade-offs between:
+
 - Performance (6s startup is acceptable)
 - Correctness (100% cache hit rate for critical queries)
 - Complexity (reasonable code complexity)
@@ -337,15 +353,16 @@ This is a **well-designed caching warming strategy** that makes appropriate trad
 
 ## Summary Table
 
-| Operation | Current | Strategy | Optimization | Status |
-|-----------|---------|----------|---------------|--------|
-| Tasks | 5,892ms | OmniJS bridge unified | Single pass, multiple buckets | ✅ Optimal |
-| Projects | 2,000ms | OmniJS bridge bulk | Direct access, filtering | ✅ Optimal |
-| Tags | 927ms | Tool delegation + bridge | Skips stats, fast mode | ✅ Good |
-| Perspectives | 6,055ms | Tool delegation + bridge | Standard list | ✅ Good |
-| **Parallelization** | **6,056ms** | **Concurrent** | **2.45x speedup** | ✅ Optimal |
+| Operation           | Current     | Strategy                 | Optimization                  | Status     |
+| ------------------- | ----------- | ------------------------ | ----------------------------- | ---------- |
+| Tasks               | 5,892ms     | OmniJS bridge unified    | Single pass, multiple buckets | ✅ Optimal |
+| Projects            | 2,000ms     | OmniJS bridge bulk       | Direct access, filtering      | ✅ Optimal |
+| Tags                | 927ms       | Tool delegation + bridge | Skips stats, fast mode        | ✅ Good    |
+| Perspectives        | 6,055ms     | Tool delegation + bridge | Standard list                 | ✅ Good    |
+| **Parallelization** | **6,056ms** | **Concurrent**           | **2.45x speedup**             | ✅ Optimal |
 
 **Remaining opportunities**:
+
 - Perspectives optimization: ~1% potential gain (not recommended)
 - Selective warming: Trade-off not worth it
 - Further optimization: Diminishing returns

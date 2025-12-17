@@ -5,7 +5,7 @@ const execAsync = promisify(exec);
 
 async function testIncludeStats() {
   console.log('Testing list_projects with includeStats parameter...\n');
-  
+
   // Test 1: Without stats
   console.log('Test 1: Without stats (includeStats: false)');
   const script1 = `
@@ -25,7 +25,7 @@ async function testIncludeStats() {
     
     JSON.stringify({ projects, includeStats: false });
   `;
-  
+
   try {
     const { stdout: result1 } = await execAsync(`osascript -l JavaScript -e '${script1.replace(/'/g, "'\"'\"'")}'`);
     const data1 = JSON.parse(result1);
@@ -33,9 +33,9 @@ async function testIncludeStats() {
   } catch (error) {
     console.error('Error:', error.message);
   }
-  
+
   console.log('\n---\n');
-  
+
   // Test 2: With stats
   console.log('Test 2: With stats (includeStats: true)');
   const script2 = `
@@ -83,7 +83,7 @@ async function testIncludeStats() {
     
     JSON.stringify({ projects, includeStats: true });
   `;
-  
+
   try {
     const { stdout: result2 } = await execAsync(`osascript -l JavaScript -e '${script2.replace(/'/g, "'\"'\"'")}'`);
     const data2 = JSON.parse(result2);

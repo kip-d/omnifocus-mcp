@@ -155,7 +155,7 @@ async function runTests() {
         if (data.success && data.data?.items) {
           const projects = data.data.items;
           console.log(`✅ Found ${projects.length} projects in sandbox folder`);
-          
+
           // Check if our projects have the sequential property
           for (const project of projects) {
             if (project.name.includes('Test Sequential Project')) {
@@ -206,8 +206,8 @@ async function runTests() {
             console.log('✅ Project updated successfully');
             const changes = data.data.project.changes || [];
             console.log(`   Changes: ${changes.join(', ')}`);
-            
-            if (!changes.some(change => change.includes('sequential'))) {
+
+            if (!changes.some((change) => change.includes('sequential'))) {
               console.error('   ❌ Sequential change not reported!');
               exitCode = 1;
             }
@@ -226,7 +226,6 @@ async function runTests() {
     }
 
     console.log('\n✨ Tests completed!');
-
   } catch (error) {
     console.error('❌ Test error:', error);
     exitCode = 1;

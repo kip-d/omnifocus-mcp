@@ -9,7 +9,7 @@ import { createInterface } from 'readline';
 
 const server = spawn('node', ['./dist/index.js'], {
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: { ...process.env, NODE_ENV: 'test' }
+  env: { ...process.env, NODE_ENV: 'test' },
 });
 
 let messageId = 1;
@@ -17,7 +17,7 @@ const pendingRequests = new Map();
 
 const rl = createInterface({
   input: server.stdout,
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
 rl.on('line', (line) => {
@@ -40,7 +40,7 @@ function sendRequest(method, params = {}, timeout = 60000) {
       jsonrpc: '2.0',
       id: requestId,
       method,
-      params
+      params,
     };
 
     pendingRequests.set(requestId, resolve);
@@ -79,17 +79,19 @@ async function main() {
     const initResponse = await sendRequest('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'tag-update-test', version: '1.0.0' }
+      clientInfo: { name: 'tag-update-test', version: '1.0.0' },
     });
     console.log('✅ Server initialized');
 
     // Send initialized notification
-    server.stdin.write(JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    }) + '\n');
+    server.stdin.write(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }) + '\n',
+    );
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Step 1: Create a task with initial tag
     const uniqueName = `Tag Update Test ${Date.now()}`;
@@ -100,8 +102,8 @@ async function main() {
       arguments: {
         operation: 'create',
         name: uniqueName,
-        tags: ['initial-tag']
-      }
+        tags: ['initial-tag'],
+      },
     });
 
     const createResult = await parseResponse(createResponse);
@@ -118,7 +120,7 @@ async function main() {
     console.log(`   Initial tags: ${JSON.stringify(createResult.data.task.tags)}`);
 
     // Wait for OmniFocus to process
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Step 2: Update task tags
     console.log(`\n🔄 Step 2: Updating task tags to ["updated-tag", "second-tag"]...`);
@@ -128,8 +130,8 @@ async function main() {
       arguments: {
         operation: 'update',
         taskId: taskId,
-        tags: ['updated-tag', 'second-tag']
-      }
+        tags: ['updated-tag', 'second-tag'],
+      },
     });
 
     const updateResult = await parseResponse(updateResponse);
@@ -144,7 +146,7 @@ async function main() {
 
     // Wait longer for OmniFocus to process and update indexes
     console.log('   Waiting 3 seconds for OmniFocus to update indexes...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Step 3: Query the task to verify tags were updated
     console.log(`\n🔍 Step 3: Querying task to verify tag update...`);
@@ -156,15 +158,15 @@ async function main() {
         limit: 10,
         details: true,
         // Add timestamp to bust cache
-        _cacheBuster: Date.now()
-      }
+        _cacheBuster: Date.now(),
+      },
     });
 
     const queryResult = await parseResponse(queryResponse);
     console.log(`📊 Query returned ${queryResult.data?.tasks?.length || 0} tasks`);
 
     if (queryResult.success && queryResult.data?.tasks?.length > 0) {
-      const foundTask = queryResult.data.tasks.find(t => t.id === taskId);
+      const foundTask = queryResult.data.tasks.find((t) => t.id === taskId);
       if (foundTask) {
         console.log(`✅ Task found in query`);
         console.log(`   Tags after update: ${JSON.stringify(foundTask.tags)}`);
@@ -188,8 +190,8 @@ async function main() {
       name: 'manage_task',
       arguments: {
         operation: 'delete',
-        taskId
-      }
+        taskId,
+      },
     });
     console.log('✅ Cleanup complete');
 
@@ -203,7 +205,6 @@ async function main() {
       }
       process.exit(0);
     }, 2000);
-
   } catch (error) {
     console.error('❌ Error:', error);
     server.kill('SIGTERM');

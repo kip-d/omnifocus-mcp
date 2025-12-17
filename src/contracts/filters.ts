@@ -57,7 +57,7 @@ export type DateOperator = 'BETWEEN' | '<=' | '>=';
  */
 export interface TaskFilter {
   // --- Identification ---
-  id?: string;                    // Exact task ID lookup
+  id?: string; // Exact task ID lookup
 
   // --- Completion Status ---
   /**
@@ -68,16 +68,16 @@ export interface TaskFilter {
   completed?: boolean;
 
   // --- Tags ---
-  tags?: string[];                // Tag names to filter by
-  tagsOperator?: TagOperator;     // How to combine tags (default: AND)
+  tags?: string[]; // Tag names to filter by
+  tagsOperator?: TagOperator; // How to combine tags (default: AND)
 
   // --- Text Search ---
-  text?: string;                  // Search term
-  textOperator?: TextOperator;    // How to match (default: CONTAINS)
+  text?: string; // Search term
+  textOperator?: TextOperator; // How to match (default: CONTAINS)
 
   // --- Date Filters ---
-  dueAfter?: string;              // ISO date string
-  dueBefore?: string;             // ISO date string
+  dueAfter?: string; // ISO date string
+  dueBefore?: string; // ISO date string
   dueDateOperator?: DateOperator; // BETWEEN, <=, >=
 
   deferAfter?: string;
@@ -107,14 +107,14 @@ export interface TaskFilter {
   hasRepetitionRule?: boolean;
 
   // --- Project ---
-  projectId?: string;             // Filter by project ID (from advanced filters)
-  project?: string | null;        // Filter by project (simple param, null = inbox)
+  projectId?: string; // Filter by project ID (from advanced filters)
+  project?: string | null; // Filter by project (simple param, null = inbox)
 
   // --- Search (for name/note search) ---
-  search?: string;                // Search term for name/note content
+  search?: string; // Search term for name/note content
 
   // --- Folder (for project filtering) ---
-  folder?: string;                // Filter projects by folder name
+  folder?: string; // Filter projects by folder name
 
   // --- Pagination ---
   limit?: number;
@@ -176,10 +176,10 @@ export const FILTER_PROPERTY_NAMES = [
   'blocked',
   'available',
   'inInbox',
-  'dropped',            // NEW: Filter by dropped status
-  'hasRepetitionRule',  // NEW: Filter for recurring tasks
+  'dropped', // NEW: Filter by dropped status
+  'hasRepetitionRule', // NEW: Filter for recurring tasks
   'projectId',
-  'folder',             // NEW: Filter projects by folder name
+  'folder', // NEW: Filter projects by folder name
   'limit',
   'offset',
   'mode',
@@ -198,7 +198,7 @@ export function validateFilterProperties(filter: Record<string, unknown>): strin
     // Skip debug properties
     if (key.startsWith('_debug')) continue;
 
-    if (!knownSet.has(key as typeof FILTER_PROPERTY_NAMES[number])) {
+    if (!knownSet.has(key as (typeof FILTER_PROPERTY_NAMES)[number])) {
       unknownProps.push(key);
     }
   }

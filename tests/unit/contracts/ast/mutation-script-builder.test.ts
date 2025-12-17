@@ -128,7 +128,7 @@ describe('buildCreateTaskScript', () => {
 
   it('escapes special characters in name', async () => {
     const result = await buildCreateTaskScript({
-      name: "Task with 'quotes' and \"double quotes\"",
+      name: 'Task with \'quotes\' and "double quotes"',
     });
 
     // Should not break script structure
@@ -413,7 +413,7 @@ describe('buildBatchScript', () => {
         { operation: 'create', target: 'task', data: { name: 'Parent' }, tempId: 'temp-1' },
         { operation: 'create', target: 'task', data: { name: 'Child' }, parentTempId: 'temp-1' },
       ],
-      { createSequentially: true }
+      { createSequentially: true },
     );
 
     expect(result.script).toContain('temp-1');
@@ -422,11 +422,9 @@ describe('buildBatchScript', () => {
   });
 
   it('respects createSequentially option', () => {
-    const result = buildBatchScript(
-      'task',
-      [{ operation: 'create', target: 'task', data: { name: 'Task' } }],
-      { createSequentially: true }
-    );
+    const result = buildBatchScript('task', [{ operation: 'create', target: 'task', data: { name: 'Task' } }], {
+      createSequentially: true,
+    });
 
     expect(result.script).toContain('sequential');
   });
@@ -435,7 +433,7 @@ describe('buildBatchScript', () => {
     const result = buildBatchScript(
       'task',
       [{ operation: 'create', target: 'task', data: { name: 'Task' }, tempId: 'temp-1' }],
-      { returnMapping: true }
+      { returnMapping: true },
     );
 
     expect(result.script).toContain('tempIdMapping');

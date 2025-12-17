@@ -18,11 +18,11 @@ const tests = [
         name: 'list_tasks',
         arguments: {
           completed: false,
-          limit: 10
-        }
+          limit: 10,
+        },
       },
-      id: 1
-    }
+      id: 1,
+    },
   },
   {
     name: 'Invalid list_tasks - bad limit type',
@@ -33,11 +33,11 @@ const tests = [
         name: 'list_tasks',
         arguments: {
           completed: false,
-          limit: "ten" // Should be number
-        }
+          limit: 'ten', // Should be number
+        },
       },
-      id: 2
-    }
+      id: 2,
+    },
   },
   {
     name: 'Invalid list_tasks - limit too high',
@@ -47,11 +47,11 @@ const tests = [
       params: {
         name: 'list_tasks',
         arguments: {
-          limit: 2000 // Max is 1000
-        }
+          limit: 2000, // Max is 1000
+        },
       },
-      id: 3
-    }
+      id: 3,
+    },
   },
   {
     name: 'Invalid create_task - missing required name',
@@ -62,11 +62,11 @@ const tests = [
         name: 'create_task',
         arguments: {
           // Missing required 'name' field
-          flagged: true
-        }
+          flagged: true,
+        },
       },
-      id: 4
-    }
+      id: 4,
+    },
   },
   {
     name: 'Invalid date format',
@@ -76,18 +76,18 @@ const tests = [
       params: {
         name: 'list_tasks',
         arguments: {
-          dueBefore: "tomorrow" // Should be ISO 8601
-        }
+          dueBefore: 'tomorrow', // Should be ISO 8601
+        },
       },
-      id: 5
-    }
-  }
+      id: 5,
+    },
+  },
 ];
 
 async function runTest() {
   const proc = spawn('node', [serverPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, LOG_LEVEL: 'error' }
+    env: { ...process.env, LOG_LEVEL: 'error' },
   });
 
   let output = '';
@@ -105,34 +105,34 @@ async function runTest() {
     method: 'initialize',
     params: {
       protocolVersion: '2024-11-05',
-      capabilities: {}
+      capabilities: {},
     },
-    id: 0
+    id: 0,
   };
-  
+
   proc.stdin.write(JSON.stringify(initRequest) + '\n');
 
   // Wait for initialization
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Run tests
   for (const test of tests) {
     console.log(`\n📝 Test: ${test.name}`);
     console.log('Request:', JSON.stringify(test.request.params, null, 2));
-    
+
     output = '';
     proc.stdin.write(JSON.stringify(test.request) + '\n');
-    
+
     // Wait for response
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     // Parse last response
     const lines = output.trim().split('\n');
     const lastLine = lines[lines.length - 1];
-    
+
     try {
       const response = JSON.parse(lastLine);
-      
+
       if (response.error) {
         console.log('❌ Error:', response.error.message);
         if (response.error.data?.validation_errors) {
@@ -140,7 +140,8 @@ async function runTest() {
         }
       } else if (response.result) {
         console.log('✅ Success!');
-        if (response.id === 1) { // Only show results for first valid test
+        if (response.id === 1) {
+          // Only show results for first valid test
           const content = JSON.parse(response.result.content[0].text);
           console.log(`Found ${content.items?.length || 0} tasks`);
         }

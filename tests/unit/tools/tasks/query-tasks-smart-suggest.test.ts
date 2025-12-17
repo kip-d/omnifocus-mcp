@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
 }));
 
 describe('QueryTasksTool smart_suggest', () => {
@@ -60,7 +60,7 @@ describe('QueryTasksTool smart_suggest', () => {
   });
 
   it('returns SCRIPT_ERROR when underlying query fails', async () => {
-    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'boom' , details: 'Test error' });
+    mockOmni.executeJson.mockResolvedValue({ success: false, error: 'boom', details: 'Test error' });
     const res: any = await tool.execute({ mode: 'smart_suggest', limit: 5 });
     expect(res.success).toBe(false);
     expect(res.error.code).toBe('SCRIPT_ERROR');

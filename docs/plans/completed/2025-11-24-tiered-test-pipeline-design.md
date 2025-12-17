@@ -1,17 +1,17 @@
 # Tiered Test Pipeline Design
 
-**Date:** 2025-11-24
-**Status:** Approved Design
-**Author:** Brainstorming session
+**Date:** 2025-11-24 **Status:** Approved Design **Author:** Brainstorming session
 
 ## Problem Statement
 
 Current testing workflow has multiple friction points:
+
 - **Startup time:** MCP server spawns for each test run (~3-5s overhead)
 - **Execution time:** OmniFocus operations are slow (5-10s per operation)
 - **Mental overhead:** Unclear which tests to run, often run everything or rely on human testers
 
-Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensive validation but has 30+ minute turnaround time.
+Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensive validation but has 30+ minute
+turnaround time.
 
 ## Goals
 
@@ -24,11 +24,11 @@ Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensiv
 
 ### Tier Definitions
 
-| Tier | Name | Time | Trigger | What It Tests |
-|------|------|------|---------|---------------|
-| 1 | Unit | 2-5s | File save (watch) | Pure TypeScript logic |
-| 2 | Smoke | 8-12s | On-demand | Minimal OmniFocus round-trip |
-| 3 | Integration | 60-90s | Pre-commit, CI | Complete TESTING_PROMPT.md flow |
+| Tier | Name        | Time   | Trigger           | What It Tests                   |
+| ---- | ----------- | ------ | ----------------- | ------------------------------- |
+| 1    | Unit        | 2-5s   | File save (watch) | Pure TypeScript logic           |
+| 2    | Smoke       | 8-12s  | On-demand         | Minimal OmniFocus round-trip    |
+| 3    | Integration | 60-90s | Pre-commit, CI    | Complete TESTING_PROMPT.md flow |
 
 ### Tier 1: Unit Tests (Instant)
 
@@ -37,6 +37,7 @@ Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensiv
 **Location:** `tests/unit/**/*.test.ts` (existing ~50 tests)
 
 **What's covered:**
+
 - Compilers (QueryCompiler, MutationCompiler, AnalysisCompiler)
 - Validators (schema validation, AST validation)
 - Transformers (AST builders, response formatters)
@@ -53,6 +54,7 @@ Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensiv
 **Location:** `tests/smoke/**/*.test.ts` (new directory)
 
 **What's covered:**
+
 1. System health check (diagnostics)
 2. Create one task with test tag
 3. Query to verify task exists
@@ -70,6 +72,7 @@ Human testers running TESTING_PROMPT.md via Claude Desktop provides comprehensiv
 **Location:** `tests/integration/**/*.test.ts` (existing)
 
 **What's covered:**
+
 - All read operations (inbox, today, overdue, projects, tags)
 - All write operations (create, update, complete, delete for tasks and projects)
 - Tag filtering and verification
@@ -152,14 +155,14 @@ export default defineConfig({
         include: ['tests/integration/**/*.test.ts'],
         exclude: [
           'tests/integration/helpers/**',
-          'tests/integration/test-*.ts'  // Legacy standalone scripts
+          'tests/integration/test-*.ts', // Legacy standalone scripts
         ],
         setupFiles: ['tests/integration/setup.ts'],
         testTimeout: 120000,
         environment: 'node',
-      }
-    ]
-  }
+      },
+    ],
+  },
 });
 ```
 
@@ -220,8 +223,8 @@ describe('OmniFocus Smoke Tests', () => {
       query: {
         type: 'tasks',
         filters: { id: taskId },
-        limit: 1
-      }
+        limit: 1,
+      },
     });
     expect(queryResult.success).toBe(true);
     expect(queryResult.data?.items?.length).toBe(1);
@@ -326,10 +329,12 @@ package.json                       # updated scripts
 ### Existing Tests Classification
 
 Most existing tests are already properly located:
+
 - `tests/unit/**` → Tier 1 (no changes needed)
 - `tests/integration/**/*.test.ts` → Tier 3 (no changes needed)
 
-Legacy standalone scripts in `tests/integration/test-*.ts` should be excluded from Vitest projects (they're manual investigation tools, not automated tests).
+Legacy standalone scripts in `tests/integration/test-*.ts` should be excluded from Vitest projects (they're manual
+investigation tools, not automated tests).
 
 ### Gradual Adoption
 

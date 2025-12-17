@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() })),
 }));
 
 describe('ProductivityStatsTool', () => {
@@ -37,9 +37,9 @@ describe('ProductivityStatsTool', () => {
     const cached = {
       period: 'week',
       stats: {
-        overview: { totalTasks: 100, completedTasks: 75, completionRate: 0.75 }
+        overview: { totalTasks: 100, completedTasks: 75, completionRate: 0.75 },
       },
-      healthScore: 85
+      healthScore: 85,
     };
     mockCache.get.mockReturnValue(cached);
 
@@ -55,7 +55,7 @@ describe('ProductivityStatsTool', () => {
     mockOmni.executeJson.mockResolvedValue({
       success: false,
       error: 'Failed to calculate stats',
-      details: 'OmniFocus error'
+      details: 'OmniFocus error',
     });
 
     const res: any = await tool.execute({ period: 'week' } as any);
@@ -73,23 +73,23 @@ describe('ProductivityStatsTool', () => {
         completedTasks: 150,
         completionRate: 0.75,
         activeProjects: 12,
-        overdueCount: 5
+        overdueCount: 5,
       },
       projectStats: {
-        'Work': { total: 100, completed: 80, rate: 0.8 },
-        'Personal': { total: 100, completed: 70, rate: 0.7 }
+        Work: { total: 100, completed: 80, rate: 0.8 },
+        Personal: { total: 100, completed: 70, rate: 0.7 },
       },
       tagStats: {
-        'urgent': { total: 30, completed: 25, rate: 0.83 },
-        'important': { total: 50, completed: 40, rate: 0.8 }
+        urgent: { total: 30, completed: 25, rate: 0.83 },
+        important: { total: 50, completed: 40, rate: 0.8 },
       },
-      insights: ['Completion rate is healthy', 'Focus on overdue tasks']
+      insights: ['Completion rate is healthy', 'Focus on overdue tasks'],
     });
 
     const res: any = await tool.execute({
       period: 'week',
       includeProjectStats: true,
-      includeTagStats: true
+      includeTagStats: true,
     } as any);
 
     expect(res.success).toBe(true);
@@ -109,9 +109,9 @@ describe('ProductivityStatsTool', () => {
         completedTasks: 425,
         completionRate: 0.85,
         activeProjects: 8,
-        overdueCount: 15
+        overdueCount: 15,
       },
-      insights: ['High completion rate']
+      insights: ['High completion rate'],
     });
 
     const res: any = await tool.execute({ period: 'month' } as any);
@@ -127,7 +127,7 @@ describe('ProductivityStatsTool', () => {
     mockOmni.buildScript.mockReturnValue('script');
     const mockResponse = {
       summary: { totalTasks: 10, completedTasks: 8, completionRate: 0.8 },
-      insights: []
+      insights: [],
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
@@ -146,15 +146,15 @@ describe('ProductivityStatsTool', () => {
       summary: {
         totalTasks: 50,
         completedTasks: 30,
-        completionRate: 0.6
-      }
+        completionRate: 0.6,
+      },
       // No projectStats or tagStats
     });
 
     const res: any = await tool.execute({
       period: 'week',
       includeProjectStats: false,
-      includeTagStats: false
+      includeTagStats: false,
     } as any);
 
     expect(res.success).toBe(true);
@@ -166,7 +166,7 @@ describe('ProductivityStatsTool', () => {
     mockOmni.buildScript.mockReturnValue('script');
     mockOmni.executeJson.mockResolvedValue({
       summary: { totalTasks: 100, completedTasks: 80, completionRate: 0.8 },
-      insights: []
+      insights: [],
     });
 
     await tool.execute({ period: 'week' } as any);
@@ -185,9 +185,9 @@ describe('ProductivityStatsTool', () => {
         completedTasks: 0,
         completionRate: 0,
         activeProjects: 0,
-        overdueCount: 0
+        overdueCount: 0,
       },
-      insights: []
+      insights: [],
     });
 
     const res: any = await tool.execute({ period: 'week' } as any);

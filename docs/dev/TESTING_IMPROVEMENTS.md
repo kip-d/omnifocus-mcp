@@ -1,11 +1,11 @@
 # Testing Improvements - Lessons from v3.0.0 Bug Cycle
 
-**Created:** 2025-11-10
-**Context:** After shipping 5 critical bugs despite 662 passing tests
+**Created:** 2025-11-10 **Context:** After shipping 5 critical bugs despite 662 passing tests
 
 ## Executive Summary
 
 We shipped v3.0.0 with **5 critical bugs** that broke core functionality:
+
 1. Text filter completely non-functional
 2. Date range filter too broad
 3. Date updates failing with JXA_CACHE_STALE
@@ -23,6 +23,7 @@ We shipped v3.0.0 with **5 critical bugs** that broke core functionality:
 ### Problem 1: Testing Implementation, Not Behavior
 
 **Example from `advanced-filters.test.ts:251-269`:**
+
 ```typescript
 it('should support BETWEEN operator for date range', async () => {
   const result = tool['processAdvancedFilters']({
@@ -30,9 +31,9 @@ it('should support BETWEEN operator for date range', async () => {
       dueDate: {
         operator: 'BETWEEN',
         value: '2025-10-01',
-        upperBound: '2025-10-07'
-      }
-    }
+        upperBound: '2025-10-07',
+      },
+    },
   });
 
   // ❌ Only tests parameter conversion!
@@ -45,18 +46,21 @@ it('should support BETWEEN operator for date range', async () => {
 **What this test verified:** The `processAdvancedFilters` method correctly transforms parameters.
 
 **What it did NOT verify:**
+
 - Whether `list-tasks-omnijs.ts` actually has date filter logic
 - Whether date filtering works in OmniFocus
 - Whether results are actually within the date range
 - Whether the filter is even executed
 
-**Result:** Bug #10 shipped - date range filter returned tasks BEFORE the range, AFTER the range, and with NO due date. Test passed because it only checked parameter conversion.
+**Result:** Bug #10 shipped - date range filter returned tasks BEFORE the range, AFTER the range, and with NO due date.
+Test passed because it only checked parameter conversion.
 
 ---
 
 ### Problem 2: Static Code Analysis Instead of Execution Tests
 
 **Example from `tag-operations.test.ts:6-12`:**
+
 ```typescript
 it('should use OmniJS bridge for tag property access (v3)', () => {
   // ❌ Just searching for strings in source code!
@@ -69,43 +73,47 @@ it('should use OmniJS bridge for tag property access (v3)', () => {
 **What this test verified:** Script source code contains certain strings.
 
 **What it did NOT verify:**
+
 - Whether addTags/removeTags operations exist
 - Whether they actually modify tasks
 - Whether they handle errors
 - Whether they work with real OmniFocus data
 
-**Result:** addTags/removeTags shipped completely missing from v3. Script didn't have the code at all, but tests only checked for string presence, not actual functionality.
+**Result:** addTags/removeTags shipped completely missing from v3. Script didn't have the code at all, but tests only
+checked for string presence, not actual functionality.
 
 ---
 
 ### Problem 3: No Result Validation
 
 **Missing test pattern:**
+
 ```typescript
 // ❌ THIS TEST DOESN'T EXIST IN OUR SUITE
 it('should return only tasks within date range', async () => {
   const result = await sendMCPRequest({
     query: {
-      type: "tasks",
-      filters: { dueDate: { between: ["2025-11-09", "2025-11-16"] } }
-    }
+      type: 'tasks',
+      filters: { dueDate: { between: ['2025-11-09', '2025-11-16'] } },
+    },
   });
 
   const data = JSON.parse(result.content[0].text);
 
   // ✅ Validate EVERY result
-  data.tasks.forEach(task => {
-    expect(task.dueDate >= "2025-11-09").toBe(true);
-    expect(task.dueDate <= "2025-11-16").toBe(true);
+  data.tasks.forEach((task) => {
+    expect(task.dueDate >= '2025-11-09').toBe(true);
+    expect(task.dueDate <= '2025-11-16').toBe(true);
   });
 
   // ✅ Validate no tasks without due dates
-  const tasksWithoutDates = data.tasks.filter(t => !t.dueDate);
+  const tasksWithoutDates = data.tasks.filter((t) => !t.dueDate);
   expect(tasksWithoutDates.length).toBe(0);
 });
 ```
 
 **Current test coverage:**
+
 - ✅ Parameter conversion (tool layer)
 - ✅ Script source code analysis (string matching)
 - ❌ Actual OmniFocus execution
@@ -118,25 +126,25 @@ it('should return only tasks within date range', async () => {
 
 ### Current State (Before Improvements)
 
-| Test Type | Count | Validates Behavior | Caught Bugs |
-|-----------|-------|-------------------|-------------|
-| Unit tests (parameter conversion) | ~400 | ❌ No | 0/5 |
-| Unit tests (string matching) | ~50 | ❌ No | 0/5 |
-| Integration tests (basic) | ~200 | ⚠️ Partial | 0/5 |
-| Result validation tests | 0 | N/A | N/A |
-| Update operation tests | 0 | N/A | N/A |
-| **Total** | **~650** | **❌** | **0/5 bugs caught** |
+| Test Type                         | Count    | Validates Behavior | Caught Bugs         |
+| --------------------------------- | -------- | ------------------ | ------------------- |
+| Unit tests (parameter conversion) | ~400     | ❌ No              | 0/5                 |
+| Unit tests (string matching)      | ~50      | ❌ No              | 0/5                 |
+| Integration tests (basic)         | ~200     | ⚠️ Partial         | 0/5                 |
+| Result validation tests           | 0        | N/A                | N/A                 |
+| Update operation tests            | 0        | N/A                | N/A                 |
+| **Total**                         | **~650** | **❌**             | **0/5 bugs caught** |
 
 ### Target State (After Improvements)
 
-| Test Type | Target Count | Validates Behavior | Expected Coverage |
-|-----------|-------------|-------------------|-------------------|
-| Unit tests (schema validation) | ~200 | ✅ Yes (for schemas) | Parameter validation |
-| Integration tests (execution + validation) | ~300 | ✅ Yes | All user-facing operations |
-| Result validation tests | ~100 | ✅ Yes | All filter types |
-| Update operation tests | ~50 | ✅ Yes | All update operations |
-| End-to-end workflow tests | ~20 | ✅ Yes | Critical user paths |
-| **Total** | **~670** | **✅** | **100% user-facing ops** |
+| Test Type                                  | Target Count | Validates Behavior   | Expected Coverage          |
+| ------------------------------------------ | ------------ | -------------------- | -------------------------- |
+| Unit tests (schema validation)             | ~200         | ✅ Yes (for schemas) | Parameter validation       |
+| Integration tests (execution + validation) | ~300         | ✅ Yes               | All user-facing operations |
+| Result validation tests                    | ~100         | ✅ Yes               | All filter types           |
+| Update operation tests                     | ~50          | ✅ Yes               | All update operations      |
+| End-to-end workflow tests                  | ~20          | ✅ Yes               | Critical user paths        |
+| **Total**                                  | **~670**     | **✅**               | **100% user-facing ops**   |
 
 ---
 
@@ -147,6 +155,7 @@ it('should return only tasks within date range', async () => {
 Create integration tests that validate actual behavior, not parameter conversion.
 
 **File:** `tests/integration/validation/filter-results.test.ts`
+
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
@@ -174,10 +183,10 @@ describe('Filter Result Validation', () => {
           query: {
             type: 'tasks',
             filters: { text: { contains: searchTerm } },
-            limit: 100
-          }
-        }
-      }
+            limit: 100,
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
@@ -199,7 +208,7 @@ describe('Filter Result Validation', () => {
         console.error(`Task ${index} doesn't match filter:`, {
           id: task.id,
           name: task.name,
-          note: task.note?.substring(0, 50)
+          note: task.note?.substring(0, 50),
         });
       }
     });
@@ -217,10 +226,10 @@ describe('Filter Result Validation', () => {
           query: {
             type: 'tasks',
             filters: { dueDate: { between: [startDate, endDate] } },
-            limit: 100
-          }
-        }
-      }
+            limit: 100,
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
@@ -239,13 +248,13 @@ describe('Filter Result Validation', () => {
           id: task.id,
           name: task.name,
           dueDate: task.dueDate,
-          expected: `${startDate} to ${endDate}`
+          expected: `${startDate} to ${endDate}`,
         });
       }
     });
 
     // ✅ Validate no tasks without due dates
-    const tasksWithoutDates = data.tasks.filter(t => !t.dueDate);
+    const tasksWithoutDates = data.tasks.filter((t) => !t.dueDate);
     expect(tasksWithoutDates.length).toBe(0);
   });
 
@@ -261,10 +270,10 @@ describe('Filter Result Validation', () => {
             type: 'tasks',
             filters: { tags: { any: requiredTags } },
             fields: ['id', 'name', 'tags'],
-            limit: 100
-          }
-        }
-      }
+            limit: 100,
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
@@ -273,9 +282,7 @@ describe('Filter Result Validation', () => {
     data.tasks.forEach((task, index) => {
       expect(Array.isArray(task.tags)).toBe(true);
 
-      const hasRequiredTag = task.tags.some(tag =>
-        requiredTags.includes(tag)
-      );
+      const hasRequiredTag = task.tags.some((tag) => requiredTags.includes(tag));
 
       expect(hasRequiredTag).toBe(true);
       // If this fails, show which task and tags
@@ -284,7 +291,7 @@ describe('Filter Result Validation', () => {
           id: task.id,
           name: task.name,
           actualTags: task.tags,
-          requiredTags: requiredTags
+          requiredTags: requiredTags,
         });
       }
     });
@@ -302,22 +309,20 @@ describe('Filter Result Validation', () => {
             filters: {
               text: { contains: 'review' },
               dueDate: { between: ['2025-11-01', '2025-12-31'] },
-              tags: { any: ['Work'] }
+              tags: { any: ['Work'] },
             },
-            limit: 100
-          }
-        }
-      }
+            limit: 100,
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
 
     // ✅ Validate EVERY result matches ALL filters
-    data.tasks.forEach(task => {
+    data.tasks.forEach((task) => {
       // Text filter
-      const matchesText =
-        task.name?.toLowerCase().includes('review') ||
-        task.note?.toLowerCase().includes('review');
+      const matchesText = task.name?.toLowerCase().includes('review') || task.note?.toLowerCase().includes('review');
       expect(matchesText).toBe(true);
 
       // Date range filter
@@ -338,6 +343,7 @@ describe('Filter Result Validation', () => {
 Test that update operations actually modify tasks and persist changes.
 
 **File:** `tests/integration/validation/update-operations.test.ts`
+
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
@@ -363,10 +369,10 @@ describe('Update Operations Validation', () => {
               mutation: {
                 operation: 'delete',
                 target: 'task',
-                id: taskId
-              }
-            }
-          }
+                id: taskId,
+              },
+            },
+          },
         });
       } catch (err) {
         console.warn(`Failed to cleanup task ${taskId}:`, err);
@@ -384,10 +390,10 @@ describe('Update Operations Validation', () => {
           mutation: {
             operation: 'create',
             target: 'task',
-            data: { name, ...properties }
-          }
-        }
-      }
+            data: { name, ...properties },
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
@@ -406,10 +412,10 @@ describe('Update Operations Validation', () => {
         arguments: {
           query: {
             type: 'tasks',
-            filters: { id: taskId }
-          }
-        }
-      }
+            filters: { id: taskId },
+          },
+        },
+      },
     });
 
     const data = JSON.parse(result.content[0].text);
@@ -432,10 +438,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { dueDate: '2025-12-25' }
-          }
-        }
-      }
+            changes: { dueDate: '2025-12-25' },
+          },
+        },
+      },
     });
 
     const updateData = JSON.parse(updateResult.content[0].text);
@@ -459,10 +465,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { deferDate: '2025-12-20' }
-          }
-        }
-      }
+            changes: { deferDate: '2025-12-20' },
+          },
+        },
+      },
     });
 
     // ✅ Verify change persisted
@@ -483,10 +489,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { plannedDate: '2025-12-18' }
-          }
-        }
-      }
+            changes: { plannedDate: '2025-12-18' },
+          },
+        },
+      },
     });
 
     // ✅ Verify change persisted
@@ -498,7 +504,7 @@ describe('Update Operations Validation', () => {
   it('should support tags (full replacement)', async () => {
     // Create task with initial tags
     const taskId = await createTask('Test tags replacement', {
-      tags: ['initial1', 'initial2']
+      tags: ['initial1', 'initial2'],
     });
 
     // Replace tags
@@ -511,10 +517,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { tags: ['replaced1', 'replaced2', 'replaced3'] }
-          }
-        }
-      }
+            changes: { tags: ['replaced1', 'replaced2', 'replaced3'] },
+          },
+        },
+      },
     });
 
     // ✅ Verify tags replaced (not merged)
@@ -527,7 +533,7 @@ describe('Update Operations Validation', () => {
   it('should support addTags (append to existing)', async () => {
     // Create task with initial tags
     const taskId = await createTask('Test addTags', {
-      tags: ['existing1', 'existing2']
+      tags: ['existing1', 'existing2'],
     });
 
     // Add more tags
@@ -540,10 +546,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { addTags: ['new1', 'new2'] }
-          }
-        }
-      }
+            changes: { addTags: ['new1', 'new2'] },
+          },
+        },
+      },
     });
 
     // ✅ Verify tags appended (not replaced)
@@ -558,7 +564,7 @@ describe('Update Operations Validation', () => {
   it('should support removeTags (filter out specified)', async () => {
     // Create task with multiple tags
     const taskId = await createTask('Test removeTags', {
-      tags: ['keep1', 'remove1', 'keep2', 'remove2']
+      tags: ['keep1', 'remove1', 'keep2', 'remove2'],
     });
 
     // Remove specific tags
@@ -571,10 +577,10 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { removeTags: ['remove1', 'remove2'] }
-          }
-        }
-      }
+            changes: { removeTags: ['remove1', 'remove2'] },
+          },
+        },
+      },
     });
 
     // ✅ Verify specified tags removed, others kept
@@ -588,7 +594,7 @@ describe('Update Operations Validation', () => {
 
   it('should handle addTags with deduplication', async () => {
     const taskId = await createTask('Test addTags dedup', {
-      tags: ['existing']
+      tags: ['existing'],
     });
 
     // Try to add tags that already exist
@@ -601,15 +607,15 @@ describe('Update Operations Validation', () => {
             operation: 'update',
             target: 'task',
             id: taskId,
-            changes: { addTags: ['existing', 'new'] }
-          }
-        }
-      }
+            changes: { addTags: ['existing', 'new'] },
+          },
+        },
+      },
     });
 
     // ✅ Verify no duplicates created
     const task = await readTask(taskId);
-    expect(task.tags.filter(t => t === 'existing').length).toBe(1);
+    expect(task.tags.filter((t) => t === 'existing').length).toBe(1);
     expect(task.tags).toContain('new');
   });
 });
@@ -622,6 +628,7 @@ describe('Update Operations Validation', () => {
 **Remove static analysis tests, add execution tests.**
 
 **BEFORE (❌ Bad):**
+
 ```typescript
 it('should use OmniJS bridge', () => {
   expect(LIST_TAGS_SCRIPT).toContain('evaluateJavascript');
@@ -629,11 +636,12 @@ it('should use OmniJS bridge', () => {
 ```
 
 **AFTER (✅ Good):**
+
 ```typescript
 it('should list tags successfully', async () => {
   const result = await client.sendRequest({
     method: 'tools/call',
-    params: { name: 'tags', arguments: {} }
+    params: { name: 'tags', arguments: {} },
   });
 
   const data = JSON.parse(result.content[0].text);
@@ -641,7 +649,7 @@ it('should list tags successfully', async () => {
   expect(data.v).toBe('3');
   expect(Array.isArray(data.tags)).toBe(true);
 
-  data.tags.forEach(tag => {
+  data.tags.forEach((tag) => {
     expect(tag.id).toBeDefined();
     expect(tag.name).toBeDefined();
     expect(typeof tag.name).toBe('string');
@@ -677,6 +685,7 @@ it('should list tags successfully', async () => {
 **VALIDATE RESULTS, NOT PARAMETERS**
 
 ❌ **WRONG - Parameter Testing:**
+
 ```typescript
 it('should support date range filter', () => {
   const result = tool.processFilters({...});
@@ -685,6 +694,7 @@ it('should support date range filter', () => {
 ```
 
 ✅ **CORRECT - Result Validation:**
+
 ```typescript
 it('should return only tasks in date range', async () => {
   const result = await executeQuery({...});
@@ -720,18 +730,21 @@ Before approving PR, verify:
 ## Implementation Plan
 
 ### Week 1: Critical Gap Closure
+
 - [ ] Create `tests/integration/validation/` directory
 - [ ] Implement filter result validation tests (text, date range, tags)
 - [ ] Implement update operation tests (dates, tags, addTags, removeTags)
 - [ ] Run against current codebase to establish baseline
 
 ### Week 2: Test Replacement
+
 - [ ] Audit existing tests for parameter-only validation
 - [ ] Replace or supplement with result validation
 - [ ] Remove string matching tests
 - [ ] Add execution tests for scripts
 
 ### Week 3: Automation & CI
+
 - [ ] Add pre-commit hook to require validation tests for new features
 - [ ] Update CI to fail if result validation coverage drops
 - [ ] Create test coverage reports highlighting validation gaps
@@ -742,12 +755,14 @@ Before approving PR, verify:
 ## Success Metrics
 
 ### Before Improvements
+
 - Tests: 662 passing
 - Bugs caught: 0/5 (0%)
 - User testing caught: 5/5 (100%)
 - Time to discover bugs: Minutes (user testing)
 
 ### After Improvements (Target)
+
 - Tests: ~670 passing
 - Bugs caught: 5/5 (100%) - with result validation
 - User testing caught: 0/5 (0%) - bugs prevented
@@ -790,6 +805,4 @@ Before approving PR, verify:
 
 ---
 
-**Document Owner:** Development Team
-**Last Updated:** 2025-11-10
-**Review Frequency:** After each bug discovery
+**Document Owner:** Development Team **Last Updated:** 2025-11-10 **Review Frequency:** After each bug discovery

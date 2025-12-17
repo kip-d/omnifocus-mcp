@@ -5,10 +5,10 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 
 // Mocks
 vi.mock('../../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({
-  OmniAutomation: vi.fn()
+  OmniAutomation: vi.fn(),
 }));
 vi.mock('../../../../src/utils/logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -16,7 +16,7 @@ vi.mock('../../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('ManageReviewsTool', () => {
@@ -97,7 +97,11 @@ describe('ManageReviewsTool', () => {
     mockOmni.buildScript.mockReturnValue('script');
     mockOmni.executeJson.mockResolvedValue({ ok: true, id: 'p1' });
 
-    const res: any = await tool.executeValidated({ operation: 'mark_reviewed', projectId: 'p1', updateNextReviewDate: true } as any);
+    const res: any = await tool.executeValidated({
+      operation: 'mark_reviewed',
+      projectId: 'p1',
+      updateNextReviewDate: true,
+    } as any);
     expect(res.success).toBe(true);
     expect(res.metadata.operation).toBe('mark_reviewed');
     expect(res.metadata.reviewed_id).toBe('p1');
@@ -139,4 +143,3 @@ describe('ManageReviewsTool', () => {
     expect(mockCache.invalidate).toHaveBeenCalledWith('reviews');
   });
 });
-

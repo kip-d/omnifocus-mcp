@@ -5,7 +5,7 @@ describe('Task Search Limit Bug Fix', () => {
   // Test the v3 function-generated script
   const testScript = createUpdateTaskScript('test-id-123', {
     name: 'Test Task',
-    projectId: 'test-project-id'
+    projectId: 'test-project-id',
   });
 
   it('should avoid whose() and use safe iteration', () => {
@@ -15,7 +15,9 @@ describe('Task Search Limit Bug Fix', () => {
     expect(testScript).toContain('doc.flattenedTasks');
     expect(testScript).toMatch(/for \(let i = 0; i < tasks\.length; i\+\+\)/);
     // v3 uses direct property access: tasks[i].id.primaryKey === taskId
-    expect(testScript).toMatch(/tasks\[i\]\.id\.primaryKey === taskId|tasks\[i\]\.id\(\)\) === taskId|safeGet\(\(\) => tasks\[i\]\.id\(\)\)/);
+    expect(testScript).toMatch(
+      /tasks\[i\]\.id\.primaryKey === taskId|tasks\[i\]\.id\(\)\) === taskId|safeGet\(\(\) => tasks\[i\]\.id\(\)\)/,
+    );
   });
 
   it('should directly scan tasks collection without whose()', () => {

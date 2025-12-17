@@ -14,11 +14,11 @@ console.log('\nInput Schema:', JSON.stringify(tool.inputSchema, null, 2));
 
 // Test a sample input
 const testInput = {
-  projectId: "test123",
+  projectId: 'test123',
   updates: {
-    name: "Updated Project Name",
-    note: "Updated note"
-  }
+    name: 'Updated Project Name',
+    note: 'Updated note',
+  },
 };
 
 console.log('\nTesting with sample input:', JSON.stringify(testInput, null, 2));

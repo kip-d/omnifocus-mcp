@@ -1,10 +1,12 @@
 # Running OmniFocus MCP Evaluations
 
-This guide explains how to run the evaluation suite for the OmniFocus MCP server using the official MCP evaluation harness.
+This guide explains how to run the evaluation suite for the OmniFocus MCP server using the official MCP evaluation
+harness.
 
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - Anthropic API key
 - OmniFocus running on your Mac
@@ -85,18 +87,18 @@ The evaluation suite contains 10 questions that test:
 
 ### Question-by-Question Results
 
-| # | Question | Expected Answer | Tool(s) Used |
-|---|----------|-----------------|--------------|
-| 1 | Most overdue review | Westgate | projects |
-| 2 | Empty projects count | 4 | projects |
-| 3 | Total tasks in PPO | 44 | tasks |
-| 4 | Available tasks in PPO | 41 | tasks |
-| 5 | Sequential projects | Blank Order Project | projects |
-| 6 | Flagged overdue tasks | 2 | tasks |
-| 7 | Project with most overdue | Pending Purchase Orders | tasks, projects |
-| 8 | Highest priority overdue task | Call Kurzweil support... | tasks |
-| 9 | On-hold projects | 1 | projects |
-| 10 | Oldest active project | Blank Order Project | projects |
+| #   | Question                      | Expected Answer          | Tool(s) Used    |
+| --- | ----------------------------- | ------------------------ | --------------- |
+| 1   | Most overdue review           | Westgate                 | projects        |
+| 2   | Empty projects count          | 4                        | projects        |
+| 3   | Total tasks in PPO            | 44                       | tasks           |
+| 4   | Available tasks in PPO        | 41                       | tasks           |
+| 5   | Sequential projects           | Blank Order Project      | projects        |
+| 6   | Flagged overdue tasks         | 2                        | tasks           |
+| 7   | Project with most overdue     | Pending Purchase Orders  | tasks, projects |
+| 8   | Highest priority overdue task | Call Kurzweil support... | tasks           |
+| 9   | On-hold projects              | 1                        | projects        |
+| 10  | Oldest active project         | Blank Order Project      | projects        |
 
 ## Tool Coverage
 
@@ -110,12 +112,14 @@ The evaluation tests these MCP tools:
 ## Evaluation Success Criteria
 
 ✅ An evaluation question is **PASSED** if:
+
 1. Claude successfully calls appropriate MCP tools
 2. Claude interprets the tool responses correctly
 3. Claude's answer matches the expected answer exactly
 4. The answer is returned in the correct format
 
 ❌ An evaluation question is **FAILED** if:
+
 1. Claude calls incorrect tools
 2. Claude misinterprets the data returned
 3. Claude's answer differs from the expected answer
@@ -124,19 +128,25 @@ The evaluation tests these MCP tools:
 ## Interpreting Results
 
 ### High Accuracy (90%+)
+
 Your MCP server tools are:
+
 - Well-documented with clear descriptions
 - Returning appropriately structured data
 - Easily interpretable by LLMs
 
 ### Medium Accuracy (70-89%)
+
 Some tools may need improvements:
+
 - Descriptions could be more detailed
 - Response formats could be simplified
 - Some tools returning too much data
 
 ### Low Accuracy (<70%)
+
 Significant improvements needed:
+
 - Review tool descriptions for clarity
 - Check response schemas for consistency
 - Simplify complex tool responses
@@ -168,11 +178,13 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}
 ## Troubleshooting
 
 ### Connection Errors
+
 - Ensure OmniFocus is running
 - Check that no other MCP server is using the port
 - Verify the MCP server binary exists at `dist/index.js`
 
 ### Low Accuracy
+
 - Review tool descriptions - they should explain:
   - What the tool does in plain English
   - All available parameters and their purposes
@@ -182,6 +194,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}
 - Test individual tools manually
 
 ### Timeout Errors
+
 - Increase the evaluation timeout
 - Break complex questions into simpler ones
 - Ensure the MCP server is responsive
@@ -214,4 +227,5 @@ After running evaluations:
 
 ---
 
-For more information on the MCP evaluation framework, see the [MCP Builder Skill Evaluation Guide](/Users/kip/.claude/plugins/marketplaces/anthropic-agent-skills/mcp-builder/reference/evaluation.md).
+For more information on the MCP evaluation framework, see the
+[MCP Builder Skill Evaluation Guide](/Users/kip/.claude/plugins/marketplaces/anthropic-agent-skills/mcp-builder/reference/evaluation.md).

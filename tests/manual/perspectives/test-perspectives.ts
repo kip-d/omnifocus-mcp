@@ -93,15 +93,15 @@ const testScript = `
 
 try {
   console.log('Testing perspective access via JXA...\n');
-  
+
   const result = execSync(`osascript -l JavaScript -e '${testScript}'`, {
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 10 * 1024 * 1024,
   });
-  
+
   const parsed = JSON.parse(result);
   console.log('Result:', JSON.stringify(parsed, null, 2));
-  
+
   if (parsed.perspectives) {
     console.log('\n✅ SUCCESS! We can access perspectives via evaluateJavascript!');
     console.log(`Found ${parsed.perspectives.builtIn.length} built-in perspectives`);

@@ -65,34 +65,38 @@ export interface FilterValue {
 // Zod schema type wrapping FilterValue
 type FilterType = z.ZodType<FilterValue>;
 
-const FilterSchema: FilterType = z.lazy(() => z.object({
-  // Task filters
-  id: z.string().optional(), // Exact task ID lookup
-  status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
-  tags: TagFilterSchema.optional(),
-  project: z.union([z.string(), z.null()]).optional(),
-  dueDate: DateFilterSchema.optional(),
-  deferDate: DateFilterSchema.optional(),
-  plannedDate: DateFilterSchema.optional(),
-  added: DateFilterSchema.optional(), // Creation date
-  flagged: z.boolean().optional(),
-  blocked: z.boolean().optional(),
-  available: z.boolean().optional(),
-  inInbox: z.boolean().optional(), // Explicit inbox filter
-  text: TextFilterSchema.optional(),
-  estimatedMinutes: NumberFilterSchema.optional(), // Task duration
+const FilterSchema: FilterType = z.lazy(() =>
+  z
+    .object({
+      // Task filters
+      id: z.string().optional(), // Exact task ID lookup
+      status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
+      tags: TagFilterSchema.optional(),
+      project: z.union([z.string(), z.null()]).optional(),
+      dueDate: DateFilterSchema.optional(),
+      deferDate: DateFilterSchema.optional(),
+      plannedDate: DateFilterSchema.optional(),
+      added: DateFilterSchema.optional(), // Creation date
+      flagged: z.boolean().optional(),
+      blocked: z.boolean().optional(),
+      available: z.boolean().optional(),
+      inInbox: z.boolean().optional(), // Explicit inbox filter
+      text: TextFilterSchema.optional(),
+      estimatedMinutes: NumberFilterSchema.optional(), // Task duration
 
-  // Project/Task name filter
-  name: TextFilterSchema.optional(),
+      // Project/Task name filter
+      name: TextFilterSchema.optional(),
 
-  // Project filters
-  folder: z.string().optional(),
+      // Project filters
+      folder: z.string().optional(),
 
-  // Logical operators
-  AND: z.array(FilterSchema).optional(),
-  OR: z.array(FilterSchema).optional(),
-  NOT: FilterSchema.optional(),
-}).passthrough());
+      // Logical operators
+      AND: z.array(FilterSchema).optional(),
+      OR: z.array(FilterSchema).optional(),
+      NOT: FilterSchema.optional(),
+    })
+    .passthrough(),
+);
 
 // Field selection enum for type safety
 const TaskFieldEnum = z.enum([
@@ -150,18 +154,20 @@ const QuerySchema = z.object({
   offset: coerceNumber().min(0).optional(),
 
   // Mode parameter with all 10 modes from QueryTasksTool
-  mode: z.enum([
-    'all',           // List all tasks (with optional filters)
-    'inbox',         // Tasks in inbox (not assigned to any project)
-    'search',        // Text search in task names
-    'overdue',       // Tasks past their due date
-    'today',         // Today perspective: Due soon (≤3 days) OR flagged
-    'upcoming',      // Tasks due in next N days
-    'available',     // Tasks ready to work on
-    'blocked',       // Tasks waiting on others
-    'flagged',       // High priority tasks
-    'smart_suggest', // AI-powered suggestions
-  ]).optional(),
+  mode: z
+    .enum([
+      'all', // List all tasks (with optional filters)
+      'inbox', // Tasks in inbox (not assigned to any project)
+      'search', // Text search in task names
+      'overdue', // Tasks past their due date
+      'today', // Today perspective: Due soon (≤3 days) OR flagged
+      'upcoming', // Tasks due in next N days
+      'available', // Tasks ready to work on
+      'blocked', // Tasks waiting on others
+      'flagged', // High priority tasks
+      'smart_suggest', // AI-powered suggestions
+    ])
+    .optional(),
 
   // Response control parameters
   details: z.boolean().optional(), // Include full task details vs minimal

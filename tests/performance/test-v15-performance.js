@@ -10,7 +10,7 @@ import { execSync } from 'child_process';
 function runScript(scriptContent) {
   const result = execSync(`osascript -l JavaScript -e '${scriptContent}'`, {
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 10 * 1024 * 1024,
   });
   return JSON.parse(result);
 }
@@ -135,7 +135,7 @@ const tests = [
           version: "v1_15_0"
         });
       })();
-    `
+    `,
   },
   {
     name: 'Overdue Tasks',
@@ -253,8 +253,8 @@ const tests = [
           version: "v1_15_0"
         });
       })();
-    `
-  }
+    `,
+  },
 ];
 
 console.log('\\nv1.15.0 JavaScript Filtering Performance Comparison');
@@ -263,7 +263,7 @@ console.log('=====================================================\\n');
 for (const test of tests) {
   console.log(`Testing: ${test.name}`);
   console.log('-'.repeat(50));
-  
+
   // Run v1.14.0 version
   console.log('Running v1.14.0 implementation...');
   const v14Times = [];
@@ -277,7 +277,7 @@ for (const test of tests) {
   }
   const v14Avg = v14Times.reduce((a, b) => a + b, 0) / v14Times.length;
   console.log(`  Average time: ${v14Avg.toFixed(1)}ms\\n`);
-  
+
   // Run v1.15.0 version
   console.log('Running v1.15.0 implementation...');
   const v15Times = [];
@@ -291,11 +291,11 @@ for (const test of tests) {
   }
   const v15Avg = v15Times.reduce((a, b) => a + b, 0) / v15Times.length;
   console.log(`  Average time: ${v15Avg.toFixed(1)}ms\\n`);
-  
+
   // Calculate improvement
-  const improvement = ((v14Avg - v15Avg) / v14Avg * 100).toFixed(1);
+  const improvement = (((v14Avg - v15Avg) / v14Avg) * 100).toFixed(1);
   const speedup = (v14Avg / v15Avg).toFixed(2);
-  
+
   console.log('Results:');
   console.log(`  v1.14.0: ${v14Avg.toFixed(1)}ms`);
   console.log(`  v1.15.0: ${v15Avg.toFixed(1)}ms`);

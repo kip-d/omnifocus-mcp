@@ -68,25 +68,25 @@ async function runTest() {
       name: 'create_task',
       arguments: {
         name: `${TEST_INBOX_PREFIX} Plan Party ${Date.now()}`,
-        sequential: true,  // Subtasks must be done in order
+        sequential: true, // Subtasks must be done in order
         note: 'This is an action group with sequential subtasks',
         tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
 
     const parentData = JSON.parse(parentResult.result.content[0].text);
-    
+
     if (!parentData.success || !parentData.data?.task?.taskId) {
       console.error('❌ Failed to create parent task:', parentData);
       return;
     }
-    
+
     const parentTaskId = parentData.data.task.taskId;
     console.log(`✅ Created parent task: ${parentTaskId}`);
 
     // Step 2: Create child tasks
     console.log('\n2️⃣ Creating subtasks...');
-    
+
     // First subtask
     const child1Result = await sendRequest(proc, 'tools/call', {
       name: 'create_task',
@@ -97,7 +97,7 @@ async function runTest() {
         tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
-    
+
     const child1Data = JSON.parse(child1Result.result.content[0].text);
     if (child1Data.success) {
       console.log('✅ Created subtask 1: Make guest list');
@@ -115,7 +115,7 @@ async function runTest() {
         tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
-    
+
     const child2Data = JSON.parse(child2Result.result.content[0].text);
     if (child2Data.success) {
       console.log('✅ Created subtask 2: Send invitations');
@@ -133,7 +133,7 @@ async function runTest() {
         tags: [`${TEST_TAG_PREFIX}parent-child`],
       },
     });
-    
+
     const child3Data = JSON.parse(child3Result.result.content[0].text);
     if (child3Data.success) {
       console.log('✅ Created subtask 3: Buy decorations');
@@ -166,7 +166,6 @@ async function runTest() {
     }
 
     console.log('\n✨ Test completed! Check OmniFocus to see the action group structure.');
-
   } catch (error) {
     console.error('❌ Test error:', error);
   } finally {

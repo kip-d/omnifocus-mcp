@@ -41,7 +41,16 @@ SCOPE FILTERING:
     complexity: 'moderate' as const,
     performanceClass: 'slow' as const,
     tags: ['unified', 'analyze', 'analytics'],
-    capabilities: ['productivity_stats', 'task_velocity', 'overdue_analysis', 'pattern_analysis', 'workflow_analysis', 'recurring_tasks', 'parse_meeting_notes', 'manage_reviews'],
+    capabilities: [
+      'productivity_stats',
+      'task_velocity',
+      'overdue_analysis',
+      'pattern_analysis',
+      'workflow_analysis',
+      'recurring_tasks',
+      'parse_meeting_notes',
+      'manage_reviews',
+    ],
   };
 
   annotations = {
@@ -123,9 +132,7 @@ SCOPE FILTERING:
     return this.productivityTool.execute(args);
   }
 
-  private async routeToVelocity(
-    compiled: Extract<CompiledAnalysis, { type: 'task_velocity' }>,
-  ): Promise<unknown> {
+  private async routeToVelocity(compiled: Extract<CompiledAnalysis, { type: 'task_velocity' }>): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
     if (compiled.scope?.dateRange) {
@@ -134,15 +141,13 @@ SCOPE FILTERING:
     }
 
     if (compiled.params?.groupBy) {
-      args.groupBy = compiled.params.groupBy;  // TaskVelocityTool expects 'groupBy', not 'interval'
+      args.groupBy = compiled.params.groupBy; // TaskVelocityTool expects 'groupBy', not 'interval'
     }
 
     return this.velocityTool.execute(args);
   }
 
-  private async routeToOverdue(
-    compiled: Extract<CompiledAnalysis, { type: 'overdue_analysis' }>,
-  ): Promise<unknown> {
+  private async routeToOverdue(compiled: Extract<CompiledAnalysis, { type: 'overdue_analysis' }>): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
     if (compiled.scope?.tags) {
@@ -156,9 +161,7 @@ SCOPE FILTERING:
     return this.overdueTool.execute(args);
   }
 
-  private async routeToPattern(
-    compiled: Extract<CompiledAnalysis, { type: 'pattern_analysis' }>,
-  ): Promise<unknown> {
+  private async routeToPattern(compiled: Extract<CompiledAnalysis, { type: 'pattern_analysis' }>): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
     // Map insights to patterns (PatternAnalysisTool expects 'patterns' not 'insights')
@@ -172,9 +175,7 @@ SCOPE FILTERING:
     return this.patternTool.execute(args);
   }
 
-  private async routeToWorkflow(
-    compiled: Extract<CompiledAnalysis, { type: 'workflow_analysis' }>,
-  ): Promise<unknown> {
+  private async routeToWorkflow(compiled: Extract<CompiledAnalysis, { type: 'workflow_analysis' }>): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
     if (compiled.scope?.dateRange) {
@@ -185,9 +186,7 @@ SCOPE FILTERING:
     return this.workflowTool.execute(args);
   }
 
-  private async routeToRecurring(
-    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>,
-  ): Promise<unknown> {
+  private async routeToRecurring(compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>): Promise<unknown> {
     const args: Record<string, unknown> = {};
 
     if (compiled.params?.operation) {
@@ -224,9 +223,7 @@ SCOPE FILTERING:
     return this.meetingNotesTool.execute(args);
   }
 
-  private async routeToReviews(
-    compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>,
-  ): Promise<unknown> {
+  private async routeToReviews(compiled: Extract<CompiledAnalysis, { type: 'manage_reviews' }>): Promise<unknown> {
     const args: Record<string, unknown> = {
       // ManageReviewsTool requires operation - default to list_for_review
       operation: compiled.params?.operation ?? 'list_for_review',

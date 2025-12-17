@@ -6,7 +6,7 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
 vi.mock('../../../../src/utils/logger.js', () => ({
-  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() }))
+  createLogger: vi.fn(() => ({ info: vi.fn(), debug: vi.fn(), error: vi.fn() })),
 }));
 
 describe('OverdueAnalysisTool', () => {
@@ -38,12 +38,12 @@ describe('OverdueAnalysisTool', () => {
           totalOverdue: 5,
           overduePercentage: 10,
           averageDaysOverdue: 3,
-          oldestOverdueDate: '2025-01-01'
-        }
+          oldestOverdueDate: '2025-01-01',
+        },
       },
       overdueTasks: [],
       patterns: [],
-      recommendations: ['Fix overdue tasks']
+      recommendations: ['Fix overdue tasks'],
     };
     mockCache.get.mockReturnValue(cached);
 
@@ -59,7 +59,7 @@ describe('OverdueAnalysisTool', () => {
     mockOmni.executeJson.mockResolvedValue({
       success: false,
       error: 'Failed to analyze overdue tasks',
-      details: 'OmniFocus error'
+      details: 'OmniFocus error',
     });
 
     const res: any = await tool.execute({} as any);
@@ -76,7 +76,7 @@ describe('OverdueAnalysisTool', () => {
           totalOverdue: 15,
           overduePercentage: 25.5,
           averageDaysOverdue: 7.2,
-          oldestOverdueDate: '2025-10-01'
+          oldestOverdueDate: '2025-10-01',
         },
         overdueTasks: [
           {
@@ -85,15 +85,15 @@ describe('OverdueAnalysisTool', () => {
             dueDate: '2025-10-01',
             daysOverdue: 45,
             tags: ['urgent'],
-            projectId: 'proj1'
-          }
+            projectId: 'proj1',
+          },
         ],
         patterns: [
           { type: 'project', value: 'Work', count: 8, percentage: 53.3 },
-          { type: 'tag', value: 'urgent', count: 5, percentage: 33.3 }
+          { type: 'tag', value: 'urgent', count: 5, percentage: 33.3 },
         ],
-        recommendations: ['Focus on urgent tasks', 'Review weekly commitments']
-      }
+        recommendations: ['Focus on urgent tasks', 'Review weekly commitments'],
+      },
     });
 
     const res: any = await tool.execute({ groupBy: 'project', limit: 50 } as any);
@@ -115,14 +115,12 @@ describe('OverdueAnalysisTool', () => {
           totalOverdue: 42,
           overduePercentage: 35.0,
           averageDaysOverdue: 12.5,
-          oldestOverdueDate: '2024-08-15'
+          oldestOverdueDate: '2024-08-15',
         },
         overdueTasks: [],
-        patterns: [
-          { type: 'project', value: 'BigProject', count: 20, percentage: 47.6 }
-        ],
-        recommendations: ['Review BigProject for blockers']
-      }
+        patterns: [{ type: 'project', value: 'BigProject', count: 20, percentage: 47.6 }],
+        recommendations: ['Review BigProject for blockers'],
+      },
     });
 
     const res: any = await tool.execute({} as any);
@@ -140,12 +138,12 @@ describe('OverdueAnalysisTool', () => {
           totalOverdue: 0,
           overduePercentage: 0,
           averageDaysOverdue: 0,
-          oldestOverdueDate: null
+          oldestOverdueDate: null,
         },
         overdueTasks: [],
         patterns: [],
-        recommendations: ['Great job! No overdue tasks.']
-      }
+        recommendations: ['Great job! No overdue tasks.'],
+      },
     });
 
     const res: any = await tool.execute({} as any);
@@ -162,8 +160,8 @@ describe('OverdueAnalysisTool', () => {
         summary: { totalOverdue: 10, overduePercentage: 15, averageDaysOverdue: 5, oldestOverdueDate: '2025-01-01' },
         overdueTasks: [],
         patterns: [],
-        recommendations: []
-      }
+        recommendations: [],
+      },
     };
     mockOmni.executeJson.mockResolvedValue(mockResponse);
 
@@ -184,8 +182,8 @@ describe('OverdueAnalysisTool', () => {
         summary: { totalOverdue: 3, overduePercentage: 5, averageDaysOverdue: 2, oldestOverdueDate: '2025-11-01' },
         overdueTasks: [],
         patterns: [],
-        recommendations: []
-      }
+        recommendations: [],
+      },
     });
 
     await tool.execute({} as any);

@@ -1,8 +1,8 @@
 # User Testing Instructions: 4-Tool Unified API
 
-**Branch to test:** `feature/unified-api`
-**What it has:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
-**Note:** This branch implements the unified API that consolidates 17 legacy tools into 3 core tools (plus system diagnostics)
+**Branch to test:** `feature/unified-api` **What it has:** 4 unified tools (omnifocus_read, omnifocus_write,
+omnifocus_analyze, system) **Note:** This branch implements the unified API that consolidates 17 legacy tools into 3
+core tools (plus system diagnostics)
 
 ---
 
@@ -58,6 +58,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 **Copy the entire contents of `TESTING_PROMPT.md` into a new Claude Desktop conversation.**
 
 That file contains a natural language testing script that will:
+
 1. Verify you have the 4 unified tools
 2. Test read operations (queries)
 3. Test write operations (create/update/complete/delete)
@@ -73,12 +74,12 @@ Just paste it in and let Claude work through it.
 
 We consolidated **17 individual tools** down to **4 unified tools**:
 
-| Old (17 tools) | New (4 tools) | What it does |
-|----------------|---------------|--------------|
-| tasks, projects, tags, folders, perspectives, export, recurring_tasks | **omnifocus_read** | All query operations |
-| manage_task, batch_create, parse_meeting_notes | **omnifocus_write** | All create/update/delete operations |
-| productivity_stats, task_velocity, analyze_overdue, workflow_analysis, analyze_patterns, manage_reviews | **omnifocus_analyze** | All analytics and analysis |
-| system | **system** | Version info and diagnostics |
+| Old (17 tools)                                                                                          | New (4 tools)         | What it does                        |
+| ------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------- |
+| tasks, projects, tags, folders, perspectives, export, recurring_tasks                                   | **omnifocus_read**    | All query operations                |
+| manage_task, batch_create, parse_meeting_notes                                                          | **omnifocus_write**   | All create/update/delete operations |
+| productivity_stats, task_velocity, analyze_overdue, workflow_analysis, analyze_patterns, manage_reviews | **omnifocus_analyze** | All analytics and analysis          |
+| system                                                                                                  | **system**            | Version info and diagnostics        |
 
 **Question:** Can these 4 tools do everything the 17 tools did?
 
@@ -89,12 +90,15 @@ We consolidated **17 individual tools** down to **4 unified tools**:
 After running the testing prompt in Claude Desktop, report:
 
 ### ✅ What Worked
+
 List tests that passed
 
 ### ❌ What Failed
+
 List tests that failed with error details
 
 ### 💡 Overall Assessment
+
 - [ ] **READY** - All tests passed, can replace 17 tools with 4
 - [ ] **NOT READY** - Issues found (list them)
 
@@ -103,9 +107,11 @@ List tests that failed with error details
 ## Troubleshooting
 
 ### "Claude doesn't see 4 tools, it sees 17"
+
 Wrong branch! Check: `git branch --show-current` should show `feature/unified-api`
 
 ### "Build fails"
+
 ```bash
 rm -rf dist/ node_modules/
 npm install
@@ -113,6 +119,7 @@ npm run build
 ```
 
 ### "Claude can't connect to OmniFocus"
+
 1. Check OmniFocus is running
 2. Check config path is correct: `cat ~/Library/Application\ Support/Claude/claude_desktop_config.json`
 3. Restart Claude Desktop completely
@@ -128,6 +135,5 @@ npm run build
 
 ---
 
-**Last Updated:** 2025-11-05
-**Branch:** feature/unified-api
-**Tools:** 4 unified tools (omnifocus_read, omnifocus_write, omnifocus_analyze, system)
+**Last Updated:** 2025-11-05 **Branch:** feature/unified-api **Tools:** 4 unified tools (omnifocus_read,
+omnifocus_write, omnifocus_analyze, system)

@@ -1,19 +1,20 @@
 # QueryCompiler TaskFilter Integration Design
 
-**Date:** 2025-11-24
-**Status:** Approved
-**Context:** Session notes in `src/contracts/SESSION_NOTES_2025-11-24.md`
+**Date:** 2025-11-24 **Status:** Approved **Context:** Session notes in `src/contracts/SESSION_NOTES_2025-11-24.md`
 
 ## Problem Statement
 
-15+ bugs in git history share a common pattern: property name mismatches between the API schema (`FilterValue`) and what OmniJS scripts expect. For example:
+15+ bugs in git history share a common pattern: property name mismatches between the API schema (`FilterValue`) and what
+OmniJS scripts expect. For example:
+
 - API sends: `status: 'completed'`
 - Script checks: `filter.completed === true`
 - Result: Filter doesn't work, bug reported
 
 ## Solution
 
-Transform `FilterValue` (API schema) to `TaskFilter` (contracts) inside `QueryCompiler.compile()`. This creates a single translation point with compile-time type safety.
+Transform `FilterValue` (API schema) to `TaskFilter` (contracts) inside `QueryCompiler.compile()`. This creates a single
+translation point with compile-time type safety.
 
 ## Architecture
 
@@ -29,33 +30,33 @@ Transform `FilterValue` (API schema) to `TaskFilter` (contracts) inside `QueryCo
 
 ## Transformation Rules
 
-| FilterValue | TaskFilter | Notes |
-|-------------|------------|-------|
-| `status: 'completed'` | `completed: true` | Explicit mapping |
-| `status: 'active'` | `completed: false` | |
-| `status: undefined` | `completed: undefined` | Default behavior |
-| `tags: { any: [...] }` | `tags: [...], tagsOperator: 'OR'` | Operator extracted |
-| `tags: { all: [...] }` | `tags: [...], tagsOperator: 'AND'` | |
-| `tags: { none: [...] }` | `tags: [...], tagsOperator: 'NOT_IN'` | |
-| `dueDate: { before: x }` | `dueBefore: x` | Flattened |
-| `dueDate: { after: x }` | `dueAfter: x` | |
-| `dueDate: { between: [a,b] }` | `dueAfter: a, dueBefore: b, dueDateOperator: 'BETWEEN'` | |
-| `text: { contains: x }` | `text: x, textOperator: 'CONTAINS'` | |
-| `text: { matches: x }` | `text: x, textOperator: 'MATCHES'` | |
-| `project: null` | `inInbox: true` | Null project = inbox |
-| `flagged: true` | `flagged: true` | Direct passthrough |
-| `available: true` | `available: true` | Direct passthrough |
+| FilterValue                   | TaskFilter                                              | Notes                |
+| ----------------------------- | ------------------------------------------------------- | -------------------- |
+| `status: 'completed'`         | `completed: true`                                       | Explicit mapping     |
+| `status: 'active'`            | `completed: false`                                      |                      |
+| `status: undefined`           | `completed: undefined`                                  | Default behavior     |
+| `tags: { any: [...] }`        | `tags: [...], tagsOperator: 'OR'`                       | Operator extracted   |
+| `tags: { all: [...] }`        | `tags: [...], tagsOperator: 'AND'`                      |                      |
+| `tags: { none: [...] }`       | `tags: [...], tagsOperator: 'NOT_IN'`                   |                      |
+| `dueDate: { before: x }`      | `dueBefore: x`                                          | Flattened            |
+| `dueDate: { after: x }`       | `dueAfter: x`                                           |                      |
+| `dueDate: { between: [a,b] }` | `dueAfter: a, dueBefore: b, dueDateOperator: 'BETWEEN'` |                      |
+| `text: { contains: x }`       | `text: x, textOperator: 'CONTAINS'`                     |                      |
+| `text: { matches: x }`        | `text: x, textOperator: 'MATCHES'`                      |                      |
+| `project: null`               | `inInbox: true`                                         | Null project = inbox |
+| `flagged: true`               | `flagged: true`                                         | Direct passthrough   |
+| `available: true`             | `available: true`                                       | Direct passthrough   |
 
 ## Logical Operators (AND/OR/NOT)
 
 **Current approach:** Flatten simple cases, log and reject complex ones.
 
-| Operator | Handling |
-|----------|----------|
-| `AND: [a, b]` | Merge filters (most common use) |
-| `OR: [...]` | Log warning, use first condition only |
-| `NOT: { status: 'completed' }` | Transform to `completed: false` |
-| Complex NOT | Log warning, best-effort simplification |
+| Operator                       | Handling                                |
+| ------------------------------ | --------------------------------------- |
+| `AND: [a, b]`                  | Merge filters (most common use)         |
+| `OR: [...]`                    | Log warning, use first condition only   |
+| `NOT: { status: 'completed' }` | Transform to `completed: false`         |
+| Complex NOT                    | Log warning, best-effort simplification |
 
 **Observability:** All rejections are logged to `mcp.log` with structured JSON:
 
@@ -64,11 +65,13 @@ Transform `FilterValue` (API schema) to `TaskFilter` (contracts) inside `QueryCo
   {"originalFilter":{...},"flattenedTo":{...},"suggestion":"Open issue with use case"}
 ```
 
-**Analysis script:** `scripts/analyze-filter-rejections.ts` summarizes rejection patterns from logs to inform when full support is needed.
+**Analysis script:** `scripts/analyze-filter-rejections.ts` summarizes rejection patterns from logs to inform when full
+support is needed.
 
 ## Migration Strategy
 
 ### Phase 1: Transform in QueryCompiler (This PR)
+
 - `CompiledQuery.filters` type changes from `FilterValue` to `TaskFilter`
 - New private method `transformFilters(input: FilterValue): TaskFilter`
 - Import `TaskFilter` from `src/contracts/filters.ts`
@@ -76,12 +79,14 @@ Transform `FilterValue` (API schema) to `TaskFilter` (contracts) inside `QueryCo
 - Fix any property name mismatches discovered
 
 ### Phase 2: Migrate Scripts to Generator (Future)
+
 - Start with simplest mode (e.g., "all")
 - Use `generateFilterBlock()` from `src/contracts/generator.ts`
 - Verify identical behavior with integration tests
 - Replace hand-written filter logic
 
 ### Phase 3: Remove Duplicated Code (Future)
+
 - Delete hand-written filter functions from scripts
 - All filtering comes from generator
 - Single source of truth achieved
@@ -116,10 +121,12 @@ describe('transformFilters', () => {
 ```
 
 ### Integration Tests
+
 - Existing `tests/integration/validation/filter-results.test.ts` validates end-to-end behavior
 - No new integration tests needed initially
 
 ### Coverage Goals
+
 - 100% coverage of transformation rules in unit tests
 - Integration tests verify behavior unchanged
 

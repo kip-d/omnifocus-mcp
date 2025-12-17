@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  invalidDateError,
-  parsingError,
-  formatErrorWithRecovery,
-} from '../../../src/utils/error-messages.js';
+import { invalidDateError, parsingError, formatErrorWithRecovery } from '../../../src/utils/error-messages.js';
 
 describe('error-messages helpers', () => {
   it('invalidDateError lists relative date guidance', () => {
@@ -25,4 +21,3 @@ describe('error-messages helpers', () => {
     expect(formatted).toContain('How to fix:');
   });
 });
-

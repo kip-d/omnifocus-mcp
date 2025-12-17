@@ -6,8 +6,12 @@
 import { z } from 'zod';
 
 // Local date schema - handles both YYYY-MM-DD and YYYY-MM-DD HH:mm formats
-export const LocalDateTimeSchema = z.string()
-  .regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm')
+export const LocalDateTimeSchema = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/,
+    'Invalid date format. Use YYYY-MM-DD or YYYY-MM-DD HH:mm',
+  )
   .describe('Date in local time (e.g., 2024-01-15 or 2024-01-15 10:30). Will be converted to UTC.');
 
 /**

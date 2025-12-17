@@ -2,9 +2,12 @@
 
 ## Overview
 
-The batch operations feature allows you to create multiple projects and tasks in a single MCP tool call, with support for hierarchical relationships using temporary IDs. This is especially valuable for local LLMs (like gpt-oss:120b) to avoid expensive sequential operations.
+The batch operations feature allows you to create multiple projects and tasks in a single MCP tool call, with support
+for hierarchical relationships using temporary IDs. This is especially valuable for local LLMs (like gpt-oss:120b) to
+avoid expensive sequential operations.
 
 **Performance Benefits:**
+
 - Single MCP call instead of 10+ sequential calls
 - Reduced context consumption
 - Faster execution (seconds vs minutes for large batches)
@@ -102,44 +105,44 @@ The batch operations feature allows you to create multiple projects and tasks in
 
 ### Top-Level Options
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `items` | array | required | Array of items to create (max 100 per batch) |
-| `createSequentially` | string | "true" | Create items in dependency order (parents before children) |
-| `atomicOperation` | string | "false" | Rollback all creations if any fail (all-or-nothing) |
-| `returnMapping` | string | "true" | Return tempId → realId mapping in response |
-| `stopOnError` | string | "true" | Stop processing on first error |
+| Parameter            | Type   | Default  | Description                                                |
+| -------------------- | ------ | -------- | ---------------------------------------------------------- |
+| `items`              | array  | required | Array of items to create (max 100 per batch)               |
+| `createSequentially` | string | "true"   | Create items in dependency order (parents before children) |
+| `atomicOperation`    | string | "false"  | Rollback all creations if any fail (all-or-nothing)        |
+| `returnMapping`      | string | "true"   | Return tempId → realId mapping in response                 |
+| `stopOnError`        | string | "true"   | Stop processing on first error                             |
 
 ### Item Properties
 
 #### Common Properties (Project & Task)
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `tempId` | string | ✅ | Unique temporary ID for referencing within batch |
-| `type` | string | ✅ | Either "project" or "task" |
-| `name` | string | ✅ | Name of the project or task |
-| `parentTempId` | string | ❌ | TempId of parent (project for tasks, task for subtasks) |
-| `note` | string | ❌ | Description or notes |
-| `tags` | array | ❌ | Array of tag names to assign |
-| `flagged` | boolean | ❌ | Whether to flag the item |
+| Property       | Type    | Required | Description                                             |
+| -------------- | ------- | -------- | ------------------------------------------------------- |
+| `tempId`       | string  | ✅       | Unique temporary ID for referencing within batch        |
+| `type`         | string  | ✅       | Either "project" or "task"                              |
+| `name`         | string  | ✅       | Name of the project or task                             |
+| `parentTempId` | string  | ❌       | TempId of parent (project for tasks, task for subtasks) |
+| `note`         | string  | ❌       | Description or notes                                    |
+| `tags`         | array   | ❌       | Array of tag names to assign                            |
+| `flagged`      | boolean | ❌       | Whether to flag the item                                |
 
 #### Project-Specific Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `status` | string | "active", "on-hold", "done", or "dropped" |
-| `sequential` | boolean | Whether tasks must be completed in order |
-| `reviewInterval` | number/string | Review interval in days |
+| Property         | Type          | Description                               |
+| ---------------- | ------------- | ----------------------------------------- |
+| `status`         | string        | "active", "on-hold", "done", or "dropped" |
+| `sequential`     | boolean       | Whether tasks must be completed in order  |
+| `reviewInterval` | number/string | Review interval in days                   |
 
 #### Task-Specific Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `dueDate` | string | Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm) |
-| `deferDate` | string | Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm) |
-| `estimatedMinutes` | number/string | Estimated duration in minutes |
-| `sequential` | boolean | Whether subtasks must be completed in order |
+| Property           | Type          | Description                                 |
+| ------------------ | ------------- | ------------------------------------------- |
+| `dueDate`          | string        | Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm)   |
+| `deferDate`        | string        | Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm) |
+| `estimatedMinutes` | number/string | Estimated duration in minutes               |
+| `sequential`       | boolean       | Whether subtasks must be completed in order |
 
 ## Response Format
 
@@ -249,6 +252,7 @@ If task1 fails to create, proj1 will be automatically deleted (rollback).
 ### Dependency Graph Validation
 
 The system automatically:
+
 - ✅ Validates all `parentTempId` references exist
 - ✅ Detects circular dependencies
 - ✅ Orders creation (parents before children)
@@ -287,10 +291,10 @@ Processes all items, collects all errors, returns complete results.
 ```json
 {
   "items": [
-    {"tempId": "p1", "type": "project", "name": "Marketing Campaign"},
-    {"tempId": "t1", "type": "task", "name": "Research", "parentTempId": "p1"},
-    {"tempId": "t2", "type": "task", "name": "Design", "parentTempId": "p1"},
-    {"tempId": "t3", "type": "task", "name": "Launch", "parentTempId": "p1"}
+    { "tempId": "p1", "type": "project", "name": "Marketing Campaign" },
+    { "tempId": "t1", "type": "task", "name": "Research", "parentTempId": "p1" },
+    { "tempId": "t2", "type": "task", "name": "Design", "parentTempId": "p1" },
+    { "tempId": "t3", "type": "task", "name": "Launch", "parentTempId": "p1" }
   ]
 }
 ```
@@ -302,10 +306,10 @@ Create project templates with multiple tasks in one call:
 ```json
 {
   "items": [
-    {"tempId": "proj", "type": "project", "name": "Client Onboarding"},
-    {"tempId": "t1", "type": "task", "name": "Send welcome email", "parentTempId": "proj", "dueDate": "2025-10-01"},
-    {"tempId": "t2", "type": "task", "name": "Schedule kickoff", "parentTempId": "proj", "dueDate": "2025-10-03"},
-    {"tempId": "t3", "type": "task", "name": "Review requirements", "parentTempId": "proj", "dueDate": "2025-10-05"}
+    { "tempId": "proj", "type": "project", "name": "Client Onboarding" },
+    { "tempId": "t1", "type": "task", "name": "Send welcome email", "parentTempId": "proj", "dueDate": "2025-10-01" },
+    { "tempId": "t2", "type": "task", "name": "Schedule kickoff", "parentTempId": "proj", "dueDate": "2025-10-03" },
+    { "tempId": "t3", "type": "task", "name": "Review requirements", "parentTempId": "proj", "dueDate": "2025-10-05" }
   ]
 }
 ```
@@ -317,13 +321,13 @@ Create multi-level task hierarchies:
 ```json
 {
   "items": [
-    {"tempId": "proj", "type": "project", "name": "Software Release"},
-    {"tempId": "dev", "type": "task", "name": "Development", "parentTempId": "proj"},
-    {"tempId": "dev1", "type": "task", "name": "Backend API", "parentTempId": "dev"},
-    {"tempId": "dev2", "type": "task", "name": "Frontend UI", "parentTempId": "dev"},
-    {"tempId": "qa", "type": "task", "name": "Quality Assurance", "parentTempId": "proj"},
-    {"tempId": "qa1", "type": "task", "name": "Unit tests", "parentTempId": "qa"},
-    {"tempId": "qa2", "type": "task", "name": "Integration tests", "parentTempId": "qa"}
+    { "tempId": "proj", "type": "project", "name": "Software Release" },
+    { "tempId": "dev", "type": "task", "name": "Development", "parentTempId": "proj" },
+    { "tempId": "dev1", "type": "task", "name": "Backend API", "parentTempId": "dev" },
+    { "tempId": "dev2", "type": "task", "name": "Frontend UI", "parentTempId": "dev" },
+    { "tempId": "qa", "type": "task", "name": "Quality Assurance", "parentTempId": "proj" },
+    { "tempId": "qa1", "type": "task", "name": "Unit tests", "parentTempId": "qa" },
+    { "tempId": "qa2", "type": "task", "name": "Integration tests", "parentTempId": "qa" }
   ]
 }
 ```
@@ -337,11 +341,11 @@ Create multi-level task hierarchies:
 
 ## Error Codes
 
-| Code | Description |
-|------|-------------|
-| `VALIDATION_ERROR` | Circular dependency or invalid references |
-| `ATOMIC_OPERATION_FAILED` | Batch failed and all items rolled back |
-| `SCRIPT_ERROR` | OmniFocus script execution failed |
+| Code                      | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `VALIDATION_ERROR`        | Circular dependency or invalid references |
+| `ATOMIC_OPERATION_FAILED` | Batch failed and all items rolled back    |
+| `SCRIPT_ERROR`            | OmniFocus script execution failed         |
 
 ## Best Practices
 
@@ -354,11 +358,13 @@ Create multi-level task hierarchies:
 ## Performance Characteristics
 
 **Tested on M4 Pro Mac mini (64GB RAM):**
+
 - 10 items: ~500ms
 - 50 items: ~2s
 - 100 items: ~4s
 
 **vs Sequential Operations (local LLM):**
+
 - 10 sequential calls: 30-60 seconds
 - 50 sequential calls: 2-5 minutes
 - 100 sequential calls: 5-10 minutes

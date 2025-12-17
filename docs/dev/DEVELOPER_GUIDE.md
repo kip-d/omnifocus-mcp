@@ -1,6 +1,7 @@
 # Developer Guide - OmniFocus MCP Server
 
 This guide is for developers who want to:
+
 - Integrate this MCP server into their own tools
 - Understand the technical implementation
 - Call tools programmatically
@@ -382,6 +383,7 @@ Deep dive into your GTD system health and efficiency:
 ```
 
 **Response Structure:**
+
 ```json
 {
   "success": true,
@@ -436,6 +438,7 @@ Deep dive into your GTD system health and efficiency:
 ```
 
 **Use Cases:**
+
 - **GTD Weekly Review**: Use `standard` depth with all focus areas to review your workflow health
 - **Daily Check-in**: Use `quick` depth focused on productivity and bottlenecks
 - **Troubleshooting**: Use `standard` or `deep` with `includeRawData: true` when you feel stuck
@@ -443,6 +446,7 @@ Deep dive into your GTD system health and efficiency:
 - **Pattern Discovery**: Focus on `time_patterns` and `opportunities` to find workflow improvements
 
 **Performance Notes:**
+
 - Cached for 2 hours (analysis is computationally expensive)
 - `quick` depth: ~5-10 seconds
 - `standard` depth: ~15-30 seconds
@@ -717,10 +721,12 @@ Deep dive into your GTD system health and efficiency:
 ### Date Formats
 
 All date parameters accept:
+
 - `"YYYY-MM-DD"` - Date only (smart defaults: due=5pm, defer=8am)
 - `"YYYY-MM-DD HH:mm"` - Date and time in local timezone
 
 Basic natural language is supported:
+
 - `"today"`, `"tomorrow"` work
 - Complex phrases like "the 3rd Thursday after next week" should be converted to YYYY-MM-DD by the LLM first
 
@@ -732,19 +738,20 @@ All tool schemas handle both string and native types:
 
 ```typescript
 // Schema handles both
-limit: z.union([
-  z.number(),
-  z.string().transform(val => parseInt(val, 10))
-]).pipe(z.number().min(1).max(200)).default(25)
+limit: z.union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+  .pipe(z.number().min(1).max(200))
+  .default(25);
 ```
 
 When testing:
+
 - Direct Node.js calls: Use native types
 - Claude Desktop calls: Everything becomes strings
 
 ### Parameter Defaults
 
 Most parameters have sensible defaults:
+
 - `limit`: 25 (tasks), 50 (projects)
 - `details`: false (for performance)
 - `completed`: false (exclude completed items)
@@ -759,6 +766,7 @@ Most parameters have sensible defaults:
 ### Cache Behavior
 
 The server uses TTL-based caching:
+
 - Tasks: 30 seconds
 - Projects: 5 minutes
 - Tags: 5 minutes
@@ -813,6 +821,7 @@ MCP Client → MCP Server → Tool → Cache Check → JXA Script → OmniFocus
 ### JXA + Bridge Approach
 
 The server uses a hybrid approach:
+
 - **Pure JXA**: Simple operations (<100 items)
 - **JXA + Bridge**: Complex operations, bulk operations (>100 items), tag assignment, repetition rules
 
@@ -820,13 +829,15 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for complete details.
 
 ## Response Format Standards
 
-The codebase uses a **two-layer response system** that provides type safety from script execution through MCP tool responses.
+The codebase uses a **two-layer response system** that provides type safety from script execution through MCP tool
+responses.
 
 ### Layer 1: ScriptResult (Script Execution)
 
 **File:** `src/omnifocus/script-result-types.ts`
 
-Used by JXA scripts and the `OmniAutomation.executeJson()` method. This is a discriminated union that eliminates scattered error checking.
+Used by JXA scripts and the `OmniAutomation.executeJson()` method. This is a discriminated union that eliminates
+scattered error checking.
 
 ```typescript
 // The discriminated union
@@ -847,6 +858,7 @@ interface ScriptError {
 ```
 
 **Type Guards:**
+
 ```typescript
 import { isScriptSuccess, isScriptError } from '../omnifocus/script-result-types.js';
 
@@ -862,6 +874,7 @@ if (isScriptSuccess(result)) {
 ```
 
 **Factory Functions:**
+
 ```typescript
 import { createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
 
@@ -901,7 +914,7 @@ interface StandardResponseV2<T> {
   error?: {
     code: string;
     message: string;
-    suggestion?: string;  // Help LLM fix the issue
+    suggestion?: string; // Help LLM fix the issue
     details?: unknown;
   };
 }
@@ -919,6 +932,7 @@ interface StandardMetadataV2 {
 ```
 
 **Factory Functions:**
+
 ```typescript
 import {
   createSuccessResponseV2,
@@ -939,22 +953,23 @@ return createTaskResponseV2('query_tasks', tasks, { query_time_ms: 200 });
 
 // Error response
 return createErrorResponseV2(
-  'create_task',          // operation
-  'VALIDATION_ERROR',     // error code
+  'create_task', // operation
+  'VALIDATION_ERROR', // error code
   'Task name is required', // message
   'Provide a name parameter', // suggestion for LLM
-  { field: 'name' }       // details
+  { field: 'name' }, // details
 );
 ```
 
 ### When to Use Each Layer
 
-| Layer | Where | Purpose |
-|-------|-------|---------|
-| `ScriptResult<T>` | Inside tool implementation | Handle JXA script execution results |
-| `StandardResponseV2<T>` | Tool's return value | Format response for MCP/LLM consumption |
+| Layer                   | Where                      | Purpose                                 |
+| ----------------------- | -------------------------- | --------------------------------------- |
+| `ScriptResult<T>`       | Inside tool implementation | Handle JXA script execution results     |
+| `StandardResponseV2<T>` | Tool's return value        | Format response for MCP/LLM consumption |
 
 **Typical flow in a tool:**
+
 ```typescript
 async executeValidated(args: Input): Promise<StandardResponseV2<Output>> {
   const timer = new OperationTimerV2();
@@ -1078,7 +1093,7 @@ See existing tools for patterns.
 const result = await this.cache.get(
   cacheKey,
   async () => executeScript(),
-  300000  // 5 minutes
+  300000, // 5 minutes
 );
 
 // No caching

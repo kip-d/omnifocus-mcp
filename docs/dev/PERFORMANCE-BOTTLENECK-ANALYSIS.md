@@ -11,24 +11,26 @@
 ## Profiling Results (October 20, 2025)
 
 ### Database Context
+
 - Total tasks: 1,961
 - Incomplete tasks: 1,854
 - Test query: 45 inbox tasks with ~10 properties each
 
 ### Performance Measurements
 
-| Operation | Time | % of Total | Per-Item Cost |
-|-----------|------|------------|---------------|
-| Task enumeration | 253ms | 0.1% | 0.129ms |
-| Single property (all tasks) | 32,675ms | 14.9% | **16.662ms** |
-| Multi-property (100 tasks) | 8,333ms | 3.8% | 83.330ms |
-| Date filtering (all tasks) | 63,732ms | 29.0% | 32.500ms |
-| whose() clause | 60,145ms | 27.4% | - |
-| Manual filter | 33,054ms | 15.0% | - |
+| Operation                   | Time     | % of Total | Per-Item Cost |
+| --------------------------- | -------- | ---------- | ------------- |
+| Task enumeration            | 253ms    | 0.1%       | 0.129ms       |
+| Single property (all tasks) | 32,675ms | 14.9%      | **16.662ms**  |
+| Multi-property (100 tasks)  | 8,333ms  | 3.8%       | 83.330ms      |
+| Date filtering (all tasks)  | 63,732ms | 29.0%      | 32.500ms      |
+| whose() clause              | 60,145ms | 27.4%      | -             |
+| Manual filter               | 33,054ms | 15.0%      | -             |
 
 **Critical Finding**: **16.662ms per property access in JXA** - This is the bottleneck!
 
 ### Time Distribution
+
 - JavaScript processing: **85%**
 - Property access: 14.9%
 - Task enumeration: 0.1%
@@ -36,6 +38,7 @@
 ### Impact Calculation
 
 For 45 inbox tasks with 10 properties:
+
 ```
 45 tasks × 10 properties × 16.662ms = 7,498ms (7.5 seconds)
 Plus JavaScript overhead (85% of time) ≈ 6.4 seconds
@@ -46,15 +49,16 @@ Actual observed: 13-22 seconds ✅ Matches prediction
 ## Current Architecture (list-tasks.ts)
 
 ### Problem Pattern - JXA Per-Property Access
+
 ```javascript
 function buildTaskObject(task, filter, skipRecurringAnalysis) {
   const taskObj = {};
 
-  taskObj.id = safeGet(() => task.id());           // 16.662ms
-  taskObj.name = safeGet(() => task.name());       // 16.662ms
-  taskObj.completed = safeIsCompleted(task);       // 16.662ms
-  taskObj.flagged = isFlagged(task);               // 16.662ms
-  taskObj.dueDate = safeGetDate(() => task.dueDate());  // 16.662ms
+  taskObj.id = safeGet(() => task.id()); // 16.662ms
+  taskObj.name = safeGet(() => task.name()); // 16.662ms
+  taskObj.completed = safeIsCompleted(task); // 16.662ms
+  taskObj.flagged = isFlagged(task); // 16.662ms
+  taskObj.dueDate = safeGetDate(() => task.dueDate()); // 16.662ms
   // ... 5-15 more properties ...
 
   return taskObj;
@@ -108,11 +112,11 @@ const tasks = JSON.parse(resultJson);
 
 ### Performance Comparison
 
-| Approach | Per-Property Cost | 45 Tasks × 10 Props | Script Size |
-|----------|------------------|---------------------|-------------|
-| Current (JXA) | 16.662ms | ~7,500ms | 31KB (fixed) |
-| OmniJS Bridge | 0.001ms | ~0.45ms | ~2KB (fixed) |
-| **Improvement** | **16,662x faster** | **~16,666x faster** | Smaller |
+| Approach        | Per-Property Cost  | 45 Tasks × 10 Props | Script Size  |
+| --------------- | ------------------ | ------------------- | ------------ |
+| Current (JXA)   | 16.662ms           | ~7,500ms            | 31KB (fixed) |
+| OmniJS Bridge   | 0.001ms            | ~0.45ms             | ~2KB (fixed) |
+| **Improvement** | **16,662x faster** | **~16,666x faster** | Smaller      |
 
 ### Advantages of OmniJS-First
 
@@ -124,6 +128,7 @@ const tasks = JSON.parse(resultJson);
 ### Available OmniJS Global Collections
 
 From OmniFocus API:
+
 - `inbox` - Inbox tasks
 - `library` - All tasks
 - `flattenedTasks` - All tasks (flattened)
@@ -138,6 +143,7 @@ From OmniFocus API:
 **Approach**: Transform from JXA iteration to OmniJS bridge with filtering
 
 **Current Pattern (JXA-First)**:
+
 ```javascript
 // 1. Get all tasks in JXA
 const allTasks = doc.flattenedTasks();
@@ -146,13 +152,14 @@ const allTasks = doc.flattenedTasks();
 for (let i = 0; i < allTasks.length; i++) {
   if (matchesFilter(task, filter)) {
     // 3. Access properties via JXA (SLOW!)
-    const taskObj = buildTaskObject(task);  // 450 bridge crossings!
+    const taskObj = buildTaskObject(task); // 450 bridge crossings!
     tasks.push(taskObj);
   }
 }
 ```
 
 **New Pattern (OmniJS-First)**:
+
 ```javascript
 // 1. Build OmniJS script with filter logic
 const filterScript = buildFilterScript(filter, fields);
@@ -167,6 +174,7 @@ const tasks = JSON.parse(result);
 ### Phase 2: Optimize Common Query Patterns
 
 **Mode-specific optimizations**:
+
 - `mode: 'inbox'` → Use `inbox` collection
 - `mode: 'today'` → OmniJS date filtering on `flattenedTasks`
 - `mode: 'overdue'` → OmniJS date filtering
@@ -176,6 +184,7 @@ const tasks = JSON.parse(result);
 ### Phase 3: Handle Complex Filters
 
 **Filters to implement in OmniJS**:
+
 - Date ranges (dueAfter, dueBefore, deferAfter, deferBefore)
 - Status flags (completed, flagged, blocked, available)
 - Tag matching (tags array)
@@ -185,11 +194,13 @@ const tasks = JSON.parse(result);
 ## Expected Performance Improvement
 
 ### Current Performance
+
 - 45 tasks, 10 properties: **13-22 seconds**
 - Property access: 7.5 seconds
 - JavaScript overhead: 6.4 seconds
 
 ### Expected After Optimization
+
 - Same query: **<1 second**
 - Property access: ~0.45ms (OmniJS)
 - Minimal JavaScript overhead (filtering in OmniJS)
@@ -199,18 +210,22 @@ const tasks = JSON.parse(result);
 ## Implementation Risks & Mitigation
 
 ### Risk 1: OmniJS API Differences
+
 - **Mitigation**: Test thoroughly, consult OmniFocus API docs
 - **Fallback**: Keep JXA version for unsupported features
 
 ### Risk 2: Complex Filter Translation
+
 - **Mitigation**: Start with simple modes (inbox, today, flagged)
 - **Progressive enhancement**: Add complex filters iteratively
 
 ### Risk 3: Field Selection Complexity
+
 - **Mitigation**: Generate OmniJS script dynamically based on `fields` parameter
 - **Testing**: Verify all field combinations work
 
 ### Risk 4: Breaking Existing Tests
+
 - **Mitigation**: Run full integration test suite after changes
 - **Validation**: Compare outputs with current implementation
 

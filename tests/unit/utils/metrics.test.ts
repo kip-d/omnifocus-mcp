@@ -26,7 +26,7 @@ describe('MetricsCollector', () => {
         toolName: 'test_tool',
         executionTime: 100,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -41,7 +41,7 @@ describe('MetricsCollector', () => {
         executionTime: 50,
         success: false,
         errorType: 'TEST_ERROR',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -56,7 +56,7 @@ describe('MetricsCollector', () => {
           toolName: `tool_${i % 3}`,
           executionTime: 100 + i,
           success: i % 2 === 0,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
 
@@ -71,14 +71,14 @@ describe('MetricsCollector', () => {
         toolName: 'test_tool',
         executionTime: 100,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
         toolName: 'test_tool',
         executionTime: 200,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -91,14 +91,14 @@ describe('MetricsCollector', () => {
         toolName: 'test_tool',
         executionTime: 50,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
         toolName: 'test_tool',
         executionTime: 300,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -113,7 +113,7 @@ describe('MetricsCollector', () => {
         executionTime: 100,
         success: false,
         errorType: 'ERROR_A',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
@@ -121,7 +121,7 @@ describe('MetricsCollector', () => {
         executionTime: 100,
         success: false,
         errorType: 'ERROR_A',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
@@ -129,7 +129,7 @@ describe('MetricsCollector', () => {
         executionTime: 100,
         success: false,
         errorType: 'ERROR_B',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -146,7 +146,7 @@ describe('MetricsCollector', () => {
         executionTime: 10,
         success: true,
         cacheHit: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
@@ -154,7 +154,7 @@ describe('MetricsCollector', () => {
         executionTime: 100,
         success: true,
         cacheHit: false,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
@@ -162,7 +162,7 @@ describe('MetricsCollector', () => {
         executionTime: 10,
         success: true,
         cacheHit: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -180,7 +180,7 @@ describe('MetricsCollector', () => {
           toolName: 'test',
           executionTime: i,
           success: true,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
       }
 
@@ -196,14 +196,14 @@ describe('MetricsCollector', () => {
         toolName: 'tool_a',
         executionTime: 100,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
         toolName: 'tool_b',
         executionTime: 200,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();
@@ -232,14 +232,14 @@ describe('MetricsCollector', () => {
         toolName: 'tool1',
         executionTime: 100,
         success: true,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       collector.recordExecution({
         toolName: 'tool2',
         executionTime: 100,
         success: false,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       const metrics = collector.getAggregatedMetrics();

@@ -7,59 +7,59 @@ describe('QueryCompiler', () => {
 
   describe('compile()', () => {
     it('should compile simple tasks query to mode and filters', () => {
-    const input: ReadInput = {
-      query: {
-        type: 'tasks',
-        filters: {
-          status: 'active',
-          project: null,
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          filters: {
+            status: 'active',
+            project: null,
+          },
+          limit: 25,
         },
-        limit: 25,
-      }
-    };
+      };
 
-    const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input);
 
-    expect(compiled.type).toBe('tasks');
-    expect(compiled.mode).toBe('all');
-    // Filters are transformed: status: 'active' -> completed: false
-    expect(compiled.filters.completed).toBe(false);
-    // project: null -> inInbox: true
-    expect(compiled.filters.inInbox).toBe(true);
-    expect(compiled.limit).toBe(25);
-  });
+      expect(compiled.type).toBe('tasks');
+      expect(compiled.mode).toBe('all');
+      // Filters are transformed: status: 'active' -> completed: false
+      expect(compiled.filters.completed).toBe(false);
+      // project: null -> inInbox: true
+      expect(compiled.filters.inInbox).toBe(true);
+      expect(compiled.limit).toBe(25);
+    });
 
-  it('should compile smart_suggest mode', () => {
-    const input: ReadInput = {
-      query: {
-        type: 'tasks',
-        mode: 'smart_suggest',
-        limit: 10,
-      }
-    };
+    it('should compile smart_suggest mode', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          mode: 'smart_suggest',
+          limit: 10,
+        },
+      };
 
-    const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input);
 
-    expect(compiled.type).toBe('tasks');
-    expect(compiled.mode).toBe('smart_suggest');
-    expect(compiled.limit).toBe(10);
-  });
+      expect(compiled.type).toBe('tasks');
+      expect(compiled.mode).toBe('smart_suggest');
+      expect(compiled.limit).toBe(10);
+    });
 
-  it('should compile tag filters', () => {
-    const input: ReadInput = {
-      query: {
-        type: 'tasks',
-        filters: {
-          tags: { any: ['work', 'urgent'] },
-        }
-      }
-    };
+    it('should compile tag filters', () => {
+      const input: ReadInput = {
+        query: {
+          type: 'tasks',
+          filters: {
+            tags: { any: ['work', 'urgent'] },
+          },
+        },
+      };
 
-    const compiled = compiler.compile(input);
+      const compiled = compiler.compile(input);
 
-    // Tags are transformed: { any: [...] } -> tags: [...], tagsOperator: 'OR'
-    expect(compiled.filters.tags).toEqual(['work', 'urgent']);
-    expect(compiled.filters.tagsOperator).toBe('OR');
+      // Tags are transformed: { any: [...] } -> tags: [...], tagsOperator: 'OR'
+      expect(compiled.filters.tags).toEqual(['work', 'urgent']);
+      expect(compiled.filters.tagsOperator).toBe('OR');
     });
   });
 
@@ -95,7 +95,7 @@ describe('QueryCompiler', () => {
       it('transforms tags.any to tags + tagsOperator: OR', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          tags: { any: ['urgent', 'home'] }
+          tags: { any: ['urgent', 'home'] },
         });
         expect(result.tags).toEqual(['urgent', 'home']);
         expect(result.tagsOperator).toBe('OR');
@@ -104,7 +104,7 @@ describe('QueryCompiler', () => {
       it('transforms tags.all to tags + tagsOperator: AND', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          tags: { all: ['work', 'priority'] }
+          tags: { all: ['work', 'priority'] },
         });
         expect(result.tags).toEqual(['work', 'priority']);
         expect(result.tagsOperator).toBe('AND');
@@ -113,7 +113,7 @@ describe('QueryCompiler', () => {
       it('transforms tags.none to tags + tagsOperator: NOT_IN', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          tags: { none: ['waiting'] }
+          tags: { none: ['waiting'] },
         });
         expect(result.tags).toEqual(['waiting']);
         expect(result.tagsOperator).toBe('NOT_IN');
@@ -130,7 +130,7 @@ describe('QueryCompiler', () => {
       it('transforms dueDate.before to dueBefore', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          dueDate: { before: '2025-12-31' }
+          dueDate: { before: '2025-12-31' },
         });
         expect(result.dueBefore).toBe('2025-12-31');
       });
@@ -138,7 +138,7 @@ describe('QueryCompiler', () => {
       it('transforms dueDate.after to dueAfter', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          dueDate: { after: '2025-01-01' }
+          dueDate: { after: '2025-01-01' },
         });
         expect(result.dueAfter).toBe('2025-01-01');
       });
@@ -146,7 +146,7 @@ describe('QueryCompiler', () => {
       it('transforms dueDate.between to dueAfter + dueBefore + operator', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          dueDate: { between: ['2025-01-01', '2025-01-31'] }
+          dueDate: { between: ['2025-01-01', '2025-01-31'] },
         });
         expect(result.dueAfter).toBe('2025-01-01');
         expect(result.dueBefore).toBe('2025-01-31');
@@ -156,7 +156,7 @@ describe('QueryCompiler', () => {
       it('transforms deferDate.before to deferBefore', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          deferDate: { before: '2025-06-01' }
+          deferDate: { before: '2025-06-01' },
         });
         expect(result.deferBefore).toBe('2025-06-01');
       });
@@ -166,7 +166,7 @@ describe('QueryCompiler', () => {
       it('transforms text.contains to text + textOperator: CONTAINS', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          text: { contains: 'search term' }
+          text: { contains: 'search term' },
         });
         expect(result.text).toBe('search term');
         expect(result.textOperator).toBe('CONTAINS');
@@ -175,7 +175,7 @@ describe('QueryCompiler', () => {
       it('transforms text.matches to text + textOperator: MATCHES', () => {
         const compiler = new QueryCompiler();
         const result = compiler.transformFilters({
-          text: { matches: 'exact' }
+          text: { matches: 'exact' },
         });
         expect(result.text).toBe('exact');
         expect(result.textOperator).toBe('MATCHES');
@@ -222,12 +222,10 @@ describe('QueryCompiler', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         const result = compiler.transformFilters({
-          OR: [{ status: 'active' }, { flagged: true }]
+          OR: [{ status: 'active' }, { flagged: true }],
         });
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('OR operator not yet supported')
-        );
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('OR operator not yet supported'));
         // Should use first condition
         expect(result.completed).toBe(false);
 
@@ -238,7 +236,7 @@ describe('QueryCompiler', () => {
         const compiler = new QueryCompiler();
 
         const result = compiler.transformFilters({
-          AND: [{ status: 'active' }, { flagged: true }]
+          AND: [{ status: 'active' }, { flagged: true }],
         });
 
         expect(result.completed).toBe(false);
@@ -249,7 +247,7 @@ describe('QueryCompiler', () => {
         const compiler = new QueryCompiler();
 
         const result = compiler.transformFilters({
-          NOT: { status: 'completed' }
+          NOT: { status: 'completed' },
         });
 
         expect(result.completed).toBe(false);

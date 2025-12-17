@@ -9,7 +9,8 @@ import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-ty
 
 // Consolidated recurring tasks schema
 const RecurringTasksSchema = z.object({
-  operation: z.enum(['analyze', 'patterns'])
+  operation: z
+    .enum(['analyze', 'patterns'])
     .describe('Operation to perform: analyze (detailed task analysis) or patterns (frequency statistics)'),
 
   // Common parameters
@@ -17,22 +18,14 @@ const RecurringTasksSchema = z.object({
     .default(true)
     .describe('Only include active (non-completed, non-dropped) recurring tasks'),
 
-  includeCompleted: coerceBoolean()
-    .default(false)
-    .describe('Include completed recurring tasks'),
+  includeCompleted: coerceBoolean().default(false).describe('Include completed recurring tasks'),
 
-  includeDropped: coerceBoolean()
-    .default(false)
-    .describe('Include dropped recurring tasks'),
+  includeDropped: coerceBoolean().default(false).describe('Include dropped recurring tasks'),
 
   // Analyze-specific parameters
-  includeHistory: coerceBoolean()
-    .optional()
-    .describe('Include completion history information (analyze operation)'),
+  includeHistory: coerceBoolean().optional().describe('Include completion history information (analyze operation)'),
 
-  sortBy: z.enum(['nextDue', 'frequency', 'name'])
-    .optional()
-    .describe('Sort order for results (analyze operation)'),
+  sortBy: z.enum(['nextDue', 'frequency', 'name']).optional().describe('Sort order for results (analyze operation)'),
 });
 
 type RecurringTasksInput = z.infer<typeof RecurringTasksSchema>;
@@ -43,7 +36,8 @@ type RecurringTasksInput = z.infer<typeof RecurringTasksSchema>;
  */
 export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, RecurringTasksResponseV2> {
   name = 'recurring_tasks';
-  description = 'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
+  description =
+    'Analyze recurring tasks and patterns. Use operation="analyze" for detailed task-by-task analysis with next due dates, or operation="patterns" for frequency statistics and common recurrence patterns.';
   schema = RecurringTasksSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -165,7 +159,9 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
           }
 
           // Execute pattern analysis script
-          const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, { options: patternsOptions });
+          const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
+            options: patternsOptions,
+          });
           const patternsScriptResult = await this.execJson(patternsScript);
 
           if (isScriptError(patternsScriptResult)) {
@@ -204,16 +200,27 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
             insights.push('No recurring tasks found in your OmniFocus database');
           } else {
             if (patternsResult.mostCommon) {
-              insights.push(`Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`);
+              insights.push(
+                `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
+              );
             }
 
             if (patternsResult.patterns && patternsResult.patterns.length > 0) {
               insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
 
               // Add specific pattern insights
-              const weeklyCount = patternsResult.patterns.filter((p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week')).length;
-              const dailyCount = patternsResult.patterns.filter((p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day')).length;
-              const monthlyCount = patternsResult.patterns.filter((p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month')).length;
+              const weeklyCount = patternsResult.patterns.filter(
+                (p: unknown) =>
+                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
+              ).length;
+              const dailyCount = patternsResult.patterns.filter(
+                (p: unknown) =>
+                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
+              ).length;
+              const monthlyCount = patternsResult.patterns.filter(
+                (p: unknown) =>
+                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
+              ).length;
 
               if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
               if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
@@ -222,7 +229,9 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
 
             if (patternsResult.byProject && patternsResult.byProject.length > 0) {
               const projectWithMostRecurring = patternsResult.byProject[0];
-              insights.push(`Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`);
+              insights.push(
+                `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
+              );
             }
           }
 

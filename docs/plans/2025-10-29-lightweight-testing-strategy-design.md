@@ -1,15 +1,18 @@
 # Lightweight Testing Strategy Design
 
-**Date:** 2025-10-29
-**Status:** ✅ Superseded (2025-11-24)
-**Superseded By:** `2025-11-24-tiered-test-pipeline-design.md` + `TESTING_PROMPT_LIGHTWEIGHT.md`
-**Goal:** Enable unattended single-session testing of all 31 MCP tools
+**Date:** 2025-10-29 **Status:** ✅ Superseded (2025-11-24) **Superseded By:**
+`2025-11-24-tiered-test-pipeline-design.md` + `TESTING_PROMPT_LIGHTWEIGHT.md` **Goal:** Enable unattended single-session
+testing of all 31 MCP tools
 
-> **Note:** The core ideas from this design were incorporated into the tiered test pipeline (automated smoke + integration tests) and TESTING_PROMPT_LIGHTWEIGHT.md (modern v3.0 manual testing). The two-phase auto-transition concept was replaced with a cleaner separation of automated vs manual testing.
+> **Note:** The core ideas from this design were incorporated into the tiered test pipeline (automated smoke +
+> integration tests) and TESTING_PROMPT_LIGHTWEIGHT.md (modern v3.0 manual testing). The two-phase auto-transition
+> concept was replaced with a cleaner separation of automated vs manual testing.
 
 ## Problem Statement
 
-User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% through). Current testing prompt is too verbose, making complete testing impossible in a single session. This breaks the unattended testing workflow where User Testing needs to paste prompt and walk away.
+User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% through). Current testing prompt is too
+verbose, making complete testing impossible in a single session. This breaks the unattended testing workflow where User
+Testing needs to paste prompt and walk away.
 
 ## Requirements
 
@@ -23,12 +26,14 @@ User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% t
 ### Architecture
 
 **One Prompt, Two Phases:**
+
 - **Phase 1:** Lightweight pass (all 31 tools, concise output)
 - **Phase 2:** Automatic detailed investigation (failures only, triggered in same session)
 
 ### Phase 1: Lightweight Pass
 
 **Output Format:**
+
 ```
 ✅ Test N: tool_name(key_params) - brief_result
 ❌ Test N: tool_name - FAIL: one_line_error
@@ -36,6 +41,7 @@ User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% t
 ```
 
 **Included:**
+
 - Pass/fail indicator
 - Tool name + key parameters
 - Brief result (count, success message)
@@ -43,6 +49,7 @@ User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% t
 - One-line error for failures
 
 **Excluded:**
+
 - Full JSON tool calls (except failures)
 - Complete responses (except failures)
 - Detailed analysis (except failures)
@@ -55,13 +62,11 @@ User Testing hit Claude Desktop's conversation length limit at test 21/31 (68% t
 **Trigger Condition:** Phase 1 detects any failures or warnings
 
 **Output for Each Failure:**
+
 ```markdown
 🔍 Test N: tool_name - DETAILED ANALYSIS
 
-Tool Call: {full JSON}
-Response: {relevant excerpt}
-Issue Analysis: {root cause}
-File Locations: {paths}
+Tool Call: {full JSON} Response: {relevant excerpt} Issue Analysis: {root cause} File Locations: {paths}
 Recommendations: {specific fixes}
 ```
 
@@ -70,11 +75,13 @@ Recommendations: {specific fixes}
 ### Token Estimates
 
 **Successful run (no failures):**
+
 - Phase 1: 15-20k tokens
 - Claude responses: 20-30k tokens
 - **Total: 35-50k tokens** ✅
 
 **With failures (2-3 typical):**
+
 - Phase 1: 15-20k tokens
 - Phase 2: 2-3k tokens (3 failures × 1k each)
 - Claude responses: 25-35k tokens
@@ -87,20 +94,25 @@ Recommendations: {specific fixes}
 ### File: `docs/operational/TESTING_PROMPT_LIGHTWEIGHT.md`
 
 Structure:
+
 ```markdown
 # OmniFocus MCP Comprehensive Test Suite
 
 ## Instructions
+
 - Phase 1: Run all 31 tests with lightweight format
 - Phase 2: IF failures detected, automatically investigate
 
 ## Output Format
+
 [Format specifications]
 
 ## Phase 1: All Tests
+
 [31 tests organized by category]
 
 ## Phase 2: Detailed Investigation Template
+
 [Investigation format for failures]
 ```
 
@@ -115,15 +127,13 @@ Structure:
 
 ## Success Criteria
 
-✅ User Testing can paste ONE prompt
-✅ Walk away (unattended execution)
-✅ All 31 tools tested in single session
-✅ Failures get automatic detailed investigation
-✅ Total token usage < 60-70k (comfortable margin)
+✅ User Testing can paste ONE prompt ✅ Walk away (unattended execution) ✅ All 31 tools tested in single session ✅
+Failures get automatic detailed investigation ✅ Total token usage < 60-70k (comfortable margin)
 
 ## Fallback Plan
 
 If single session still doesn't work after optimization:
+
 - **Split at natural boundary:** Tests 1-16 (queries) vs 17-31 (analytics/mutations)
 - **Two separate prompts** with clear handoff
 - **Still unattended per session**
@@ -140,22 +150,26 @@ If single session still doesn't work after optimization:
 ## Implementation Results (2025-10-29 - Pre-v3.0)
 
 **Attempt 1: Single-session lightweight format**
+
 - Created `TESTING_PROMPTS_LIGHTWEIGHT.md`
 - Result: Still hit limit at test 20-21 ❌
 - Issue: Claude added commentary between tests despite concise format
 
 **Attempt 2: Stricter output instructions**
+
 - Added "CRITICAL OUTPUT INSTRUCTIONS" with explicit "NO commentary" rules
 - Result: Still hit limit at test 20-21 ❌
 - Issue: Not commentary - actual conversation length limit
 
 **Final Solution: Two-session split** ✅
+
 - Created `TESTING_PROMPTS_SESSION_1.md` (Tests 1-15)
 - Created `TESTING_PROMPTS_SESSION_2.md` (Tests 16-31)
 - Each session standalone, unattended per session
 - Natural split: Core functionality vs Analytics/Advanced
 
 **Lessons Learned:**
+
 1. Lightweight format helps but isn't sufficient alone
 2. Stricter instructions don't override fundamental token limits
 3. Two-session approach is the reliable solution
@@ -168,6 +182,7 @@ If single session still doesn't work after optimization:
 **Status:** ✅ **COMPLETED**
 
 **New Context:**
+
 - v3.0.0 unified API reduced from 31 tools → 4 tools
 - Automated smoke tests (21s) + integration tests (6min) provide comprehensive coverage
 - Performance optimizations (100x speedup on slow operations)
@@ -175,18 +190,21 @@ If single session still doesn't work after optimization:
 **Solution: Hybrid Automated + Manual Approach**
 
 Created `TESTING_PROMPT_LIGHTWEIGHT.md` with:
+
 - **Pre-flight check:** Run automated tests first (smoke → integration)
 - **Manual tests:** 10 real-world scenarios using unified API
 - **Output format:** One-line results (~8-12k tokens vs 60-80k)
 - **Integration:** Leverages automated test infrastructure
 
 **Key Improvements over Oct 2025 version:**
+
 1. **Smaller surface:** 4 unified tools vs 31 individual tools
 2. **Faster execution:** Performance fixes mean quicker test cycles
 3. **Better automation:** Smoke + integration tests catch most issues
 4. **Focused manual testing:** Real-world scenarios, not exhaustive tool testing
 
 **Token Budget:**
+
 - Success run: ~8-12k tokens ✅
 - With failures: ~15-20k tokens ✅
 - Comfortable single-session execution

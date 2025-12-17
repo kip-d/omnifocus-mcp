@@ -12,7 +12,7 @@ vi.mock('../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('PerspectivesTool', () => {
@@ -22,14 +22,14 @@ describe('PerspectivesTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn(() => null),
       set: vi.fn(),
       clear: vi.fn(),
       invalidate: vi.fn(),
     };
-    
+
     mockOmniAutomation = {
       buildScript: vi.fn((script, params) => `built script with params: ${JSON.stringify(params)}`),
       executeJson: vi.fn(),
@@ -49,9 +49,9 @@ describe('PerspectivesTool', () => {
         perspectives: [
           { name: 'Inbox', isBuiltIn: true },
           { name: 'Projects', isBuiltIn: true },
-          { name: 'Custom View', isBuiltIn: false }
+          { name: 'Custom View', isBuiltIn: false },
         ],
-        metadata: { count: 3 }
+        metadata: { count: 3 },
       };
 
       mockOmniAutomation.executeJson.mockResolvedValue({ success: true, data: mockResult });
@@ -70,20 +70,20 @@ describe('PerspectivesTool', () => {
     it('should include filter rules when requested', async () => {
       const mockResult = {
         perspectives: [
-          { 
-            name: 'Flagged', 
+          {
+            name: 'Flagged',
             isBuiltIn: true,
-            filterRules: { flagged: true }
-          }
+            filterRules: { flagged: true },
+          },
         ],
-        metadata: { count: 1 }
+        metadata: { count: 1 },
       };
 
       mockOmniAutomation.executeJson.mockResolvedValue({ success: true, data: mockResult });
 
       const result = await tool.executeValidated({
         operation: 'list',
-        includeFilterRules: true
+        includeFilterRules: true,
       });
 
       expect(result.success).toBe(true);
@@ -110,17 +110,17 @@ describe('PerspectivesTool', () => {
         perspectiveType: 'builtin',
         tasks: [
           { id: 'task1', name: 'Task 1', completed: false },
-          { id: 'task2', name: 'Task 2', completed: false }
+          { id: 'task2', name: 'Task 2', completed: false },
         ],
-        count: 2
+        count: 2,
       };
 
       mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         operation: 'query',
         perspectiveName: 'Today',
-        limit: 50
+        limit: 50,
       });
 
       expect(result.success).toBe(true);
@@ -130,8 +130,8 @@ describe('PerspectivesTool', () => {
     });
 
     it('should return error when perspectiveName is missing', async () => {
-      const result = await tool.executeValidated({ 
-        operation: 'query'
+      const result = await tool.executeValidated({
+        operation: 'query',
         // Missing perspectiveName
       });
 
@@ -145,15 +145,15 @@ describe('PerspectivesTool', () => {
         success: true,
         data: {
           perspectiveName: 'Cached',
-          tasks: []
-        }
+          tasks: [],
+        },
       };
 
       mockCache.get.mockReturnValue(cachedResult);
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         operation: 'query',
-        perspectiveName: 'Cached'
+        perspectiveName: 'Cached',
       });
 
       expect(result).toBe(cachedResult);
@@ -163,14 +163,14 @@ describe('PerspectivesTool', () => {
     it('should handle perspective not found', async () => {
       const mockResult = {
         success: false,
-        error: 'Perspective "NonExistent" not found'
+        error: 'Perspective "NonExistent" not found',
       };
 
       mockOmniAutomation.execute.mockResolvedValue(JSON.stringify(mockResult));
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         operation: 'query',
-        perspectiveName: 'NonExistent'
+        perspectiveName: 'NonExistent',
       });
 
       expect(result.success).toBe(false);
@@ -198,7 +198,7 @@ describe('PerspectivesTool', () => {
           project: 'Work Project',
           projectId: 'proj1',
           available: true,
-          tags: ['urgent', 'meeting']
+          tags: ['urgent', 'meeting'],
         },
         {
           id: 'task2',
@@ -210,7 +210,7 @@ describe('PerspectivesTool', () => {
           project: null,
           projectId: null,
           available: false,
-          tags: ['personal']
+          tags: ['personal'],
         },
         {
           id: 'task3',
@@ -227,11 +227,11 @@ describe('PerspectivesTool', () => {
           project: 'Work Project',
           projectId: 'proj1',
           available: true,
-          tags: ['review']
-        }
+          tags: ['review'],
+        },
       ],
       filterRules: {},
-      aggregation: 'none'
+      aggregation: 'none',
     };
 
     describe('formatOutput feature', () => {
@@ -242,7 +242,7 @@ describe('PerspectivesTool', () => {
           operation: 'query',
           perspectiveName: 'Today',
           formatOutput: true,
-          groupBy: 'project'
+          groupBy: 'project',
         });
 
         expect(result.success).toBe(true);
@@ -264,7 +264,7 @@ describe('PerspectivesTool', () => {
           operation: 'query',
           perspectiveName: 'Today',
           formatOutput: true,
-          includeMetadata: true
+          includeMetadata: true,
         });
 
         expect(result.success).toBe(true);
@@ -287,7 +287,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          groupBy: 'project'
+          groupBy: 'project',
         });
 
         expect(result.success).toBe(true);
@@ -304,7 +304,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          groupBy: 'dueDate'
+          groupBy: 'dueDate',
         });
 
         expect(result.success).toBe(true);
@@ -322,7 +322,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          groupBy: 'status'
+          groupBy: 'status',
         });
 
         expect(result.success).toBe(true);
@@ -338,7 +338,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          groupBy: 'tag'
+          groupBy: 'tag',
         });
 
         expect(result.success).toBe(true);
@@ -356,7 +356,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          fields: ['id', 'name', 'flagged']
+          fields: ['id', 'name', 'flagged'],
         });
 
         expect(result.success).toBe(true);
@@ -379,7 +379,7 @@ describe('PerspectivesTool', () => {
         const result = await tool.executeValidated({
           operation: 'query',
           perspectiveName: 'Today',
-          fields: ['id', 'name']
+          fields: ['id', 'name'],
         });
 
         expect(result.success).toBe(true);
@@ -400,7 +400,7 @@ describe('PerspectivesTool', () => {
         // First call with basic options
         await tool.executeValidated({
           operation: 'query',
-          perspectiveName: 'Today'
+          perspectiveName: 'Today',
         });
 
         // Second call with enhanced options
@@ -409,7 +409,7 @@ describe('PerspectivesTool', () => {
           perspectiveName: 'Today',
           formatOutput: true,
           groupBy: 'project',
-          fields: ['id', 'name']
+          fields: ['id', 'name'],
         });
 
         // Should make separate cache calls due to different keys
@@ -429,7 +429,7 @@ describe('PerspectivesTool', () => {
           groupBy: 'status',
           fields: ['id', 'name', 'flagged', 'completed', 'dueDate', 'project'],
           includeMetadata: true,
-          limit: 10
+          limit: 10,
         });
 
         expect(result.success).toBe(true);
@@ -462,7 +462,7 @@ describe('PerspectivesTool', () => {
   describe('invalid operation', () => {
     it('should return error for invalid operation', async () => {
       const result = await tool.executeValidated({
-        operation: 'invalid' as any
+        operation: 'invalid' as any,
       });
 
       expect(result.success).toBe(false);

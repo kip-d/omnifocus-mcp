@@ -6,7 +6,7 @@ import globals from 'globals';
 export default [
   // Base ESLint recommended rules
   eslint.configs.recommended,
-  
+
   // TypeScript files configuration
   {
     files: ['**/*.ts'],
@@ -28,7 +28,7 @@ export default [
     rules: {
       // TypeScript recommended rules (but relaxed for MCP server)
       ...tseslint.configs['recommended'].rules,
-      
+
       // Relaxed any type rules for MCP server
       '@typescript-eslint/no-explicit-any': 'warn', // Allow any but warn
       '@typescript-eslint/no-unsafe-assignment': 'warn', // Warn but don't error
@@ -36,23 +36,26 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
-      
+
       // Keep useful warnings
-      '@typescript-eslint/no-unused-vars': ['error', { 
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+        },
+      ],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      
+
       // Enforce consistency
       'no-console': 'off', // MCP servers often use console for debugging
-      'quotes': ['error', 'single', { avoidEscape: true }],
-      'semi': ['error', 'always'],
+      quotes: ['error', 'single', { avoidEscape: true }],
+      semi: ['error', 'always'],
       'comma-dangle': ['error', 'always-multiline'],
       'no-trailing-spaces': 'error',
       'eol-last': ['error', 'always'],
-      
+
       // Additional useful rules
       'no-case-declarations': 'error',
       '@typescript-eslint/no-base-to-string': 'warn',
@@ -62,7 +65,7 @@ export default [
       '@typescript-eslint/require-await': 'warn',
     },
   },
-  
+
   // Test files - relax some rules
   {
     files: ['**/*.test.ts', '**/*.spec.ts', 'tests/**/*.ts'],
@@ -76,10 +79,14 @@ export default [
       '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
-  
+
   // JXA bridge and embedded script wrappers - boundary layer
   {
-    files: ['src/omnifocus/OmniAutomation.ts', 'src/omnifocus/DiagnosticOmniAutomation.ts', 'src/omnifocus/scripts/**/*.ts'],
+    files: [
+      'src/omnifocus/OmniAutomation.ts',
+      'src/omnifocus/DiagnosticOmniAutomation.ts',
+      'src/omnifocus/scripts/**/*.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'warn',
@@ -89,7 +96,7 @@ export default [
       '@typescript-eslint/no-unsafe-return': 'warn',
     },
   },
-  
+
   // Ignore patterns
   {
     ignores: [

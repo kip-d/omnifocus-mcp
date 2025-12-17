@@ -1,6 +1,7 @@
 # Automated OmniFocus MCP v2.0.0 Test Suite
 
-Please run this automated test suite and report the results in a structured format. Execute each test, track the results, and provide a comprehensive report at the end.
+Please run this automated test suite and report the results in a structured format. Execute each test, track the
+results, and provide a comprehensive report at the end.
 
 ```
 I'll run a comprehensive test suite for the OmniFocus MCP v2.0.0 server. Let me execute each test category systematically and report the results.
@@ -9,7 +10,7 @@ I'll run a comprehensive test suite for the OmniFocus MCP v2.0.0 server. Let me 
 
 I'll test:
 1. Basic connectivity and version
-2. V2 tool operations (tasks, projects) 
+2. V2 tool operations (tasks, projects)
 3. CRUD operations with special focus on tag assignment
 4. Advanced features (recurring tasks, subtasks)
 5. Performance benchmarks
@@ -31,7 +32,7 @@ const testResults = {
   passed: [],
   failed: [],
   performance: [],
-  criticalIssues: []
+  criticalIssues: [],
 };
 
 // Test helper
@@ -54,93 +55,92 @@ async function runTest(name, testFn) {
 3. Run each test group:
 
 ### Group A: Task Queries
+
 ```javascript
 // Test different task query modes
-await runTest("Task Query - All", () => 
-  tasks({ mode: "all", limit: 5, details: false }));
+await runTest('Task Query - All', () => tasks({ mode: 'all', limit: 5, details: false }));
 
-await runTest("Task Query - Today", () => 
-  tasks({ mode: "today", limit: 10, details: false }));
+await runTest('Task Query - Today', () => tasks({ mode: 'today', limit: 10, details: false }));
 
-await runTest("Task Query - Search", () => 
-  tasks({ mode: "search", search: "test", limit: 5 }));
+await runTest('Task Query - Search', () => tasks({ mode: 'search', search: 'test', limit: 5 }));
 
-await runTest("Task Query - Overdue", () => 
-  tasks({ mode: "overdue", limit: 10 }));
+await runTest('Task Query - Overdue', () => tasks({ mode: 'overdue', limit: 10 }));
 ```
 
 ### Group B: Project Operations
+
 ```javascript
 let testProjectId;
 
-await runTest("Project List", () => 
-  projects({ operation: "list", limit: 5, details: false }));
+await runTest('Project List', () => projects({ operation: 'list', limit: 5, details: false }));
 
-await runTest("Project Create", async () => {
-  const result = await projects({ 
-    operation: "create", 
-    name: `MCP Test ${Date.now()}`
+await runTest('Project Create', async () => {
+  const result = await projects({
+    operation: 'create',
+    name: `MCP Test ${Date.now()}`,
   });
   testProjectId = result.data?.project?.id;
   return result;
 });
 
 if (testProjectId) {
-  await runTest("Project Update", () => 
-    projects({ 
-      operation: "update", 
-      projectId: testProjectId, 
-      note: "Updated via test" 
-    }));
+  await runTest('Project Update', () =>
+    projects({
+      operation: 'update',
+      projectId: testProjectId,
+      note: 'Updated via test',
+    }),
+  );
 
-  await runTest("Project Delete", () => 
-    projects({ operation: "delete", projectId: testProjectId }));
+  await runTest('Project Delete', () => projects({ operation: 'delete', projectId: testProjectId }));
 }
 ```
 
 ### Group C: Task CRUD with Tag Verification
+
 ```javascript
 let testTaskId;
 
-await runTest("Create Task with Tags", async () => {
+await runTest('Create Task with Tags', async () => {
   const result = await create_task({
     name: `Tag Test ${Date.now()}`,
-    tags: ["test", "mcp"],
-    flagged: true
+    tags: ['test', 'mcp'],
+    flagged: true,
   });
   testTaskId = result.data?.task?.id;
-  
+
   // CRITICAL: Verify tags were assigned
-  if (!result.data?.task?.tags?.includes("test")) {
-    testResults.criticalIssues.push("Tags not assigned during creation!");
+  if (!result.data?.task?.tags?.includes('test')) {
+    testResults.criticalIssues.push('Tags not assigned during creation!');
   }
   return result;
 });
 
 if (testTaskId) {
-  await runTest("Update Task", () => 
-    update_task({ 
-      taskId: testTaskId, 
-      name: "Updated Task",
-      note: "Test note"
-    }));
+  await runTest('Update Task', () =>
+    update_task({
+      taskId: testTaskId,
+      name: 'Updated Task',
+      note: 'Test note',
+    }),
+  );
 
-  await runTest("Complete Task", () => 
-    complete_task({ taskId: testTaskId }));
+  await runTest('Complete Task', () => complete_task({ taskId: testTaskId }));
 }
 ```
 
 ### Group D: Advanced Features
+
 ```javascript
-await runTest("Recurring Task", async () => {
+await runTest('Recurring Task', async () => {
   const result = await create_task({
-    name: "Weekly Recurring",
+    name: 'Weekly Recurring',
     repeatRule: {
-      unit: "week",
+      unit: 'week',
       steps: 1,
-      method: "fixed",
-      weekdays: ["monday", "friday"]
-    }
+      method: 'fixed',
+      weekdays: ['monday', 'friday'],
+    },
   });
   if (result.data?.task?.id) {
     await delete_task({ taskId: result.data.task.id });
@@ -148,75 +148,77 @@ await runTest("Recurring Task", async () => {
   return result;
 });
 
-await runTest("Task with Subtask", async () => {
-  const parent = await create_task({ 
-    name: "Parent Task", 
-    sequential: true 
+await runTest('Task with Subtask', async () => {
+  const parent = await create_task({
+    name: 'Parent Task',
+    sequential: true,
   });
-  
+
   if (parent.data?.task?.id) {
     const child = await create_task({
-      name: "Subtask",
-      parentTaskId: parent.data.task.id
+      name: 'Subtask',
+      parentTaskId: parent.data.task.id,
     });
-    
+
     // Cleanup
     if (child.data?.task?.id) {
       await delete_task({ taskId: child.data.task.id });
     }
     await delete_task({ taskId: parent.data.task.id });
-    
+
     return { parent, child };
   }
 });
 ```
 
 ### Group E: Performance Tests
+
 ```javascript
-await runTest("Large Query Performance", async () => {
+await runTest('Large Query Performance', async () => {
   const start = Date.now();
-  const result = await tasks({ 
-    mode: "all", 
-    limit: 100, 
+  const result = await tasks({
+    mode: 'all',
+    limit: 100,
     details: false,
-    skipAnalysis: true 
+    skipAnalysis: true,
   });
   const time = Date.now() - start;
-  
+
   if (time > 2000) {
     testResults.criticalIssues.push(`Large query took ${time}ms (>2s threshold)`);
   }
-  
-  testResults.performance.push({ 
-    test: "100 tasks query", 
-    time, 
-    acceptable: time < 2000 
+
+  testResults.performance.push({
+    test: '100 tasks query',
+    time,
+    acceptable: time < 2000,
   });
-  
+
   return result;
 });
 ```
 
 ### Group F: Error Handling
+
 ```javascript
-await runTest("Invalid Task ID Error", async () => {
+await runTest('Invalid Task ID Error', async () => {
   try {
-    await update_task({ taskId: "invalid_xyz", name: "Test" });
-    throw new Error("Should have failed with invalid ID");
+    await update_task({ taskId: 'invalid_xyz', name: 'Test' });
+    throw new Error('Should have failed with invalid ID');
   } catch (error) {
-    if (error.message.includes("not found") || error.message.includes("invalid")) {
+    if (error.message.includes('not found') || error.message.includes('invalid')) {
       return { correctError: true };
     }
     throw error;
   }
 });
 
-await runTest("Validation Error", async () => {
+await runTest('Validation Error', async () => {
   try {
-    await tasks({ mode: "invalid_mode" });
-    throw new Error("Should have failed with validation error");
+    await tasks({ mode: 'invalid_mode' });
+    throw new Error('Should have failed with validation error');
   } catch (error) {
-    if (error.message.includes("Invalid enum")) {
+    if (error.message.includes('Invalid enum')) {
       return { correctError: true };
     }
     throw error;
@@ -229,13 +231,13 @@ await runTest("Validation Error", async () => {
 ```javascript
 // Calculate statistics
 const totalTests = testResults.passed.length + testResults.failed.length;
-const passRate = (testResults.passed.length / totalTests * 100).toFixed(1);
+const passRate = ((testResults.passed.length / totalTests) * 100).toFixed(1);
 const avgTime = testResults.passed.reduce((sum, t) => sum + t.time, 0) / testResults.passed.length;
-const maxTime = Math.max(...testResults.passed.map(t => t.time));
-const minTime = Math.min(...testResults.passed.map(t => t.time));
+const maxTime = Math.max(...testResults.passed.map((t) => t.time));
+const minTime = Math.min(...testResults.passed.map((t) => t.time));
 
 // Generate report
-console.log("\n=== FINAL TEST REPORT ===\n");
+console.log('\n=== FINAL TEST REPORT ===\n');
 console.log(`✅ Passed: ${testResults.passed.length}/${totalTests} (${passRate}%)`);
 console.log(`❌ Failed: ${testResults.failed.length}/${totalTests}`);
 console.log(`\n⚡ Performance:`);
@@ -245,7 +247,7 @@ console.log(`  - Slowest: ${maxTime}ms`);
 
 if (testResults.criticalIssues.length > 0) {
   console.log(`\n🚨 CRITICAL ISSUES:`);
-  testResults.criticalIssues.forEach(issue => console.log(`  - ${issue}`));
+  testResults.criticalIssues.forEach((issue) => console.log(`  - ${issue}`));
 }
 
 if (testResults.failed.length > 0) {
@@ -255,13 +257,15 @@ if (testResults.failed.length > 0) {
   });
 }
 
-console.log(`\n📊 VERDICT: ${passRate >= 90 ? "✅ READY FOR RELEASE" : "⚠️ NEEDS INVESTIGATION"}`);
+console.log(`\n📊 VERDICT: ${passRate >= 90 ? '✅ READY FOR RELEASE' : '⚠️ NEEDS INVESTIGATION'}`);
 ```
 
 Please run this automated test suite and provide:
+
 1. The complete console output
 2. The final test report
 3. Any unexpected errors or warnings
 4. Your assessment of whether v2.0.0 is ready for release
 
-The most critical test is whether tags are properly assigned during task creation (Group C). This is a key v2.0.0 feature that must work.
+The most critical test is whether tags are properly assigned during task creation (Group C). This is a key v2.0.0
+feature that must work.

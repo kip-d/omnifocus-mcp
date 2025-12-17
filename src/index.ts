@@ -9,8 +9,14 @@ import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
 import { getVersionInfo } from './utils/version.js';
 import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
+import { parseCLIArgs, validateCLIConfig, CLIConfig } from './utils/cli.js';
+import { SessionManager } from './session-manager.js';
+import { HttpServerManager } from './http-server.js';
 
 const logger = createLogger('server');
+
+// Parse CLI arguments early to determine mode
+const cliConfig = parseCLIArgs();
 
 // Global error handlers to prevent server crashes from uncaught exceptions
 // These are defensive safety nets - tool execution errors should be caught and converted to McpError
@@ -32,21 +38,6 @@ process.on('unhandledRejection', (reason: unknown, _promise: Promise<unknown>) =
   // Don't exit - let server continue operating
   // The rejection has been logged for debugging
 });
-
-// Create server instance
-const versionInfo = getVersionInfo();
-const server = new Server(
-  {
-    name: 'omnifocus-mcp-cached',
-    version: versionInfo.version,
-  },
-  {
-    capabilities: {
-      tools: {},
-      prompts: {},
-    },
-  },
-);
 
 // Track pending async operations to prevent premature exit
 const pendingOperations = new Set<Promise<unknown>>();
@@ -82,10 +73,6 @@ export async function runServer() {
   } catch (error) {
     logger.error('Failed to check permissions:', error);
   }
-
-  // Register all tools and prompts AFTER server creation but BEFORE connection
-  await registerTools(server, cacheManager, pendingOperations);
-  registerPrompts(server);
 
   // Warm cache with frequently accessed data (non-blocking)
   // Disable cache warming in CI environments (Linux, no OmniFocus), test mode, or benchmark mode
@@ -125,7 +112,7 @@ export async function runServer() {
       logger.info('Cache warming enabled via ENABLE_CACHE_WARMING override');
     }
     logger.info('Warming cache before accepting requests...');
-  try {
+    try {
       await cacheWarmer.warmCache();
       logger.info('Cache warming completed successfully');
       // Emit cache statistics after warm‑up to verify hit‑rate potential
@@ -135,6 +122,39 @@ export async function runServer() {
       logger.warn('Cache warming failed:', error);
     }
   }
+
+  // Check if we're running in HTTP mode
+  if (cliConfig.httpMode) {
+    await runHttpServer(cacheManager, cliConfig);
+  } else {
+    await runStdioServer(cacheManager);
+  }
+}
+
+/**
+ * Runs the server in stdio mode (original behavior)
+ */
+async function runStdioServer(cacheManager: CacheManager) {
+  logger.info('Starting server in stdio mode');
+
+  // Create server instance
+  const versionInfo = getVersionInfo();
+  const stdioServer = new Server(
+    {
+      name: 'omnifocus-mcp-cached',
+      version: versionInfo.version,
+    },
+    {
+      capabilities: {
+        tools: {},
+        prompts: {},
+      },
+    },
+  );
+
+  // Register all tools and prompts AFTER server creation but BEFORE connection
+  await registerTools(stdioServer, cacheManager, pendingOperations);
+  registerPrompts(stdioServer);
 
   const transport = new StdioServerTransport();
 
@@ -155,7 +175,7 @@ export async function runServer() {
 
     // Close server connection cleanly, allowing transport to flush responses
     logger.info('Closing server connection...');
-    await server.close();
+    await stdioServer.close();
 
     logger.info('Exiting gracefully per MCP specification');
     process.exit(0);
@@ -190,7 +210,76 @@ export async function runServer() {
     }
   });
 
-  await server.connect(transport);
+  await stdioServer.connect(transport);
+}
+
+/**
+ * Runs the server in HTTP mode
+ */
+async function runHttpServer(cacheManager: CacheManager, cliConfig: CLIConfig) {
+  logger.info('Starting server in HTTP mode', {
+    port: cliConfig.port,
+    host: cliConfig.host,
+    authEnabled: !!cliConfig.authToken,
+  });
+
+  // Validate CLI configuration
+  try {
+    validateCLIConfig(cliConfig);
+  } catch (error) {
+    logger.error('Invalid CLI configuration:', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exit(1);
+  }
+
+  // Create session manager
+  const sessionManager = new SessionManager(cacheManager, cliConfig.authToken);
+  sessionManager.startCleanupInterval();
+
+  // Create HTTP server manager
+  const httpServerManager = new HttpServerManager(sessionManager, cliConfig.port, cliConfig.host, cliConfig.authToken);
+
+  // Start HTTP server
+  try {
+    await httpServerManager.start();
+  } catch (error) {
+    logger.error('Failed to start HTTP server:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    process.exit(1);
+  }
+
+  // Handle graceful shutdown for HTTP mode
+  const gracefulShutdown = async (signal: string) => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+
+    try {
+      // Stop accepting new connections
+      logger.info('Stopping HTTP server...');
+      await httpServerManager.stop();
+
+      // Close all active sessions
+      logger.info('Closing all active sessions...');
+      await sessionManager.closeAllSessions();
+
+      logger.info('HTTP server shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      logger.error('Error during graceful shutdown:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      process.exit(1);
+    }
+  };
+
+  // Handle termination signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  logger.info('HTTP server ready and accepting connections');
 }
 
 const shouldAutoStart = process.env.MCP_SKIP_AUTO_START !== 'true';

@@ -76,8 +76,8 @@ export function validateScriptParameters(
   const expected = extractExpectedParameters(template);
   const provided = Object.keys(providedParams);
 
-  const missing = expected.filter(param => !provided.includes(param));
-  const extra = provided.filter(param => !expected.includes(param));
+  const missing = expected.filter((param) => !provided.includes(param));
+  const extra = provided.filter((param) => !expected.includes(param));
 
   return {
     valid: missing.length === 0,

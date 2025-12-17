@@ -102,27 +102,27 @@ class RealLLMTestHarness {
     // Extract the actual result from MCP response format
     const content = response.result?.content;
     if (content && content[0]) {
-      return content[0].type === 'json'
-        ? content[0].json
-        : JSON.parse(content[0].text);
+      return content[0].type === 'json' ? content[0].json : JSON.parse(content[0].text);
     }
     return response.result;
   }
 
   private generateToolsSystemPrompt(): string {
-    const toolDescriptions = this.availableTools.map(tool => {
-      const requiredParams = tool.inputSchema.required || [];
-      const properties = Object.entries(tool.inputSchema.properties || {})
-        .map(([name, schema]: [string, any]) => {
-          const required = requiredParams.includes(name) ? ' (required)' : ' (optional)';
-          const type = schema.type || 'any';
-          const description = schema.description || '';
-          return `  - ${name}${required}: ${type} - ${description}`;
-        })
-        .join('\n');
+    const toolDescriptions = this.availableTools
+      .map((tool) => {
+        const requiredParams = tool.inputSchema.required || [];
+        const properties = Object.entries(tool.inputSchema.properties || {})
+          .map(([name, schema]: [string, any]) => {
+            const required = requiredParams.includes(name) ? ' (required)' : ' (optional)';
+            const type = schema.type || 'any';
+            const description = schema.description || '';
+            return `  - ${name}${required}: ${type} - ${description}`;
+          })
+          .join('\n');
 
-      return `${tool.name}: ${tool.description}\nParameters:\n${properties}`;
-    }).join('\n\n');
+        return `${tool.name}: ${tool.description}\nParameters:\n${properties}`;
+      })
+      .join('\n\n');
 
     return `You are a productivity assistant with access to OmniFocus task management tools.
 You can help users manage their tasks, projects, and productivity workflows.
@@ -138,7 +138,10 @@ Important: When calling tools, use the exact parameter names and format specifie
 All string parameters should be properly quoted. Boolean values should be true/false.`;
   }
 
-  async askLLM(userQuery: string, model: string = process.env.REAL_LLM_MODEL || 'phi3.5:3.8b'): Promise<{
+  async askLLM(
+    userQuery: string,
+    model: string = process.env.REAL_LLM_MODEL || 'phi3.5:3.8b',
+  ): Promise<{
     response: string;
     toolCalls: Array<{ tool: string; args: any; result: any }>;
     reasoning: string[];
@@ -155,12 +158,12 @@ All string parameters should be properly quoted. Boolean values should be true/f
           {
             role: 'system',
             content: `You are an AI assistant for OmniFocus task management.
-            Available tools: ${this.availableTools.map(t => `${t.name}: ${t.description}`).join(', ')}
+            Available tools: ${this.availableTools.map((t) => `${t.name}: ${t.description}`).join(', ')}
 
             For user queries, identify which tool(s) to use and respond concisely. Use phrases like:
-            "I'll use the [toolname] tool" or "Call the [toolname] tool" to indicate tool usage.`
+            "I'll use the [toolname] tool" or "Call the [toolname] tool" to indicate tool usage.`,
           },
-          { role: 'user', content: `${userQuery}\n\nWhich tool(s) should I use and how?` }
+          { role: 'user', content: `${userQuery}\n\nWhich tool(s) should I use and how?` },
         ],
         stream: false,
       });
@@ -176,61 +179,61 @@ All string parameters should be properly quoted. Boolean values should be true/f
         /(?:use|call|invoke)\s+(?:the\s+)?`(\w+)`/gi,
         /tool.*?(?:use|call|invoke).*?(\w+)/gi,
         /(\w+)\s+tool/gi,
-        /`(\w+)`.*?tool/gi
+        /`(\w+)`.*?tool/gi,
       ];
 
       for (const pattern of patterns) {
         const matches = executionResponse.message.content.matchAll(pattern);
         for (const match of matches) {
           const toolName = match[1];
-          if (this.availableTools.some(tool => tool.name === toolName) && !toolMatches.includes(toolName)) {
+          if (this.availableTools.some((tool) => tool.name === toolName) && !toolMatches.includes(toolName)) {
             toolMatches.push(toolName);
           }
         }
       }
 
       for (const toolName of toolMatches) {
-          try {
-            // Let the LLM determine parameters for this tool
-            const paramsResponse = await this.ollama.chat({
-              model,
-              messages: [
-                {
-                  role: 'system',
-                  content: `You are helping determine parameters for the ${toolName} tool.
-                  Tool description: ${this.availableTools.find(t => t.name === toolName)?.description}
+        try {
+          // Let the LLM determine parameters for this tool
+          const paramsResponse = await this.ollama.chat({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content: `You are helping determine parameters for the ${toolName} tool.
+                  Tool description: ${this.availableTools.find((t) => t.name === toolName)?.description}
 
                   Respond with ONLY a valid JSON object containing the parameters.
-                  For the original query: "${userQuery}"`
-                },
-                {
-                  role: 'user',
-                  content: `What parameters should I use for the ${toolName} tool to help with: "${userQuery}"?`
-                }
-              ],
-              stream: false,
-            });
+                  For the original query: "${userQuery}"`,
+              },
+              {
+                role: 'user',
+                content: `What parameters should I use for the ${toolName} tool to help with: "${userQuery}"?`,
+              },
+            ],
+            stream: false,
+          });
 
-            // Try to parse JSON parameters from LLM response
-            let params = {};
-            try {
-              const jsonMatch = paramsResponse.message.content.match(/\{.*\}/s);
-              if (jsonMatch) {
-                params = JSON.parse(jsonMatch[0]);
-              } else {
-                // Fallback to reasonable defaults based on tool
-                params = this.getDefaultParamsForTool(toolName, userQuery);
-              }
-            } catch (e) {
+          // Try to parse JSON parameters from LLM response
+          let params = {};
+          try {
+            const jsonMatch = paramsResponse.message.content.match(/\{.*\}/s);
+            if (jsonMatch) {
+              params = JSON.parse(jsonMatch[0]);
+            } else {
+              // Fallback to reasonable defaults based on tool
               params = this.getDefaultParamsForTool(toolName, userQuery);
             }
-
-            const result = await this.callTool(toolName, params);
-            toolCalls.push({ tool: toolName, args: params, result });
-            reasoning.push(`Called ${toolName} with params: ${JSON.stringify(params)}`);
-          } catch (error) {
-            reasoning.push(`Failed to call ${toolName}: ${error}`);
+          } catch (e) {
+            params = this.getDefaultParamsForTool(toolName, userQuery);
           }
+
+          const result = await this.callTool(toolName, params);
+          toolCalls.push({ tool: toolName, args: params, result });
+          reasoning.push(`Called ${toolName} with params: ${JSON.stringify(params)}`);
+        } catch (error) {
+          reasoning.push(`Failed to call ${toolName}: ${error}`);
+        }
       }
 
       // If no tools were called, try a direct approach
@@ -284,7 +287,10 @@ All string parameters should be properly quoted. Boolean values should be true/f
 
     // Prioritize specific patterns
     if (lowerQuery.includes('overdue')) {
-      return { tool: 'analyze_overdue', params: { includeRecentlyCompleted: 'false', groupBy: 'project', limit: '50' } };
+      return {
+        tool: 'analyze_overdue',
+        params: { includeRecentlyCompleted: 'false', groupBy: 'project', limit: '50' },
+      };
     }
     if (lowerQuery.includes('today') || (lowerQuery.includes('due') && !lowerQuery.includes('overdue'))) {
       return { tool: 'tasks', params: { mode: 'today', limit: '10', details: 'true' } };
@@ -293,7 +299,10 @@ All string parameters should be properly quoted. Boolean values should be true/f
       return { tool: 'projects', params: { operation: 'list', limit: '20', details: 'true' } };
     }
     if (lowerQuery.includes('productive') || lowerQuery.includes('stats')) {
-      return { tool: 'productivity_stats', params: { period: 'week', includeProjectStats: 'true', includeTagStats: 'false' } };
+      return {
+        tool: 'productivity_stats',
+        params: { period: 'week', includeProjectStats: 'true', includeTagStats: 'false' },
+      };
     }
     if (lowerQuery.includes('overwhelm') || lowerQuery.includes('plan')) {
       return { tool: 'tasks', params: { mode: 'today', limit: '10', details: 'true' } };
@@ -320,7 +329,10 @@ All string parameters should be properly quoted. Boolean values should be true/f
 
       const handleData = (data: Buffer) => {
         try {
-          const lines = data.toString().split('\n').filter(line => line.trim());
+          const lines = data
+            .toString()
+            .split('\n')
+            .filter((line) => line.trim());
           for (const line of lines) {
             try {
               const response = JSON.parse(line);
@@ -384,16 +396,19 @@ d('Real LLM Integration Tests', () => {
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
       // Should call tasks tool with today mode
-      const tasksCalls = result.toolCalls.filter(call => call.tool === 'tasks');
+      const tasksCalls = result.toolCalls.filter((call) => call.tool === 'tasks');
       expect(tasksCalls.length).toBeGreaterThan(0);
 
       // Reasoning should show logical progression
       expect(result.reasoning.length).toBeGreaterThan(0);
-      expect(result.reasoning.some(r => r.includes('today') || r.includes('tasks'))).toBe(true);
+      expect(result.reasoning.some((r) => r.includes('today') || r.includes('tasks'))).toBe(true);
 
       console.log('Query: "What should I work on today?"');
       console.log('Reasoning:', result.reasoning);
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
     }, 120000);
 
     it('should understand "Show me my overdue tasks" and use analyze_overdue tool', async () => {
@@ -402,15 +417,17 @@ d('Real LLM Integration Tests', () => {
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
       // Should use overdue-related tools
-      const relevantCalls = result.toolCalls.filter(call =>
-        call.tool === 'analyze_overdue' ||
-        (call.tool === 'tasks' && call.args.mode === 'overdue')
+      const relevantCalls = result.toolCalls.filter(
+        (call) => call.tool === 'analyze_overdue' || (call.tool === 'tasks' && call.args.mode === 'overdue'),
       );
       expect(relevantCalls.length).toBeGreaterThan(0);
 
       console.log('Query: "Show me my overdue tasks"');
       console.log('Reasoning:', result.reasoning);
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
     }, 120000);
 
     it('should understand "How productive was I this week?" and use productivity stats', async () => {
@@ -419,37 +436,43 @@ d('Real LLM Integration Tests', () => {
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
       // Should call productivity_stats tool
-      const productivityCalls = result.toolCalls.filter(call => call.tool === 'productivity_stats');
+      const productivityCalls = result.toolCalls.filter((call) => call.tool === 'productivity_stats');
       expect(productivityCalls.length).toBeGreaterThan(0);
 
       // Should use week period
-      const weekCall = productivityCalls.find(call => call.args.period === 'week');
+      const weekCall = productivityCalls.find((call) => call.args.period === 'week');
       expect(weekCall).toBeDefined();
 
       console.log('Query: "How productive was I this week?"');
       console.log('Reasoning:', result.reasoning);
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
     }, 120000);
   });
 
   describe('Complex Workflow Understanding', () => {
     it('should handle multi-step requests like "Help me plan my day"', async () => {
-      const result = await llmHarness.askLLM('Help me plan my day - show me what\'s due today, any overdue items, and my recent productivity');
+      const result = await llmHarness.askLLM(
+        "Help me plan my day - show me what's due today, any overdue items, and my recent productivity",
+      );
 
       expect(result.toolCalls.length).toBeGreaterThan(1);
 
       // Should use multiple relevant tools
-      const toolNames = result.toolCalls.map(call => call.tool);
+      const toolNames = result.toolCalls.map((call) => call.tool);
       expect(toolNames).toContain('tasks');
 
       // Might also use productivity stats or overdue analysis
-      const hasComprehensiveData = toolNames.some(name =>
-        ['productivity_stats', 'analyze_overdue'].includes(name)
-      );
+      const hasComprehensiveData = toolNames.some((name) => ['productivity_stats', 'analyze_overdue'].includes(name));
 
       console.log('Query: "Help me plan my day"');
       console.log('Reasoning:', result.reasoning);
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
       console.log('Tool diversity:', new Set(toolNames).size, 'unique tools used');
     }, 180000);
 
@@ -459,7 +482,7 @@ d('Real LLM Integration Tests', () => {
       expect(result.toolCalls.length).toBeGreaterThan(0);
 
       // Should show sophisticated understanding by using tools
-      const toolNames = result.toolCalls.map(call => call.tool);
+      const toolNames = result.toolCalls.map((call) => call.tool);
       expect(toolNames.length).toBeGreaterThan(0);
 
       // If multiple tools used, that's great emergent behavior
@@ -470,15 +493,21 @@ d('Real LLM Integration Tests', () => {
 
       console.log('Query: "I feel overwhelmed. Help me understand my workload and prioritize."');
       console.log('Reasoning:', result.reasoning);
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
       console.log('Emergent behavior: Used', uniqueTools.size, 'different tools');
 
       // Log the actual reasoning to see how the LLM approaches the problem
-      expect(result.reasoning.some(r =>
-        r.toLowerCase().includes('overwhelm') ||
-        r.toLowerCase().includes('workload') ||
-        r.toLowerCase().includes('prioritize')
-      )).toBe(true);
+      expect(
+        result.reasoning.some(
+          (r) =>
+            r.toLowerCase().includes('overwhelm') ||
+            r.toLowerCase().includes('workload') ||
+            r.toLowerCase().includes('prioritize'),
+        ),
+      ).toBe(true);
     }, 180000);
   });
 
@@ -489,32 +518,32 @@ d('Real LLM Integration Tests', () => {
         {
           query: 'Show me my projects',
           expectedTools: ['projects'],
-          description: 'Should use projects tool for project listing'
+          description: 'Should use projects tool for project listing',
         },
         {
           query: 'What tasks are due today?',
           expectedTools: ['tasks'],
-          description: 'Should use tasks tool for due date queries'
+          description: 'Should use tasks tool for due date queries',
         },
         {
           query: 'How many tasks did I complete this week?',
           expectedTools: ['productivity_stats', 'tasks'], // Both tools can handle completion data
-          description: 'Should use productivity_stats OR tasks tool for completion queries'
+          description: 'Should use productivity_stats OR tasks tool for completion queries',
         },
       ];
 
       for (const test of testQueries) {
         const result = await llmHarness.askLLM(test.query);
 
-        const usedExpectedTool = result.toolCalls.some(call =>
-          test.expectedTools.includes(call.tool)
-        );
+        const usedExpectedTool = result.toolCalls.some((call) => test.expectedTools.includes(call.tool));
 
-        console.log(`Query: "${test.query}" -> Expected: ${test.expectedTools.join(' OR ')}, Used: ${result.toolCalls.map(c => c.tool).join(', ')}`);
+        console.log(
+          `Query: "${test.query}" -> Expected: ${test.expectedTools.join(' OR ')}, Used: ${result.toolCalls.map((c) => c.tool).join(', ')}`,
+        );
 
         if (!usedExpectedTool) {
           console.log(`❌ Test failed: ${test.description}`);
-          console.log(`   Tools used: ${result.toolCalls.map(c => c.tool).join(', ')}`);
+          console.log(`   Tools used: ${result.toolCalls.map((c) => c.tool).join(', ')}`);
           console.log(`   Reasoning: ${result.reasoning.join('; ')}`);
         }
 
@@ -535,8 +564,14 @@ d('Real LLM Integration Tests', () => {
       expect(result.reasoning.length).toBeGreaterThan(0);
 
       console.log('Query: "Create a new task called Test LLM Integration"');
-      console.log('Tool calls:', result.toolCalls.map(c => `${c.tool}(${JSON.stringify(c.args)})`));
-      console.log('Results:', result.toolCalls.map(c => c.result?.success ? 'SUCCESS' : 'FAILED'));
+      console.log(
+        'Tool calls:',
+        result.toolCalls.map((c) => `${c.tool}(${JSON.stringify(c.args)})`),
+      );
+      console.log(
+        'Results:',
+        result.toolCalls.map((c) => (c.result?.success ? 'SUCCESS' : 'FAILED')),
+      );
     }, 120000);
   });
 

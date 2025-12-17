@@ -9,14 +9,14 @@ describe('AnalyzeSchema', () => {
         scope: {
           dateRange: {
             start: '2025-01-01',
-            end: '2025-01-31'
-          }
+            end: '2025-01-31',
+          },
         },
         params: {
           groupBy: 'week',
-          metrics: ['completed', 'velocity']
-        }
-      }
+          metrics: ['completed', 'velocity'],
+        },
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);
@@ -29,9 +29,9 @@ describe('AnalyzeSchema', () => {
         type: 'parse_meeting_notes',
         params: {
           text: 'Follow up with Sarah',
-          extractTasks: true
-        }
-      }
+          extractTasks: true,
+        },
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);
@@ -41,8 +41,8 @@ describe('AnalyzeSchema', () => {
   it('should reject invalid type', () => {
     const input = {
       analysis: {
-        type: 'invalid_type'
-      }
+        type: 'invalid_type',
+      },
     };
 
     const result = AnalyzeSchema.safeParse(input);

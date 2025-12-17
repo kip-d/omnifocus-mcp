@@ -128,7 +128,7 @@ export class TestWriteClient {
     }
 
     // Transform tags to have __test- prefix
-    const tags = options.tags?.map(t => this.ensureTestTagPrefix(t)) || [];
+    const tags = options.tags?.map((t) => this.ensureTestTagPrefix(t)) || [];
 
     const result = await this.mcpClient.callTool('omnifocus_write', {
       mutation: {
@@ -159,7 +159,7 @@ export class TestWriteClient {
     this.createdProjectIds.push(projectId);
 
     // Track any created tags
-    tags.forEach(t => {
+    tags.forEach((t) => {
       if (!this.createdTagNames.includes(t)) {
         this.createdTagNames.push(t);
       }
@@ -175,25 +175,18 @@ export class TestWriteClient {
    * Create a task in a project (must be in sandbox).
    * All test tags are automatically prefixed with __test-.
    */
-  async createTestTask(
-    name: string,
-    projectId: string,
-    options: TaskOptions = {},
-  ): Promise<TestTask> {
+  async createTestTask(name: string, projectId: string, options: TaskOptions = {}): Promise<TestTask> {
     if (!this.sandboxFolderId) {
       throw new Error('Sandbox not initialized. Call ensureSandbox() first.');
     }
 
     // Verify project is in our tracked projects (created via this client)
     if (!this.createdProjectIds.includes(projectId)) {
-      throw new Error(
-        `Project ${projectId} was not created via TestWriteClient. ` +
-        'Use createTestProject() first.',
-      );
+      throw new Error(`Project ${projectId} was not created via TestWriteClient. ` + 'Use createTestProject() first.');
     }
 
     // Transform tags to have __test- prefix
-    const tags = options.tags?.map(t => this.ensureTestTagPrefix(t)) || [];
+    const tags = options.tags?.map((t) => this.ensureTestTagPrefix(t)) || [];
 
     const result = await this.mcpClient.callTool('omnifocus_write', {
       mutation: {
@@ -226,7 +219,7 @@ export class TestWriteClient {
     this.createdTaskIds.push(taskId);
 
     // Track any created tags
-    tags.forEach(t => {
+    tags.forEach((t) => {
       if (!this.createdTagNames.includes(t)) {
         this.createdTagNames.push(t);
       }
@@ -253,7 +246,7 @@ export class TestWriteClient {
     const taskName = name.startsWith(TEST_INBOX_PREFIX) ? name : `${TEST_INBOX_PREFIX} ${name}`;
 
     // Transform tags to have __test- prefix
-    const tags = options.tags?.map(t => this.ensureTestTagPrefix(t)) || [];
+    const tags = options.tags?.map((t) => this.ensureTestTagPrefix(t)) || [];
 
     const result = await this.mcpClient.callTool('omnifocus_write', {
       mutation: {
@@ -285,7 +278,7 @@ export class TestWriteClient {
     this.createdTaskIds.push(taskId);
 
     // Track any created tags
-    tags.forEach(t => {
+    tags.forEach((t) => {
       if (!this.createdTagNames.includes(t)) {
         this.createdTagNames.push(t);
       }
@@ -318,16 +311,13 @@ export class TestWriteClient {
    */
   async updateTask(taskId: string, changes: Partial<TaskOptions> & { name?: string }): Promise<void> {
     if (!this.createdTaskIds.includes(taskId)) {
-      throw new Error(
-        `Task ${taskId} was not created via TestWriteClient. ` +
-        'Cannot update tasks outside sandbox.',
-      );
+      throw new Error(`Task ${taskId} was not created via TestWriteClient. ` + 'Cannot update tasks outside sandbox.');
     }
 
     // Transform tags to have __test- prefix
     const processedChanges: Record<string, unknown> = { ...changes };
     if (changes.tags) {
-      processedChanges.tags = changes.tags.map(t => this.ensureTestTagPrefix(t));
+      processedChanges.tags = changes.tags.map((t) => this.ensureTestTagPrefix(t));
     }
 
     const result = await this.mcpClient.callTool('omnifocus_write', {
@@ -350,8 +340,7 @@ export class TestWriteClient {
   async completeTask(taskId: string): Promise<void> {
     if (!this.createdTaskIds.includes(taskId)) {
       throw new Error(
-        `Task ${taskId} was not created via TestWriteClient. ` +
-        'Cannot complete tasks outside sandbox.',
+        `Task ${taskId} was not created via TestWriteClient. ` + 'Cannot complete tasks outside sandbox.',
       );
     }
 
@@ -373,10 +362,7 @@ export class TestWriteClient {
    */
   async deleteTask(taskId: string): Promise<void> {
     if (!this.createdTaskIds.includes(taskId)) {
-      throw new Error(
-        `Task ${taskId} was not created via TestWriteClient. ` +
-        'Cannot delete tasks outside sandbox.',
-      );
+      throw new Error(`Task ${taskId} was not created via TestWriteClient. ` + 'Cannot delete tasks outside sandbox.');
     }
 
     const result = await this.mcpClient.callTool('omnifocus_write', {
@@ -392,7 +378,7 @@ export class TestWriteClient {
     }
 
     // Remove from tracking
-    this.createdTaskIds = this.createdTaskIds.filter(id => id !== taskId);
+    this.createdTaskIds = this.createdTaskIds.filter((id) => id !== taskId);
   }
 
   /**

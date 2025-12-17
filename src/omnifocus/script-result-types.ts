@@ -45,10 +45,12 @@ export function isScriptError<T>(result: ScriptResult<T>): result is ScriptError
 // Schema for task/project list results
 export const ListResultSchema = z.object({
   items: z.array(z.unknown()), // Will be tasks or projects
-  summary: z.object({
-    total: z.number(),
-    insights: z.array(z.string()).optional(),
-  }).optional(),
+  summary: z
+    .object({
+      total: z.number(),
+      insights: z.array(z.string()).optional(),
+    })
+    .optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -74,12 +76,6 @@ export function createScriptSuccess<T>(data: T): ScriptSuccess<T> {
   return { success: true, data };
 }
 
-export function createScriptError(
-  error: string,
-  context?: string,
-  details?: unknown,
-  stack?: string,
-): ScriptError {
+export function createScriptError(error: string, context?: string, details?: unknown, stack?: string): ScriptError {
   return { success: false, error, context, details, stack };
 }
-

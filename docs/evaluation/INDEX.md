@@ -3,29 +3,32 @@
 ## 📍 Quick Navigation
 
 ### For First-Time Users
+
 1. Start here: **[README.md](README.md)** - Overview and quick start
 2. Then read: **[EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md)** - Understanding the approach
 3. Finally: **[RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md)** - How to execute tests
 
 ### For Developers
+
 - **[RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md)** - Technical setup and execution
 - **[EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)** - Detailed question breakdown
 - **[../../evaluation.xml](../../evaluation.xml)** - The actual test questions
 
 ### For CI/CD Integration
+
 See **[RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md)** → "Advanced" section
 
 ---
 
 ## 📋 Document Overview
 
-| Document | Purpose | Read Time | Audience |
-|----------|---------|-----------|----------|
-| [README.md](README.md) | Overview, quick start, troubleshooting | 10 min | Everyone |
-| [EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md) | Methodology and planning | 15 min | Architects, Leads |
-| [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md) | Detailed question analysis | 20 min | Developers, QA |
-| [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) | Step-by-step execution | 15 min | DevOps, Developers |
-| [INDEX.md](INDEX.md) | This file - Navigation guide | 5 min | Everyone |
+| Document                                         | Purpose                                | Read Time | Audience           |
+| ------------------------------------------------ | -------------------------------------- | --------- | ------------------ |
+| [README.md](README.md)                           | Overview, quick start, troubleshooting | 10 min    | Everyone           |
+| [EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md) | Methodology and planning               | 15 min    | Architects, Leads  |
+| [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)   | Detailed question analysis             | 20 min    | Developers, QA     |
+| [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) | Step-by-step execution                 | 15 min    | DevOps, Developers |
+| [INDEX.md](INDEX.md)                             | This file - Navigation guide           | 5 min     | Everyone           |
 
 ---
 
@@ -35,18 +38,18 @@ All questions are in **[evaluation.xml](../../evaluation.xml)**
 
 ### Quick Reference
 
-| Q# | Question | Answer | Tools |
-|----|----------|--------|-------|
-| 1 | Most overdue review? | Westgate | projects |
-| 2 | Empty projects count? | 4 | projects |
-| 3 | Total tasks in PPO? | 44 | tasks |
-| 4 | Available tasks in PPO? | 41 | tasks |
-| 5 | Sequential project? | Blank Order Project | projects |
-| 6 | Flagged overdue count? | 2 | tasks |
-| 7 | Project most overdue? | Pending Purchase Orders | tasks |
-| 8 | Highest priority overdue? | Call Kurzweil support... | tasks |
-| 9 | On-hold projects? | 1 | projects |
-| 10 | Oldest active project? | Blank Order Project | projects |
+| Q#  | Question                  | Answer                   | Tools    |
+| --- | ------------------------- | ------------------------ | -------- |
+| 1   | Most overdue review?      | Westgate                 | projects |
+| 2   | Empty projects count?     | 4                        | projects |
+| 3   | Total tasks in PPO?       | 44                       | tasks    |
+| 4   | Available tasks in PPO?   | 41                       | tasks    |
+| 5   | Sequential project?       | Blank Order Project      | projects |
+| 6   | Flagged overdue count?    | 2                        | tasks    |
+| 7   | Project most overdue?     | Pending Purchase Orders  | tasks    |
+| 8   | Highest priority overdue? | Call Kurzweil support... | tasks    |
+| 9   | On-hold projects?         | 1                        | projects |
+| 10  | Oldest active project?    | Blank Order Project      | projects |
 
 For detailed breakdowns, see **[EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)**
 
@@ -71,18 +74,23 @@ For detailed breakdowns, see **[EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)**
 ## 🔧 Common Tasks
 
 ### "I want to run the evaluation"
+
 → Follow **[RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md)** → "Quick Start" section
 
 ### "I need to understand what's being tested"
+
 → Read **[EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)** → "Question Distribution"
 
 ### "My evaluation is failing, what do I do?"
+
 → Check **[README.md](README.md)** → "Troubleshooting" section
 
 ### "I want to add my own questions"
+
 → See **[README.md](README.md)** → "Pro Tips" section
 
 ### "How do I integrate this into CI/CD?"
+
 → Refer to **[RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md)** → "Advanced" section
 
 ---
@@ -105,23 +113,27 @@ omnifocus-mcp/
 ## 📖 Reading Paths
 
 ### Path 1: Quick Overview (20 min)
+
 - [README.md](README.md) quick start
 - [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md) question list
 - Done!
 
 ### Path 2: Full Understanding (45 min)
+
 - [README.md](README.md) - Overview
 - [EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md) - Methodology
 - [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md) - Details
 - [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) - Execution
 
 ### Path 3: Developer Deep Dive (60 min)
+
 - [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) - Setup
 - [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md) - Question details
 - [evaluation.xml](../../evaluation.xml) - Source questions
 - Manual testing with your tools
 
 ### Path 4: Troubleshooting (varies)
+
 - Start: [README.md](README.md) → Troubleshooting
 - Then: [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) → Specific section
 - Finally: [evaluation.xml](../../evaluation.xml) → Verify test data
@@ -131,6 +143,7 @@ omnifocus-mcp/
 ## ✅ Checklist
 
 ### Before Running Evaluation
+
 - [ ] MCP server built: `npm run build`
 - [ ] OmniFocus running
 - [ ] Python 3.8+ installed
@@ -139,12 +152,14 @@ omnifocus-mcp/
 - [ ] evaluation.xml exists and is valid
 
 ### Before Interpreting Results
+
 - [ ] Understand what each question tests
 - [ ] Know expected answers
 - [ ] Understand tool capabilities
 - [ ] Review baseline expectations
 
 ### After Receiving Results
+
 - [ ] Review accuracy percentage
 - [ ] Check which questions failed
 - [ ] Identify patterns in failures
@@ -155,10 +170,12 @@ omnifocus-mcp/
 ## 🎓 Learning Resources
 
 ### Inside This Suite
+
 - **[EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md)** - MCP evaluation best practices
 - **[EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md)** - Detailed question methodology
 
 ### External Resources
+
 - MCP Protocol: https://modelcontextprotocol.io/specification
 - MCP Builder Skill: See your skills directory
 - Anthropic Docs: https://docs.anthropic.com
@@ -168,15 +185,19 @@ omnifocus-mcp/
 ## 🆘 Support
 
 ### Quick Questions
+
 Check [README.md](README.md) → "Troubleshooting"
 
 ### Specific Tool Issues
+
 See [RUNNING_EVALUATIONS.md](RUNNING_EVALUATIONS.md) → "Troubleshooting"
 
 ### Understanding Questions
+
 Read [EVALUATION_SUMMARY.md](EVALUATION_SUMMARY.md) for each question
 
 ### Methodology Questions
+
 Refer to [EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md)
 
 ---
@@ -223,7 +244,7 @@ Refer to [EVALUATION_STRATEGY.md](EVALUATION_STRATEGY.md)
 
 ## 🎉 You're All Set!
 
-Ready to evaluate your OmniFocus MCP server? 
+Ready to evaluate your OmniFocus MCP server?
 
 **Start here**: [README.md](README.md)
 
@@ -233,4 +254,4 @@ Ready to evaluate your OmniFocus MCP server?
 
 ---
 
-*Last Updated: October 2025*
+_Last Updated: October 2025_

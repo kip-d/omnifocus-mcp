@@ -51,14 +51,14 @@ export class MCPTestClient {
   private pendingRequests: Map<number, (response: MCPResponse) => void> = new Map();
   private createdTaskIds: string[] = [];
   private createdProjectIds: string[] = [];
-  private sessionId: string = generateSessionId();  // Unique session tag for efficient cleanup
+  private sessionId: string = generateSessionId(); // Unique session tag for efficient cleanup
   private options: MCPTestClientOptions;
 
   private cleanupMetrics: CleanupMetrics = {
     startTime: 0,
     operations: 0,
     duration: 0,
-    lastCleanup: 0
+    lastCleanup: 0,
   };
 
   constructor(options: MCPTestClientOptions = {}) {
@@ -76,7 +76,7 @@ export class MCPTestClient {
 
     this.server = spawn('node', ['./dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env
+      env,
     });
 
     // Critical Issue #2: Defensive checks for stdio pipes
@@ -86,7 +86,7 @@ export class MCPTestClient {
 
     const rl = createInterface({
       input: this.server.stdout,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     });
 
     rl.on('line', (line: string) => {
@@ -109,9 +109,9 @@ export class MCPTestClient {
         capabilities: {},
         clientInfo: {
           name: 'mcp-test-client',
-          version: '1.0.0'
-        }
-      }
+          version: '1.0.0',
+        },
+      },
     };
 
     const initResponse = await this.sendRequest(initRequest);
@@ -124,10 +124,12 @@ export class MCPTestClient {
     if (!this.server.stdin) {
       throw new Error('Server stdin not available for notifications');
     }
-    this.server.stdin.write(JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'notifications/initialized'
-    }) + '\n');
+    this.server.stdin.write(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }) + '\n',
+    );
 
     await this.delay(100);
   }
@@ -185,7 +187,7 @@ export class MCPTestClient {
   }
 
   delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async callTool(toolName: string, params: any = {}): Promise<any> {
@@ -195,8 +197,8 @@ export class MCPTestClient {
       method: 'tools/call',
       params: {
         name: toolName,
-        arguments: params
-      }
+        arguments: params,
+      },
     };
 
     const response = await this.sendRequest(request);
@@ -227,9 +229,7 @@ export class MCPTestClient {
     // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
     // Prefix tags with __test- if not already prefixed
     const rawTags = properties.tags || [];
-    const prefixedTags = rawTags.map((t: string) =>
-      t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
-    );
+    const prefixedTags = rawTags.map((t: string) => (t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`));
     const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
 
     // Ensure task name has __TEST__ prefix for inbox tasks (sandbox compliance)
@@ -238,15 +238,15 @@ export class MCPTestClient {
     const taskParams = {
       name: taskName,
       ...properties,
-      tags: tags
+      tags: tags,
     };
 
     const result = await this.callTool('omnifocus_write', {
       mutation: {
         operation: 'create',
         target: 'task',
-        data: taskParams
-      }
+        data: taskParams,
+      },
     });
     if (result.success && result.data?.task?.taskId) {
       this.createdTaskIds.push(result.data.task.taskId);
@@ -258,23 +258,21 @@ export class MCPTestClient {
     // Include both TESTING_TAG (for paranoid fallback cleanup) and SESSION_ID (for fast cleanup)
     // Prefix tags with __test- if not already prefixed
     const rawTags = properties.tags || [];
-    const prefixedTags = rawTags.map((t: string) =>
-      t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`
-    );
+    const prefixedTags = rawTags.map((t: string) => (t.startsWith(TEST_TAG_PREFIX) ? t : `${TEST_TAG_PREFIX}${t}`));
     const tags = [...prefixedTags, TESTING_TAG, this.sessionId];
 
     const projectParams = {
       name: name,
       ...properties,
-      tags: tags
+      tags: tags,
     };
 
     const result = await this.callTool('omnifocus_write', {
       mutation: {
         operation: 'create',
         target: 'project',
-        data: projectParams
-      }
+        data: projectParams,
+      },
     });
     if (result.success && result.data?.project?.project?.id) {
       this.createdProjectIds.push(result.data.project.project.id);
@@ -316,7 +314,9 @@ export class MCPTestClient {
     this.cleanupMetrics.startTime = Date.now();
     this.cleanupMetrics.operations = 0;
 
-    console.log(`🧹 Quick cleanup: deleting ${this.createdTaskIds.length} tasks, ${this.createdProjectIds.length} projects`);
+    console.log(
+      `🧹 Quick cleanup: deleting ${this.createdTaskIds.length} tasks, ${this.createdProjectIds.length} projects`,
+    );
 
     // Clean up created tasks using bulk_delete
     if (this.createdTaskIds.length > 0) {
@@ -325,8 +325,8 @@ export class MCPTestClient {
           mutation: {
             operation: 'bulk_delete',
             target: 'task',
-            ids: this.createdTaskIds
-          }
+            ids: this.createdTaskIds,
+          },
         });
         this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
@@ -342,8 +342,8 @@ export class MCPTestClient {
           mutation: {
             operation: 'bulk_delete',
             target: 'project',
-            ids: this.createdProjectIds
-          }
+            ids: this.createdProjectIds,
+          },
         });
         this.cleanupMetrics.operations += this.createdProjectIds.length;
       } catch (error: unknown) {
@@ -358,7 +358,9 @@ export class MCPTestClient {
 
     this.cleanupMetrics.duration = Date.now() - this.cleanupMetrics.startTime;
     this.cleanupMetrics.lastCleanup = Date.now();
-    console.log(`  📊 Quick cleanup completed in ${this.cleanupMetrics.duration}ms (${this.cleanupMetrics.operations} operations)`);
+    console.log(
+      `  📊 Quick cleanup completed in ${this.cleanupMetrics.duration}ms (${this.cleanupMetrics.operations} operations)`,
+    );
   }
 
   async thoroughCleanup(): Promise<void> {
@@ -376,8 +378,8 @@ export class MCPTestClient {
           mutation: {
             operation: 'bulk_delete',
             target: 'task',
-            ids: this.createdTaskIds
-          }
+            ids: this.createdTaskIds,
+          },
         });
         this.cleanupMetrics.operations += this.createdTaskIds.length;
       } catch (error: unknown) {
@@ -393,8 +395,8 @@ export class MCPTestClient {
           mutation: {
             operation: 'bulk_delete',
             target: 'project',
-            ids: this.createdProjectIds
-          }
+            ids: this.createdProjectIds,
+          },
         });
         this.cleanupMetrics.operations += this.createdProjectIds.length;
       } catch (error: unknown) {
@@ -413,7 +415,9 @@ export class MCPTestClient {
 
     this.cleanupMetrics.duration = Date.now() - this.cleanupMetrics.startTime;
     this.cleanupMetrics.lastCleanup = Date.now();
-    console.log(`  📊 Thorough cleanup completed in ${this.cleanupMetrics.duration}ms (${this.cleanupMetrics.operations} operations)`);
+    console.log(
+      `  📊 Thorough cleanup completed in ${this.cleanupMetrics.duration}ms (${this.cleanupMetrics.operations} operations)`,
+    );
   }
 
   async cleanup(): Promise<void> {

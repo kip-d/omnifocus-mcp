@@ -2,16 +2,19 @@
 
 ## Executive Summary
 
-**Achievement**: Implemented OmniJS-first architecture that delivers **45.3x performance improvement** for task queries, reducing execution time from 13-22 seconds to 331ms for 45 inbox tasks.
+**Achievement**: Implemented OmniJS-first architecture that delivers **45.3x performance improvement** for task queries,
+reducing execution time from 13-22 seconds to 331ms for 45 inbox tasks.
 
 ## Problem Statement
 
 ### Original Issue
+
 - **Symptom**: Inbox query of 45 tasks taking 13-22 seconds (should be 1-2 seconds)
 - **Root Cause**: JXA per-property access overhead (16.662ms per property)
 - **Impact**: Poor user experience, test timeouts, unusable performance
 
 ### Profiling Data (from profile-jxa-bottlenecks.js)
+
 ```
 Database: 1,961 tasks
 Per-property access: 16.662ms
@@ -27,17 +30,20 @@ For 45 tasks × 10 properties:
 ## Solution: OmniJS-First Architecture
 
 ### Key Innovation
+
 Instead of JXA iteration with per-property access:
+
 ```javascript
 // OLD (JXA-first) - SLOW
 for (let i = 0; i < tasks.length; i++) {
-  taskObj.id = task.id();        // 16.662ms
-  taskObj.name = task.name();    // 16.662ms
+  taskObj.id = task.id(); // 16.662ms
+  taskObj.name = task.name(); // 16.662ms
   // ... 450 bridge crossings total!
 }
 ```
 
 Use OmniJS global collections with single bridge call:
+
 ```javascript
 // NEW (OmniJS-first) - FAST
 const omniJsScript = `
@@ -63,9 +69,11 @@ const result = app.evaluateJavascript(omniJsScript);
 ## Implementation
 
 ### File Created
+
 `src/omnifocus/scripts/tasks/list-tasks-v3-omnijs.ts`
 
 ### Modes Implemented
+
 - ✅ `inbox` - Inbox global collection
 - ✅ `today` - Tasks due today
 - ✅ `overdue` - Past-due tasks
@@ -74,7 +82,9 @@ const result = app.evaluateJavascript(omniJsScript);
 - ✅ `all` - All tasks (default)
 
 ### Field Support
+
 All standard fields supported:
+
 - Core: id, name, completed, flagged, inInbox
 - Status: blocked, available, taskStatus, next
 - Dates: dueDate, deferDate, plannedDate, added, modified, completionDate
@@ -84,16 +94,19 @@ All standard fields supported:
 ## Performance Results
 
 ### Test 1: 10 Inbox Tasks
+
 - **Execution time**: 301ms
 - **Per-task**: 30.10ms
 - **vs Profiled JXA**: 2.8x faster
 
 ### Test 2: 45 Inbox Tasks (Real-World Case)
+
 - **Execution time**: 331ms (0.33 seconds)
 - **Per-task**: 7.36ms
 - **vs Current Implementation**: **45.3x faster!**
 
 ### Performance Breakdown
+
 ```
 Total: 331ms
 ├─ JXA setup: ~50ms
@@ -109,11 +122,11 @@ Improvement: 45.3x faster
 
 ## Comparison to Original Estimates
 
-| Metric | Estimated | Actual | Notes |
-|--------|-----------|--------|-------|
-| Improvement factor | 13-22x | **45.3x** | Exceeded projection! |
-| 45 tasks execution | <1 second | **0.33s** | Well under target |
-| Per-task overhead | ~10ms | **7.36ms** | Better than expected |
+| Metric             | Estimated | Actual     | Notes                |
+| ------------------ | --------- | ---------- | -------------------- |
+| Improvement factor | 13-22x    | **45.3x**  | Exceeded projection! |
+| 45 tasks execution | <1 second | **0.33s**  | Well under target    |
+| Per-task overhead  | ~10ms     | **7.36ms** | Better than expected |
 
 ## Why It's Faster Than Expected
 
@@ -126,11 +139,13 @@ Improvement: 45.3x faster
 ## Code Quality
 
 ### Script Size
+
 - V3 implementation: ~350 lines (well documented)
 - Fixed-size when executed: ~5-10KB (no embedded IDs)
 - Well within 523KB JXA limit (0.9-1.9%)
 
 ### Pattern Based On
+
 - `src/omnifocus/scripts/perspectives/query-perspective.ts`
 - Proven pattern already in production
 - Same architectural approach as perspectives
@@ -138,6 +153,7 @@ Improvement: 45.3x faster
 ## Testing Performed
 
 ### Direct JXA Tests
+
 ```bash
 # Test V3 with 10 tasks
 /tmp/test-list-tasks-v3.js
@@ -149,6 +165,7 @@ Result: 331ms ✅
 ```
 
 ### Verification
+
 - ✅ Script compiles without errors
 - ✅ Returns correct task data
 - ✅ Field filtering works
@@ -159,12 +176,14 @@ Result: 331ms ✅
 ## Next Steps
 
 ### Phase 1: Integration (Immediate)
+
 1. Update TasksToolV2 to use LIST_TASKS_SCRIPT_V3
 2. Run full integration test suite
 3. Verify backward compatibility
 4. Test all query modes
 
 ### Phase 2: Validation (Short-term)
+
 1. Run benchmark-performance.ts with V3
 2. Compare all modes (today, overdue, flagged, available)
 3. Verify complex filters work
@@ -172,12 +191,14 @@ Result: 331ms ✅
 5. Performance regression testing
 
 ### Phase 3: Deployment (After validation)
+
 1. Replace LIST_TASKS_SCRIPT with LIST_TASKS_SCRIPT_V3
 2. Update documentation
 3. Deprecate old implementation
 4. Monitor production performance
 
 ### Phase 4: Extension (Future)
+
 1. Add complex filter support (tag filtering, project filtering, search)
 2. Implement pagination optimization
 3. Add recurring task analysis (if needed)
@@ -186,6 +207,7 @@ Result: 331ms ✅
 ## Risk Assessment
 
 ### Low Risk
+
 - ✅ Pattern already proven in query-perspective.ts
 - ✅ Script size well within limits
 - ✅ Fixed-size scripts avoid Issue #27
@@ -193,11 +215,13 @@ Result: 331ms ✅
 - ✅ Field filtering maintains flexibility
 
 ### Medium Risk
+
 - ⚠️ Integration testing needed
 - ⚠️ Edge cases may exist
 - ⚠️ Complex filters need validation
 
 ### Mitigation
+
 - Run full integration test suite before merging
 - Keep old implementation as fallback during transition
 - Progressive rollout by mode (inbox first)
@@ -221,9 +245,11 @@ Result: 331ms ✅
 ## Files Modified/Created
 
 ### Created
+
 - `src/omnifocus/scripts/tasks/list-tasks-v3-omnijs.ts` - New V3 implementation
 
 ### To Modify (Integration Phase)
+
 - `src/tools/tasks/TasksToolV2.ts` - Update to use V3 script
 - (Optional) `src/omnifocus/scripts/tasks/list-tasks.ts` - Deprecate or replace
 
@@ -237,7 +263,8 @@ Result: 331ms ✅
 
 ## Conclusion
 
-**This is a transformative performance improvement** that fundamentally changes the user experience for task queries. The 45.3x speedup means:
+**This is a transformative performance improvement** that fundamentally changes the user experience for task queries.
+The 45.3x speedup means:
 
 - Instant responses instead of 15+ second waits
 - Integration tests run much faster
@@ -256,6 +283,7 @@ Result: 331ms ✅
 ## Contact
 
 This breakthrough was achieved through:
+
 1. Systematic profiling of bottlenecks
 2. Analysis of proven patterns (query-perspective.ts)
 3. Iterative testing and refinement

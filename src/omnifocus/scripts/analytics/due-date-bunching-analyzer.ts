@@ -23,18 +23,15 @@ interface DueDateBunchingResult {
   recommendations: string[];
 }
 
-export function analyzeDueDateBunching(
-  tasks: Task[],
-  options: DueDateBunchingOptions,
-): DueDateBunchingResult {
+export function analyzeDueDateBunching(tasks: Task[], options: DueDateBunchingOptions): DueDateBunchingResult {
   const { threshold } = options;
 
   // Filter to incomplete tasks with due dates
-  const incompleteTasks = tasks.filter(t => !t.completed && t.dueDate);
+  const incompleteTasks = tasks.filter((t) => !t.completed && t.dueDate);
 
   // Group by date
   const dateGroups = new Map<string, Task[]>();
-  incompleteTasks.forEach(task => {
+  incompleteTasks.forEach((task) => {
     // Extract date portion - handles both ISO (2025-10-20T14:30:00Z) and local (2025-10-20 14:30) formats
     const dateOnly = task.dueDate!.substring(0, 10); // Always get first 10 chars (YYYY-MM-DD)
     if (!dateGroups.has(dateOnly)) {
@@ -47,7 +44,7 @@ export function analyzeDueDateBunching(
   const bunchedDates = Array.from(dateGroups.entries())
     .filter(([_, tasks]) => tasks.length > threshold)
     .map(([date, tasks]) => {
-      const projects = Array.from(new Set(tasks.map(t => t.project)));
+      const projects = Array.from(new Set(tasks.map((t) => t.project)));
       return {
         date,
         taskCount: tasks.length,
@@ -59,9 +56,7 @@ export function analyzeDueDateBunching(
   // Calculate average tasks per day
   const totalTasks = incompleteTasks.length;
   const totalDays = dateGroups.size;
-  const averageTasksPerDay = totalDays > 0
-    ? Math.round((totalTasks / totalDays) * 10) / 10
-    : 0;
+  const averageTasksPerDay = totalDays > 0 ? Math.round((totalTasks / totalDays) * 10) / 10 : 0;
 
   // Find peak day
   let peakDay: { date: string; count: number } | null = null;

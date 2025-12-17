@@ -3,6 +3,7 @@
 The MCP server includes built-in GTD workflow prompts that you can use with MCP clients.
 
 **Using Built-in Prompts:**
+
 - **Claude Desktop**: Click "+" button → "Add from omnifocus" → Select a GTD prompt
 - **ChatGPT Desktop**: Check if your version supports MCP prompts
 - **Manual workflow**: Follow the tool-based workflows below if your client doesn't support prompts yet
@@ -12,11 +13,13 @@ The MCP server includes built-in GTD workflow prompts that you can use with MCP 
 Here's how to conduct a GTD weekly review using the available tools:
 
 ### Step 1: Process Your Inbox
+
 ```
 Please check my OmniFocus inbox using list_tasks with inInbox: true
 ```
 
 ### Step 2: Review Completed Tasks
+
 ```
 Show me all tasks completed in the last 7 days using list_tasks with:
 - completed: true
@@ -26,6 +29,7 @@ Show me all tasks completed in the last 7 days using list_tasks with:
 ```
 
 ### Step 3: Identify Stale Projects
+
 ```
 List all active projects and show their task counts using list_projects with:
 - status: ["active"]
@@ -36,6 +40,7 @@ For each project with 0 available tasks, these might be stale and need review.
 ```
 
 ### Step 4: Review Project Health
+
 ```
 For projects that seem stale, get more details using list_tasks with:
 - projectId: [the project's ID]
@@ -46,11 +51,13 @@ This helps determine if the project needs next actions defined.
 ```
 
 ### Step 5: Check Overdue Tasks
+
 ```
 Show me all overdue tasks using get_overdue_tasks with limit: 50
 ```
 
 ### Step 6: Review Upcoming Week
+
 ```
 Show me tasks for the next 7 days using get_upcoming_tasks with:
 - days: 7
@@ -58,6 +65,7 @@ Show me tasks for the next 7 days using get_upcoming_tasks with:
 ```
 
 ### Step 7: Analyze Productivity
+
 ```
 Show me my productivity stats using get_productivity_stats
 ```
@@ -69,11 +77,13 @@ Show me my productivity stats using get_productivity_stats
 The server includes an enhanced `gtd_process_inbox` prompt that guides you through comprehensive inbox processing:
 
 **Basic Usage:**
+
 ```
 Use the gtd_process_inbox prompt to help me process my inbox
 ```
 
 **With Options:**
+
 ```
 Use gtd_process_inbox with:
 - batch_size: 10 (process 10 items at once)
@@ -83,6 +93,7 @@ Use gtd_process_inbox with:
 ```
 
 **What the Prompt Does:**
+
 1. **Retrieves inbox items** (oldest first, so nothing gets forgotten)
 2. **Guides through GTD framework** for each item:
    - CLARIFY: Is it actionable?
@@ -94,8 +105,8 @@ Use gtd_process_inbox with:
 5. **Provides summaries** after each batch
 6. **Continues** until inbox is empty
 
-**Quick Mode:**
-For rapid processing when you know what to do:
+**Quick Mode:** For rapid processing when you know what to do:
+
 ```
 Use gtd_process_inbox with quick_mode: true and batch_size: 20
 ```
@@ -153,16 +164,21 @@ Use batch_create with:
 ### Recommended Context Tags
 
 **Location Contexts:**
+
 - `@computer`, `@phone`, `@office`, `@home`, `@errands`, `@anywhere`
 
 **Energy Contexts:**
+
 - `@high-energy`, `@low-energy`
 
 **Time Contexts:**
+
 - `@15min`, `@30min`, `@1hour`, `@deep-work`
 
 **People Contexts:**
+
 - `@waiting-for`, `@agenda-{person}`, `@delegated-to-{person}`
 
 **Priority Contexts:**
+
 - `@urgent`, `@important`, `@someday`

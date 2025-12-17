@@ -16,7 +16,7 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // Simple test tools with minimal schemas
@@ -29,32 +29,32 @@ const tools = [
       properties: {
         message: {
           type: 'string',
-          description: 'Message to echo back'
-        }
+          description: 'Message to echo back',
+        },
       },
       required: ['message'],
-      additionalProperties: false
-    }
+      additionalProperties: false,
+    },
   },
   {
-    name: 'add_numbers', 
+    name: 'add_numbers',
     description: 'Add two numbers together',
     inputSchema: {
       type: 'object',
       properties: {
         a: {
           type: 'number',
-          description: 'First number'
+          description: 'First number',
         },
         b: {
-          type: 'number', 
-          description: 'Second number'
-        }
+          type: 'number',
+          description: 'Second number',
+        },
       },
       required: ['a', 'b'],
-      additionalProperties: false
-    }
-  }
+      additionalProperties: false,
+    },
+  },
 ];
 
 // Register tools/list handler
@@ -62,10 +62,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
 });
 
-// Register tools/call handler  
+// Register tools/call handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  
+
   switch (name) {
     case 'echo':
       return {
@@ -75,27 +75,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               success: true,
               echoed_message: args.message,
-              timestamp: new Date().toISOString()
-            })
-          }
-        ]
+              timestamp: new Date().toISOString(),
+            }),
+          },
+        ],
       };
-      
+
     case 'add_numbers':
       const sum = Number(args.a) + Number(args.b);
       return {
         content: [
           {
-            type: 'text', 
+            type: 'text',
             text: JSON.stringify({
               success: true,
               result: sum,
-              calculation: `${args.a} + ${args.b} = ${sum}`
-            })
-          }
-        ]
+              calculation: `${args.a} + ${args.b} = ${sum}`,
+            }),
+          },
+        ],
       };
-      
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

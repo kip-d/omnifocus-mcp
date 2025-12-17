@@ -1,7 +1,7 @@
 (() => {
   const app = Application('OmniFocus');
   app.includeStandardAdditions = true;
-  
+
   try {
     const jsCode = `
       (() => {
@@ -75,12 +75,12 @@
         return JSON.stringify(result);
       })()
     `;
-    
+
     const resultJson = app.evaluateJavascript(jsCode);
     const result = JSON.parse(resultJson);
-    
+
     return JSON.stringify(result, null, 2);
   } catch (e) {
     return JSON.stringify({ error: e.toString() });
   }
-})()
+})();

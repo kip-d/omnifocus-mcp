@@ -10,13 +10,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type {
-  FilterNode,
-  ComparisonNode,
-  ExistsNode,
-  AndNode,
-  OrNode,
-} from './types.js';
+import type { FilterNode, ComparisonNode, ExistsNode, AndNode, OrNode } from './types.js';
 import { KNOWN_FIELDS } from './types.js';
 
 // =============================================================================
@@ -62,7 +56,7 @@ const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array'> = {
   'task.note': 'string',
   'task.id.primaryKey': 'string',
   'task.containingProject': 'string',
-  'taskTags': 'array',
+  taskTags: 'array',
 };
 
 // =============================================================================
@@ -91,12 +85,7 @@ export function validateFilterAST(ast: FilterNode): ValidationResult {
 // NODE VALIDATION
 // =============================================================================
 
-function validateNode(
-  node: FilterNode,
-  errors: ValidationError[],
-  warnings: ValidationWarning[],
-  path: string,
-): void {
+function validateNode(node: FilterNode, errors: ValidationError[], warnings: ValidationWarning[], path: string): void {
   switch (node.type) {
     case 'literal':
       // Always valid
@@ -128,11 +117,7 @@ function validateNode(
   }
 }
 
-function validateComparisonNode(
-  node: ComparisonNode,
-  errors: ValidationError[],
-  path: string,
-): void {
+function validateComparisonNode(node: ComparisonNode, errors: ValidationError[], path: string): void {
   // Check field is known
   if (!isKnownField(node.field)) {
     errors.push({
@@ -154,11 +139,7 @@ function validateComparisonNode(
   }
 }
 
-function validateExistsNode(
-  node: ExistsNode,
-  errors: ValidationError[],
-  path: string,
-): void {
+function validateExistsNode(node: ExistsNode, errors: ValidationError[], path: string): void {
   if (!isKnownField(node.field)) {
     errors.push({
       code: 'UNKNOWN_FIELD',
@@ -194,10 +175,7 @@ function validateLogicalNode(
 /**
  * Detect contradictions like: completed: true AND completed: false
  */
-function detectContradictions(
-  ast: FilterNode,
-  errors: ValidationError[],
-): void {
+function detectContradictions(ast: FilterNode, errors: ValidationError[]): void {
   if (ast.type !== 'and') return;
 
   const comparisons = collectComparisons(ast);
@@ -228,7 +206,7 @@ function hasContradiction(values: unknown[]): boolean {
     return true;
   }
   // For other types, different values in AND is a contradiction
-  const uniqueValues = new Set(values.map(v => JSON.stringify(v)));
+  const uniqueValues = new Set(values.map((v) => JSON.stringify(v)));
   return uniqueValues.size > 1;
 }
 
@@ -261,15 +239,10 @@ function collectComparisons(node: FilterNode): ComparisonNode[] {
 /**
  * Detect tautologies like: completed: true OR completed: false
  */
-function detectTautologies(
-  ast: FilterNode,
-  warnings: ValidationWarning[],
-): void {
+function detectTautologies(ast: FilterNode, warnings: ValidationWarning[]): void {
   if (ast.type !== 'or') return;
 
-  const comparisons = ast.children.filter(
-    (c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==',
-  );
+  const comparisons = ast.children.filter((c): c is ComparisonNode => c.type === 'comparison' && c.operator === '==');
 
   const fieldValues = new Map<string, unknown[]>();
 

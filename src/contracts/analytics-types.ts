@@ -200,9 +200,7 @@ export function generateInsights(
     }
 
     // Generate insight
-    const priority = typeof config.priority === 'function'
-      ? config.priority(metrics)
-      : config.priority;
+    const priority = typeof config.priority === 'function' ? config.priority(metrics) : config.priority;
 
     insights.push({
       category: config.category,
@@ -218,10 +216,7 @@ export function generateInsights(
 /**
  * Generate recommendations from a list of configs
  */
-export function generateRecommendations(
-  metrics: AnalysisMetrics,
-  configs: RecommendationConfig[],
-): Recommendation[] {
+export function generateRecommendations(metrics: AnalysisMetrics, configs: RecommendationConfig[]): Recommendation[] {
   const recommendations: Recommendation[] = [];
 
   for (const config of configs) {
@@ -231,9 +226,7 @@ export function generateRecommendations(
     }
 
     // Generate recommendation
-    const priority = typeof config.priority === 'function'
-      ? config.priority(metrics)
-      : config.priority;
+    const priority = typeof config.priority === 'function' ? config.priority(metrics) : config.priority;
 
     recommendations.push({
       category: config.category,

@@ -4,11 +4,13 @@
 
 **Goal:** Consolidate 62 scripts to ~55 by eliminating duplicates and documenting helper pain points for Phase 2.
 
-**Architecture:** Top-down approach - trace from unified API → backend tools → scripts to understand actual usage, then consolidate based on context-dependent performance/simplicity tradeoffs.
+**Architecture:** Top-down approach - trace from unified API → backend tools → scripts to understand actual usage, then
+consolidate based on context-dependent performance/simplicity tradeoffs.
 
 **Tech Stack:** TypeScript, Vitest, JXA/OmniJS bridge, OmniFocus 4.6.1 API
 
-**Testing Philosophy:** Comprehensive - run full integration test suite after each consolidation to ensure no regressions.
+**Testing Philosophy:** Comprehensive - run full integration test suite after each consolidation to ensure no
+regressions.
 
 ---
 
@@ -19,6 +21,7 @@
 **Goal:** Map which backend tools each unified API operation routes to.
 
 **Files:**
+
 - Create: `docs/consolidation/call-graph.md`
 - Read: `src/tools/unified/compilers/QueryCompiler.ts`
 - Read: `src/tools/unified/compilers/MutationCompiler.ts`
@@ -64,24 +67,24 @@ Create `docs/consolidation/call-graph.md` with structure:
 ## omnifocus_read Routes
 
 | Query Type | Backend Tool | Notes |
-|------------|--------------|-------|
-| tasks | TasksTool | ... |
-| projects | ProjectsTool | ... |
-| ... | ... | ... |
+| ---------- | ------------ | ----- |
+| tasks      | TasksTool    | ...   |
+| projects   | ProjectsTool | ...   |
+| ...        | ...          | ...   |
 
 ## omnifocus_write Routes
 
-| Operation | Target | Backend Tool | Notes |
-|-----------|--------|--------------|-------|
-| create | task | ManageTaskTool | ... |
-| ... | ... | ... | ... |
+| Operation | Target | Backend Tool   | Notes |
+| --------- | ------ | -------------- | ----- |
+| create    | task   | ManageTaskTool | ...   |
+| ...       | ...    | ...            | ...   |
 
 ## omnifocus_analyze Routes
 
-| Analysis Type | Backend Tool | Notes |
-|---------------|--------------|-------|
-| productivity_stats | ProductivityStatsTool | ... |
-| ... | ... | ... |
+| Analysis Type      | Backend Tool          | Notes |
+| ------------------ | --------------------- | ----- |
+| productivity_stats | ProductivityStatsTool | ...   |
+| ...                | ...                   | ...   |
 ```
 
 **Step 5: Commit**
@@ -98,6 +101,7 @@ git commit -m "docs: map unified API to backend tools call graph"
 **Goal:** Map which scripts each backend tool uses.
 
 **Files:**
+
 - Modify: `docs/consolidation/call-graph.md`
 - Read: `src/tools/tasks/TasksTool.ts` (and similar for other tools)
 
@@ -130,14 +134,17 @@ Extend `docs/consolidation/call-graph.md`:
 ## Backend Tools → Scripts
 
 ### TasksTool
+
 - list-tasks.ts (or list-tasks-omniJS.ts?)
 - ... (document all scripts used)
 
 ### ProjectsTool
+
 - list-projects.ts
 - ...
 
 ### ManageTaskTool
+
 - create-task.ts (or create-task-with-bridge.ts?)
 - ...
 ```
@@ -167,6 +174,7 @@ git commit -m "docs: map backend tools to scripts"
 **Goal:** Find backend tools and scripts NOT called by unified API.
 
 **Files:**
+
 - Create: `docs/consolidation/dead-code.md`
 - Reference: `docs/consolidation/call-graph.md`
 
@@ -232,6 +240,7 @@ git commit -m "docs: identify potentially dead code"
 **Goal:** Set up document to track helper issues during consolidation.
 
 **Files:**
+
 - Create: `docs/consolidation/helper-pain-points.md`
 
 **Step 1: Create template**
@@ -242,6 +251,7 @@ git commit -m "docs: identify potentially dead code"
 **Purpose:** Track every helper issue encountered during Phase 1 consolidation to inform Phase 2 helper refactoring.
 
 **Instructions:** Add entries in real-time as you encounter issues. Include:
+
 - Date/time
 - Which script/task you were working on
 - What helper problem you encountered
@@ -256,6 +266,7 @@ git commit -m "docs: identify potentially dead code"
 **Context:** What were you trying to do?
 
 **Problem:** What helper issue did you encounter?
+
 - Missing function?
 - Awkward API?
 - Performance issue?
@@ -272,11 +283,11 @@ git commit -m "docs: identify potentially dead code"
 
 Track which helpers are actually used during consolidation:
 
-| Helper File | Used By Scripts | Frequency | Notes |
-|-------------|-----------------|-----------|-------|
-| helpers.ts | (track as we go) | ... | ... |
-| minimal-tag-bridge.ts | ... | ... | ... |
-| ... | ... | ... | ... |
+| Helper File           | Used By Scripts  | Frequency | Notes |
+| --------------------- | ---------------- | --------- | ----- |
+| helpers.ts            | (track as we go) | ...       | ...   |
+| minimal-tag-bridge.ts | ...              | ...       | ...   |
+| ...                   | ...              | ...       | ...   |
 ```
 
 **Step 2: Commit**
@@ -297,12 +308,14 @@ git commit -m "docs: create helper pain points tracking log"
 **Goal:** Migrate to OmniJS version exclusively for massive performance improvement.
 
 **Context:** Two versions exist:
+
 - `list-tasks.ts` (JXA - slower)
 - `list-tasks-omniJS.ts` (OmniJS bridge - 13-22x faster)
 
 **Decision:** Use OmniJS version (performance difference > 10x = always use faster).
 
 **Files:**
+
 - Read: `src/omnifocus/scripts/tasks/list-tasks.ts`
 - Read: `src/omnifocus/scripts/tasks/list-tasks-omniJS.ts`
 - Modify: Backend tool that imports list-tasks
@@ -328,11 +341,13 @@ Expected: See which version is currently imported.
 **Step 3: Update tool to use OmniJS version**
 
 In the tool file, change import from:
+
 ```typescript
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks.js';
 ```
 
 To:
+
 ```typescript
 import { LIST_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks/list-tasks-omniJS.js';
 ```
@@ -369,10 +384,9 @@ Add to `docs/consolidation/helper-pain-points.md`:
 ```markdown
 ### 2025-11-06 - list-tasks consolidation
 
-**Decision:** Migrated to list-tasks-omniJS.ts exclusively
-**Reason:** 13-22x performance improvement (>10x threshold)
-**Impact:** All task queries significantly faster
-**Helper observations:**
+**Decision:** Migrated to list-tasks-omniJS.ts exclusively **Reason:** 13-22x performance improvement (>10x threshold)
+**Impact:** All task queries significantly faster **Helper observations:**
+
 - OmniJS bridge pattern works well for bulk operations
 - No helper issues encountered in this consolidation
 ```
@@ -397,12 +411,14 @@ Using: src/omnifocus/scripts/tasks/list-tasks-omniJS.ts"
 **Goal:** Consolidate create-task.ts and create-task-with-bridge.ts into single implementation.
 
 **Context:** Two versions exist:
+
 - `create-task.ts` (239 LOC)
 - `create-task-with-bridge.ts` (180 LOC - simpler)
 
 **Decision:** Need to determine which handles tags/repetition correctly (bridge required for these).
 
 **Files:**
+
 - Read: `src/omnifocus/scripts/tasks/create-task.ts`
 - Read: `src/omnifocus/scripts/tasks/create-task-with-bridge.ts`
 - Modify: Backend tool (ManageTaskTool?)
@@ -443,17 +459,17 @@ Add to `docs/consolidation/helper-pain-points.md`:
 ```markdown
 ### 2025-11-06 - create-task analysis
 
-**Context:** Consolidating create-task variants
-**Observation:** Need to understand why two versions exist
-**Analysis:**
+**Context:** Consolidating create-task variants **Observation:** Need to understand why two versions exist **Analysis:**
+
 - create-task.ts: [document capabilities]
-- create-task-with-bridge.ts: [document capabilities]
-**Helper needs:** Tag and repetition operations require bridge helpers
+- create-task-with-bridge.ts: [document capabilities] **Helper needs:** Tag and repetition operations require bridge
+  helpers
 ```
 
 **Step 5: Make consolidation decision**
 
 Based on analysis:
+
 - If bridge version handles all cases → use it (simpler, 180 LOC)
 - If non-bridge has needed features → extract and add to bridge version
 - Document decision in helper-pain-points.md
@@ -512,12 +528,14 @@ Using: [chosen file]"
 **Goal:** Merge productivity-stats.ts and productivity-stats-v3.ts.
 
 **Context:**
+
 - `productivity-stats.ts` (321 LOC)
 - `productivity-stats-v3.ts` (283 LOC - 12% smaller)
 
 **Decision:** Likely use v3 (smaller), but verify functionality first.
 
 **Files:**
+
 - Read: `src/omnifocus/scripts/analytics/productivity-stats.ts`
 - Read: `src/omnifocus/scripts/analytics/productivity-stats-v3.ts`
 - Modify: `src/tools/analytics/ProductivityStatsTool.ts`
@@ -545,12 +563,11 @@ Add to `helper-pain-points.md`:
 ```markdown
 ### 2025-11-06 - productivity-stats consolidation
 
-**Context:** Two versions, v3 is 12% smaller (283 vs 321 LOC)
-**Observations:**
+**Context:** Two versions, v3 is 12% smaller (283 vs 321 LOC) **Observations:**
+
 - [Document key differences found in diff]
 - [Any date handling patterns?]
-- [Any helper usage differences?]
-**Decision:** [Which to keep and why]
+- [Any helper usage differences?] **Decision:** [Which to keep and why]
 ```
 
 **Step 4: Test both versions if unclear**
@@ -616,6 +633,7 @@ Using: productivity-stats-v3.ts"
 **Context:** Nearly identical (158 vs 156 LOC - only 2 line difference).
 
 **Files:**
+
 - Read: Both versions
 - Modify: `src/tools/analytics/TaskVelocityTool.ts`
 - Delete: One version
@@ -642,9 +660,8 @@ Add to `helper-pain-points.md`:
 ```markdown
 ### 2025-11-06 - task-velocity consolidation
 
-**Context:** Essentially identical (2 LOC difference)
-**Observation:** Why do near-duplicates exist?
-**Action:** Keep v3, delete other
+**Context:** Essentially identical (2 LOC difference) **Observation:** Why do near-duplicates exist? **Action:** Keep
+v3, delete other
 ```
 
 **Step 4: Use v3 (consistency with other v3 consolidations)**
@@ -687,10 +704,12 @@ Using: task-velocity-v3.ts"
 **Goal:** Merge list-tags.ts and list-tags-v3.ts.
 
 **Context:**
+
 - `list-tags.ts` (287 LOC)
 - `list-tags-v3.ts` (219 LOC - 24% smaller)
 
 **Files:**
+
 - Read: Both versions
 - Modify: Tags backend tool
 - Delete: Larger version
@@ -715,11 +734,10 @@ Add to `helper-pain-points.md`:
 ```markdown
 ### 2025-11-06 - list-tags consolidation
 
-**Context:** v3 is 24% smaller (219 vs 287 LOC)
-**Observations:**
+**Context:** v3 is 24% smaller (219 vs 287 LOC) **Observations:**
+
 - [Key differences]
-- [Any tag helper patterns worth noting?]
-**Decision:** Use v3 (smaller, likely more optimized)
+- [Any tag helper patterns worth noting?] **Decision:** Use v3 (smaller, likely more optimized)
 ```
 
 **Step 4: Update tool**
@@ -762,6 +780,7 @@ Using: list-tags-v3.ts"
 **Goal:** Remove backend tools and scripts not used by unified API.
 
 **Files:**
+
 - Reference: `docs/consolidation/dead-code.md`
 - Delete: Files identified as unused
 
@@ -833,6 +852,7 @@ All tests pass after removal."
 **Goal:** Review all helper observations to prepare for Phase 2.
 
 **Files:**
+
 - Read: `docs/consolidation/helper-pain-points.md`
 - Create: `docs/consolidation/phase1-summary.md`
 
@@ -843,6 +863,7 @@ cat docs/consolidation/helper-pain-points.md
 ```
 
 Count and categorize pain points:
+
 - Missing functions: X
 - Awkward APIs: Y
 - Performance issues: Z
@@ -851,6 +872,7 @@ Count and categorize pain points:
 **Step 2: Summarize helper usage**
 
 Based on consolidation work, document:
+
 - Which helpers were used most frequently
 - Which helpers had issues
 - Patterns that repeated across scripts
@@ -864,9 +886,8 @@ Based on consolidation work, document:
 
 ## Results
 
-**Scripts:** 62 → [actual final count] files
-**LOC Reduced:** [calculate from diffs]
-**Performance Improvements:**
+**Scripts:** 62 → [actual final count] files **LOC Reduced:** [calculate from diffs] **Performance Improvements:**
+
 - list-tasks: 13-22x faster (migrated to OmniJS)
 - [other improvements]
 
@@ -888,30 +909,32 @@ Based on consolidation work, document:
 **Total observations:** [count]
 
 **Categories:**
+
 - Missing functionality: [list key items]
 - Awkward APIs: [list key items]
 - Performance concerns: [list key items]
 - Duplication found: [list key items]
 
 **Most-used helpers:**
+
 1. helpers.ts - Used by X scripts
 2. minimal-tag-bridge.ts - Used by Y scripts
 3. [others]
 
 **Recommendations for Phase 2:**
+
 1. [Key insight 1]
 2. [Key insight 2]
 3. [Key insight 3]
 
 ## Test Status
 
-✅ All integration tests passing
-✅ No regressions introduced
-✅ Performance improvements validated
+✅ All integration tests passing ✅ No regressions introduced ✅ Performance improvements validated
 
 ## Next Steps
 
 Ready for Phase 2: Helper Refactoring
+
 - Use pain points to design new helper architecture
 - Address identified issues systematically
 - Build helpers we know we need (not guessing)
@@ -946,6 +969,7 @@ Summary of consolidation results, helper insights, and Phase 2 readiness."
 - ✅ Phase 1 summary document created
 
 **Metrics:**
+
 - Scripts: 62 → ~55-58 files
 - Integration tests: 100% passing
 - Helper observations: 20+ documented
@@ -956,11 +980,13 @@ Summary of consolidation results, helper insights, and Phase 2 readiness."
 ## Testing Strategy
 
 **After Each Consolidation:**
+
 1. Run affected tool's integration tests
 2. Run full integration test suite
 3. Verify all pass before proceeding
 
 **Commands:**
+
 ```bash
 # Build
 npm run build
@@ -976,13 +1002,15 @@ npm run test:integration
 npm test
 ```
 
-**Known Issue:** Integration tests may be flaky when run as full suite (see `docs/consolidation/flaky-integration-tests.md`). Run individually if full suite fails.
+**Known Issue:** Integration tests may be flaky when run as full suite (see
+`docs/consolidation/flaky-integration-tests.md`). Run individually if full suite fails.
 
 ---
 
 ## Helper Pain Points - Recording Guidelines
 
 **When to record:**
+
 - Every time you encounter a helper issue
 - When you write inline code that should be in a helper
 - When you find duplicated logic between helpers
@@ -990,13 +1018,14 @@ npm test
 - When helper causes performance issue
 
 **What to record:**
+
 - Context: Which script/task you're working on
 - Problem: Specific helper issue
 - Workaround: What you did instead
 - Ideal: What you wish existed
 
-**Why this matters:**
-Phase 2 success depends on Phase 1 observations. The more detailed your helper pain points log, the better the Phase 2 helper architecture will be.
+**Why this matters:** Phase 2 success depends on Phase 1 observations. The more detailed your helper pain points log,
+the better the Phase 2 helper architecture will be.
 
 ---
 

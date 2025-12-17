@@ -18,9 +18,11 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 
 ## Usage
 
-These definitions provide type information for all OmniFocus automation objects and methods available through JavaScript for Automation (JXA).
+These definitions provide type information for all OmniFocus automation objects and methods available through JavaScript
+for Automation (JXA).
 
 ### Key Classes:
+
 - `Task` - Core task management
 - `Project` - Project management
 - `Tag` - Tag management
@@ -29,6 +31,7 @@ These definitions provide type information for all OmniFocus automation objects 
 - `Perspective` - Perspective management
 
 ### Important Notes:
+
 1. These are the official API definitions from OmniGroup
 2. They represent the actual automation interface available in each OmniFocus version
 3. Some methods in these definitions may behave differently in JXA context
@@ -42,16 +45,19 @@ The `OmniFocus-extensions.d.ts` file contains properties not included in the off
 **Verified on OmniFocus 4.8.3** (October 2025) - All 14 properties tested ✅
 
 ### Project Extensions (4 properties)
+
 - `effectiveStatus: Project.Status` - Effective status considering parent folders
 - `singletonActionHolder: boolean` - Whether project contains singleton actions
 - `nextTask: Task | null` - Next actionable child task in this project
 - `defaultSingletonActionHolder: boolean` - Whether this is the default singleton action holder
 
 ### Tag Extensions (2 properties)
+
 - `availableTaskCount: number` - Number of available tasks with this tag or descendants
 - `remainingTaskCount: number` - Number of incomplete tasks with this tag or descendants
 
 ### Task Extensions (8 properties)
+
 - `numberOfTasks: number` - Total number of direct child tasks
 - `numberOfAvailableTasks: number` - Number of available direct child tasks
 - `numberOfCompletedTasks: number` - Number of completed direct child tasks
@@ -80,12 +86,15 @@ When a new version of OmniFocus is released, follow these steps to update the Ty
 
 1. Note the OmniFocus version number (e.g., 4.8.3) from **OmniFocus → About OmniFocus**
 2. Move the exported file to this directory:
+
    ```bash
    mv ~/Downloads/OmniFocus.ts src/omnifocus/api/OmniFocus-[VERSION]-d.ts
    ```
+
    Replace `[VERSION]` with the version number (e.g., `4.8.3`)
 
 3. Archive the previous current version:
+
    ```bash
    git mv src/omnifocus/api/OmniFocus.d.ts src/omnifocus/api/OmniFocus-[OLD_VERSION]-d.ts
    ```
@@ -130,6 +139,7 @@ git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
 ## Integration with MCP Bridge
 
 The MCP bridge uses these definitions as a reference for:
+
 - Correct method signatures
 - Available properties and methods
 - Type safety in our TypeScript code

@@ -126,7 +126,7 @@ async function runTest() {
       console.log(`   Name: ${movedTask.name}`);
       console.log(`   Parent ID: ${movedTask.parentTaskId || 'None'}`);
       console.log(`   Parent Name: ${movedTask.parentTaskName || 'None'}`);
-      
+
       if (movedTask.parentTaskId === parentTaskId) {
         console.log('\n✅ Parent-child relationship successfully established!');
       } else {
@@ -135,7 +135,6 @@ async function runTest() {
     }
 
     console.log('\n✨ Test completed!');
-
   } catch (error) {
     console.error('❌ Test error:', error);
   } finally {

@@ -40,7 +40,7 @@ export type MutationTarget = 'task' | 'project';
  */
 export interface DayOfWeek {
   day: 'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA';
-  position?: number;  // -1 = last, 1 = first, 2 = second, etc.
+  position?: number; // -1 = last, 1 = first, 2 = second, etc.
 }
 
 /**
@@ -114,10 +114,10 @@ export interface RepetitionRule {
 export interface TaskCreateData {
   name: string;
   note?: string;
-  project?: string | null;    // null = inbox
-  parentTaskId?: string;      // For subtask creation
+  project?: string | null; // null = inbox
+  parentTaskId?: string; // For subtask creation
   tags?: string[];
-  dueDate?: string;           // YYYY-MM-DD or YYYY-MM-DD HH:mm
+  dueDate?: string; // YYYY-MM-DD or YYYY-MM-DD HH:mm
   deferDate?: string;
   plannedDate?: string;
   flagged?: boolean;
@@ -138,7 +138,7 @@ export interface ProjectCreateData {
   flagged?: boolean;
   sequential?: boolean;
   status?: 'active' | 'on_hold' | 'completed' | 'dropped';
-  reviewInterval?: number;    // Days between reviews
+  reviewInterval?: number; // Days between reviews
 }
 
 // =============================================================================
@@ -151,10 +151,10 @@ export interface ProjectCreateData {
 export interface TaskUpdateData {
   name?: string;
   note?: string;
-  project?: string | null;    // null = move to inbox
-  tags?: string[];            // Replace all tags
-  addTags?: string[];         // Add to existing tags
-  removeTags?: string[];      // Remove from existing tags
+  project?: string | null; // null = move to inbox
+  tags?: string[]; // Replace all tags
+  addTags?: string[]; // Add to existing tags
+  removeTags?: string[]; // Remove from existing tags
   dueDate?: string | null;
   deferDate?: string | null;
   plannedDate?: string | null;
@@ -164,7 +164,7 @@ export interface TaskUpdateData {
   flagged?: boolean;
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean;
-  repetitionRule?: RepetitionRule;  // Set/update repetition rule
+  repetitionRule?: RepetitionRule; // Set/update repetition rule
   clearRepeatRule?: boolean;
   status?: 'completed' | 'dropped';
 }
@@ -221,7 +221,7 @@ export interface CompleteMutation {
   operation: 'complete';
   target: MutationTarget;
   id: string;
-  completionDate?: string;    // Custom completion date
+  completionDate?: string; // Custom completion date
   minimalResponse?: boolean;
 }
 
@@ -246,8 +246,8 @@ export interface BatchMutation {
     data?: TaskCreateData | ProjectCreateData;
     id?: string;
     changes?: TaskUpdateData | ProjectUpdateData;
-    tempId?: string;          // Temporary ID for parent references
-    parentTempId?: string;    // Reference parent by temp ID
+    tempId?: string; // Temporary ID for parent references
+    parentTempId?: string; // Reference parent by temp ID
   }>;
   createSequentially?: boolean;
   atomicOperation?: boolean;
@@ -286,11 +286,11 @@ export interface MutationResult {
   success: boolean;
   operation: MutationOperation;
   target: MutationTarget;
-  id?: string;                // ID of created/updated/deleted item
-  ids?: string[];             // IDs for batch/bulk operations
+  id?: string; // ID of created/updated/deleted item
+  ids?: string[]; // IDs for batch/bulk operations
   changes?: Record<string, { from: unknown; to: unknown }>;
   error?: string;
-  tempIdMapping?: Record<string, string>;  // For batch operations
+  tempIdMapping?: Record<string, string>; // For batch operations
 }
 
 // =============================================================================
@@ -354,10 +354,7 @@ export function validateMutation(mutation: TaskMutation): MutationValidationResu
   };
 }
 
-function validateCreateMutation(
-  mutation: CreateMutation,
-  errors: MutationValidationError[],
-): void {
+function validateCreateMutation(mutation: CreateMutation, errors: MutationValidationError[]): void {
   if (!mutation.data) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -398,10 +395,7 @@ function validateCreateMutation(
   }
 }
 
-function validateUpdateMutation(
-  mutation: UpdateMutation,
-  errors: MutationValidationError[],
-): void {
+function validateUpdateMutation(mutation: UpdateMutation, errors: MutationValidationError[]): void {
   if (!mutation.id) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -441,10 +435,7 @@ function validateUpdateMutation(
   }
 }
 
-function validateCompleteMutation(
-  mutation: CompleteMutation,
-  errors: MutationValidationError[],
-): void {
+function validateCompleteMutation(mutation: CompleteMutation, errors: MutationValidationError[]): void {
   if (!mutation.id) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -462,10 +453,7 @@ function validateCompleteMutation(
   }
 }
 
-function validateDeleteMutation(
-  mutation: DeleteMutation,
-  errors: MutationValidationError[],
-): void {
+function validateDeleteMutation(mutation: DeleteMutation, errors: MutationValidationError[]): void {
   if (!mutation.id) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -475,10 +463,7 @@ function validateDeleteMutation(
   }
 }
 
-function validateBatchMutation(
-  mutation: BatchMutation,
-  errors: MutationValidationError[],
-): void {
+function validateBatchMutation(mutation: BatchMutation, errors: MutationValidationError[]): void {
   if (!mutation.operations || mutation.operations.length === 0) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -515,10 +500,7 @@ function validateBatchMutation(
   });
 }
 
-function validateBulkDeleteMutation(
-  mutation: BulkDeleteMutation,
-  errors: MutationValidationError[],
-): void {
+function validateBulkDeleteMutation(mutation: BulkDeleteMutation, errors: MutationValidationError[]): void {
   if (!mutation.ids || mutation.ids.length === 0) {
     errors.push({
       code: 'MISSING_FIELD',
@@ -539,10 +521,7 @@ function validateBulkDeleteMutation(
 const VALID_FREQUENCIES = ['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'];
 const VALID_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
-function validateRepetitionRule(
-  rule: RepetitionRule,
-  errors: MutationValidationError[],
-): void {
+function validateRepetitionRule(rule: RepetitionRule, errors: MutationValidationError[]): void {
   // Validate frequency
   if (!VALID_FREQUENCIES.includes(rule.frequency)) {
     errors.push({

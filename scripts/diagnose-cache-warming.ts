@@ -24,7 +24,7 @@ function startMCPServer(): Promise<void> {
     console.log('Starting MCP server with cache warming...');
     mcpProcess = spawn('node', ['dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env } // Cache warming enabled by default
+      env: { ...process.env }, // Cache warming enabled by default
     });
 
     const startTime = performance.now();
@@ -52,7 +52,7 @@ function startMCPServer(): Promise<void> {
             warmingResults.push({
               operation,
               duration: parseInt(duration, 10),
-              success: status === '✓'
+              success: status === '✓',
             });
           }
         }
@@ -91,8 +91,8 @@ function startMCPServer(): Promise<void> {
         params: {
           protocolVersion: '2025-06-18',
           capabilities: {},
-          clientInfo: { name: 'diagnostic', version: '1.0.0' }
-        }
+          clientInfo: { name: 'diagnostic', version: '1.0.0' },
+        },
       };
       mcpProcess.stdin.write(JSON.stringify(initRequest) + '\n');
     }, 100);
@@ -160,7 +160,7 @@ async function main() {
     await startMCPServer();
 
     // Keep server alive briefly to ensure all logs are captured
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Display breakdown of cache warming operations
     console.log('\n📊 Cache Warming Breakdown:');
@@ -178,7 +178,9 @@ async function main() {
         // Scale bars relative to slowest operation (max 100 chars)
         const barLength = Math.ceil((result.duration / slowest) * 100);
         const bar = '█'.repeat(barLength);
-        console.log(`  ${statusIcon} ${result.operation.padEnd(15)} ${result.duration.toString().padStart(6)}ms  ${bar}`);
+        console.log(
+          `  ${statusIcon} ${result.operation.padEnd(15)} ${result.duration.toString().padStart(6)}ms  ${bar}`,
+        );
       }
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -194,13 +196,12 @@ async function main() {
         console.log(`  ⚠️  Actual parallel time not captured`);
       }
 
-      console.log(`  Success rate: ${warmingResults.filter(r => r.success).length}/${warmingResults.length}`);
+      console.log(`  Success rate: ${warmingResults.filter((r) => r.success).length}/${warmingResults.length}`);
     }
 
     await stopMCPServer();
     console.log('\n✓ Diagnostics complete');
     process.exit(0);
-
   } catch (error) {
     console.error('Diagnostic failed:', error);
     await stopMCPServer();

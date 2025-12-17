@@ -12,13 +12,13 @@ describe('AnalysisCompiler', () => {
         scope: {
           dateRange: {
             start: '2025-01-01',
-            end: '2025-01-31'
-          }
+            end: '2025-01-31',
+          },
         },
         params: {
           groupBy: 'week',
-        }
-      }
+        },
+      },
     };
 
     const compiled = compiler.compile(input);
@@ -35,8 +35,8 @@ describe('AnalysisCompiler', () => {
         params: {
           text: 'Follow up with Sarah',
           extractTasks: true,
-        }
-      }
+        },
+      },
     };
 
     const compiled = compiler.compile(input);

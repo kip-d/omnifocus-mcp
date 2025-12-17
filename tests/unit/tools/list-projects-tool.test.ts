@@ -6,10 +6,10 @@ import { Logger } from '../../../src/utils/Logger.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../src/omnifocus/OmniAutomation.js', () => ({
-  OmniAutomation: vi.fn()
+  OmniAutomation: vi.fn(),
 }));
 vi.mock('../../../src/utils/Logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -17,7 +17,7 @@ vi.mock('../../../src/utils/Logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('ProjectsTool', () => {
@@ -28,18 +28,18 @@ describe('ProjectsTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn(),
       set: vi.fn(),
       clear: vi.fn(),
     };
-    
+
     mockOmniAutomation = {
       buildScript: vi.fn(),
       executeJson: vi.fn(),
     };
-    
+
     mockLogger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -63,14 +63,14 @@ describe('ProjectsTool', () => {
           total_available: 0,
           returned_count: 0,
           optimization: 'omnijs_v3',
-          stats_included: true
-        }
+          stats_included: true,
+        },
       });
 
       const result = await tool.executeValidated({
         operation: 'list',
         limit: 10,
-        details: true
+        details: true,
       });
 
       // v3 implementation uses executeJson directly with generated script string
@@ -86,7 +86,7 @@ describe('ProjectsTool', () => {
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
-        metadata: {}
+        metadata: {},
       });
 
       const result = await tool.executeValidated({ operation: 'list', limit: 10 });
@@ -100,28 +100,30 @@ describe('ProjectsTool', () => {
       mockCache.get.mockReturnValue(null);
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
-        projects: [{
-          id: 'proj-1',
-          name: 'Test Project',
-          status: 'active',
-          flagged: false,
-          numberOfTasks: 10,
-          stats: {
-            active: 7,
-            completed: 3,
-            total: 10,
-            completionRate: 30,
-            overdue: 2,
-            flagged: 1,
-            estimatedHours: '5.5',
-            lastActivityDate: '2025-07-24T00:00:00.000Z'
-          }
-        }],
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Test Project',
+            status: 'active',
+            flagged: false,
+            numberOfTasks: 10,
+            stats: {
+              active: 7,
+              completed: 3,
+              total: 10,
+              completionRate: 30,
+              overdue: 2,
+              flagged: 1,
+              estimatedHours: '5.5',
+              lastActivityDate: '2025-07-24T00:00:00.000Z',
+            },
+          },
+        ],
         metadata: {
           total_available: 1,
           returned_count: 1,
-          limit_applied: 10
-        }
+          limit_applied: 10,
+        },
       });
 
       const result = await tool.executeValidated({ operation: 'list', includeStats: true });
@@ -140,15 +142,17 @@ describe('ProjectsTool', () => {
       mockCache.get.mockReturnValue(null);
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
-        projects: [{
-          id: 'proj-1',
-          name: 'Test Project',
-          status: 'active',
-          flagged: false,
-          numberOfTasks: 10
-          // No stats property
-        }],
-        metadata: {}
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Test Project',
+            status: 'active',
+            flagged: false,
+            numberOfTasks: 10,
+            // No stats property
+          },
+        ],
+        metadata: {},
       });
 
       const result = await tool.executeValidated({ operation: 'list', includeStats: false });
@@ -162,24 +166,26 @@ describe('ProjectsTool', () => {
       mockCache.get.mockReturnValue(null);
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
-        projects: [{
-          id: 'proj-1',
-          name: 'Empty Project',
-          status: 'active',
-          flagged: false,
-          numberOfTasks: 0,
-          stats: {
-            active: 0,
-            completed: 0,
-            total: 0,
-            completionRate: 0,
-            overdue: 0,
-            flagged: 0,
-            estimatedHours: null,
-            lastActivityDate: null
-          }
-        }],
-        metadata: {}
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Empty Project',
+            status: 'active',
+            flagged: false,
+            numberOfTasks: 0,
+            stats: {
+              active: 0,
+              completed: 0,
+              total: 0,
+              completionRate: 0,
+              overdue: 0,
+              flagged: 0,
+              estimatedHours: null,
+              lastActivityDate: null,
+            },
+          },
+        ],
+        metadata: {},
       });
 
       const result = await tool.executeValidated({ operation: 'list', details: true });
@@ -195,15 +201,17 @@ describe('ProjectsTool', () => {
       mockCache.get.mockReturnValue(null);
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
-        projects: [{
-          id: 'proj-1',
-          name: 'Project with Error',
-          status: 'active',
-          flagged: false,
-          numberOfTasks: 10,
-          statsError: 'Failed to collect statistics'
-        }],
-        metadata: {}
+        projects: [
+          {
+            id: 'proj-1',
+            name: 'Project with Error',
+            status: 'active',
+            flagged: false,
+            numberOfTasks: 10,
+            statsError: 'Failed to collect statistics',
+          },
+        ],
+        metadata: {},
       });
 
       const result = await tool.executeValidated({ operation: 'list', details: true });
@@ -219,7 +227,7 @@ describe('ProjectsTool', () => {
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
-        metadata: {}
+        metadata: {},
       });
 
       await tool.executeValidated({ operation: 'list', limit: 10, details: true });
@@ -236,7 +244,7 @@ describe('ProjectsTool', () => {
       // v3 script returns { projects: [...], metadata: {...} } directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         projects: [],
-        metadata: {}
+        metadata: {},
       });
 
       await tool.executeValidated({ operation: 'list', limit: 10 });
@@ -257,18 +265,20 @@ describe('ProjectsTool', () => {
       // Simulate faster response without stats
       mockOmniAutomation.executeJson.mockResolvedValueOnce({
         projects: [{ id: 'p1', name: 'Project 1', numberOfTasks: 5 }],
-        metadata: { query_time_ms: 500 }
+        metadata: { query_time_ms: 500 },
       });
 
       // Simulate slower response with stats
       mockOmniAutomation.executeJson.mockResolvedValueOnce({
-        projects: [{
-          id: 'p1',
-          name: 'Project 1',
-          numberOfTasks: 5,
-          stats: { active: 3, completed: 2, total: 5, completionRate: 40 }
-        }],
-        metadata: { query_time_ms: 1500 }
+        projects: [
+          {
+            id: 'p1',
+            name: 'Project 1',
+            numberOfTasks: 5,
+            stats: { active: 3, completed: 2, total: 5, completionRate: 40 },
+          },
+        ],
+        metadata: { query_time_ms: 1500 },
       });
 
       const result1 = await tool.executeValidated({ operation: 'list', details: false });

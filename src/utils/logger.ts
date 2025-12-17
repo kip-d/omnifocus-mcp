@@ -39,16 +39,7 @@ export function generateCorrelationId(): string {
 }
 
 // Keys whose values should be redacted in logs
-const SENSITIVE_KEYS = new Set([
-  'name',
-  'note',
-  'notes',
-  'taskName',
-  'projectName',
-  'tagName',
-  'title',
-  'script',
-]);
+const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectName', 'tagName', 'title', 'script']);
 
 // Best‑effort deep redaction that preserves structure for debugging
 export function redactArgs<T>(value: T, depth = 0): T {
@@ -60,7 +51,7 @@ export function redactArgs<T>(value: T, depth = 0): T {
   if (Array.isArray(value)) {
     // Array mapping preserves generic type structure
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return value.map(v => redactArgs(v, depth + 1)) as unknown as T;
+    return value.map((v) => redactArgs(v, depth + 1)) as unknown as T;
   }
 
   const out: Record<string, unknown> = {};
@@ -138,22 +129,22 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
     },
     error: (message: string, ...args: unknown[]) => {
       // Enhanced error logging with better context preservation
-      const errArg = args && args.length === 1 && args[0] instanceof Error
-        ? (args[0] as Error).message
-        : undefined;
+      const errArg = args && args.length === 1 && args[0] instanceof Error ? (args[0] as Error).message : undefined;
       const finalMessage = errArg ? `${message} ${errArg}` : message;
       logWithContext('error', finalMessage, useStructuredLogging ? args : [], undefined);
 
       // Log error metrics for telemetry (privacy-safe - no user data)
       if (typeof args[0] === 'object' && args[0] !== null && 'errorType' in args[0]) {
         const errorData = args[0] as { errorType?: string; recoverable?: boolean };
-        stderr.write(`[ERROR_METRIC] ${JSON.stringify({
-          timestamp: new Date().toISOString(),
-          context,
-          errorType: errorData.errorType,
-          recoverable: errorData.recoverable,
-          correlationId: initialContext?.correlationId,
-        })}\n`);
+        stderr.write(
+          `[ERROR_METRIC] ${JSON.stringify({
+            timestamp: new Date().toISOString(),
+            context,
+            errorType: errorData.errorType,
+            recoverable: errorData.recoverable,
+            correlationId: initialContext?.correlationId,
+          })}\n`,
+        );
       }
     },
     debug: (message: string, ...args: unknown[]) => {
@@ -190,4 +181,3 @@ export function createCorrelatedLogger(
     metadata,
   });
 }
-

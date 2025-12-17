@@ -30,25 +30,27 @@ const CreateDataSchema = z.object({
 });
 
 // Update changes schema
-const UpdateChangesSchema = z.object({
-  name: z.string().optional(),
-  note: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  addTags: z.array(z.string()).optional(),
-  removeTags: z.array(z.string()).optional(),
-  dueDate: z.union([z.string(), z.null()]).optional(),
-  deferDate: z.union([z.string(), z.null()]).optional(),
-  plannedDate: z.union([z.string(), z.null()]).optional(),
-  clearDueDate: z.boolean().optional(),
-  clearDeferDate: z.boolean().optional(),
-  clearPlannedDate: z.boolean().optional(),
-  flagged: z.boolean().optional(),
-  status: z.enum(['completed', 'dropped']).optional(),
-  project: z.union([z.string(), z.null()]).optional(),
-  estimatedMinutes: z.number().optional(),
-  clearEstimatedMinutes: z.boolean().optional(), // Bug #18: Clear estimated time
-  clearRepeatRule: z.boolean().optional(), // Bug #19: Clear repetition rule
-}).passthrough();
+const UpdateChangesSchema = z
+  .object({
+    name: z.string().optional(),
+    note: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    addTags: z.array(z.string()).optional(),
+    removeTags: z.array(z.string()).optional(),
+    dueDate: z.union([z.string(), z.null()]).optional(),
+    deferDate: z.union([z.string(), z.null()]).optional(),
+    plannedDate: z.union([z.string(), z.null()]).optional(),
+    clearDueDate: z.boolean().optional(),
+    clearDeferDate: z.boolean().optional(),
+    clearPlannedDate: z.boolean().optional(),
+    flagged: z.boolean().optional(),
+    status: z.enum(['completed', 'dropped']).optional(),
+    project: z.union([z.string(), z.null()]).optional(),
+    estimatedMinutes: z.number().optional(),
+    clearEstimatedMinutes: z.boolean().optional(), // Bug #18: Clear estimated time
+    clearRepeatRule: z.boolean().optional(), // Bug #19: Clear repetition rule
+  })
+  .passthrough();
 
 // Enhanced batch item schema with hierarchical relationships
 const BatchItemDataSchema = CreateDataSchema.extend({

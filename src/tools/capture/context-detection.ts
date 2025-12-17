@@ -17,7 +17,20 @@ interface ContextPattern {
 const LOCATION_CONTEXTS: ContextPattern[] = [
   {
     tag: '@computer',
-    keywords: ['email', 'code', 'program', 'document', 'spreadsheet', 'write', 'research', 'online', 'website', 'type', 'draft', 'edit'],
+    keywords: [
+      'email',
+      'code',
+      'program',
+      'document',
+      'spreadsheet',
+      'write',
+      'research',
+      'online',
+      'website',
+      'type',
+      'draft',
+      'edit',
+    ],
   },
   {
     tag: '@phone',
@@ -168,7 +181,7 @@ function matchesContext(text: string, context: ContextPattern): boolean {
   }
 
   // Check keywords
-  return context.keywords.some(keyword => {
+  return context.keywords.some((keyword) => {
     const regex = new RegExp(`\\b${keyword}\\b`, 'i');
     return regex.test(text);
   });
@@ -221,4 +234,3 @@ function detectPeopleTags(text: string): string[] {
 
   return tags;
 }
-

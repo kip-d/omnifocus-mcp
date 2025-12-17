@@ -39,4 +39,3 @@ describe('tools/index registerTools', () => {
     await expect(callHandler({ params: { name: 'unknown', arguments: {} } })).rejects.toBeInstanceOf(McpError);
   });
 });
-

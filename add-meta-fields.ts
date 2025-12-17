@@ -209,10 +209,7 @@ for (const [filePath, { content, after }] of Object.entries(toolsMeta)) {
 
     // Find the schema line and add meta after it
     if (fileContent.includes(after)) {
-      fileContent = fileContent.replace(
-        after,
-        `${after}${content}`
-      );
+      fileContent = fileContent.replace(after, `${after}${content}`);
       writeFileSync(fullPath, fileContent, 'utf-8');
       console.log(`✅ Updated ${filePath}`);
       processedCount++;

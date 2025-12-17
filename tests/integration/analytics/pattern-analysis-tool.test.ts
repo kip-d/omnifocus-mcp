@@ -19,7 +19,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('analyzes review gaps pattern', async () => {
     const result = await tool.execute({
       patterns: ['review_gaps'],
-      options: {}
+      options: {},
     });
 
     // OmniFocus needs to be running with data for integration tests
@@ -41,7 +41,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('analyzes next actions pattern', async () => {
     const result = await tool.execute({
       patterns: ['next_actions'],
-      options: {}
+      options: {},
     });
 
     if (!result.success) {
@@ -62,7 +62,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('analyzes wip limits pattern', async () => {
     const result = await tool.execute({
       patterns: ['wip_limits'],
-      options: { wipLimit: 5 }
+      options: { wipLimit: 5 },
     });
 
     if (!result.success) {
@@ -83,7 +83,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('analyzes due date bunching pattern', async () => {
     const result = await tool.execute({
       patterns: ['due_date_bunching'],
-      options: { bunchingThreshold: 8 }
+      options: { bunchingThreshold: 8 },
     });
 
     if (!result.success) {
@@ -104,7 +104,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('analyzes all GTD patterns together', async () => {
     const result = await tool.execute({
       patterns: ['review_gaps', 'next_actions', 'wip_limits', 'due_date_bunching'],
-      options: { wipLimit: 5, bunchingThreshold: 8 }
+      options: { wipLimit: 5, bunchingThreshold: 8 },
     });
 
     if (!result.success) {
@@ -131,7 +131,7 @@ describe('PatternAnalysisTool - GTD Patterns Integration', () => {
   it('includes GTD patterns when "all" is specified', async () => {
     const result = await tool.execute({
       patterns: ['all'],
-      options: {}
+      options: {},
     });
 
     if (!result.success) {

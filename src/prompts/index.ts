@@ -30,7 +30,7 @@ export function registerPrompts(server: Server): void {
     new QuickReferencePrompt(),
   ];
 
-  promptInstances.forEach(prompt => {
+  promptInstances.forEach((prompt) => {
     prompts.set(prompt.name, prompt);
   });
 
@@ -38,7 +38,7 @@ export function registerPrompts(server: Server): void {
   server.setRequestHandler(ListPromptsRequestSchema, () => {
     logger.info('Listing available prompts');
 
-    const promptList = Array.from(prompts.values()).map(prompt => prompt.toPrompt());
+    const promptList = Array.from(prompts.values()).map((prompt) => prompt.toPrompt());
 
     return {
       prompts: promptList,
@@ -53,19 +53,13 @@ export function registerPrompts(server: Server): void {
 
     const prompt = prompts.get(name);
     if (!prompt) {
-      throw new McpError(
-        ErrorCode.InvalidRequest,
-        `Unknown prompt: ${name}`,
-      );
+      throw new McpError(ErrorCode.InvalidRequest, `Unknown prompt: ${name}`);
     }
 
     // Validate required arguments
     for (const arg of prompt.arguments) {
       if (arg.required && !(arg.name in args)) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          `Missing required argument: ${arg.name}`,
-        );
+        throw new McpError(ErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
       }
     }
 

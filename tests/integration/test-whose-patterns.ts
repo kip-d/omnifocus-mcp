@@ -115,7 +115,7 @@ const testScript = `
 
 async function testWhosePatterns() {
   console.log('Testing whose() implementation patterns...\n');
-  
+
   try {
     const result = await omni.execute(testScript);
     console.log('Results:', JSON.stringify(result, null, 2));

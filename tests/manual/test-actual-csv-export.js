@@ -6,46 +6,46 @@ import { spawn } from 'child_process';
 
 async function testActualExport() {
   const omni = new OmniAutomation();
-  
+
   console.log('Testing actual export script...\n');
-  
+
   try {
     // Build the script
     const script = omni.buildScript(EXPORT_TASKS_SCRIPT, {
       format: 'csv',
       filter: { completed: false, limit: 2 },
-      fields: null
+      fields: null,
     });
-    
+
     console.log('Script built, length:', script.length);
-    
+
     // Test the script directly
     const proc = spawn('osascript', ['-l', 'JavaScript'], {
-      timeout: 30000 // 30 seconds
+      timeout: 30000, // 30 seconds
     });
-    
+
     let stdout = '';
     let stderr = '';
     let errorOccurred = false;
-    
+
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
     });
-    
+
     proc.stderr.on('data', (data) => {
       stderr += data.toString();
     });
-    
+
     proc.on('error', (error) => {
       errorOccurred = true;
       console.error('Process error:', error);
     });
-    
+
     const timeout = setTimeout(() => {
       console.log('Script timed out after 30 seconds');
       proc.kill();
     }, 30000);
-    
+
     proc.on('close', (code) => {
       clearTimeout(timeout);
       console.log('Exit code:', code);
@@ -65,11 +65,10 @@ async function testActualExport() {
         console.log('No output received');
       }
     });
-    
+
     // Write the script
     proc.stdin.write(script);
     proc.stdin.end();
-    
   } catch (error) {
     console.error('Error:', error.message);
   }

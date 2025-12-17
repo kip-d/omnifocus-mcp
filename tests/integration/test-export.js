@@ -20,7 +20,7 @@ async function sendRequest(id, method, params) {
 
 async function testExportDirect() {
   console.log('Testing export functionality directly...\n');
-  
+
   const serverPath = path.join(__dirname, '../../dist/index.js');
   const proc = spawn('node', [serverPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -31,8 +31,8 @@ async function testExportDirect() {
 
   proc.stdout.on('data', (data) => {
     output += data.toString();
-    const lines = output.split('\n').filter(line => line.trim());
-    lines.forEach(line => {
+    const lines = output.split('\n').filter((line) => line.trim());
+    lines.forEach((line) => {
       if (line.trim()) {
         try {
           const response = JSON.parse(line);
@@ -51,33 +51,37 @@ async function testExportDirect() {
 
   // Initialize with proper params
   console.log('→ Sending: initialize');
-  proc.stdin.write(await sendRequest(1, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'test-client', version: '1.0.0' }
-  }) + '\n');
-  
+  proc.stdin.write(
+    (await sendRequest(1, 'initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+    })) + '\n',
+  );
+
   // Wait a bit
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
   // Test export
   console.log('→ Sending: tools/call export_tasks');
-  proc.stdin.write(await sendRequest(2, 'tools/call', {
-    name: 'export_tasks',
-    arguments: {
-      format: 'json',
-      filter: {
-        completed: false,
-        limit: 2
-      }
-    }
-  }) + '\n');
-  
+  proc.stdin.write(
+    (await sendRequest(2, 'tools/call', {
+      name: 'export_tasks',
+      arguments: {
+        format: 'json',
+        filter: {
+          completed: false,
+          limit: 2,
+        },
+      },
+    })) + '\n',
+  );
+
   // Wait for response
-  await new Promise(resolve => setTimeout(resolve, 5000));
-  
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
   proc.kill();
-  
+
   // Ensure clean exit
   console.log('\n✅ Export test completed!');
   process.exit(0);

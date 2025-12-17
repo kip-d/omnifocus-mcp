@@ -3,9 +3,7 @@
  * These interfaces define the data structures returned by V2 tools
  */
 
-import type {
-  StandardResponseV2,
-} from '../utils/response-format.js';
+import type { StandardResponseV2 } from '../utils/response-format.js';
 
 // Task-related types
 export interface TaskV2 {
@@ -95,26 +93,32 @@ export interface OverdueAnalysisDataV2 {
     }>;
     insights: Record<string, unknown>;
   };
-  groupedAnalysis: Record<string, {
-    count: number;
-    averageDaysOverdue?: number;
-    tasks?: unknown[];
-  }>;
+  groupedAnalysis: Record<
+    string,
+    {
+      count: number;
+      averageDaysOverdue?: number;
+      tasks?: unknown[];
+    }
+  >;
 }
-
 
 // Task Management Operation types
 export interface TaskOperationDataV2 {
-  task?: TaskV2 | {  // Can be full TaskV2 or simplified structure
-    id: string;
-    name: string;
-    [key: string]: unknown;
-  };
+  task?:
+    | TaskV2
+    | {
+        // Can be full TaskV2 or simplified structure
+        id: string;
+        name: string;
+        [key: string]: unknown;
+      };
   operation?: 'create' | 'update' | 'delete' | 'complete' | 'bulk_complete' | 'bulk_delete';
   changes?: Record<string, unknown>;
   affected_count?: number; // For bulk operations
   taskIds?: string[]; // For bulk operations
-  result?: {  // Some operations return a result object
+  result?: {
+    // Some operations return a result object
     success: boolean;
     message?: string;
     data?: unknown;
@@ -244,4 +248,3 @@ export interface ReviewsDataV2 {
 }
 
 export type ReviewsResponseV2 = StandardResponseV2<ReviewsDataV2>;
-

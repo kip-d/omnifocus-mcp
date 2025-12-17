@@ -55,10 +55,7 @@ export interface GenerateFilterCodeError {
  * @param target - The target language ('jxa' or 'omnijs')
  * @returns Generated code string, or throws if validation fails
  */
-export function generateFilterCode(
-  filter: TaskFilter,
-  target: EmitTarget = 'omnijs',
-): string {
+export function generateFilterCode(filter: TaskFilter, target: EmitTarget = 'omnijs'): string {
   const result = generateFilterCodeSafe(filter, target);
 
   if (!result.success) {
@@ -90,7 +87,7 @@ export function generateFilterCodeSafe(
   if (!validation.valid) {
     return {
       success: false,
-      error: validation.errors.map(e => e.message).join('; '),
+      error: validation.errors.map((e) => e.message).join('; '),
       validation,
       ast,
     };
@@ -117,10 +114,7 @@ export function generateFilterCodeSafe(
  * @param target - The target language ('jxa' or 'omnijs')
  * @returns JavaScript function code string
  */
-export function generateFilterFunction(
-  filter: TaskFilter,
-  target: EmitTarget = 'omnijs',
-): string {
+export function generateFilterFunction(filter: TaskFilter, target: EmitTarget = 'omnijs'): string {
   const code = generateFilterCode(filter, target);
 
   // Wrap in a function that receives task and taskTags
@@ -139,9 +133,7 @@ export function generateFilterFunction(
  * @param filter - The TaskFilter to transform
  * @returns Complete filter code block ready to embed in OmniJS script
  */
-export function generateFilterBlock(
-  filter: TaskFilter,
-): string {
+export function generateFilterBlock(filter: TaskFilter): string {
   const code = generateFilterCode(filter, 'omnijs');
 
   return `

@@ -20,11 +20,14 @@ export type BatchItem = BatchItemMinimal;
 export interface DependencyNode {
   item: BatchItem;
   dependencies: string[]; // tempIds this item depends on
-  dependents: string[];   // tempIds that depend on this item
+  dependents: string[]; // tempIds that depend on this item
 }
 
 export class DependencyGraphError extends Error {
-  constructor(message: string, public readonly details?: unknown) {
+  constructor(
+    message: string,
+    public readonly details?: unknown,
+  ) {
     super(message);
     this.name = 'DependencyGraphError';
   }
@@ -42,10 +45,7 @@ export class DependencyGraph {
     // Build nodes
     for (const item of items) {
       if (this.nodes.has(item.tempId)) {
-        throw new DependencyGraphError(
-          `Duplicate temporary ID: ${item.tempId}`,
-          { tempId: item.tempId },
-        );
+        throw new DependencyGraphError(`Duplicate temporary ID: ${item.tempId}`, { tempId: item.tempId });
       }
 
       this.nodes.set(item.tempId, {
@@ -62,10 +62,10 @@ export class DependencyGraph {
         const parentNode = this.nodes.get(item.parentTempId);
 
         if (!parentNode) {
-          throw new DependencyGraphError(
-            `Unknown parent temporary ID: ${item.parentTempId}`,
-            { tempId: item.tempId, parentTempId: item.parentTempId },
-          );
+          throw new DependencyGraphError(`Unknown parent temporary ID: ${item.parentTempId}`, {
+            tempId: item.tempId,
+            parentTempId: item.parentTempId,
+          });
         }
 
         // Add dependency
@@ -93,10 +93,7 @@ export class DependencyGraph {
       }
 
       if (inProgress.has(tempId)) {
-        throw new DependencyGraphError(
-          'Circular dependency detected',
-          { tempId, cycle: Array.from(inProgress) },
-        );
+        throw new DependencyGraphError('Circular dependency detected', { tempId, cycle: Array.from(inProgress) });
       }
 
       inProgress.add(tempId);
@@ -134,10 +131,9 @@ export class DependencyGraph {
       }
 
       if (inProgress.has(tempId)) {
-        throw new DependencyGraphError(
-          `Circular dependency detected: ${path.join(' -> ')} -> ${tempId}`,
-          { cycle: [...path, tempId] },
-        );
+        throw new DependencyGraphError(`Circular dependency detected: ${path.join(' -> ')} -> ${tempId}`, {
+          cycle: [...path, tempId],
+        });
       }
 
       inProgress.add(tempId);
@@ -182,7 +178,7 @@ export class DependencyGraph {
     }
 
     return node.dependents
-      .map(id => this.nodes.get(id)?.item)
+      .map((id) => this.nodes.get(id)?.item)
       .filter((item): item is BatchItem => item !== undefined);
   }
 

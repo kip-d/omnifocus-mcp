@@ -13,7 +13,7 @@ const testScript = `(() => {
 console.log('Running super simple count test...\n');
 
 const proc = spawn('osascript', ['-l', 'JavaScript'], {
-  timeout: 5000
+  timeout: 5000,
 });
 
 let stdout = '';

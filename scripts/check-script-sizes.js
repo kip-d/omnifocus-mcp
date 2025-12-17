@@ -10,7 +10,8 @@ import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 // Import our size monitoring utilities
-const { analyzeScriptSize, EMPIRICAL_LIMITS, DEFAULT_THRESHOLDS } = await import('./dist/omnifocus/utils/script-size-monitor.js');
+const { analyzeScriptSize, EMPIRICAL_LIMITS, DEFAULT_THRESHOLDS } =
+  await import('./dist/omnifocus/utils/script-size-monitor.js');
 
 console.log('📏 OmniFocus Script Size Check\n');
 
@@ -22,7 +23,7 @@ function checkScriptsInDirectory(dir, pattern = /\.ts$/) {
     const files = readdirSync(dir);
     const scripts = [];
 
-    files.forEach(file => {
+    files.forEach((file) => {
       if (pattern.test(file)) {
         const filePath = join(dir, file);
         try {
@@ -34,12 +35,13 @@ function checkScriptsInDirectory(dir, pattern = /\.ts$/) {
           if (scriptMatches) {
             scriptMatches.forEach((match, index) => {
               const scriptContent = match.match(/`([\s\S]*?)`/)?.[1] || '';
-              if (scriptContent.length > 1000) { // Only check substantial scripts
+              if (scriptContent.length > 1000) {
+                // Only check substantial scripts
                 scripts.push({
                   file: file,
                   scriptIndex: index,
                   content: scriptContent,
-                  size: scriptContent.length
+                  size: scriptContent.length,
                 });
               }
             });
@@ -49,7 +51,7 @@ function checkScriptsInDirectory(dir, pattern = /\.ts$/) {
               file: file,
               scriptIndex: 0,
               content: content,
-              size: content.length
+              size: content.length,
             });
           }
         } catch (error) {
@@ -73,14 +75,14 @@ async function analyzeAllScripts() {
     'src/omnifocus/scripts/tasks',
     'src/omnifocus/scripts/projects',
     'src/omnifocus/scripts/analytics',
-    'src/omnifocus/scripts/shared'
+    'src/omnifocus/scripts/shared',
   ];
 
   let allScripts = [];
 
   for (const dir of scriptDirs) {
     const scripts = checkScriptsInDirectory(dir);
-    allScripts.push(...scripts.map(s => ({ ...s, directory: dir })));
+    allScripts.push(...scripts.map((s) => ({ ...s, directory: dir })));
   }
 
   if (allScripts.length === 0) {
@@ -96,15 +98,20 @@ async function analyzeAllScripts() {
 
   allScripts.forEach((script, index) => {
     const analysis = analyzeScriptSize(script.content, 'jxa');
-    const status = analysis.threshold === 'safe' ? '✅' :
-                   analysis.threshold === 'info' ? 'ℹ️' :
-                   analysis.threshold === 'warn' ? '⚠️' : '🚨';
+    const status =
+      analysis.threshold === 'safe'
+        ? '✅'
+        : analysis.threshold === 'info'
+          ? 'ℹ️'
+          : analysis.threshold === 'warn'
+            ? '⚠️'
+            : '🚨';
 
-    const scriptName = script.scriptIndex > 0
-      ? `${script.file}[${script.scriptIndex}]`
-      : script.file;
+    const scriptName = script.scriptIndex > 0 ? `${script.file}[${script.scriptIndex}]` : script.file;
 
-    console.log(`${(index + 1).toString().padStart(2)}. ${status} ${scriptName.padEnd(35)}: ${analysis.sizeKB}KB (${analysis.percentOfLimit}%)`);
+    console.log(
+      `${(index + 1).toString().padStart(2)}. ${status} ${scriptName.padEnd(35)}: ${analysis.sizeKB}KB (${analysis.percentOfLimit}%)`,
+    );
 
     if (analysis.threshold !== 'safe') {
       console.log(`     ${analysis.message}`);

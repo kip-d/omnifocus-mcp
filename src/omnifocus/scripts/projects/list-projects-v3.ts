@@ -32,13 +32,7 @@ export function buildListProjectsScriptV3(params: {
   performanceMode?: 'normal' | 'lite';
   fields?: string[];
 }): string {
-  const {
-    filter = {},
-    limit = 50,
-    includeStats = false,
-    performanceMode = 'normal',
-    fields = [],
-  } = params;
+  const { filter = {}, limit = 50, includeStats = false, performanceMode = 'normal', fields = [] } = params;
 
   // Determine which fields to include
   const shouldInclude = (fieldName: string): boolean => {
@@ -153,7 +147,9 @@ export function buildListProjectsScriptV3(params: {
 
               // Performance mode: include task counts only in normal mode
               if (performanceMode !== 'lite') {
-                ${shouldInclude('taskCounts') ? `
+                ${
+                  shouldInclude('taskCounts')
+                    ? `
                 const rootTask = project.rootTask;
                 if (rootTask) {
                   proj.taskCounts = {
@@ -162,9 +158,13 @@ export function buildListProjectsScriptV3(params: {
                     completed: rootTask.numberOfCompletedTasks || 0
                   };
                 }
-                ` : ''}
+                `
+                    : ''
+                }
 
-                ${shouldInclude('nextTask') ? `
+                ${
+                  shouldInclude('nextTask')
+                    ? `
                 const nextTask = project.nextTask;
                 if (nextTask) {
                   proj.nextTask = {
@@ -174,7 +174,9 @@ export function buildListProjectsScriptV3(params: {
                     dueDate: nextTask.dueDate ? nextTask.dueDate.toISOString() : null
                   };
                 }
-                ` : ''}
+                `
+                    : ''
+                }
               }
 
               // Include stats if requested (expensive)

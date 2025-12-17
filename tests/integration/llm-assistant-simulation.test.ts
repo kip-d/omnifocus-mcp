@@ -82,9 +82,7 @@ class LLMAssistantSimulator {
     // Extract the actual result from MCP response format
     const content = response.result?.content;
     if (content && content[0]) {
-      return content[0].type === 'json'
-        ? content[0].json
-        : JSON.parse(content[0].text);
+      return content[0].type === 'json' ? content[0].json : JSON.parse(content[0].text);
     }
     return response.result;
   }
@@ -107,7 +105,10 @@ class LLMAssistantSimulator {
 
       const handleData = (data: Buffer) => {
         try {
-          const lines = data.toString().split('\n').filter(line => line.trim());
+          const lines = data
+            .toString()
+            .split('\n')
+            .filter((line) => line.trim());
           for (const line of lines) {
             try {
               const response = JSON.parse(line);
@@ -161,20 +162,20 @@ d('LLM Assistant Simulation Tests', () => {
       const tools = await assistant.discoverTools();
 
       // Verify we have the essential tools an LLM would need
-      const toolNames = tools.map(t => t.name);
+      const toolNames = tools.map((t) => t.name);
       expect(toolNames).toContain('tasks');
       expect(toolNames).toContain('projects');
       expect(toolNames).toContain('manage_task');
       expect(toolNames).toContain('productivity_stats');
     });
 
-    it('should get today\'s tasks like an LLM assistant would', async () => {
+    it("should get today's tasks like an LLM assistant would", async () => {
       // Step 1: LLM calls tasks tool to see what's due today
       const todaysTasks = await assistant.callTool('tasks', {
         mode: 'today',
         includeOverdue: true,
         includeDetails: true,
-        limit: 20
+        limit: 20,
       });
 
       expect(todaysTasks).toHaveProperty('success');
@@ -197,7 +198,7 @@ d('LLM Assistant Simulation Tests', () => {
       const overdueAnalysis = await assistant.callTool('analyze_overdue', {
         includeRecentlyCompleted: false,
         groupBy: 'project',
-        limit: 50
+        limit: 50,
       });
 
       expect(overdueAnalysis).toHaveProperty('success');
@@ -213,7 +214,7 @@ d('LLM Assistant Simulation Tests', () => {
       const stats = await assistant.callTool('productivity_stats', {
         period: 'week',
         includeProjectStats: true,
-        includeTagStats: false
+        includeTagStats: false,
       });
 
       expect(stats).toHaveProperty('success');
@@ -239,7 +240,7 @@ d('LLM Assistant Simulation Tests', () => {
         note: 'Planning vacation to Europe - flights, hotels, activities',
         status: 'active',
         folder: SANDBOX_FOLDER_NAME,
-        tags: [`${TEST_TAG_PREFIX}llm-sim`]
+        tags: [`${TEST_TAG_PREFIX}llm-sim`],
       });
 
       expect(projectResult).toHaveProperty('success');
@@ -272,7 +273,7 @@ d('LLM Assistant Simulation Tests', () => {
           operation: 'create',
           name: task.name,
           projectId: createdProjectId,
-          tags: task.tags
+          tags: task.tags,
         });
 
         expect(taskResult).toHaveProperty('success');
@@ -294,15 +295,13 @@ d('LLM Assistant Simulation Tests', () => {
       const projectsList = await assistant.callTool('projects', {
         operation: 'list',
         includeCompleted: false,
-        limit: 50
+        limit: 50,
       });
 
       expect(projectsList).toHaveProperty('success');
 
       if (projectsList.success) {
-        const vacation = projectsList.data.items.find(
-          (p: any) => p.name === 'Plan Summer Vacation 2025'
-        );
+        const vacation = projectsList.data.items.find((p: any) => p.name === 'Plan Summer Vacation 2025');
         expect(vacation).toBeDefined();
         if (vacation) {
           expect(vacation.id).toBe(createdProjectId);
@@ -318,7 +317,7 @@ d('LLM Assistant Simulation Tests', () => {
         operation: 'list',
         includeUsageStats: true,
         sortBy: 'usage',
-        includeEmpty: false
+        includeEmpty: false,
       });
 
       expect(tagsResult).toHaveProperty('success');
@@ -334,7 +333,7 @@ d('LLM Assistant Simulation Tests', () => {
       const productivity = await assistant.callTool('productivity_stats', {
         period: 'week',
         includeTagStats: true,
-        includeProjectStats: false
+        includeProjectStats: false,
       });
 
       expect(productivity).toHaveProperty('success');
@@ -349,14 +348,14 @@ d('LLM Assistant Simulation Tests', () => {
       const overdue = await assistant.callTool('analyze_overdue', {
         includeRecentlyCompleted: true,
         groupBy: 'project',
-        limit: 100
+        limit: 100,
       });
 
       // Step 2: Get this week's productivity
       const thisWeek = await assistant.callTool('productivity_stats', {
         period: 'week',
         includeProjectStats: true,
-        includeTagStats: true
+        includeTagStats: true,
       });
 
       // Step 3: Get upcoming tasks for planning
@@ -364,7 +363,7 @@ d('LLM Assistant Simulation Tests', () => {
         mode: 'upcoming',
         days: 7,
         includeToday: false,
-        limit: 50
+        limit: 50,
       });
 
       // Step 4: Check active projects
@@ -372,7 +371,7 @@ d('LLM Assistant Simulation Tests', () => {
         operation: 'list',
         includeCompleted: false,
         details: true,
-        limit: 20
+        limit: 20,
       });
 
       // All calls should succeed or fail gracefully
@@ -396,7 +395,7 @@ d('LLM Assistant Simulation Tests', () => {
         const result = await assistant.callTool('manage_task', {
           operation: 'update',
           // Missing required taskId
-          name: 'This should fail'
+          name: 'This should fail',
         });
         // If the call succeeded, check if it returned an error in the response
         if (result.success === false) {
@@ -427,7 +426,7 @@ d('LLM Assistant Simulation Tests', () => {
       // Step 1: Get overdue tasks
       const overdue = await assistant.callTool('analyze_overdue', {
         limit: 10,
-        groupBy: 'age'
+        groupBy: 'age',
       });
 
       if (!overdue.success) {
@@ -449,7 +448,7 @@ d('LLM Assistant Simulation Tests', () => {
       const flagResult = await assistant.callTool('manage_task', {
         operation: 'update',
         taskId: mostOverdueTask.id,
-        flagged: true
+        flagged: true,
       });
 
       expect(flagResult).toHaveProperty('success');
@@ -468,7 +467,7 @@ d('LLM Assistant Simulation Tests', () => {
       const quickTest = await assistant.callTool('tasks', {
         mode: 'today',
         limit: 1,
-        details: false
+        details: false,
       });
 
       if (!quickTest.success) {
@@ -480,13 +479,13 @@ d('LLM Assistant Simulation Tests', () => {
       const tasksList = await assistant.callTool('tasks', {
         mode: 'all',
         limit: 50, // Small limit for speed
-        details: false
+        details: false,
       });
 
       const productivity = await assistant.callTool('productivity_stats', {
         period: 'week',
         includeProjectStats: false,
-        includeTagStats: false
+        includeTagStats: false,
       });
 
       // Verify both tools respond successfully

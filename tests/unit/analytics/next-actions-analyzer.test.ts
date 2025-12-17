@@ -6,7 +6,7 @@ describe('analyzeNextActions', () => {
     const tasks = [
       { id: 't1', name: 'Call John about meeting', completed: false },
       { id: 't2', name: 'Write proposal draft', completed: false },
-      { id: 't3', name: 'Review PR #123', completed: false }
+      { id: 't3', name: 'Review PR #123', completed: false },
     ];
 
     const result = analyzeNextActions(tasks);
@@ -20,7 +20,7 @@ describe('analyzeNextActions', () => {
     const tasks = [
       { id: 't1', name: 'Mom', completed: false },
       { id: 't2', name: 'Project ideas', completed: false },
-      { id: 't3', name: 'Stuff', completed: false }
+      { id: 't3', name: 'Stuff', completed: false },
     ];
 
     const result = analyzeNextActions(tasks);
@@ -34,7 +34,7 @@ describe('analyzeNextActions', () => {
   it('skips completed tasks', () => {
     const tasks = [
       { id: 't1', name: 'Vague', completed: true },
-      { id: 't2', name: 'Call Sarah', completed: false }
+      { id: 't2', name: 'Call Sarah', completed: false },
     ];
 
     const result = analyzeNextActions(tasks);
@@ -43,9 +43,7 @@ describe('analyzeNextActions', () => {
   });
 
   it('provides suggestions for vague tasks', () => {
-    const tasks = [
-      { id: 't1', name: 'Mom', completed: false }
-    ];
+    const tasks = [{ id: 't1', name: 'Mom', completed: false }];
 
     const result = analyzeNextActions(tasks);
 

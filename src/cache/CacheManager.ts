@@ -144,8 +144,8 @@ export class CacheManager {
   public clear(category?: keyof CacheConfig): void {
     if (category) {
       // Clear specific category
-      const keysToDelete = Array.from(this.cache.keys()).filter(key => key.startsWith(category + ':'));
-      keysToDelete.forEach(key => {
+      const keysToDelete = Array.from(this.cache.keys()).filter((key) => key.startsWith(category + ':'));
+      keysToDelete.forEach((key) => {
         this.cache.delete(key);
         this.stats.evictions++;
       });
@@ -184,7 +184,7 @@ export class CacheManager {
       return Promise.resolve(cached);
     }
 
-    return fetcher().then(data => {
+    return fetcher().then((data) => {
       this.set(category, key, data);
       return data;
     });
@@ -198,7 +198,7 @@ export class CacheManager {
     let count = 0;
     for (const [cacheKey] of this.cache) {
       if (cacheKey.startsWith('tasks:')) {
-        const shouldInvalidate = patterns.some(pattern => {
+        const shouldInvalidate = patterns.some((pattern) => {
           switch (pattern) {
             case 'today':
               return cacheKey.includes('tasks_today') || cacheKey.includes('todays_agenda');
@@ -263,10 +263,10 @@ export class CacheManager {
       // - Project list queries that might include this project
       // - Task queries that filter by this project
       if (
-        cacheKey.startsWith('tasks:') && cacheKey.includes(`project:${projectId}`) ||
-        cacheKey.startsWith('tasks:') && cacheKey.includes(`projectId:${projectId}`) ||
-        cacheKey.startsWith('projects:') ||  // Project lists need refresh
-        cacheKey === `projects:${projectId}`  // Specific project cache
+        (cacheKey.startsWith('tasks:') && cacheKey.includes(`project:${projectId}`)) ||
+        (cacheKey.startsWith('tasks:') && cacheKey.includes(`projectId:${projectId}`)) ||
+        cacheKey.startsWith('projects:') || // Project lists need refresh
+        cacheKey === `projects:${projectId}` // Specific project cache
       ) {
         this.cache.delete(cacheKey);
         count++;
@@ -345,15 +345,16 @@ export class CacheManager {
 
     // Invalidate tag-specific caches
     if (context.tags && context.tags.length > 0) {
-      context.tags.forEach(tag => this.invalidateTag(tag));
+      context.tags.forEach((tag) => this.invalidateTag(tag));
     }
 
     // Always invalidate analytics for any task change
     this.invalidate('analytics');
 
-    logger.debug(`Smart invalidation for ${context.operation}: ${patterns.length} patterns, project: ${context.projectId}, tags: ${context.tags?.length || 0}`);
+    logger.debug(
+      `Smart invalidation for ${context.operation}: ${patterns.length} patterns, project: ${context.projectId}, tags: ${context.tags?.length || 0}`,
+    );
   }
-
 
   /**
    * Validate all cached entries and report corruption

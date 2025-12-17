@@ -9,9 +9,11 @@ Visual comparison of M4 Pro, M2 Ultra, and M2 Air performance across comprehensi
 **All performance numbers below are from ISOLATED benchmarks** (MCP server running alone).
 
 **Real-world users run:**
+
 - OmniFocus + Claude Desktop + Browser (10-20 tabs) + Video editing + Content creation + Development tools
 
 **Under heavy multi-tasking (>12 cores active):**
+
 - The M2 Ultra's "5% slower" result **reverses** to become **20-50% faster**
 - M4 Pro slows down when competing for CPU time with other apps
 - M2 Ultra maintains full speed due to extra core availability
@@ -19,6 +21,7 @@ Visual comparison of M4 Pro, M2 Ultra, and M2 Air performance across comprehensi
 **See Section 9.5 "Real-World Multi-Tasking Impact"** for complete analysis.
 
 **Quick decision guide:**
+
 - Light user (<8 cores typically active) → **M4 Pro** wins
 - Power user (>12 cores typically active) → **M2 Ultra** wins
 - **Check Activity Monitor first** to see your actual CPU load!
@@ -29,13 +32,13 @@ Visual comparison of M4 Pro, M2 Ultra, and M2 Air performance across comprehensi
 
 **Isolated Performance (Benchmarks Below):**
 
-| Metric | M4 Pro | M2 Ultra | M2 Air |
-|--------|--------|----------|--------|
-| **Overall Winner** | ⭐ **YES** | - | - |
-| **Total Time** | **17.3s** ⭐ | 18.1s | 33.3s |
-| **Cache Warming** | 6.4s | **4.9s** ⭐ | 10.7s |
-| **Heavy Analytics** | **2.7s avg** ⭐ | 3.7s avg | 6.3s avg |
-| **Cost/Performance** | Best | Good | **Best Value** ⭐ |
+| Metric               | M4 Pro          | M2 Ultra    | M2 Air            |
+| -------------------- | --------------- | ----------- | ----------------- |
+| **Overall Winner**   | ⭐ **YES**      | -           | -                 |
+| **Total Time**       | **17.3s** ⭐    | 18.1s       | 33.3s             |
+| **Cache Warming**    | 6.4s            | **4.9s** ⭐ | 10.7s             |
+| **Heavy Analytics**  | **2.7s avg** ⭐ | 3.7s avg    | 6.3s avg          |
+| **Cost/Performance** | Best            | Good        | **Best Value** ⭐ |
 
 ---
 
@@ -171,23 +174,25 @@ Scale: Each █ = 100ms
 
 ### Performance Breakdown
 
-| Operation Category | M4 Pro | M2 Ultra | Winner | Margin |
-|-------------------|--------|----------|--------|--------|
-| **Cache Warming** | 6.4s | 4.9s | M2 Ultra | 30% faster |
-| **Fast Queries** | 1-7ms | 1-4ms | TIE | Negligible |
-| **Medium Ops** | 329-953ms | 303-900ms | TIE | < 10% |
-| **Heavy Analytics** | 2.7s avg | 3.7s avg | M4 Pro | 27% faster |
-| **Total Time** | 17.3s | 18.1s | M4 Pro | 5% faster |
+| Operation Category  | M4 Pro    | M2 Ultra  | Winner   | Margin     |
+| ------------------- | --------- | --------- | -------- | ---------- |
+| **Cache Warming**   | 6.4s      | 4.9s      | M2 Ultra | 30% faster |
+| **Fast Queries**    | 1-7ms     | 1-4ms     | TIE      | Negligible |
+| **Medium Ops**      | 329-953ms | 303-900ms | TIE      | < 10%      |
+| **Heavy Analytics** | 2.7s avg  | 3.7s avg  | M4 Pro   | 27% faster |
+| **Total Time**      | 17.3s     | 18.1s     | M4 Pro   | 5% faster  |
 
 ### Strengths Summary
 
 **M4 Pro Strengths:**
+
 - ⭐ Fastest overall (17.3s total)
 - ⭐ Best at heavy analytics (23-40% faster)
 - ⭐ Better power efficiency (14 cores vs 24)
 - ⭐ Lower cost (vs M2 Ultra)
 
 **M2 Ultra Strengths:**
+
 - ⭐ Fastest cache warming (30% faster)
 - ⭐ Better for concurrent loads (more cores)
 - ⭐ Maximum thermal headroom
@@ -200,6 +205,7 @@ Scale: Each █ = 100ms
 ### Performance per Dollar (Estimated)
 
 Assuming approximate pricing:
+
 - M2 Air (8GB): ~$1,099
 - M4 Pro (14-core/64GB): ~$2,399
 - M2 Ultra (24-core/192GB): ~$5,999
@@ -295,6 +301,7 @@ Heavy Compute:     6.3s         2.7s ⭐       3.7s
 ```
 
 **Insight**:
+
 - High bandwidth (800 GB/s) helps with **data loading** (cache warming)
 - Architecture (M4) helps with **data processing** (compute operations)
 - Different winners for different bottlenecks!
@@ -333,6 +340,7 @@ M2 Ultra (active cooling + more cores):
 **All benchmarks above measure ISOLATED performance** — the MCP server running alone with no competing applications.
 
 **Real-world users typically run:**
+
 - OmniFocus (the application itself)
 - Claude Desktop or other LLM assistants
 - Web browser with 10-20+ tabs (Chrome, Safari, Firefox)
@@ -413,12 +421,12 @@ M2 Ultra  █████████████████▋ 18.1s  ⭐ NOW 
 
 ### Multi-Tasking Impact by Workload Type
 
-| Your Typical System Load | M4 Pro Impact | M2 Ultra Impact | Winner |
-|--------------------------|---------------|-----------------|--------|
-| **Light** (<8 cores active) | No slowdown | No slowdown | M4 Pro (faster isolated) |
-| **Moderate** (8-12 cores) | Minor slowdown (5-10%) | No slowdown | M4 Pro (slight edge) |
-| **Heavy** (12-16 cores) | Significant slowdown (20-30%) | No slowdown | **M2 Ultra** ⭐ |
-| **Extreme** (>16 cores) | Major slowdown (30-50%) | Minor slowdown (5-10%) | **M2 Ultra** ⭐ |
+| Your Typical System Load    | M4 Pro Impact                 | M2 Ultra Impact        | Winner                   |
+| --------------------------- | ----------------------------- | ---------------------- | ------------------------ |
+| **Light** (<8 cores active) | No slowdown                   | No slowdown            | M4 Pro (faster isolated) |
+| **Moderate** (8-12 cores)   | Minor slowdown (5-10%)        | No slowdown            | M4 Pro (slight edge)     |
+| **Heavy** (12-16 cores)     | Significant slowdown (20-30%) | No slowdown            | **M2 Ultra** ⭐          |
+| **Extreme** (>16 cores)     | Major slowdown (30-50%)       | Minor slowdown (5-10%) | **M2 Ultra** ⭐          |
 
 ### Check Your Typical Load
 
@@ -433,6 +441,7 @@ top -l 1 | head -n 10
 ```
 
 **Visual guide:**
+
 ```
 CPU Idle Time:
 ├─ >70% idle  → Light user    → M4 Pro wins
@@ -446,23 +455,27 @@ CPU Idle Time:
 **If Activity Monitor typically shows:**
 
 **<8 cores active (idle >50%)**
+
 - ✅ M4 Pro - Full isolated benchmark performance
 - ✅ M2 Air - Fast queries work identically anyway
-- ⚠️  M2 Ultra - Overkill, extra cores sit unused
+- ⚠️ M2 Ultra - Overkill, extra cores sit unused
 
 **8-14 cores active (idle 20-50%)**
+
 - ✅ M4 Pro - Some slowdown but still good
 - ✅ M2 Ultra - Maintains full performance
-- ⚠️  M2 Air - Will slow down noticeably
+- ⚠️ M2 Air - Will slow down noticeably
 
 **>14 cores active (idle <20%)**
-- ⚠️  M4 Pro - Significant slowdown (20-50%)
+
+- ⚠️ M4 Pro - Significant slowdown (20-50%)
 - ⭐ M2 Ultra - **Strongly recommended**, maintains full speed
 - ❌ M2 Air - Major slowdowns
 
 ### Real-World Use Case Examples
 
 **Developer + Content Creator (Typical Power User):**
+
 ```
 Morning: VS Code (3 cores) + Docker (2 cores) + Chrome (3 cores) = 8 cores
 └─> M4 Pro works great, no contention
@@ -477,6 +490,7 @@ Evening: Render continues + photo editing in Photoshop (4 cores) = 18 cores
 **Recommendation**: **M2 Ultra** for content creators who frequently max out their CPU
 
 **Software Developer (Light to Moderate User):**
+
 ```
 Typical: VS Code (2 cores) + Docker (1 core) + Chrome (2 cores) = 5 cores
 └─> M4 Pro's superior single-core speed dominates
@@ -491,31 +505,33 @@ Occasional build/test: Add npm build (4 cores) = 9 cores total
 
 ## 10. Summary Decision Matrix
 
-| Your Priority | Recommended Choice | Why |
-|--------------|-------------------|-----|
-| **Best isolated performance** | M4 Pro | Fastest total time (17.3s), excellent analytics |
-| **Best real-world performance** | **Depends on CPU load** | M4 Pro if <8 cores active, M2 Ultra if >12 cores |
-| **Heavy multi-tasking** | **M2 Ultra** ⭐ | Maintains full speed under load, M4 Pro slows 20-50% |
-| **Video/content creation** | **M2 Ultra** | Extra cores prevent slowdowns during renders |
-| **Light development** | M4 Pro or M2 Air | Fast queries identical, M4 faster analytics |
-| **Fastest cache warming** | M2 Ultra | 30% faster startup (4.9s vs 6.4s) |
-| **Heavy analytics (isolated)** | M4 Pro | 23-40% faster than M2 Ultra |
-| **Production server** | M2 Ultra | Cache warming + concurrent loads + thermal headroom |
-| **Frequent restarts** | M2 Ultra | Fastest cache warming saves time |
-| **Budget development** | M2 Air | Fast queries work identically, adequate for most work |
-| **Power efficiency** | M4 Pro | 42% fewer cores, better performance when isolated |
-| **Check CPU usage first!** | **Activity Monitor** | <8 cores → M4 Pro, >12 cores → M2 Ultra |
+| Your Priority                   | Recommended Choice      | Why                                                   |
+| ------------------------------- | ----------------------- | ----------------------------------------------------- |
+| **Best isolated performance**   | M4 Pro                  | Fastest total time (17.3s), excellent analytics       |
+| **Best real-world performance** | **Depends on CPU load** | M4 Pro if <8 cores active, M2 Ultra if >12 cores      |
+| **Heavy multi-tasking**         | **M2 Ultra** ⭐         | Maintains full speed under load, M4 Pro slows 20-50%  |
+| **Video/content creation**      | **M2 Ultra**            | Extra cores prevent slowdowns during renders          |
+| **Light development**           | M4 Pro or M2 Air        | Fast queries identical, M4 faster analytics           |
+| **Fastest cache warming**       | M2 Ultra                | 30% faster startup (4.9s vs 6.4s)                     |
+| **Heavy analytics (isolated)**  | M4 Pro                  | 23-40% faster than M2 Ultra                           |
+| **Production server**           | M2 Ultra                | Cache warming + concurrent loads + thermal headroom   |
+| **Frequent restarts**           | M2 Ultra                | Fastest cache warming saves time                      |
+| **Budget development**          | M2 Air                  | Fast queries work identically, adequate for most work |
+| **Power efficiency**            | M4 Pro                  | 42% fewer cores, better performance when isolated     |
+| **Check CPU usage first!**      | **Activity Monitor**    | <8 cores → M4 Pro, >12 cores → M2 Ultra               |
 
 ---
 
 ## Conclusion
 
 **The Counterintuitive Truth (in isolated testing)**:
+
 - More cores don't help (M2 Ultra 5% slower than M4 Pro)
 - More RAM doesn't help (workload fits in 24GB easily)
 - More bandwidth helps... but only for cache warming
 
 **The Real-World Reality (under heavy multi-tasking)**:
+
 - More cores DO help! (M2 Ultra prevents core contention)
 - The 5% benchmark disadvantage reverses to 20-50% advantage
 - Extra cores ensure MCP server gets dedicated CPU time
@@ -523,24 +539,27 @@ Occasional build/test: Add npm build (4 cores) = 9 cores total
 **The Real Winners by Scenario**:
 
 **Isolated/Light Use (<8 cores active):**
+
 - ⭐ M4 architecture (better IPC, cache, single-core perf)
 - M2 Ultra bandwidth (for cache warming only)
 
 **Real-World Power Use (>12 cores active):**
+
 - ⭐ M2 Ultra core abundance (prevents contention)
 - ⭐ M2 Ultra thermal headroom (sustains performance)
 - M4 Pro slows down significantly under load
 
 **Your Best Choice**:
+
 1. **Check Activity Monitor** to see your typical CPU load
 2. **If idle usually >50%** (light user) → M4 Pro for best isolated performance
 3. **If idle usually <30%** (power user) → M2 Ultra for consistent real-world performance
 4. **When in doubt** → M2 Ultra is safer for real-world mixed workloads
 
-**The Most Important Lesson**: Benchmarks in isolation can be misleading. Real-world performance depends on your complete workflow, not just the MCP server alone.
+**The Most Important Lesson**: Benchmarks in isolation can be misleading. Real-world performance depends on your
+complete workflow, not just the MCP server alone.
 
 ---
 
-**Generated**: October 28, 2025
-**Data Source**: `docs/dev/HARDWARE_PERFORMANCE_ANALYSIS.md`
-**Benchmark Tool**: `scripts/benchmark-performance.ts`
+**Generated**: October 28, 2025 **Data Source**: `docs/dev/HARDWARE_PERFORMANCE_ANALYSIS.md` **Benchmark Tool**:
+`scripts/benchmark-performance.ts`

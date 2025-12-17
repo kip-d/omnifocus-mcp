@@ -12,7 +12,7 @@ describe('analyzeDueDateBunching', () => {
       { id: 't6', dueDate: '2025-10-20', completed: false, project: 'Home' },
       { id: 't7', dueDate: '2025-10-20', completed: false, project: 'Home' },
       { id: 't8', dueDate: '2025-10-20', completed: false, project: 'Home' },
-      { id: 't9', dueDate: '2025-10-20', completed: false, project: 'Home' }
+      { id: 't9', dueDate: '2025-10-20', completed: false, project: 'Home' },
     ];
 
     const result = analyzeDueDateBunching(tasks, { threshold: 8 });
@@ -25,7 +25,7 @@ describe('analyzeDueDateBunching', () => {
   it('skips completed tasks', () => {
     const tasks = [
       { id: 't1', dueDate: '2025-10-20', completed: true, project: 'Work' },
-      { id: 't2', dueDate: '2025-10-20', completed: false, project: 'Work' }
+      { id: 't2', dueDate: '2025-10-20', completed: false, project: 'Work' },
     ];
 
     const result = analyzeDueDateBunching(tasks, { threshold: 5 });
@@ -42,7 +42,7 @@ describe('analyzeDueDateBunching', () => {
       { id: 't5', dueDate: '2025-10-20', completed: false, project: 'Home' },
       { id: 't6', dueDate: '2025-10-20', completed: false, project: 'Home' },
       { id: 't7', dueDate: '2025-10-20', completed: false, project: 'Home' },
-      { id: 't8', dueDate: '2025-10-20', completed: false, project: 'Home' }
+      { id: 't8', dueDate: '2025-10-20', completed: false, project: 'Home' },
     ];
 
     const result = analyzeDueDateBunching(tasks, { threshold: 5 });
@@ -56,7 +56,7 @@ describe('analyzeDueDateBunching', () => {
       { id: 't1', dueDate: '2025-10-20', completed: false, project: 'Work' },
       { id: 't2', dueDate: '2025-10-20', completed: false, project: 'Work' },
       { id: 't3', dueDate: '2025-10-21', completed: false, project: 'Work' },
-      { id: 't4', dueDate: '2025-10-21', completed: false, project: 'Work' }
+      { id: 't4', dueDate: '2025-10-21', completed: false, project: 'Work' },
     ];
 
     const result = analyzeDueDateBunching(tasks, { threshold: 10 });

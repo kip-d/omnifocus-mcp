@@ -2,19 +2,18 @@
 
 > **Status:** NOT IMPLEMENTED - Reference designs preserved from PR #35
 >
-> These contract types were designed for AST-based project/tag filtering but were
-> deemed unnecessary given our working inline filtering approach. Preserved here
-> in case future complexity warrants formalization.
+> These contract types were designed for AST-based project/tag filtering but were deemed unnecessary given our working
+> inline filtering approach. Preserved here in case future complexity warrants formalization.
 >
-> **Decision (Dec 2025):** Inline filtering in `list-projects-v3.ts` and existing
-> tag scripts is sufficient. AST formalization would be over-engineering for the
-> current simple filter needs.
+> **Decision (Dec 2025):** Inline filtering in `list-projects-v3.ts` and existing tag scripts is sufficient. AST
+> formalization would be over-engineering for the current simple filter needs.
 
 ---
 
 ## When to Consider Implementing
 
 These contracts become worthwhile if:
+
 - Complex boolean composition is needed ("projects in folder X OR flagged, but NOT on-hold")
 - Multiple emitter targets are required (JXA + OmniJS from same filter)
 - Filter validation/testing needs to be separated from script execution
@@ -40,17 +39,17 @@ export type ProjectStatus = 'active' | 'onHold' | 'done' | 'dropped';
  */
 export interface ProjectFilter {
   // --- Identification ---
-  id?: string;                      // Exact project ID lookup
+  id?: string; // Exact project ID lookup
 
   // --- Status ---
-  status?: ProjectStatus[];         // Filter by multiple statuses (OR logic)
+  status?: ProjectStatus[]; // Filter by multiple statuses (OR logic)
 
   // --- Boolean Flags ---
   flagged?: boolean;
-  needsReview?: boolean;            // Projects past review date
+  needsReview?: boolean; // Projects past review date
 
   // --- Text Search ---
-  text?: string;                    // Search in name + note
+  text?: string; // Search in name + note
 
   // --- Folder ---
   folderId?: string;
@@ -61,8 +60,8 @@ export interface ProjectFilter {
   offset?: number;
 
   // --- Performance Mode ---
-  performanceMode?: 'normal' | 'lite';  // lite skips expensive stats
-  includeStats?: boolean;               // Include task counts
+  performanceMode?: 'normal' | 'lite'; // lite skips expensive stats
+  includeStats?: boolean; // Include task counts
 }
 
 /**
@@ -94,8 +93,9 @@ export function createProjectFilter(filter: ProjectFilter): ProjectFilter {
 
 ## TagQueryOptions Contract
 
-Unlike TaskFilter/ProjectFilter, tags use a **mode-based pattern** rather than
-filter-based queries. This reflects how OmniFocus handles tags:
+Unlike TaskFilter/ProjectFilter, tags use a **mode-based pattern** rather than filter-based queries. This reflects how
+OmniFocus handles tags:
+
 - Tags don't have rich filterable properties (no dates, status, etc.)
 - The main variation is HOW MUCH data to return (field projection)
 - Post-query filtering is minimal (only "exclude empty tags")
@@ -159,9 +159,9 @@ export interface TagQueryOptions {
  * - full: Complete tag data for detailed views
  */
 export const TAG_MODE_FIELDS = {
-  names: [],                           // Just string array
-  basic: ['id', 'name'],               // Minimal objects
-  full: ['id', 'name', 'parent', 'childrenAreMutuallyExclusive', 'usage']
+  names: [], // Just string array
+  basic: ['id', 'name'], // Minimal objects
+  full: ['id', 'name', 'parent', 'childrenAreMutuallyExclusive', 'usage'],
 } as const;
 
 /**
@@ -188,7 +188,7 @@ export function getFieldsForMode(mode: TagQueryMode): readonly string[] {
 ```typescript
 export function buildFilteredProjectsScript(
   filter: ProjectFilter,
-  options: { limit?: number; fields?: string[]; includeStats?: boolean } = {}
+  options: { limit?: number; fields?: string[]; includeStats?: boolean } = {},
 ): GeneratedScript {
   const { limit = 50, fields = [], includeStats = false } = options;
   const filterCode = generateProjectFilterCode(filter);
@@ -267,7 +267,7 @@ src/contracts/entities/
 
 ## Source
 
-Extracted from PR #35 (feature/phase3-ast-extension) before closing.
-Original design docs:
+Extracted from PR #35 (feature/phase3-ast-extension) before closing. Original design docs:
+
 - `docs/plans/2025-11-24-ast-consolidation-opportunities.md`
 - `docs/plans/2025-11-25-phase3-ast-extension-design.md`

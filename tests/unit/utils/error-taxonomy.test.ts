@@ -19,7 +19,7 @@ describe('Error Taxonomy System', () => {
         ['Grant permissions in System Settings'],
         'Quick fix: Check automation permissions',
         { tool: 'test_tool' },
-        new Error('Original error')
+        new Error('Original error'),
       );
 
       expect(error).toEqual({
@@ -33,11 +33,7 @@ describe('Error Taxonomy System', () => {
     });
 
     it('should create a minimal categorized error', () => {
-      const error = createCategorizedError(
-        ScriptErrorType.INTERNAL_ERROR,
-        'Internal error occurred',
-        ['Try again']
-      );
+      const error = createCategorizedError(ScriptErrorType.INTERNAL_ERROR, 'Internal error occurred', ['Try again']);
 
       expect(error).toEqual({
         errorType: ScriptErrorType.INTERNAL_ERROR,
@@ -59,7 +55,7 @@ describe('Error Taxonomy System', () => {
         new Error('permission denied'),
       ];
 
-      permissionErrors.forEach(error => {
+      permissionErrors.forEach((error) => {
         const result = categorizeError(error, 'test operation');
         expect(result.errorType).toBe(ScriptErrorType.PERMISSION_DENIED);
         expect(result.message).toContain('Permission denied');
@@ -72,15 +68,15 @@ describe('Error Taxonomy System', () => {
       const notRunningErrors = [
         new Error('OmniFocus is not running'),
         new Error('can\'t find process "OmniFocus"'),
-        new Error('application isn\'t running'),
+        new Error("application isn't running"),
       ];
 
-      notRunningErrors.forEach(error => {
+      notRunningErrors.forEach((error) => {
         const result = categorizeError(error, 'list tasks');
         expect(result.errorType).toBe(ScriptErrorType.OMNIFOCUS_NOT_RUNNING);
         expect(result.message).toContain('Cannot list tasks - OmniFocus is not running');
         expect(result.recovery).toContain('Open OmniFocus from your Applications folder or Dock');
-        expect(result.actionable).toBe('Launch OmniFocus and ensure it\'s fully loaded');
+        expect(result.actionable).toBe("Launch OmniFocus and ensure it's fully loaded");
       });
     });
 
@@ -91,7 +87,7 @@ describe('Error Taxonomy System', () => {
         new Error('execution took too long'),
       ];
 
-      timeoutErrors.forEach(error => {
+      timeoutErrors.forEach((error) => {
         const result = categorizeError(error, 'query tasks');
         expect(result.errorType).toBe(ScriptErrorType.SCRIPT_TIMEOUT);
         expect(result.message).toContain('query tasks operation timed out');
@@ -107,7 +103,7 @@ describe('Error Taxonomy System', () => {
         new Error('script size exceeded limits'),
       ];
 
-      sizeErrors.forEach(error => {
+      sizeErrors.forEach((error) => {
         const result = categorizeError(error, 'bulk update');
         expect(result.errorType).toBe(ScriptErrorType.SCRIPT_TOO_LARGE);
         expect(result.message).toContain('Script size exceeded limits');
@@ -123,7 +119,7 @@ describe('Error Taxonomy System', () => {
         new Error('omniJs execution failed'),
       ];
 
-      bridgeErrors.forEach(error => {
+      bridgeErrors.forEach((error) => {
         const result = categorizeError(error, 'create task with tags', { helper: 'bridge' });
         expect(result.errorType).toBe(ScriptErrorType.BRIDGE_FAILURE);
         expect(result.message).toContain('JavaScript bridge failure');
@@ -140,7 +136,7 @@ describe('Error Taxonomy System', () => {
         new Error('null id parameter'),
       ];
 
-      invalidIdErrors.forEach(error => {
+      invalidIdErrors.forEach((error) => {
         const result = categorizeError(error, 'update task');
         expect(result.errorType).toBe(ScriptErrorType.INVALID_ID);
         expect(result.message).toContain('Invalid or missing ID');
@@ -156,7 +152,7 @@ describe('Error Taxonomy System', () => {
         new Error('undefined result from query'),
       ];
 
-      nullErrors.forEach(error => {
+      nullErrors.forEach((error) => {
         const result = categorizeError(error, 'search tasks');
         expect(result.errorType).toBe(ScriptErrorType.NULL_RESULT);
         expect(result.message).toContain('No data returned');
@@ -166,12 +162,9 @@ describe('Error Taxonomy System', () => {
     });
 
     it('should categorize connection timeout errors', () => {
-      const connectionErrors = [
-        new Error('connection timeout occurred'),
-        new Error('connection test failed'),
-      ];
+      const connectionErrors = [new Error('connection timeout occurred'), new Error('connection test failed')];
 
-      connectionErrors.forEach(error => {
+      connectionErrors.forEach((error) => {
         const result = categorizeError(error, 'query projects', { consecutiveFailures: 3 });
         expect(result.errorType).toBe(ScriptErrorType.CONNECTION_TIMEOUT);
         expect(result.message).toContain('Connection timeout');
@@ -201,7 +194,7 @@ describe('Error Taxonomy System', () => {
         new Error('expected string but got number'),
       ];
 
-      validationErrors.forEach(error => {
+      validationErrors.forEach((error) => {
         const result = categorizeError(error, 'create task');
         expect(result.errorType).toBe(ScriptErrorType.VALIDATION_ERROR);
         expect(result.message).toContain('Parameter validation failed');
@@ -289,7 +282,7 @@ describe('Error Taxonomy System', () => {
         ScriptErrorType.OMNIFOCUS_ERROR,
       ];
 
-      recoverableTypes.forEach(errorType => {
+      recoverableTypes.forEach((errorType) => {
         expect(isRecoverableError(errorType)).toBe(true);
       });
     });
@@ -301,7 +294,7 @@ describe('Error Taxonomy System', () => {
         ScriptErrorType.INTERNAL_ERROR,
       ];
 
-      nonRecoverableTypes.forEach(errorType => {
+      nonRecoverableTypes.forEach((errorType) => {
         expect(isRecoverableError(errorType)).toBe(false);
       });
     });
@@ -351,10 +344,10 @@ describe('Error Taxonomy System', () => {
         nested: {
           data: {
             values: [1, 2, 3],
-            metadata: { type: 'test' }
-          }
+            metadata: { type: 'test' },
+          },
         },
-        circularRef: {} as any
+        circularRef: {} as any,
       };
       context.circularRef.self = context.circularRef;
 

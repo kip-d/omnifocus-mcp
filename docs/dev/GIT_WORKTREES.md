@@ -1,15 +1,16 @@
 # Git Worktrees Reference
 
-**Last Updated:** 2025-11-09
-**Status:** Production guidance based on real-world experience
+**Last Updated:** 2025-11-09 **Status:** Production guidance based on real-world experience
 
 ## What Are Git Worktrees?
 
-Git worktrees allow you to check out multiple branches simultaneously in different directories. Instead of switching branches in your main repo, you create separate working directories that share the same git repository.
+Git worktrees allow you to check out multiple branches simultaneously in different directories. Instead of switching
+branches in your main repo, you create separate working directories that share the same git repository.
 
 ## When to Use Worktrees
 
 **✅ Good Use Cases:**
+
 - Long-running feature development while maintaining main branch
 - Working on multiple features in parallel
 - Need to test/compare code between branches without switching
@@ -17,6 +18,7 @@ Git worktrees allow you to check out multiple branches simultaneously in differe
 - Keeping main pristine while experimenting
 
 **❌ Poor Use Cases:**
+
 - Quick bug fixes (just use normal branches)
 - Single feature work (no benefit over regular workflow)
 - When you need GitHub CLI's automated merge operations
@@ -25,19 +27,23 @@ Git worktrees allow you to check out multiple branches simultaneously in differe
 ## The Worktree Experience: Reality vs. Expectations
 
 ### What Worktrees DO Well
+
 - ✅ Isolate your work from main repository
 - ✅ Allow parallel development on multiple branches
 - ✅ Prevent accidental commits to wrong branch
 - ✅ Keep main branch clean and ready for production
 
 ### What Worktrees DON'T Solve
+
 - ❌ GitHub CLI automation (`gh pr merge --delete-branch` fails on cleanup)
 - ❌ Simplifying merge workflows (actually adds complexity)
 - ❌ Eliminating manual cleanup steps
 - ❌ Making error messages clearer (often more confusing)
 
 ### Key Insight
-**Worktrees trade automated convenience for isolation.** You get safety and parallel work, but lose the seamless automation of GitHub CLI's merge and cleanup operations.
+
+**Worktrees trade automated convenience for isolation.** You get safety and parallel work, but lose the seamless
+automation of GitHub CLI's merge and cleanup operations.
 
 ## Complete Worktree Workflow
 
@@ -58,6 +64,7 @@ cd .worktrees/feature-name
 ```
 
 **Recommended structure:**
+
 ```
 my-project/
 ├── .git/
@@ -85,8 +92,7 @@ gh pr create --base main --head feature/feature-name
 
 #### Approach A: Manual GitHub Merge (RECOMMENDED)
 
-**Pros:** Clear, predictable, you control each step
-**Cons:** More manual steps
+**Pros:** Clear, predictable, you control each step **Cons:** More manual steps
 
 ```bash
 # 1. Merge PR on GitHub (web UI or CLI without --delete-branch)
@@ -105,8 +111,7 @@ git branch -D feature/feature-name
 
 #### Approach B: GitHub CLI with Manual Cleanup
 
-**Pros:** Uses familiar `gh pr merge` command
-**Cons:** Confusing error messages, merge succeeds but cleanup fails
+**Pros:** Uses familiar `gh pr merge` command **Cons:** Confusing error messages, merge succeeds but cleanup fails
 
 ```bash
 # 1. Try to merge with GitHub CLI
@@ -155,6 +160,7 @@ git branch -a
 ### Issue 1: "Cannot delete branch used by worktree"
 
 **Error:**
+
 ```
 error: cannot delete branch 'feature/name' used by worktree at '/path/to/repo'
 ```
@@ -162,6 +168,7 @@ error: cannot delete branch 'feature/name' used by worktree at '/path/to/repo'
 **Cause:** You're on the feature branch in main repo, or worktree still exists
 
 **Solution:**
+
 ```bash
 # Check current branch
 git branch --show-current
@@ -177,6 +184,7 @@ git branch -D feature/name
 ### Issue 2: "Contains modified or untracked files"
 
 **Error:**
+
 ```
 fatal: '.worktrees/feature-name' contains modified or untracked files, use --force to delete it
 ```
@@ -184,6 +192,7 @@ fatal: '.worktrees/feature-name' contains modified or untracked files, use --for
 **Cause:** Uncommitted changes or untracked files in worktree
 
 **Solution:**
+
 ```bash
 # If changes are not needed (after merge), force remove
 git worktree remove .worktrees/feature-name --force
@@ -200,6 +209,7 @@ git worktree remove .worktrees/feature-name
 ### Issue 3: "Not possible to fast-forward"
 
 **Error:**
+
 ```
 ! [remote rejected] main -> main (not possible to fast-forward)
 ```
@@ -207,6 +217,7 @@ git worktree remove .worktrees/feature-name
 **Cause:** Local main has diverged from origin/main during merge process
 
 **Solution:**
+
 ```bash
 # Reset local main to match GitHub
 git checkout main
@@ -223,6 +234,7 @@ git log -1  # Verify you see the merge commit
 **Reality:** The PR merge on GitHub likely succeeded! The errors are only about local cleanup.
 
 **Solution:**
+
 ```bash
 # FIRST: Verify if PR actually merged
 gh pr view <number> --json state,mergedAt,mergedBy
@@ -234,9 +246,11 @@ gh pr view <number> --json state,mergedAt,mergedBy
 ## Gotchas and Lessons Learned
 
 ### 1. GitHub CLI Automation Doesn't Understand Worktrees
+
 **Problem:** `gh pr merge --delete-branch` expects a normal git workflow.
 
 **Reality:** It will:
+
 - ✅ Merge the PR on GitHub successfully
 - ❌ Fail to update local main (not in worktree)
 - ❌ Fail to delete local branch (worktree using it)
@@ -244,6 +258,7 @@ gh pr view <number> --json state,mergedAt,mergedBy
 **Lesson:** Use `gh pr merge` WITHOUT `--delete-branch` and clean up manually.
 
 ### 2. Error Messages Are Confusing
+
 **Problem:** When cleanup fails, errors look like the merge failed.
 
 **Reality:** Check the PR status on GitHub - merge probably succeeded!
@@ -251,6 +266,7 @@ gh pr view <number> --json state,mergedAt,mergedBy
 **Lesson:** Always verify PR state with `gh pr view <number>` before assuming failure.
 
 ### 3. Worktree Removal Needs Force
+
 **Problem:** Can't remove worktree if it has uncommitted work.
 
 **Reality:** After merging, those changes are in main, so forcing is safe.
@@ -258,6 +274,7 @@ gh pr view <number> --json state,mergedAt,mergedBy
 **Lesson:** `git worktree remove --force` is normal and expected after merge.
 
 ### 4. You Can't Delete Branches You're On
+
 **Problem:** Can't delete feature branch while checked out on it.
 
 **Reality:** Main repo might be on feature branch from `git pull origin main`.
@@ -287,22 +304,24 @@ Just use regular branches - worktrees add complexity without benefit.
 
 ## When to Choose Worktrees vs. Regular Branches
 
-| Scenario | Use Worktrees | Use Regular Branches |
-|----------|---------------|---------------------|
-| Long-running feature (days/weeks) | ✅ Yes | ⚠️  Possible but risky |
-| Multiple features in parallel | ✅ Yes | ❌ No (switching is painful) |
-| Quick bug fix | ❌ No (overkill) | ✅ Yes |
-| Need to compare branches | ✅ Yes | ⚠️  Can use diffs instead |
-| Running tests on multiple branches | ✅ Yes | ❌ No |
-| Single feature, no distractions | ⚠️  Possible | ✅ Yes (simpler) |
+| Scenario                           | Use Worktrees    | Use Regular Branches         |
+| ---------------------------------- | ---------------- | ---------------------------- |
+| Long-running feature (days/weeks)  | ✅ Yes           | ⚠️ Possible but risky        |
+| Multiple features in parallel      | ✅ Yes           | ❌ No (switching is painful) |
+| Quick bug fix                      | ❌ No (overkill) | ✅ Yes                       |
+| Need to compare branches           | ✅ Yes           | ⚠️ Can use diffs instead     |
+| Running tests on multiple branches | ✅ Yes           | ❌ No                        |
+| Single feature, no distractions    | ⚠️ Possible      | ✅ Yes (simpler)             |
 
 ## Additional Resources
 
 **Official Git documentation:**
+
 - `git worktree --help`
 - https://git-scm.com/docs/git-worktree
 
 **GitHub CLI:**
+
 - `gh pr --help`
 - https://cli.github.com/manual/gh_pr_merge
 
@@ -357,12 +376,14 @@ git remote -v
 ```
 
 **What this protects:**
+
 - ✅ Can still fetch/pull from upstream
 - ✅ Can still create PRs to upstream
 - ❌ **Cannot** accidentally push to upstream
 - ❌ **Cannot** delete upstream branches
 
 **To push to upstream (if you have permissions and really need to):**
+
 ```bash
 # Temporarily override (use with extreme caution!)
 git push https://github.com/original/repo.git branch-name
@@ -372,7 +393,8 @@ git push https://github.com/original/repo.git branch-name
 
 **Worktrees are powerful for parallel work and isolation, but they don't play nicely with automated merge tools.**
 
-**Key Takeaway:** If you use worktrees, embrace manual cleanup. Don't expect GitHub CLI's automation to "just work" - it won't. The trade-off is worth it for long-running feature work, but not for simple fixes.
+**Key Takeaway:** If you use worktrees, embrace manual cleanup. Don't expect GitHub CLI's automation to "just work" - it
+won't. The trade-off is worth it for long-running feature work, but not for simple fixes.
 
 **Rule of thumb:** Worktrees for features that need days/weeks. Regular branches for everything else.
 

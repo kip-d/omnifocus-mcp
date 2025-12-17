@@ -5,7 +5,6 @@
  * while maintaining backward compatibility with simple filters.
  */
 
-
 /**
  * String filter with operator
  */
@@ -27,8 +26,8 @@ export interface ArrayFilter {
  */
 export interface DateFilter {
   operator: '>' | '>=' | '<' | '<=' | 'BETWEEN';
-  value: string;          // ISO date string or natural language
-  upperBound?: string;    // For BETWEEN operator
+  value: string; // ISO date string or natural language
+  upperBound?: string; // For BETWEEN operator
 }
 
 /**
@@ -37,7 +36,7 @@ export interface DateFilter {
 export interface NumberFilter {
   operator: '>' | '>=' | '<' | '<=' | 'EQUALS' | 'BETWEEN';
   value: number;
-  upperBound?: number;    // For BETWEEN operator
+  upperBound?: number; // For BETWEEN operator
 }
 
 /**
@@ -77,7 +76,7 @@ export interface QueryFilters {
 
   // Text search filters
   search?: StringFilter;
-  text?: StringFilter;  // Bug #9 fix - separate text filter with CONTAINS/MATCHES operators
+  text?: StringFilter; // Bug #9 fix - separate text filter with CONTAINS/MATCHES operators
 
   // Status field filter (for taskStatus enum)
   taskStatus?: ArrayFilter;
@@ -142,4 +141,3 @@ export function isNumberFilter(filter: unknown): filter is NumberFilter {
     typeof (filter as NumberFilter).value === 'number'
   );
 }
-

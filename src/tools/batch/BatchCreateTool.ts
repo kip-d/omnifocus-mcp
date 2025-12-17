@@ -85,9 +85,7 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       }
 
       // Step 3: Get creation order (respects dependencies)
-      const orderedItems = args.createSequentially
-        ? graph.getCreationOrder()
-        : args.items;
+      const orderedItems = args.createSequentially ? graph.getCreationOrder() : args.items;
 
       // Step 4: Create items in order
       for (let i = 0; i < orderedItems.length; i++) {
@@ -123,7 +121,6 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
         }
       }
 
-
       // Step 5: Handle atomic operation rollback if needed
       const failedCount = resolver.getFailedCount();
       if (args.atomicOperation && failedCount > 0) {
@@ -148,21 +145,21 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
         const tags = new Set<string>();
 
         for (const item of args.items) {
-          if (item.type === 'project' && results.find(r => r.tempId === item.tempId)?.success) {
+          if (item.type === 'project' && results.find((r) => r.tempId === item.tempId)?.success) {
             // Created project - invalidate its specific cache later
             const realId = resolver.getRealId(item.tempId);
             if (realId) projectIds.add(realId);
           }
           if (item.tags) {
-            item.tags.forEach(tag => tags.add(tag));
+            item.tags.forEach((tag) => tags.add(tag));
           }
         }
 
         // Invalidate affected project caches
-        projectIds.forEach(id => this.cache.invalidateProject(id));
+        projectIds.forEach((id) => this.cache.invalidateProject(id));
 
         // Invalidate affected tag caches
-        tags.forEach(tag => this.cache.invalidateTag(tag));
+        tags.forEach((tag) => this.cache.invalidateTag(tag));
 
         // Invalidate task queries that might be affected
         this.cache.invalidateTaskQueries(['today', 'inbox']);
@@ -191,7 +188,6 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
         undefined, // No summary needed for batch operations
         { query_time_ms: timer.toMetadata().query_time_ms },
       );
-
     } catch (error) {
       // Handle validation errors (circular dependencies, etc.)
       if (error instanceof DependencyGraphError) {
@@ -311,7 +307,7 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       }
 
       // Determine if parent is a project or task
-      const parentMapping = resolver.getDetailedStatus().find(m => m.tempId === item.parentTempId);
+      const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
       if (parentMapping?.type === 'project') {
         projectId = parentRealId;
       } else {
@@ -330,7 +326,12 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     };
 
     // Handle task-specific fields
-    const taskItem = item as { dueDate?: string; deferDate?: string; estimatedMinutes?: number | string; sequential?: boolean };
+    const taskItem = item as {
+      dueDate?: string;
+      deferDate?: string;
+      estimatedMinutes?: number | string;
+      sequential?: boolean;
+    };
 
     if (taskItem.dueDate) {
       taskData.dueDate = localToUTC(taskItem.dueDate, 'due');
@@ -339,9 +340,10 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       taskData.deferDate = localToUTC(taskItem.deferDate, 'defer');
     }
     if (taskItem.estimatedMinutes !== undefined) {
-      taskData.estimatedMinutes = typeof taskItem.estimatedMinutes === 'string'
-        ? parseInt(taskItem.estimatedMinutes, 10)
-        : taskItem.estimatedMinutes;
+      taskData.estimatedMinutes =
+        typeof taskItem.estimatedMinutes === 'string'
+          ? parseInt(taskItem.estimatedMinutes, 10)
+          : taskItem.estimatedMinutes;
     }
     if (taskItem.sequential !== undefined) {
       taskData.sequential = taskItem.sequential;
@@ -394,9 +396,10 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     for (let i = createdItems.length - 1; i >= 0; i--) {
       const item = createdItems[i];
       try {
-        const script = item.type === 'project'
-          ? this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { projectId: item.realId })
-          : this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: item.realId });
+        const script =
+          item.type === 'project'
+            ? this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { projectId: item.realId })
+            : this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: item.realId });
 
         await this.execJson(script);
         this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);

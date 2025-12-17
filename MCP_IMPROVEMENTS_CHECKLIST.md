@@ -1,8 +1,6 @@
 # MCP Improvements Checklist
 
-**Based on**: MCP Builder Skill Evaluation (November 21, 2025)
-**Current Score**: 95/100 (A+)
-**Target Score**: 100/100
+**Based on**: MCP Builder Skill Evaluation (November 21, 2025) **Current Score**: 95/100 (A+) **Target Score**: 100/100
 
 ---
 
@@ -20,9 +18,7 @@ Your OmniFocus MCP server is **outstanding** (95/100). These improvements will b
 
 ### ☑️ 1. Add Standard Tool Annotations
 
-**Why**: MCP ecosystem compatibility, better client UX
-**Effort**: Low (~30 minutes)
-**Impact**: High
+**Why**: MCP ecosystem compatibility, better client UX **Effort**: Low (~30 minutes) **Impact**: High
 
 #### What to Do:
 
@@ -37,11 +33,11 @@ export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
 
   // ADD THIS:
   annotations = {
-    title: "Query OmniFocus Data",
-    readOnlyHint: true,      // Does not modify data
-    destructiveHint: false,  // Safe to call repeatedly
-    idempotentHint: true,    // Same params = same result
-    openWorldHint: true      // Interacts with OmniFocus (external system)
+    title: 'Query OmniFocus Data',
+    readOnlyHint: true, // Does not modify data
+    destructiveHint: false, // Safe to call repeatedly
+    idempotentHint: true, // Same params = same result
+    openWorldHint: true, // Interacts with OmniFocus (external system)
   };
 
   meta = {
@@ -53,62 +49,68 @@ export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
 #### Files to Modify:
 
 1. **src/tools/unified/OmniFocusReadTool.ts**
+
    ```typescript
    annotations = {
-     title: "Query OmniFocus Data",
+     title: 'Query OmniFocus Data',
      readOnlyHint: true,
      destructiveHint: false,
      idempotentHint: true,
-     openWorldHint: true
+     openWorldHint: true,
    };
    ```
 
 2. **src/tools/unified/OmniFocusWriteTool.ts**
+
    ```typescript
    annotations = {
-     title: "Manage OmniFocus Tasks",
-     readOnlyHint: false,    // Modifies data
-     destructiveHint: true,  // Delete is permanent
-     idempotentHint: false,  // Multiple calls have different effects
-     openWorldHint: true
+     title: 'Manage OmniFocus Tasks',
+     readOnlyHint: false, // Modifies data
+     destructiveHint: true, // Delete is permanent
+     idempotentHint: false, // Multiple calls have different effects
+     openWorldHint: true,
    };
    ```
 
 3. **src/tools/unified/OmniFocusAnalyzeTool.ts**
+
    ```typescript
    annotations = {
-     title: "Analyze OmniFocus Data",
+     title: 'Analyze OmniFocus Data',
      readOnlyHint: true,
      destructiveHint: false,
      idempotentHint: true,
-     openWorldHint: true
+     openWorldHint: true,
    };
    ```
 
 4. **src/tools/system/SystemTool.ts** (already has meta, add annotations)
    ```typescript
    annotations = {
-     title: "System Utilities",
+     title: 'System Utilities',
      readOnlyHint: true,
      destructiveHint: false,
      idempotentHint: true,
-     openWorldHint: false    // No external interaction
+     openWorldHint: false, // No external interaction
    };
    ```
 
 #### How to Register Annotations:
 
-Check your tool registration in `src/index.ts`. If using the standard MCP SDK pattern, annotations should be part of the tool definition:
+Check your tool registration in `src/index.ts`. If using the standard MCP SDK pattern, annotations should be part of the
+tool definition:
 
 ```typescript
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [{
-      name: tool.name,
-      description: tool.description,
-      inputSchema: zodToJsonSchema(tool.schema),
-      annotations: tool.annotations  // ADD THIS
-    }]
+    tools: [
+      {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: zodToJsonSchema(tool.schema),
+        annotations: tool.annotations, // ADD THIS
+      },
+    ],
   };
 });
 ```
@@ -117,9 +119,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 ### ☑️ 2. Implement Character Limits
 
-**Why**: Prevent context overflow for LLMs
-**Effort**: Medium (~1 hour)
-**Impact**: Medium
+**Why**: Prevent context overflow for LLMs **Effort**: Medium (~1 hour) **Impact**: Medium
 
 #### What to Do:
 
@@ -147,7 +147,7 @@ export interface TruncationInfo {
 
 export function truncateResponse<T>(
   data: T,
-  limit: number = CHARACTER_LIMIT
+  limit: number = CHARACTER_LIMIT,
 ): { data: T; truncation?: TruncationInfo } {
   const serialized = JSON.stringify(data);
 
@@ -164,8 +164,8 @@ export function truncateResponse<T>(
         truncated: true,
         originalLength: data.length,
         truncatedLength: truncatedData.length,
-        message: `Response truncated from ${data.length} to ${truncatedData.length} items. Use 'limit' or 'offset' parameters to see more results.`
-      }
+        message: `Response truncated from ${data.length} to ${truncatedData.length} items. Use 'limit' or 'offset' parameters to see more results.`,
+      },
     };
   }
 
@@ -177,8 +177,8 @@ export function truncateResponse<T>(
         truncated: true,
         originalLength: data.length,
         truncatedLength: limit,
-        message: 'Response truncated. Use filters to reduce result size.'
-      }
+        message: 'Response truncated. Use filters to reduce result size.',
+      },
     };
   }
 
@@ -205,7 +205,7 @@ export function createTaskResponseV2(
     data: {
       items: truncatedTasks,
       count: truncatedTasks.length,
-      total: tasks.length,  // Original count
+      total: tasks.length, // Original count
     },
     metadata: {
       tool,
@@ -213,7 +213,7 @@ export function createTaskResponseV2(
       // ADD TRUNCATION INFO
       ...(truncation && {
         truncated: truncation.truncated,
-        truncation_message: truncation.message
+        truncation_message: truncation.message,
       }),
       ...metadata,
       ...customMetadata,
@@ -235,23 +235,25 @@ npm run test:unit -- truncation
 
 ### ☑️ 3. Optimize Backend to Return JSON (Token Efficiency)
 
-**Why**: Save 20-30% tokens in LLM-mediated workflows
-**Effort**: Low (~15 minutes for Tier 1, +15 minutes for Tier 2)
+**Why**: Save 20-30% tokens in LLM-mediated workflows **Effort**: Low (~15 minutes for Tier 1, +15 minutes for Tier 2)
 **Impact**: Medium (token savings) + Optional (power user flexibility)
 
 #### Understanding the Context
 
 **Your Use Case**: LLM-mediated access (Claude Desktop/Code)
+
 ```
 User → Claude → Your Server (JSON) → Claude formats → Natural language to user
 ```
 
 **Current State**: Backend tools default to Markdown
+
 - More verbose (33% more characters)
 - Wastes tokens (LLM never shows user the raw Markdown)
 - LLM is excellent at formatting JSON into readable output
 
 **Token Comparison**:
+
 ```json
 // JSON (efficient): ~150 chars
 {"tasks": [{"id":"123","name":"Call dentist","dueDate":"2025-03-15"}]}
@@ -262,6 +264,7 @@ User → Claude → Your Server (JSON) → Claude formats → Natural language t
 ```
 
 **When Markdown Has Value**:
+
 - MCP Inspector debugging/testing
 - Power users writing scripts without LLM
 - Direct API access for report generation
@@ -314,10 +317,11 @@ export const ReadSchema = z.object({
     type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders']),
 
     // ADD THIS FIELD
-    response_format: ResponseFormatEnum
-      .default('json')  // Note: JSON default for LLM efficiency
+    response_format: ResponseFormatEnum.default('json') // Note: JSON default for LLM efficiency
       .optional()
-      .describe('Output format: "json" (recommended for LLM processing, 20-30% more compact), "markdown" (human-readable for direct inspection/debugging)'),
+      .describe(
+        'Output format: "json" (recommended for LLM processing, 20-30% more compact), "markdown" (human-readable for direct inspection/debugging)',
+      ),
 
     filters: FilterSchema.optional(),
     // ... rest of fields
@@ -360,13 +364,14 @@ private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
 
 Choose your approach:
 
-| Option | Effort | Best For | Flexibility |
-|--------|--------|----------|-------------|
-| **Tier 1 only** | 15 min | 95% of users (LLM access) | Fixed JSON |
-| **Tier 1 + 2** | 30 min | Power users + debugging | User choice |
-| **Current state** | 0 min | Nobody (wastes tokens) | Uses Markdown |
+| Option            | Effort | Best For                  | Flexibility   |
+| ----------------- | ------ | ------------------------- | ------------- |
+| **Tier 1 only**   | 15 min | 95% of users (LLM access) | Fixed JSON    |
+| **Tier 1 + 2**    | 30 min | Power users + debugging   | User choice   |
+| **Current state** | 0 min  | Nobody (wastes tokens)    | Uses Markdown |
 
-**Recommendation**: Start with Tier 1 (simple backend optimization). Add Tier 2 later if you get requests for Markdown output or need better debugging workflows.
+**Recommendation**: Start with Tier 1 (simple backend optimization). Add Tier 2 later if you get requests for Markdown
+output or need better debugging workflows.
 
 ---
 
@@ -374,18 +379,18 @@ Choose your approach:
 
 ### 4. Consider Prefixing Backend Tool Names
 
-**Why**: Avoid naming conflicts in MCP ecosystem
-**Effort**: Medium (2-3 hours - requires testing)
-**Impact**: Low (mostly internal consistency)
+**Why**: Avoid naming conflicts in MCP ecosystem **Effort**: Medium (2-3 hours - requires testing) **Impact**: Low
+(mostly internal consistency)
 
-**Decision Point**: Since your **unified API is the primary interface**, this is optional. Backend tools are internal routing targets.
+**Decision Point**: Since your **unified API is the primary interface**, this is optional. Backend tools are internal
+routing targets.
 
 **If you choose to do this**:
 
 ```typescript
 // Option 1: Rename backend tools
 export class QueryTasksTool {
-  name = 'omnifocus_tasks_backend';  // Clear internal designation
+  name = 'omnifocus_tasks_backend'; // Clear internal designation
 }
 
 // Option 2: Document as internal
@@ -396,9 +401,7 @@ export class QueryTasksTool {
 
 ### 5. Enhance Evaluation Suite
 
-**Why**: Better quality assurance
-**Effort**: High (~4 hours)
-**Impact**: Medium
+**Why**: Better quality assurance **Effort**: High (~4 hours) **Impact**: Medium
 
 **Add to `evaluation.xml`**:
 
@@ -538,12 +541,13 @@ python scripts/evaluation.py -t stdio -c node -a dist/index.js evaluation.xml
 ## Questions?
 
 Refer to:
+
 - **Full evaluation**: `MCP_BUILDER_EVALUATION.md`
-- **MCP Best Practices**: `/Users/kip/.claude/plugins/marketplaces/anthropic-agent-skills/mcp-builder/reference/mcp_best_practices.md`
+- **MCP Best Practices**:
+  `/Users/kip/.claude/plugins/marketplaces/anthropic-agent-skills/mcp-builder/reference/mcp_best_practices.md`
 - **Tool annotations spec**: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
 
 ---
 
-**Status**: Ready to implement
-**Estimated Total Time**: 2-3 hours for high-priority items
-**Expected Outcome**: Perfect 100/100 MCP score
+**Status**: Ready to implement **Estimated Total Time**: 2-3 hours for high-priority items **Expected Outcome**: Perfect
+100/100 MCP score

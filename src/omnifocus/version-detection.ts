@@ -15,9 +15,9 @@ interface OmniFocusVersion {
 }
 
 interface OmniFocusFeatures {
-  hasPlannedDates: boolean;           // 4.7+
-  hasMutuallyExclusiveTags: boolean;  // 4.7+
-  hasEnhancedRepeats: boolean;        // 4.7+
+  hasPlannedDates: boolean; // 4.7+
+  hasMutuallyExclusiveTags: boolean; // 4.7+
+  hasEnhancedRepeats: boolean; // 4.7+
 }
 
 interface VersionInfo {

@@ -44,7 +44,10 @@ describe('OmniFocusWriteTool dry-run mode', () => {
       });
 
       expect(result).toBeDefined();
-      const response = result as { success: boolean; data: { dryRun: boolean; wouldAffect: { count: number; creates: number; items: unknown[] } } };
+      const response = result as {
+        success: boolean;
+        data: { dryRun: boolean; wouldAffect: { count: number; creates: number; items: unknown[] } };
+      };
       expect(response.success).toBe(true);
       expect(response.data.dryRun).toBe(true);
       expect(response.data.wouldAffect.count).toBe(2);
@@ -138,7 +141,10 @@ describe('OmniFocusWriteTool dry-run mode', () => {
       });
 
       expect(result).toBeDefined();
-      const response = result as { success: boolean; data: { dryRun: boolean; wouldAffect: { count: number; items: unknown[] } } };
+      const response = result as {
+        success: boolean;
+        data: { dryRun: boolean; wouldAffect: { count: number; items: unknown[] } };
+      };
       expect(response.success).toBe(true);
       expect(response.data.dryRun).toBe(true);
       expect(response.data.wouldAffect.count).toBe(3);

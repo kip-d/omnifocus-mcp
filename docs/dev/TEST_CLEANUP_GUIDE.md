@@ -2,21 +2,25 @@
 
 ## Problem: Database Pollution from Integration Tests
 
-Integration tests that create OmniFocus tasks and projects were leaving behind test data after test runs, polluting the database with orphaned test items.
+Integration tests that create OmniFocus tasks and projects were leaving behind test data after test runs, polluting the
+database with orphaned test items.
 
 ### Root Cause
 
-In `omnifocus-4.7-features.test.ts`, 12 calls to `client.callTool('manage_task', { operation: 'create', ... })` were creating tasks directly without:
+In `omnifocus-4.7-features.test.ts`, 12 calls to `client.callTool('manage_task', { operation: 'create', ... })` were
+creating tasks directly without:
 
 1. Adding tracking tags (session ID and `'mcp-test'` tag)
 2. Recording task IDs in `createdTaskIds[]`
 3. Notifying the cleanup system about the created items
 
-**Result**: The `afterEach()` and `afterAll()` cleanup hooks couldn't find these tasks because they weren't in the tracking array.
+**Result**: The `afterEach()` and `afterAll()` cleanup hooks couldn't find these tasks because they weren't in the
+tracking array.
 
 ### Evidence
 
 Tasks with these tag combinations were found in OmniFocus after test runs:
+
 - `['test', 'planned-dates']`
 - `['test', 'planned-query']`
 - `['test', 'planned-update']`
@@ -61,25 +65,27 @@ trackCreatedProjectId(result: any): void {
 When creating items via direct `callTool()` calls, immediately track the result:
 
 #### ❌ BEFORE (Untracked - pollutes database)
+
 ```typescript
 const response = await client.callTool('manage_task', {
   operation: 'create',
   name: 'Task with Planned Date',
   plannedDate: '2025-11-15 09:00',
-  tags: ['test', 'planned-dates']
+  tags: ['test', 'planned-dates'],
 });
 // Task created but NOT tracked - will remain in database after test!
 ```
 
 #### ✅ AFTER (Tracked - cleaned up automatically)
+
 ```typescript
 const response = await client.callTool('manage_task', {
   operation: 'create',
   name: 'Task with Planned Date',
   plannedDate: '2025-11-15 09:00',
-  tags: ['test', 'planned-dates']
+  tags: ['test', 'planned-dates'],
 });
-client.trackCreatedTaskId(response);  // Add this line!
+client.trackCreatedTaskId(response); // Add this line!
 // Task now tracked and will be deleted in afterEach/afterAll
 ```
 
@@ -95,7 +101,7 @@ client.trackCreatedTaskId(response);  // Add this line!
 // ✅ BEST - Automatic tracking with session ID
 const result = await client.createTestTask('My Task', {
   plannedDate: '2025-11-15',
-  tags: ['test', 'my-feature']
+  tags: ['test', 'my-feature'],
 });
 // Automatically tracked, tagged with mcp-test + session ID, cleaned up
 ```
@@ -109,7 +115,7 @@ When you must use direct `callTool()` calls, track immediately:
 const response = await client.callTool('manage_task', {
   operation: 'create',
   name: 'Task',
-  tags: ['test']
+  tags: ['test'],
 });
 if (response.success) {
   client.trackCreatedTaskId(response);
@@ -144,6 +150,7 @@ afterEach(async () => {
 ```
 
 **What it does**:
+
 1. Gets the list of tracked task IDs
 2. Uses `bulk_delete` operation to delete all tasks at once (fast!)
 3. Individually deletes tracked projects
@@ -161,6 +168,7 @@ afterAll(async () => {
 ```
 
 **What it does**:
+
 1. Performs bulk delete of tracked tasks (same as `quickCleanup`)
 2. Individually deletes tracked projects
 3. (Optionally) scans for any remaining test data by tag
@@ -176,13 +184,14 @@ All 12 direct `callTool('manage_task', ...)` calls were updated to call `trackCr
 ### Example Transformation
 
 **Before**:
+
 ```typescript
 it('should create task with planned date', async () => {
   const response = await client.callTool('manage_task', {
     operation: 'create',
     name: 'Task with Planned Date',
     plannedDate: '2025-11-15 09:00',
-    tags: ['test', 'planned-dates']
+    tags: ['test', 'planned-dates'],
   });
   expect(response.success).toBe(true);
   expect(response.data?.task?.taskId).toBeDefined();
@@ -190,23 +199,25 @@ it('should create task with planned date', async () => {
 ```
 
 **After**:
+
 ```typescript
 it('should create task with planned date', async () => {
   const response = await client.callTool('manage_task', {
     operation: 'create',
     name: 'Task with Planned Date',
     plannedDate: '2025-11-15 09:00',
-    tags: ['test', 'planned-dates']
+    tags: ['test', 'planned-dates'],
   });
   expect(response.success).toBe(true);
   expect(response.data?.task?.taskId).toBeDefined();
-  client.trackCreatedTaskId(response);  // ← ADDED
+  client.trackCreatedTaskId(response); // ← ADDED
 });
 ```
 
 ### Modified Tests
 
 In `omnifocus-4.7-features.test.ts`:
+
 1. Line 47: `should create task with planned date` ✅
 2. Line 60: `should list tasks with planned date included` ✅
 3. Line 91: `should update task with new planned date` ✅
@@ -225,16 +236,19 @@ In `omnifocus-4.7-features.test.ts`:
 ### Now Properly Cleaned Up
 
 ✅ **data-lifecycle.test.ts** (6 tests)
+
 - Uses `createTestTask()` and `createTestProject()` helpers
 - Tracked with session ID and `'mcp-test'` tag
 - Cleaned up in `afterEach()` and `afterAll()`
 
 ✅ **omnifocus-4.7-features.test.ts** (15 tests)
+
 - Now uses `client.trackCreatedTaskId()` for all direct creates
 - Cleaned up in `afterEach()` and `afterAll()`
 - Database pollution issue **RESOLVED**
 
 ✅ **batch-operations.test.ts** (8 skipped tests)
+
 - Has custom cleanup code in `afterAll()`
 - Cleans up via direct OmniAutomation script execution
 - Will be cleaned up when test is enabled
@@ -263,23 +277,25 @@ npm test -- tests/integration/omnifocus-4.7-features.test.ts tests/integration/d
 ### Verify Cleanup Logs
 
 The cleanup output shows:
+
 ```
 🧹 Quick cleanup: deleting 12 tasks, 0 projects
 📊 Quick cleanup completed in 5234ms (12 operations)
 ```
 
-Each test run should show tasks being deleted. If you see "0 tasks deleted", no test data was created (which is also good!).
+Each test run should show tasks being deleted. If you see "0 tasks deleted", no test data was created (which is also
+good!).
 
 ---
 
 ## Best Practices Summary
 
-| Scenario | Method | Cleanup | Notes |
-|----------|--------|---------|-------|
-| Normal test data | `createTestTask()` | Automatic ✅ | Always use this when possible |
-| Custom properties | `callTool()` + `trackCreatedTaskId()` | Automatic ✅ | Track immediately after create |
-| Complex operations | Direct script execution | Manual | Provide custom `afterAll()` hook |
-| Read-only tests | No creation needed | N/A | Skip cleanup entirely |
+| Scenario           | Method                                | Cleanup      | Notes                            |
+| ------------------ | ------------------------------------- | ------------ | -------------------------------- |
+| Normal test data   | `createTestTask()`                    | Automatic ✅ | Always use this when possible    |
+| Custom properties  | `callTool()` + `trackCreatedTaskId()` | Automatic ✅ | Track immediately after create   |
+| Complex operations | Direct script execution               | Manual       | Provide custom `afterAll()` hook |
+| Read-only tests    | No creation needed                    | N/A          | Skip cleanup entirely            |
 
 ---
 
@@ -287,21 +303,18 @@ Each test run should show tasks being deleted. If you see "0 tasks deleted", no 
 
 ### "Tests create tasks but cleanup doesn't run"
 
-**Cause**: `afterEach()` or `afterAll()` not being called
-**Solution**: Check test framework setup - ensure hooks are registered
-**Verify**: Add console.log in cleanup hook and run test
+**Cause**: `afterEach()` or `afterAll()` not being called **Solution**: Check test framework setup - ensure hooks are
+registered **Verify**: Add console.log in cleanup hook and run test
 
 ### "Some tasks remain after cleanup"
 
-**Cause**: Task created but not tracked
-**Solution**: Add `client.trackCreatedTaskId(response)` after creation
+**Cause**: Task created but not tracked **Solution**: Add `client.trackCreatedTaskId(response)` after creation
 **Verify**: Check if tracking ID is being recorded in logs
 
 ### "Cleanup is slow (> 10 seconds)"
 
-**Cause**: Too many individual delete operations
-**Solution**: Bulk delete is already optimized - timeout may be legitimate
-**Verify**: Run with `--reporter=verbose` to see timing breakdown
+**Cause**: Too many individual delete operations **Solution**: Bulk delete is already optimized - timeout may be
+legitimate **Verify**: Run with `--reporter=verbose` to see timing breakdown
 
 ---
 
@@ -311,4 +324,3 @@ Each test run should show tasks being deleted. If you see "0 tasks deleted", no 
 - ✅ `tests/integration/omnifocus-4.7-features.test.ts` - Track all creates
 - 📄 `docs/dev/SKIPPED_TESTS.md` - Documentation of all skipped tests
 - 📄 `docs/dev/TEST_CLEANUP_GUIDE.md` - This file
-

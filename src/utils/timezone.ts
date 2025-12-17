@@ -66,7 +66,9 @@ export function getSystemTimezone(): string {
 
     // Final fallback - use UTC offset to guess
     const offset = new Date().getTimezoneOffset();
-    console.warn(`Could not detect system timezone name. Using UTC offset ${-offset / 60} hours. This may cause date interpretation issues.`);
+    console.warn(
+      `Could not detect system timezone name. Using UTC offset ${-offset / 60} hours. This may cause date interpretation issues.`,
+    );
     return 'UTC';
   } catch (error) {
     console.error('Error detecting timezone:', error);
@@ -118,7 +120,9 @@ export function localToUTC(
   // Check if date is valid
   if (isNaN(localDate.getTime())) {
     const tzInfo = getTimezoneInfo();
-    throw new Error(`Invalid date format: "${localDateStr}". Expected formats: "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Current timezone: ${tzInfo.timezone} (${tzInfo.offsetString}). Examples: "2024-01-15" (becomes midnight in ${tzInfo.timezone}) or "2024-01-15 14:30" (becomes 2:30 PM in ${tzInfo.timezone}).`);
+    throw new Error(
+      `Invalid date format: "${localDateStr}". Expected formats: "YYYY-MM-DD" or "YYYY-MM-DD HH:mm". Current timezone: ${tzInfo.timezone} (${tzInfo.offsetString}). Examples: "2024-01-15" (becomes midnight in ${tzInfo.timezone}) or "2024-01-15 14:30" (becomes 2:30 PM in ${tzInfo.timezone}).`,
+    );
   }
 
   // Convert to UTC

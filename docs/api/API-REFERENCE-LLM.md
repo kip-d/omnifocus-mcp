@@ -2,22 +2,26 @@
 
 **Last Updated:** 2025-10-20
 
-**17 Consolidated Tools** | **22 Task Fields** | **95% Performance Improvements** | **Type-Safe V2 Architecture** | **Smart Capture**
+**17 Consolidated Tools** | **22 Task Fields** | **95% Performance Improvements** | **Type-Safe V2 Architecture** |
+**Smart Capture**
 
 **🚨 CRITICAL FOR LLMs: Date Conversion Required**
 
-Users will use natural language: "tomorrow", "next Friday", "in 3 days"
-**YOU MUST CONVERT** to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` before calling manage_task
-Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29' }`
+Users will use natural language: "tomorrow", "next Friday", "in 3 days" **YOU MUST CONVERT** to `YYYY-MM-DD` or
+`YYYY-MM-DD HH:mm` before calling manage_task Example: User says "due tomorrow" (Oct 28) → You call
+`{ dueDate: '2025-10-29' }`
 
 **📖 Related Resources:**
+
 - **[User Prompts & Workflows](../prompts/README.md)** - Ready-to-use prompts for testing and daily GTD workflows
 - **[Smart Capture Guide](SMART_CAPTURE.md)** - Extract action items from meeting notes
 - **[Main Documentation](../README.md)** - Installation, setup, and complete overview
 
 ## Smart Capture (1 tool)
 
-**parse_meeting_notes** `input*` `extractMode:"both"` `suggestProjects:true` `suggestTags:true` `suggestDueDates:true` `suggestEstimates:true` `returnFormat:"preview"` `groupByProject:true` `existingProjects[]?` `defaultProject?`
+**parse_meeting_notes** `input*` `extractMode:"both"` `suggestProjects:true` `suggestTags:true` `suggestDueDates:true`
+`suggestEstimates:true` `returnFormat:"preview"` `groupByProject:true` `existingProjects[]?` `defaultProject?`
+
 - Extract action items from meeting notes, transcripts, or unstructured text
 - Auto-suggests context tags (@computer, @phone, @15min, @urgent, etc.)
 - Parses natural language dates ("by Friday" → YYYY-MM-DD)
@@ -26,6 +30,7 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 - Output formats: `preview` (for review) or `batch_ready` (for batch_create)
 
 **Examples:**
+
 ```javascript
 // Extract and preview
 {
@@ -50,12 +55,15 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 
 ## Task Operations (2 tools)
 
-**tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?` `completed:"false"` `dueBy?` `daysAhead:"7"` `filters?` `sort[]?`
+**tasks** `mode*` `limit*:"25"` `details*:"false"` `fastSearch*:"true"` `fields[]?` `search?` `project?` `tags[]?`
+`completed:"false"` `dueBy?` `daysAhead:"7"` `filters?` `sort[]?`
+
 - Modes: all|search|overdue|today|upcoming|available|blocked|flagged|smart_suggest
 - Advanced: `filters` (operator-based), `sort` (multi-field)
 - Returns: summary→insights, then data
 
 **Advanced Filtering Examples:**
+
 ```javascript
 // OR logic for tags: "tasks tagged urgent OR important"
 { filters: { tags: { operator: "OR", values: ["urgent", "important"] } } }
@@ -85,11 +93,13 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 ```
 
 **Filter Operators:**
+
 - String: CONTAINS, STARTS_WITH, ENDS_WITH, EQUALS, NOT_EQUALS
 - Array: OR, AND, NOT_IN, IN
 - Date/Number: >, >=, <, <=, BETWEEN
 
 **Available Task Fields** (22 total, use in `fields[]?` parameter):
+
 - **Core**: id, name, note
 - **Status**: completed, flagged, blocked, available, inInbox
 - **Scheduling**: dueDate, deferDate, plannedDate, completionDate, dropDate
@@ -99,9 +109,11 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 - **Planning**: estimatedMinutes
 
 **Sort Fields** (use in `sort[]?` parameter):
+
 - dueDate, deferDate, name, flagged, estimatedMinutes, added, modified, completionDate
 
 **Sorting Examples:**
+
 ```javascript
 // Recently modified first
 { sort: [{ field: "modified", direction: "desc" }], limit: 10 }
@@ -113,9 +125,13 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 }
 ```
 
-**manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?` `deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?` `clear*?`
+**manage_task** `operation*` `taskId?` `name?` `note?` `projectId?` `parentTaskId?` `dueDate?` `plannedDate?`
+`deferDate?` `flagged?` `estimatedMinutes?` `tags[]?` `sequential?` `repeatRule?` `completionDate?` `minimalResponse?`
+`clear*?`
+
 - Ops: create(name*)|update(taskId*)|complete(taskId*)|delete(taskId*)
-- **Dates - YOUR CONVERSION REQUIRED**: Users say "tomorrow"/"next Friday" → YOU convert to "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" format (due→5pm, defer→8am). Schema REJECTS natural language.
+- **Dates - YOUR CONVERSION REQUIRED**: Users say "tomorrow"/"next Friday" → YOU convert to "YYYY-MM-DD" or "YYYY-MM-DD
+  HH:mm" format (due→5pm, defer→8am). Schema REJECTS natural language.
 - **plannedDate** (OmniFocus 4.7+): When task is planned for scheduling (e.g., "2025-11-15 09:00")
 - **repeatRule** (OmniFocus 4.7+ enhanced): User-friendly intent schema:
   ```javascript
@@ -134,54 +150,79 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 
 ## Projects (1 tool)
 
-**projects** `operation*` `limit*` `details*` `status?` `folder?` `needsReview?` `projectId?` `name?` `note?` `dueDate?` `reviewInterval?` `tags[]?` `flagged?` `completionDate?`
+**projects** `operation*` `limit*` `details*` `status?` `folder?` `needsReview?` `projectId?` `name?` `note?` `dueDate?`
+`reviewInterval?` `tags[]?` `flagged?` `completionDate?`
+
 - Ops: list|create(name*)|update(projectId*)|complete(projectId*)|delete(projectId*)|review|active|stats
 
 ## Organization (3 tools)
 
-**folders** `operation*` `folderId?` `folderName?` `name?` `parentFolderId?` `searchQuery?` `includeProjects?` `includeSubfolders?` `status?` `includeContents?` `duplicateName?`
-- Ops: list|get|search(searchQuery*)|projects|create(name*)|update(folderId*,name*)|delete(folderId*)|move(folderId*,parentFolderId*)|duplicate(folderId*)|set_status(folderId*,status*)
+**folders** `operation*` `folderId?` `folderName?` `name?` `parentFolderId?` `searchQuery?` `includeProjects?`
+`includeSubfolders?` `status?` `includeContents?` `duplicateName?`
 
-**tags** `operation*` `sortBy:"name"` `includeEmpty:"true"` `includeUsageStats:"false"` `includeTaskCounts:"false"` `fastMode:"true"` `namesOnly:"false"` `action?` `tagName?` `newName?` `targetTag?` `parentTagName?` `parentTagId?` `mutuallyExclusive?`
+- Ops:
+  list|get|search(searchQuery*)|projects|create(name*)|update(folderId*,name*)|delete(folderId*)|move(folderId*,parentFolderId*)|duplicate(folderId*)|set_status(folderId*,status*)
+
+**tags** `operation*` `sortBy:"name"` `includeEmpty:"true"` `includeUsageStats:"false"` `includeTaskCounts:"false"`
+`fastMode:"true"` `namesOnly:"false"` `action?` `tagName?` `newName?` `targetTag?` `parentTagName?` `parentTagId?`
+`mutuallyExclusive?`
+
 - Ops: list|active|manage(action*,tagName*)
-- Actions: create|rename(newName*)|delete|merge(targetTag*)|nest|unparent|reparent|set_mutual_exclusivity(mutuallyExclusive*)
-- **set_mutual_exclusivity** (OmniFocus 4.7+): Set `mutuallyExclusive: true` to enable mutual exclusivity on tag's children, `false` to disable
+- Actions:
+  create|rename(newName*)|delete|merge(targetTag*)|nest|unparent|reparent|set_mutual_exclusivity(mutuallyExclusive\*)
+- **set_mutual_exclusivity** (OmniFocus 4.7+): Set `mutuallyExclusive: true` to enable mutual exclusivity on tag's
+  children, `false` to disable
 
 **manage_reviews** `operation*` `projectId?` `reviewDate?` `reviewInterval?` `nextReviewDate?`
-- Ops: list_for_review|mark_reviewed(projectId*)|set_schedule(projectIds*[],reviewInterval*)|clear_schedule(projectIds*[])
+
+- Ops:
+  list_for_review|mark_reviewed(projectId*)|set_schedule(projectIds*[],reviewInterval*)|clear_schedule(projectIds*[])
 
 ## Analytics (5 tools - all return summary first)
 
 **productivity_stats** `period*` `includeProjectStats*` `includeTagStats*`
+
 - Period: today|week|month|quarter|year
 
 **task_velocity** `days*` `groupBy*` `includeWeekends*`
+
 - GroupBy: day|week|project|tag
 
 **analyze_overdue** `includeRecentlyCompleted*` `groupBy*` `limit*`
+
 - GroupBy: project|age|priority
 
 **workflow_analysis** `analysisDepth*` `focusAreas*` `includeRawData*` `maxInsights*`
+
 - Depth: quick|standard|deep
 - Focus: productivity|workload|bottlenecks|opportunities
 
 **analyze_patterns** `patterns*` `options*`
-- Patterns: duplicates|dormant_projects|tag_audit|deadline_health|waiting_for|estimation_bias|next_actions|review_gaps|all
+
+- Patterns:
+  duplicates|dormant_projects|tag_audit|deadline_health|waiting_for|estimation_bias|next_actions|review_gaps|all
 
 ## Utilities (4 tools)
 
-**export** `type*` `format*:"json"` `filter?` `fields[]?` `includeStats?` `outputDirectory?` `includeCompleted?` `includeProjectStats?`
-- Types: tasks(filter?,fields?)|projects(includeStats?)|all(outputDirectory*)
+**export** `type*` `format*:"json"` `filter?` `fields[]?` `includeStats?` `outputDirectory?` `includeCompleted?`
+`includeProjectStats?`
+
+- Types: tasks(filter?,fields?)|projects(includeStats?)|all(outputDirectory\*)
 - Formats: json|csv|markdown
 
-**recurring_tasks** `operation*` `activeOnly:"true"` `includeCompleted:"false"` `includeDropped:"false"` `includeHistory?` `sortBy?`
+**recurring_tasks** `operation*` `activeOnly:"true"` `includeCompleted:"false"` `includeDropped:"false"`
+`includeHistory?` `sortBy?`
+
 - Ops: analyze(includeHistory?,sortBy?)|patterns
 
-**perspectives** `operation*` `perspectiveName?` `limit?` `includeDetails?` `includeFilterRules?` `sortBy?` `formatOutput?` `groupBy?` `fields[]?` `includeMetadata?`
-- Ops: list|query(perspectiveName*)
+**perspectives** `operation*` `perspectiveName?` `limit?` `includeDetails?` `includeFilterRules?` `sortBy?`
+`formatOutput?` `groupBy?` `fields[]?` `includeMetadata?`
+
+- Ops: list|query(perspectiveName\*)
 - Enhanced: formatOutput→human-readable, groupBy→project|tag|dueDate|status, fields→performance
 
 **system** `operation*` `testScript?`
+
 - Ops: version|diagnostics
 
 ---
@@ -205,9 +246,8 @@ Example: User says "due tomorrow" (Oct 28) → You call `{ dueDate: '2025-10-29'
 
 ## Migration from v1 (Historical)
 
-Old: create_task → New: manage_task(operation:'create')
-Old: export_tasks → New: export(type:'tasks')
-Old: analyze_recurring_tasks → New: recurring_tasks(operation:'analyze')
+Old: create_task → New: manage_task(operation:'create') Old: export_tasks → New: export(type:'tasks') Old:
+analyze_recurring_tasks → New: recurring_tasks(operation:'analyze')
 
 ## Architecture Benefits
 

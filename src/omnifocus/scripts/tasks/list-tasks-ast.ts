@@ -18,7 +18,11 @@
  */
 
 import type { TaskFilter } from '../../../contracts/filters.js';
-import { buildFilteredTasksScript, buildInboxScript, buildTaskByIdScript } from '../../../contracts/ast/script-builder.js';
+import {
+  buildFilteredTasksScript,
+  buildInboxScript,
+  buildTaskByIdScript,
+} from '../../../contracts/ast/script-builder.js';
 
 /**
  * Build a V4 task query script using AST-generated filters
@@ -98,10 +102,7 @@ export function buildListTasksScriptV4(params: {
  * Escape template string for embedding in another template
  */
 function escapeTemplateString(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/`/g, '\\`')
-    .replace(/\${/g, '\\${');
+  return str.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${');
 }
 
 /**

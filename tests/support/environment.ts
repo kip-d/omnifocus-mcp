@@ -13,7 +13,7 @@ export interface EnvironmentInfo {
 
 export class TestEnvironment {
   private static environmentInfo: EnvironmentInfo | null = null;
-  
+
   /**
    * Check if OmniFocus is running and accessible
    */
@@ -21,26 +21,31 @@ export class TestEnvironment {
     try {
       // Quick check using osascript to see if OmniFocus is running
       const { execSync } = await import('child_process');
-      const result = execSync('osascript -e "tell application \"System Events\" to get name of every process whose background only is false"', { encoding: 'utf8' });
+      const result = execSync(
+        'osascript -e "tell application \"System Events\" to get name of every process whose background only is false"',
+        { encoding: 'utf8' },
+      );
       return result.toLowerCase().includes('omnifocus');
     } catch {
       return false;
     }
   }
-  
+
   /**
    * Check if OmniFocus has an open document
    */
   static async isOmniFocusDocumentOpen(): Promise<boolean> {
     try {
       const { execSync } = await import('child_process');
-      const result = execSync('osascript -e "tell application \"OmniFocus\" to get name of every document"', { encoding: 'utf8' });
+      const result = execSync('osascript -e "tell application \"OmniFocus\" to get name of every document"', {
+        encoding: 'utf8',
+      });
       return result.trim().length > 0 && !result.includes('error');
     } catch {
       return false;
     }
   }
-  
+
   /**
    * Get comprehensive environment information
    */
@@ -48,37 +53,37 @@ export class TestEnvironment {
     if (this.environmentInfo) {
       return this.environmentInfo;
     }
-    
+
     const [isOmniFocusRunning, isOmniFocusDocumentOpen] = await Promise.all([
       this.isOmniFocusRunning(),
-      this.isOmniFocusDocumentOpen()
+      this.isOmniFocusDocumentOpen(),
     ]);
-    
+
     this.environmentInfo = {
       isOmniFocusRunning,
       isOmniFocusDocumentOpen,
       hasTestData: isOmniFocusRunning && isOmniFocusDocumentOpen,
       nodeVersion: process.version,
-      platform: process.platform
+      platform: process.platform,
     };
-    
+
     return this.environmentInfo;
   }
-  
+
   /**
    * Skip test if OmniFocus is not available
    */
   static skipIfNoOmniFocus(testName: string, testFn: () => void | Promise<void>): void {
     test.skipIf(!this.isOmniFocusRunning(), testName, testFn);
   }
-  
+
   /**
    * Skip test if OmniFocus document is not open
    */
   static skipIfNoDocument(testName: string, testFn: () => void | Promise<void>): void {
     test.skipIf(!this.isOmniFocusDocumentOpen(), testName, testFn);
   }
-  
+
   /**
    * Log environment information for debugging
    */

@@ -4,17 +4,20 @@
 
 ## Executive Summary
 
-The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combines JXA (JavaScript for Automation) with targeted OmniJS bridge operations to achieve optimal performance and functionality.
+The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combines JXA (JavaScript for Automation) with
+targeted OmniJS bridge operations to achieve optimal performance and functionality.
 
 ## JavaScript Execution Model
 
 ### Primary: JXA (JavaScript for Automation)
+
 - **Entry point**: All scripts start with `Application('OmniFocus')`
 - **Execution**: Via `osascript -l JavaScript` through stdin piping
 - **Use cases**: Reading properties, simple CRUD operations, direct API access
 - **Performance**: Good for most operations (<1 second for 2000+ tasks)
 
 ### Secondary: evaluateJavascript() Bridge
+
 - **Pattern**: JXA script calls `app.evaluateJavascript(omniJsCode)`
 - **Use cases**: Operations JXA cannot handle or needs performance boost
 - **When required**:
@@ -24,6 +27,7 @@ The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combi
   - Bulk operations requiring speed
 
 ### Never: Pure OmniJS
+
 - No scripts run purely in OmniJS context
 - OmniJS code only executes through evaluateJavascript() bridge
 
@@ -32,12 +36,14 @@ The OmniFocus MCP server uses a **hybrid JavaScript execution model** that combi
 ### Quick Decision Guide
 
 **Start with Pure JXA for:**
+
 - Reading task/project/tag properties
 - Simple CRUD operations (create, update, delete)
 - Queries and filters
 - Most standard OmniFocus operations
 
 **Add Bridge for:**
+
 - ✅ **Tag assignment during task creation** (JXA limitation)
 - ✅ **Task movement between projects** (preserves IDs better)
 - ✅ **Setting repetition rules** (complex rule objects)
@@ -64,6 +70,7 @@ Operation needed?
 ## Implementation Patterns
 
 ### Pattern 1: Pure JXA
+
 ```typescript
 export const SIMPLE_OPERATION_SCRIPT = `
   ${getUnifiedHelpers()}
@@ -85,6 +92,7 @@ export const SIMPLE_OPERATION_SCRIPT = `
 ```
 
 ### Pattern 2: JXA + Bridge
+
 ```typescript
 export const COMPLEX_OPERATION_SCRIPT = `
   ${getUnifiedHelpers()}
@@ -113,6 +121,7 @@ export const COMPLEX_OPERATION_SCRIPT = `
 ## Helper System Organization
 
 ### Current Structure (v2.2.0+)
+
 ```
 src/omnifocus/scripts/shared/
 ├── helpers.ts              # Unified helper system (single getUnifiedHelpers function)
@@ -124,32 +133,38 @@ src/omnifocus/scripts/shared/
 ### Helper Function Selection Guide
 
 **Primary (v2.2.0+):**
+
 - **getUnifiedHelpers()** - Complete unified helper suite (~16.37KB, only 3.1% of JXA limit)
   - Includes all utilities needed for any operation
   - Eliminates composition complexity
   - Used in all 34 scripts across the codebase
 
 **Deprecated (v2.2.0+, removal in v2.3.0):**
+
 - ~~getAllHelpers()~~ - Use `getUnifiedHelpers()` instead
 - ~~getCoreHelpers()~~ - Use `getUnifiedHelpers()` instead
 - ~~getMinimalHelpers()~~ - Use `getUnifiedHelpers()` instead
 - All other specialized helpers deprecated in favor of unified approach
 
 **For Bridge Operations:**
+
 - **getBridgeOperations()** - From bridge-helpers.ts, evaluateJavascript templates
 
 ## Script Size Considerations
 
 ### Empirical Limits (Tested September 2025)
+
 - **JXA Direct**: 523KB (~523,000 characters)
 - **OmniJS Bridge**: 261KB (~261,000 characters)
 
 ### Current Usage
+
 - Largest script: ~31KB (6% of JXA limit)
 - All scripts well within empirical limits
 - Previous 19KB "limit" was incorrect assumption
 
 ### Recommendations
+
 - Use appropriate helper level for functionality needed
 - No need for aggressive size optimization
 - Script size is rarely the limiting factor
@@ -157,12 +172,14 @@ src/omnifocus/scripts/shared/
 ## Performance Guidelines
 
 ### JXA Performance Rules
+
 1. **Never use whose() or where() methods** - Takes 25+ seconds
 2. **Use direct iteration with try/catch** - 50% faster than wrapper functions
 3. **Early exit conditions** - Check completed/date conditions first
 4. **Cache timestamp comparisons** - Don't create Date objects in loops
 
 ### When to Use Bridge for Performance
+
 - Bulk operations (>100 items)
 - Complex data transformations
 - Operations requiring precise timing
@@ -171,6 +188,7 @@ src/omnifocus/scripts/shared/
 ## Error Handling Patterns
 
 ### JXA Error Handling
+
 ```javascript
 function safeGet(fn) {
   try {
@@ -185,6 +203,7 @@ const name = safeGet(() => task.name()) || 'Unnamed';
 ```
 
 ### Bridge Error Handling
+
 ```javascript
 function executeBridgeOperation(app, template, params) {
   try {
@@ -200,12 +219,14 @@ function executeBridgeOperation(app, template, params) {
 ## Security Considerations
 
 ### Bridge Script Safety
+
 - Always use template-based script generation
 - Never concatenate user input directly into scripts
 - Use `JSON.stringify()` for parameter injection
 - Validate bridge operation results
 
 ### Example Safe Bridge Template
+
 ```javascript
 const SAFE_TEMPLATE = [
   '(() => {',
@@ -215,25 +236,27 @@ const SAFE_TEMPLATE = [
   '  task.clearTags();',
   '  tags.forEach(name => task.addTag(Tag.byName(name) || new Tag(name)));',
   '  return JSON.stringify({ success: true });',
-  '})()'
+  '})()',
 ].join('\\n');
 ```
 
 ## Common Anti-Patterns
 
 ### ❌ Don't Do This
+
 ```javascript
 // Direct string concatenation - security risk
 const script = `task.name = "${userInput}";`;
 
 // Using whose() - performance killer
-const tasks = doc.flattenedTasks.whose({completed: false})();
+const tasks = doc.flattenedTasks.whose({ completed: false })();
 
 // Pure OmniJS without JXA wrapper
 const omniJsScript = 'Task.byIdentifier("123").name = "new";';
 ```
 
 ### ✅ Do This Instead
+
 ```javascript
 // Template-based parameter injection
 const script = formatBridgeScript(template, { NAME: userInput });
@@ -253,12 +276,14 @@ const result = app.evaluateJavascript(omniJsScript);
 ## Testing Patterns
 
 ### Direct Tool Testing
+
 ```bash
 # Test with proper MCP initialization
 node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 ```
 
 ### Environment Differences
+
 - **CLI Testing**: Works for read operations, write operations may fail
 - **Claude Desktop**: All operations work correctly
 - **Root Cause**: Unknown environment-specific script execution difference
@@ -266,12 +291,14 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 ## Migration Guidelines
 
 ### From Legacy Patterns
+
 1. Replace direct `evaluateJavascript` strings with templates
 2. Consolidate duplicate helper functions
 3. Use performance-optimized scripts for production
 4. Remove experimental script variants
 
 ### Future Development
+
 1. Start with Pure JXA for new operations
 2. Add bridge operations only when JXA limitations require it
 3. Use getAllHelpers() freely (no size constraints)
@@ -280,11 +307,13 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 ## Troubleshooting
 
 ### Common Issues
+
 - **Scripts timeout**: Check for whose() usage, implement early exits
 - **Bridge operations fail**: Verify template parameters and error handling
 - **CLI vs Claude Desktop differences**: Use Claude Desktop for write operations
 
 ### Debug Patterns
+
 - Add console.error() statements for execution tracking
 - Use structured error returns with context
 - Implement graceful fallbacks for bridge operations
@@ -292,12 +321,14 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 ## Performance Benchmarks
 
 ### Typical Operation Times
+
 - Task queries (2000+ tasks): <1 second
 - Task creation: <0.5 seconds
 - Tag operations via bridge: <1 second
 - Bulk exports: 2-5 seconds (depending on size)
 
 ### When Performance Degrades
+
 - Using whose() methods: 25+ seconds
 - No early exit conditions: 5-10x slower
 - Complex nested operations: Variable
@@ -305,25 +336,30 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 ## Tool Architecture (V2.1.0)
 
 ### Self-Contained Design
+
 Each of the 15 consolidated tools contains complete implementation without delegation:
 
 **Core Tools**:
+
 - `tasks` - Self-contained query implementation with 8 modes
 - `manage_task` - Self-contained CRUD operations
 - `projects` - Self-contained project operations
 - `folders` - Self-contained folder operations (10 operations)
 - `tags` - Self-contained tag management
 
-**Analytics Tools**: 5 tools for GTD metrics and analysis
-**Utility Tools**: 4 tools for export, perspectives, recurring tasks, system info
+**Analytics Tools**: 5 tools for GTD metrics and analysis **Utility Tools**: 4 tools for export, perspectives, recurring
+tasks, system info
 
 ### Implementation Pattern
+
 ```typescript
 class ConsolidatedTool extends BaseTool {
   async execute(args: ToolArgs): Promise<ToolResponse> {
     switch (args.operation) {
-      case 'create': return await this.executeCreate(args);
-      case 'update': return await this.executeUpdate(args);
+      case 'create':
+        return await this.executeCreate(args);
+      case 'update':
+        return await this.executeUpdate(args);
       // Direct implementation, no delegation
     }
   }
@@ -338,13 +374,16 @@ class ConsolidatedTool extends BaseTool {
 ## Future Considerations
 
 ### Scalability
+
 - Easy to add new operations to existing tools
 - Clear patterns for new consolidated tools
 - Maintainable without delegation complexity
 
 ### Performance Evolution
+
 - Monitor for new JXA limitations
 - Expand bridge operations as needed
 - Continue empirical testing of actual limits
 
-This architecture guide provides the framework for consistent, performant, and maintainable OmniFocus automation scripts.
+This architecture guide provides the framework for consistent, performant, and maintainable OmniFocus automation
+scripts.

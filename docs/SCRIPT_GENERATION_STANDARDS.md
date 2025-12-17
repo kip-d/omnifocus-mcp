@@ -1,10 +1,12 @@
 # Script Generation Standards
 
-This document establishes consistent patterns for JavaScript script generation in the OmniFocus MCP project to prevent syntax errors and ensure reliable execution.
+This document establishes consistent patterns for JavaScript script generation in the OmniFocus MCP project to prevent
+syntax errors and ensure reliable execution.
 
 ## ✅ Correct Patterns
 
 ### 1. IIFE-Wrapped Template Scripts
+
 For static template scripts, always use IIFE (Immediately Invoked Function Expression) wrapping:
 
 ```typescript
@@ -20,6 +22,7 @@ export const EXAMPLE_SCRIPT = `
 ```
 
 ### 2. Function-Based Script Generation
+
 For dynamic script generation with parameters, use direct function calls (not return statements):
 
 ```typescript
@@ -41,6 +44,7 @@ export function createExampleScript(param1: string, param2: any): string {
 ## ❌ Anti-Patterns to Avoid
 
 ### 1. Return Statements Outside Functions
+
 ```typescript
 // ❌ WRONG: This causes "Return statements are only valid inside functions" error
 export function createBadScript(param: string): string {
@@ -55,6 +59,7 @@ export function createBadScript(param: string): string {
 ```
 
 ### 2. Orphaned Variable Assignments
+
 ```typescript
 // ❌ WRONG: Variables without proper return/output handling
 export function createBadScript2(param: string): string {
@@ -99,12 +104,14 @@ Before deploying any script generation function:
 ## 🚨 Historical Issues Fixed
 
 ### Issue #1: Project Update Script (2025-09-15)
-**Problem**: `createUpdateProjectScript` had `return updateProject(...)` at top level
-**Solution**: Changed to direct function call `updateProject(...)`
+
+**Problem**: `createUpdateProjectScript` had `return updateProject(...)` at top level **Solution**: Changed to direct
+function call `updateProject(...)`
 
 ### Issue #2: Task Update Script (2025-09-15)
-**Problem**: `createUpdateTaskScript` had `const result = ...; result;` pattern
-**Solution**: Changed to direct function call `updateTask(...)`
+
+**Problem**: `createUpdateTaskScript` had `const result = ...; result;` pattern **Solution**: Changed to direct function
+call `updateTask(...)`
 
 ## 💡 Best Practices
 
@@ -121,4 +128,5 @@ Before deploying any script generation function:
 - `src/omnifocus/scripts/shared/bridge-template.ts` - Template formatting utilities
 
 ---
-*Last updated: 2025-09-15 - Added after systematic script generation audit*
+
+_Last updated: 2025-09-15 - Added after systematic script generation audit_

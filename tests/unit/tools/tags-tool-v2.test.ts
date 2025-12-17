@@ -6,10 +6,10 @@ import { Logger } from '../../../src/utils/Logger.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../src/omnifocus/OmniAutomation.js', () => ({
-  OmniAutomation: vi.fn()
+  OmniAutomation: vi.fn(),
 }));
 vi.mock('../../../src/utils/Logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -17,7 +17,7 @@ vi.mock('../../../src/utils/Logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('TagsTool', () => {
@@ -62,9 +62,12 @@ describe('TagsTool', () => {
       mockOmniAutomation.executeJson.mockResolvedValue({
         success: true,
         data: {
-          tags: [{ id: 'tag1', name: 'Work' }, { id: 'tag2', name: 'Personal' }],
-          count: 2
-        }
+          tags: [
+            { id: 'tag1', name: 'Work' },
+            { id: 'tag2', name: 'Personal' },
+          ],
+          count: 2,
+        },
       });
 
       const result = await tool.executeValidated({
@@ -89,8 +92,8 @@ describe('TagsTool', () => {
         success: true,
         data: {
           tags: [{ id: 'tag1', name: 'Work' }],
-          count: 1
-        }
+          count: 1,
+        },
       });
 
       const result = await tool.executeValidated({
@@ -119,8 +122,8 @@ describe('TagsTool', () => {
           action: 'set_mutual_exclusivity',
           tagName: 'Priority',
           childrenAreMutuallyExclusive: true,
-          message: 'Mutual exclusivity for Priority child tags set to enabled'
-        }
+          message: 'Mutual exclusivity for Priority child tags set to enabled',
+        },
       });
 
       const result = await tool.executeValidated({
@@ -153,8 +156,8 @@ describe('TagsTool', () => {
           action: 'set_mutual_exclusivity',
           tagName: 'Priority',
           childrenAreMutuallyExclusive: false,
-          message: 'Mutual exclusivity for Priority child tags set to disabled'
-        }
+          message: 'Mutual exclusivity for Priority child tags set to disabled',
+        },
       });
 
       const result = await tool.executeValidated({
@@ -205,10 +208,10 @@ describe('TagsTool', () => {
         data: {
           tags: [
             { id: 'tag1', name: 'Priority', childrenAreMutuallyExclusive: true },
-            { id: 'tag2', name: 'Status', childrenAreMutuallyExclusive: false }
+            { id: 'tag2', name: 'Status', childrenAreMutuallyExclusive: false },
           ],
-          count: 2
-        }
+          count: 2,
+        },
       });
 
       const result = await tool.executeValidated({
@@ -276,7 +279,7 @@ describe('TagsTool', () => {
       mockOmniAutomation.executeJson.mockResolvedValue({
         success: false,
         error: 'Tag not found',
-        details: 'Tag "NonExistent" could not be located'
+        details: 'Tag "NonExistent" could not be located',
       });
 
       const result = await tool.executeValidated({

@@ -16,7 +16,7 @@ d('MCP Protocol Compliance Tests', () => {
   });
 
   afterAll(async () => {
-    await client.thoroughCleanup();  // Clean up any test data created
+    await client.thoroughCleanup(); // Clean up any test data created
     // Don't stop server - globalTeardown handles that
   });
 
@@ -138,7 +138,8 @@ d('MCP Protocol Compliance Tests', () => {
 
       if (result.success === false) {
         const errorMessage = result.error.message;
-        const isOmniFocusError = errorMessage.includes('OmniFocus') ||
+        const isOmniFocusError =
+          errorMessage.includes('OmniFocus') ||
           errorMessage.includes('not be available') ||
           errorMessage.includes('not running');
         expect(isOmniFocusError).toBe(true);
@@ -168,7 +169,7 @@ d('MCP Protocol Compliance Tests', () => {
           operation: 'update',
           target: 'task',
           // Missing required id
-          id: '',  // Invalid empty string
+          id: '', // Invalid empty string
           changes: {
             name: 'Updated name',
           },

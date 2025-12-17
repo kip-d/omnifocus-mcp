@@ -11,6 +11,7 @@
 ## Scripts by Category
 
 ### Query Operations (Read-Only)
+
 ```
 TASKS:
   - list-tasks.ts (495 LOC) ⚠️ DEPRECATED - Use list-tasks-omnijs.ts
@@ -40,6 +41,7 @@ OTHER:
 ```
 
 ### Create Operations
+
 ```
 TASKS:
   - create-task.ts (239 LOC) ⚠️ DUPLICATE
@@ -59,6 +61,7 @@ REVIEWS:
 ```
 
 ### Update Operations
+
 ```
 TASKS:
   - update-task.ts (479 LOC) - Most complex
@@ -77,6 +80,7 @@ REVIEWS:
 ```
 
 ### Delete Operations
+
 ```
 TASKS:
   - delete-task.ts (44 LOC) ✓ SIMPLE
@@ -93,6 +97,7 @@ TAGS:
 ```
 
 ### Status Change Operations
+
 ```
 TASKS:
   - complete-task.ts (84 LOC) ✓ SIMPLE
@@ -106,6 +111,7 @@ REVIEWS:
 ```
 
 ### Analysis Operations
+
 ```
 CORE ANALYTICS:
   - workflow-analysis.ts (738 LOC) - Largest, most complex
@@ -127,6 +133,7 @@ RECURRING:
 ```
 
 ### Infrastructure
+
 ```
 CACHING:
   - warm-task-caches.ts (232 LOC)
@@ -149,43 +156,43 @@ SYSTEM:
 ## Consolidation Candidates (Priority Order)
 
 ### 🔴 CRITICAL (Remove duplicates)
+
 - [ ] Merge create-task.ts + create-task-with-bridge.ts
   - Saves: 219 LOC
   - Use: create-task-with-bridge.ts as base (simpler)
-  
-- [ ] Consolidate list-tasks variants  
+- [ ] Consolidate list-tasks variants
   - Saves: 437-495 LOC (use omnijs, not standard)
   - Gain: 13-22x performance improvement
 
 ### 🟠 HIGH (Consolidate near-identical versions)
+
 - [ ] Merge productivity-stats.ts + productivity-stats-v3.ts
   - Saves: 280-304 LOC
-  
 - [ ] Merge task-velocity.ts + task-velocity-v3.ts
   - Saves: 154-164 LOC
-  
 - [ ] Consolidate list-tags.ts + list-tags-v3.ts
   - Saves: 240-286 LOC
 
 ### 🟡 MEDIUM (Extract shared patterns)
+
 - [ ] Extract analytics common patterns
   - Affects: 11 analyzer scripts
   - Saves: ~200-300 LOC total
-  
 - [ ] Extract date handling patterns
   - Affects: 12+ scripts
   - Saves: ~100-150 LOC total
 
 ### 🔵 LOW (Cleanup & optimization)
+
 - [ ] Audit date-range-queries.ts (335 LOC)
   - Determine if active or legacy
-  
 - [ ] Review routing files (288 LOC total)
   - Verify needed with unified API
 
 ## Helper Dependencies Quick Reference
 
 ### Universal Dependencies
+
 - `helpers.ts` - Used by ALL 62 scripts
   - safeGet() - Most common usage
   - safeGetDate() - Date operations
@@ -195,23 +202,28 @@ SYSTEM:
 ### Domain-Specific Dependencies
 
 **Task Creation/Update:**
+
 - minimal-tag-bridge.ts (3 scripts)
 - repeat-helpers.ts (4 scripts)
 
 **Date Enrichment:**
+
 - date-fields-bridge.ts (1 script: list-tasks.ts)
 
 **Bridge Operations:**
+
 - bridge-template.ts (2 scripts: complex updates)
 - bridge-helpers.ts (legacy, check usage)
 
 **Repetition Rules:**
+
 - repeat-helpers.ts (4 scripts)
 - repeat-translation.ts (for user intent conversion)
 
 ## Performance Notes
 
 ### Fastest Script Patterns
+
 1. Pure JXA simple ops (delete, complete)
    - Execution: <100ms
    - Example: delete-task.ts (44 LOC)
@@ -225,6 +237,7 @@ SYSTEM:
    - Example: list-tags.ts (96.3% optimized)
 
 ### Slowest Script Patterns
+
 1. Deep JXA loops with per-item access
    - Execution: 5-25+ seconds for 100+ items
    - Example: Old list-tasks.ts variant
@@ -242,22 +255,22 @@ When creating new scripts:
 ```
 Simple deletion/status change?
   → Pure JXA (44-111 LOC)
-  
+
 Creating/updating single item?
   → JXA + bridge (180-310 LOC)
-  
+
 Querying many items (>50)?
   → OmniJS bridge + JXA wrapper (200-500 LOC)
-  
+
 Complex analysis on many items?
   → OmniJS bridge for counting + filtering (300-700 LOC)
-  
+
 Need tag assignment?
   → Use minimal-tag-bridge (required for persistence)
-  
+
 Need date enrichment?
   → Use date-fields-bridge (for added/modified/dropDate)
-  
+
 Need repetition rules?
   → Use repeat-helpers (handles complex rule objects)
 ```
@@ -289,4 +302,3 @@ npm run test:integration
 - Dependency analysis: `SCRIPT_DEPENDENCIES.md`
 - Architecture guide: `docs/dev/ARCHITECTURE.md`
 - Pattern library: `docs/dev/PATTERN_INDEX.md`
-

@@ -164,7 +164,7 @@ PERFORMANCE:
   private needsAdvancedFilters(filters: TaskFilter): boolean {
     // TaskFilter already has transformed properties
     return Boolean(
-      filters.tags ||   // Tags are now string[] with tagsOperator
+      filters.tags || // Tags are now string[] with tagsOperator
       filters.dueBefore ||
       filters.dueAfter ||
       filters.deferBefore ||

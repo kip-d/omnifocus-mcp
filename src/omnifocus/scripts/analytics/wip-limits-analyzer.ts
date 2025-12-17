@@ -41,16 +41,11 @@ function isTaskAvailable(task: Task): boolean {
   return true;
 }
 
-export function analyzeWipLimits(
-  projects: Project[],
-  options: WipLimitsOptions,
-): WipLimitsResult {
+export function analyzeWipLimits(projects: Project[], options: WipLimitsOptions): WipLimitsResult {
   const { wipLimit } = options;
-  const activeProjects = projects.filter(
-    p => p.status === 'active' || p.status === 'on-hold',
-  );
+  const activeProjects = projects.filter((p) => p.status === 'active' || p.status === 'on-hold');
 
-  const analyzed = activeProjects.map(project => {
+  const analyzed = activeProjects.map((project) => {
     let availableTasks: number;
 
     if (project.sequential) {
@@ -71,10 +66,10 @@ export function analyzeWipLimits(
     };
   });
 
-  const overLimit = analyzed.filter(p => p.overLimit);
-  const healthy = analyzed.filter(p => !p.overLimit);
+  const overLimit = analyzed.filter((p) => p.overLimit);
+  const healthy = analyzed.filter((p) => !p.overLimit);
 
-  const projectsOverWipLimit = overLimit.map(p => ({
+  const projectsOverWipLimit = overLimit.map((p) => ({
     project: p.project,
     availableTasks: p.availableTasks,
     limit: p.limit,

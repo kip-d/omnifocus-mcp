@@ -1,6 +1,8 @@
 # LLM Assistant Simulation Tests
 
-This directory contains integration tests that simulate how an LLM assistant (like Claude) would interact with our OmniFocus MCP server. These tests provide valuable insights into the real-world usage patterns and help ensure our tools work correctly in practice.
+This directory contains integration tests that simulate how an LLM assistant (like Claude) would interact with our
+OmniFocus MCP server. These tests provide valuable insights into the real-world usage patterns and help ensure our tools
+work correctly in practice.
 
 ## What These Tests Do
 
@@ -15,16 +17,19 @@ The tests simulate realistic conversation flows where an LLM assistant:
 ## Test Scenarios
 
 ### 📋 **Basic Scenarios**
+
 - **"What should I work on today?"** - Today's tasks + overdue analysis + productivity context
 - **"Create a vacation project"** - Project creation + task addition + verification
 - **"Show me productive tags"** - Tag statistics + productivity correlation
 
 ### 🔄 **Complex Workflows**
+
 - **Weekly GTD Review** - Multi-tool analysis for comprehensive review
 - **Tool Chaining** - Find urgent task → flag it (like real assistant behavior)
 - **Data Consistency** - Verify task counts match across different tools
 
 ### ❌ **Error Handling**
+
 - Invalid parameters (missing required fields)
 - Non-existent tools
 - OmniFocus not running scenarios
@@ -32,6 +37,7 @@ The tests simulate realistic conversation flows where an LLM assistant:
 ## Running the Tests
 
 ### Prerequisites
+
 ```bash
 # Build the server first
 npm run build
@@ -41,6 +47,7 @@ npm run build
 ```
 
 ### Enable LLM Simulation Tests
+
 ```bash
 # Set environment variable to enable these tests
 export ENABLE_LLM_SIMULATION_TESTS=true
@@ -53,13 +60,17 @@ npm run test:integration
 ```
 
 ### Without OmniFocus Running
+
 The tests are designed to be meaningful even when OmniFocus isn't running:
+
 - Tests verify proper error handling and error message quality
 - Tests ensure MCP protocol compliance
 - Tests validate tool discovery and parameter validation
 
 ### With OmniFocus Running
+
 When OmniFocus is available, tests additionally verify:
+
 - Actual data retrieval and processing
 - Tool chaining with real data
 - Cross-tool data consistency
@@ -88,20 +99,25 @@ describe('Scenario: User request simulation', () => {
 ## Key Features
 
 ### 🤖 **LLMAssistantSimulator Class**
+
 Simulates how an LLM assistant communicates with MCP servers:
+
 - Proper MCP protocol initialization
 - Tool discovery and parameter handling
 - Error handling and response parsing
 - Message correlation and timeouts
 
 ### 📊 **Realistic Data Flows**
+
 Tests mirror actual Claude Desktop usage:
+
 - Multiple tool calls to build context
 - Tool chaining for complex workflows
 - Error recovery and graceful degradation
 - Data consistency validation
 
 ### 🔍 **Comprehensive Coverage**
+
 - **Protocol compliance** - Proper MCP message flow
 - **Tool functionality** - Real-world usage patterns
 - **Error scenarios** - Graceful failure handling
@@ -125,16 +141,19 @@ Tests mirror actual Claude Desktop usage:
 ## Benefits
 
 ### 🎯 **Real-World Validation**
+
 - Tests actual LLM usage patterns vs. theoretical API coverage
 - Identifies tools that are hard to use in practice
 - Validates error messages are helpful to LLMs
 
 ### 🔧 **Development Insights**
+
 - Shows which tool combinations are most valuable
 - Identifies missing functionality gaps
 - Reveals performance bottlenecks in realistic scenarios
 
 ### 📈 **Quality Assurance**
+
 - Ensures tools work together seamlessly
 - Validates MCP protocol compliance
 - Tests error handling under realistic conditions
@@ -169,4 +188,5 @@ describe('Scenario: Your new user request', () => {
 });
 ```
 
-This testing approach gives us confidence that our MCP server works well with real LLM assistants, not just in isolation.
+This testing approach gives us confidence that our MCP server works well with real LLM assistants, not just in
+isolation.

@@ -1,11 +1,14 @@
 # OmniFocus 4.7-4.8.3 Feature Support Implementation Plan
 
 ## Overview
-Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, Mutually Exclusive Tags, and Enhanced Repeat Functionality.
+
+Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, Mutually Exclusive Tags, and Enhanced
+Repeat Functionality.
 
 ## Phase 1: Planned Date Support (Highest Priority)
 
 ### 1.1 Schema Updates
+
 - **src/tools/schemas/task-schemas.ts**:
   - Add `plannedDate: LocalDateTimeSchema.optional()` to TaskSchema
   - Add `plannedDate: LocalDateTimeSchema.optional()` to CreateTaskSchema
@@ -19,6 +22,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Add `clearPlannedDate` option
 
 ### 1.2 Script Updates
+
 - **src/omnifocus/scripts/tasks/create-task.ts** (lines 66-82):
   - Add plannedDate handling after deferDate/dueDate logic
 
@@ -41,6 +45,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Include in CSV/JSON/Markdown exports
 
 ### 1.3 Query Tool Updates
+
 - **src/tools/tasks/QueryTasksToolV2.ts**:
   - Add planned date as query filter option
   - Document usage patterns
@@ -51,10 +56,12 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ## Phase 2: Mutually Exclusive Tags Support
 
 ### 2.1 Schema Updates
+
 - **src/tools/schemas/shared-schemas.ts**:
   - Add `childrenAreMutuallyExclusive: boolean` to tag response schema
 
 ### 2.2 Script Updates
+
 - **src/omnifocus/scripts/tags/list-tags.ts**:
   - Add childrenAreMutuallyExclusive property to tag extraction
 
@@ -63,6 +70,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Support setting/unsetting childrenAreMutuallyExclusive property
 
 ### 2.3 Tool Updates
+
 - **src/tools/tags/TagsToolV2.ts**:
   - Add action enum value for mutual exclusivity management
   - Document the feature and usage patterns
@@ -70,6 +78,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ## Phase 3: Enhanced Repeat Functionality
 
 ### 3.1 Schema Updates
+
 - **src/tools/schemas/repeat-schemas.ts**:
   - Add `anchorDateKey: z.enum(['DeferDate', 'DueDate', 'PlannedDate']).optional()` to RepeatRuleSchema
   - Add `catchUpAutomatically: coerceBoolean().optional().default(false)` to RepeatRuleSchema
@@ -78,12 +87,14 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Add `endAfterOccurrences: coerceNumber().int().positive().optional()` to RepeatRuleSchema
 
 ### 3.2 Helper Updates
+
 - **src/omnifocus/scripts/shared/repeat-helpers.ts**:
   - Update prepareRepetitionRuleData() to handle new parameters
   - Add support for anchorDateKey, catchUpAutomatically, scheduleType
   - Add end condition handling
 
 ### 3.3 Script Updates
+
 - **src/omnifocus/scripts/tasks/create-task.ts** (line 98+):
   - Update repeat rule application to use new parameters
 
@@ -93,12 +104,14 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ## Phase 4: Version Detection & Compatibility
 
 ### 4.1 Version Detection
+
 - **src/omnifocus/version-detection.ts** (NEW):
   - Create utility to detect OmniFocus version via JXA
   - Cache version for session
   - Export feature flags (hasPlannedDates, hasMutuallyExclusiveTags, hasEnhancedRepeats)
 
 ### 4.2 Documentation Updates
+
 - **src/omnifocus/api/README.md**:
   - Add section on version-specific features
   - Document which features require 4.7+
@@ -111,6 +124,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ## Phase 5: Testing & Validation
 
 ### 5.1 Unit Tests
+
 - **tests/unit/tools/schemas/task-schemas.test.ts** (NEW):
   - Test plannedDate schema validation
   - Test clearPlannedDate logic
@@ -123,6 +137,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Test mutually exclusive tag operations
 
 ### 5.2 Integration Tests
+
 - **tests/integration/planned-dates.test.ts** (NEW):
   - Create task with planned date
   - Update task planned date
@@ -142,6 +157,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
   - Test end after N occurrences
 
 ### 5.3 Manual Testing Checklist
+
 - [ ] Create task with planned date in OmniFocus 4.8.3
 - [ ] Verify planned date appears in Forecast view
 - [ ] Test mutually exclusive tag groups
@@ -152,16 +168,19 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ## Phase 6: Documentation & Examples
 
 ### 6.1 User Documentation
+
 - Update tool descriptions with planned date examples
 - Add mutually exclusive tag workflow examples
 - Document enhanced repeat patterns with new options
 
 ### 6.2 API Documentation
+
 - Document version requirements for each feature
 - Add migration guide from 4.6.x to 4.7+
 - Create feature comparison matrix
 
 ## Implementation Order
+
 1. **Phase 1** (Planned Dates) - Most impactful user-facing feature
 2. **Phase 3** (Enhanced Repeats) - High value, builds on existing repeat infrastructure
 3. **Phase 2** (Mutually Exclusive Tags) - Useful but lower priority
@@ -170,6 +189,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 6. **Phase 6** (Documentation) - Final polish
 
 ## Success Criteria
+
 - ✅ All new 4.7+ API properties accessible via MCP tools
 - ✅ Backward compatibility maintained (scripts don't break on older versions)
 - ✅ Comprehensive test coverage for new features
@@ -178,6 +198,7 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 - ✅ Manual testing confirms features work in OmniFocus 4.8.3
 
 ## Estimated Effort
+
 - Phase 1: 3-4 hours (schemas, scripts, tests)
 - Phase 2: 1-2 hours (simpler feature)
 - Phase 3: 2-3 hours (complex repeat logic)
@@ -192,14 +213,17 @@ Update MCP server to fully support new OmniFocus 4.7+ features: Planned Dates, M
 ### New Properties Available
 
 **Task & Project:**
+
 - `plannedDate: Date | null` (line 1607 in Task, line 1171 in Project)
 - `effectivePlannedDate: Date | null` (readonly, inherits from parent)
 
 **Tag:**
+
 - `childrenAreMutuallyExclusive: boolean` (line 1485)
 - When true, only one child tag can be assigned at a time
 
 **Task.RepetitionRule:**
+
 - `anchorDateKey: Task.AnchorDateKey` (DeferDate, DueDate, or PlannedDate)
 - `catchUpAutomatically: boolean` - skip missed occurrences
 - Enhanced scheduling with `scheduleType: Task.RepetitionScheduleType`

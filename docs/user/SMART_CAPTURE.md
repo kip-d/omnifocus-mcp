@@ -1,10 +1,12 @@
 # Smart Capture: Meeting Notes → OmniFocus Tasks
 
-Extract action items from unstructured text (meeting notes, transcripts, emails) and convert them into structured OmniFocus tasks and projects.
+Extract action items from unstructured text (meeting notes, transcripts, emails) and convert them into structured
+OmniFocus tasks and projects.
 
 ## Overview
 
 The `parse_meeting_notes` tool analyzes text and automatically:
+
 - **Extracts action items** - Identifies tasks from natural language
 - **Detects projects** - Recognizes multi-step work as projects
 - **Suggests context tags** - Auto-assigns @computer, @phone, @15min, @urgent, etc.
@@ -26,6 +28,7 @@ The `parse_meeting_notes` tool analyzes text and automatically:
 ```
 
 **Output:**
+
 ```json
 {
   "extracted": {
@@ -79,6 +82,7 @@ Meeting: Q4 Planning
 ```
 
 **Extracted:**
+
 - 3 projects with subtasks
 - 2 standalone tasks
 - Tags: @john, @waiting-for-sarah, @computer
@@ -98,6 +102,7 @@ Thanks!
 ```
 
 **Extracted:**
+
 - 3 tasks
 - Tags: @urgent, @computer, @30min
 - Due date: "next week" → calculated date
@@ -112,6 +117,7 @@ also ask Bob about timeline
 ```
 
 **Extracted:**
+
 - 4 sequential tasks
 - Tags: @phone, @computer, @agenda-bob
 - Due date: "end of week" → Friday
@@ -121,6 +127,7 @@ also ask Bob about timeline
 The tool auto-suggests tags based on content:
 
 ### Location Tags
+
 - `@computer` - email, code, document, write, research
 - `@phone` - call, contact, discuss
 - `@office` - meeting, in-person, presentation
@@ -129,17 +136,20 @@ The tool auto-suggests tags based on content:
 - `@anywhere` - think about, consider
 
 ### Time Estimate Tags
+
 - `@15min` - quick, brief, short
 - `@30min` - call, review, check
 - `@1hour` - meeting, discussion
 - `@deep-work` - plan, design, analyze, write
 
 ### Priority Tags
+
 - `@urgent` - asap, urgent, critical, immediately
 - `@important` - must, essential, required
 - `@someday` - maybe, eventually, consider
 
 ### People Tags
+
 - `@{name}` - "[Name] to..." (assignee)
 - `@waiting-for-{name}` - "Waiting for [Name]"
 - `@agenda-{name}` - "Ask/Discuss with [Name]"
@@ -156,6 +166,7 @@ Supported date formats:
 - `end of month` → last day of current month
 
 **Date phrases:**
+
 - "by Friday" → due date
 - "after Monday" → defer date
 - "follow up next Tuesday" → defer date
@@ -165,14 +176,14 @@ Supported date formats:
 
 Automatic time estimates based on keywords:
 
-| Keyword Pattern | Estimate |
-|----------------|----------|
-| quick, brief, short | 15 minutes |
-| call, phone, review | 30 minutes |
-| meeting, discussion | 1 hour |
-| write, create, design | 1.5 hours |
-| plan, analyze, research | 2 hours |
-| deep work, focus | 3 hours |
+| Keyword Pattern         | Estimate   |
+| ----------------------- | ---------- |
+| quick, brief, short     | 15 minutes |
+| call, phone, review     | 30 minutes |
+| meeting, discussion     | 1 hour     |
+| write, create, design   | 1.5 hours  |
+| plan, analyze, research | 2 hours    |
+| deep work, focus        | 3 hours    |
 
 ## Project Detection
 
@@ -183,6 +194,7 @@ The tool identifies projects by:
 3. **Multiple tasks**: Grouped under headers
 
 **Example:**
+
 ```
 Website Redesign project:
 - Review analytics
@@ -195,21 +207,25 @@ Website Redesign project:
 ## Parameters
 
 ### Required
+
 - `input` (string) - Meeting notes, transcript, or text to parse
 
 ### Optional
 
 **Extraction Control:**
+
 - `extractMode` - What to extract: `"action_items"`, `"projects"`, or `"both"` (default)
 - `returnFormat` - Output format: `"preview"` (default) or `"batch_ready"`
 
 **Smart Suggestions:**
+
 - `suggestProjects` (boolean, default: true) - Match to existing projects
 - `suggestTags` (boolean, default: true) - Suggest context tags
 - `suggestDueDates` (boolean, default: true) - Extract due dates
 - `suggestEstimates` (boolean, default: true) - Estimate duration
 
 **Output Control:**
+
 - `groupByProject` (boolean, default: true) - Group tasks by project
 - `existingProjects` (string[]) - Known project names for matching
 - `defaultProject` (string) - Fallback project for unmatched items
@@ -231,14 +247,14 @@ The tool outputs batch-ready format compatible with `batch_create`:
 ```javascript
 // Step 1: Extract
 const result = await parse_meeting_notes({
-  input: "...",
-  returnFormat: "batch_ready"
+  input: '...',
+  returnFormat: 'batch_ready',
 });
 
 // Step 2: Create (one call for everything)
 await batch_create({
   items: result.batchItems,
-  atomicOperation: true
+  atomicOperation: true,
 });
 ```
 
@@ -247,6 +263,7 @@ await batch_create({
 ### 1. Structure Your Notes
 
 **Good:**
+
 ```
 Action Items:
 - Send proposal by Friday
@@ -255,6 +272,7 @@ Action Items:
 ```
 
 **Works But Less Optimal:**
+
 ```
 We should probably send the proposal sometime soon and
 maybe call the client if we get a chance and review budgets
@@ -275,6 +293,7 @@ maybe call the client if we get a chance and review budgets
 ### 4. Mark Assignees Clearly
 
 **Good:**
+
 - "John to send report"
 - "Waiting for Sarah's approval"
 - "Ask Bob about timeline"
@@ -290,6 +309,7 @@ maybe call the client if we get a chance and review budgets
 ### Example 1: Sprint Planning
 
 **Input:**
+
 ```
 Sprint Planning - Week of Oct 1
 
@@ -308,6 +328,7 @@ Waiting On:
 ```
 
 **Result:**
+
 - 5 tasks
 - Tags: @urgent, @deep-work, @computer, @waiting-for-sarah, @waiting-for-devops
 - Estimates: 3hr (deep work), 30min (review), etc.
@@ -315,6 +336,7 @@ Waiting On:
 ### Example 2: Client Meeting
 
 **Input:**
+
 ```
 Client Call with Acme Corp - Oct 1
 
@@ -330,6 +352,7 @@ Action Items:
 ```
 
 **Result:**
+
 - 4 tasks
 - Tags: @computer, @john, @phone
 - Due dates: Friday, next Tuesday
@@ -338,6 +361,7 @@ Action Items:
 ### Example 3: Project Kickoff
 
 **Input:**
+
 ```
 New Website Project Kickoff
 
@@ -355,6 +379,7 @@ Then development and testing
 ```
 
 **Result:**
+
 - 1 project: "New Website"
 - 6 subtasks in sequential order
 - Tags: @computer, @deep-work, @1hour
@@ -366,17 +391,13 @@ Then development and testing
 Process multiple meetings in one go:
 
 ```javascript
-const meetings = [
-  "Meeting 1 notes: ...",
-  "Meeting 2 notes: ...",
-  "Meeting 3 notes: ..."
-];
+const meetings = ['Meeting 1 notes: ...', 'Meeting 2 notes: ...', 'Meeting 3 notes: ...'];
 
 const allItems = [];
 for (const meeting of meetings) {
   const result = await parse_meeting_notes({
     input: meeting,
-    returnFormat: "batch_ready"
+    returnFormat: 'batch_ready',
   });
   allItems.push(...result.batchItems);
 }
@@ -391,9 +412,9 @@ If you have consistent project names:
 
 ```javascript
 await parse_meeting_notes({
-  input: "Update Client Onboarding documentation",
-  existingProjects: ["Client Onboarding", "Documentation"],
-  defaultProject: "Miscellaneous"
+  input: 'Update Client Onboarding documentation',
+  existingProjects: ['Client Onboarding', 'Documentation'],
+  defaultProject: 'Miscellaneous',
 });
 ```
 
@@ -406,8 +427,8 @@ Always use preview mode first:
 ```javascript
 // 1. Preview
 const preview = await parse_meeting_notes({
-  input: "...",
-  returnFormat: "preview"
+  input: '...',
+  returnFormat: 'preview',
 });
 
 // 2. Review extracted items
@@ -416,8 +437,8 @@ console.log(preview.extracted.tasks);
 
 // 3. If good, get batch_ready format
 const batch = await parse_meeting_notes({
-  input: "...",  // same input
-  returnFormat: "batch_ready"
+  input: '...', // same input
+  returnFormat: 'batch_ready',
 });
 
 // 4. Create

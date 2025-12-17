@@ -1,11 +1,11 @@
 # Flaky Integration Tests Issue
 
-**Date Discovered:** 2025-11-06
-**Status:** Known Issue - Not Blocking Consolidation Work
+**Date Discovered:** 2025-11-06 **Status:** Known Issue - Not Blocking Consolidation Work
 
 ## Summary
 
-Two integration tests fail with timeouts when run as part of full test suite, but pass reliably when run individually. This indicates a test isolation/resource contention issue rather than code bugs.
+Two integration tests fail with timeouts when run as part of full test suite, but pass reliably when run individually.
+This indicates a test isolation/resource contention issue rather than code bugs.
 
 ## Failing Tests (Full Suite)
 
@@ -21,6 +21,7 @@ Two integration tests fail with timeouts when run as part of full test suite, bu
 ### When Run Individually (Both Pass ✅)
 
 **mcp-protocol.test.ts:**
+
 ```
 ✅ 7/7 tests passed
 Duration: 66.41s
@@ -32,6 +33,7 @@ Duration: 66.41s
 ```
 
 **end-to-end.test.ts:**
+
 ```
 ✅ 17/17 tests passed
 Duration: 182.08s
@@ -53,12 +55,15 @@ npm test
 
 **Likely Issue:** Shared MCP server state/resource contention
 
-The tests use a shared MCP server instance (`tests/integration/helpers/shared-server.ts`) that persists across test files. When tests run concurrently or in rapid succession:
+The tests use a shared MCP server instance (`tests/integration/helpers/shared-server.ts`) that persists across test
+files. When tests run concurrently or in rapid succession:
+
 - Server may not fully initialize before next test
 - Resources (osascript processes, OmniFocus connections) may be exhausted
 - Cleanup between tests may not complete before next test starts
 
 **Evidence:**
+
 1. Tests pass individually (fresh server state)
 2. Tests timeout during initialization/setup phases
 3. `thoroughCleanup()` undefined error suggests client not initialized
@@ -67,12 +72,14 @@ The tests use a shared MCP server instance (`tests/integration/helpers/shared-se
 ## Configuration Context
 
 From `vitest.config.ts`:
+
 ```typescript
 testTimeout: isIntegrationTest ? 120000 : 30000,     // 2min integration, 30s unit
 hookTimeout: isIntegrationTest ? 300000 : 60000,     // 5min integration, 1min unit
 ```
 
-Note: `end-to-end.test.ts` hits 30s hook timeout (not 5min), suggesting it's not being detected as integration test in some scenarios.
+Note: `end-to-end.test.ts` hits 30s hook timeout (not 5min), suggesting it's not being detected as integration test in
+some scenarios.
 
 ## Impact
 
@@ -117,4 +124,6 @@ Note: `end-to-end.test.ts` hits 30s hook timeout (not 5min), suggesting it's not
 
 ## Notes
 
-This issue was discovered during worktree setup for script-helper-consolidation work. Both test files validated individually and confirmed working correctly. The flakiness is a test infrastructure issue, not a code correctness issue.
+This issue was discovered during worktree setup for script-helper-consolidation work. Both test files validated
+individually and confirmed working correctly. The flakiness is a test infrastructure issue, not a code correctness
+issue.

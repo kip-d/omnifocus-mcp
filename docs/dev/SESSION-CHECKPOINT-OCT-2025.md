@@ -5,12 +5,14 @@
 ### Branch Merged: feature/profiling-benchmarking → main ✓
 
 **Primary Deliverables:**
+
 1. Profiling infrastructure (`profile-jxa-bottlenecks.js`)
 2. Benchmarking suite (`benchmark-performance.ts`)
 3. Root cause analysis: JXA per-property access = 16.662ms overhead
 4. OmniJS-first optimization pattern established and documented
 
 **V3 Optimizations Completed:**
+
 - **Task velocity**: 67.6s → 7.8s (8.7x faster)
 - **Tags (names only)**: 3.6s → 0.6s (5.9x faster)
 - **Tags (fast mode)**: 6.9s → 0.7s (9.8x faster)
@@ -53,12 +55,14 @@ Task velocity                | 7,779ms  | ✓ Optimized (V3)
 **Expected improvement:** 8-10x faster (similar to task velocity)
 
 **Pattern to apply:**
+
 1. Create `productivity-stats-v3.ts`
 2. Use OmniJS `flattenedTasks.forEach()`
 3. Calculate all statistics in single bridge call
 4. Update `ProductivityStatsToolV2.ts` to use V3 script
 
 **Reference implementations:**
+
 - `src/omnifocus/scripts/analytics/task-velocity-v3.ts`
 - `src/omnifocus/scripts/tags/list-tags-v3.ts`
 
@@ -69,11 +73,13 @@ Task velocity                | 7,779ms  | ✓ Optimized (V3)
 **Current status:** Already uses OmniJS bridge
 
 **Investigation needed:**
+
 - Full mode requires iterating through `flattenedTasks` to calculate usage statistics
 - This is expected overhead for usage stats
 - May not be optimizable further without caching strategy
 
 **Possible approaches:**
+
 - Implement incremental usage stats cache
 - Make usage stats optional/on-demand
 - Accept 8.4s as reasonable for comprehensive usage analysis
@@ -155,6 +161,7 @@ export const YOUR_SCRIPT_V3 = `
 ### Step 1: Productivity Stats V3
 
 1. Read current implementation:
+
    ```bash
    cat src/omnifocus/scripts/analytics/productivity-stats.ts
    cat src/tools/analytics/ProductivityStatsToolV2.ts
@@ -167,6 +174,7 @@ export const YOUR_SCRIPT_V3 = `
 4. Update `ProductivityStatsToolV2.ts` to use V3 script
 
 5. Build and benchmark:
+
    ```bash
    npm run build
    BENCHMARK_MODE=warm npm run benchmark
@@ -194,16 +202,19 @@ Use benchmark suite to identify next targets and apply OmniJS-first pattern.
 ## Essential Reference Files
 
 ### Pattern Examples
+
 - `src/omnifocus/scripts/analytics/task-velocity-v3.ts` - Analytics pattern
 - `src/omnifocus/scripts/tags/list-tags-v3.ts` - Collection iteration
 - `src/omnifocus/scripts/projects/get-project-stats-v3.ts` - Project statistics
 
 ### Documentation
+
 - `docs/dev/CHECKPOINT-OMNIJS-V3-BREAKTHROUGH.md` - Detailed pattern explanation
 - `docs/dev/PERFORMANCE-BOTTLENECK-ANALYSIS.md` - Root cause analysis
 - `docs/dev/BENCHMARK-ANALYSIS-OCT-2025.md` - Optimization priorities
 
 ### Tools
+
 - `scripts/benchmark-performance.ts` - Performance testing
 - `tests/performance/profile-jxa-bottlenecks.js` - Direct profiling
 
@@ -227,6 +238,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"productivi
 ## Success Metrics
 
 For productivity stats optimization:
+
 - [ ] Current: ~7.7s
 - [ ] Target: <1s
 - [ ] Expected: 8-10x improvement
@@ -243,7 +255,8 @@ For productivity stats optimization:
 
 ## Session Context
 
-This checkpoint created after merging feature/profiling-benchmarking branch to main. The profiling infrastructure is complete and the optimization pattern is proven. Ready to continue systematic optimization of remaining slow operations.
+This checkpoint created after merging feature/profiling-benchmarking branch to main. The profiling infrastructure is
+complete and the optimization pattern is proven. Ready to continue systematic optimization of remaining slow operations.
 
 **Next session should start with:** Productivity stats V3 optimization (Priority 1)
 
@@ -256,6 +269,7 @@ This checkpoint created after merging feature/profiling-benchmarking branch to m
 **Implementation:** Created `productivity-stats-v3.ts` with single OmniJS bridge call
 
 **Performance Results:**
+
 ```
 Operation                    | Before    | After     | Improvement
 -----------------------------|-----------|-----------|-------------
@@ -268,12 +282,12 @@ Tags (full mode)             | 8,388ms   | 6,002ms   | -28.4% (side effect)
 
 ### 🔍 Performance Analysis: Why Not <1s?
 
-**Initial Expectation:** 8-10x improvement (7.7s → <1s)
-**Actual Result:** 1.4x improvement (7.7s → 5.5s)
+**Initial Expectation:** 8-10x improvement (7.7s → <1s) **Actual Result:** 1.4x improvement (7.7s → 5.5s)
 
 **Root Cause Analysis:**
 
 The V1 script was **already partially optimized**:
+
 - ✓ Used OmniJS bridge for task iteration (lines 150-211)
 - ✗ Used JXA iteration for project stats (lines 66-111)
 - ✗ Used JXA iteration for tag stats (lines 115-141)
@@ -285,6 +299,7 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 **Why 6-8s is Actually Good Performance:**
 
 **Task Velocity (7.8s):**
+
 - Database: 1,961 tasks
 - Analysis: 12 time intervals (week period)
 - Computational work: 1,961 tasks × 12 intervals × 2 loops = **~47,000 date comparisons**
@@ -292,6 +307,7 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 - **Conclusion:** Even at 0.001ms per operation in OmniJS, 47k operations takes time
 
 **Tags Full Mode (6.0s):**
+
 - Database: 202 tags, 1,961 tasks
 - Analysis: Count usage per tag across all tasks
 - Computational work: O(n + m×k) = 202 + (1,961 × ~3 tags/task) = **~6,085 tag checks**
@@ -299,6 +315,7 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 - **Conclusion:** Comprehensive usage analysis requires checking every task
 
 **Productivity Stats (5.5s):**
+
 - Database: 1,961 tasks, multiple projects, tags
 - Analysis: Overall stats + project stats + tag stats
 - All in single bridge call but lots of iteration work
@@ -307,17 +324,20 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 ### 🎯 Performance Realization
 
 **The 16.662ms JXA overhead was eliminated!**
+
 - V1 with JXA property access: ~67s (task velocity)
 - V3 with OmniJS property access: ~8s (task velocity)
 - **8.4x improvement achieved! ✓**
 
 **Remaining 6-8s is algorithmic work:**
+
 - Date comparisons
 - Array iterations
 - Statistical calculations
 - JSON serialization
 
 **This is NOT a JXA/OmniJS issue!** This is the inherent cost of:
+
 - Analyzing 1,961 tasks with complex date filtering
 - Computing statistics across 12 time intervals
 - Checking tag usage across all tasks
@@ -325,23 +345,27 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 ### 💡 Further Optimization Options
 
 **Option 1: Accept Current Performance (Recommended)**
+
 - 6-8s for comprehensive analytics on 2,000 tasks is reasonable
 - Operations are infrequent (not real-time queries)
 - Complexity is inherent to the analysis, not implementation
 
 **Option 2: Algorithmic Optimization**
+
 - Reduce number of intervals (12 → 6 = 50% faster)
 - Use binary search instead of linear search for intervals
 - Pre-filter tasks by date range before iteration
 - **Estimated improvement:** 30-40% (6s → 4s)
 
 **Option 3: Caching Strategy**
+
 - Cache interval calculations between runs
 - Incremental tag usage updates
 - Background pre-computation
 - **Complexity:** High implementation cost
 
 **Option 4: Limit Scope**
+
 - Make project/tag stats optional (default: false)
 - Reduce analysis period (week → day)
 - Limit tasks analyzed (recent 500 instead of all 1,961)
@@ -350,17 +374,21 @@ V3 optimization only improved the JXA portions, not the already-optimized OmniJS
 ### ✅ Success Metrics Update
 
 **Productivity Stats V3:**
+
 - [x] Current: ~7.7s → 5.5s achieved
 - [x] Target: <1s (revised to "eliminate JXA overhead")
 - [x] Expected: 8-10x improvement (achieved for V1 task velocity 67s → 7.8s)
 - [x] Pattern: OmniJS flattenedTasks.forEach() applied
 - [x] Commit: Included before/after metrics ✓
 
-**Understanding:** The <1s target was based on assumption that ALL of V1 used JXA iteration. In reality, V1 already used OmniJS for task iteration. The V3 optimization successfully eliminated remaining JXA overhead, achieving the expected improvement where applicable.
+**Understanding:** The <1s target was based on assumption that ALL of V1 used JXA iteration. In reality, V1 already used
+OmniJS for task iteration. The V3 optimization successfully eliminated remaining JXA overhead, achieving the expected
+improvement where applicable.
 
 ### 📈 Final Benchmark Summary
 
 **All V3 Optimizations Complete:**
+
 ```
 Operation                    | Time     | Status
 -----------------------------|----------|---------------------------
@@ -376,6 +404,7 @@ Task velocity                | 7,802ms  | ✓ Optimized (V3) - algorithmic compl
 ```
 
 **Performance Baseline Achieved:**
+
 - All JXA per-property overhead eliminated (16.662ms → 0.001ms) ✓
 - All scripts use single OmniJS bridge call ✓
 - Remaining time is algorithmic work, not implementation overhead ✓
@@ -391,9 +420,11 @@ Task velocity                | 7,802ms  | ✓ Optimized (V3) - algorithmic compl
 ### 📋 Next Steps (Future Sessions)
 
 **If further optimization desired:**
+
 1. Profile specific operations to find hotspots (date comparisons? JSON serialization?)
 2. Implement algorithmic improvements (binary search, pre-filtering)
 3. Add caching layer for frequently-used calculations
 4. Consider limiting scope of analysis for faster results
 
-**Current Recommendation:** Accept 6-8s as production-ready performance for comprehensive analytics operations. Focus optimization efforts on higher-impact areas.
+**Current Recommendation:** Accept 6-8s as production-ready performance for comprehensive analytics operations. Focus
+optimization efforts on higher-impact areas.

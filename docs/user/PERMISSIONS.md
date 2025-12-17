@@ -2,13 +2,15 @@
 
 ## Overview
 
-The OmniFocus MCP server requires permission to access OmniFocus via AppleScript/JavaScript for Automation (JXA). This document explains how the permission system works and how to grant the necessary permissions.
+The OmniFocus MCP server requires permission to access OmniFocus via AppleScript/JavaScript for Automation (JXA). This
+document explains how the permission system works and how to grant the necessary permissions.
 
 ## How Permissions Work
 
 ### Automatic Permission Check
 
-When the MCP server starts, it automatically performs a non-blocking permission check to verify access to OmniFocus. This check:
+When the MCP server starts, it automatically performs a non-blocking permission check to verify access to OmniFocus.
+This check:
 
 1. Attempts to connect to OmniFocus via AppleScript
 2. Caches the result to avoid repeated permission prompts
@@ -115,6 +117,7 @@ To test if permissions are working correctly:
 2. Run the permission test: `npx tsx tests/test-permissions.ts`
 
 This will:
+
 - Check current permission status
 - Attempt to execute a simple OmniFocus script
 - Display any error messages with instructions
@@ -151,14 +154,14 @@ The permission system is implemented in `src/utils/permissions.ts` and provides:
 
 ## FAQ
 
-**Q: Why does the server need these permissions?**
-A: OmniFocus doesn't provide a public API, so we use Apple's official automation framework (JXA) which requires user permission for security.
+**Q: Why does the server need these permissions?** A: OmniFocus doesn't provide a public API, so we use Apple's official
+automation framework (JXA) which requires user permission for security.
 
-**Q: Are permissions safe to grant?**
-A: Yes, these are standard macOS automation permissions. The server only accesses OmniFocus data as requested by your commands.
+**Q: Are permissions safe to grant?** A: Yes, these are standard macOS automation permissions. The server only accesses
+OmniFocus data as requested by your commands.
 
-**Q: Can I revoke permissions later?**
-A: Yes, you can revoke permissions anytime in System Settings > Privacy & Security > Automation.
+**Q: Can I revoke permissions later?** A: Yes, you can revoke permissions anytime in System Settings > Privacy &
+Security > Automation.
 
-**Q: Do I need to grant permissions for each terminal app?**
-A: Yes, macOS tracks permissions per application. If you switch terminal apps, you'll need to grant permissions again.
+**Q: Do I need to grant permissions for each terminal app?** A: Yes, macOS tracks permissions per application. If you
+switch terminal apps, you'll need to grant permissions again.

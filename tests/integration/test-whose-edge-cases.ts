@@ -82,22 +82,22 @@ const edgeCaseScript = `
 
 async function testEdgeCases() {
   console.log('Testing whose() edge cases and performance...\n');
-  
+
   try {
     const result = await omni.execute<any>(edgeCaseScript);
-    
+
     if (result) {
       console.log('Property Types:');
       console.log(result.propertyTypes);
-      
+
       console.log('\nTest Results:');
       console.log('='.repeat(80));
-      
+
       for (const test of result.tests) {
         console.log(`\nTest: ${test.name}`);
         console.log(`Query: ${test.query}`);
         console.log(`Success: ${test.success ? '✅' : '❌'}`);
-        
+
         if (test.success) {
           console.log(`Count: ${test.count}`);
           console.log(`Time: ${test.elapsed_ms}ms`);
@@ -106,7 +106,7 @@ async function testEdgeCases() {
           console.log(`Error: ${test.error}`);
         }
       }
-      
+
       console.log('\n' + '='.repeat(80));
       console.log('\nPerformance Comparison:');
       console.log(`whose() method: ${result.performance.whose_ms}ms for ${result.performance.whose_count} tasks`);

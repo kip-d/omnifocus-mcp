@@ -235,10 +235,12 @@ describe('describeFilter', () => {
   it('describes date ranges', () => {
     expect(describeFilter({ dueBefore: '2025-12-31' })).toContain('due before 2025-12-31');
     expect(describeFilter({ dueAfter: '2025-01-01' })).toContain('due after 2025-01-01');
-    expect(describeFilter({
-      dueAfter: '2025-01-01',
-      dueBefore: '2025-12-31',
-    })).toContain('due between');
+    expect(
+      describeFilter({
+        dueAfter: '2025-01-01',
+        dueBefore: '2025-12-31',
+      }),
+    ).toContain('due between');
   });
 
   it('describes text search', () => {

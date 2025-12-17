@@ -30,7 +30,7 @@ const addScriptLines = [
   '    }',
   '  }',
   '  return JSON.stringify({ success: added.length === tagNames.length, tags: added });',
-  '})()'
+  '})()',
 ];
 const addScript = addScriptLines.join('\n');
 
@@ -46,7 +46,7 @@ const readScriptLines = [
   '    }',
   '  }',
   '  return JSON.stringify(names);',
-  '})()'
+  '})()',
 ];
 const readScript = readScriptLines.join('\n');
 

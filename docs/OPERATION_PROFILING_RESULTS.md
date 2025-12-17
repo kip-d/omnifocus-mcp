@@ -1,11 +1,14 @@
 # Operation Profiling Results
 
 ## Objective
-Identify which operations have similar performance characteristics to bulk_delete and could benefit from the single-pass bulk operation pattern.
+
+Identify which operations have similar performance characteristics to bulk_delete and could benefit from the single-pass
+bulk operation pattern.
 
 ## Test Methodology
 
 ### Environment
+
 - **System:** M2 MacBook Air with 24GB RAM
 - **OmniFocus:** ~1000 accumulated tasks
 - **Test:** Integration test suite (`npm run test:integration`)
@@ -14,7 +17,9 @@ Identify which operations have similar performance characteristics to bulk_delet
 ### Operations Profiled
 
 #### 1. Bulk Delete (Optimized) ✅
+
 **Implementation:** `BULK_DELETE_TASKS_SCRIPT` - Single-pass map pattern
+
 ```
 Timing: 36 seconds for 10 deletions
 Per-operation: 3.6 seconds
@@ -23,7 +28,9 @@ Status: ✅ OPTIMIZED (81% improvement from 186s)
 ```
 
 #### 2. Individual Delete (Baseline)
+
 **Implementation:** `DELETE_TASK_SCRIPT` - Loop through flattenedTasks
+
 ```
 Timing: ~18.7 seconds per deletion (from previous runs)
 Pattern: Loops through flattenedTasks for each task
@@ -32,14 +39,18 @@ Status: ❌ SLOW - Candidate for optimization
 ```
 
 #### 3. Individual Project Delete
+
 **Implementation:** Current projects deletion in cleanup
+
 ```
 Pattern: Similar to individual task delete
 Status: ⏳ NEEDS PROFILING - Likely similar bottleneck
 ```
 
 #### 4. Bulk Complete (Current Implementation)
+
 **Implementation:** Loops individual completes
+
 ```
 Timing: Observed in integration tests during cleanup
 Pattern: Same as individual deletes - loops flattenedTasks per operation
@@ -48,14 +59,18 @@ Potential improvement: 70-80% (similar to bulk_delete)
 ```
 
 #### 5. Single Task Create
+
 **Implementation:** `CREATE_TASK_SCRIPT`
+
 ```
 Pattern: Creates one task with bridge helpers
 Status: ⏳ NEEDS PROFILING - May not benefit from bulk optimization
 ```
 
 #### 6. Single Task Update
+
 **Implementation:** `UPDATE_TASK_SCRIPT`
+
 ```
 Pattern: Updates task properties
 Status: ⏳ NEEDS PROFILING - May need individual handling
@@ -66,6 +81,7 @@ Status: ⏳ NEEDS PROFILING - May need individual handling
 To gather concrete data on all operations, we need to:
 
 ### 1. Add Timing Instrumentation
+
 ```typescript
 // In each tool's executeValidated():
 const operationStart = Date.now();
@@ -81,14 +97,17 @@ logger.info('Operation timing', {
 ```
 
 ### 2. Run Full Integration Test Suite
+
 ```bash
 npm run test:integration 2>&1 | tee profiling-results.log
 ```
 
 ### 3. Extract Timing Data
+
 Parse logs for all operation timings and aggregate statistics.
 
 ### 4. Analyze Results
+
 - Identify O(N × M) patterns (candidates for optimization)
 - Estimate potential improvements
 - Prioritize by frequency of use
@@ -98,27 +117,34 @@ Parse logs for all operation timings and aggregate statistics.
 Based on code analysis (before actual profiling):
 
 ### ✅ HIGH PRIORITY
+
 **Bulk Complete** - Currently in handleBulkOperation()
+
 - Same flattenedTasks iteration as bulk_delete
 - Estimated: 70-80% improvement potential
 - Frequency: Used in test cleanup, user workflows
 - Implementation effort: Similar to bulk_delete
 
 ### ⏳ MEDIUM PRIORITY
+
 **Project Deletions** - If bulk operation possible
+
 - Unknown if projects iterate similar to tasks
 - Estimated: 50-70% improvement if same pattern
 - Frequency: Test cleanup uses individual project deletes
 - Implementation effort: TBD
 
 ### ❓ LOW PRIORITY (NEEDS PROFILING)
+
 **Single Task Create** - May not benefit
+
 - Creates bridge for tags/subtasks
 - May already be optimized
 - Frequency: Core feature
 - Status: Profile first
 
 **Single Task Update** - May not benefit
+
 - Updates individual properties
 - Side effects per item
 - Frequency: Common operation
@@ -127,6 +153,7 @@ Based on code analysis (before actual profiling):
 ## Performance Scaling Analysis
 
 ### Current System (Without Optimization)
+
 ```
 Operation Time = constant × item_count × operation_count
 
@@ -139,6 +166,7 @@ Example with 1000 tasks:
 ```
 
 ### After Bulk Optimization
+
 ```
 Operation Time = constant × item_count
 

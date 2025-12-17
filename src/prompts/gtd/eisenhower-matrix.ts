@@ -69,7 +69,7 @@ Let me check what's in your ${processAll ? 'inbox' : 'unprocessed inbox items'}.
 Based on these answers, we'll place it in the right quadrant:
 
 **Q1 (Urgent + Important)**: 
-- ${autoFlag ? 'I\'ll automatically flag these' : 'You can flag these'}
+- ${autoFlag ? "I'll automatically flag these" : 'You can flag these'}
 - Set due date for today or tomorrow
 - These need immediate attention
 

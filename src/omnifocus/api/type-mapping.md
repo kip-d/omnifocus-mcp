@@ -5,31 +5,32 @@ This document maps between the official OmniFocus API types and our custom types
 ## Task Properties
 
 ### Official API (Task class)
+
 ```typescript
 declare class Task extends ActiveObject {
   // Identification
   readonly id: ObjectIdentifier;
   name: string;
-  
+
   // Dates
   dueDate: Date | null;
   deferDate: Date | null;
   completionDate: Date | null;
   readonly added: Date;
   readonly modified: Date;
-  
+
   // Status
   flagged: boolean;
   completed: boolean;
   readonly effectivelyCompleted: boolean;
   readonly effectivelyDropped: boolean;
   dropped: boolean;
-  
+
   // Content
   note: string;
   attachments: Array<FileWrapper>;
   linkedFileURLs: Array<URL>;
-  
+
   // Organization
   readonly assignedContainer: Project | Task | OmniFocusInbox | null;
   readonly containingProject: Project | null;
@@ -37,14 +38,14 @@ declare class Task extends ActiveObject {
   readonly project: Project | null;
   readonly inInbox: boolean;
   sequential: boolean;
-  
+
   // Tags
   readonly tags: TagArray;
   readonly flattenedTags: TagArray;
-  
+
   // Repetition
   repetitionRule: Task.RepetitionRule | null;
-  
+
   // Other
   estimatedMinutes: number | null;
   readonly hasChildren: boolean;
@@ -55,6 +56,7 @@ declare class Task extends ActiveObject {
 ```
 
 ### Our Custom Type (OmniFocusTask interface)
+
 ```typescript
 export interface OmniFocusTask {
   id: string;
@@ -66,25 +68,26 @@ export interface OmniFocusTask {
   deferDate?: Date;
   completionDate?: Date;
   flagged: boolean;
-  tags: string[];  // We store tag names, not Tag objects
+  tags: string[]; // We store tag names, not Tag objects
   estimatedMinutes?: number;
   completed: boolean;
   dropped: boolean;
   effectivelyCompleted: boolean;
-  blocked: boolean;  // Not in official API
+  blocked: boolean; // Not in official API
   sequential: boolean;
   inInbox: boolean;
-  
+
   // Custom recurring task fields
   repetitionRule?: RepetitionRule;
   recurringStatus?: RecurringTaskStatus;
-  
+
   // Metadata
   added?: Date;
 }
 ```
 
 ### Key Differences:
+
 1. **Tags**: Official API returns `TagArray` of `Tag` objects, we convert to string array
 2. **Project**: Official API returns `Project` object, we extract name and ID separately
 3. **Blocked**: We have a `blocked` field that's not in official API
@@ -93,39 +96,40 @@ export interface OmniFocusTask {
 ## Project Properties
 
 ### Official API (Project class)
+
 ```typescript
 declare class Project extends DatabaseObject {
   // Identification
   readonly id: ObjectIdentifier;
   name: string;
-  
+
   // Dates
   dueDate: Date | null;
   deferDate: Date | null;
   completionDate: Date | null;
   readonly lastModified: Date;
-  
+
   // Status
   status: Project.Status;
   flagged: boolean;
   readonly completed: boolean;
   readonly dropped: boolean;
-  
+
   // Content
   note: string;
   attachments: Array<FileWrapper>;
-  
+
   // Organization
   readonly parentFolder: Folder | null;
   sequential: boolean;
   containsSingletonActions: boolean;
   defaultSingletonActionHolder: boolean;
-  
+
   // Review
   lastReviewDate: Date | null;
   nextReviewDate: Date | null;
   reviewInterval: ReviewInterval | null;
-  
+
   // Tasks
   readonly numberOfTasks: number;
   readonly numberOfAvailableTasks: number;
@@ -133,7 +137,7 @@ declare class Project extends DatabaseObject {
   readonly hasChildren: boolean;
   readonly children: TaskArray;
   readonly flattenedTasks: TaskArray;
-  
+
   // Tags
   readonly tags: TagArray;
   readonly flattenedTags: TagArray;
@@ -141,6 +145,7 @@ declare class Project extends DatabaseObject {
 ```
 
 ### Our Custom Type (OmniFocusProject interface)
+
 ```typescript
 export interface OmniFocusProject {
   id: string;
@@ -163,6 +168,7 @@ export interface OmniFocusProject {
 ```
 
 ### Key Differences:
+
 1. **Status**: Official API uses `Project.Status` enum, we use string literals
 2. **ReviewInterval**: Official API uses `ReviewInterval` object, we extract days as number
 3. **Folder**: Official API returns `Folder` object, we extract name as string
@@ -171,21 +177,22 @@ export interface OmniFocusProject {
 ## Tag Properties
 
 ### Official API (Tag class)
+
 ```typescript
 declare class Tag extends ActiveObject {
   // Identification
   readonly id: ObjectIdentifier;
   name: string;
-  
+
   // Properties
   note: string;
   allowsNextAction: boolean;
-  
+
   // Hierarchy
   readonly parent: Tag | null;
   readonly children: TagArray;
   readonly flattenedTags: TagArray;
-  
+
   // Tasks
   readonly availableTasks: TaskArray;
   readonly remainingTasks: TaskArray;
@@ -196,24 +203,27 @@ declare class Tag extends ActiveObject {
 ```
 
 ### Our Custom Type (OmniFocusTag interface)
+
 ```typescript
 export interface OmniFocusTag {
   id: string;
   name: string;
   note?: string;
   allowsNextAction: boolean;
-  parent?: string;  // We store parent name, not Tag object
-  children: string[];  // We store child names, not Tag objects
+  parent?: string; // We store parent name, not Tag object
+  children: string[]; // We store child names, not Tag objects
 }
 ```
 
 ### Key Differences:
+
 1. **Parent/Children**: Official API uses `Tag` objects, we convert to string names
 2. **Tasks/Projects**: Not included in our custom type but available in official API
 
 ## Method Access Patterns
 
 ### Task Methods We Use:
+
 - `task.id()` → `task.id`
 - `task.name()` → `task.name`
 - `task.note()` → `task.note`
@@ -233,6 +243,7 @@ export interface OmniFocusTag {
 - `task.tags()` → `task.tags` (returns TagArray)
 
 ### Project Methods We Use:
+
 - `project.id()` → `project.id`
 - `project.name()` → `project.name`
 - `project.note()` → `project.note`
@@ -251,6 +262,7 @@ export interface OmniFocusTag {
 - `project.parentFolder()` → `project.parentFolder`
 
 ### Tag Methods We Use:
+
 - `tag.id()` → `tag.id`
 - `tag.name()` → `tag.name`
 - `tag.note()` → `tag.note`

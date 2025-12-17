@@ -87,10 +87,10 @@ describe('Response Format Tests', () => {
               tags: [],
               recurringStatus: {
                 isRecurring: false,
-                type: 'non-recurring'
-              }
-            }
-          ]
+                type: 'non-recurring',
+              },
+            },
+          ],
         },
         metadata: {
           operation: 'list_tasks',
@@ -108,9 +108,9 @@ describe('Response Format Tests', () => {
             tasks_scanned: 10,
             filter_time_ms: 20,
             analysis_time_ms: 30,
-            analysis_skipped: false
-          }
-        }
+            analysis_skipped: false,
+          },
+        },
       };
 
       // Validate structure
@@ -140,10 +140,10 @@ describe('Response Format Tests', () => {
                 overdue: 2,
                 flagged: 1,
                 estimatedHours: '5.5',
-                lastActivityDate: '2025-07-24T00:00:00.000Z'
-              }
-            }
-          ]
+                lastActivityDate: '2025-07-24T00:00:00.000Z',
+              },
+            },
+          ],
         },
         metadata: {
           operation: 'list_projects',
@@ -153,9 +153,9 @@ describe('Response Format Tests', () => {
           returned_count: 1,
           query_time_ms: 1600,
           filters_applied: {
-            includeStats: true
-          }
-        }
+            includeStats: true,
+          },
+        },
       };
 
       // Validate structure
@@ -171,7 +171,7 @@ describe('Cache Behavior Tests', () => {
   it('should cache results with includeStats parameter in key', () => {
     const cacheKey1 = JSON.stringify({ limit: 10, includeStats: false });
     const cacheKey2 = JSON.stringify({ limit: 10, includeStats: true });
-    
+
     // Different cache keys for different includeStats values
     expect(cacheKey1).not.toBe(cacheKey2);
   });
@@ -179,7 +179,7 @@ describe('Cache Behavior Tests', () => {
   it('should cache results with skipAnalysis parameter in key', () => {
     const cacheKey1 = JSON.stringify({ limit: 10, skipAnalysis: false });
     const cacheKey2 = JSON.stringify({ limit: 10, skipAnalysis: true });
-    
+
     // Different cache keys for different skipAnalysis values
     expect(cacheKey1).not.toBe(cacheKey2);
   });
@@ -200,8 +200,8 @@ describe('Error Handling Tests', () => {
 
     // Either use whose() or safe iteration; both are acceptable
     const usesWhose = testScript.includes('doc.flattenedTasks.whose({id: taskId})');
-    const usesIteration = testScript.includes('doc.flattenedTasks')
-      && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(testScript);
+    const usesIteration =
+      testScript.includes('doc.flattenedTasks') && /for \(let i = 0; i < tasks\.length; i\+\+\)/.test(testScript);
     expect(usesWhose || usesIteration).toBe(true);
     expect(testScript).toContain('if (!task)');
   });

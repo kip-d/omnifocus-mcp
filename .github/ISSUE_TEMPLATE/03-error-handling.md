@@ -4,13 +4,14 @@ about: Improve error messages, handling, or recovery
 title: '[ERROR] '
 labels: 'enhancement, error-handling, priority-3'
 assignees: ''
-
 ---
 
 ## Error Handling Enhancement
 
 ### Error Type
+
 <!-- What kind of error is this about? -->
+
 - [ ] Permission errors
 - [ ] Invalid parameters
 - [ ] Timeout errors
@@ -20,12 +21,15 @@ assignees: ''
 - [ ] Other:
 
 ### Current Error Behavior
+
 <!-- What happens now when this error occurs? -->
 
 ### Proposed Improvement
+
 <!-- How should the error be handled? -->
 
 ### Error Response Format
+
 ```typescript
 {
   code: "OMNIFOCUS_ERROR_CODE",
@@ -39,9 +43,11 @@ assignees: ''
 ```
 
 ### User Experience
+
 <!-- How will this improve the user experience? -->
 
 ### Implementation Checklist
+
 - [ ] Define error code
 - [ ] Write helpful error message
 - [ ] Add actionable suggestion

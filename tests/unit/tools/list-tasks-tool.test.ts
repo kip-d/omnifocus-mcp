@@ -6,10 +6,10 @@ import { Logger } from '../../../src/utils/Logger.js';
 
 // Mock dependencies
 vi.mock('../../../src/cache/CacheManager.js', () => ({
-  CacheManager: vi.fn()
+  CacheManager: vi.fn(),
 }));
 vi.mock('../../../src/omnifocus/OmniAutomation.js', () => ({
-  OmniAutomation: vi.fn()
+  OmniAutomation: vi.fn(),
 }));
 vi.mock('../../../src/utils/Logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -17,7 +17,7 @@ vi.mock('../../../src/utils/Logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('QueryTasksTool', () => {
@@ -28,19 +28,19 @@ describe('QueryTasksTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn(),
       set: vi.fn(),
       clear: vi.fn(),
     };
-    
+
     mockOmniAutomation = {
       buildScript: vi.fn(),
       executeJson: vi.fn(),
       execute: vi.fn(),
     };
-    
+
     mockLogger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -60,13 +60,13 @@ describe('QueryTasksTool', () => {
       // V4 AST-powered script no longer uses buildScript, it generates scripts directly
       mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
-        summary: { total: 0 }
+        summary: { total: 0 },
       });
 
       const result = await tool.executeValidated({
         mode: 'all',
         completed: false,
-        limit: 10
+        limit: 10,
       });
 
       expect(result.success).toBe(true);
@@ -80,13 +80,13 @@ describe('QueryTasksTool', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
-        summary: { total: 0 }
+        summary: { total: 0 },
       });
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         mode: 'search',
         search: 'test',
-        limit: 10
+        limit: 10,
       });
 
       expect(result.success).toBe(true);
@@ -98,12 +98,12 @@ describe('QueryTasksTool', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
-        summary: { total: 0 }
+        summary: { total: 0 },
       });
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         mode: 'overdue',
-        limit: 10
+        limit: 10,
       });
 
       expect(result.success).toBe(true);
@@ -115,13 +115,13 @@ describe('QueryTasksTool', () => {
     it('should use cache when available for overdue mode', async () => {
       const cachedData = {
         tasks: [{ id: 'task1', name: 'Cached Task' }],
-        summary: { total: 1 }
+        summary: { total: 1 },
       };
       mockCache.get.mockReturnValue(cachedData);
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         mode: 'overdue',
-        limit: 10
+        limit: 10,
       });
 
       expect(result.success).toBe(true);
@@ -134,12 +134,12 @@ describe('QueryTasksTool', () => {
       mockOmniAutomation.buildScript.mockReturnValue('test script');
       mockOmniAutomation.executeJson.mockResolvedValue({
         tasks: [],
-        summary: { total: 0 }
+        summary: { total: 0 },
       });
 
-      await tool.executeValidated({ 
+      await tool.executeValidated({
         mode: 'overdue',
-        limit: 10
+        limit: 10,
       });
 
       expect(mockCache.set).toHaveBeenCalled();
@@ -150,11 +150,15 @@ describe('QueryTasksTool', () => {
     it('should handle script execution errors', async () => {
       mockCache.get.mockReturnValue(null);
       mockOmniAutomation.buildScript.mockReturnValue('test script');
-      mockOmniAutomation.executeJson.mockResolvedValue({ success: false, error: 'Script failed' , details: 'Test error' });
+      mockOmniAutomation.executeJson.mockResolvedValue({
+        success: false,
+        error: 'Script failed',
+        details: 'Test error',
+      });
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         mode: 'all',
-        limit: 10
+        limit: 10,
       });
 
       expect(result.success).toBe(false);
@@ -162,8 +166,8 @@ describe('QueryTasksTool', () => {
     });
 
     it('should require search term for search mode', async () => {
-      const result = await tool.executeValidated({ 
-        mode: 'search'
+      const result = await tool.executeValidated({
+        mode: 'search',
         // Missing search term
       });
 

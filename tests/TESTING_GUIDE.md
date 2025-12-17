@@ -2,18 +2,25 @@
 
 ## Overview
 
-This guide explains how to write tests that properly handle schema validation and parameter coercion in the OmniFocus MCP server.
+This guide explains how to write tests that properly handle schema validation and parameter coercion in the OmniFocus
+MCP server.
 
 ## Key Concepts
 
 ### 1. Schema Validation
-All tools validate input parameters using Zod schemas before execution. Tests must provide schema-compliant parameters or expect validation errors.
+
+All tools validate input parameters using Zod schemas before execution. Tests must provide schema-compliant parameters
+or expect validation errors.
 
 ### 2. Claude Desktop String Coercion
-Claude Desktop converts all parameters to strings during transport. Our schemas handle this with coercion helpers, but tests need to account for this behavior.
+
+Claude Desktop converts all parameters to strings during transport. Our schemas handle this with coercion helpers, but
+tests need to account for this behavior.
 
 ### 3. Response Structures
-Different tools use different response patterns. Always check the tool's actual implementation for the correct structure.
+
+Different tools use different response patterns. Always check the tool's actual implementation for the correct
+structure.
 
 ## Using Test Utilities
 
@@ -26,7 +33,7 @@ import { ManageFolderSchema } from '../../src/tools/schemas/folder-schemas';
 // Generate valid parameters with defaults
 const params = SchemaTestHelper.generateValidParams(ManageFolderSchema, {
   operation: 'create',
-  name: 'Test Folder'
+  name: 'Test Folder',
 });
 
 // Validate test data
@@ -37,7 +44,7 @@ if (!validation.valid) {
 
 // Create schema-compliant mock
 const tool = SchemaTestHelper.createSchemaMock(ManageFolderTool, {
-  omniAutomation: mockOmniAutomation
+  omniAutomation: mockOmniAutomation,
 });
 ```
 
@@ -49,14 +56,14 @@ import { createMockedTool, createManageFolderMock } from '../utils/mock-factorie
 // Create a fully mocked tool
 const tool = createMockedTool(ManageFolderTool, {
   omniAutomation: createManageFolderMock({
-    create: { folder: { id: '1', name: 'Created' } }
-  })
+    create: { folder: { id: '1', name: 'Created' } },
+  }),
 });
 
 // Test with operation-specific responses
 const result = await tool.execute({
   operation: 'create',
-  name: 'Test Folder'
+  name: 'Test Folder',
 });
 ```
 
@@ -66,15 +73,9 @@ const result = await tool.execute({
 import { ResponseBuilder } from '../utils/mock-factories';
 
 // Create consistent responses
-const successResponse = ResponseBuilder.success(
-  { tasks: [] },
-  { operation: 'list_tasks' }
-);
+const successResponse = ResponseBuilder.success({ tasks: [] }, { operation: 'list_tasks' });
 
-const errorResponse = ResponseBuilder.error(
-  'VALIDATION_ERROR',
-  'Invalid parameters'
-);
+const errorResponse = ResponseBuilder.error('VALIDATION_ERROR', 'Invalid parameters');
 ```
 
 ## Test Patterns
@@ -85,20 +86,20 @@ const errorResponse = ResponseBuilder.error(
 describe('ManageFolderTool', () => {
   let tool: ManageFolderTool;
   let mockOmniAutomation: any;
-  
+
   beforeEach(() => {
     mockOmniAutomation = createManageFolderMock();
     tool = createMockedTool(ManageFolderTool, {
-      omniAutomation: mockOmniAutomation
+      omniAutomation: mockOmniAutomation,
     });
   });
-  
+
   it('should create folder', async () => {
     const result = await tool.execute({
       operation: 'create',
-      name: 'Test Folder'
+      name: 'Test Folder',
     });
-    
+
     expect(result.success).toBe(true);
     expect(result.data.folder.name).toBe('Test Folder');
   });
@@ -110,16 +111,16 @@ describe('ManageFolderTool', () => {
 ```typescript
 describe('ExportTasksTool', () => {
   let tool: ExportTasksTool;
-  
+
   beforeEach(() => {
     tool = createMockedTool(ExportTasksTool, {
-      omniAutomation: createExportTasksMock()
+      omniAutomation: createExportTasksMock(),
     });
   });
-  
+
   it('should export with default format', async () => {
     const result = await tool.execute({});
-    
+
     expect(result.data.format).toBe('json');
   });
 });
@@ -130,10 +131,8 @@ describe('ExportTasksTool', () => {
 ```typescript
 it('should reject invalid parameters', async () => {
   // Invalid operation should throw McpError
-  await expect(
-    tool.execute({ operation: 'invalid' })
-  ).rejects.toThrow('Invalid parameters');
-  
+  await expect(tool.execute({ operation: 'invalid' })).rejects.toThrow('Invalid parameters');
+
   // Mock should not be called for invalid params
   expect(mockOmniAutomation.execute).not.toHaveBeenCalled();
 });
@@ -147,12 +146,12 @@ it('should handle string coercion', async () => {
   const params = {
     operation: 'create',
     name: 'Test',
-    includeEmpty: 'true',  // String boolean
-    limit: '50'            // String number
+    includeEmpty: 'true', // String boolean
+    limit: '50', // String number
   };
-  
+
   const result = await tool.execute(params);
-  
+
   // Tool should handle coercion internally
   expect(result.success).toBe(true);
 });
@@ -161,6 +160,7 @@ it('should handle string coercion', async () => {
 ## Common Issues and Solutions
 
 ### Issue: Test fails with "Invalid parameters"
+
 **Solution**: Check that all required fields are provided and match schema types.
 
 ```typescript
@@ -172,6 +172,7 @@ await tool.execute({ operation: 'create', name: 'Test' });
 ```
 
 ### Issue: Mock not being called
+
 **Solution**: Ensure mock is injected before calling execute.
 
 ```typescript
@@ -186,6 +187,7 @@ const tool = createMockedTool(ManageFolderTool, {
 ```
 
 ### Issue: Response structure mismatch
+
 **Solution**: Check tool's actual response format.
 
 ```typescript

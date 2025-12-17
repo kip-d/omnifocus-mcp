@@ -5,7 +5,12 @@ import { CREATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/create-fol
 import { UPDATE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/update-folder.js';
 import { DELETE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/delete-folder.js';
 import { MOVE_FOLDER_SCRIPT } from '../../omnifocus/scripts/folders/move-folder.js';
-import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
+import {
+  createErrorResponseV2,
+  createSuccessResponseV2,
+  OperationTimerV2,
+  StandardResponseV2,
+} from '../../utils/response-format.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
@@ -17,53 +22,37 @@ const convertToFolderId = (id: string): FolderId => id as FolderId;
 
 // Consolidated folders schema
 const FoldersSchema = z.object({
-  operation: z.enum(['list', 'get', 'search', 'projects', 'create', 'update', 'delete', 'move', 'duplicate', 'set_status'])
+  operation: z
+    .enum(['list', 'get', 'search', 'projects', 'create', 'update', 'delete', 'move', 'duplicate', 'set_status'])
     .describe('Operation to perform on folders'),
 
   // Identification
-  folderId: z.string()
+  folderId: z
+    .string()
     .optional()
     .describe('Folder ID (required for get, update, delete, move, duplicate, set_status, projects)'),
 
-  folderName: z.string()
-    .optional()
-    .describe('Folder name (alternative to folderId for some operations)'),
+  folderName: z.string().optional().describe('Folder name (alternative to folderId for some operations)'),
 
   // Create/Update parameters
-  name: z.string()
-    .optional()
-    .describe('New folder name (for create/update)'),
+  name: z.string().optional().describe('New folder name (for create/update)'),
 
-  parentFolderId: z.string()
-    .optional()
-    .describe('Parent folder ID (for create/move)'),
+  parentFolderId: z.string().optional().describe('Parent folder ID (for create/move)'),
 
   // Query parameters
-  searchQuery: z.string()
-    .optional()
-    .describe('Search query for folder names (search operation)'),
+  searchQuery: z.string().optional().describe('Search query for folder names (search operation)'),
 
-  includeProjects: coerceBoolean()
-    .optional()
-    .describe('Include projects in each folder (list operation)'),
+  includeProjects: coerceBoolean().optional().describe('Include projects in each folder (list operation)'),
 
-  includeSubfolders: coerceBoolean()
-    .optional()
-    .describe('Include subfolders (list operation)'),
+  includeSubfolders: coerceBoolean().optional().describe('Include subfolders (list operation)'),
 
   // Status operation
-  status: z.enum(['active', 'dropped'])
-    .optional()
-    .describe('New status for folder (set_status operation)'),
+  status: z.enum(['active', 'dropped']).optional().describe('New status for folder (set_status operation)'),
 
-  includeContents: coerceBoolean()
-    .optional()
-    .describe('Apply status to all projects in folder (set_status operation)'),
+  includeContents: coerceBoolean().optional().describe('Apply status to all projects in folder (set_status operation)'),
 
   // Duplicate operation
-  duplicateName: z.string()
-    .optional()
-    .describe('Name for duplicated folder (duplicate operation)'),
+  duplicateName: z.string().optional().describe('Name for duplicated folder (duplicate operation)'),
 });
 
 type FoldersInput = z.infer<typeof FoldersSchema>;
@@ -74,7 +63,8 @@ type FoldersInput = z.infer<typeof FoldersSchema>;
  */
 export class FoldersTool extends BaseTool<typeof FoldersSchema> {
   name = 'folders';
-  description = 'Query and manage OmniFocus folders. Operations: list (all folders), get (specific folder), search (by name), projects (projects in folder), create, update, delete, move, duplicate, set_status. Consistent with the projects tool pattern.';
+  description =
+    'Query and manage OmniFocus folders. Operations: list (all folders), get (specific folder), search (by name), projects (projects in folder), create, update, delete, move, duplicate, set_status. Consistent with the projects tool pattern.';
   schema = FoldersSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -121,15 +111,32 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             sortBy = 'path',
             sortOrder = 'asc',
             limit = 100,
-          } = params as { includeProjects?: boolean; includeSubfolders?: boolean; sortBy?: string; sortOrder?: string; limit?: number };
+          } = params as {
+            includeProjects?: boolean;
+            includeSubfolders?: boolean;
+            sortBy?: string;
+            sortOrder?: string;
+            limit?: number;
+          };
 
           const cacheKey = `folders_${includeProjects ? 'with_projects' : 'basic'}`;
 
           // Check cache first
           const cached = this.cache.get('folders', cacheKey);
-          if (cached && !includeProjects) { // Don't use cache if projects are requested as they may be stale
+          if (cached && !includeProjects) {
+            // Don't use cache if projects are requested as they may be stale
             this.logger.debug('Returning cached folder data');
-            return createSuccessResponseV2('folders', { folders: (cached as { folders?: unknown[]; items?: unknown[] }).folders ?? (cached as { folders?: unknown[]; items?: unknown[] }).items ?? cached }, undefined, { ...timer.toMetadata(), operation: 'list', from_cache: true, filters: {} });
+            return createSuccessResponseV2(
+              'folders',
+              {
+                folders:
+                  (cached as { folders?: unknown[]; items?: unknown[] }).folders ??
+                  (cached as { folders?: unknown[]; items?: unknown[] }).items ??
+                  cached,
+              },
+              undefined,
+              { ...timer.toMetadata(), operation: 'list', from_cache: true, filters: {} },
+            );
           }
 
           // Use v3 script with OmniJS bridge for accurate hierarchy
@@ -153,7 +160,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedListResult = listResult.data as { items?: unknown[]; folders?: unknown[]; metadata?: { returned_count?: number; total_available?: number } };
+          const parsedListResult = listResult.data as {
+            items?: unknown[];
+            folders?: unknown[];
+            metadata?: { returned_count?: number; total_available?: number };
+          };
           const foldersArr = parsedListResult.items || parsedListResult.folders || [];
 
           // Cache the results for 5 minutes (folders change less frequently)
@@ -161,7 +172,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             this.cache.set('folders', cacheKey, { folders: foldersArr });
           }
 
-          return createSuccessResponseV2('folders', { folders: foldersArr }, undefined, { ...timer.toMetadata(), operation: 'list', total_folders: foldersArr.length });
+          return createSuccessResponseV2('folders', { folders: foldersArr }, undefined, {
+            ...timer.toMetadata(),
+            operation: 'list',
+            total_folders: foldersArr.length,
+          });
         }
 
         case 'get': {
@@ -198,7 +213,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedGetResult = getResult.data as { folders?: Array<{ id: string; [key: string]: unknown }> };
 
           // Find the specific folder by ID
-          const folder = parsedGetResult.folders?.find((f: { id: string; [key: string]: unknown }) => f.id === params.folderId);
+          const folder = parsedGetResult.folders?.find(
+            (f: { id: string; [key: string]: unknown }) => f.id === params.folderId,
+          );
           if (!folder) {
             return createErrorResponseV2(
               'folders',
@@ -210,7 +227,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          return createSuccessResponseV2('folders', { folder: { ...folder, operation: 'get' } }, undefined, { ...timer.toMetadata(), operation: 'get', folder_id: params.folderId });
+          return createSuccessResponseV2('folders', { folder: { ...folder, operation: 'get' } }, undefined, {
+            ...timer.toMetadata(),
+            operation: 'get',
+            folder_id: params.folderId,
+          });
         }
 
         case 'search': {
@@ -244,9 +265,17 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
             );
           }
 
-          const parsedSearchResult = searchResult.data as { folders?: unknown[]; metadata?: { returned_count?: number } };
+          const parsedSearchResult = searchResult.data as {
+            folders?: unknown[];
+            metadata?: { returned_count?: number };
+          };
 
-          return createSuccessResponseV2('folders', { folders: parsedSearchResult.folders ?? [] }, undefined, { ...timer.toMetadata(), operation: 'search', search_term: params.searchQuery, total_matches: parsedSearchResult.metadata?.returned_count || (parsedSearchResult.folders?.length ?? 0) });
+          return createSuccessResponseV2('folders', { folders: parsedSearchResult.folders ?? [] }, undefined, {
+            ...timer.toMetadata(),
+            operation: 'search',
+            search_term: params.searchQuery,
+            total_matches: parsedSearchResult.metadata?.returned_count || (parsedSearchResult.folders?.length ?? 0),
+          });
         }
 
         case 'projects': {
@@ -283,7 +312,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           const parsedProjectsResult = projectsResult.data as { folders?: Array<{ id: string; projects?: unknown[] }> };
 
           // Find the specific folder by ID and return its projects
-          const folderWithProjects = parsedProjectsResult.folders?.find((f: { id: string; projects?: unknown[] }) => f.id === params.folderId);
+          const folderWithProjects = parsedProjectsResult.folders?.find(
+            (f: { id: string; projects?: unknown[] }) => f.id === params.folderId,
+          );
           if (!folderWithProjects) {
             return createErrorResponseV2(
               'folders',
@@ -297,7 +328,17 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
           const projects = (folderWithProjects as { projects?: unknown[] })?.projects || [];
 
-          return createSuccessResponseV2('folders', { projects, count: projects.length, operation: 'get_projects' }, undefined, { ...timer.toMetadata(), operation: 'get_projects', folder_id: params.folderId, project_count: projects.length });
+          return createSuccessResponseV2(
+            'folders',
+            { projects, count: projects.length, operation: 'get_projects' },
+            undefined,
+            {
+              ...timer.toMetadata(),
+              operation: 'get_projects',
+              folder_id: params.folderId,
+              project_count: projects.length,
+            },
+          );
         }
 
         // Management operations
@@ -338,7 +379,11 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           this.cache.invalidate('folders');
 
           const createdFolder = createResult.data as { id?: string; [key: string]: unknown };
-          return createSuccessResponseV2('folders', { folder: { ...createdFolder, operation: 'create' } }, undefined, { ...timer.toMetadata(), operation: 'create', created_id: createdFolder?.id });
+          return createSuccessResponseV2('folders', { folder: { ...createdFolder, operation: 'create' } }, undefined, {
+            ...timer.toMetadata(),
+            operation: 'create',
+            created_id: createdFolder?.id,
+          });
         }
 
         case 'update': {
@@ -381,7 +426,23 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
           const parsedUpdateResult = updateResult.data as { changes?: unknown; [key: string]: unknown };
 
-          return createSuccessResponseV2('folders', { folder: { ...parsedUpdateResult, operation: 'update' } }, undefined, { ...timer.toMetadata(), operation: 'update', updated_id: params.folderId, changes: parsedUpdateResult.changes as string | number | boolean | unknown[] | Record<string, unknown> | null });
+          return createSuccessResponseV2(
+            'folders',
+            { folder: { ...parsedUpdateResult, operation: 'update' } },
+            undefined,
+            {
+              ...timer.toMetadata(),
+              operation: 'update',
+              updated_id: params.folderId,
+              changes: parsedUpdateResult.changes as
+                | string
+                | number
+                | boolean
+                | unknown[]
+                | Record<string, unknown>
+                | null,
+            },
+          );
         }
 
         case 'delete': {
@@ -422,13 +483,21 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
           const parsedDeleteResult = deleteResult.data as any;
 
-          return createSuccessResponseV2('folders',
+          return createSuccessResponseV2(
+            'folders',
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            { folder: { ...parsedDeleteResult, operation: 'delete' } }, undefined, { ...timer.toMetadata(), operation: 'delete', deleted_id: params.folderId,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-            moved_to: parsedDeleteResult.folder?.parent,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-            moved_contents: parsedDeleteResult.changes });
+            { folder: { ...parsedDeleteResult, operation: 'delete' } },
+            undefined,
+            {
+              ...timer.toMetadata(),
+              operation: 'delete',
+              deleted_id: params.folderId,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              moved_to: parsedDeleteResult.folder?.parent,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              moved_contents: parsedDeleteResult.changes,
+            },
+          );
         }
 
         case 'move': {
@@ -468,11 +537,20 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
           const parsedMoveResult = moveResult.data as any;
 
-          return createSuccessResponseV2('folders',
+          return createSuccessResponseV2(
+            'folders',
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            { folder: { ...parsedMoveResult, operation: 'move' } }, undefined, { ...timer.toMetadata(), operation: 'move', moved_id: params.folderId,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-            old_parent: parsedMoveResult.folder?.parent, new_parent: params.parentFolderId });
+            { folder: { ...parsedMoveResult, operation: 'move' } },
+            undefined,
+            {
+              ...timer.toMetadata(),
+              operation: 'move',
+              moved_id: params.folderId,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              old_parent: parsedMoveResult.folder?.parent,
+              new_parent: params.parentFolderId,
+            },
+          );
         }
 
         case 'duplicate': {
@@ -537,9 +615,13 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
           const parsedStatusResult = statusResult.data as any;
 
-          return createSuccessResponseV2('folders',
+          return createSuccessResponseV2(
+            'folders',
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            { folder: { ...parsedStatusResult, operation: 'set_status' } }, undefined, { ...timer.toMetadata(), operation: 'set_status', updated_id: params.folderId, new_status: params.status });
+            { folder: { ...parsedStatusResult, operation: 'set_status' } },
+            undefined,
+            { ...timer.toMetadata(), operation: 'set_status', updated_id: params.folderId, new_status: params.status },
+          );
         }
 
         default:
@@ -556,5 +638,4 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
       return this.handleErrorV2<FoldersDataV2>(error);
     }
   }
-
 }

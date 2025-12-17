@@ -47,8 +47,20 @@ export interface GeneratedScript {
  * Default fields to include in task response
  */
 const DEFAULT_FIELDS = [
-  'id', 'name', 'completed', 'flagged', 'inInbox', 'blocked', 'available',
-  'dueDate', 'deferDate', 'plannedDate', 'tags', 'note', 'project', 'projectId',
+  'id',
+  'name',
+  'completed',
+  'flagged',
+  'inInbox',
+  'blocked',
+  'available',
+  'dueDate',
+  'deferDate',
+  'plannedDate',
+  'tags',
+  'note',
+  'project',
+  'projectId',
   'estimatedMinutes',
 ];
 
@@ -146,10 +158,7 @@ function generateFieldProjection(fields: string[]): string {
  * @param options - Script generation options
  * @returns Generated script ready for execution
  */
-export function buildFilteredTasksScript(
-  filter: TaskFilter,
-  options: ScriptOptions = {},
-): GeneratedScript {
+export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, fields = [], includeCompleted = false } = options;
 
   // Build the AST to check if empty
@@ -168,9 +177,12 @@ export function buildFilteredTasksScript(
   // Determine completion filter behavior
   // If filter explicitly sets completed, use that
   // Otherwise, use includeCompleted option
-  const completionCheck = filter.completed !== undefined
-    ? '' // AST handles it
-    : (includeCompleted ? '' : 'if (task.completed) return;');
+  const completionCheck =
+    filter.completed !== undefined
+      ? '' // AST handles it
+      : includeCompleted
+        ? ''
+        : 'if (task.completed) return;';
 
   const script = `
 (() => {
@@ -217,10 +229,7 @@ export function buildFilteredTasksScript(
 /**
  * Build an OmniJS script for inbox tasks with optional additional filters
  */
-export function buildInboxScript(
-  additionalFilter: TaskFilter = {},
-  options: ScriptOptions = {},
-): GeneratedScript {
+export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, fields = [] } = options;
 
   // Merge inbox filter with additional filters
@@ -273,10 +282,7 @@ export function buildInboxScript(
 /**
  * Build an OmniJS script for a specific task by ID
  */
-export function buildTaskByIdScript(
-  taskId: string,
-  fields: string[] = [],
-): GeneratedScript {
+export function buildTaskByIdScript(taskId: string, fields: string[] = []): GeneratedScript {
   const fieldProjection = generateFieldProjection(fields);
 
   const script = `
@@ -338,9 +344,7 @@ export interface RecurringTasksOptions extends ScriptOptions {
  * Uses AST for filtering (hasRepetitionRule, completed, dropped, projectId)
  * while keeping the domain-specific pattern inference logic.
  */
-export function buildRecurringTasksScript(
-  options: RecurringTasksOptions = {},
-): GeneratedScript {
+export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): GeneratedScript {
   const {
     limit = 1000,
     includeCompleted = false,

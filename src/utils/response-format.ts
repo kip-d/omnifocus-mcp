@@ -190,7 +190,9 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
   // Overdue insight
   if (summary.breakdown!.overdue && summary.breakdown!.overdue > 0) {
     if (mostOverdueTask) {
-      insights.push(`${summary.breakdown!.overdue} tasks overdue, oldest: "${mostOverdueTask.name}" (${mostOverdueDays} days)`);
+      insights.push(
+        `${summary.breakdown!.overdue} tasks overdue, oldest: "${mostOverdueTask.name}" (${mostOverdueDays} days)`,
+      );
     } else {
       insights.push(`${summary.breakdown!.overdue} task${summary.breakdown!.overdue > 1 ? 's' : ''} overdue`);
     }
@@ -232,8 +234,8 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
 
   // Generate preview of most important tasks
   const previewTasks = tasks
-    .map(item => item as OmniFocusTask)
-    .filter(t => !t.completed)
+    .map((item) => item as OmniFocusTask)
+    .filter((t) => !t.completed)
     .sort((a, b) => {
       // Sort by: overdue first, then due today, then flagged
       const aDate = isValidDateValue(a.dueDate) ? new Date(a.dueDate) : null;
@@ -251,10 +253,15 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
       return 0;
     })
     .slice(0, 3)
-    .map(t => ({
+    .map((t) => ({
       id: t.id || '',
       name: t.name || '',
-      dueDate: t.dueDate && t.dueDate !== null ? (typeof t.dueDate === 'string' ? t.dueDate : t.dueDate.toISOString()) : undefined,
+      dueDate:
+        t.dueDate && t.dueDate !== null
+          ? typeof t.dueDate === 'string'
+            ? t.dueDate
+            : t.dueDate.toISOString()
+          : undefined,
       project: t.project || undefined,
       flagged: t.flagged,
     }));
@@ -291,12 +298,20 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
 
     // Count by status
     switch (project.status) {
-      case 'active': summary.active = (summary.active || 0) + 1; break;
+      case 'active':
+        summary.active = (summary.active || 0) + 1;
+        break;
       case 'on-hold':
-      case 'onHold': summary.on_hold = (summary.on_hold || 0) + 1; break;
+      case 'onHold':
+        summary.on_hold = (summary.on_hold || 0) + 1;
+        break;
       case 'done':
-      case 'completed': summary.completed = (summary.completed || 0) + 1; break;
-      case 'dropped': summary.dropped = (summary.dropped || 0) + 1; break;
+      case 'completed':
+        summary.completed = (summary.completed || 0) + 1;
+        break;
+      case 'dropped':
+        summary.dropped = (summary.dropped || 0) + 1;
+        break;
     }
 
     // Check for review
@@ -329,11 +344,13 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
 
   // Detect stalled projects (active but no recent activity)
   const stalledProjects = projects
-    .map(item => item as OmniFocusProject)
-    .filter(p => {
+    .map((item) => item as OmniFocusProject)
+    .filter((p) => {
       if (p.status !== 'active') return false;
       if (!isValidDateValue(p.modifiedDate)) return false;
-      const daysSinceModified = Math.floor((now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24));
+      const daysSinceModified = Math.floor(
+        (now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24),
+      );
       return daysSinceModified > 14;
     });
 
@@ -618,35 +635,31 @@ export function normalizeDateInput(
   switch (lowerInput) {
     case 'today':
       return getDefaultTime(new Date(now));
-    case 'tomorrow':
-      {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return getDefaultTime(tomorrow);
-      }
-    case 'next week':
-      {
-        const nextWeek = new Date(now);
-        nextWeek.setDate(nextWeek.getDate() + 7);
-        return getDefaultTime(nextWeek);
-      }
-    case 'next monday':
-      {
-        const nextMonday = new Date(now);
-        const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
-        nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
-        nextMonday.setHours(9, 0, 0, 0); // Keep 9am for Monday
-        return nextMonday;
-      }
+    case 'tomorrow': {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return getDefaultTime(tomorrow);
+    }
+    case 'next week': {
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return getDefaultTime(nextWeek);
+    }
+    case 'next monday': {
+      const nextMonday = new Date(now);
+      const daysUntilMonday = (8 - now.getDay()) % 7 || 7;
+      nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+      nextMonday.setHours(9, 0, 0, 0); // Keep 9am for Monday
+      return nextMonday;
+    }
     case 'end of week':
-    case 'friday':
-      {
-        const friday = new Date(now);
-        const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
-        friday.setDate(friday.getDate() + daysUntilFriday);
-        friday.setHours(17, 0, 0, 0); // Keep 5pm for Friday
-        return friday;
-      }
+    case 'friday': {
+      const friday = new Date(now);
+      const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
+      friday.setDate(friday.getDate() + daysUntilFriday);
+      friday.setHours(17, 0, 0, 0); // Keep 5pm for Friday
+      return friday;
+    }
   }
 
   // Check if it's a plain YYYY-MM-DD date (no time specified)

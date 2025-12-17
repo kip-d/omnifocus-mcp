@@ -1,6 +1,7 @@
 # Prompt Discovery CLI Tool
 
-The OmniFocus MCP server includes a comprehensive prompt discovery CLI tool that provides unified access to both manual templates and programmatic MCP prompts.
+The OmniFocus MCP server includes a comprehensive prompt discovery CLI tool that provides unified access to both manual
+templates and programmatic MCP prompts.
 
 ## Overview
 
@@ -35,21 +36,23 @@ npm run prompts:list [options]
 
 ### Options
 
-| Option | Values | Description |
-|--------|--------|-------------|
-| `--type` | `all`, `mcp`, `template` | Filter by prompt type (default: `all`) |
-| `--category` | Any string | Filter by category (case-insensitive) |
-| `--format` | `table`, `json`, `markdown`, `list` | Output format (default: `table`) |
-| `--examples` | Flag | Include usage examples in output |
-| `--validate` | Flag | Validate all prompts and exit |
-| `--help` | Flag | Show help message |
+| Option       | Values                              | Description                            |
+| ------------ | ----------------------------------- | -------------------------------------- |
+| `--type`     | `all`, `mcp`, `template`            | Filter by prompt type (default: `all`) |
+| `--category` | Any string                          | Filter by category (case-insensitive)  |
+| `--format`   | `table`, `json`, `markdown`, `list` | Output format (default: `table`)       |
+| `--examples` | Flag                                | Include usage examples in output       |
+| `--validate` | Flag                                | Validate all prompts and exit          |
+| `--help`     | Flag                                | Show help message                      |
 
 ### Output Formats
 
 #### Table Format (Default)
+
 ```bash
 npm run prompts:list
 ```
+
 ```
 Name              | Type | Category      | Description
 ------------------+------+---------------+---------------------
@@ -60,9 +63,11 @@ Total: 8 prompts (5 MCP + 3 templates)
 ```
 
 #### JSON Format
+
 ```bash
 npm run prompts:list -- --format=json
 ```
+
 ```json
 [
   {
@@ -78,15 +83,19 @@ npm run prompts:list -- --format=json
 ```
 
 #### Markdown Format
+
 ```bash
 npm run prompts:list -- --format=markdown
 ```
+
 Generates a complete markdown documentation of all prompts organized by category.
 
 #### List Format
+
 ```bash
 npm run prompts:list -- --format=list
 ```
+
 ```
 gtd_principles (mcp)
 Daily GTD Workflow (template)
@@ -135,13 +144,16 @@ npm run prompts:list -- --type=mcp --format=list
 The discovery tool automatically categorizes prompts:
 
 ### GTD Workflows
+
 - **MCP Prompts**: `gtd_principles`, `gtd_weekly_review`, `gtd_process_inbox`, `eisenhower_matrix_inbox`
 - **Templates**: `daily-gtd-workflow.md`
 
 ### Testing
+
 - **Templates**: `test-v2-comprehensive.md`, `v2-features-test.md`
 
 ### Reference
+
 - **MCP Prompts**: `quick_reference`
 
 ## Discovery Process
@@ -169,6 +181,7 @@ npm run prompts:list -- --validate
 ```
 
 The validation mode:
+
 - ✅ Verifies all discovered files exist
 - ✅ Checks MCP prompt class files are accessible
 - ✅ Validates manual template files are readable
@@ -176,6 +189,7 @@ The validation mode:
 - ✅ Returns appropriate exit codes for CI/CD
 
 **Exit Codes:**
+
 - `0` - All prompts validated successfully
 - `1` - Validation errors found
 
@@ -247,14 +261,17 @@ The CLI tool is implemented as a TypeScript module with:
 ### Common Issues
 
 **"Warning: Could not find file for XyzPrompt"**
+
 - The prompt class exists in `index.ts` but the file mapping needs updating
 - Add the class to the `classFileMap` in `list-prompts.ts`
 
 **"Warning: Could not parse metadata for XyzPrompt"**
+
 - The TypeScript file doesn't have the expected `name =` and `description =` patterns
 - Check the prompt class follows the standard format
 
 **Validation failures**
+
 - Check that all referenced files exist and are accessible
 - Verify TypeScript compilation succeeds for MCP prompts
 - Ensure manual template files are valid Markdown
@@ -275,11 +292,13 @@ DEBUG=prompts npm run prompts:list
 When adding new prompts, the CLI will automatically discover them if they follow the patterns:
 
 **For MCP Prompts:**
+
 1. Create the TypeScript class in appropriate subdirectory
 2. Register it in `/src/prompts/index.ts`
 3. Use standard `name =` and `description =` patterns
 
 **For Manual Templates:**
+
 1. Add `.md` file to `/prompts/` directory
 2. Start with `# Title` heading
 3. Follow with description paragraph

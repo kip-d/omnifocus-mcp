@@ -129,7 +129,7 @@ async function importEntry() {
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>(res => {
+  const promise = new Promise<T>((res) => {
     resolve = res;
   });
   return { promise, resolve };
@@ -214,7 +214,7 @@ describe('server entrypoint', () => {
       lastRegisteredPendingOps = pendingOps;
     });
     const { runServer } = await importEntry();
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined as never));
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
     try {
       await runServer();
@@ -224,7 +224,7 @@ describe('server entrypoint', () => {
       expect(serverCloseMock).not.toHaveBeenCalled();
 
       deferred.resolve();
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(serverCloseMock).toHaveBeenCalledTimes(1);
       expect(exitSpy).toHaveBeenCalledWith(0);

@@ -11,15 +11,18 @@
 ### Pattern: Bridge Helper (Embedded Functions)
 
 **When to use:**
+
 - JXA cannot access/set a property directly
 - Need to use OmniJS `evaluateJavascript()` for reliable access
 - Examples: tags, dates (added/modified/dropDate), repetition rules, planned dates
 
 **Files:**
+
 - `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Tag assignment
 - `src/omnifocus/scripts/shared/date-fields-bridge.ts` - Date field retrieval
 
 **Pattern structure:**
+
 ```typescript
 // 1. Define bridge function as template string
 export const MY_BRIDGE = `
@@ -48,6 +51,7 @@ export function getMyBridge(): string {
 ```
 
 **Usage in scripts:**
+
 ```typescript
 import { getMyBridge } from '../shared/my-bridge.js';
 
@@ -66,9 +70,11 @@ export const MY_SCRIPT = `
 `;
 ```
 
-**Key insight:** Bridge functions are embedded INTO the script string, not called from TypeScript. This keeps everything in one JXA execution context.
+**Key insight:** Bridge functions are embedded INTO the script string, not called from TypeScript. This keeps everything
+in one JXA execution context.
 
 **Search command:**
+
 ```bash
 grep -r "evaluateJavascript\|bridge" src/omnifocus/scripts/shared/
 ```
@@ -95,12 +101,14 @@ Can JXA access this property directly?
 ```
 
 **How to test:**
+
 ```bash
 # Create test script in /tmp/test-property.js
 osascript -l JavaScript /tmp/test-property.js
 ```
 
 **Search command:**
+
 ```bash
 grep -A 10 "bridgeSet\|bridgeGet" src/omnifocus/scripts/shared/
 ```
@@ -114,6 +122,7 @@ grep -A 10 "bridgeSet\|bridgeGet" src/omnifocus/scripts/shared/
 **Solutions:**
 
 1. **Unified helpers** (for most scripts):
+
 ```typescript
 import { getUnifiedHelpers } from '../shared/helpers.js';
 
@@ -127,11 +136,13 @@ export const MY_SCRIPT = `
 ```
 
 2. **Minimal helpers** (for size-critical scripts):
+
 ```typescript
 import { getMinimalHelpers } from '../shared/helpers.js';
 ```
 
 3. **Bridge helpers** (for OmniJS operations):
+
 ```typescript
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 import { getDateFieldsBridge } from '../shared/date-fields-bridge.js';
@@ -147,6 +158,7 @@ export const MY_SCRIPT = `
 ```
 
 **Search command:**
+
 ```bash
 grep -r "import.*shared" src/omnifocus/scripts/tasks/
 ```
@@ -158,25 +170,28 @@ grep -r "import.*shared" src/omnifocus/scripts/tasks/
 **Problem:** Need to fetch additional data for tasks after filtering.
 
 **❌ WRONG APPROACH:**
+
 - Run main query in TypeScript
 - Run second query from TypeScript to enrich
 - Merge in TypeScript
 
 **✅ CORRECT APPROACH:**
+
 - Embed bridge helper in script
 - Filter tasks in JXA
 - Call bridge FROM WITHIN SCRIPT to enrich
 - Return complete results in one call
 
 **Example:** `list-tasks.ts` lines 427-465
+
 ```typescript
 // Inside the JXA script IIFE:
 const results = []; // Filtered tasks
 
 // Enrich with date fields if requested
 if (needsDateFields && results.length > 0) {
-  const taskIds = results.map(t => t.id);
-  const dateFields = bridgeGetDateFields(app, taskIds);  // Bridge call
+  const taskIds = results.map((t) => t.id);
+  const dateFields = bridgeGetDateFields(app, taskIds); // Bridge call
 
   // Merge into results
   for (const task of results) {
@@ -193,6 +208,7 @@ return JSON.stringify({ tasks: results });
 **Why this works:** Single osascript execution, all data collected before returning.
 
 **Search command:**
+
 ```bash
 grep -A 20 "bridgeGet.*Fields" src/omnifocus/scripts/tasks/
 ```
@@ -201,32 +217,35 @@ grep -A 20 "bridgeGet.*Fields" src/omnifocus/scripts/tasks/
 
 ## 📋 Common Use Cases → Patterns
 
-| Use Case | Pattern | File Reference |
-|----------|---------|----------------|
-| Set tags on task | Bridge helper | `minimal-tag-bridge.ts:41` (`bridgeSetTags`) |
-| Get added/modified dates | Bridge helper | `date-fields-bridge.ts:13` (`bridgeGetDateFields`) |
-| Set planned date | Bridge helper | `minimal-tag-bridge.ts:73` (`bridgeSetPlannedDate`) |
-| Apply repetition rule | Bridge helper | `create-task.ts:142` (`applyRepetitionRuleViaBridge`) |
-| Validate project exists | Unified helpers | `helpers.ts` (`validateProject`) |
-| Format errors | Unified helpers | `helpers.ts` (`formatError`) |
-| Query with filters | Script pattern | `list-tasks.ts` (complete example) |
-| Create task with tags | Script pattern | `create-task.ts` (JXA + bridge) |
+| Use Case                 | Pattern         | File Reference                                        |
+| ------------------------ | --------------- | ----------------------------------------------------- |
+| Set tags on task         | Bridge helper   | `minimal-tag-bridge.ts:41` (`bridgeSetTags`)          |
+| Get added/modified dates | Bridge helper   | `date-fields-bridge.ts:13` (`bridgeGetDateFields`)    |
+| Set planned date         | Bridge helper   | `minimal-tag-bridge.ts:73` (`bridgeSetPlannedDate`)   |
+| Apply repetition rule    | Bridge helper   | `create-task.ts:142` (`applyRepetitionRuleViaBridge`) |
+| Validate project exists  | Unified helpers | `helpers.ts` (`validateProject`)                      |
+| Format errors            | Unified helpers | `helpers.ts` (`formatError`)                          |
+| Query with filters       | Script pattern  | `list-tasks.ts` (complete example)                    |
+| Create task with tags    | Script pattern  | `create-task.ts` (JXA + bridge)                       |
 
 ---
 
 ## 🔄 Pattern Evolution
 
 **When to create a NEW pattern:**
+
 1. You've solved a problem that could recur
 2. The solution uses JXA/OmniJS techniques
 3. No similar pattern exists (you searched!)
 
 **When to EXTEND an existing pattern:**
+
 1. Similar functionality already exists
 2. Your change fits the existing structure
 3. You're adding a new bridge operation
 
 **When to REFACTOR a pattern:**
+
 1. You found a better approach
 2. Performance significantly improves
 3. Reduces code duplication
@@ -238,6 +257,7 @@ grep -A 20 "bridgeGet.*Fields" src/omnifocus/scripts/tasks/
 ## 🚨 Anti-Patterns (DON'T DO THIS)
 
 ### ❌ Two-Stage Query from TypeScript
+
 ```typescript
 // DON'T: Query, then enrich from TypeScript
 const tasks = await this.execJson(query1);
@@ -252,6 +272,7 @@ const enriched = await this.execJson(query2);
 ---
 
 ### ❌ Calling Bridge from TypeScript
+
 ```typescript
 // DON'T: Call evaluateJavascript from TypeScript
 const dates = app.evaluateJavascript(script);
@@ -264,6 +285,7 @@ const dates = app.evaluateJavascript(script);
 ---
 
 ### ❌ Duplicating Bridge Logic
+
 ```typescript
 // DON'T: Copy bridge code into multiple scripts
 export const SCRIPT_A = `

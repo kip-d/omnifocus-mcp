@@ -188,10 +188,7 @@ export interface MCPToolResponse<T> {
  */
 export function isScriptError(value: unknown): value is { error: true; message: string } {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'error' in value &&
-    (value as Record<string, unknown>).error === true
+    typeof value === 'object' && value !== null && 'error' in value && (value as Record<string, unknown>).error === true
   );
 }
 
@@ -311,7 +308,7 @@ export function unwrapScriptOutput<T>(
   // Try to find the data at various nesting levels
   // This handles: { tasks: [...] }, { data: { tasks: [...] } }, { data: { data: { tasks: [...] } } }
   const accessors: Array<(o: Record<string, unknown>) => unknown> = [
-    (o) => o[expectedShape],                                    // { tasks: [...] }
+    (o) => o[expectedShape], // { tasks: [...] }
     (o) => (o.data as Record<string, unknown>)?.[expectedShape], // { data: { tasks: [...] } }
     (o) => ((o.data as Record<string, unknown>)?.data as Record<string, unknown>)?.[expectedShape], // double-wrapped
   ];

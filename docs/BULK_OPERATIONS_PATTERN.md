@@ -2,15 +2,18 @@
 
 ## Overview
 
-This document describes the **single-pass bulk operation pattern** - an optimization technique for improving performance of bulk operations on OmniFocus tasks by 80%+ through algorithmic improvements rather than API changes.
+This document describes the **single-pass bulk operation pattern** - an optimization technique for improving performance
+of bulk operations on OmniFocus tasks by 80%+ through algorithmic improvements rather than API changes.
 
 ## The Problem: Multi-Pass Iteration
 
 ### Before Optimization (❌ Slow)
+
 ```typescript
 // Individual delete operations - LOOPS through flattenedTasks for EACH deletion
-for (const taskId of taskIds) {  // N iterations
-  const script = DELETE_TASK_SCRIPT;  // Each script:
+for (const taskId of taskIds) {
+  // N iterations
+  const script = DELETE_TASK_SCRIPT; // Each script:
   // - Calls doc.flattenedTasks()
   // - Loops through all tasks looking for match
   // - Deletes that one task
@@ -21,15 +24,17 @@ for (const taskId of taskIds) {  // N iterations
 ```
 
 **Performance Characteristics:**
+
 - Each operation iterates through ALL flattenedTasks
 - With N operations on M tasks: O(N × M) iterations
 - Measured bottleneck: ~18.7 seconds per operation
 - Root cause: Redundant iteration through entire task list
 
 ### After Optimization (✅ Fast)
+
 ```typescript
 // Single bulk operation - LOOPS through flattenedTasks ONCE
-const script = BULK_DELETE_TASKS_SCRIPT;  // Single script:
+const script = BULK_DELETE_TASKS_SCRIPT; // Single script:
 // - Calls doc.flattenedTasks() ONCE
 // - Builds map: { taskId → task } in one pass
 // - Deletes all tasks from map
@@ -40,6 +45,7 @@ await executeScript(script);
 ```
 
 **Performance Characteristics:**
+
 - Single iteration through flattenedTasks
 - With N operations on M tasks: O(M) iterations (not O(N × M))
 - Measured improvement: ~3.6 seconds per operation (5.2x faster)
@@ -109,6 +115,7 @@ export const BULK_DELETE_TASKS_SCRIPT = `
 ```
 
 **Key principles:**
+
 1. **Build a reference map** in one pass through all items
 2. **Store only what you need** (filter by ID during iteration)
 3. **Perform operations** on the map, not the original collection
@@ -120,10 +127,7 @@ export const BULK_DELETE_TASKS_SCRIPT = `
 // In ManageTaskTool.handleBulkOperation():
 if (operation === 'bulk_delete') {
   // Use single bulk script instead of looping individual scripts
-  const script = this.omniAutomation.buildScript(
-    BULK_DELETE_TASKS_SCRIPT,
-    { taskIds: targetTaskIds }
-  );
+  const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, { taskIds: targetTaskIds });
   const result = await this.execJson(script);
 
   // Process results from bulk operation
@@ -160,16 +164,18 @@ async quickCleanup(): Promise<void> {
 ## Performance Metrics
 
 ### Real-World Results
+
 Measured on integration test cleanup with 10 task deletions:
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Total time | 187s | 36s | 81% faster ✅ |
-| Per operation | 18.7s | 3.6s | 5.2x faster |
-| Iterations | 10,000 | 1,000 | 90% fewer |
-| Complexity | O(N × M) | O(M) | Linear vs quadratic |
+| Metric        | Before   | After | Improvement         |
+| ------------- | -------- | ----- | ------------------- |
+| Total time    | 187s     | 36s   | 81% faster ✅       |
+| Per operation | 18.7s    | 3.6s  | 5.2x faster         |
+| Iterations    | 10,000   | 1,000 | 90% fewer           |
+| Complexity    | O(N × M) | O(M)  | Linear vs quadratic |
 
 Where:
+
 - N = number of operations (10 deletions)
 - M = number of tasks in OmniFocus (~1000)
 
@@ -189,6 +195,7 @@ Example with 1000 tasks:
 ## Candidates for This Pattern
 
 ### ✅ Good Candidates
+
 - **`bulk_delete`** - IMPLEMENTED - 81% improvement
 - **`bulk_complete`** - Currently loops individual completes
   - Same flattenedTasks iteration overhead
@@ -197,6 +204,7 @@ Example with 1000 tasks:
 - **Batch tag assignments** - If tags are accessed via iteration
 
 ### ❌ Not Good Candidates
+
 - **Single operations** - No multi-pass overhead to optimize
 - **Operations that don't iterate** - Already fast
 - **Operations with complex side effects** - May need per-item processing
@@ -219,6 +227,7 @@ When implementing a bulk operation using this pattern:
 ## Common Pitfalls
 
 ### 1. String coercion in map keys
+
 ```typescript
 // ❌ WRONG - taskId might be string or number
 taskMap[taskId] = task;
@@ -230,6 +239,7 @@ if (taskIds.map(String).includes(taskIdStr)) { ... }
 ```
 
 ### 2. Missing null checks
+
 ```typescript
 // ❌ WRONG - task might not exist in map
 app.delete(taskMap[taskId]);
@@ -244,6 +254,7 @@ if (task) {
 ```
 
 ### 3. Not filtering during map building
+
 ```typescript
 // ❌ SLOW - Stores ALL tasks in map
 for (let i = 0; i < allTasks.length; i++) {
@@ -277,10 +288,12 @@ for (let i = 0; i < allTasks.length; i++) {
 ## Conclusion
 
 The single-pass bulk operation pattern is a powerful optimization technique that:
+
 - Reduces algorithmic complexity from O(N × M) to O(M)
 - Achieves 80%+ performance improvements in practice
 - Requires no API changes (works within existing OmniFocus constraints)
 - Can be applied to many bulk operations
 - Scales dramatically as operation count increases
 
-By building reference maps during a single iteration, we eliminate redundant work and create operations that scale with task count, not operation count.
+By building reference maps during a single iteration, we eliminate redundant work and create operations that scale with
+task count, not operation count.

@@ -33,7 +33,7 @@ export class WeeklyReviewPrompt extends BasePrompt {
         role: 'user',
         content: {
           type: 'text',
-          text: 'Let\'s do a comprehensive GTD weekly review. I\'ll guide you through each step to ensure nothing falls through the cracks.',
+          text: "Let's do a comprehensive GTD weekly review. I'll guide you through each step to ensure nothing falls through the cracks.",
         },
       },
       {
@@ -128,20 +128,24 @@ Let's check your on-hold projects to see if any should be reactivated.`,
           text: 'Show me all on-hold projects with their defer dates and notes about why they are on hold.',
         },
       },
-      ...(includeSomedayMaybe ? [{
-        role: 'assistant' as const,
-        content: {
-          type: 'text' as const,
-          text: '## Step 6: Someday/Maybe Review\nLet\'s review your someday/maybe items to see if any should become active.',
-        },
-      },
-      {
-        role: 'user' as const,
-        content: {
-          type: 'text' as const,
-          text: 'List all projects with status "onHold" that are in a Someday or Maybe folder, showing when they were last reviewed.',
-        },
-      }] : []),
+      ...(includeSomedayMaybe
+        ? [
+            {
+              role: 'assistant' as const,
+              content: {
+                type: 'text' as const,
+                text: "## Step 6: Someday/Maybe Review\nLet's review your someday/maybe items to see if any should become active.",
+              },
+            },
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'List all projects with status "onHold" that are in a Someday or Maybe folder, showing when they were last reviewed.',
+              },
+            },
+          ]
+        : []),
       {
         role: 'assistant',
         content: {
@@ -154,7 +158,7 @@ Review your calendar for the upcoming week to ensure your task list aligns with 
         role: 'user',
         content: {
           type: 'text',
-          text: 'Show me all tasks due in the next 7 days, grouped by day, so I can see if I\'m overcommitted on any particular day.',
+          text: "Show me all tasks due in the next 7 days, grouped by day, so I can see if I'm overcommitted on any particular day.",
         },
       },
       {

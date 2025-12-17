@@ -1,9 +1,7 @@
 # Checkpoint: Added/Modified/DropDate Field Implementation
 
-**Date:** October 22, 2025
-**Branch:** main
-**Status:** ✅ COMPLETE - All features working correctly
-**Commits:** 994320d, 157c875, efb6596 (final verification)
+**Date:** October 22, 2025 **Branch:** main **Status:** ✅ COMPLETE - All features working correctly **Commits:**
+994320d, 157c875, efb6596 (final verification)
 
 ---
 
@@ -13,7 +11,8 @@ Enable access to `added`, `modified`, and `dropDate` fields on OmniFocus tasks t
 
 **User Request:** "Can you now accurately tell me the creation dates for the 46 actions I see with a tag of 'test'"
 
-**Problem:** These fields exist in the OmniFocus API (`DatedObject` class) but cannot be accessed via JXA due to Date type conversion limitations.
+**Problem:** These fields exist in the OmniFocus API (`DatedObject` class) but cannot be accessed via JXA due to Date
+type conversion limitations.
 
 ---
 
@@ -21,15 +20,18 @@ Enable access to `added`, `modified`, and `dropDate` fields on OmniFocus tasks t
 
 ### Architecture: Embedded Bridge Pattern
 
-Following the established pattern from `minimal-tag-bridge.ts`, the implementation uses an **embedded bridge helper** approach:
+Following the established pattern from `minimal-tag-bridge.ts`, the implementation uses an **embedded bridge helper**
+approach:
 
 **File:** `src/omnifocus/scripts/shared/date-fields-bridge.ts` (NEW)
+
 - Created `bridgeGetDateFields(app, taskIds)` function
 - Returns: `{taskId: {added, modified, dropDate}, ...}`
 - Follows exact pattern from tag bridge
 - ~1KB size, efficient bulk retrieval
 
 **File:** `src/omnifocus/scripts/tasks/list-tasks.ts` (MODIFIED)
+
 - Lines 19-22: Imported and embedded bridge helper
 - Lines 427-465: In-script enrichment after task filtering
 - Only runs when date fields explicitly requested via `fields` parameter
@@ -38,11 +40,13 @@ Following the established pattern from `minimal-tag-bridge.ts`, the implementati
 ### Verification Results ✅
 
 **Test Command:**
+
 ```bash
 node /tmp/test-date-fields.js
 ```
 
 **Results:**
+
 ```
 ✅ Found tasks response (id:2)
 📊 Returned 2 tasks
@@ -65,8 +69,9 @@ Task 2:
 Debug logging confirmed correct data flow through all layers:
 
 1. ✅ **Script layer**: Bridge correctly retrieves dates from OmniJS
+
    ```json
-   {"added":"2025-10-20T19:17:16.534Z","modified":"2025-10-20T19:17:16.534Z"}
+   { "added": "2025-10-20T19:17:16.534Z", "modified": "2025-10-20T19:17:16.534Z" }
    ```
 
 2. ✅ **parseTasks layer**: Date strings preserved through parsing
@@ -89,14 +94,15 @@ Debug logging confirmed correct data flow through all layers:
 ```javascript
 // MCP tool call
 mcp__omnifocus__tasks({
-  mode: "all",
-  tags: ["test"],
+  mode: 'all',
+  tags: ['test'],
   limit: 5,
-  fields: ["id", "name", "added", "modified", "dropDate"]
-})
+  fields: ['id', 'name', 'added', 'modified', 'dropDate'],
+});
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -127,6 +133,7 @@ All dates returned in UTC timezone with `.000Z` suffix.
 ## 🔍 Debugging Process
 
 ### Initial Issue
+
 - Checkpoint documented "MCP Tool Response Missing Date Fields"
 - Suspected data loss somewhere in processing pipeline
 
@@ -150,12 +157,14 @@ All dates returned in UTC timezone with `.000Z` suffix.
 ### Key Learning: MCP Testing Requires Async Handling
 
 **❌ Wrong:**
+
 ```bash
 echo '{"jsonrpc":"2.0"...}' | node dist/index.js
 # Server closes stdin immediately, osascript may not complete
 ```
 
 **✅ Correct:**
+
 ```javascript
 // Use proper async test script
 const server = spawn('node', ['dist/index.js']);
@@ -198,6 +207,7 @@ All relevant documentation has been updated:
 ### 1. Always Search for Existing Patterns FIRST
 
 **Before implementing ANY bridge operation:**
+
 ```bash
 grep -r "keyword" src/omnifocus/scripts/shared/
 ```
@@ -237,9 +247,10 @@ export const MY_SCRIPT = `
 ```
 
 **❌ WRONG:** Two-stage query from TypeScript
+
 ```typescript
 const tasks = await this.execJson(queryScript);
-const enriched = await this.execJson(enrichScript);  // Separate execution!
+const enriched = await this.execJson(enrichScript); // Separate execution!
 // Merge in TypeScript...
 ```
 
@@ -248,17 +259,20 @@ const enriched = await this.execJson(enrichScript);  // Separate execution!
 ## 📁 Files Modified
 
 **Created:**
+
 - `src/omnifocus/scripts/shared/date-fields-bridge.ts` - Bridge helper (NEW)
 - `docs/dev/PATTERN_INDEX.md` - Pattern catalog (NEW)
 - `/tmp/test-date-fields.js` - Async MCP test script (NEW)
 
 **Modified:**
+
 - `src/omnifocus/scripts/tasks/list-tasks.ts` - Lines 19-22, 427-465 (enrichment)
 - `CLAUDE.md` - Added pattern search protocol
 - `docs/dev/LESSONS_LEARNED.md` - Documented pattern search lesson
 - `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Enhanced docs
 
 **Debug artifacts (removed after verification):**
+
 - Debug logging in `QueryTasksToolV2.ts` (removed after confirming correctness)
 
 ---
@@ -274,7 +288,9 @@ function bridgeGetDateFields(app, taskIds) {
     const doc = document.windows[0].document;
     const results = {};
 
-    ${taskIds.map(id => `
+    ${taskIds
+      .map(
+        (id) => `
       try {
         const task = doc.byIdentifier('${id}');
         results['${id}'] = {
@@ -283,7 +299,9 @@ function bridgeGetDateFields(app, taskIds) {
           dropDate: task.dropDate ? task.dropDate.toISOString() : null
         };
       } catch (e) {}
-    `).join('')}
+    `,
+      )
+      .join('')}
 
     JSON.stringify(results);
   `;
@@ -300,10 +318,10 @@ const results = filterAndBuildTasks();
 
 // If date fields requested, enrich with bridge
 if (needsDateFields(fields)) {
-  const taskIds = results.map(t => t.id);
+  const taskIds = results.map((t) => t.id);
   const dateData = bridgeGetDateFields(app, taskIds);
 
-  results.forEach(task => {
+  results.forEach((task) => {
     const dates = dateData[task.id];
     if (dates) {
       task.added = dates.added;
@@ -321,11 +339,13 @@ return results;
 ## 📖 Reference Files
 
 **For understanding the pattern:**
+
 - `minimal-tag-bridge.ts` - Original pattern source
 - `create-task.ts:158-162` - Tag bridge usage example
 - `list-tasks.ts:427-465` - Date fields enrichment implementation
 
 **For future debugging:**
+
 - `/tmp/test-date-fields.js` - Async MCP test harness
 - This checkpoint - Complete implementation history
 
@@ -333,10 +353,13 @@ return results;
 
 ## 💬 Quotes to Remember
 
-> "So can we explore using OmniJS to get at these fields?" — User question that led to finding the existing bridge pattern
+> "So can we explore using OmniJS to get at these fields?" — User question that led to finding the existing bridge
+> pattern
 
 > "STOP! Before Writing ANY Code - Search for Existing Patterns FIRST" — Hard-won lesson from this implementation
 
 ---
 
-**Status:** Implementation complete and verified. Date fields (`added`, `modified`, `dropDate`) are now accessible through the MCP `tasks` tool when explicitly requested via the `fields` parameter. All success criteria met. Documentation updated. Pattern established for future similar implementations.
+**Status:** Implementation complete and verified. Date fields (`added`, `modified`, `dropDate`) are now accessible
+through the MCP `tasks` tool when explicitly requested via the `fields` parameter. All success criteria met.
+Documentation updated. Pattern established for future similar implementations.

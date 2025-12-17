@@ -7,22 +7,22 @@ import { spawn } from 'child_process';
 import { createInterface } from 'readline';
 
 console.log('🚀 OmniFocus MCP v2.0.0 Test Suite\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 const server = spawn('node', ['dist/index.js'], {
-  stdio: ['pipe', 'pipe', 'inherit']
+  stdio: ['pipe', 'pipe', 'inherit'],
 });
 
 const rl = createInterface({
   input: server.stdout,
-  crlfDelay: Infinity
+  crlfDelay: Infinity,
 });
 
 let requestId = 1;
 let testResults = {
   passed: 0,
   failed: 0,
-  tests: []
+  tests: [],
 };
 
 let createdTaskId = null;
@@ -34,9 +34,9 @@ const sendRequest = (method, params = {}) => {
     jsonrpc: '2.0',
     method,
     params,
-    id: requestId++
+    id: requestId++,
   };
-  
+
   server.stdin.write(JSON.stringify(request) + '\n');
 };
 
@@ -56,19 +56,23 @@ const testResult = (name, passed, details = '') => {
 const cleanup = () => {
   server.stdin.end();
   server.kill('SIGTERM');
-  
+
   // Print summary
-  console.log('\n' + '=' .repeat(60));
+  console.log('\n' + '='.repeat(60));
   console.log('📊 Test Results Summary\n');
   console.log(`✅ Passed: ${testResults.passed}`);
   console.log(`❌ Failed: ${testResults.failed}`);
-  console.log(`📈 Success Rate: ${Math.round(testResults.passed / (testResults.passed + testResults.failed) * 100)}%`);
-  
+  console.log(
+    `📈 Success Rate: ${Math.round((testResults.passed / (testResults.passed + testResults.failed)) * 100)}%`,
+  );
+
   if (testResults.failed > 0) {
     console.log('\n⚠️ Failed Tests:');
-    testResults.tests.filter(t => !t.passed).forEach(t => {
-      console.log(`  • ${t.name}: ${t.details}`);
-    });
+    testResults.tests
+      .filter((t) => !t.passed)
+      .forEach((t) => {
+        console.log(`  • ${t.name}: ${t.details}`);
+      });
     process.exit(1);
   } else {
     console.log('\n🎉 All tests passed! v2.0.0 is ready for release!');
@@ -80,12 +84,12 @@ const cleanup = () => {
 rl.on('line', (line) => {
   try {
     const response = JSON.parse(line);
-    
+
     // Debug log
     if (response.error) {
       console.log('Error response:', JSON.stringify(response.error));
     }
-    
+
     // Process based on response ID
     if (response.id === 1) {
       // Initialize complete, start tests
@@ -95,10 +99,9 @@ rl.on('line', (line) => {
           name: 'Test Task with Tags ' + Date.now(),
           flagged: 'true',
           sequential: 'false',
-          tags: ['test', 'v2', 'automated']
-        }
+          tags: ['test', 'v2', 'automated'],
+        },
       });
-      
     } else if (response.id === 2) {
       // Test 1: Create task with tags
       try {
@@ -113,29 +116,31 @@ rl.on('line', (line) => {
           return;
         }
         const content = JSON.parse(response.result.content[0].text);
-        
+
         // The response structure is different - it's nested in data.task
         const task = content.data?.task || content;
         createdTaskId = task.taskId || task.id;
-        
-        const tagsVisible = task.tags && task.tags.length === 3 && 
-                           task.tags.includes('test') && task.tags.includes('v2');
-        testResult('Create task with tags', tagsVisible, 
-                  tagsVisible ? '' : `Tags not visible: ${JSON.stringify(task.tags)}`);
-        
+
+        const tagsVisible =
+          task.tags && task.tags.length === 3 && task.tags.includes('test') && task.tags.includes('v2');
+        testResult(
+          'Create task with tags',
+          tagsVisible,
+          tagsVisible ? '' : `Tags not visible: ${JSON.stringify(task.tags)}`,
+        );
+
         // Next test: Update tags
         sendRequest('tools/call', {
           name: 'update_task',
           arguments: {
             taskId: createdTaskId,
-            tags: ['updated', 'final']
-          }
+            tags: ['updated', 'final'],
+          },
         });
       } catch (e) {
         testResult('Create task with tags', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 3) {
       // Test 2: Update task tags
       try {
@@ -146,40 +151,36 @@ rl.on('line', (line) => {
         }
         const content = JSON.parse(response.result.content[0].text);
         const task = content.data?.task || content;
-        const tagsUpdated = task.tags && task.tags.length === 2 &&
-                           task.tags.includes('updated') && task.tags.includes('final');
-        testResult('Update task tags', tagsUpdated,
-                  tagsUpdated ? '' : `Wrong tags: ${JSON.stringify(task.tags)}`);
-        
+        const tagsUpdated =
+          task.tags && task.tags.length === 2 && task.tags.includes('updated') && task.tags.includes('final');
+        testResult('Update task tags', tagsUpdated, tagsUpdated ? '' : `Wrong tags: ${JSON.stringify(task.tags)}`);
+
         // Next test: Invalid project ID
         sendRequest('tools/call', {
           name: 'update_task',
           arguments: {
             taskId: createdTaskId,
-            projectId: 'invalid-project-xyz'
-          }
+            projectId: 'invalid-project-xyz',
+          },
         });
       } catch (e) {
         testResult('Update task tags', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 4) {
       // Test 3: Invalid project ID validation
-      const failed = response.error || 
-                    (response.result && response.result.content[0].text.includes('Project not found'));
-      testResult('Invalid project ID validation', failed,
-                failed ? '' : 'Should have failed with invalid project');
-      
+      const failed =
+        response.error || (response.result && response.result.content[0].text.includes('Project not found'));
+      testResult('Invalid project ID validation', failed, failed ? '' : 'Should have failed with invalid project');
+
       // Next test: Move to inbox
       sendRequest('tools/call', {
         name: 'update_task',
         arguments: {
           taskId: createdTaskId,
-          projectId: ''  // Empty string = inbox
-        }
+          projectId: '', // Empty string = inbox
+        },
       });
-      
     } else if (response.id === 5) {
       // Test 4: Move task to inbox
       try {
@@ -190,9 +191,8 @@ rl.on('line', (line) => {
         }
         const content = JSON.parse(response.result.content[0].text);
         const task = content.data?.task || content;
-        testResult('Move task to inbox', task.inInbox,
-                  task.inInbox ? '' : 'Task not in inbox');
-        
+        testResult('Move task to inbox', task.inInbox, task.inInbox ? '' : 'Task not in inbox');
+
         // Next test: Create with repeat rule
         sendRequest('tools/call', {
           name: 'create_task',
@@ -203,15 +203,14 @@ rl.on('line', (line) => {
             repeatRule: {
               unit: 'day',
               steps: '1',
-              method: 'fixed'
-            }
-          }
+              method: 'fixed',
+            },
+          },
         });
       } catch (e) {
         testResult('Move task to inbox', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 6) {
       // Test 5: Create task with repeat rule
       try {
@@ -224,9 +223,8 @@ rl.on('line', (line) => {
         const task = content.data?.task || content;
         repeatTaskId = task.taskId || task.id;
         const hasRepeat = task.hasRepeatRule || task.repeatRule?.applied;
-        testResult('Create task with repeat rule', hasRepeat,
-                  hasRepeat ? '' : 'Repeat rule not applied');
-        
+        testResult('Create task with repeat rule', hasRepeat, hasRepeat ? '' : 'Repeat rule not applied');
+
         // Next test: Update repeat rule
         sendRequest('tools/call', {
           name: 'update_task',
@@ -236,15 +234,14 @@ rl.on('line', (line) => {
               unit: 'week',
               steps: '2',
               method: 'fixed',
-              weekdays: ['monday', 'friday']
-            }
-          }
+              weekdays: ['monday', 'friday'],
+            },
+          },
         });
       } catch (e) {
         testResult('Create task with repeat rule', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 7) {
       // Test 6: Update repeat rule
       try {
@@ -255,22 +252,20 @@ rl.on('line', (line) => {
         }
         const content = JSON.parse(response.result.content[0].text);
         const task = content.data?.task || content;
-        testResult('Update repeat rule to weekly', task.hasRepeatRule,
-                  task.hasRepeatRule ? '' : 'Repeat not updated');
-        
+        testResult('Update repeat rule to weekly', task.hasRepeatRule, task.hasRepeatRule ? '' : 'Repeat not updated');
+
         // Next test: Clear repeat rule
         sendRequest('tools/call', {
           name: 'update_task',
           arguments: {
             taskId: repeatTaskId,
-            clearRepeatRule: true
-          }
+            clearRepeatRule: true,
+          },
         });
       } catch (e) {
         testResult('Update repeat rule to weekly', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 8) {
       // Test 7: Clear repeat rule
       try {
@@ -281,9 +276,8 @@ rl.on('line', (line) => {
         }
         const content = JSON.parse(response.result.content[0].text);
         const task = content.data?.task || content;
-        testResult('Clear repeat rule', !task.hasRepeatRule,
-                  !task.hasRepeatRule ? '' : 'Repeat not cleared');
-        
+        testResult('Clear repeat rule', !task.hasRepeatRule, !task.hasRepeatRule ? '' : 'Repeat not cleared');
+
         // Next test: Performance - flagged tasks
         const startTime = Date.now();
         sendRequest('tools/call', {
@@ -291,8 +285,8 @@ rl.on('line', (line) => {
           arguments: {
             mode: 'flagged',
             limit: '50',
-            details: 'false'
-          }
+            details: 'false',
+          },
         });
         // Store start time for next test
         server.perfTestStart = startTime;
@@ -300,21 +294,18 @@ rl.on('line', (line) => {
         testResult('Clear repeat rule', false, e.message);
         cleanup();
       }
-      
     } else if (response.id === 9) {
       // Test 8: Performance - flagged tasks
       const duration = Date.now() - server.perfTestStart;
-      testResult('Performance: Query flagged < 2s', duration < 2000,
-                duration < 2000 ? '' : `Took ${duration}ms`);
-      
+      testResult('Performance: Query flagged < 2s', duration < 2000, duration < 2000 ? '' : `Took ${duration}ms`);
+
       // Next test: Complete task
       sendRequest('tools/call', {
         name: 'complete_task',
         arguments: {
-          taskId: createdTaskId
-        }
+          taskId: createdTaskId,
+        },
       });
-      
     } else if (response.id === 10) {
       // Test 9: Complete task
       try {
@@ -325,9 +316,8 @@ rl.on('line', (line) => {
         }
         const content = JSON.parse(response.result.content[0].text);
         const task = content.data?.task || content;
-        testResult('Complete task', task.completed,
-                  task.completed ? '' : 'Task not completed');
-        
+        testResult('Complete task', task.completed, task.completed ? '' : 'Task not completed');
+
         // All tests done
         cleanup();
       } catch (e) {
@@ -335,7 +325,6 @@ rl.on('line', (line) => {
         cleanup();
       }
     }
-    
   } catch (e) {
     // Ignore non-JSON lines
   }
@@ -347,8 +336,8 @@ sendRequest('initialize', {
   capabilities: {},
   clientInfo: {
     name: 'v2-test-suite',
-    version: '1.0.0'
-  }
+    version: '1.0.0',
+  },
 });
 
 // Timeout after 30 seconds

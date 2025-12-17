@@ -12,6 +12,7 @@ This document explains how the OmniFocus MCP server handles user data and ensure
 ## What Gets Logged?
 
 ### At INFO Level (Default)
+
 - ✅ Operation names and tool names
 - ✅ Error types and categories
 - ✅ Performance metrics (timing, counts)
@@ -20,13 +21,16 @@ This document explains how the OmniFocus MCP server handles user data and ensure
 - ❌ **NO** task names, notes, or user content
 
 ### At DEBUG Level (Opt-in)
+
 - Includes user data BUT automatically redacted:
   - Task/project/tag names → `[REDACTED]`
   - Notes → `[REDACTED]`
   - Script content → `[REDACTED]`
 
 ### Error Metrics (Always Privacy-Safe)
+
 Special `[ERROR_METRIC]` logs contain:
+
 ```json
 {
   "timestamp": "2025-09-30T...",
@@ -36,11 +40,13 @@ Special `[ERROR_METRIC]` logs contain:
   "correlationId": "abc123..."
 }
 ```
+
 **No user data** - only error types and system information.
 
 ## Redacted Fields
 
 The logger automatically redacts these field names:
+
 - `name` - task/project/tag names
 - `note`, `notes` - task notes
 - `taskName`, `projectName`, `tagName`
@@ -50,6 +56,7 @@ The logger automatically redacts these field names:
 ## Log Levels
 
 Set via environment variable:
+
 ```bash
 LOG_LEVEL=error  # Only errors (least verbose)
 LOG_LEVEL=warn   # Errors and warnings
@@ -60,11 +67,13 @@ LOG_LEVEL=debug  # Include user data (redacted)
 ## Sharing Logs for Support
 
 **Safe to share:**
+
 - Any logs at INFO or ERROR level
 - `[ERROR_METRIC]` lines (contain no user data)
 - Full logs if generated with `LOG_LEVEL=info` or higher
 
 **Be careful with:**
+
 - Logs generated with `LOG_LEVEL=debug`
   - Even though redacted, verify before sharing
   - Check for any `[REDACTED]` markers
@@ -74,16 +83,19 @@ LOG_LEVEL=debug  # Include user data (redacted)
 Log location depends on which MCP client you're using:
 
 **Claude Desktop (macOS):**
+
 ```bash
 ~/Library/Logs/Claude/mcp*.log
 ```
 
 **Claude Code:**
+
 ```bash
 ~/Library/Logs/claude-code/*.log
 ```
 
 **ChatGPT Desktop:**
+
 ```bash
 # By default, logs are written to stderr/stdout
 # - If you launch ChatGPT Desktop from Terminal, check the terminal output
@@ -93,6 +105,7 @@ Log location depends on which MCP client you're using:
 ```
 
 **Custom MCP Clients:**
+
 - Logs go to `stderr` by default
 - Check your client's documentation for log location
 
@@ -101,6 +114,7 @@ Log location depends on which MCP client you're using:
 To share **only error statistics** (completely privacy-safe):
 
 **For Claude Desktop:**
+
 ```bash
 grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | jq .
 
@@ -110,16 +124,19 @@ grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | \
 ```
 
 **For Claude Code:**
+
 ```bash
 grep ERROR_METRIC ~/Library/Logs/claude-code/*.log | jq .
 ```
 
 **For any client (if you know the log file):**
+
 ```bash
 grep ERROR_METRIC /path/to/your/logs/*.log | jq .
 ```
 
 Example output:
+
 ```
    5 SCRIPT_TIMEOUT
    2 OMNIFOCUS_NOT_RUNNING
@@ -146,6 +163,7 @@ grep ERROR_METRIC $LOG_PATH/*.log | jq 'select(.recoverable == true)' | wc -l
 ```
 
 **Example for Claude Desktop users:**
+
 ```bash
 LOG_PATH=~/Library/Logs/Claude
 grep ERROR_METRIC $LOG_PATH/mcp*.log | wc -l
@@ -154,13 +172,17 @@ grep ERROR_METRIC $LOG_PATH/mcp*.log | wc -l
 ## Implementation Details
 
 ### Redaction Implementation
+
 See `src/utils/logger.ts`:
+
 - `redactArgs()` function recursively scans objects
 - Deep redaction preserves structure for debugging
 - Maximum recursion depth of 6 to prevent pathological cases
 
 ### Error Categorization
+
 See `src/utils/error-taxonomy.ts`:
+
 - All errors are categorized by type
 - Each type marked as recoverable or not
 - Used for metrics and auto-recovery decisions
@@ -168,6 +190,7 @@ See `src/utils/error-taxonomy.ts`:
 ## Privacy Audit History
 
 **September 2025:**
+
 - Removed raw user data from INFO level logs in ManageTaskTool
 - Added ERROR_METRIC logging for privacy-safe telemetry
 - Changed sensitive logs from `logger.info()` to `logger.debug()`
@@ -178,4 +201,5 @@ See `src/utils/error-taxonomy.ts`:
 ## Questions?
 
 If you find any logs that contain user data inappropriately, please report as a security issue:
+
 - https://github.com/kip-d/omnifocus-mcp/security

@@ -1,9 +1,7 @@
 # Conversion Templates for Helper Elimination
 
-**Created:** 2025-11-07
-**Purpose:** Step-by-step templates for converting scripts to pure OmniJS v3
-**Target:** 28 scripts across 3 tiers
-**Expected Impact:** 527KB reduction, 20x average performance gain
+**Created:** 2025-11-07 **Purpose:** Step-by-step templates for converting scripts to pure OmniJS v3 **Target:** 28
+scripts across 3 tiers **Expected Impact:** 527KB reduction, 20x average performance gain
 
 ---
 
@@ -23,11 +21,11 @@
 
 ### Performance Gains by Tier
 
-| Tier | Scripts | Current Overhead | Target Overhead | Expected Gain | Proven By |
-|------|---------|------------------|-----------------|---------------|-----------|
-| **Tier 1** | 2 | 18KB each | 0KB | **13-67x faster** | productivity-stats, task-velocity |
-| **Tier 2** | 25 | 18KB each | 0KB | **10-100x faster** | list-tags, list-tasks-omnijs |
-| **Tier 3** | 2 | 18KB each | 3KB | **15-20% smaller** | Size reduction only |
+| Tier       | Scripts | Current Overhead | Target Overhead | Expected Gain      | Proven By                         |
+| ---------- | ------- | ---------------- | --------------- | ------------------ | --------------------------------- |
+| **Tier 1** | 2       | 18KB each        | 0KB             | **13-67x faster**  | productivity-stats, task-velocity |
+| **Tier 2** | 25      | 18KB each        | 0KB             | **10-100x faster** | list-tags, list-tasks-omnijs      |
+| **Tier 3** | 2       | 18KB each        | 3KB             | **15-20% smaller** | Size reduction only               |
 
 ### Key Principles
 
@@ -48,6 +46,7 @@
 **Proven Performance:** 13-67x faster than helper-based versions
 
 **Examples:**
+
 - `analyze-overdue.ts` (Tier 1, ready for conversion)
 - `workflow-analysis.ts` (Tier 1, ready for conversion)
 
@@ -63,6 +62,7 @@ cat src/omnifocus/scripts/analytics/analyze-overdue.ts
 ```
 
 **Understand:**
+
 - What data does it analyze? (overdue tasks, blocked tasks, project bottlenecks)
 - What calculations does it perform? (days overdue, blockage rates, averages)
 - What does it return? (grouped tasks, statistics, insights)
@@ -79,6 +79,7 @@ cat src/omnifocus/scripts/analytics/task-velocity-v3.ts
 ```
 
 **Key patterns to extract:**
+
 - How they structure OmniJS script (template with `{{params}}`)
 - How they iterate through collections (flattenedTasks, flattenedProjects)
 - How they access properties (direct, with per-item try/catch)
@@ -251,9 +252,10 @@ export const SCRIPT_NAME_V3 = `
 **✅ DO:**
 
 1. **Use direct property access:**
+
    ```javascript
    // ✅ CORRECT - Direct access with per-item try/catch
-   flattenedTasks.forEach(task => {
+   flattenedTasks.forEach((task) => {
      try {
        const name = task.name;
        const completed = task.completed || false;
@@ -265,13 +267,18 @@ export const SCRIPT_NAME_V3 = `
    ```
 
 2. **Use v3 response format:**
+
    ```javascript
    return JSON.stringify({
      ok: true,
      v: '3',
-     data: { /* your data */ },
-     summary: { /* summary stats */ },
-     metadata: { query_time_ms: endTime - startTime }
+     data: {
+       /* your data */
+     },
+     summary: {
+       /* summary stats */
+     },
+     metadata: { query_time_ms: endTime - startTime },
    });
    ```
 
@@ -284,6 +291,7 @@ export const SCRIPT_NAME_V3 = `
 **❌ DON'T:**
 
 1. **Import helpers:**
+
    ```javascript
    // ❌ WRONG
    import { getUnifiedHelpers } from '../shared/helpers.js';
@@ -291,6 +299,7 @@ export const SCRIPT_NAME_V3 = `
    ```
 
 2. **Use safeGet wrappers:**
+
    ```javascript
    // ❌ WRONG - 50% slower
    const value = safeGet(() => item.property);
@@ -304,18 +313,20 @@ export const SCRIPT_NAME_V3 = `
    ```
 
 3. **Use .where() or .whose():**
+
    ```javascript
    // ❌ WRONG - Doesn't exist in our environment
-   const tasks = doc.flattenedTasks.where(t => !t.completed);
+   const tasks = doc.flattenedTasks.where((t) => !t.completed);
 
    // ✅ CORRECT - Filter manually
-   flattenedTasks.forEach(task => {
+   flattenedTasks.forEach((task) => {
      if (task.completed) return; // Skip
      // ... process task
    });
    ```
 
 4. **Return raw arrays:**
+
    ```javascript
    // ❌ WRONG
    return JSON.stringify(results);
@@ -324,7 +335,7 @@ export const SCRIPT_NAME_V3 = `
    return JSON.stringify({
      ok: true,
      v: '3',
-     data: { results: results }
+     data: { results: results },
    });
    ```
 
@@ -342,6 +353,7 @@ node test-single-tool.js tool_name '{"param":"value"}'
 ```
 
 **Compare:**
+
 - Performance (should be 10-100x faster)
 - Response structure (should match v3 format)
 - Functionality (should produce same results)
@@ -525,6 +537,7 @@ export const ANALYZE_OVERDUE_SCRIPT_V3 = `
 ```
 
 **Performance comparison:**
+
 - Before: ~5-10 seconds (JXA property access overhead)
 - After: <1 second (OmniJS direct access)
 - Improvement: 5-10x faster
@@ -538,6 +551,7 @@ export const ANALYZE_OVERDUE_SCRIPT_V3 = `
 **Expected Performance:** 10-100x faster than helper-based versions
 
 **Examples:**
+
 - `list-projects.ts` (25 scripts in Tier 2)
 - `update-project.ts`
 - `manage-folders.ts`
@@ -549,13 +563,13 @@ export const ANALYZE_OVERDUE_SCRIPT_V3 = `
 
 Determine what type of CRUD operation:
 
-| Type | Pattern | Example |
-|------|---------|---------|
-| **List** | Query collection, return array | list-projects, list-tags |
-| **Get** | Find by ID, return single item | get-project, get-folder |
+| Type       | Pattern                            | Example                       |
+| ---------- | ---------------------------------- | ----------------------------- |
+| **List**   | Query collection, return array     | list-projects, list-tags      |
+| **Get**    | Find by ID, return single item     | get-project, get-folder       |
 | **Create** | Make new item, return confirmation | create-project, create-folder |
-| **Update** | Modify existing, return updated | update-project, update-folder |
-| **Delete** | Remove item, return confirmation | delete-project, delete-folder |
+| **Update** | Modify existing, return updated    | update-project, update-folder |
+| **Delete** | Remove item, return confirmation   | delete-project, delete-folder |
 
 #### Step 2: Study proven v3 examples
 
@@ -571,6 +585,7 @@ cat src/omnifocus/scripts/tasks/list-tasks-omnijs.ts  # Has inbox, today, overdu
 ```
 
 **Key patterns for CRUD:**
+
 - Parameter validation (projectId, folderId, etc.)
 - Existence checks (does project exist?)
 - Collection iteration (flattenedProjects, flattenedFolders)
@@ -850,9 +865,14 @@ export const UPDATE_ITEM_SCRIPT_V3 = `
 ```javascript
 // ✅ CORRECT - Use enum comparison in OmniJS
 const isActive = project.status === Project.Status.Active;
-const status = project.status === Project.Status.Active ? 'active' :
-              project.status === Project.Status.OnHold ? 'on-hold' :
-              project.status === Project.Status.Done ? 'done' : 'dropped';
+const status =
+  project.status === Project.Status.Active
+    ? 'active'
+    : project.status === Project.Status.OnHold
+      ? 'on-hold'
+      : project.status === Project.Status.Done
+        ? 'done'
+        : 'dropped';
 ```
 
 **Case 2: Nested properties**
@@ -871,7 +891,7 @@ if (parent) {
 ```javascript
 // ✅ CORRECT - Iterate safely
 const tags = item.tags || [];
-result.tags = tags.map(tag => tag.name);
+result.tags = tags.map((tag) => tag.name);
 
 const subtasks = item.tasks || [];
 result.subtaskCount = subtasks.length;
@@ -892,6 +912,7 @@ node test-single-tool.js projects '{"search":"work","includeStats":true}'
 ```
 
 **Verify:**
+
 - All filter combinations work
 - Statistics calculated correctly
 - Response structure matches v3 format
@@ -1047,6 +1068,7 @@ export const LIST_PROJECTS_SCRIPT_V3 = `
 ```
 
 **Performance comparison:**
+
 - Before: ~3-6 seconds (JXA iteration + safeGet wrappers)
 - After: <0.5 seconds (OmniJS direct access)
 - Improvement: 6-12x faster
@@ -1061,6 +1083,7 @@ export const LIST_PROJECTS_SCRIPT_V3 = `
 **Expected Impact:** 15-20% smaller bundles, functionality preserved
 
 **Examples:**
+
 - `create-task.ts` (already updated in QW2, needs helper removal)
 - `update-task.ts` (already updated in QW2, needs helper removal)
 
@@ -1071,6 +1094,7 @@ export const LIST_PROJECTS_SCRIPT_V3 = `
 Confirm the script needs bridge operations:
 
 **Bridge operations (REQUIRED for these features):**
+
 1. ✅ `bridgeSetTags()` - Tag assignment (JXA doesn't persist)
 2. ✅ `applyRepetitionRuleViaBridge()` - Repeat rules (complex objects)
 3. ✅ `bridgeSetPlannedDate()` - Planned date (JXA doesn't persist)
@@ -1089,6 +1113,7 @@ grep -o "[a-zA-Z_][a-zA-Z0-9_]*(" src/omnifocus/scripts/tasks/create-task.ts | s
 **Cross-reference with getUnifiedHelpers() functions.**
 
 **Typical usage in create-task/update-task:**
+
 - `bridgeSetTags()` - ✅ ESSENTIAL (keep)
 - `applyRepetitionRuleViaBridge()` - ✅ ESSENTIAL (keep)
 - `bridgeSetPlannedDate()` - ✅ ESSENTIAL (keep)
@@ -1280,6 +1305,7 @@ export const CREATE_TASK_SCRIPT = `
 ```
 
 **Savings:**
+
 - Before: 18KB + duplicates = ~20KB
 - After: 3KB essential bundle = 3KB
 - **Reduction: 17KB (85% smaller)**
@@ -1307,6 +1333,7 @@ node test-single-tool.js manage_task '{
 ```
 
 **Verify:**
+
 1. ✅ Tags appear in OmniFocus immediately
 2. ✅ Repeat rule set correctly
 3. ✅ Planned date persists
@@ -1369,14 +1396,14 @@ return JSON.stringify({
   ],
   summary: {
     total: count,
-    insights: ["Human-readable insight"],
-    query_time_ms: endTime - startTime
+    insights: ['Human-readable insight'],
+    query_time_ms: endTime - startTime,
   },
   metadata: {
     generated_at: new Date().toISOString(),
     optimization: 'omnijs_v3',
-    method: 'single_bridge'
-  }
+    method: 'single_bridge',
+  },
 });
 
 // Error response
@@ -1385,8 +1412,8 @@ return JSON.stringify({
   v: '3',
   error: {
     message: 'Brief error message',
-    details: 'Detailed error information'
-  }
+    details: 'Detailed error information',
+  },
 });
 ```
 
@@ -1411,7 +1438,7 @@ try {
 **Best practice - per-item try/catch:**
 
 ```javascript
-flattenedItems.forEach(item => {
+flattenedItems.forEach((item) => {
   try {
     // Access ALL properties for this item
     const id = item.id.primaryKey;
@@ -1419,7 +1446,6 @@ flattenedItems.forEach(item => {
     const status = item.status;
 
     // Process item...
-
   } catch (e) {
     // Skip this item entirely if ANY property fails
   }
@@ -1462,7 +1488,7 @@ const data = JSON.parse(resultJson);
 const allTasks = doc.flattenedTasks();
 for (let i = 0; i < allTasks.length; i++) {
   const task = allTasks[i];
-  const name = safeGet(() => task.name());  // 16ms per call!
+  const name = safeGet(() => task.name()); // 16ms per call!
 }
 ```
 
@@ -1531,9 +1557,14 @@ const isAvailable = task.taskStatus === Task.Status.Available;
 **Convert to strings for return:**
 
 ```javascript
-const status = project.status === Project.Status.Active ? 'active' :
-              project.status === Project.Status.OnHold ? 'on-hold' :
-              project.status === Project.Status.Done ? 'done' : 'dropped';
+const status =
+  project.status === Project.Status.Active
+    ? 'active'
+    : project.status === Project.Status.OnHold
+      ? 'on-hold'
+      : project.status === Project.Status.Done
+        ? 'done'
+        : 'dropped';
 ```
 
 ### Pattern 7: Nested Properties
@@ -1565,93 +1596,90 @@ if (project) {
 
 ### Tier 1: Analytics Scripts (2 scripts, ~6-8 hours)
 
-| Script | Path | Effort | Priority | Expected Gain |
-|--------|------|--------|----------|---------------|
-| analyze-overdue | `analytics/analyze-overdue.ts` | 3 hours | HIGH | 13-67x faster |
-| workflow-analysis | `analytics/workflow-analysis.ts` | 4 hours | HIGH | 13-67x faster |
+| Script            | Path                             | Effort  | Priority | Expected Gain |
+| ----------------- | -------------------------------- | ------- | -------- | ------------- |
+| analyze-overdue   | `analytics/analyze-overdue.ts`   | 3 hours | HIGH     | 13-67x faster |
+| workflow-analysis | `analytics/workflow-analysis.ts` | 4 hours | HIGH     | 13-67x faster |
 
-**Pattern:** Follow productivity-stats-v3.ts template
-**Size reduction:** 36KB (2 × 18KB)
+**Pattern:** Follow productivity-stats-v3.ts template **Size reduction:** 36KB (2 × 18KB)
 
 ### Tier 2: CRUD/Query Scripts (25 scripts, ~75-125 hours)
 
 #### Folders (5 scripts, ~15-25 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| list-folders | `folders/list-folders.ts` | 3-5 hours | LIST |
-| get-folder | `folders/get-folder.ts` | 2-4 hours | GET |
-| create-folder | `folders/create-folder.ts` | 3-5 hours | CREATE |
-| update-folder | `folders/update-folder.ts` | 3-5 hours | UPDATE |
-| delete-folder | `folders/delete-folder.ts` | 2-4 hours | DELETE |
+| Script        | Path                       | Effort    | Pattern |
+| ------------- | -------------------------- | --------- | ------- |
+| list-folders  | `folders/list-folders.ts`  | 3-5 hours | LIST    |
+| get-folder    | `folders/get-folder.ts`    | 2-4 hours | GET     |
+| create-folder | `folders/create-folder.ts` | 3-5 hours | CREATE  |
+| update-folder | `folders/update-folder.ts` | 3-5 hours | UPDATE  |
+| delete-folder | `folders/delete-folder.ts` | 2-4 hours | DELETE  |
 
 #### Projects (5 scripts, ~15-25 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| list-projects | `projects/list-projects.ts` | 4-6 hours | LIST |
-| get-project | `projects/get-project.ts` | 2-4 hours | GET |
-| create-project | `projects/create-project.ts` | 4-6 hours | CREATE |
-| update-project | `projects/update-project.ts` | 4-6 hours | UPDATE |
-| complete-project | `projects/complete-project.ts` | 2-4 hours | UPDATE |
+| Script           | Path                           | Effort    | Pattern |
+| ---------------- | ------------------------------ | --------- | ------- |
+| list-projects    | `projects/list-projects.ts`    | 4-6 hours | LIST    |
+| get-project      | `projects/get-project.ts`      | 2-4 hours | GET     |
+| create-project   | `projects/create-project.ts`   | 4-6 hours | CREATE  |
+| update-project   | `projects/update-project.ts`   | 4-6 hours | UPDATE  |
+| complete-project | `projects/complete-project.ts` | 2-4 hours | UPDATE  |
 
 #### Reviews (3 scripts, ~9-15 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| list-reviews | `reviews/list-reviews.ts` | 3-5 hours | LIST |
-| mark-reviewed | `reviews/mark-reviewed.ts` | 3-5 hours | UPDATE |
-| update-review-interval | `reviews/update-review-interval.ts` | 3-5 hours | UPDATE |
+| Script                 | Path                                | Effort    | Pattern |
+| ---------------------- | ----------------------------------- | --------- | ------- |
+| list-reviews           | `reviews/list-reviews.ts`           | 3-5 hours | LIST    |
+| mark-reviewed          | `reviews/mark-reviewed.ts`          | 3-5 hours | UPDATE  |
+| update-review-interval | `reviews/update-review-interval.ts` | 3-5 hours | UPDATE  |
 
 #### Tasks - Simple (4 scripts, ~12-20 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| move-task | `tasks/move-task.ts` | 3-5 hours | UPDATE |
-| complete-task | `tasks/complete-task.ts` | 2-4 hours | UPDATE |
-| delete-task | `tasks/delete-task.ts` | 2-4 hours | DELETE |
-| get-task | `tasks/get-task.ts` | 3-5 hours | GET |
+| Script        | Path                     | Effort    | Pattern |
+| ------------- | ------------------------ | --------- | ------- |
+| move-task     | `tasks/move-task.ts`     | 3-5 hours | UPDATE  |
+| complete-task | `tasks/complete-task.ts` | 2-4 hours | UPDATE  |
+| delete-task   | `tasks/delete-task.ts`   | 2-4 hours | DELETE  |
+| get-task      | `tasks/get-task.ts`      | 3-5 hours | GET     |
 
 #### Recurring (2 scripts, ~6-10 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| list-recurring | `recurring/list-recurring.ts` | 3-5 hours | LIST |
+| Script            | Path                             | Effort    | Pattern   |
+| ----------------- | -------------------------------- | --------- | --------- |
+| list-recurring    | `recurring/list-recurring.ts`    | 3-5 hours | LIST      |
 | analyze-recurring | `recurring/analyze-recurring.ts` | 3-5 hours | ANALYTICS |
 
 #### Export (2 scripts, ~6-10 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| export-tasks | `export/export-tasks.ts` | 3-5 hours | LIST |
-| export-projects | `export/export-projects.ts` | 3-5 hours | LIST |
+| Script          | Path                        | Effort    | Pattern |
+| --------------- | --------------------------- | --------- | ------- |
+| export-tasks    | `export/export-tasks.ts`    | 3-5 hours | LIST    |
+| export-projects | `export/export-projects.ts` | 3-5 hours | LIST    |
 
 #### Tags (1 script, ~3-5 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| manage-tags | `tags/manage-tags.ts` | 3-5 hours | CRUD |
+| Script      | Path                  | Effort    | Pattern |
+| ----------- | --------------------- | --------- | ------- |
+| manage-tags | `tags/manage-tags.ts` | 3-5 hours | CRUD    |
 
 #### Other (3 scripts, ~9-15 hours)
 
-| Script | Path | Effort | Pattern |
-|--------|------|--------|---------|
-| list-perspectives | `perspectives/list-perspectives.ts` | 3-5 hours | LIST |
-| agenda-tasks | `agenda/agenda-tasks.ts` | 3-5 hours | LIST |
-| search-all | `search/search-all.ts` | 3-5 hours | LIST |
+| Script            | Path                                | Effort    | Pattern |
+| ----------------- | ----------------------------------- | --------- | ------- |
+| list-perspectives | `perspectives/list-perspectives.ts` | 3-5 hours | LIST    |
+| agenda-tasks      | `agenda/agenda-tasks.ts`            | 3-5 hours | LIST    |
+| search-all        | `search/search-all.ts`              | 3-5 hours | LIST    |
 
-**Pattern:** Follow list-tags-v3.ts or list-tasks-omnijs.ts
-**Size reduction:** 450KB (25 × 18KB)
+**Pattern:** Follow list-tags-v3.ts or list-tasks-omnijs.ts **Size reduction:** 450KB (25 × 18KB)
 
 ### Tier 3: Bridge Scripts (2 scripts, ~10-12 hours)
 
-| Script | Path | Effort | Priority | Expected Gain |
-|--------|------|--------|----------|---------------|
-| create-task | `tasks/create-task.ts` | 5-6 hours | MEDIUM | 85% smaller bundle |
-| update-task | `tasks/update-task.ts` | 5-6 hours | MEDIUM | 85% smaller bundle |
+| Script      | Path                   | Effort    | Priority | Expected Gain      |
+| ----------- | ---------------------- | --------- | -------- | ------------------ |
+| create-task | `tasks/create-task.ts` | 5-6 hours | MEDIUM   | 85% smaller bundle |
+| update-task | `tasks/update-task.ts` | 5-6 hours | MEDIUM   | 85% smaller bundle |
 
-**Pattern:** Use essential bridge helpers bundle
-**Size reduction:** 34KB (2 × 17KB)
+**Pattern:** Use essential bridge helpers bundle **Size reduction:** 34KB (2 × 17KB)
 
 **Total size reduction:** 36KB + 450KB + 34KB = **520KB**
 
@@ -1694,12 +1722,14 @@ if (project) {
 ### Tier-Specific Checks
 
 **Tier 1 (Analytics):**
+
 - [ ] All counters initialized before loop
 - [ ] Statistics calculated in OmniJS
 - [ ] Insights generated from data
 - [ ] Summary includes averages/totals
 
 **Tier 2 (CRUD):**
+
 - [ ] Filters applied in OmniJS context
 - [ ] Search terms handled correctly
 - [ ] Limit respected
@@ -1707,6 +1737,7 @@ if (project) {
 - [ ] Optional properties handled (note, dates, etc.)
 
 **Tier 3 (Bridge):**
+
 - [ ] Essential bridge bundle imported
 - [ ] Simple helpers inlined
 - [ ] All bridge operations tested
@@ -1721,16 +1752,19 @@ if (project) {
 ### Performance Metrics
 
 **Tier 1 (Analytics):**
+
 - ✅ Target: 13-67x faster
 - ✅ Measure: Time before/after conversion
 - ✅ Proven by Phase 1 results
 
 **Tier 2 (CRUD):**
+
 - ✅ Target: 10-100x faster
 - ✅ Measure: Query time in metadata
 - ✅ Compare to helper-based version
 
 **Tier 3 (Bridge):**
+
 - ✅ Target: 15-20% smaller
 - ✅ Measure: `ls -lh dist/.../.js` before/after
 - ✅ Functionality preserved
@@ -1738,6 +1772,7 @@ if (project) {
 ### Size Reduction
 
 **All Tiers:**
+
 - ✅ Helper overhead eliminated (18KB → 0-3KB)
 - ✅ Response size unchanged (data is same)
 - ✅ Total reduction: ~520KB across 28 scripts
@@ -1745,6 +1780,7 @@ if (project) {
 ### Code Quality
 
 **All Tiers:**
+
 - ✅ Zero helper dependencies (except Tier 3 essential bundle)
 - ✅ No safeGet wrappers (direct access)
 - ✅ Single bridge call per operation
@@ -1758,28 +1794,32 @@ if (project) {
 ### Pitfall 1: Forgetting v3 Response Format
 
 **❌ WRONG:**
+
 ```javascript
 return JSON.stringify(results);
 ```
 
 **✅ CORRECT:**
+
 ```javascript
 return JSON.stringify({
   ok: true,
   v: '3',
   items: results,
-  summary: { total: results.length }
+  summary: { total: results.length },
 });
 ```
 
 ### Pitfall 2: Using safeGet in v3 Scripts
 
 **❌ WRONG:**
+
 ```javascript
 const name = safeGet(() => task.name());
 ```
 
 **✅ CORRECT:**
+
 ```javascript
 try {
   const name = task.name;
@@ -1791,6 +1831,7 @@ try {
 ### Pitfall 3: Iterating in JXA Context
 
 **❌ WRONG:**
+
 ```javascript
 const allTasks = doc.flattenedTasks();
 for (let i = 0; i < allTasks.length; i++) {
@@ -1800,6 +1841,7 @@ for (let i = 0; i < allTasks.length; i++) {
 ```
 
 **✅ CORRECT:**
+
 ```javascript
 const dataScript = `
   (() => {
@@ -1814,15 +1856,17 @@ const result = app.evaluateJavascript(dataScript);
 ### Pitfall 4: Multiple Bridge Calls
 
 **❌ WRONG:**
+
 ```javascript
 // Multiple bridge calls per item
-items.forEach(item => {
+items.forEach((item) => {
   const script = `/* get properties for ${item.id} */`;
   const props = app.evaluateJavascript(script);
 });
 ```
 
 **✅ CORRECT:**
+
 ```javascript
 // Single bridge call for all items
 const script = `
@@ -1840,10 +1884,12 @@ const result = app.evaluateJavascript(script);
 ### Pitfall 5: Mixing Tier 3 with Tier 2
 
 **If script needs bridge operations (tags, repeat, planned):**
+
 - ✅ Use Tier 3 template (essential bridge bundle)
 - ❌ Don't try to convert to pure OmniJS
 
 **If script doesn't need bridge operations:**
+
 - ✅ Use Tier 1/2 template (pure OmniJS)
 - ❌ Don't keep unnecessary bridge helpers
 
@@ -1914,4 +1960,5 @@ const result = app.evaluateJavascript(script);
 
 **End of Conversion Templates**
 
-*Use these templates as step-by-step guides for all 28 script conversions. Each template is based on proven Phase 1 results and includes before/after examples, common pitfalls, and success criteria.*
+_Use these templates as step-by-step guides for all 28 script conversions. Each template is based on proven Phase 1
+results and includes before/after examples, common pitfalls, and success criteria._

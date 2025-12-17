@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  localToUTC,
-  getSystemTimezone,
-  getCurrentTimezoneOffset,
-  getTimezoneInfo,
-} from '../../src/utils/timezone.js';
+import { localToUTC, getSystemTimezone, getCurrentTimezoneOffset, getTimezoneInfo } from '../../src/utils/timezone.js';
 
 describe('Date Handling and Timezone Utilities', () => {
   // Store original functions for cleanup
@@ -26,10 +21,10 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should convert date-only strings to local noon by default (generic context)', () => {
       const input = '2024-01-15';
       const result = localToUTC(input);
-      
+
       // Result should be a valid ISO string
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
+
       // The converted date should represent noon in local time (12:00 PM) for generic context
       const converted = new Date(result);
       const local = new Date(converted.toLocaleString());
@@ -42,7 +37,7 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should use 8am for defer context with date-only', () => {
       const input = '2024-01-15';
       const result = localToUTC(input, 'defer');
-      
+
       const converted = new Date(result);
       const local = new Date(converted.toLocaleString());
       expect(local.getHours()).toBe(8);
@@ -52,7 +47,7 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should use 5pm for due context with date-only', () => {
       const input = '2024-01-15';
       const result = localToUTC(input, 'due');
-      
+
       const converted = new Date(result);
       const local = new Date(converted.toLocaleString());
       expect(local.getHours()).toBe(17);
@@ -62,9 +57,9 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should convert date-time strings to UTC', () => {
       const input = '2024-01-15 14:30';
       const result = localToUTC(input);
-      
+
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      
+
       // The converted date should represent 2:30 PM in local time
       const converted = new Date(result);
       const local = new Date(converted.toLocaleString());
@@ -75,14 +70,14 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should handle T-format date-time strings', () => {
       const input = '2024-01-15T14:30';
       const result = localToUTC(input);
-      
+
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
     it('should add seconds if missing', () => {
       const input = '2024-01-15 14:30';
       const result = localToUTC(input);
-      
+
       // Should be valid even without seconds
       expect(new Date(result).getTime()).toBeGreaterThan(0);
     });
@@ -94,9 +89,9 @@ describe('Date Handling and Timezone Utilities', () => {
     });
 
     it('should handle edge cases like leap year', () => {
-      const leapDay = '2024-02-29';  // 2024 is a leap year
+      const leapDay = '2024-02-29'; // 2024 is a leap year
       const result = localToUTC(leapDay);
-      
+
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(new Date(result).getUTCDate()).toBe(29);
       expect(new Date(result).getUTCMonth()).toBe(1); // February = 1
@@ -126,15 +121,15 @@ describe('Date Handling and Timezone Utilities', () => {
   describe('getTimezoneInfo', () => {
     it('should return complete timezone information', () => {
       const info = getTimezoneInfo();
-      
+
       expect(typeof info.timezone).toBe('string');
       expect(typeof info.offset).toBe('number');
       expect(typeof info.offsetHours).toBe('number');
       expect(typeof info.offsetString).toBe('string');
-      
+
       // Offset hours should be the negative of offset minutes / 60
       expect(info.offsetHours).toBe(-info.offset / 60);
-      
+
       // Offset string should include UTC and sign
       expect(info.offsetString).toMatch(/^UTC[+-]\d+$/);
     });
@@ -144,14 +139,14 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should handle DST transitions gracefully', () => {
       // Test dates around DST transitions
       const springForward = '2024-03-10'; // Typical US DST start
-      const fallBack = '2024-11-03';      // Typical US DST end
-      
+      const fallBack = '2024-11-03'; // Typical US DST end
+
       expect(() => localToUTC(springForward)).not.toThrow();
       expect(() => localToUTC(fallBack)).not.toThrow();
-      
+
       const springResult = localToUTC(springForward);
       const fallResult = localToUTC(fallBack);
-      
+
       expect(springResult).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       expect(fallResult).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
@@ -164,11 +159,11 @@ describe('Date Handling and Timezone Utilities', () => {
     it('should handle February in leap vs non-leap years', () => {
       expect(() => localToUTC('2024-02-29')).not.toThrow(); // Leap year
       expect(() => localToUTC('2023-02-28')).not.toThrow(); // Non-leap year
-      
+
       // Note: JavaScript Date constructor is lenient and converts 2023-02-29 to 2023-03-01
       // This is actually valid behavior, so we don't expect it to throw
       expect(() => localToUTC('2023-02-29')).not.toThrow();
-      
+
       // Verify it gets converted to March 1st
       const converted = localToUTC('2023-02-29');
       expect(new Date(converted).getUTCMonth()).toBe(2); // March = 2

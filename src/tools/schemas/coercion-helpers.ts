@@ -12,16 +12,14 @@ import { z } from 'zod';
 /**
  * Coerce boolean values from MCP bridge (handles string conversion)
  */
-export const coerceBoolean = () => z.preprocess(
-  (val) => {
+export const coerceBoolean = () =>
+  z.preprocess((val) => {
     if (typeof val === 'boolean') return val;
     const strVal = String(val).toLowerCase().trim();
     if (strVal === 'true' || strVal === '1' || strVal === 'yes') return true;
     if (strVal === 'false' || strVal === '0' || strVal === 'no' || strVal === '') return false;
     return Boolean(strVal);
-  },
-  z.boolean(),
-);
+  }, z.boolean());
 
 /**
  * Coerce number values from MCP bridge

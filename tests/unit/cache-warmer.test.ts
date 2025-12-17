@@ -21,14 +21,14 @@ describe('CacheWarmer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.values(loggerMocks.logger).forEach(fn => fn.mockClear());
+    Object.values(loggerMocks.logger).forEach((fn) => fn.mockClear());
 
     mockCache = {
       set: vi.fn(),
       get: vi.fn(),
       clear: vi.fn(),
       clearNamespace: vi.fn(),
-      warm: vi.fn()
+      warm: vi.fn(),
     };
     (CacheManager as any).mockImplementation(() => mockCache);
   });
@@ -51,8 +51,8 @@ describe('CacheWarmer', () => {
           projects: true,
           tags: false,
           tasks: true,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       };
 
       warmer = new CacheWarmer(mockCache as any, customStrategy);
@@ -63,8 +63,8 @@ describe('CacheWarmer', () => {
       const partialStrategy = {
         timeout: 3000,
         categories: {
-          tags: false
-        }
+          tags: false,
+        },
       };
 
       warmer = new CacheWarmer(mockCache as any, partialStrategy);
@@ -88,8 +88,8 @@ describe('CacheWarmer', () => {
           projects: false,
           tags: false,
           tasks: false,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       });
 
       const result = await warmer.warmCache();
@@ -135,11 +135,11 @@ describe('CacheWarmer', () => {
         today: true,
         overdue: true,
         upcoming: false,
-        flagged: true
+        flagged: true,
       };
 
       warmer = new CacheWarmer(mockCache as any, {
-        taskWarmingOptions: taskOptions
+        taskWarmingOptions: taskOptions,
       });
 
       expect(warmer).toBeDefined();
@@ -151,8 +151,8 @@ describe('CacheWarmer', () => {
           today: false,
           overdue: false,
           upcoming: false,
-          flagged: false
-        }
+          flagged: false,
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -166,8 +166,8 @@ describe('CacheWarmer', () => {
           projects: true,
           tags: false,
           tasks: false,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -179,8 +179,8 @@ describe('CacheWarmer', () => {
           projects: false,
           tags: true,
           tasks: false,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -192,8 +192,8 @@ describe('CacheWarmer', () => {
           projects: true,
           tags: true,
           tasks: false,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -203,7 +203,7 @@ describe('CacheWarmer', () => {
   describe('Timeout Handling', () => {
     it('should accept custom timeout value', () => {
       warmer = new CacheWarmer(mockCache as any, {
-        timeout: 15000
+        timeout: 15000,
       });
 
       expect(warmer).toBeDefined();
@@ -217,7 +217,7 @@ describe('CacheWarmer', () => {
     it('falls back with timeout results when operations hang', async () => {
       vi.useFakeTimers();
       warmer = new CacheWarmer(mockCache as any, { timeout: 5 });
-      const never = new Promise<WarmingResult>(() => { });
+      const never = new Promise<WarmingResult>(() => {});
 
       const executePromise = (warmer as any).executeWithTimeout([never]);
 
@@ -246,8 +246,8 @@ describe('CacheWarmer', () => {
           projects: true,
           tags: false,
           tasks: false,
-          perspectives: false
-        }
+          perspectives: false,
+        },
       });
 
       vi.spyOn(warmer as any, 'warmProjects' as any).mockRejectedValue(new Error('Cache error'));
@@ -292,9 +292,9 @@ describe('CacheWarmer', () => {
     it('should handle partial category configuration', () => {
       warmer = new CacheWarmer(mockCache as any, {
         categories: {
-          projects: true
+          projects: true,
           // Other categories use defaults
-        }
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -309,10 +309,10 @@ describe('CacheWarmer', () => {
         timeout: 2000,
         categories: {
           projects: true, // High value
-          tags: true,      // High value
-          tasks: false,    // Skip for faster startup
-          perspectives: false
-        }
+          tags: true, // High value
+          tasks: false, // Skip for faster startup
+          perspectives: false,
+        },
       });
 
       expect(warmer).toBeDefined();
@@ -327,14 +327,14 @@ describe('CacheWarmer', () => {
           projects: true,
           tags: true,
           tasks: true,
-          perspectives: true
+          perspectives: true,
         },
         taskWarmingOptions: {
           today: true,
           overdue: true,
           upcoming: true,
-          flagged: true
-        }
+          flagged: true,
+        },
       });
 
       expect(warmer).toBeDefined();

@@ -51,10 +51,7 @@ class PromptDiscovery {
   private manualTemplates: ManualTemplateInfo[] = [];
 
   async discover(): Promise<void> {
-    await Promise.all([
-      this.discoverMCPPrompts(),
-      this.discoverManualTemplates()
-    ]);
+    await Promise.all([this.discoverMCPPrompts(), this.discoverManualTemplates()]);
   }
 
   private async discoverMCPPrompts(): Promise<void> {
@@ -87,11 +84,11 @@ class PromptDiscovery {
     try {
       // Map specific class names to known files
       const classFileMap: Record<string, string> = {
-        'GTDPrinciplesPrompt': 'gtd/GTDPrinciplesPrompt.ts',
-        'WeeklyReviewPrompt': 'gtd/WeeklyReviewPrompt.ts',
-        'InboxProcessingPrompt': 'gtd/InboxProcessingPrompt.ts',
-        'EisenhowerMatrixPrompt': 'gtd/eisenhower-matrix.ts',
-        'QuickReferencePrompt': 'reference/QuickReferencePrompt.ts',
+        GTDPrinciplesPrompt: 'gtd/GTDPrinciplesPrompt.ts',
+        WeeklyReviewPrompt: 'gtd/WeeklyReviewPrompt.ts',
+        InboxProcessingPrompt: 'gtd/InboxProcessingPrompt.ts',
+        EisenhowerMatrixPrompt: 'gtd/eisenhower-matrix.ts',
+        QuickReferencePrompt: 'reference/QuickReferencePrompt.ts',
       };
 
       // Find the file containing this class
@@ -107,7 +104,9 @@ class PromptDiscovery {
           await stat(path);
           filePath = path;
           break;
-        } catch { /* File doesn't exist, continue */ }
+        } catch {
+          /* File doesn't exist, continue */
+        }
       }
 
       if (!filePath) {
@@ -135,7 +134,7 @@ class PromptDiscovery {
         category,
         file: filePath.replace(PROJECT_ROOT, '.'),
         arguments: [], // Could be enhanced to parse arguments
-        usageExample: `Ask Claude: "Use the ${nameMatch[1]} prompt"`
+        usageExample: `Ask Claude: "Use the ${nameMatch[1]} prompt"`,
       });
     } catch (error) {
       console.warn(`Warning: Could not parse ${className}: ${error}`);
@@ -147,7 +146,7 @@ class PromptDiscovery {
 
     try {
       const files = await readdir(templatesDir);
-      const mdFiles = files.filter(file => file.endsWith('.md') && file !== 'README.md');
+      const mdFiles = files.filter((file) => file.endsWith('.md') && file !== 'README.md');
 
       for (const file of mdFiles) {
         await this.parseManualTemplate(join(templatesDir, file));
@@ -186,7 +185,7 @@ class PromptDiscovery {
         category,
         file: `./prompts/${fileName}`,
         size: `${sizeKB}KB`,
-        usageExample: `Copy content from ${fileName} and paste into Claude`
+        usageExample: `Copy content from ${fileName} and paste into Claude`,
       });
     } catch (error) {
       console.warn(`Warning: Could not parse ${filePath}: ${error}`);
@@ -201,13 +200,11 @@ class PromptDiscovery {
     let prompts = this.getAllPrompts();
 
     if (options.type && options.type !== 'all') {
-      prompts = prompts.filter(p => p.type === options.type);
+      prompts = prompts.filter((p) => p.type === options.type);
     }
 
     if (options.category) {
-      prompts = prompts.filter(p =>
-        p.category.toLowerCase().includes(options.category!.toLowerCase())
-      );
+      prompts = prompts.filter((p) => p.category.toLowerCase().includes(options.category!.toLowerCase()));
     }
 
     return prompts.sort((a, b) => a.name.localeCompare(b.name));
@@ -222,7 +219,7 @@ class PromptDiscovery {
         return this.formatMarkdown(prompts, options);
 
       case 'list':
-        return prompts.map(p => `${p.name} (${p.type})`).join('\n');
+        return prompts.map((p) => `${p.name} (${p.type})`).join('\n');
 
       default:
         return this.formatTable(prompts, options);
@@ -234,25 +231,25 @@ class PromptDiscovery {
       return 'No prompts found matching criteria.';
     }
 
-    const maxNameLen = Math.max(4, ...prompts.map(p => p.name.length));
-    const maxTypeLen = Math.max(4, ...prompts.map(p => p.type.length));
-    const maxCategoryLen = Math.max(8, ...prompts.map(p => p.category.length));
+    const maxNameLen = Math.max(4, ...prompts.map((p) => p.name.length));
+    const maxTypeLen = Math.max(4, ...prompts.map((p) => p.type.length));
+    const maxCategoryLen = Math.max(8, ...prompts.map((p) => p.category.length));
 
     let output = '';
     output += `${'Name'.padEnd(maxNameLen)} | ${'Type'.padEnd(maxTypeLen)} | ${'Category'.padEnd(maxCategoryLen)} | Description\n`;
     output += `${'-'.repeat(maxNameLen)}-+-${'-'.repeat(maxTypeLen)}-+-${'-'.repeat(maxCategoryLen)}-+-${'-'.repeat(20)}\n`;
 
     for (const prompt of prompts) {
-      const shortDesc = prompt.description.length > 60
-        ? prompt.description.substring(0, 57) + '...'
-        : prompt.description;
+      const shortDesc =
+        prompt.description.length > 60 ? prompt.description.substring(0, 57) + '...' : prompt.description;
 
       output += `${prompt.name.padEnd(maxNameLen)} | ${prompt.type.padEnd(maxTypeLen)} | ${prompt.category.padEnd(maxCategoryLen)} | ${shortDesc}\n`;
     }
 
     if (options.examples) {
       output += '\n\nUsage Examples:\n';
-      for (const prompt of prompts.slice(0, 5)) { // Show first 5 examples
+      for (const prompt of prompts.slice(0, 5)) {
+        // Show first 5 examples
         output += `  ${prompt.name}: ${prompt.usageExample}\n`;
       }
     }
@@ -263,10 +260,10 @@ class PromptDiscovery {
   private formatMarkdown(prompts: PromptInfo[], options: DiscoveryOptions): string {
     let output = '# Available Prompts\n\n';
 
-    const categories = [...new Set(prompts.map(p => p.category))];
+    const categories = [...new Set(prompts.map((p) => p.category))];
 
     for (const category of categories.sort()) {
-      const categoryPrompts = prompts.filter(p => p.category === category);
+      const categoryPrompts = prompts.filter((p) => p.category === category);
       output += `## ${category}\n\n`;
 
       for (const prompt of categoryPrompts) {
@@ -313,7 +310,9 @@ class PromptDiscovery {
     }
 
     if (isValid) {
-      console.log(`✅ All prompts validated successfully (${this.mcpPrompts.length} MCP + ${this.manualTemplates.length} templates)`);
+      console.log(
+        `✅ All prompts validated successfully (${this.mcpPrompts.length} MCP + ${this.manualTemplates.length} templates)`,
+      );
     }
 
     return isValid;
@@ -354,7 +353,7 @@ async function main(): Promise<void> {
     type: 'all',
     format: 'table',
     examples: false,
-    validate: false
+    validate: false,
   };
 
   // Parse command line arguments
@@ -404,11 +403,10 @@ async function main(): Promise<void> {
 
     // Summary line
     if (options.format === 'table') {
-      const mcpCount = prompts.filter(p => p.type === 'mcp').length;
-      const templateCount = prompts.filter(p => p.type === 'template').length;
+      const mcpCount = prompts.filter((p) => p.type === 'mcp').length;
+      const templateCount = prompts.filter((p) => p.type === 'template').length;
       console.log(`\nTotal: ${prompts.length} prompts (${mcpCount} MCP + ${templateCount} templates)`);
     }
-
   } catch (error) {
     console.error(`Error discovering prompts: ${error}`);
     process.exit(1);

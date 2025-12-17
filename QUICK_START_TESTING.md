@@ -1,6 +1,7 @@
 # Quick Start: Testing the Three-Tool Builder API
 
 ## 🎯 Goal
+
 Test if 3 new unified tools can fully replace the existing 17 legacy tools.
 
 ---
@@ -38,6 +39,7 @@ npm run test:integration -- tests/integration/tools/unified
 ```
 
 **Steps:**
+
 1. Update Claude Desktop config to point to this branch
 2. Restart Claude Desktop
 3. Copy/paste `TESTING_PROMPT.md` into Claude Desktop
@@ -63,12 +65,14 @@ npm run test:integration -- tests/integration/tools/unified
 ```
 
 **Steps:**
+
 1. Restart Claude Desktop (to pick up new build)
 2. Copy/paste `TESTING_PROMPT.md` again
 3. Claude will test same operations
 4. **ALL tests must still pass** ⚠️
 
 **Critical Success Criteria:**
+
 - ✅ Read operations work
 - ✅ Write operations work (create/update/complete/delete)
 - ✅ Analyze operations work
@@ -87,35 +91,38 @@ If any test fails → **3 tools cannot replace 17 tools** → Report immediately
 
 ### Test Results: Three-Tool Builder API
 
-**Date:** ___________
-**Tester:** ___________
-**Branch:** feature/three-tool-builder-api
+**Date:** ****\_\_\_**** **Tester:** ****\_\_\_**** **Branch:** feature/three-tool-builder-api
 
 #### Phase 1: All Tools (3+17) ✅❌
+
 - [ ] Read operations work
 - [ ] Write operations work
 - [ ] Analyze operations work
 
 #### Phase 2: Only 3 Tools ✅❌
+
 - [ ] Read operations work
 - [ ] Write operations work
 - [ ] Analyze operations work
 - [ ] **Can remove 17 legacy tools?** YES / NO
 
 #### Issues Found
-- ________________________________
-- ________________________________
+
+- ***
+- ***
 
 #### Decision
+
 - [ ] **READY TO REMOVE 17 LEGACY TOOLS**
 - [ ] **NOT READY - Issues found:**
-  - ________________________________
+  - ***
 
 ---
 
 ## 🚨 If Something Goes Wrong
 
 ### Build fails
+
 ```bash
 rm -rf dist/ node_modules/
 npm install
@@ -123,12 +130,14 @@ npm run build
 ```
 
 ### Can't restore tools
+
 ```bash
 git checkout src/tools/index.ts
 npm run build
 ```
 
 ### Claude Desktop not connecting
+
 ```bash
 # Check config
 cat ~/Library/Application\ Support/Claude/claude_desktop_config.json

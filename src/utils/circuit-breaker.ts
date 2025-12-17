@@ -33,7 +33,7 @@ export class CircuitBreaker {
   constructor(options: CircuitBreakerOptions) {
     this.threshold = options.threshold;
     this.timeout = options.timeout;
-    this.shouldCountError = options.shouldCountError || ((err) => !!(err));
+    this.shouldCountError = options.shouldCountError || ((err) => !!err);
 
     this.state = {
       isOpen: false,
@@ -85,7 +85,7 @@ export class CircuitBreaker {
    * Get current state of the circuit breaker
    */
   getState(): CircuitBreakerState {
-    return {...this.state};
+    return { ...this.state };
   }
 
   /**

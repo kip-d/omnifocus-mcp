@@ -9,7 +9,7 @@ describe('Error Response Format Tests', () => {
       'Test error message',
       'Try again',
       { detail: 'extra info' },
-      { operation: 'test', duration_ms: 100 }
+      { operation: 'test', duration_ms: 100 },
     );
 
     expect(error.success).toBe(false);
@@ -25,7 +25,7 @@ describe('Error Response Format Tests', () => {
       'test-tool',
       { items: [{ id: 1, name: 'test' }] },
       { total: 1 },
-      { operation: 'list', from_cache: false }
+      { operation: 'list', from_cache: false },
     );
 
     expect(success.success).toBe(true);
@@ -36,11 +36,7 @@ describe('Error Response Format Tests', () => {
   });
 
   it('handles error responses without optional fields', () => {
-    const error = createErrorResponseV2(
-      'test-tool',
-      'SIMPLE_ERROR',
-      'Simple error'
-    );
+    const error = createErrorResponseV2('test-tool', 'SIMPLE_ERROR', 'Simple error');
 
     expect(error.success).toBe(false);
     expect(error.error.code).toBe('SIMPLE_ERROR');
@@ -56,14 +52,14 @@ describe('Schema Validation Edge Cases', () => {
     required: ['name'],
     properties: {
       name: { type: 'string' },
-      count: { type: 'number', default: 1 }
-    }
+      count: { type: 'number', default: 1 },
+    },
   };
 
   it('validates required fields are present', () => {
     const validData = { name: 'test' };
     expect(validData.name).toBeDefined();
-    
+
     const invalidData = {};
     expect((invalidData as any).name).toBeUndefined();
   });
@@ -77,13 +73,9 @@ describe('Schema Validation Edge Cases', () => {
 
 describe('Date Parsing Edge Cases', () => {
   it('handles various date formats', () => {
-    const validDates = [
-      '2025-12-31',
-      '2025-12-31 17:00',
-      '2025-01-01 00:00'
-    ];
+    const validDates = ['2025-12-31', '2025-12-31 17:00', '2025-01-01 00:00'];
 
-    validDates.forEach(dateStr => {
+    validDates.forEach((dateStr) => {
       const date = new Date(dateStr);
       expect(date.toString()).not.toBe('Invalid Date');
     });
@@ -94,10 +86,10 @@ describe('Date Parsing Edge Cases', () => {
       'invalid-date',
       '2025-13-01', // Invalid month
       '2025-12-32', // Invalid day
-      '2025-12-31 25:00' // Invalid hour
+      '2025-12-31 25:00', // Invalid hour
     ];
 
-    invalidDates.forEach(dateStr => {
+    invalidDates.forEach((dateStr) => {
       const date = new Date(dateStr);
       expect(date.toString()).toBe('Invalid Date');
     });

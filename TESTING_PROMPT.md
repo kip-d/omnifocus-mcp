@@ -1,6 +1,7 @@
 # OmniFocus MCP Test Suite - EXECUTE NOW
 
-**INSTRUCTION:** Execute this test suite immediately. Do not ask clarifying questions. Start with Step 1 below and proceed through each test sequentially, reporting results as you go.
+**INSTRUCTION:** Execute this test suite immediately. Do not ask clarifying questions. Start with Step 1 below and
+proceed through each test sequentially, reporting results as you go.
 
 ---
 
@@ -30,14 +31,15 @@ Example: `@mcp-test-20251123-1430`
 
 **ACTION:** Call the system tool with `operation: "diagnostics"` to verify OmniFocus connection.
 
-**If health = "healthy":** Report "Diagnostics passed" and proceed to Core Tests.
-**If health = "degraded":** Report which tests failed and STOP - do not continue testing.
+**If health = "healthy":** Report "Diagnostics passed" and proceed to Core Tests. **If health = "degraded":** Report
+which tests failed and STOP - do not continue testing.
 
 ---
 
 ## Reference: Date Handling
 
-You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format before calling tools. This is handled automatically - just note it in your mental model.
+You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format before calling tools. This is
+handled automatically - just note it in your mental model.
 
 ---
 
@@ -50,14 +52,17 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 ### Test 4: Read Operations
 
 **4a. Query today's tasks:**
+
 - ACTION: Query tasks with mode "today"
 - REPORT: Number of tasks returned, sample task names
 
 **4b. Query overdue tasks:**
+
 - ACTION: Query tasks with mode "overdue"
 - REPORT: Number of overdue tasks, or "none overdue"
 
 **4c. List projects:**
+
 - ACTION: Query projects with limit 5
 - REPORT: Number returned, sample project names
 
@@ -68,12 +73,14 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 ### Test 5: Create Task
 
 **ACTION:** Create a task with these properties:
+
 - name: "Test Task Alpha"
 - tags: [your-test-tag, "urgent"]
 - dueDate: tomorrow's date in YYYY-MM-DD format
 - note: "Created by MCP test suite"
 
 **REPORT:**
+
 - Success/failure
 - Task ID returned
 - Any errors
@@ -85,10 +92,12 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 ### Test 6: Create Project
 
 **ACTION:** Create a project with:
+
 - name: "Test Project Beta"
 - tags: [your-test-tag]
 
 **REPORT:**
+
 - Success/failure
 - Project ID returned (should start with project identifier, not task)
 - Any errors
@@ -100,6 +109,7 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 ### Test 7: Update Task
 
 **ACTION:** Update "Test Task Alpha" (use ID from Test 5):
+
 - Add note text: "Updated by test suite"
 - Change dueDate to day after tomorrow
 
@@ -114,6 +124,7 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 **ACTION:** Query all **active** tasks with your test tag
 
 **REPORT:**
+
 - Number of tasks found
 - Task names returned
 
@@ -128,6 +139,7 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 **ACTION:** Mark "Test Task Alpha" as complete (use ID from Test 5)
 
 **REPORT:**
+
 - Success/failure
 - Completion time (should be < 10 seconds)
 
@@ -140,6 +152,7 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 **ACTION:** Run productivity_stats analysis with groupBy: "week"
 
 **REPORT:**
+
 - Success/failure
 - Key metrics returned (completed count, etc.)
 
@@ -152,11 +165,13 @@ You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` fo
 ### Test 11: Delete Test Data
 
 **ACTION:**
+
 1. Query all tasks with your test tag
 2. Delete each test task found
 3. Delete "Test Project Beta" project
 
 **REPORT:**
+
 - Number of items deleted
 - Any deletion errors
 
@@ -210,7 +225,8 @@ If a test fails, check if it matches these known behaviors:
 
 1. **Tags may not appear in OmniFocus UI immediately** - Refresh or wait 1-2 seconds
 2. **Dates must be YYYY-MM-DD format** - You handle the conversion
-3. **Completed tasks excluded by default** - Tag/status queries exclude completed tasks unless explicitly requested with `status: "completed"` filter
+3. **Completed tasks excluded by default** - Tag/status queries exclude completed tasks unless explicitly requested with
+   `status: "completed"` filter
 
 ---
 

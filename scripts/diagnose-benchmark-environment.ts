@@ -39,7 +39,7 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
     machine: `${process.platform} ${process.arch}`,
     cpu: cpus()[0].model,
     cores: cpus().length,
-    memory: `${Math.round(totalmem() / (1024 ** 3))} GB`,
+    memory: `${Math.round(totalmem() / 1024 ** 3)} GB`,
     nodeVersion: process.version,
   };
 
@@ -89,7 +89,7 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
       });
 
       // Parse MCP response - look for id: 2 (the tool call response)
-      const lines = output.split('\n').filter(l => l.trim());
+      const lines = output.split('\n').filter((l) => l.trim());
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
@@ -135,7 +135,7 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
     includeUsageStats: 'false',
     includeTaskCounts: 'false',
     fastMode: 'true',
-    namesOnly: 'true'
+    namesOnly: 'true',
   });
 
   const omnifocus = {
@@ -164,12 +164,12 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
 
 // Main execution
 gatherDiagnostics()
-  .then(data => {
+  .then((data) => {
     console.log('\n=== DIAGNOSTIC RESULTS ===\n');
     console.log(JSON.stringify(data, null, 2));
     console.log('\n=== END DIAGNOSTICS ===\n');
   })
-  .catch(error => {
+  .catch((error) => {
     console.error('Diagnostic failed:', error);
     process.exit(1);
   });

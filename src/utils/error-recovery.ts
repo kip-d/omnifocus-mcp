@@ -66,7 +66,7 @@ export function isTransientError(error: unknown): boolean {
     '504',
   ];
 
-  return transientPatterns.some(pattern => errorMessage.includes(pattern));
+  return transientPatterns.some((pattern) => errorMessage.includes(pattern));
 }
 
 /**
@@ -108,11 +108,7 @@ export async function executeWithRetry<T>(
       }
 
       // Calculate exponential backoff delay
-      const delay = calculateExponentialBackoff(
-        attempt,
-        mergedOptions.initialDelay,
-        mergedOptions.maxDelay,
-      );
+      const delay = calculateExponentialBackoff(attempt, mergedOptions.initialDelay, mergedOptions.maxDelay);
 
       // Call onRetry callback
       mergedOptions.onRetry(attempt, error);
@@ -129,11 +125,7 @@ export async function executeWithRetry<T>(
 /**
  * Calculate exponential backoff delay
  */
-function calculateExponentialBackoff(
-  attempt: number,
-  initialDelay: number,
-  maxDelay: number,
-): number {
+function calculateExponentialBackoff(attempt: number, initialDelay: number, maxDelay: number): number {
   const delay = initialDelay * Math.pow(2, attempt - 1);
   return Math.min(delay, maxDelay);
 }
@@ -142,7 +134,7 @@ function calculateExponentialBackoff(
  * Sleep for specified milliseconds
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -197,10 +189,7 @@ function generateErrorId(): string {
 /**
  * Classify error and provide appropriate context
  */
-export function classifyErrorWithContext(
-  error: unknown,
-  operation: string,
-): EnhancedErrorContext {
+export function classifyErrorWithContext(error: unknown, operation: string): EnhancedErrorContext {
   if (!(error instanceof Error)) {
     return {
       recovery_suggestions: ['An unknown error occurred', 'Please try again'],
@@ -218,9 +207,7 @@ export function classifyErrorWithContext(
       'Grant OmniFocus automation permissions in System Settings',
       'Restart OmniFocus after granting permissions',
     ];
-    context.related_documentation = [
-      'https://docs.omnifocus.com/automation-permissions',
-    ];
+    context.related_documentation = ['https://docs.omnifocus.com/automation-permissions'];
   }
 
   // Timeout errors

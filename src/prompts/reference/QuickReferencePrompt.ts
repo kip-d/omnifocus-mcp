@@ -95,7 +95,8 @@ Remember: Specialized tools > General tools with filters!
 
 export class QuickReferencePrompt extends BasePrompt {
   name = 'quick_reference';
-  description = 'Quick reference card with essential performance tips, limitations, and emergency commands. Perfect for keeping handy during development.';
+  description =
+    'Quick reference card with essential performance tips, limitations, and emergency commands. Perfect for keeping handy during development.';
   arguments = [];
 
   generateMessages(_args: Record<string, unknown>): PromptMessage[] {

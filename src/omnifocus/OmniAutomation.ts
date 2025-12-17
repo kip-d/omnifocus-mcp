@@ -14,7 +14,10 @@ import { monitorScriptSize, EMPIRICAL_LIMITS } from './utils/script-size-monitor
 const logger = createLogger('omniautomation');
 
 export class OmniAutomationError extends Error {
-  constructor(message: string, public readonly details?: { script?: string; stderr?: string; code?: number }) {
+  constructor(
+    message: string,
+    public readonly details?: { script?: string; stderr?: string; code?: number },
+  ) {
     super(message);
     this.name = 'OmniAutomationError';
   }
@@ -34,15 +37,16 @@ export class OmniAutomation {
   constructor(maxScriptSize?: number, timeout?: number) {
     // Allow configuration via environment variables or constructor parameters
     // Updated to use empirical JXA limit (523KB) with 25% safety margin (392KB)
-    this.maxScriptSize = maxScriptSize ||
-      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10) : Math.floor(EMPIRICAL_LIMITS.jxaDirect * 0.75));
-    this.timeout = timeout ||
-      (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
+    this.maxScriptSize =
+      maxScriptSize ||
+      (process.env.OMNIFOCUS_MAX_SCRIPT_SIZE
+        ? parseInt(process.env.OMNIFOCUS_MAX_SCRIPT_SIZE, 10)
+        : Math.floor(EMPIRICAL_LIMITS.jxaDirect * 0.75));
+    this.timeout =
+      timeout || (process.env.OMNIFOCUS_SCRIPT_TIMEOUT ? parseInt(process.env.OMNIFOCUS_SCRIPT_TIMEOUT, 10) : 120000); // Default 120 seconds
   }
 
   public async execute<T = unknown>(script: string): Promise<T> {
-
-
     // Use empirical size monitoring for better feedback
     const sizeAnalysis = monitorScriptSize(script, 'jxa');
 
@@ -50,10 +54,9 @@ export class OmniAutomation {
     if (script.length > this.maxScriptSize) {
       throw new OmniAutomationError(
         `Script too large: ${sizeAnalysis.sizeKB}KB (limit: ${Math.round(this.maxScriptSize / 1024)}KB). ` +
-        `Empirical JXA capacity is ${sizeAnalysis.limitKB}KB - consider increasing maxScriptSize if needed.`,
+          `Empirical JXA capacity is ${sizeAnalysis.limitKB}KB - consider increasing maxScriptSize if needed.`,
       );
     }
-
 
     const result = await this.executeInternal<T>(script);
 
@@ -62,11 +65,8 @@ export class OmniAutomation {
 
   // New type-safe execution with discriminated unions and schema validation
   public async executeJson<T = unknown>(script: string, schema?: z.ZodSchema<T>): Promise<ScriptResult<T>> {
-
     try {
-
       const result = await this.execute<unknown>(script);
-
 
       // Handle raw script errors (legacy shape)
       const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object';
@@ -84,23 +84,20 @@ export class OmniAutomation {
         if (!validation.success) {
           return createScriptError(
             'Script result validation failed',
-            `Schema validation errors: ${validation.error.issues.map(i => i.message).join(', ')}`,
+            `Schema validation errors: ${validation.error.issues.map((i) => i.message).join(', ')}`,
             { result, errors: validation.error.issues },
           );
         }
         return createScriptSuccess(validation.data as T);
       }
 
-
       return createScriptSuccess(result as T);
     } catch (error) {
-
       if (error instanceof OmniAutomationError) {
-        return createScriptError(
-          error.message,
-          'OmniAutomation execution error',
-          { script: error.details?.script, stderr: error.details?.stderr },
-        );
+        return createScriptError(error.message, 'OmniAutomation execution error', {
+          script: error.details?.script,
+          stderr: error.details?.stderr,
+        });
       }
 
       return createScriptError(
@@ -126,7 +123,9 @@ export class OmniAutomation {
     }
     if (env.ok === false) {
       const msg = env.error.message || 'JXA error';
-      const err = new OmniAutomationError(msg, { stderr: typeof env.error.details === 'string' ? env.error.details : undefined });
+      const err = new OmniAutomationError(msg, {
+        stderr: typeof env.error.details === 'string' ? env.error.details : undefined,
+      });
       throw err;
     }
     // Zod parse returns properly typed data based on schema
@@ -135,17 +134,13 @@ export class OmniAutomation {
   }
 
   private async executeInternal<T = unknown>(script: string): Promise<T> {
-
-
     // Check if script already has its own IIFE wrapper and app/doc initialization
     const hasIIFE = script.includes('(() =>') || script.includes('(function');
     const hasAppInit = script.includes("Application('OmniFocus')");
 
-
     // Tests expect: wrap only if there is no IIFE AND no Application('OmniFocus').
     // If either is present, do not wrap. Always write the chosen (possibly wrapped) script to stdin.
-    const wrappedScript = (!hasIIFE && !hasAppInit) ? this.wrapScript(script) : script;
-
+    const wrappedScript = !hasIIFE && !hasAppInit ? this.wrapScript(script) : script;
 
     // Create promise and track it to prevent premature server exit
     // Don't await here - we need to return the SAME promise that's tracked in pendingOperations
@@ -160,43 +155,39 @@ export class OmniAutomation {
     });
     logger.debug('First 500 chars of wrapped script:', wrappedScript.substring(0, 500));
 
-
-
     // Create the execution promise
     const promise = new Promise<T>((resolve, reject) => {
-
       const proc = spawn('osascript', ['-l', 'JavaScript'], {
         timeout: this.timeout,
       });
-
-
 
       let _stdout = '';
       let stderr = '';
 
       proc.stdout.on('data', (data: Buffer) => {
-
         _stdout += data.toString();
       });
 
       proc.stderr.on('data', (data: Buffer) => {
-
         stderr += data.toString();
       });
 
       proc.on('error', (error) => {
-
         logger.error('Script execution failed:', error);
         reject(new OmniAutomationError('Failed to execute script', { script: wrappedScript, stderr: error.message }));
       });
 
       proc.on('close', (code) => {
-
         if (code !== 0) {
           logger.error('Script execution failed with code:', code);
 
-
-          reject(new OmniAutomationError(`Script execution failed with code ${code}`, { script: wrappedScript, stderr, code: code || undefined }));
+          reject(
+            new OmniAutomationError(`Script execution failed with code ${code}`, {
+              script: wrappedScript,
+              stderr,
+              code: code || undefined,
+            }),
+          );
           return;
         }
 
@@ -235,7 +226,12 @@ export class OmniAutomation {
           // Try to return the raw output if it might be useful
           if (trimmedOutput.includes('{') || trimmedOutput.includes('[')) {
             // Looks like malformed JSON, treat as error
-            reject(new OmniAutomationError('Invalid JSON response from script', { script: wrappedScript, stderr: trimmedOutput }));
+            reject(
+              new OmniAutomationError('Invalid JSON response from script', {
+                script: wrappedScript,
+                stderr: trimmedOutput,
+              }),
+            );
           } else {
             // Might be a simple string result, wrap it
             resolve(trimmedOutput as T);
@@ -245,26 +241,21 @@ export class OmniAutomation {
 
       // Write script to stdin
 
-
       // Debug: write the actual script being executed to a file
-
 
       proc.stdin.write(wrappedScript);
 
       proc.stdin.end();
-
     });
 
     // Track this promise to prevent premature server exit
     if (globalPendingOperations) {
-
       globalPendingOperations.add(promise);
 
       // Remove from set when completed (success or failure)
       promise.finally(() => {
         if (globalPendingOperations) {
           globalPendingOperations.delete(promise);
-
         }
       });
     }
@@ -337,11 +328,14 @@ export class OmniAutomation {
   }
 
   // Helper method to build common script patterns
-  public buildScript<T extends Record<string, unknown> = Record<string, unknown>>(template: string, params: T = {} as T): string {
+  public buildScript<T extends Record<string, unknown> = Record<string, unknown>>(
+    template: string,
+    params: T = {} as T,
+  ): string {
     let script = template;
 
     // Ensure params is not null/undefined
-    const safeParams = params || {} as T;
+    const safeParams = params || ({} as T);
 
     for (const [key, value] of Object.entries(safeParams)) {
       const placeholder = `{{${key}}}`;
@@ -367,7 +361,7 @@ export class OmniAutomation {
     }
 
     if (Array.isArray(value)) {
-      const items = value.map(v => this.formatValue(v)).join(', ');
+      const items = value.map((v) => this.formatValue(v)).join(', ');
       return `[${items}]`;
     }
 
@@ -436,7 +430,13 @@ export class OmniAutomation {
       proc.on('close', (code) => {
         if (code !== 0) {
           logger.error('URL scheme execution failed with code:', code);
-          reject(new OmniAutomationError(`URL scheme execution failed with code ${code}`, { script, stderr, code: code || undefined }));
+          reject(
+            new OmniAutomationError(`URL scheme execution failed with code ${code}`, {
+              script,
+              stderr,
+              code: code || undefined,
+            }),
+          );
           return;
         }
 
@@ -467,9 +467,7 @@ export class OmniAutomation {
     }
 
     for (const chunk of chunks) {
-      const chunkResults = await Promise.allSettled(
-        chunk.map(script => this.execute<T>(script)),
-      );
+      const chunkResults = await Promise.allSettled(chunk.map((script) => this.execute<T>(script)));
 
       for (const result of chunkResults) {
         if (result.status === 'fulfilled') {

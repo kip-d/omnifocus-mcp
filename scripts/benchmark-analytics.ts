@@ -29,7 +29,7 @@ function startMCPServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     mcpProcess = spawn('node', ['dist/index.js'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NO_CACHE_WARMING: 'true' }
+      env: { ...process.env, NO_CACHE_WARMING: 'true' },
     });
 
     let initReceived = false;
@@ -65,8 +65,8 @@ function startMCPServer(): Promise<void> {
       params: {
         protocolVersion: '2025-06-18',
         capabilities: {},
-        clientInfo: { name: 'benchmark', version: '1.0.0' }
-      }
+        clientInfo: { name: 'benchmark', version: '1.0.0' },
+      },
     };
 
     mcpProcess.stdin.write(JSON.stringify(initRequest) + '\n');
@@ -97,8 +97,8 @@ async function callTool(toolName: string, args: any): Promise<{ time: number; re
       method: 'tools/call',
       params: {
         name: toolName,
-        arguments: args
-      }
+        arguments: args,
+      },
     };
 
     let responseReceived = false;
@@ -138,7 +138,7 @@ async function benchmarkOperation(
   name: string,
   toolName: string,
   args: any,
-  iterations: number = 3
+  iterations: number = 3,
 ): Promise<BenchmarkResult> {
   console.log(`\n  Running: ${name}...`);
 
@@ -151,7 +151,7 @@ async function benchmarkOperation(
     lastResult = result;
 
     // Small delay between iterations
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
@@ -166,7 +166,7 @@ async function benchmarkOperation(
     minTime,
     maxTime,
     iterations,
-    details: lastResult
+    details: lastResult,
   };
 }
 
@@ -203,102 +203,147 @@ async function main() {
     // Tags benchmarks
     console.log('\n--- Tags Benchmarks ---');
 
-    results.push(await benchmarkOperation(
-      'Tags (names only)',
-      'tags',
-      { operation: 'list', sortBy: 'name', includeEmpty: 'true', includeUsageStats: 'false', includeTaskCounts: 'false', fastMode: 'false', namesOnly: 'true' }
-    ));
+    results.push(
+      await benchmarkOperation('Tags (names only)', 'tags', {
+        operation: 'list',
+        sortBy: 'name',
+        includeEmpty: 'true',
+        includeUsageStats: 'false',
+        includeTaskCounts: 'false',
+        fastMode: 'false',
+        namesOnly: 'true',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Tags (fast mode)',
-      'tags',
-      { operation: 'list', sortBy: 'name', includeEmpty: 'true', includeUsageStats: 'false', includeTaskCounts: 'false', fastMode: 'true', namesOnly: 'false' }
-    ));
+    results.push(
+      await benchmarkOperation('Tags (fast mode)', 'tags', {
+        operation: 'list',
+        sortBy: 'name',
+        includeEmpty: 'true',
+        includeUsageStats: 'false',
+        includeTaskCounts: 'false',
+        fastMode: 'true',
+        namesOnly: 'false',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Tags (full mode, no usage stats)',
-      'tags',
-      { operation: 'list', sortBy: 'name', includeEmpty: 'true', includeUsageStats: 'false', includeTaskCounts: 'false', fastMode: 'false', namesOnly: 'false' }
-    ));
+    results.push(
+      await benchmarkOperation('Tags (full mode, no usage stats)', 'tags', {
+        operation: 'list',
+        sortBy: 'name',
+        includeEmpty: 'true',
+        includeUsageStats: 'false',
+        includeTaskCounts: 'false',
+        fastMode: 'false',
+        namesOnly: 'false',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Tags (full mode, with usage stats)',
-      'tags',
-      { operation: 'list', sortBy: 'name', includeEmpty: 'true', includeUsageStats: 'true', includeTaskCounts: 'false', fastMode: 'false', namesOnly: 'false' }
-    ));
+    results.push(
+      await benchmarkOperation('Tags (full mode, with usage stats)', 'tags', {
+        operation: 'list',
+        sortBy: 'name',
+        includeEmpty: 'true',
+        includeUsageStats: 'true',
+        includeTaskCounts: 'false',
+        fastMode: 'false',
+        namesOnly: 'false',
+      }),
+    );
 
     // Productivity stats benchmarks
     console.log('\n--- Productivity Stats Benchmarks ---');
 
-    results.push(await benchmarkOperation(
-      'Productivity stats (week, no details)',
-      'productivity_stats',
-      { period: 'week', includeProjectStats: 'false', includeTagStats: 'false' }
-    ));
+    results.push(
+      await benchmarkOperation('Productivity stats (week, no details)', 'productivity_stats', {
+        period: 'week',
+        includeProjectStats: 'false',
+        includeTagStats: 'false',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Productivity stats (week, with projects)',
-      'productivity_stats',
-      { period: 'week', includeProjectStats: 'true', includeTagStats: 'false' }
-    ));
+    results.push(
+      await benchmarkOperation('Productivity stats (week, with projects)', 'productivity_stats', {
+        period: 'week',
+        includeProjectStats: 'true',
+        includeTagStats: 'false',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Productivity stats (week, with tags)',
-      'productivity_stats',
-      { period: 'week', includeProjectStats: 'false', includeTagStats: 'true' }
-    ));
+    results.push(
+      await benchmarkOperation('Productivity stats (week, with tags)', 'productivity_stats', {
+        period: 'week',
+        includeProjectStats: 'false',
+        includeTagStats: 'true',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Productivity stats (week, full details)',
-      'productivity_stats',
-      { period: 'week', includeProjectStats: 'true', includeTagStats: 'true' }
-    ));
+    results.push(
+      await benchmarkOperation('Productivity stats (week, full details)', 'productivity_stats', {
+        period: 'week',
+        includeProjectStats: 'true',
+        includeTagStats: 'true',
+      }),
+    );
 
     // Task velocity benchmarks
     console.log('\n--- Task Velocity Benchmarks ---');
 
-    results.push(await benchmarkOperation(
-      'Task velocity (7 days)',
-      'task_velocity',
-      { days: '7', groupBy: 'day', includeWeekends: 'true' }
-    ));
+    results.push(
+      await benchmarkOperation('Task velocity (7 days)', 'task_velocity', {
+        days: '7',
+        groupBy: 'day',
+        includeWeekends: 'true',
+      }),
+    );
 
-    results.push(await benchmarkOperation(
-      'Task velocity (30 days)',
-      'task_velocity',
-      { days: '30', groupBy: 'day', includeWeekends: 'true' }
-    ));
+    results.push(
+      await benchmarkOperation('Task velocity (30 days)', 'task_velocity', {
+        days: '30',
+        groupBy: 'day',
+        includeWeekends: 'true',
+      }),
+    );
 
     formatResults(results);
 
     console.log('\n\n=== Performance Analysis ===\n');
 
     // Tags comparison
-    const tagsNamesOnly = results.find(r => r.operation.includes('names only'));
-    const tagsFast = results.find(r => r.operation.includes('fast mode'));
-    const tagsFullNoStats = results.find(r => r.operation.includes('no usage stats'));
-    const tagsFullWithStats = results.find(r => r.operation.includes('with usage stats'));
+    const tagsNamesOnly = results.find((r) => r.operation.includes('names only'));
+    const tagsFast = results.find((r) => r.operation.includes('fast mode'));
+    const tagsFullNoStats = results.find((r) => r.operation.includes('no usage stats'));
+    const tagsFullWithStats = results.find((r) => r.operation.includes('with usage stats'));
 
     if (tagsNamesOnly && tagsFast && tagsFullNoStats) {
-      const fastVsNamesOnly = ((tagsFast.avgTime - tagsNamesOnly.avgTime) / tagsNamesOnly.avgTime * 100).toFixed(1);
-      const fullVsFast = ((tagsFullNoStats.avgTime - tagsFast.avgTime) / tagsFast.avgTime * 100).toFixed(1);
+      const fastVsNamesOnly = (((tagsFast.avgTime - tagsNamesOnly.avgTime) / tagsNamesOnly.avgTime) * 100).toFixed(1);
+      const fullVsFast = (((tagsFullNoStats.avgTime - tagsFast.avgTime) / tagsFast.avgTime) * 100).toFixed(1);
 
       console.log('Tags Performance:');
-      console.log(`  Fast mode vs Names only: +${fastVsNamesOnly}% slower (${tagsFast.avgTime.toFixed(0)}ms vs ${tagsNamesOnly.avgTime.toFixed(0)}ms)`);
-      console.log(`  Full mode vs Fast mode: +${fullVsFast}% slower (${tagsFullNoStats.avgTime.toFixed(0)}ms vs ${tagsFast.avgTime.toFixed(0)}ms)`);
+      console.log(
+        `  Fast mode vs Names only: +${fastVsNamesOnly}% slower (${tagsFast.avgTime.toFixed(0)}ms vs ${tagsNamesOnly.avgTime.toFixed(0)}ms)`,
+      );
+      console.log(
+        `  Full mode vs Fast mode: +${fullVsFast}% slower (${tagsFullNoStats.avgTime.toFixed(0)}ms vs ${tagsFast.avgTime.toFixed(0)}ms)`,
+      );
       console.log(`  → Parent hierarchy adds ${(tagsFullNoStats.avgTime - tagsFast.avgTime).toFixed(0)}ms overhead`);
     }
 
     if (tagsFullWithStats && tagsFullNoStats) {
-      const statsOverhead = ((tagsFullWithStats.avgTime - tagsFullNoStats.avgTime) / tagsFullNoStats.avgTime * 100).toFixed(1);
-      console.log(`  Usage stats adds +${statsOverhead}% (${(tagsFullWithStats.avgTime - tagsFullNoStats.avgTime).toFixed(0)}ms) - already optimized with OmniJS bridge`);
+      const statsOverhead = (
+        ((tagsFullWithStats.avgTime - tagsFullNoStats.avgTime) / tagsFullNoStats.avgTime) *
+        100
+      ).toFixed(1);
+      console.log(
+        `  Usage stats adds +${statsOverhead}% (${(tagsFullWithStats.avgTime - tagsFullNoStats.avgTime).toFixed(0)}ms) - already optimized with OmniJS bridge`,
+      );
     }
 
     // Productivity stats comparison
-    const statsNoDetails = results.find(r => r.operation.includes('no details'));
-    const statsWithProjects = results.find(r => r.operation.includes('with projects'));
-    const statsWithTags = results.find(r => r.operation.includes('with tags'));
-    const statsFull = results.find(r => r.operation.includes('full details'));
+    const statsNoDetails = results.find((r) => r.operation.includes('no details'));
+    const statsWithProjects = results.find((r) => r.operation.includes('with projects'));
+    const statsWithTags = results.find((r) => r.operation.includes('with tags'));
+    const statsFull = results.find((r) => r.operation.includes('full details'));
 
     if (statsNoDetails && statsWithProjects && statsWithTags && statsFull) {
       console.log('\nProductivity Stats Performance:');
@@ -310,7 +355,6 @@ async function main() {
     }
 
     console.log('\n📊 Benchmark complete!\n');
-
   } catch (error) {
     console.error('Benchmark failed:', error);
     process.exit(1);

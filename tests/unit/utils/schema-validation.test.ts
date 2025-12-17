@@ -1,16 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import {
-  normalizeDateInput,
-  normalizeBooleanInput,
-  normalizeStringInput,
-} from '../../../src/utils/response-format';
+import { normalizeDateInput, normalizeBooleanInput, normalizeStringInput } from '../../../src/utils/response-format';
 
 describe('Schema Validation Helpers', () => {
   describe('normalizeDateInput', () => {
     it('should handle Date objects', () => {
       const date = new Date('2025-01-01T00:00:00Z');
       const result = normalizeDateInput(date);
-      
+
       expect(result).toBe(date);
     });
 
@@ -23,12 +19,12 @@ describe('Schema Validation Helpers', () => {
       // This is the primary format we expect from the LLM
       // Format: YYYY-MM-DD HH:mm (local time, no timezone)
       const result = normalizeDateInput('2025-01-01 14:30');
-      
+
       expect(result).toBeInstanceOf(Date);
       // Just verify it parses as a valid date
       expect(result?.getFullYear()).toBe(2025);
       expect(result?.getMonth()).toBe(0); // January
-      
+
       // Also test date-only format (YYYY-MM-DD)
       // Note: JavaScript interprets this as UTC midnight
       const result2 = normalizeDateInput('2025-03-15');
@@ -59,12 +55,12 @@ describe('Schema Validation Helpers', () => {
 
     it('should handle today and tomorrow as special cases', () => {
       const now = new Date();
-      
+
       // Today
       const today = normalizeDateInput('today');
       expect(today).toBeInstanceOf(Date);
       expect(today?.toDateString()).toBe(now.toDateString());
-      
+
       // Tomorrow
       const tomorrow = normalizeDateInput('tomorrow');
       expect(tomorrow).toBeInstanceOf(Date);
@@ -87,14 +83,14 @@ describe('Schema Validation Helpers', () => {
         expect(nextWeek).toBeInstanceOf(Date);
         // It adds 7 days to current date
       }
-      
+
       // Other natural language dates may parse as dates (not recommended)
       const nextFriday = normalizeDateInput('next friday');
       // This will likely parse as a date but not correctly
       if (nextFriday !== null) {
         expect(nextFriday).toBeInstanceOf(Date);
       }
-      
+
       const in3Days = normalizeDateInput('in 3 days');
       // This may or may not parse
       if (in3Days !== null) {
@@ -109,7 +105,7 @@ describe('Schema Validation Helpers', () => {
       if (usFormat !== null) {
         expect(usFormat).toBeInstanceOf(Date);
       }
-      
+
       // Natural language format may also parse
       const natural = normalizeDateInput('January 15, 2025');
       if (natural !== null) {
@@ -142,7 +138,7 @@ describe('Schema Validation Helpers', () => {
       expect(midnight).toBeInstanceOf(Date);
       expect(midnight?.getHours()).toBe(0);
       expect(midnight?.getMinutes()).toBe(0);
-      
+
       const endOfDay = normalizeDateInput('2025-12-31 23:59');
       expect(endOfDay).toBeInstanceOf(Date);
       expect(endOfDay?.getHours()).toBe(23);
@@ -292,7 +288,7 @@ describe('Schema Validation Helpers', () => {
         note: 'null',
         priority: '',
       };
-      
+
       const normalized = {
         name: normalizeStringInput(formData.name),
         dueDate: normalizeDateInput(formData.dueDate),
@@ -301,7 +297,7 @@ describe('Schema Validation Helpers', () => {
         note: normalizeStringInput(formData.note),
         priority: normalizeStringInput(formData.priority),
       };
-      
+
       expect(normalized.name).toBe('New Task');
       expect(normalized.dueDate).toBeInstanceOf(Date);
       expect(normalized.completed).toBe(false);
@@ -319,7 +315,7 @@ describe('Schema Validation Helpers', () => {
         dueBy: '2025-03-15 14:30', // Proper format, not natural language
         projectId: 'null',
       };
-      
+
       // How we would process these
       const processed = {
         limit: parseInt(mcpParams.limit, 10),
@@ -328,7 +324,7 @@ describe('Schema Validation Helpers', () => {
         dueBy: normalizeDateInput(mcpParams.dueBy),
         projectId: normalizeStringInput(mcpParams.projectId),
       };
-      
+
       expect(processed.limit).toBe(25);
       expect(processed.details).toBe(true);
       expect(processed.completed).toBe(false);
@@ -342,15 +338,15 @@ describe('Schema Validation Helpers', () => {
       // Real world edge cases we've seen
       expect(normalizeStringInput('{{undefined}}')).toBe('{{undefined}}'); // Template placeholder
       expect(normalizeBooleanInput('True ')).toBe(true); // Extra space
-      
+
       // Natural language dates don't work
       const in0Days = normalizeDateInput('in 0 days');
       if (in0Days !== null) {
         expect(in0Days.toString()).toBe('Invalid Date');
       }
-      
+
       expect(normalizeStringInput('\u0000')).toBe('\u0000'); // Null character
-      
+
       // These edge cases should be handled gracefully
       expect(normalizeBooleanInput('YES')).toBe(true); // YES is recognized
       expect(normalizeStringInput('\r\n\t ')).toBe(''); // Only whitespace -> empty string

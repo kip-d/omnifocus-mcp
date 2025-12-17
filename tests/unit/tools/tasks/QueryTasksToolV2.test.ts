@@ -14,21 +14,26 @@ describe('QueryTasksTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn().mockReturnValue(null),
       set: vi.fn(),
       invalidate: vi.fn(),
     } as any;
-    
+
     tool = new QueryTasksTool(mockCache);
-    
+
     // Mock OmniAutomation
     mockOmni = {
       executeJson: vi.fn(),
-      executeTyped: vi.fn(async (_s: string, schema: any) => schema.parse({
-        tasks: [], overdueCount: 0, dueTodayCount: 0, flaggedCount: 0,
-      })),
+      executeTyped: vi.fn(async (_s: string, schema: any) =>
+        schema.parse({
+          tasks: [],
+          overdueCount: 0,
+          dueTodayCount: 0,
+          flaggedCount: 0,
+        }),
+      ),
       buildScript: vi.fn((template, params) => `script with ${JSON.stringify(params)}`),
     };
     (tool as any).omniAutomation = mockOmni;
@@ -47,17 +52,17 @@ describe('QueryTasksTool', () => {
   describe('schema validation', () => {
     it('should accept valid mode values', async () => {
       const modes = ['all', 'overdue', 'today', 'upcoming', 'available', 'blocked', 'flagged', 'smart_suggest'];
-      
+
       for (const mode of modes) {
         mockOmni.executeJson.mockResolvedValueOnce({
           tasks: [],
           summary: { total_tasks: 0, completed: 0, incomplete: 0 },
         });
-        
+
         const result = await tool.execute({ mode, limit: 25, details: false });
         expect(result.success).toBe(true);
       }
-      
+
       // Search mode requires search parameter
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
@@ -68,8 +73,7 @@ describe('QueryTasksTool', () => {
     });
 
     it('should reject invalid mode', async () => {
-      await expect(tool.execute({ mode: 'invalid' }))
-        .rejects.toThrow('Invalid parameters');
+      await expect(tool.execute({ mode: 'invalid' })).rejects.toThrow('Invalid parameters');
     });
 
     it('should accept search parameters', async () => {
@@ -77,12 +81,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'search',
         search: 'meeting',
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -91,12 +95,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         project: 'Work',
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -105,12 +109,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         tags: ['urgent', 'work'],
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -119,12 +123,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         completed: true,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -133,12 +137,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         completed: 'true' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -147,12 +151,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         dueBy: 'tomorrow',
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -161,12 +165,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'upcoming',
         daysAhead: 7,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -175,25 +179,29 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'upcoming',
         daysAhead: '14' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
     it('should enforce daysAhead min/max limits', async () => {
-      await expect(tool.execute({
-        mode: 'upcoming',
-        daysAhead: 0,
-      })).rejects.toThrow('Invalid parameters');
-      
-      await expect(tool.execute({
-        mode: 'upcoming',
-        daysAhead: 31,
-      })).rejects.toThrow('Invalid parameters');
+      await expect(
+        tool.execute({
+          mode: 'upcoming',
+          daysAhead: 0,
+        }),
+      ).rejects.toThrow('Invalid parameters');
+
+      await expect(
+        tool.execute({
+          mode: 'upcoming',
+          daysAhead: 31,
+        }),
+      ).rejects.toThrow('Invalid parameters');
     });
 
     it('should handle limit parameter', async () => {
@@ -201,12 +209,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         limit: 50,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -215,25 +223,29 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         limit: '100' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
     it('should enforce limit min/max bounds', async () => {
-      await expect(tool.execute({
-        mode: 'all',
-        limit: 0,
-      })).rejects.toThrow('Invalid parameters');
-      
-      await expect(tool.execute({
-        mode: 'all',
-        limit: 201,
-      })).rejects.toThrow('Invalid parameters');
+      await expect(
+        tool.execute({
+          mode: 'all',
+          limit: 0,
+        }),
+      ).rejects.toThrow('Invalid parameters');
+
+      await expect(
+        tool.execute({
+          mode: 'all',
+          limit: 201,
+        }),
+      ).rejects.toThrow('Invalid parameters');
     });
 
     it('should handle details parameter', async () => {
@@ -241,12 +253,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         details: true,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -255,12 +267,12 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         details: 'true' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -269,9 +281,9 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({});
-      
+
       expect(result.success).toBe(true);
       // Default mode is 'all', limit is 25, details is false
     });
@@ -293,7 +305,7 @@ describe('QueryTasksTool', () => {
           flagged: false,
         },
       ];
-      
+
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: mockTasks,
         summary: {
@@ -303,11 +315,11 @@ describe('QueryTasksTool', () => {
           flagged: 1,
         },
       });
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(true);
-      // The summary is auto-generated by createTaskResponseV2  
+      // The summary is auto-generated by createTaskResponseV2
       expect(result.summary).toBeDefined();
       expect(result.summary.total_count).toBe(2);
       expect(result.data.tasks).toHaveLength(2);
@@ -319,9 +331,9 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({ mode: 'search', search: 'nonexistent' });
-      
+
       expect(result.success).toBe(true);
       expect(result.summary.total_count).toBe(0);
       expect(result.data.tasks).toHaveLength(0);
@@ -332,9 +344,9 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.metadata).toBeDefined();
       expect(result.metadata.operation).toBe('tasks');
       expect(result.metadata.timestamp).toBeDefined();
@@ -370,14 +382,14 @@ describe('QueryTasksTool', () => {
       expect(result.success).toBe(true);
       const tasks = result.data?.tasks ?? [];
 
-      const child = tasks.find(task => task.id === 'child-1');
+      const child = tasks.find((task) => task.id === 'child-1');
       expect(child?.parentTaskId).toBe('parent-1');
       expect(child?.parentTaskName).toBe('Parent Task');
       expect(Array.isArray(child?.tags)).toBe(true);
       expect(child?.tags).toContain('IntegrationTag');
       expect(child?.flagged).toBe(true);
 
-      const parent = tasks.find(task => task.id === 'parent-1');
+      const parent = tasks.find((task) => task.id === 'parent-1');
       expect(parent?.childCounts?.total).toBe(1);
     });
   });
@@ -388,7 +400,7 @@ describe('QueryTasksTool', () => {
         tasks: [{ id: 'task1', name: 'Meeting notes', completed: false }],
         summary: { total_tasks: 1, completed: 0, incomplete: 1 },
       });
-      
+
       const result = await tool.execute({
         mode: 'search',
         search: 'meeting',
@@ -402,7 +414,7 @@ describe('QueryTasksTool', () => {
     it('should handle today mode', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
-        summary: { 
+        summary: {
           total_tasks: 3,
           completed: 0,
           incomplete: 3,
@@ -410,9 +422,9 @@ describe('QueryTasksTool', () => {
           flagged: 1,
         },
       });
-      
+
       const result = await tool.execute({ mode: 'today' });
-      
+
       expect(result.success).toBe(true);
       expect(result.summary).toBeDefined();
     });
@@ -420,16 +432,16 @@ describe('QueryTasksTool', () => {
     it('should handle overdue mode', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
-        summary: { 
+        summary: {
           total_tasks: 5,
           completed: 0,
           incomplete: 5,
           overdue: 5,
         },
       });
-      
+
       const result = await tool.execute({ mode: 'overdue' });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -438,34 +450,34 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 10, completed: 0, incomplete: 10 },
       });
-      
+
       const result = await tool.execute({
         mode: 'upcoming',
         daysAhead: 14,
       });
-      
+
       expect(result.success).toBe(true);
       expect(mockOmni.buildScript).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           days: 14,
-        })
+        }),
       );
     });
 
     it('should handle flagged mode', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
-        summary: { 
+        summary: {
           total_tasks: 7,
           completed: 0,
           incomplete: 7,
           flagged: 7,
         },
       });
-      
+
       const result = await tool.execute({ mode: 'flagged' });
-      
+
       expect(result.success).toBe(true);
       expect(result.summary).toBeDefined();
     });
@@ -478,9 +490,9 @@ describe('QueryTasksTool', () => {
         error: 'Script failed',
         details: { code: -1743 },
       });
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       // The actual error message is 'Failed to get tasks'
@@ -489,9 +501,9 @@ describe('QueryTasksTool', () => {
 
     it('should handle null results', async () => {
       mockOmni.executeJson.mockResolvedValueOnce(null);
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
     });
@@ -501,9 +513,9 @@ describe('QueryTasksTool', () => {
         tasks: [],
         // summary missing - createTaskResponseV2 will generate it
       });
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(true);
       expect(result.summary).toBeDefined(); // Auto-generated
     });
@@ -514,9 +526,9 @@ describe('QueryTasksTool', () => {
         error: 'Error: -1743 - Not allowed to send Apple events',
         details: { code: -1743 },
       });
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('PERMISSION_DENIED');
       // The suggestion should contain System Settings
@@ -525,9 +537,9 @@ describe('QueryTasksTool', () => {
 
     it('should handle timeout errors', async () => {
       mockOmni.executeJson.mockRejectedValueOnce(new Error('Script execution timed out'));
-      
+
       const result = await tool.execute({ mode: 'all' });
-      
+
       expect(result.success).toBe(false);
       // The base tool maps timeout errors to SCRIPT_TIMEOUT
       expect(result.error.code).toBe('SCRIPT_TIMEOUT');
@@ -542,12 +554,12 @@ describe('QueryTasksTool', () => {
         tasks: [{ id: 'cached', name: 'Cached Task' }],
         summary: { total_tasks: 1, completed: 0, incomplete: 1 },
       };
-      
+
       mockCache.get.mockReturnValueOnce(cachedData);
-      
+
       // Use a mode that actually checks cache (not 'all')
       const result = await tool.execute({ mode: 'overdue' });
-      
+
       expect(mockCache.get).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.metadata.from_cache).toBe(true);
@@ -558,19 +570,19 @@ describe('QueryTasksTool', () => {
         tasks: [{ id: 'new', name: 'New Task' }],
         summary: { total_tasks: 1, completed: 0, incomplete: 1 },
       };
-      
+
       mockOmni.executeJson.mockResolvedValueOnce(responseData);
-      
+
       // Use a mode that actually caches (not 'all')
       const result = await tool.execute({ mode: 'overdue' });
-      
+
       expect(result.success).toBe(true);
       expect(mockCache.set).toHaveBeenCalledWith(
         'tasks',
         expect.any(String),
         expect.objectContaining({
           tasks: expect.any(Array),
-        })
+        }),
       );
     });
   });
@@ -581,13 +593,13 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         completed: '1' as any,
         details: 'false' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -596,13 +608,13 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'upcoming',
         daysAhead: '7' as any,
         limit: '50' as any,
       });
-      
+
       expect(result.success).toBe(true);
     });
 
@@ -611,13 +623,13 @@ describe('QueryTasksTool', () => {
         tasks: [],
         summary: { total_tasks: 0, completed: 0, incomplete: 0 },
       });
-      
+
       const result = await tool.execute({
         mode: 'all',
         search: undefined,
         project: undefined, // undefined is allowed, null is not
       });
-      
+
       expect(result.success).toBe(true);
     });
   });

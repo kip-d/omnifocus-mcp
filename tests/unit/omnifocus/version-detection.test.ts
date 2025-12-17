@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  getOmniFocusVersion,
-  getVersionInfo,
-  clearVersionCache
-} from '../../../src/omnifocus/version-detection';
+import { getOmniFocusVersion, getVersionInfo, clearVersionCache } from '../../../src/omnifocus/version-detection';
 
 describe('OmniFocus Version Detection', () => {
   beforeEach(() => {
@@ -64,7 +60,7 @@ describe('OmniFocus Version Detection', () => {
       clearVersionCache();
 
       // Add small delay to ensure different timestamp
-      await new Promise(resolve => setTimeout(resolve, 1));
+      await new Promise((resolve) => setTimeout(resolve, 1));
 
       const second = await getOmniFocusVersion();
       // After cache clear, should call getOmniFocusVersion again

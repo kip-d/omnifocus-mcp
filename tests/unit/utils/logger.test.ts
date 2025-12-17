@@ -42,4 +42,3 @@ describe('logger', () => {
     process.env.LOG_LEVEL = orig;
   });
 });
-

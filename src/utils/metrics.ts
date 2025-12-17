@@ -102,23 +102,27 @@ export class MetricsCollector {
     let totalExecutionTime = 0;
 
     for (const [toolName, toolMetricsList] of toolMetricsMap.entries()) {
-      const successfulCalls = toolMetricsList.filter(m => m.success).length;
+      const successfulCalls = toolMetricsList.filter((m) => m.success).length;
       const failedCalls = toolMetricsList.length - successfulCalls;
-      const executionTimes = toolMetricsList.map(m => m.executionTime);
+      const executionTimes = toolMetricsList.map((m) => m.executionTime);
       const averageTime = executionTimes.reduce((a, b) => a + b, 0) / executionTimes.length;
 
       // Error breakdown
       const errorBreakdown: Record<string, number> = {};
-      toolMetricsList.filter(m => !m.success && m.errorType).forEach(m => {
-        const errorType = m.errorType!;
-        errorBreakdown[errorType] = (errorBreakdown[errorType] || 0) + 1;
-      });
+      toolMetricsList
+        .filter((m) => !m.success && m.errorType)
+        .forEach((m) => {
+          const errorType = m.errorType!;
+          errorBreakdown[errorType] = (errorBreakdown[errorType] || 0) + 1;
+        });
 
       // Performance characteristics
-      const cacheHits = toolMetricsList.filter(m => m.cacheHit === true).length;
-      const cacheTotal = toolMetricsList.filter(m => m.cacheHit !== undefined).length;
-      const resultSizes = toolMetricsList.filter(m => m.resultSize !== undefined).map(m => m.resultSize!);
-      const parameterCounts = toolMetricsList.filter(m => m.parameterCount !== undefined).map(m => m.parameterCount!);
+      const cacheHits = toolMetricsList.filter((m) => m.cacheHit === true).length;
+      const cacheTotal = toolMetricsList.filter((m) => m.cacheHit !== undefined).length;
+      const resultSizes = toolMetricsList.filter((m) => m.resultSize !== undefined).map((m) => m.resultSize!);
+      const parameterCounts = toolMetricsList
+        .filter((m) => m.parameterCount !== undefined)
+        .map((m) => m.parameterCount!);
 
       toolMetrics[toolName] = {
         toolName,
@@ -131,8 +135,12 @@ export class MetricsCollector {
         lastExecutionTime: toolMetricsList[toolMetricsList.length - 1]?.timestamp,
         errorBreakdown,
         cacheHitRate: cacheTotal > 0 ? Math.round((cacheHits / cacheTotal) * 100) / 100 : undefined,
-        averageResultSize: resultSizes.length > 0 ? Math.round(resultSizes.reduce((a, b) => a + b, 0) / resultSizes.length) : undefined,
-        averageParameterCount: parameterCounts.length > 0 ? Math.round(parameterCounts.reduce((a, b) => a + b, 0) / parameterCounts.length * 100) / 100 : undefined,
+        averageResultSize:
+          resultSizes.length > 0 ? Math.round(resultSizes.reduce((a, b) => a + b, 0) / resultSizes.length) : undefined,
+        averageParameterCount:
+          parameterCounts.length > 0
+            ? Math.round((parameterCounts.reduce((a, b) => a + b, 0) / parameterCounts.length) * 100) / 100
+            : undefined,
       };
 
       totalCalls += toolMetricsList.length;
@@ -181,7 +189,7 @@ export class MetricsCollector {
     const topTools = Object.values(systemMetrics.toolMetrics)
       .sort((a, b) => b.totalCalls - a.totalCalls)
       .slice(0, 5)
-      .map(tool => ({
+      .map((tool) => ({
         name: tool.toolName,
         calls: tool.totalCalls,
         avgTime: tool.averageExecutionTime,
@@ -191,9 +199,10 @@ export class MetricsCollector {
       totalExecutions: systemMetrics.totalToolCalls,
       recentExecutions: this.metrics.length,
       topTools,
-      errorRate: systemMetrics.totalToolCalls > 0
-        ? Math.round((systemMetrics.totalFailedCalls / systemMetrics.totalToolCalls) * 100) / 100
-        : 0,
+      errorRate:
+        systemMetrics.totalToolCalls > 0
+          ? Math.round((systemMetrics.totalFailedCalls / systemMetrics.totalToolCalls) * 100) / 100
+          : 0,
     };
   }
 

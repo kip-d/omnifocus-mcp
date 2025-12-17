@@ -9,6 +9,7 @@
 ## 🎯 Design Philosophy
 
 Four unified tools provide streamlined MCP interface for LLM optimization:
+
 - **Reduced context**: 4 tool schemas vs 17 legacy (76% reduction)
 - **Type-safe**: Discriminated unions ensure correct parameters
 - **Zero backend changes**: Pure routing layer over existing infrastructure
@@ -21,6 +22,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 **Purpose:** Unified query interface for all OmniFocus data types
 
 **Schema:**
+
 ```typescript
 {
   query: {
@@ -64,6 +66,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ```
 
 **Examples:**
+
 ```typescript
 // Inbox tasks (two ways)
 {query: {type: "tasks", filters: {project: null}, limit: 10}}
@@ -116,6 +119,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 **Purpose:** Unified mutation interface for create/update/complete/delete operations
 
 **Schema (Discriminated Union):**
+
 ```typescript
 {
   mutation: {
@@ -151,6 +155,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ```
 
 **Examples:**
+
 ```typescript
 // Create task
 {
@@ -242,6 +247,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 **Purpose:** Unified analysis interface for insights and specialized operations
 
 **Schema (Discriminated Union):**
+
 ```typescript
 {
   analysis: {
@@ -273,6 +279,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ```
 
 **Examples:**
+
 ```typescript
 // Productivity stats
 {
@@ -368,7 +375,8 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 }
 ```
 
-**Routes to:** productivity_stats, task_velocity, analyze_overdue, analyze_patterns, workflow_analysis, recurring_tasks, parse_meeting_notes, manage_reviews tools
+**Routes to:** productivity_stats, task_velocity, analyze_overdue, analyze_patterns, workflow_analysis, recurring_tasks,
+parse_meeting_notes, manage_reviews tools
 
 ---
 
@@ -377,25 +385,35 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 **Purpose:** System information, diagnostics, and health checks
 
 **Schema:**
+
 ```typescript
 {
-  operation: "version" | "diagnostics" | "metrics" | "cache"
+  operation: 'version' | 'diagnostics' | 'metrics' | 'cache';
 }
 ```
 
 **Examples:**
+
 ```typescript
 // Get version information
-{operation: "version"}
+{
+  operation: 'version';
+}
 
 // Run system diagnostics
-{operation: "diagnostics"}
+{
+  operation: 'diagnostics';
+}
 
 // Get performance metrics
-{operation: "metrics"}
+{
+  operation: 'metrics';
+}
 
 // Get cache statistics
-{operation: "cache"}
+{
+  operation: 'cache';
+}
 ```
 
 **Returns:** System information, diagnostic results, performance metrics, or cache statistics
@@ -407,26 +425,31 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ### Common Patterns
 
 **Query inbox:**
+
 ```typescript
 {query: {type: "tasks", filters: {project: null}}}
 ```
 
 **Query overdue:**
+
 ```typescript
 {query: {type: "tasks", filters: {dueDate: {before: "now"}, status: "active"}}}
 ```
 
 **Create flagged task:**
+
 ```typescript
 {mutation: {operation: "create", target: "task", data: {name: "...", flagged: true}}}
 ```
 
 **Complete task:**
+
 ```typescript
 {mutation: {operation: "complete", target: "task", id: "..."}}
 ```
 
 **Weekly productivity:**
+
 ```typescript
 {analysis: {type: "productivity_stats", params: {groupBy: "week"}}}
 ```
@@ -435,12 +458,12 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 
 ## 🔧 Key Differences from Legacy API
 
-| Legacy (17 tools) | Unified (4 tools) | Benefit |
-|-------------------|-------------------|---------|
-| `tasks(mode: "inbox")` | `omnifocus_read({query: {type: "tasks", filters: {project: null}}})` | Explicit filter syntax |
-| `manage_task(operation: "create", ...)` | `omnifocus_write({mutation: {operation: "create", target: "task", data: {...}}})` | Discriminated union |
-| `productivity_stats(period: "week")` | `omnifocus_analyze({analysis: {type: "productivity_stats", params: {groupBy: "week"}}})` | Consistent structure |
-| 17 separate tool schemas | 4 unified tool schemas | 76% context reduction |
+| Legacy (17 tools)                       | Unified (4 tools)                                                                        | Benefit                |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------- |
+| `tasks(mode: "inbox")`                  | `omnifocus_read({query: {type: "tasks", filters: {project: null}}})`                     | Explicit filter syntax |
+| `manage_task(operation: "create", ...)` | `omnifocus_write({mutation: {operation: "create", target: "task", data: {...}}})`        | Discriminated union    |
+| `productivity_stats(period: "week")`    | `omnifocus_analyze({analysis: {type: "productivity_stats", params: {groupBy: "week"}}})` | Consistent structure   |
+| 17 separate tool schemas                | 4 unified tool schemas                                                                   | 76% context reduction  |
 
 ---
 
@@ -455,10 +478,12 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 4.  **Discriminated Unions:** The `operation` and `type` fields determine which other fields are required/valid
 5.  **String Coercion:** All parameters stringified by Claude Desktop MCP bridge
 6.  **Response Format:**
-    *   **JSON Default:** Tools return optimized JSON structure by default (saving ~20-30% tokens).
-    *   **Standard V2:** All responses follow `{success, data, error, metadata}`.
-    *   **Character Limit:** Responses are capped at 25,000 characters. Large results are automatically truncated with a helpful message.
-7.  **Tool Annotations:** All tools provide standard MCP annotations (`readOnlyHint`, `destructiveHint`, etc.) to guide client behavior.
+    - **JSON Default:** Tools return optimized JSON structure by default (saving ~20-30% tokens).
+    - **Standard V2:** All responses follow `{success, data, error, metadata}`.
+    - **Character Limit:** Responses are capped at 25,000 characters. Large results are automatically truncated with a
+      helpful message.
+7.  **Tool Annotations:** All tools provide standard MCP annotations (`readOnlyHint`, `destructiveHint`, etc.) to guide
+    client behavior.
 
 ---
 
@@ -476,11 +501,13 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ## 📊 Performance & Benefits
 
 **Context Window Optimization:**
+
 - Legacy API: 17 separate tool schemas
 - Unified API: 4 consolidated tools
 - **Reduction: 76%** (4 vs 17 tools)
 
 **Stability:**
+
 - Zero backend changes (pure routing layer)
 - Comprehensive test coverage
 - Production-ready with validation

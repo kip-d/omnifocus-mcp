@@ -122,18 +122,18 @@ const testScript = `
 
 async function testOperators() {
   console.log('Testing JXA whose() operators with correct syntax...\n');
-  
+
   try {
     const result = await omni.execute<any>(testScript);
-    
+
     if (result && result.operators) {
       console.log('Test Results:');
       console.log('='.repeat(80));
-      
+
       // Group by success/failure
       const successful = result.operators.filter((t: any) => t.success);
       const failed = result.operators.filter((t: any) => !t.success);
-      
+
       console.log('\n✅ Successful Operators:');
       successful.forEach((test: any) => {
         console.log(`\n${test.name}: ${test.description}`);
@@ -141,14 +141,14 @@ async function testOperators() {
         console.log(`Found: ${test.count} tasks in ${test.time_ms}ms`);
         if (test.sample) console.log(`Sample: "${test.sample}"`);
       });
-      
+
       console.log('\n\n❌ Failed Operators:');
       failed.forEach((test: any) => {
         console.log(`\n${test.name}: ${test.description}`);
         console.log(`Query: ${test.query}`);
         console.log(`Error: ${test.error}`);
       });
-      
+
       console.log('\n' + '='.repeat(80));
       console.log(`\nSummary: ${successful.length} successful, ${failed.length} failed`);
     }

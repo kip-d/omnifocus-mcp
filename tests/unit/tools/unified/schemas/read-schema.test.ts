@@ -7,8 +7,8 @@ describe('ReadSchema', () => {
       query: {
         type: 'tasks',
         filters: { status: 'active' },
-        limit: 25
-      }
+        limit: 25,
+      },
     };
 
     const result = ReadSchema.safeParse(input);
@@ -21,9 +21,9 @@ describe('ReadSchema', () => {
         type: 'tasks',
         filters: {
           tags: { any: ['work', 'urgent'] },
-          dueDate: { before: '2025-01-31' }
-        }
-      }
+          dueDate: { before: '2025-01-31' },
+        },
+      },
     };
 
     const result = ReadSchema.safeParse(input);
@@ -34,8 +34,8 @@ describe('ReadSchema', () => {
     const input = {
       query: {
         type: 'invalid',
-        filters: {}
-      }
+        filters: {},
+      },
     };
 
     const result = ReadSchema.safeParse(input);

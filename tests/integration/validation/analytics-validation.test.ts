@@ -52,16 +52,16 @@ describe('Analytics Validation - Actual Calculations', () => {
         mutation: {
           operation: 'complete',
           target: 'task',
-          id: result1.data.task.taskId
-        }
+          id: result1.data.task.taskId,
+        },
       });
 
       await client.callTool('omnifocus_write', {
         mutation: {
           operation: 'complete',
           target: 'task',
-          id: result2.data.task.taskId
-        }
+          id: result2.data.task.taskId,
+        },
       });
 
       // Get one more task ID from earlier created ones to complete
@@ -69,8 +69,8 @@ describe('Analytics Validation - Actual Calculations', () => {
         query: {
           type: 'tasks',
           filters: { tags: { any: [testSessionTag] }, status: 'active' },
-          limit: 1
-        }
+          limit: 1,
+        },
       });
 
       if (tasksResult.data?.tasks?.length > 0) {
@@ -78,8 +78,8 @@ describe('Analytics Validation - Actual Calculations', () => {
           mutation: {
             operation: 'complete',
             target: 'task',
-            id: tasksResult.data.tasks[0].id
-          }
+            id: tasksResult.data.tasks[0].id,
+          },
         });
       }
 
@@ -90,9 +90,9 @@ describe('Analytics Validation - Actual Calculations', () => {
           params: {
             period: 'week',
             includeProjectStats: false,
-            includeTagStats: false
-          }
-        }
+            includeTagStats: false,
+          },
+        },
       });
 
       // ✅ Validate calculation is reasonable
@@ -123,8 +123,8 @@ describe('Analytics Validation - Actual Calculations', () => {
       const result = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'productivity_stats',
-          params: { period: 'week' }
-        }
+          params: { period: 'week' },
+        },
       });
 
       expect(result.success).toBe(true);
@@ -144,7 +144,7 @@ describe('Analytics Validation - Actual Calculations', () => {
 
       await client.createTestTask('Overdue Task Test', {
         tags: [testSessionTag],
-        dueDate: pastDateStr
+        dueDate: pastDateStr,
       });
 
       // Run overdue analysis
@@ -153,9 +153,9 @@ describe('Analytics Validation - Actual Calculations', () => {
           type: 'overdue_analysis',
           params: {
             groupBy: 'project',
-            limit: 100
-          }
-        }
+            limit: 100,
+          },
+        },
       });
 
       // ✅ Validate analysis structure
@@ -185,14 +185,14 @@ describe('Analytics Validation - Actual Calculations', () => {
 
       await client.createTestTask('Future Task Test', {
         tags: [testSessionTag],
-        dueDate: futureDateStr
+        dueDate: futureDateStr,
       });
 
       const result = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'overdue_analysis',
-          params: { groupBy: 'tag', limit: 50 }
-        }
+          params: { groupBy: 'tag', limit: 50 },
+        },
       });
 
       // ✅ Should succeed even with no/few overdue tasks
@@ -207,15 +207,15 @@ describe('Analytics Validation - Actual Calculations', () => {
     it('should calculate velocity from completed tasks', async () => {
       // Create and complete a task
       const result = await client.createTestTask('Velocity Test Task', {
-        tags: [testSessionTag]
+        tags: [testSessionTag],
       });
 
       await client.callTool('omnifocus_write', {
         mutation: {
           operation: 'complete',
           target: 'task',
-          id: result.data.task.taskId
-        }
+          id: result.data.task.taskId,
+        },
       });
 
       // Run velocity analysis
@@ -225,9 +225,9 @@ describe('Analytics Validation - Actual Calculations', () => {
           params: {
             days: 7,
             groupBy: 'day',
-            includeWeekends: true
-          }
-        }
+            includeWeekends: true,
+          },
+        },
       });
 
       // ✅ Validate velocity structure
@@ -253,16 +253,16 @@ describe('Analytics Validation - Actual Calculations', () => {
       const productivityResult = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'productivity_stats',
-          params: { period: 'week' }
-        }
+          params: { period: 'week' },
+        },
       });
 
       // Get task velocity
       const velocityResult = await client.callTool('omnifocus_analyze', {
         analysis: {
           type: 'task_velocity',
-          params: { days: 7 }
-        }
+          params: { days: 7 },
+        },
       });
 
       // ✅ Both should report > 0 tasks (our test tasks + possibly others)

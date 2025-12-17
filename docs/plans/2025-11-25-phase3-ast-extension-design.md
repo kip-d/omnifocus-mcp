@@ -1,14 +1,14 @@
 # Phase 3 AST Extension Design
 
-**Date:** 2025-11-25
-**Status:** Approved - Ready for Implementation
-**Context:** Extend AST infrastructure to consolidate list-projects, list-tags, and export-tasks
+**Date:** 2025-11-25 **Status:** Approved - Ready for Implementation **Context:** Extend AST infrastructure to
+consolidate list-projects, list-tags, and export-tasks
 
 ---
 
 ## Summary
 
 Extend the existing AST contract system to support:
+
 1. **ProjectFilter** - Filter-based queries for projects (similar to TaskFilter)
 2. **TagQueryOptions** - Mode-based queries for tags (different pattern, appropriate abstraction)
 3. **export-tasks migration** - Leverage existing TaskFilter AST
@@ -22,11 +22,13 @@ Extend the existing AST contract system to support:
 ### Key Insight: Tags Are Different
 
 Tags use **mode-based** queries (field projection levels), not **filter-based** queries:
+
 - `names` mode: Just string array of tag names
 - `basic` mode: id + name objects
 - `full` mode: All properties including usage stats
 
-This is fundamentally different from tasks/projects which have rich filtering criteria (dates, status, flags, text search). Creating `TagFilter` would be artificial.
+This is fundamentally different from tasks/projects which have rich filtering criteria (dates, status, flags, text
+search). Creating `TagFilter` would be artificial.
 
 **Decision:** Create `TagQueryOptions` as a separate type acknowledging this conceptual difference.
 
@@ -90,7 +92,7 @@ export interface TagQueryOptions {
   mode: 'names' | 'basic' | 'full';
 
   // Post-query options
-  includeEmpty?: boolean;      // Include tags with 0 tasks
+  includeEmpty?: boolean; // Include tags with 0 tasks
   sortBy?: 'name' | 'usage' | 'activeTasks';
 
   // Only meaningful in 'full' mode
@@ -99,9 +101,9 @@ export interface TagQueryOptions {
 
 // Mode field mappings
 export const TAG_MODE_FIELDS = {
-  names: [],                           // Just string array
-  basic: ['id', 'name'],               // Minimal objects
-  full: ['id', 'name', 'parent', 'childrenAreMutuallyExclusive', 'usage']
+  names: [], // Just string array
+  basic: ['id', 'name'], // Minimal objects
+  full: ['id', 'name', 'parent', 'childrenAreMutuallyExclusive', 'usage'],
 } as const;
 ```
 
@@ -114,7 +116,7 @@ export const TAG_MODE_FIELDS = {
 ```typescript
 export function buildFilteredProjectsScript(
   filter: ProjectFilter,
-  options: { limit?: number; fields?: string[]; includeStats?: boolean } = {}
+  options: { limit?: number; fields?: string[]; includeStats?: boolean } = {},
 ): GeneratedScript {
   const { limit = 50, fields = [], includeStats = false } = options;
   const filterCode = generateProjectFilterCode(filter);
@@ -172,12 +174,12 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
   const conditions: string[] = [];
 
   if (filter.status && filter.status.length > 0) {
-    const statusChecks = filter.status.map(s => {
+    const statusChecks = filter.status.map((s) => {
       const statusMap = {
-        'active': 'Project.Status.Active',
-        'onHold': 'Project.Status.OnHold',
-        'done': 'Project.Status.Done',
-        'dropped': 'Project.Status.Dropped'
+        active: 'Project.Status.Active',
+        onHold: 'Project.Status.OnHold',
+        done: 'Project.Status.Done',
+        dropped: 'Project.Status.Dropped',
       };
       return `project.status === ${statusMap[s]}`;
     });
@@ -192,7 +194,7 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
     const escaped = JSON.stringify(filter.text.toLowerCase());
     conditions.push(
       `((project.name || '').toLowerCase().includes(${escaped}) || ` +
-      `(project.note || '').toLowerCase().includes(${escaped}))`
+        `(project.note || '').toLowerCase().includes(${escaped}))`,
     );
   }
 
@@ -204,12 +206,12 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
 
 ## Migration Plan
 
-| Script | Before | After | Reduction |
-|--------|--------|-------|-----------|
-| export-tasks.ts | 323 | ~50 | -273 (85%) |
-| list-projects.ts | 277 | ~30 | -247 (89%) |
-| list-tags-v3.ts | 293 | ~40 | -253 (86%) |
-| **Total** | 893 | ~120 | **-773 (87%)** |
+| Script           | Before | After | Reduction      |
+| ---------------- | ------ | ----- | -------------- |
+| export-tasks.ts  | 323    | ~50   | -273 (85%)     |
+| list-projects.ts | 277    | ~30   | -247 (89%)     |
+| list-tags-v3.ts  | 293    | ~40   | -253 (86%)     |
+| **Total**        | 893    | ~120  | **-773 (87%)** |
 
 ### Order of Implementation
 
@@ -253,6 +255,7 @@ src/contracts/entities/
 ```
 
 **Triggers for migration:**
+
 - Adding folders, perspectives as queryable entities
 - contracts/ exceeds ~15 files
 - Team feedback on navigation difficulty

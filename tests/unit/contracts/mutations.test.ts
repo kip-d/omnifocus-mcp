@@ -70,7 +70,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'data',
-        })
+        }),
       );
     });
 
@@ -87,7 +87,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'data.name',
-        })
+        }),
       );
     });
 
@@ -104,7 +104,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'data.name',
-        })
+        }),
       );
     });
 
@@ -121,7 +121,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'data.dueDate',
-        })
+        }),
       );
     });
 
@@ -138,7 +138,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'data.deferDate',
-        })
+        }),
       );
     });
 
@@ -236,7 +236,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'repetitionRule.frequency',
-        })
+        }),
       );
     });
 
@@ -256,7 +256,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'repetitionRule.interval',
-        })
+        }),
       );
     });
 
@@ -280,7 +280,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'repetitionRule.daysOfWeek',
-        })
+        }),
       );
     });
   });
@@ -328,7 +328,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'id',
-        })
+        }),
       );
     });
 
@@ -345,7 +345,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'changes',
-        })
+        }),
       );
     });
 
@@ -363,7 +363,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'changes',
-        })
+        }),
       );
     });
 
@@ -384,7 +384,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'CONFLICTING_FIELDS',
           field: 'changes.tags',
-        })
+        }),
       );
     });
 
@@ -432,7 +432,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'changes.dueDate',
-        })
+        }),
       );
     });
 
@@ -497,7 +497,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'id',
-        })
+        }),
       );
     });
 
@@ -515,7 +515,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           field: 'completionDate',
-        })
+        }),
       );
     });
   });
@@ -544,7 +544,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'id',
-        })
+        }),
       );
     });
   });
@@ -621,7 +621,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'operations',
-        })
+        }),
       );
     });
 
@@ -653,7 +653,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           message: expect.stringContaining('100'),
-        })
+        }),
       );
     });
 
@@ -661,9 +661,7 @@ describe('validateMutation', () => {
       const mutation: BatchMutation = {
         operation: 'batch',
         target: 'task',
-        operations: [
-          { operation: 'create', target: 'task', data: { name: '' } },
-        ],
+        operations: [{ operation: 'create', target: 'task', data: { name: '' } }],
       };
       const result = validateMutation(mutation);
 
@@ -672,7 +670,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'operations[0].data.name',
-        })
+        }),
       );
     });
 
@@ -713,7 +711,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'MISSING_FIELD',
           field: 'ids',
-        })
+        }),
       );
     });
 
@@ -741,7 +739,7 @@ describe('validateMutation', () => {
         expect.objectContaining({
           code: 'INVALID_VALUE',
           message: expect.stringContaining('100'),
-        })
+        }),
       );
     });
   });

@@ -6,11 +6,13 @@
 
 ## Overview
 
-The multi-machine session sync project has been **moved to a separate repository** to keep it independent from the OmniFocus MCP server work.
+The multi-machine session sync project has been **moved to a separate repository** to keep it independent from the
+OmniFocus MCP server work.
 
 **Separate Repository:** `/Users/kip/src/multi-machine-claude-resume`
 
-This is a general-purpose tool for managing work across multiple machines and should not be mixed with OmniFocus MCP-specific code.
+This is a general-purpose tool for managing work across multiple machines and should not be mixed with OmniFocus
+MCP-specific code.
 
 ## Design Decision: Session Checkpoint Purpose (Oct 21, 2025)
 
@@ -32,6 +34,7 @@ The session checkpoint serves a **metadata/context purpose**, NOT as primary sta
    - All actual work state syncs automatically via iCloud
 
 **Recommended workflow:**
+
 ```bash
 save-session "What you were working on"    # Before leaving machine
 # ~15 seconds for iCloud sync
@@ -63,9 +66,11 @@ Syncs via iCloud Drive for automatic cross-machine synchronization.
 
 ## Original Planning Document
 
-See `/Users/kip/src/omnifocus-mcp/docs/plans/2025-10-18-multi-machine-session-sync.md` for the original design exploration and requirements gathering.
+See `/Users/kip/src/omnifocus-mcp/docs/plans/2025-10-18-multi-machine-session-sync.md` for the original design
+exploration and requirements gathering.
 
-This design document is kept here for historical context and shows the design thinking that led to the separate repository approach.
+This design document is kept here for historical context and shows the design thinking that led to the separate
+repository approach.
 
 ## Next Steps
 

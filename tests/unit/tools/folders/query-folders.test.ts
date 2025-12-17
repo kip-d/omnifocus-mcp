@@ -5,7 +5,9 @@ import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation.js';
 
 vi.mock('../../../../src/cache/CacheManager.js', () => ({ CacheManager: vi.fn() }));
 vi.mock('../../../../src/omnifocus/OmniAutomation.js', () => ({ OmniAutomation: vi.fn() }));
-vi.mock('../../../../src/utils/logger.js', () => ({ createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })) }));
+vi.mock('../../../../src/utils/logger.js', () => ({
+  createLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
+}));
 
 describe('FoldersTool (Query Operations)', () => {
   let tool: FoldersTool;
@@ -40,13 +42,12 @@ describe('FoldersTool (Query Operations)', () => {
   });
 
   it('get returns NOT_FOUND when folder id missing', async () => {
-    (tool as any).execJson.mockResolvedValue({ 
-      success: true, 
-      data: { items: [] } // Empty result - no matching folder
+    (tool as any).execJson.mockResolvedValue({
+      success: true,
+      data: { items: [] }, // Empty result - no matching folder
     });
     const res: any = await tool.execute({ operation: 'get', folderId: 'missing' } as any);
     expect(res.success).toBe(false);
     expect(res.error.code).toBe('NOT_FOUND');
   });
 });
-

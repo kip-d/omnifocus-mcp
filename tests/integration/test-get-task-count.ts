@@ -25,7 +25,7 @@ async function testGetTaskCount() {
 
   const proc = spawn('node', [serverPath], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env }
+    env: { ...process.env },
   });
 
   let output = '';
@@ -43,34 +43,34 @@ async function testGetTaskCount() {
     method: 'initialize',
     params: {
       clientInfo: { name: 'test-client', version: '1.0.0' },
-      capabilities: {}
+      capabilities: {},
     },
-    id: 1
+    id: 1,
   };
 
   proc.stdin.write(JSON.stringify(initRequest) + '\n');
 
   // Wait for initialization
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Test get_task_count
   const tests = [
     {
       name: 'Count all tasks',
-      params: {}
+      params: {},
     },
     {
       name: 'Count incomplete tasks',
-      params: { completed: false }
+      params: { completed: false },
     },
     {
       name: 'Count flagged tasks',
-      params: { flagged: true }
+      params: { flagged: true },
     },
     {
       name: 'Count available tasks',
-      params: { available: true }
-    }
+      params: { available: true },
+    },
   ];
 
   for (const test of tests) {
@@ -82,25 +82,25 @@ async function testGetTaskCount() {
       method: 'tools/call',
       params: {
         name: 'get_task_count',
-        arguments: test.params
+        arguments: test.params,
       },
-      id: tests.indexOf(test) + 2
+      id: tests.indexOf(test) + 2,
     };
 
     output = '';
     proc.stdin.write(JSON.stringify(request) + '\n');
 
     // Wait for response
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Parse response
-    const lines = output.split('\n').filter(line => line.trim());
+    const lines = output.split('\n').filter((line) => line.trim());
     const lastLine = lines[lines.length - 1];
-    
+
     if (lastLine) {
       try {
         const response: MCPResponse = JSON.parse(lastLine);
-        
+
         if (response.error) {
           console.log('❌ Error:', response.error.message);
         } else if (response.result?.content) {
@@ -111,10 +111,13 @@ async function testGetTaskCount() {
             console.log('Count:', data.count);
             console.log('Query time:', data.query_time_ms + 'ms');
             if (data.filters_applied) {
-              console.log('Filters applied:', Object.entries(data.filters_applied)
-                .filter(([_, v]) => v !== undefined)
-                .map(([k, v]) => `${k}=${v}`)
-                .join(', '));
+              console.log(
+                'Filters applied:',
+                Object.entries(data.filters_applied)
+                  .filter(([_, v]) => v !== undefined)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(', '),
+              );
             }
           }
         }

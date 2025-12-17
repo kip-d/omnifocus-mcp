@@ -1,23 +1,25 @@
 # Phase 2: Helper Refactoring - Foundation Document
 
-**Created:** 2025-11-07
-**Status:** Phase 2A COMPLETE - Ready for Phase 2B
-**Based on:** Phase 1 consolidation learnings (Tasks 1-11)
-**Previous Phase:** Phase 1 completed (Tasks 5-10), see `2025-11-06-script-helper-consolidation-design.md`
+**Created:** 2025-11-07 **Status:** Phase 2A COMPLETE - Ready for Phase 2B **Based on:** Phase 1 consolidation learnings
+(Tasks 1-11) **Previous Phase:** Phase 1 completed (Tasks 5-10), see `2025-11-06-script-helper-consolidation-design.md`
 **Phase 2A Summary:** See `docs/consolidation/phase2a-summary.md`
 
 ## Executive Summary
 
-Phase 1 consolidation provided empirical evidence that **pure OmniJS bridge scripts dramatically outperform helper-heavy JXA scripts** (13-67x faster). This discovery fundamentally reshapes our helper strategy: helpers are valuable for operations JXA cannot do (tag assignment, repetition rules) but are pure overhead for analytics operations.
+Phase 1 consolidation provided empirical evidence that **pure OmniJS bridge scripts dramatically outperform helper-heavy
+JXA scripts** (13-67x faster). This discovery fundamentally reshapes our helper strategy: helpers are valuable for
+operations JXA cannot do (tag assignment, repetition rules) but are pure overhead for analytics operations.
 
 Phase 2A (Discovery & Inventory) has completed comprehensive analysis of the helper infrastructure, identifying:
+
 - **870KB helper overhead** across 29 scripts (98% can be eliminated)
 - **5 zero-usage functions** (271 LOC, zero risk to delete)
 - **5 duplicate functions** (79 LOC, easy consolidation)
 - **28 scripts ready for conversion** to pure OmniJS v3
 - **2 quick wins** available (3-5 hours, immediate impact)
 
-Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Phase 2C will implement the modular helper architecture and migrate all scripts.
+Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Phase 2C will implement the modular helper
+architecture and migrate all scripts.
 
 ## Phase 1 Results Summary
 
@@ -31,23 +33,25 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 
 ### Consolidation Details
 
-| Script | Approach | Performance Gain | Size Change |
-|--------|----------|------------------|-------------|
-| list-tasks | JXA → OmniJS bridge | 13-22x faster | Replaced |
-| create-task | Merged duplicates | N/A (consolidation) | -180 LOC |
-| productivity-stats | JXA+helpers → Pure bridge | 8-10x faster | -38 LOC (12%) |
-| task-velocity | JXA+helpers → Pure bridge | 67x faster (67.6s→<1s) | -2 LOC |
-| list-tags | JXA+helpers → Pure bridge | 13-67x estimated | -24% original |
+| Script             | Approach                  | Performance Gain       | Size Change   |
+| ------------------ | ------------------------- | ---------------------- | ------------- |
+| list-tasks         | JXA → OmniJS bridge       | 13-22x faster          | Replaced      |
+| create-task        | Merged duplicates         | N/A (consolidation)    | -180 LOC      |
+| productivity-stats | JXA+helpers → Pure bridge | 8-10x faster           | -38 LOC (12%) |
+| task-velocity      | JXA+helpers → Pure bridge | 67x faster (67.6s→<1s) | -2 LOC        |
+| list-tags          | JXA+helpers → Pure bridge | 13-67x estimated       | -24% original |
 
 ### Key Discovery: Helper Overhead is Real
 
 **Before Consolidation:**
+
 - 5 scripts importing `getUnifiedHelpers()` (~30KB each)
 - Total helper overhead: 150KB+ across scripts
 - safeGet() wrappers adding 50% overhead vs direct try/catch
 - JXA iteration patterns 1000x slower than OmniJS bridge
 
 **After Consolidation:**
+
 - 0 analytics scripts using helpers (pure OmniJS bridge)
 - 150KB eliminated
 - Performance: 13-67x improvement
@@ -58,11 +62,13 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 ### 1. Pure OmniJS Bridge Dominates for Analytics
 
 **Evidence:**
+
 - **productivity-stats-v3:** 283 LOC, zero helpers, single bridge call → 8-10x faster
 - **task-velocity-v3:** 156 LOC, pure bridge → 67x faster (67.6s → <1s)
 - **list-tags-v3:** 293 LOC, pure bridge → 13-67x estimated
 
 **Why Bridge Wins:**
+
 - Property access: ~0.001ms per item (OmniJS) vs ~1-2ms per item (JXA)
 - No helper parsing overhead (30KB eliminated per script)
 - Single execution context (all work in one call)
@@ -73,12 +79,14 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 ### 2. Helper Value is Context-Dependent
 
 **Helpers Add Value When:**
+
 - ✅ **Bridge operations required:** Tag assignment, repetition rules (JXA can't do these)
 - ✅ **Shared validation:** Type checking, project lookup across many scripts
 - ✅ **CRUD operations:** Single-item operations where convenience > performance
 - ✅ **Complex transformations:** Date parsing, error formatting used everywhere
 
 **Helpers Are Overhead When:**
+
 - ❌ **Analytics scripts:** Pure bridge is faster, helpers add nothing
 - ❌ **Bulk operations:** safeGet() wrappers 50% slower than direct try/catch
 - ❌ **Cargo-cult imports:** Scripts import helpers "just in case" but don't use most functions
@@ -95,7 +103,8 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 3. **Both Maintained:** During transition for comparison
 4. **Never Consolidated:** Until Phase 1 forced cleanup
 
-**Lesson:** Versioned scripts serve a purpose (testing, comparison, risk mitigation), but need explicit consolidation phase once optimization is validated.
+**Lesson:** Versioned scripts serve a purpose (testing, comparison, risk mitigation), but need explicit consolidation
+phase once optimization is validated.
 
 ### 4. Response Format Standardization
 
@@ -112,6 +121,7 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 ```
 
 **Benefits:**
+
 - Easy version detection (which script executed?)
 - Built-in performance monitoring
 - Consistent structure (easier testing)
@@ -123,7 +133,8 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 
 **Found During Phase 1:**
 
-1. **Duplicate error handling:** create-task-with-bridge.ts had inline versions of `formatError`, `validateProject` instead of using shared helpers
+1. **Duplicate error handling:** create-task-with-bridge.ts had inline versions of `formatError`, `validateProject`
+   instead of using shared helpers
 2. **Multiple tag bridge implementations:** Need to search for inline variants beyond minimal-tag-bridge.ts
 3. **safeGet() inconsistency:** Some scripts use safeGet(), others direct try/catch (50% performance difference)
 
@@ -136,6 +147,7 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 **Location:** `src/omnifocus/scripts/shared/`
 
 **Known Modules:**
+
 1. `helpers.ts` - 30KB monolith, 50+ functions
 2. `minimal-tag-bridge.ts` - Tag assignment bridge (required)
 3. `bridge-helpers.ts` - Bridge operation templates
@@ -152,7 +164,9 @@ Phase 2B will focus on Design & Architecture based on Phase 2A findings, then Ph
 Based on Phase 1 learnings, categorize helpers by:
 
 #### Category A: Required (Bridge Operations)
+
 **Characteristics:**
+
 - JXA fundamentally cannot do these operations
 - Bridge to OmniJS is mandatory
 - Examples: Tag assignment, repetition rules, task movement
@@ -160,7 +174,9 @@ Based on Phase 1 learnings, categorize helpers by:
 **Action:** Keep, test thoroughly, document as required
 
 #### Category B: High-Value Shared Logic
+
 **Characteristics:**
+
 - Used across multiple scripts (3+ usages)
 - Reduces duplication significantly
 - Maintainability benefit clear
@@ -169,7 +185,9 @@ Based on Phase 1 learnings, categorize helpers by:
 **Action:** Keep, refactor into modular structure
 
 #### Category C: Performance Overhead
+
 **Characteristics:**
+
 - Convenience wrappers that hurt performance
 - Used in hot paths (iteration, bulk operations)
 - Examples: safeGet(), JXA iteration helpers
@@ -177,7 +195,9 @@ Based on Phase 1 learnings, categorize helpers by:
 **Action:** Eliminate from hot paths, document when safe to use
 
 #### Category D: Dead Code
+
 **Characteristics:**
+
 - Unused or single-use functions
 - No benefit from being "shared"
 - Examples: TBD (need inventory)
@@ -185,7 +205,9 @@ Based on Phase 1 learnings, categorize helpers by:
 **Action:** Delete, move inline to single caller if needed
 
 #### Category E: Consolidation Candidates
+
 **Characteristics:**
+
 - Duplicate implementations across files
 - Near-duplicates with slight variations
 - Examples: Error formatters, project validation
@@ -194,20 +216,19 @@ Based on Phase 1 learnings, categorize helpers by:
 
 ### Usage Patterns from Phase 1
 
-| Helper Category | Used Before | Used After | Change |
-|-----------------|-------------|------------|--------|
-| getUnifiedHelpers() | 5 scripts | 0 scripts | -100% (analytics) |
-| minimal-tag-bridge | 1 script (create-task) | 1 script | 0% (still required) |
-| safeGet() wrappers | Multiple | 0 in v3 scripts | Eliminated from hot paths |
-| Direct try/catch | Some scripts | All v3 scripts | Standard in performance code |
+| Helper Category     | Used Before            | Used After      | Change                       |
+| ------------------- | ---------------------- | --------------- | ---------------------------- |
+| getUnifiedHelpers() | 5 scripts              | 0 scripts       | -100% (analytics)            |
+| minimal-tag-bridge  | 1 script (create-task) | 1 script        | 0% (still required)          |
+| safeGet() wrappers  | Multiple               | 0 in v3 scripts | Eliminated from hot paths    |
+| Direct try/catch    | Some scripts           | All v3 scripts  | Standard in performance code |
 
 **Pattern:** Analytics scripts eliminated ALL helpers. CRUD scripts still need bridge helpers.
 
 ## Phase 2A: Discovery & Inventory - COMPLETED ✅
 
-**Status:** COMPLETE (24 hours)
-**Deliverables:** All documents created, analysis comprehensive
-**Summary Document:** `docs/consolidation/phase2a-summary.md`
+**Status:** COMPLETE (24 hours) **Deliverables:** All documents created, analysis comprehensive **Summary Document:**
+`docs/consolidation/phase2a-summary.md`
 
 ### Completed Tasks
 
@@ -243,6 +264,7 @@ Based on Phase 1 learnings, categorize helpers by:
 ### Key Findings from Phase 2A
 
 **Quantitative:**
+
 - 52 functions inventoried
 - 48 scripts analyzed
 - 5 zero-usage functions (271 LOC)
@@ -251,6 +273,7 @@ Based on Phase 1 learnings, categorize helpers by:
 - 98% can be eliminated (545KB reduction)
 
 **Qualitative:**
+
 - Only 2 scripts need bridge operations
 - 28 scripts ready for pure OmniJS v3 conversion
 - safeGet() most-used but causes 50% penalty
@@ -333,6 +356,7 @@ src/omnifocus/scripts/shared/
 4. **Delete old helpers last:** Once all scripts migrated
 
 **Deliverables:**
+
 - Architecture document with rationale
 - Module structure with dependencies
 - Import patterns and examples
@@ -371,6 +395,7 @@ src/omnifocus/scripts/shared/
    - Final integration test run
 
 **Success Criteria:**
+
 - New helper modules implemented
 - Test coverage >80% for all modules
 - All scripts migrated (except pure bridge scripts)
@@ -414,6 +439,7 @@ src/omnifocus/scripts/shared/
 ### Current State Analysis Needed
 
 **Questions to Answer:**
+
 1. How many total functions in `helpers.ts`?
 2. Which functions are used by 0, 1, 2, 3+ scripts?
 3. Which functions have duplicates elsewhere?
@@ -421,6 +447,7 @@ src/omnifocus/scripts/shared/
 5. Which functions are required (bridge operations)?
 
 **Approach:**
+
 ```bash
 # Find all helper imports
 grep -r "from.*shared/" src/omnifocus/scripts/ --include="*.ts"
@@ -436,14 +463,14 @@ done
 
 **Initial Categorization** (from Phase 1 observations):
 
-| Helper | Category | Used By | Notes |
-|--------|----------|---------|-------|
-| getUnifiedHelpers() | C (Overhead) | 0 after Phase 1 | 30KB monolith eliminated |
-| minimal-tag-bridge | A (Required) | create-task.ts | Tag assignment (JXA can't do) |
-| safeGet() | C (Overhead) | 0 in v3 scripts | 50% slower than direct try/catch |
-| formatError | B (High-Value) | Multiple | Used across many scripts |
-| validateProject | E (Consolidation) | Multiple + inline | Found duplicates |
-| ... | TBD | TBD | Need complete inventory |
+| Helper              | Category          | Used By           | Notes                            |
+| ------------------- | ----------------- | ----------------- | -------------------------------- |
+| getUnifiedHelpers() | C (Overhead)      | 0 after Phase 1   | 30KB monolith eliminated         |
+| minimal-tag-bridge  | A (Required)      | create-task.ts    | Tag assignment (JXA can't do)    |
+| safeGet()           | C (Overhead)      | 0 in v3 scripts   | 50% slower than direct try/catch |
+| formatError         | B (High-Value)    | Multiple          | Used across many scripts         |
+| validateProject     | E (Consolidation) | Multiple + inline | Found duplicates                 |
+| ...                 | TBD               | TBD               | Need complete inventory          |
 
 ## Success Criteria
 
@@ -504,20 +531,19 @@ Phase 2 will be successful when:
 
 ## Timeline Estimate
 
-**Phase 2A: Discovery & Inventory** - 4-6 hours
-**Phase 2B: Architecture Design** - 3-4 hours
-**Phase 2C: Implementation & Migration** - 12-16 hours
-**Phase 2D: Documentation & Patterns** - 2-3 hours
+**Phase 2A: Discovery & Inventory** - 4-6 hours **Phase 2B: Architecture Design** - 3-4 hours **Phase 2C: Implementation
+& Migration** - 12-16 hours **Phase 2D: Documentation & Patterns** - 2-3 hours
 
 **Total: 21-29 hours of focused work**
 
-*Note: This is based on Phase 1 learnings. Empirical iteration means we'll adjust as we learn more in Phase 2A.*
+_Note: This is based on Phase 1 learnings. Empirical iteration means we'll adjust as we learn more in Phase 2A._
 
 ## Risks & Mitigations
 
 ### Risk: Breaking changes during migration
 
 **Mitigation:**
+
 - Build new helpers alongside old (no breaking changes)
 - Migrate scripts one at a time
 - Run integration tests after each migration
@@ -526,6 +552,7 @@ Phase 2 will be successful when:
 ### Risk: Helper consolidation introduces bugs
 
 **Mitigation:**
+
 - Side-by-side validation (old vs new helpers)
 - Comprehensive test coverage before migration
 - Test each helper module independently
@@ -534,6 +561,7 @@ Phase 2 will be successful when:
 ### Risk: Performance regressions from new helper structure
 
 **Mitigation:**
+
 - Measure helper overhead before refactoring (baseline)
 - Benchmark each helper module
 - Compare performance before/after migration
@@ -542,6 +570,7 @@ Phase 2 will be successful when:
 ### Risk: Incomplete inventory leads to missed duplicates
 
 **Mitigation:**
+
 - Comprehensive search using multiple strategies
 - Manual review of all helper files
 - Cross-reference with grep results
@@ -550,6 +579,7 @@ Phase 2 will be successful when:
 ### Risk: Phase 2 scope creep
 
 **Mitigation:**
+
 - Clear success criteria defined upfront
 - Focus on high-priority recommendations (modular structure)
 - Defer low-priority items (bridge consolidation)

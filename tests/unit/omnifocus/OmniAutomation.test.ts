@@ -48,10 +48,10 @@ describe('OmniAutomation', () => {
     it('should respect environment variables', () => {
       process.env.OMNIFOCUS_MAX_SCRIPT_SIZE = '200000';
       process.env.OMNIFOCUS_SCRIPT_TIMEOUT = '180000';
-      
+
       const instance = new OmniAutomation();
       expect(instance).toBeDefined();
-      
+
       // Clean up
       delete process.env.OMNIFOCUS_MAX_SCRIPT_SIZE;
       delete process.env.OMNIFOCUS_SCRIPT_TIMEOUT;
@@ -62,9 +62,7 @@ describe('OmniAutomation', () => {
     it('should reject scripts that are too large', async () => {
       const hugeScript = 'x'.repeat(100001);
 
-      await expect(omniAutomation.execute(hugeScript)).rejects.toThrow(
-        /Script too large: \d+KB \(limit: \d+KB\)/
-      );
+      await expect(omniAutomation.execute(hugeScript)).rejects.toThrow(/Script too large: \d+KB \(limit: \d+KB\)/);
     });
 
     it('should execute a simple script successfully', async () => {
@@ -75,11 +73,11 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate stdout data
       mockProcess.stdout.emit('data', JSON.stringify(expectedResult));
-      
+
       // Simulate process close
       mockProcess.emit('close', 0);
 
@@ -93,11 +91,11 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate stderr data
       mockProcess.stderr.emit('data', 'Error: Test error');
-      
+
       // Simulate process close with error code
       mockProcess.emit('close', 1);
 
@@ -110,11 +108,11 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate empty stdout
       mockProcess.stdout.emit('data', '');
-      
+
       // Simulate process close
       mockProcess.emit('close', 0);
 
@@ -128,11 +126,11 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate non-JSON output
       mockProcess.stdout.emit('data', 'simple string');
-      
+
       // Simulate process close
       mockProcess.emit('close', 0);
 
@@ -146,11 +144,11 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate malformed JSON output
       mockProcess.stdout.emit('data', '{ broken: json');
-      
+
       // Simulate process close
       mockProcess.emit('close', 0);
 
@@ -163,7 +161,7 @@ describe('OmniAutomation', () => {
       const executePromise = omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Simulate process error
       mockProcess.emit('error', new Error('Spawn failed'));
@@ -177,15 +175,11 @@ describe('OmniAutomation', () => {
       omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Check that the script was wrapped
-      expect(mockProcess.stdin.write).toHaveBeenCalledWith(
-        expect.stringContaining('(() => {')
-      );
-      expect(mockProcess.stdin.write).toHaveBeenCalledWith(
-        expect.stringContaining("Application('OmniFocus')")
-      );
+      expect(mockProcess.stdin.write).toHaveBeenCalledWith(expect.stringContaining('(() => {'));
+      expect(mockProcess.stdin.write).toHaveBeenCalledWith(expect.stringContaining("Application('OmniFocus')"));
     });
 
     it('should not double-wrap scripts with existing IIFE and app init', async () => {
@@ -197,7 +191,7 @@ describe('OmniAutomation', () => {
       omniAutomation.execute(script);
 
       // Wait for spawn to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Check that the script was NOT wrapped again
       expect(mockProcess.stdin.write).toHaveBeenCalledWith(script);
@@ -333,8 +327,8 @@ describe('OmniAutomation', () => {
 
       // The timeout is handled by spawn's timeout option
       // which should kill the process
-      await new Promise(resolve => setImmediate(resolve));
-      
+      await new Promise((resolve) => setImmediate(resolve));
+
       // Simulate timeout by closing with non-zero code
       mockProcess.stderr.emit('data', 'Script timeout');
       mockProcess.emit('close', 143); // SIGTERM exit code

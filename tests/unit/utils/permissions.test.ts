@@ -13,7 +13,7 @@ vi.mock('../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 function resolveWith(error: any) {
@@ -51,7 +51,7 @@ describe('PermissionChecker', () => {
   });
 
   it('maps -600 / not running to helpful message', async () => {
-    resolveWith(new Error('Application OmniFocus isn\'t running (-600)'));
+    resolveWith(new Error("Application OmniFocus isn't running (-600)"));
     const res = await PermissionChecker.getInstance().checkPermissions();
     expect(res.hasPermission).toBe(false);
     expect(res.error).toMatch(/not running/i);
@@ -75,4 +75,3 @@ describe('PermissionChecker', () => {
     expect(execFileMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
   });
 });
-

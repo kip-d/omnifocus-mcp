@@ -1,8 +1,7 @@
 # OmniFocus MCP Lightweight Test Suite
 
-**Purpose:** Quick confidence check for OmniFocus MCP v3.0+ unified API
-**Time:** ~5-10 minutes unattended
-**When to use:** After changes, before releases, periodic validation
+**Purpose:** Quick confidence check for OmniFocus MCP v3.0+ unified API **Time:** ~5-10 minutes unattended **When to
+use:** After changes, before releases, periodic validation
 
 ---
 
@@ -11,11 +10,13 @@
 **CRITICAL:** Follow these output rules strictly:
 
 ✅ **DO OUTPUT:**
+
 - One-line test result: `✅ Test N: description` or `❌ Test N: description - ERROR`
 - Brief summary (e.g., "3 tasks found", "task created")
 - Failures: Full details (tool call, response, analysis)
 
 ❌ **DO NOT OUTPUT:**
+
 - Explanatory commentary between tests
 - Full JSON for successful tests
 - Field-by-field validation details
@@ -30,11 +31,12 @@
 **Before manual testing, verify automated tests pass:**
 
 1. **Smoke Tests** (21 seconds):
+
    ```bash
    npm run test:smoke
    ```
-   ✅ If passing: Proceed to manual tests below
-   ❌ If failing: STOP - Fix automated tests first
+
+   ✅ If passing: Proceed to manual tests below ❌ If failing: STOP - Fix automated tests first
 
 2. **Optional: Full Integration** (6 minutes):
    ```bash
@@ -49,6 +51,7 @@
 ## Manual Tests: Real-World Scenarios
 
 **Instructions:**
+
 1. Execute each test sequentially
 2. Use test tag: `mcp-test-session-[timestamp]-[random]` (e.g., `mcp-test-session-1764126776844-abc123`)
    - **IMPORTANT:** Use millisecond timestamp (`Date.now()`) + random suffix to avoid collisions
@@ -82,6 +85,7 @@
 ### Test 3: Create Task with Tags
 
 **ACTION:**
+
 ```json
 omnifocus_write({
   mutation: {
@@ -108,6 +112,7 @@ omnifocus_write({
 ### Test 4: Verify Task Created (By ID)
 
 **ACTION:**
+
 ```json
 omnifocus_read({
   query: {
@@ -121,19 +126,22 @@ omnifocus_read({
 **EXPECT:** Returns exactly the task created in Test 3, with correct tags
 
 **VERIFICATION:**
+
 1. Response contains task with matching ID
 2. Tags array includes your test tag
 3. Name matches "Lightweight Test Task"
 
 **REPORT:** `✅ Test 4: Verified task [taskId] has correct tags` or `❌ Test 4: Task not found or missing tags`
 
-**NOTE:** This test verifies by task ID (reliable) rather than querying all tasks with tag (unreliable if pre-existing tasks have test tags)
+**NOTE:** This test verifies by task ID (reliable) rather than querying all tasks with tag (unreliable if pre-existing
+tasks have test tags)
 
 ---
 
 ### Test 5: Update Task (Add Flag)
 
 **ACTION:**
+
 ```json
 omnifocus_write({
   mutation: {
@@ -154,6 +162,7 @@ omnifocus_write({
 ### Test 6: Create Project with Task
 
 **ACTION:**
+
 ```json
 omnifocus_write({
   mutation: {
@@ -179,6 +188,7 @@ omnifocus_write({
 ### Test 7: Productivity Stats
 
 **ACTION:**
+
 ```json
 omnifocus_analyze({
   analysis: {
@@ -202,6 +212,7 @@ omnifocus_analyze({
 ### Test 8: Complete Task
 
 **ACTION:**
+
 ```json
 omnifocus_write({
   mutation: {
@@ -223,6 +234,7 @@ omnifocus_write({
 **ACTION:** Delete task and project created in this test run
 
 9a. Delete task:
+
 ```json
 omnifocus_write({
   mutation: {
@@ -234,6 +246,7 @@ omnifocus_write({
 ```
 
 9b. Delete project:
+
 ```json
 omnifocus_write({
   mutation: {
@@ -255,6 +268,7 @@ omnifocus_write({
 **ACTION:** Query for the specific task and project IDs to confirm deletion
 
 10a. Verify task deleted:
+
 ```json
 omnifocus_read({
   query: {
@@ -265,6 +279,7 @@ omnifocus_read({
 ```
 
 10b. Verify project deleted:
+
 ```json
 omnifocus_read({
   query: {
@@ -278,7 +293,8 @@ omnifocus_read({
 
 **REPORT:** `✅ Test 10: Verified cleanup - task and project deleted` or `⚠️ Test 10: Item still exists after deletion`
 
-**NOTE:** Verifying by ID is more reliable than querying by tag, which may return pre-existing items with accumulated test tags from previous sessions
+**NOTE:** Verifying by ID is more reliable than querying by tag, which may return pre-existing items with accumulated
+test tags from previous sessions
 
 ---
 
@@ -329,12 +345,12 @@ Status: ✅ ALL PASS or ❌ FAILURES DETECTED
 
 ## Comparison: Manual vs Automated Testing
 
-| Testing Method | Time | Coverage | When to Use |
-|----------------|------|----------|-------------|
-| **Smoke Tests** | 21s | Critical path | Pre-commit, quick sanity |
-| **Lightweight Manual** | 5-10min | Real-world scenarios | Before releases |
-| **Integration Tests** | 6min | Comprehensive | CI, major changes |
-| **Full Manual (TESTING_PROMPT.md)** | 15-20min | Detailed validation | New features, debugging |
+| Testing Method                      | Time     | Coverage             | When to Use              |
+| ----------------------------------- | -------- | -------------------- | ------------------------ |
+| **Smoke Tests**                     | 21s      | Critical path        | Pre-commit, quick sanity |
+| **Lightweight Manual**              | 5-10min  | Real-world scenarios | Before releases          |
+| **Integration Tests**               | 6min     | Comprehensive        | CI, major changes        |
+| **Full Manual (TESTING_PROMPT.md)** | 15-20min | Detailed validation  | New features, debugging  |
 
 ---
 

@@ -44,7 +44,8 @@ interface TaskVelocityV3Data {
 
 export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
   name = 'task_velocity';
-  description = 'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
+  description =
+    'Analyze task completion velocity and predict workload capacity. Returns key velocity metrics first, then detailed trends.';
   schema = TaskVelocitySchemaV2;
   meta = {
     // Phase 1: Essential metadata
@@ -72,11 +73,7 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
     const timer = new OperationTimerV2();
 
     try {
-      const {
-        days = 7,
-        groupBy = 'day',
-        includeWeekends = true,
-      } = args;
+      const { days = 7, groupBy = 'day', includeWeekends = true } = args;
 
       // Create cache key
       const cacheKey = `velocity_v2_${days}_${groupBy}_${includeWeekends}`;
@@ -112,7 +109,14 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
       const result = await this.execJson<TaskVelocityV3Data>(script);
 
       if (isScriptError(result)) {
-        return createErrorResponseV2('task_velocity', 'VELOCITY_ERROR', result.error || 'Script execution failed', undefined, result.details, timer.toMetadata());
+        return createErrorResponseV2(
+          'task_velocity',
+          'VELOCITY_ERROR',
+          result.error || 'Script execution failed',
+          undefined,
+          result.details,
+          timer.toMetadata(),
+        );
       }
 
       // V3 response structure - unwrap nested data
@@ -155,19 +159,13 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
       // Generate key findings
       const keyFindings = this.extractKeyFindings(responseData);
 
-      return createAnalyticsResponseV2(
-        'task_velocity',
-        responseData,
-        'Task Velocity Analysis',
-        keyFindings,
-        {
-          from_cache: false,
-          days,
-          groupBy,
-          includeWeekends,
-          ...timer.toMetadata(),
-        },
-      );
+      return createAnalyticsResponseV2('task_velocity', responseData, 'Task Velocity Analysis', keyFindings, {
+        from_cache: false,
+        days,
+        groupBy,
+        includeWeekends,
+        ...timer.toMetadata(),
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return createErrorResponseV2(
@@ -180,7 +178,6 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
       );
     }
   }
-
 
   private extractKeyFindings(data: {
     velocity?: {
@@ -234,12 +231,11 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
 
     // Add day of week pattern
     if (data.patterns?.byDayOfWeek) {
-      const days = Object.entries(data.patterns.byDayOfWeek)
-        .sort((a, b) => {
-          const aVal = typeof a[1] === 'number' ? a[1] : 0;
-          const bVal = typeof b[1] === 'number' ? b[1] : 0;
-          return bVal - aVal;
-        });
+      const days = Object.entries(data.patterns.byDayOfWeek).sort((a, b) => {
+        const aVal = typeof a[1] === 'number' ? a[1] : 0;
+        const bVal = typeof b[1] === 'number' ? b[1] : 0;
+        return bVal - aVal;
+      });
       if (days.length > 0) {
         const dayCount = typeof days[0][1] === 'number' ? days[0][1] : 0;
         if (dayCount > 0) {

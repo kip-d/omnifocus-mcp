@@ -74,7 +74,7 @@ const testScript = `(() => {
 console.log('Testing different counting methods...\n');
 
 const proc = spawn('osascript', ['-l', 'JavaScript'], {
-  timeout: 30000
+  timeout: 30000,
 });
 
 let stdout = '';

@@ -89,10 +89,12 @@ export function categorizeError(
   const errorString = errorMessage.toLowerCase();
 
   // Permission denied errors
-  if (errorString.includes('-1743') ||
-      errorString.includes('not allowed') ||
-      errorString.includes('authorization') ||
-      errorString.includes('permission denied')) {
+  if (
+    errorString.includes('-1743') ||
+    errorString.includes('not allowed') ||
+    errorString.includes('authorization') ||
+    errorString.includes('permission denied')
+  ) {
     return createCategorizedError(
       ScriptErrorType.PERMISSION_DENIED,
       `Permission denied for ${operation}`,
@@ -111,9 +113,11 @@ export function categorizeError(
   }
 
   // OmniFocus not running errors
-  if (errorString.includes('not running') ||
-      errorString.includes("can't find process") ||
-      errorString.includes('application isn\'t running')) {
+  if (
+    errorString.includes('not running') ||
+    errorString.includes("can't find process") ||
+    errorString.includes("application isn't running")
+  ) {
     return createCategorizedError(
       ScriptErrorType.OMNIFOCUS_NOT_RUNNING,
       `Cannot ${operation} - OmniFocus is not running`,
@@ -123,16 +127,18 @@ export function categorizeError(
         'Close any blocking dialogs or modal windows',
         'Try your request again',
       ],
-      'Launch OmniFocus and ensure it\'s fully loaded',
+      "Launch OmniFocus and ensure it's fully loaded",
       context,
       error,
     );
   }
 
   // Connection timeout errors (must come before script timeout to avoid misclassification)
-  if (errorString.includes('connection timeout') ||
-      errorString.includes('connection test failed') ||
-      (context?.consecutiveFailures && Number(context.consecutiveFailures) >= 3)) {
+  if (
+    errorString.includes('connection timeout') ||
+    errorString.includes('connection test failed') ||
+    (context?.consecutiveFailures && Number(context.consecutiveFailures) >= 3)
+  ) {
     return createCategorizedError(
       ScriptErrorType.CONNECTION_TIMEOUT,
       `Connection timeout during ${operation}`,
@@ -150,9 +156,11 @@ export function categorizeError(
   }
 
   // Script timeout errors
-  if (errorString.includes('timeout') ||
-      errorString.includes('timed out') ||
-      errorString.includes('execution took too long')) {
+  if (
+    errorString.includes('timeout') ||
+    errorString.includes('timed out') ||
+    errorString.includes('execution took too long')
+  ) {
     return createCategorizedError(
       ScriptErrorType.SCRIPT_TIMEOUT,
       `${operation} operation timed out`,
@@ -170,9 +178,11 @@ export function categorizeError(
   }
 
   // Script too large errors
-  if (errorString.includes('script too large') ||
-      errorString.includes('argument list too long') ||
-      errorString.includes('script size')) {
+  if (
+    errorString.includes('script too large') ||
+    errorString.includes('argument list too long') ||
+    errorString.includes('script size')
+  ) {
     return createCategorizedError(
       ScriptErrorType.SCRIPT_TOO_LARGE,
       `Script size exceeded limits for ${operation}`,
@@ -189,10 +199,12 @@ export function categorizeError(
   }
 
   // Bridge failure errors (evaluateJavascript issues)
-  if (errorString.includes('evaluatejavascript') ||
-      errorString.includes('bridge') ||
-      errorString.includes('omniJs') ||
-      (context?.helper === 'bridge' && errorString.includes('failed'))) {
+  if (
+    errorString.includes('evaluatejavascript') ||
+    errorString.includes('bridge') ||
+    errorString.includes('omniJs') ||
+    (context?.helper === 'bridge' && errorString.includes('failed'))
+  ) {
     return createCategorizedError(
       ScriptErrorType.BRIDGE_FAILURE,
       `JavaScript bridge failure during ${operation}`,
@@ -210,10 +222,12 @@ export function categorizeError(
   }
 
   // Invalid ID errors
-  if (errorString.includes('invalid id') ||
-      errorString.includes('not found') ||
-      errorString.includes('no such') ||
-      (errorString.includes('null') && errorString.includes('id'))) {
+  if (
+    errorString.includes('invalid id') ||
+    errorString.includes('not found') ||
+    errorString.includes('no such') ||
+    (errorString.includes('null') && errorString.includes('id'))
+  ) {
     return createCategorizedError(
       ScriptErrorType.INVALID_ID,
       `Invalid or missing ID for ${operation}`,
@@ -230,9 +244,11 @@ export function categorizeError(
   }
 
   // Null result errors
-  if (errorString.includes('null_result') ||
-      errorString.includes('returned null') ||
-      errorString.includes('undefined result')) {
+  if (
+    errorString.includes('null_result') ||
+    errorString.includes('returned null') ||
+    errorString.includes('undefined result')
+  ) {
     return createCategorizedError(
       ScriptErrorType.NULL_RESULT,
       `No data returned from ${operation}`,
@@ -266,11 +282,13 @@ export function categorizeError(
   }
 
   // Validation errors (from Zod or parameter validation) - be more specific
-  if (errorString.includes('validation failed') ||
-      errorString.includes('invalid parameter') ||
-      errorString.includes('required field') ||
-      errorString.includes('parameter validation') ||
-      (errorString.includes('expected') && (errorString.includes('but got') || errorString.includes('received')))) {
+  if (
+    errorString.includes('validation failed') ||
+    errorString.includes('invalid parameter') ||
+    errorString.includes('required field') ||
+    errorString.includes('parameter validation') ||
+    (errorString.includes('expected') && (errorString.includes('but got') || errorString.includes('received')))
+  ) {
     return createCategorizedError(
       ScriptErrorType.VALIDATION_ERROR,
       `Parameter validation failed for ${operation}`,
@@ -308,9 +326,7 @@ export function categorizeError(
       'Verify your parameters are correct',
       'If the issue persists, restart OmniFocus',
     ],
-    [
-      'https://docs.omnifocus.com/troubleshooting',
-    ],
+    ['https://docs.omnifocus.com/troubleshooting'],
     'support@omnifocus.com',
     {
       operation,
@@ -332,7 +348,7 @@ export function getErrorMessage(categorizedError: CategorizedScriptError): strin
 
   if (categorizedError.recovery && categorizedError.recovery.length > 0) {
     parts.push('', 'How to resolve:');
-    parts.push(...categorizedError.recovery.map(step => `  • ${step}`));
+    parts.push(...categorizedError.recovery.map((step) => `  • ${step}`));
   }
 
   return parts.join('\n');

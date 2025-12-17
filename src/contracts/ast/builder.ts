@@ -72,29 +72,15 @@ export function buildAST(filter: TaskFilter): FilterNode {
   }
 
   // --- Due date filters ---
-  const dueDateConditions = buildDateConditions(
-    'task.dueDate',
-    filter.dueAfter,
-    filter.dueBefore,
-  );
+  const dueDateConditions = buildDateConditions('task.dueDate', filter.dueAfter, filter.dueBefore);
   if (dueDateConditions.length > 0) {
-    conditions.push(and(
-      exists('task.dueDate', true),
-      ...dueDateConditions,
-    ));
+    conditions.push(and(exists('task.dueDate', true), ...dueDateConditions));
   }
 
   // --- Defer date filters ---
-  const deferDateConditions = buildDateConditions(
-    'task.deferDate',
-    filter.deferAfter,
-    filter.deferBefore,
-  );
+  const deferDateConditions = buildDateConditions('task.deferDate', filter.deferAfter, filter.deferBefore);
   if (deferDateConditions.length > 0) {
-    conditions.push(and(
-      exists('task.deferDate', true),
-      ...deferDateConditions,
-    ));
+    conditions.push(and(exists('task.deferDate', true), ...deferDateConditions));
   }
 
   // --- Project filter ---
@@ -120,10 +106,7 @@ export function buildAST(filter: TaskFilter): FilterNode {
 // HELPER FUNCTIONS
 // =============================================================================
 
-function buildTagsNode(
-  tags: string[],
-  operator: 'AND' | 'OR' | 'NOT_IN',
-): FilterNode {
+function buildTagsNode(tags: string[], operator: 'AND' | 'OR' | 'NOT_IN'): FilterNode {
   switch (operator) {
     case 'OR':
       return comparison('taskTags', 'some', tags);
@@ -136,11 +119,7 @@ function buildTagsNode(
   }
 }
 
-function buildDateConditions(
-  field: string,
-  after?: string,
-  before?: string,
-): ComparisonNode[] {
+function buildDateConditions(field: string, after?: string, before?: string): ComparisonNode[] {
   const conditions: ComparisonNode[] = [];
 
   if (after !== undefined) {
@@ -158,11 +137,7 @@ function buildDateConditions(
 // NODE FACTORY FUNCTIONS
 // =============================================================================
 
-function comparison(
-  field: string,
-  operator: ComparisonNode['operator'],
-  value: unknown,
-): ComparisonNode {
+function comparison(field: string, operator: ComparisonNode['operator'], value: unknown): ComparisonNode {
   return { type: 'comparison', field, operator, value };
 }
 

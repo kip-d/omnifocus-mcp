@@ -44,7 +44,7 @@ describe('validateFilterAST', () => {
     it('returns error for unknown field', () => {
       const ast: FilterNode = {
         type: 'comparison',
-        field: 'task.complted',  // Typo!
+        field: 'task.complted', // Typo!
         operator: '==',
         value: false,
       };
@@ -61,13 +61,13 @@ describe('validateFilterAST', () => {
         type: 'and',
         children: [
           { type: 'comparison', field: 'task.completed', operator: '==', value: false },
-          { type: 'comparison', field: 'task.tgas', operator: '==', value: true },  // Typo!
+          { type: 'comparison', field: 'task.tgas', operator: '==', value: true }, // Typo!
         ],
       };
       const result = validateFilterAST(ast);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.code === 'UNKNOWN_FIELD')).toBe(true);
+      expect(result.errors.some((e) => e.code === 'UNKNOWN_FIELD')).toBe(true);
     });
   });
 
@@ -83,7 +83,7 @@ describe('validateFilterAST', () => {
       const result = validateFilterAST(ast);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.code === 'CONTRADICTION')).toBe(true);
+      expect(result.errors.some((e) => e.code === 'CONTRADICTION')).toBe(true);
     });
   });
 
@@ -99,7 +99,7 @@ describe('validateFilterAST', () => {
       const result = validateFilterAST(ast);
 
       // Tautology is a warning, not an error (filter will work, just always matches)
-      expect(result.warnings.some(w => w.code === 'TAUTOLOGY')).toBe(true);
+      expect(result.warnings.some((w) => w.code === 'TAUTOLOGY')).toBe(true);
     });
   });
 
@@ -111,7 +111,7 @@ describe('validateFilterAST', () => {
       };
       const result = validateFilterAST(ast);
 
-      expect(result.warnings.some(w => w.code === 'EMPTY_NODE')).toBe(true);
+      expect(result.warnings.some((w) => w.code === 'EMPTY_NODE')).toBe(true);
     });
 
     it('returns warning for empty OR node', () => {
@@ -121,7 +121,7 @@ describe('validateFilterAST', () => {
       };
       const result = validateFilterAST(ast);
 
-      expect(result.warnings.some(w => w.code === 'EMPTY_NODE')).toBe(true);
+      expect(result.warnings.some((w) => w.code === 'EMPTY_NODE')).toBe(true);
     });
   });
 
@@ -131,12 +131,12 @@ describe('validateFilterAST', () => {
         type: 'comparison',
         field: 'task.completed',
         operator: '==',
-        value: 'yes',  // Should be boolean
+        value: 'yes', // Should be boolean
       };
       const result = validateFilterAST(ast);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.code === 'TYPE_MISMATCH')).toBe(true);
+      expect(result.errors.some((e) => e.code === 'TYPE_MISMATCH')).toBe(true);
     });
   });
 
@@ -155,13 +155,13 @@ describe('validateFilterAST', () => {
     it('returns error for exists with unknown field', () => {
       const ast: FilterNode = {
         type: 'exists',
-        field: 'task.dueData',  // Typo!
+        field: 'task.dueData', // Typo!
         exists: true,
       };
       const result = validateFilterAST(ast);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.code === 'UNKNOWN_FIELD')).toBe(true);
+      expect(result.errors.some((e) => e.code === 'UNKNOWN_FIELD')).toBe(true);
     });
   });
 });

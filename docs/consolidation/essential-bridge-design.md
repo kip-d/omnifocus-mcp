@@ -1,9 +1,7 @@
 # Essential Bridge Bundle Design
 
-**Created:** 2025-11-07
-**Purpose:** Minimal bridge bundle for JXA limitations
-**Target:** create-task.ts, update-task.ts (2 scripts)
-**Status:** Analysis Complete - Recommendation OPTION A
+**Created:** 2025-11-07 **Purpose:** Minimal bridge bundle for JXA limitations **Target:** create-task.ts,
+update-task.ts (2 scripts) **Status:** Analysis Complete - Recommendation OPTION A
 
 ---
 
@@ -12,12 +10,14 @@
 **RECOMMENDATION: Use existing pattern - NO NEW FILE NEEDED**
 
 The "essential bridge bundle" already exists as the combination of:
+
 - `MINIMAL_TAG_BRIDGE` (~140 lines, ~4.5KB)
 - `REPEAT_HELPERS` (~234 lines, ~7.5KB)
 
 Both scripts already import these. The task is to **remove getUnifiedHelpers()**, not create new files.
 
 **Savings:**
+
 - Current: getUnifiedHelpers (18KB) × 2 scripts = 36KB
 - Proposed: MINIMAL_TAG_BRIDGE + REPEAT_HELPERS (~12KB) × 2 = 24KB
 - Net reduction: 12KB (33% reduction)
@@ -29,6 +29,7 @@ Both scripts already import these. The task is to **remove getUnifiedHelpers()**
 ### Current State (As of 2025-11-07)
 
 **create-task.ts (lines 8-15):**
+
 ```typescript
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -43,6 +44,7 @@ export const CREATE_TASK_SCRIPT = `
 ```
 
 **update-task.ts (lines 1-14):**
+
 ```typescript
 import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -61,6 +63,7 @@ export const UPDATE_TASK_SCRIPT = `
 ### Proposed State
 
 **create-task.ts:**
+
 ```typescript
 // REMOVE: import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -75,6 +78,7 @@ export const CREATE_TASK_SCRIPT = `
 ```
 
 **update-task.ts:**
+
 ```typescript
 // REMOVE: import { getUnifiedHelpers } from '../shared/helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -125,6 +129,7 @@ Analyzed create-task.ts and update-task.ts usage:
 #### Functions NOT Used by Scripts (CAN REMOVE)
 
 From SAFE_UTILITIES:
+
 - safeGetDate() - NOT USED
 - safeGetTags() - NOT USED (bridge handles tags)
 - isValidDate() - NOT USED
@@ -139,6 +144,7 @@ From SAFE_UTILITIES:
 - safeGetStatus() - NOT USED
 
 **Analysis:** Scripts only use 4 functions from getUnifiedHelpers():
+
 - formatError
 - validateProject
 - safeGet
@@ -150,7 +156,7 @@ From SAFE_UTILITIES:
 
 ### From MINIMAL_TAG_BRIDGE (4.5KB) - ALL USED
 
-1. **__formatTagScript(template, params)** - Lines 58-70
+1. **\_\_formatTagScript(template, params)** - Lines 58-70
    - Purpose: Template formatting for OmniJS bridge
    - Used by: bridgeSetTags
    - **Status:** REQUIRED
@@ -203,6 +209,7 @@ From SAFE_UTILITIES:
 **Approach:** Remove getUnifiedHelpers(), inline only the 4 used functions
 
 **create-task.ts:**
+
 ```typescript
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
 import { REPEAT_HELPERS } from '../shared/repeat-helpers.js';
@@ -276,17 +283,20 @@ export const CREATE_TASK_SCRIPT = `
 ```
 
 **Pros:**
+
 - Maximum reduction: 18KB → 2.5KB = 15.5KB saved per script
 - Only includes what's actually used
 - Self-contained - all helpers visible in one place
 - No new files to maintain
 
 **Cons:**
+
 - Duplicates 4 functions between create-task and update-task
 - If helper logic changes, must update 2 places
 - Inlined code slightly harder to test in isolation
 
 **Size:**
+
 - Per script: 2.5KB + 4.5KB + 7.5KB = 14.5KB
 - Total (2 scripts): 29KB
 - **Savings from current:** 60KB → 29KB = 31KB (52% reduction)
@@ -377,6 +387,7 @@ export function getEssentialHelpers(): string {
 ```
 
 **Usage:**
+
 ```typescript
 import { getEssentialHelpers } from '../shared/essential-helpers.js';
 import { getMinimalTagBridge } from '../shared/minimal-tag-bridge.js';
@@ -391,17 +402,20 @@ export const CREATE_TASK_SCRIPT = `
 ```
 
 **Pros:**
+
 - Centralized helper logic - change once, apply everywhere
 - Clear module boundary - "essential helpers for task mutation"
 - Easier to test in isolation
 - Consistent with existing pattern (getMinimalTagBridge, REPEAT_HELPERS)
 
 **Cons:**
+
 - Creates new file to maintain
 - One more import per script
 - Slight indirection
 
 **Size:**
+
 - Per script: 2.5KB + 4.5KB + 7.5KB = 14.5KB
 - Total (2 scripts): 29KB
 - **Savings from current:** 60KB → 29KB = 31KB (52% reduction)
@@ -411,16 +425,19 @@ export const CREATE_TASK_SCRIPT = `
 **Approach:** Do nothing
 
 **Pros:**
+
 - Zero work
 - No risk of breaking tests
 - Helpers already tested
 
 **Cons:**
+
 - Wastes 15.5KB per script on unused functions
 - 12 unused functions embedded in every script
 - Perpetuates "everything everywhere" anti-pattern
 
 **Size:**
+
 - Per script: 18KB + 4.5KB + 7.5KB = 30KB
 - Total (2 scripts): 60KB
 - **Savings:** 0KB
@@ -449,13 +466,14 @@ export const CREATE_TASK_SCRIPT = `
    - Can revert easily if issues
 
 5. **Precedent Exists:**
-   - update-task.ts already inlines __formatBridgeScript (lines 45-57)
+   - update-task.ts already inlines \_\_formatBridgeScript (lines 45-57)
    - update-task.ts already inlines moveTaskViaBridge (lines 88-96)
    - This pattern is already used in the codebase
 
 **Counter-argument for Option B:**
 
 Option B would be better IF:
+
 - More scripts needed these helpers (only 2 do)
 - Helpers were complex and changed frequently (they're stable)
 - Testing in isolation was critical (they're simple utility functions)
@@ -467,12 +485,13 @@ Since neither is true, **Option A's simplicity wins**.
 ## Essential Function Details
 
 ### 1. safeGet(getter, defaultValue)
-**Lines:** ~10 lines
-**Purpose:** Safe property access with fallback
-**Used in:**
+
+**Lines:** ~10 lines **Purpose:** Safe property access with fallback **Used in:**
+
 - update-task.ts: 4 times (lines 111, 416, 436, 555)
 
 **Implementation:**
+
 ```javascript
 function safeGet(getter, defaultValue = null) {
   try {
@@ -485,12 +504,13 @@ function safeGet(getter, defaultValue = null) {
 ```
 
 ### 2. safeGetProject(task)
-**Lines:** ~15 lines
-**Purpose:** Extract project info safely
-**Used in:**
+
+**Lines:** ~15 lines **Purpose:** Extract project info safely **Used in:**
+
 - update-task.ts: 3 times (lines 274, 285, 465)
 
 **Implementation:**
+
 ```javascript
 function safeGetProject(task) {
   try {
@@ -498,7 +518,7 @@ function safeGetProject(task) {
     if (project) {
       return {
         name: safeGet(() => project.name()),
-        id: safeGet(() => project.id())
+        id: safeGet(() => project.id()),
       };
     }
     return null;
@@ -509,13 +529,14 @@ function safeGetProject(task) {
 ```
 
 ### 3. validateProject(projectId, doc)
-**Lines:** ~25 lines
-**Purpose:** Validate project exists by ID
-**Used in:**
+
+**Lines:** ~25 lines **Purpose:** Validate project exists by ID **Used in:**
+
 - create-task.ts: 1 time (line 76)
 - update-task.ts: 1 time (line 232)
 
 **Implementation:**
+
 ```javascript
 function validateProject(projectId, doc) {
   if (!projectId) return { valid: true, project: null };
@@ -534,7 +555,7 @@ function validateProject(projectId, doc) {
   if (!foundProject) {
     return {
       valid: false,
-      error: "Project with ID '" + projectId + "' not found"
+      error: "Project with ID '" + projectId + "' not found",
     };
   }
 
@@ -543,19 +564,20 @@ function validateProject(projectId, doc) {
 ```
 
 ### 4. formatError(error, context)
-**Lines:** ~15 lines
-**Purpose:** Format error messages as JSON
-**Used in:**
+
+**Lines:** ~15 lines **Purpose:** Format error messages as JSON **Used in:**
+
 - create-task.ts: 1 time (line 238)
 - update-task.ts: 2 times (lines 476, 714)
 
 **Implementation:**
+
 ```javascript
 function formatError(error, context = '') {
   const errorObj = {
     error: true,
     message: error.message || String(error),
-    context: context
+    context: context,
   };
 
   if (error.stack) {
@@ -573,6 +595,7 @@ function formatError(error, context = '') {
 ## Implementation Checklist
 
 ### Phase 1: Analysis (COMPLETE)
+
 - [x] Identify all getUnifiedHelpers() functions
 - [x] Grep create-task.ts for function usage
 - [x] Grep update-task.ts for function usage
@@ -583,17 +606,20 @@ function formatError(error, context = '') {
 ### Phase 2: Inline Essential Helpers (2 hours)
 
 #### Step 1: Create helper constant
+
 - [ ] Add ESSENTIAL_HELPERS constant to create-task.ts (after imports)
 - [ ] Add ESSENTIAL_HELPERS constant to update-task.ts (after imports)
 - [ ] Include 4 functions: safeGet, safeGetProject, validateProject, formatError
 
 #### Step 2: Update create-task.ts
+
 - [ ] Remove: `import { getUnifiedHelpers } from '../shared/helpers.js';`
 - [ ] Remove: `${getUnifiedHelpers()}` from script template (line 13)
 - [ ] Add: `${ESSENTIAL_HELPERS}` to script template (after line 15)
 - [ ] Verify functions are used: validateProject (line 76), formatError (line 238)
 
 #### Step 3: Update update-task.ts
+
 - [ ] Remove: `import { getUnifiedHelpers } from '../shared/helpers.js';`
 - [ ] Remove: `${getUnifiedHelpers()}` from UPDATE_TASK_SCRIPT (line 12)
 - [ ] Add: `${ESSENTIAL_HELPERS}` to script template (after line 14)
@@ -606,6 +632,7 @@ function formatError(error, context = '') {
   - formatError: lines 476, 714
 
 #### Step 4: Build and verify
+
 - [ ] Run: `npm run build`
 - [ ] Check for TypeScript errors
 - [ ] Check for undefined function errors
@@ -613,12 +640,14 @@ function formatError(error, context = '') {
 ### Phase 3: Test (2 hours)
 
 #### Integration Tests
+
 - [ ] Run: `npm run test:integration`
 - [ ] Verify: create-task tests pass
 - [ ] Verify: update-task tests pass
 - [ ] Check logs for any helper function errors
 
 #### Manual Testing
+
 - [ ] Test: Create task in inbox
 - [ ] Test: Create task in project
 - [ ] Test: Create task with tags
@@ -633,21 +662,25 @@ function formatError(error, context = '') {
 ### Phase 4: Measure Savings (30 min)
 
 #### Before Measurements
+
 - [ ] Measure: create-task.ts script size (current with getUnifiedHelpers)
 - [ ] Measure: update-task.ts script size (current with getUnifiedHelpers)
 - [ ] Total: Document current total size
 
 #### After Measurements
+
 - [ ] Measure: create-task.ts script size (with ESSENTIAL_HELPERS)
 - [ ] Measure: update-task.ts script size (with ESSENTIAL_HELPERS)
 - [ ] Total: Document new total size
 - [ ] Calculate: Reduction in KB and percentage
 
 #### Success Criteria
+
 - [ ] Size reduction ≥ 25KB (target: 31KB)
 - [ ] Percentage reduction ≥ 40% (target: 52%)
 
 ### Phase 5: Documentation (30 min)
+
 - [ ] Update: CLAUDE.md with essential helpers pattern
 - [ ] Update: docs/consolidation/phase-2b-results.md
 - [ ] Document: Size savings achieved
@@ -659,6 +692,7 @@ function formatError(error, context = '') {
 ## Success Criteria
 
 ### Functional Requirements
+
 - ✅ All task creation operations work
 - ✅ All task update operations work
 - ✅ Tag assignment works (via bridge)
@@ -668,11 +702,13 @@ function formatError(error, context = '') {
 - ✅ All integration tests pass
 
 ### Performance Requirements
+
 - ✅ Script size reduced by ≥ 25KB (target: 31KB)
 - ✅ No performance degradation
 - ✅ Build time unchanged
 
 ### Code Quality Requirements
+
 - ✅ No dead code in scripts
 - ✅ All functions actually used
 - ✅ Clear and maintainable
@@ -683,12 +719,15 @@ function formatError(error, context = '') {
 ## Alternatives Considered
 
 ### Alternative 1: Extract to new module (Option B)
+
 **Rejected because:** Only 2 scripts use these helpers, not worth the indirection
 
 ### Alternative 2: Keep getUnifiedHelpers (Option C)
+
 **Rejected because:** Wastes 15.5KB per script on unused functions
 
 ### Alternative 3: Create even more granular modules
+
 **Rejected because:** Over-engineering for 4 simple functions
 
 ---
@@ -722,18 +761,21 @@ function formatError(error, context = '') {
 ## Appendix: File Sizes
 
 ### Current State
+
 - MINIMAL_TAG_BRIDGE: 144 lines, ~4.5KB
 - REPEAT_HELPERS: 234 lines, ~7.5KB
 - getUnifiedHelpers(): 281 lines, ~18KB (includes 12 unused functions)
 - **Total per script:** 30KB
 
 ### Proposed State
+
 - MINIMAL_TAG_BRIDGE: 144 lines, ~4.5KB
 - REPEAT_HELPERS: 234 lines, ~7.5KB
 - ESSENTIAL_HELPERS: ~65 lines, ~2KB (4 functions only)
 - **Total per script:** 14KB
 
 ### Savings
+
 - Per script: 16KB (53% reduction)
 - Total (2 scripts): 32KB (53% reduction)
 

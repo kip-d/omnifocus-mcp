@@ -67,9 +67,7 @@ async function executeGuardJXA<T>(script: string): Promise<T> {
     })()
   `;
 
-  const { stdout } = await execAsync(
-    `osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`,
-  );
+  const { stdout } = await execAsync(`osascript -l JavaScript -e '${wrappedScript.replace(/'/g, "'\"'\"'")}'`);
   return JSON.parse(stdout.trim()) as T;
 }
 
@@ -181,19 +179,16 @@ function validateProjectCreate(data: ProjectCreateData): void {
   if (data.folder !== SANDBOX_FOLDER_NAME) {
     throw new Error(
       'TEST GUARD: Projects must be created inside sandbox folder. ' +
-      `Got folder: "${data.folder || '(none)'}". ` +
-      `Use folder: "${SANDBOX_FOLDER_NAME}"`,
+        `Got folder: "${data.folder || '(none)'}". ` +
+        `Use folder: "${SANDBOX_FOLDER_NAME}"`,
     );
   }
 
   // Validate tags
   if (data.tags && data.tags.length > 0) {
-    const invalidTags = data.tags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+    const invalidTags = data.tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
     if (invalidTags.length > 0) {
-      throw new Error(
-        `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
-        `Invalid: ${invalidTags.join(', ')}`,
-      );
+      throw new Error(`TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` + `Invalid: ${invalidTags.join(', ')}`);
     }
   }
 }
@@ -208,8 +203,7 @@ async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!data.project) {
     if (!data.name.startsWith(TEST_INBOX_PREFIX)) {
       throw new Error(
-        `TEST GUARD: Inbox tasks must have name starting with "${TEST_INBOX_PREFIX}". ` +
-        `Got: "${data.name}"`,
+        `TEST GUARD: Inbox tasks must have name starting with "${TEST_INBOX_PREFIX}". ` + `Got: "${data.name}"`,
       );
     }
     return; // Inbox task with correct prefix is allowed
@@ -220,18 +214,15 @@ async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!inSandbox) {
     throw new Error(
       `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
-      `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
+        `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
     );
   }
 
   // Validate tags
   if (data.tags && data.tags.length > 0) {
-    const invalidTags = data.tags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+    const invalidTags = data.tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
     if (invalidTags.length > 0) {
-      throw new Error(
-        `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
-        `Invalid: ${invalidTags.join(', ')}`,
-      );
+      throw new Error(`TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` + `Invalid: ${invalidTags.join(', ')}`);
     }
   }
 }
@@ -251,12 +242,9 @@ function validateTagChanges(changes: TaskUpdateData | ProjectUpdateData): void {
     allTags.push(...changes.addTags);
   }
 
-  const invalidTags = allTags.filter(t => !t.startsWith(TEST_TAG_PREFIX));
+  const invalidTags = allTags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
   if (invalidTags.length > 0) {
-    throw new Error(
-      `TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` +
-      `Invalid: ${invalidTags.join(', ')}`,
-    );
+    throw new Error(`TEST GUARD: Tags must start with "${TEST_TAG_PREFIX}". ` + `Invalid: ${invalidTags.join(', ')}`);
   }
 }
 
@@ -270,7 +258,7 @@ async function validateTaskInSandbox(taskId: string, operation: string): Promise
   if (!inSandbox) {
     throw new Error(
       `TEST GUARD: Cannot ${operation} task "${taskId}" outside sandbox. ` +
-      `Task must be in a project inside "${SANDBOX_FOLDER_NAME}" or have name starting with "${TEST_INBOX_PREFIX}".`,
+        `Task must be in a project inside "${SANDBOX_FOLDER_NAME}" or have name starting with "${TEST_INBOX_PREFIX}".`,
     );
   }
 }
@@ -285,7 +273,7 @@ async function validateProjectInSandbox(projectId: string, operation: string): P
   if (!inSandbox) {
     throw new Error(
       `TEST GUARD: Cannot ${operation} project "${projectId}" outside sandbox. ` +
-      `Project must be inside "${SANDBOX_FOLDER_NAME}" folder.`,
+        `Project must be inside "${SANDBOX_FOLDER_NAME}" folder.`,
     );
   }
 }
@@ -690,10 +678,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
 /**
  * Build a JXA script for updating a task
  */
-export async function buildUpdateTaskScript(
-  taskId: string,
-  changes: TaskUpdateData,
-): Promise<GeneratedMutationScript> {
+export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateData): Promise<GeneratedMutationScript> {
   // Test sandbox guard - validate task is in sandbox and tag changes
   await validateTaskInSandbox(taskId, 'update');
   validateTagChanges(changes);
@@ -1382,10 +1367,8 @@ export function buildBatchScript(
 export async function buildBulkDeleteScript(target: MutationTarget, ids: string[]): Promise<GeneratedMutationScript> {
   // Test sandbox guard - validate all items are in sandbox
   if (isTestMode()) {
-    const validationPromises = ids.map(id =>
-      target === 'task'
-        ? validateTaskInSandbox(id, 'bulk delete')
-        : validateProjectInSandbox(id, 'bulk delete'),
+    const validationPromises = ids.map((id) =>
+      target === 'task' ? validateTaskInSandbox(id, 'bulk delete') : validateProjectInSandbox(id, 'bulk delete'),
     );
     await Promise.all(validationPromises);
   }
@@ -1503,9 +1486,7 @@ function buildProjectDataObject(data: ProjectCreateData): Record<string, unknown
 /**
  * Build update changes object for script embedding
  */
-function buildUpdateChangesObject(
-  changes: TaskUpdateData | ProjectUpdateData,
-): Record<string, unknown> {
+function buildUpdateChangesObject(changes: TaskUpdateData | ProjectUpdateData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
 
   // Copy all defined properties

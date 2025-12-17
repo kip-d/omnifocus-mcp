@@ -13,8 +13,8 @@ function run() {
     tests: {
       project: {},
       tag: {},
-      task: {}
-    }
+      task: {},
+    },
   };
 
   console.log(`Testing OmniFocus version: ${app.version()}\n`);
@@ -28,14 +28,14 @@ function run() {
       results.tests[objType][propName] = {
         exists: true,
         type: typeof actualValue,
-        value: actualValue !== null && actualValue !== undefined ? String(actualValue) : null
+        value: actualValue !== null && actualValue !== undefined ? String(actualValue) : null,
       };
       console.log(`✅ ${objType}.${propName}: ${typeof actualValue} = ${actualValue}`);
       return true;
     } catch (e) {
       results.tests[objType][propName] = {
         exists: false,
-        error: e.message
+        error: e.message,
       };
       console.log(`❌ ${objType}.${propName}: ERROR - ${e.message}`);
       return false;

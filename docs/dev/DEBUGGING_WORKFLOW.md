@@ -5,6 +5,7 @@ This document outlines the systematic approach for fixing issues to avoid the **
 ## The Anti-Pattern We're Avoiding
 
 ❌ **Bad Process:**
+
 1. Fix functional issues with `any` types (quick & dirty)
 2. Fix lint warnings by replacing `any` with basic interfaces
 3. Fix build errors when interfaces don't match actual usage
@@ -15,6 +16,7 @@ This document outlines the systematic approach for fixing issues to avoid the **
 ### 1. Pre-Fix Analysis (2-3 minutes)
 
 **🚨 CRITICAL: Test MCP Integration First**
+
 ```bash
 # ALWAYS test the actual MCP tool BEFORE debugging internals
 npm run build
@@ -27,12 +29,14 @@ npm test           # Current test status
 ```
 
 **Why MCP testing first:**
+
 - Tests actual integration, not isolated components
 - Fresh process picks up new built code (no caching issues)
 - Matches production behavior exactly
 - Reveals real vs. imagined problems
 
 **Study existing patterns:**
+
 ```bash
 # Find similar tools handling same data types
 find src/tools -name "*.ts" -exec grep -l "ProductivityStatsData\|WorkflowAnalysisData" {} \;
@@ -48,6 +52,7 @@ grep -r "extractKeyFindings" src/tools --include="*.ts" -A 5
 ```
 
 **Understand the data flow:**
+
 - What does the OmniFocus script actually return?
 - How do similar tools handle script responses?
 - What do consuming methods (like `extractKeyFindings`) expect?
@@ -68,6 +73,7 @@ if (scriptData && typeof scriptData === 'object' && scriptData !== null && 'summ
 ```
 
 **Validate each logical change:**
+
 ```bash
 npm run build      # After each major change
 ```
@@ -91,16 +97,19 @@ npm test          # Tests still pass
 ## Common Gotchas
 
 ### Script Response Handling
+
 - Scripts can return different formats (direct data vs wrapped in `data` property)
 - Always handle both `ProductivityStatsData` and direct script responses
 - Use type guards to safely access properties
 
 ### Interface Mismatches
+
 - `extractKeyFindings` methods have specific expectations
 - `projectStats` might be array vs Record - check the method signature
 - Cache types must match the data being cached
 
 ### Union Type Safety
+
 ```typescript
 // ❌ WRONG - Assuming structure
 const data = scriptData.summary;
@@ -114,12 +123,14 @@ if ('summary' in scriptData) {
 ## Example: ProductivityStatsToolV2 Fix
 
 **What went wrong:**
+
 1. Used `any` types for quick fix
 2. Created new interfaces without checking existing ones
 3. Didn't verify `extractKeyFindings` expectations
 4. Resulted in 3-step fix cycle
 
 **What should have happened:**
+
 1. Found existing `ProductivityStatsData` interface
 2. Looked at `extractKeyFindings` signature expecting `projectStats: Array<{name: string; completedCount: number}>`
 3. Used proper type guards from existing patterns

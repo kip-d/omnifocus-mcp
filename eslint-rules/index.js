@@ -39,13 +39,14 @@ module.exports = {
 
             // Check if returning an object literal directly
             if (node.argument && node.argument.type === 'ObjectExpression') {
-              const properties = node.argument.properties.map(p => p.key?.name);
-              
+              const properties = node.argument.properties.map((p) => p.key?.name);
+
               // If it looks like a response object but not using standard functions
               if (properties.includes('success') || properties.includes('data')) {
                 context.report({
                   node,
-                  message: 'Use createSuccessResponse, createErrorResponse, or createListResponse instead of returning plain objects',
+                  message:
+                    'Use createSuccessResponse, createErrorResponse, or createListResponse instead of returning plain objects',
                 });
               }
             }
@@ -69,7 +70,7 @@ module.exports = {
             // Check if catch block body contains this.handleError
             const sourceCode = context.getSourceCode();
             const catchBody = sourceCode.getText(node.body);
-            
+
             if (!catchBody.includes('this.handleError')) {
               // Check if it's throwing (which is sometimes acceptable)
               if (!catchBody.includes('throw')) {
@@ -94,19 +95,20 @@ module.exports = {
             // Look for metadata object properties
             if (node.parent && node.parent.parent) {
               const parentNode = node.parent.parent;
-              
+
               // Check if this is likely a metadata object
               if (parentNode.type === 'CallExpression') {
                 const callee = parentNode.callee;
-                if (callee.name === 'createSuccessResponse' || 
-                    callee.name === 'createErrorResponse' || 
-                    callee.name === 'createListResponse') {
-                  
+                if (
+                  callee.name === 'createSuccessResponse' ||
+                  callee.name === 'createErrorResponse' ||
+                  callee.name === 'createListResponse'
+                ) {
                   // Check if property is in the metadata parameter (3rd argument)
                   const args = parentNode.arguments;
                   if (args[2] && node.parent === args[2]) {
                     const key = node.key.name || node.key.value;
-                    
+
                     // Check if key is camelCase (should be snake_case)
                     if (key && /[a-z][A-Z]/.test(key)) {
                       context.report({
@@ -139,7 +141,7 @@ module.exports = {
           },
           ExportNamedDeclaration(node) {
             if (node.declaration && node.declaration.declarations) {
-              node.declaration.declarations.forEach(decl => {
+              node.declaration.declarations.forEach((decl) => {
                 if (decl.id.name && decl.id.name.endsWith('Schema')) {
                   hasSchemaExport = true;
                 }

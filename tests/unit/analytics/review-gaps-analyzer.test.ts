@@ -9,8 +9,8 @@ describe('analyzeReviewGaps', () => {
         name: 'Never Reviewed',
         status: 'active',
         nextReviewDate: null,
-        lastReviewDate: null
-      }
+        lastReviewDate: null,
+      },
     ];
 
     const result = analyzeReviewGaps(projects);
@@ -27,8 +27,8 @@ describe('analyzeReviewGaps', () => {
         name: 'Overdue Review',
         status: 'active',
         nextReviewDate: pastDate,
-        reviewInterval: 7
-      }
+        reviewInterval: 7,
+      },
     ];
 
     const result = analyzeReviewGaps(projects);
@@ -40,7 +40,7 @@ describe('analyzeReviewGaps', () => {
   it('skips dropped and completed projects', () => {
     const projects = [
       { id: 'proj-3', name: 'Dropped', status: 'dropped', nextReviewDate: null },
-      { id: 'proj-4', name: 'Done', status: 'done', nextReviewDate: null }
+      { id: 'proj-4', name: 'Done', status: 'done', nextReviewDate: null },
     ];
 
     const result = analyzeReviewGaps(projects);
@@ -53,7 +53,7 @@ describe('analyzeReviewGaps', () => {
     const projects = [
       { id: 'p1', name: 'A', status: 'active', reviewInterval: 7, nextReviewDate: null },
       { id: 'p2', name: 'B', status: 'active', reviewInterval: 14, nextReviewDate: null },
-      { id: 'p3', name: 'C', status: 'active', reviewInterval: 21, nextReviewDate: null }
+      { id: 'p3', name: 'C', status: 'active', reviewInterval: 21, nextReviewDate: null },
     ];
 
     const result = analyzeReviewGaps(projects);

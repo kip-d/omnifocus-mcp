@@ -19,9 +19,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'CONTAINS' as const,
-            value: 'work'
-          }
-        }
+            value: 'work',
+          },
+        },
       });
 
       expect(result.project).toBe('work');
@@ -37,9 +37,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'STARTS_WITH' as const,
-            value: 'Q4'
-          }
-        }
+            value: 'Q4',
+          },
+        },
       });
 
       expect(result.project).toBe('Q4');
@@ -55,9 +55,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'ENDS_WITH' as const,
-            value: '2025'
-          }
-        }
+            value: '2025',
+          },
+        },
       });
 
       expect(result.project).toBe('2025');
@@ -73,9 +73,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'EQUALS' as const,
-            value: 'Vacation Planning'
-          }
-        }
+            value: 'Vacation Planning',
+          },
+        },
       });
 
       expect(result.project).toBe('Vacation Planning');
@@ -91,9 +91,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'NOT_EQUALS' as const,
-            value: 'Personal'
-          }
-        }
+            value: 'Personal',
+          },
+        },
       });
 
       expect(result.project).toBe('Personal');
@@ -111,9 +111,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'OR' as const,
-            values: ['urgent', 'important']
-          }
-        }
+            values: ['urgent', 'important'],
+          },
+        },
       });
 
       expect(result.tags).toEqual(['urgent', 'important']);
@@ -129,9 +129,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'AND' as const,
-            values: ['work', 'client']
-          }
-        }
+            values: ['work', 'client'],
+          },
+        },
       });
 
       expect(result.tags).toEqual(['work', 'client']);
@@ -147,9 +147,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'NOT_IN' as const,
-            values: ['waiting', 'someday']
-          }
-        }
+            values: ['waiting', 'someday'],
+          },
+        },
       });
 
       expect(result.tags).toEqual(['waiting', 'someday']);
@@ -165,9 +165,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           taskStatus: {
             operator: 'IN' as const,
-            values: ['available', 'next']
-          }
-        }
+            values: ['available', 'next'],
+          },
+        },
       });
 
       expect(result.taskStatus).toEqual(['available', 'next']);
@@ -185,9 +185,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           dueDate: {
             operator: '<=' as const,
-            value: '2025-10-07'
-          }
-        }
+            value: '2025-10-07',
+          },
+        },
       });
 
       expect(result.dueBefore).toBeDefined();
@@ -203,9 +203,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           dueDate: {
             operator: '>=' as const,
-            value: '2025-10-01'
-          }
-        }
+            value: '2025-10-01',
+          },
+        },
       });
 
       expect(result.dueAfter).toBeDefined();
@@ -221,9 +221,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           dueDate: {
             operator: '<' as const,
-            value: '2025-10-01'
-          }
-        }
+            value: '2025-10-01',
+          },
+        },
       });
 
       expect(result.dueBefore).toBeDefined();
@@ -239,9 +239,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           dueDate: {
             operator: '>' as const,
-            value: '2025-10-01'
-          }
-        }
+            value: '2025-10-01',
+          },
+        },
       });
 
       expect(result.dueAfter).toBeDefined();
@@ -258,9 +258,9 @@ describe('Advanced Filter Operators', () => {
           dueDate: {
             operator: 'BETWEEN' as const,
             value: '2025-10-01',
-            upperBound: '2025-10-07'
-          }
-        }
+            upperBound: '2025-10-07',
+          },
+        },
       });
 
       expect(result.dueBefore).toBeDefined();
@@ -277,9 +277,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           estimatedMinutes: {
             operator: '<=' as const,
-            value: 30
-          }
-        }
+            value: 30,
+          },
+        },
       });
 
       expect(result.estimatedMinutes).toBe(30);
@@ -296,9 +296,9 @@ describe('Advanced Filter Operators', () => {
           estimatedMinutes: {
             operator: 'BETWEEN' as const,
             value: 15,
-            upperBound: 30
-          }
-        }
+            upperBound: 30,
+          },
+        },
       });
 
       expect(result.estimatedMinutes).toBe(15);
@@ -317,13 +317,13 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'CONTAINS' as const,
-            value: 'work'
+            value: 'work',
           },
           dueDate: {
             operator: '<=' as const,
-            value: '2025-10-07'
-          }
-        }
+            value: '2025-10-07',
+          },
+        },
       });
 
       expect(result.project).toBe('work');
@@ -341,17 +341,17 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'OR' as const,
-            values: ['urgent', 'important']
+            values: ['urgent', 'important'],
           },
           project: {
             operator: 'STARTS_WITH' as const,
-            value: 'Q4'
+            value: 'Q4',
           },
           estimatedMinutes: {
             operator: '<=' as const,
-            value: 60
-          }
-        }
+            value: 60,
+          },
+        },
       });
 
       expect(result.tags).toEqual(['urgent', 'important']);
@@ -371,13 +371,13 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'NOT_IN' as const,
-            values: ['waiting']
+            values: ['waiting'],
           },
           project: {
             operator: 'CONTAINS' as const,
-            value: 'work'
-          }
-        }
+            value: 'work',
+          },
+        },
       });
 
       expect(result.tags).toEqual(['waiting']);
@@ -396,9 +396,7 @@ describe('Advanced Filter Operators', () => {
         limit: 10,
         details: false,
         fastSearch: true,
-        sort: [
-          { field: 'dueDate' as const, direction: 'asc' as const }
-        ]
+        sort: [{ field: 'dueDate' as const, direction: 'asc' as const }],
       };
 
       // If this doesn't throw, schema validation passes
@@ -413,9 +411,7 @@ describe('Advanced Filter Operators', () => {
         limit: 10,
         details: false,
         fastSearch: true,
-        sort: [
-          { field: 'name' as const, direction: 'desc' as const }
-        ]
+        sort: [{ field: 'name' as const, direction: 'desc' as const }],
       };
 
       expect(args.sort).toBeDefined();
@@ -431,8 +427,8 @@ describe('Advanced Filter Operators', () => {
         fastSearch: true,
         sort: [
           { field: 'flagged' as const, direction: 'desc' as const },
-          { field: 'dueDate' as const, direction: 'asc' as const }
-        ]
+          { field: 'dueDate' as const, direction: 'asc' as const },
+        ],
       };
 
       expect(args.sort).toBeDefined();
@@ -447,9 +443,7 @@ describe('Advanced Filter Operators', () => {
         limit: 10,
         details: false,
         fastSearch: true,
-        sort: [
-          { field: 'estimatedMinutes' as const, direction: 'asc' as const }
-        ]
+        sort: [{ field: 'estimatedMinutes' as const, direction: 'asc' as const }],
       };
 
       expect(args.sort).toBeDefined();
@@ -465,12 +459,10 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'OR' as const,
-            values: ['urgent', 'important']
-          }
+            values: ['urgent', 'important'],
+          },
         },
-        sort: [
-          { field: 'dueDate' as const, direction: 'asc' as const }
-        ]
+        sort: [{ field: 'dueDate' as const, direction: 'asc' as const }],
       };
 
       expect(args.sort).toBeDefined();
@@ -485,7 +477,7 @@ describe('Advanced Filter Operators', () => {
         limit: 10,
         details: false,
         fastSearch: true,
-        tags: ['urgent', 'work']
+        tags: ['urgent', 'work'],
       });
 
       expect(result.tags).toEqual(['urgent', 'work']);
@@ -499,7 +491,7 @@ describe('Advanced Filter Operators', () => {
         limit: 10,
         details: false,
         fastSearch: true,
-        project: 'Work Projects'
+        project: 'Work Projects',
       });
 
       expect(result.project).toBe('Work Projects');
@@ -517,9 +509,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'CONTAINS' as const,
-            value: 'Advanced Project'
-          }
-        }
+            value: 'Advanced Project',
+          },
+        },
       });
 
       // Simple filter should take precedence
@@ -538,9 +530,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           project: {
             operator: 'CONTAINS' as const,
-            value: 'work'
-          }
-        }
+            value: 'work',
+          },
+        },
       });
 
       expect(result.project).toBe('work');
@@ -556,9 +548,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           tags: {
             operator: 'OR' as const,
-            values: ['urgent', 'important']
-          }
-        }
+            values: ['urgent', 'important'],
+          },
+        },
       });
 
       expect(result.tags).toEqual(['urgent', 'important']);
@@ -574,9 +566,9 @@ describe('Advanced Filter Operators', () => {
         filters: {
           dueDate: {
             operator: '<=' as const,
-            value: '2025-10-07'
-          }
-        }
+            value: '2025-10-07',
+          },
+        },
       });
 
       expect(result.dueBefore).toBeDefined();
@@ -593,9 +585,9 @@ describe('Advanced Filter Operators', () => {
           dueDate: {
             operator: 'BETWEEN' as const,
             value: '2025-10-01',
-            upperBound: '2025-10-07'
-          }
-        }
+            upperBound: '2025-10-07',
+          },
+        },
       });
 
       expect(result.dueBefore).toBeDefined();
@@ -611,28 +603,26 @@ describe('Advanced Filter Operators', () => {
         name: 'Task C',
         dueDate: new Date('2025-10-03'),
         flagged: false,
-        estimatedMinutes: 30
+        estimatedMinutes: 30,
       } as OmniFocusTask,
       {
         id: '2',
         name: 'Task A',
         dueDate: new Date('2025-10-01'),
         flagged: true,
-        estimatedMinutes: 15
+        estimatedMinutes: 15,
       } as OmniFocusTask,
       {
         id: '3',
         name: 'Task B',
         dueDate: new Date('2025-10-02'),
         flagged: false,
-        estimatedMinutes: 45
-      } as OmniFocusTask
+        estimatedMinutes: 45,
+      } as OmniFocusTask,
     ];
 
     it('should sort by name ascending', () => {
-      const sorted = tool['sortTasks'](mockTasks, [
-        { field: 'name', direction: 'asc' }
-      ]);
+      const sorted = tool['sortTasks'](mockTasks, [{ field: 'name', direction: 'asc' }]);
 
       expect(sorted[0].name).toBe('Task A');
       expect(sorted[1].name).toBe('Task B');
@@ -640,9 +630,7 @@ describe('Advanced Filter Operators', () => {
     });
 
     it('should sort by dueDate ascending', () => {
-      const sorted = tool['sortTasks'](mockTasks, [
-        { field: 'dueDate', direction: 'asc' }
-      ]);
+      const sorted = tool['sortTasks'](mockTasks, [{ field: 'dueDate', direction: 'asc' }]);
 
       expect(sorted[0].name).toBe('Task A');
       expect(sorted[1].name).toBe('Task B');
@@ -652,7 +640,7 @@ describe('Advanced Filter Operators', () => {
     it('should sort by flagged descending, then dueDate ascending', () => {
       const sorted = tool['sortTasks'](mockTasks, [
         { field: 'flagged', direction: 'desc' },
-        { field: 'dueDate', direction: 'asc' }
+        { field: 'dueDate', direction: 'asc' },
       ]);
 
       // With desc sort on boolean, false comes before true (backwards)
@@ -665,9 +653,7 @@ describe('Advanced Filter Operators', () => {
     });
 
     it('should sort by estimatedMinutes descending', () => {
-      const sorted = tool['sortTasks'](mockTasks, [
-        { field: 'estimatedMinutes', direction: 'desc' }
-      ]);
+      const sorted = tool['sortTasks'](mockTasks, [{ field: 'estimatedMinutes', direction: 'desc' }]);
 
       expect(sorted[0].estimatedMinutes).toBe(45);
       expect(sorted[1].estimatedMinutes).toBe(30);
@@ -679,18 +665,16 @@ describe('Advanced Filter Operators', () => {
         {
           id: '1',
           name: 'Task with date',
-          dueDate: new Date('2025-10-01')
+          dueDate: new Date('2025-10-01'),
         } as OmniFocusTask,
         {
           id: '2',
           name: 'Task without date',
-          dueDate: undefined
-        } as OmniFocusTask
+          dueDate: undefined,
+        } as OmniFocusTask,
       ];
 
-      const sorted = tool['sortTasks'](tasksWithNull, [
-        { field: 'dueDate', direction: 'asc' }
-      ]);
+      const sorted = tool['sortTasks'](tasksWithNull, [{ field: 'dueDate', direction: 'asc' }]);
 
       expect(sorted[0].name).toBe('Task with date');
       expect(sorted[1].name).toBe('Task without date');
@@ -703,9 +687,7 @@ describe('Advanced Filter Operators', () => {
 
     it('should not mutate original array', () => {
       const original = [...mockTasks];
-      tool['sortTasks'](mockTasks, [
-        { field: 'name', direction: 'asc' }
-      ]);
+      tool['sortTasks'](mockTasks, [{ field: 'name', direction: 'asc' }]);
 
       expect(mockTasks).toEqual(original);
     });

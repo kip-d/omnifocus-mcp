@@ -2,13 +2,19 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
 import { QUERY_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/perspectives/query-perspective.js';
-import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../../utils/response-format.js';
+import {
+  createSuccessResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+  StandardResponseV2,
+} from '../../utils/response-format.js';
 import { coerceBoolean, coerceNumber } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 
 // Consolidated schema for all perspective operations
 const PerspectivesToolSchema = z.object({
-  operation: z.enum(['list', 'query'])
+  operation: z
+    .enum(['list', 'query'])
     .default('list')
     .describe('Operation to perform: list all perspectives or query a specific one'),
 
@@ -17,18 +23,12 @@ const PerspectivesToolSchema = z.object({
     .default(false)
     .describe('Include filter rules for custom perspectives (list operation)'),
 
-  sortBy: z.string()
-    .default('name')
-    .describe('Sort order for perspectives (list operation)'),
+  sortBy: z.string().default('name').describe('Sort order for perspectives (list operation)'),
 
   // Query operation parameters
-  perspectiveName: z.string()
-    .optional()
-    .describe('Name of the perspective to query (required for query operation)'),
+  perspectiveName: z.string().optional().describe('Name of the perspective to query (required for query operation)'),
 
-  limit: coerceNumber()
-    .default(50)
-    .describe('Maximum number of tasks to return (query operation)'),
+  limit: coerceNumber().default(50).describe('Maximum number of tasks to return (query operation)'),
 
   includeDetails: coerceBoolean()
     .default(false)
@@ -39,14 +39,28 @@ const PerspectivesToolSchema = z.object({
     .default(false)
     .describe('Return rich formatted text with checkboxes, flags, and visual indicators (query operation)'),
 
-  groupBy: z.enum(['none', 'project', 'tag', 'dueDate', 'status'])
+  groupBy: z
+    .enum(['none', 'project', 'tag', 'dueDate', 'status'])
     .default('none')
     .describe('Group results by project, tag, due date, or status for better organization (query operation)'),
 
-  fields: z.array(z.enum([
-    'id', 'name', 'flagged', 'dueDate', 'deferDate', 'completed',
-    'project', 'projectId', 'tags', 'available', 'note', 'estimatedMinutes',
-  ]))
+  fields: z
+    .array(
+      z.enum([
+        'id',
+        'name',
+        'flagged',
+        'dueDate',
+        'deferDate',
+        'completed',
+        'project',
+        'projectId',
+        'tags',
+        'available',
+        'note',
+        'estimatedMinutes',
+      ]),
+    )
     .optional()
     .describe('Select specific fields to return for performance optimization (query operation)'),
 
@@ -114,7 +128,8 @@ type PerspectivesResponse = StandardResponseV2<{ perspectives: PerspectiveInfo[]
 
 export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
   name = 'perspectives';
-  description = 'Manage OmniFocus perspectives with enhanced viewing capabilities. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective with rich formatting, grouping, and field selection options. Set formatOutput=true for human-readable display with checkboxes and visual indicators.';
+  description =
+    'Manage OmniFocus perspectives with enhanced viewing capabilities. Use operation="list" to see all perspectives, operation="query" to get tasks from a perspective with rich formatting, grouping, and field selection options. Set formatOutput=true for human-readable display with checkboxes and visual indicators.';
   schema = PerspectivesToolSchema;
   meta = {
     // Phase 1: Essential metadata
@@ -158,7 +173,9 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
     }
   }
 
-  private async listPerspectives(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponseV2<{ perspectives: PerspectiveInfo[] }>> {
+  private async listPerspectives(
+    args: z.infer<typeof PerspectivesToolSchema>,
+  ): Promise<StandardResponseV2<{ perspectives: PerspectiveInfo[] }>> {
     const timer = new OperationTimerV2();
 
     try {
@@ -203,12 +220,11 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
         });
       }
 
-      return createSuccessResponseV2(
-        'perspectives',
-        { perspectives },
-        undefined,
-        { ...timer.toMetadata(), ...(parsedResult as { metadata?: Record<string, unknown> }).metadata, operation: 'list' },
-      );
+      return createSuccessResponseV2('perspectives', { perspectives }, undefined, {
+        ...timer.toMetadata(),
+        ...(parsedResult as { metadata?: Record<string, unknown> }).metadata,
+        operation: 'list',
+      });
     } catch (error) {
       return createErrorResponseV2(
         'perspectives',
@@ -221,19 +237,13 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
     }
   }
 
-  private async queryPerspective(args: z.infer<typeof PerspectivesToolSchema>): Promise<StandardResponseV2<QueryPerspectiveData>> {
+  private async queryPerspective(
+    args: z.infer<typeof PerspectivesToolSchema>,
+  ): Promise<StandardResponseV2<QueryPerspectiveData>> {
     const timer = new OperationTimerV2();
 
     try {
-      const {
-        perspectiveName,
-        limit,
-        includeDetails,
-        formatOutput,
-        groupBy,
-        fields,
-        includeMetadata,
-      } = args;
+      const { perspectiveName, limit, includeDetails, formatOutput, groupBy, fields, includeMetadata } = args;
 
       if (!perspectiveName) {
         return createErrorResponseV2(
@@ -266,14 +276,22 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
 
       this.logger.debug(`Querying perspective: ${perspectiveName}`);
       // For query operation, legacy tests return a direct object with success flag
-      let raw: unknown = await (this.omniAutomation as { execute: (script: string) => Promise<unknown> }).execute(script);
-      if (typeof raw === 'string') { try { raw = JSON.parse(raw) as unknown; } catch { /* ignore */ } }
+      let raw: unknown = await (this.omniAutomation as { execute: (script: string) => Promise<unknown> }).execute(
+        script,
+      );
+      if (typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw) as unknown;
+        } catch {
+          /* ignore */
+        }
+      }
 
       if (!raw || (raw as { error?: boolean }).error === true) {
         return createErrorResponseV2(
           'perspectives',
           'SCRIPT_ERROR',
-          (raw && (raw as { message?: string }).message) ? (raw as { message: string }).message : 'Script failed',
+          raw && (raw as { message?: string }).message ? (raw as { message: string }).message : 'Script failed',
           undefined,
           { rawResult: raw },
           timer.toMetadata(),
@@ -306,7 +324,7 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
 
       // Apply field selection if specified
       if (fields && fields.length > 0) {
-        tasks = tasks.map(task => {
+        tasks = tasks.map((task) => {
           const filteredTask: Record<string, unknown> = {};
           for (const field of fields) {
             if (field in task) {
@@ -322,9 +340,7 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
         ? this.generateMetadata(tasks, groupBy || 'none', formatOutput ? 'formatted' : 'raw')
         : undefined;
 
-      const groupedResults = (groupBy && groupBy !== 'none')
-        ? this.groupTasks(tasks, groupBy)
-        : undefined;
+      const groupedResults = groupBy && groupBy !== 'none' ? this.groupTasks(tasks, groupBy) : undefined;
 
       const formattedOutput = formatOutput
         ? this.createFormattedOutput(
@@ -346,26 +362,20 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
         ...(metadata && { metadata }),
       };
 
-      const response = createSuccessResponseV2(
-        'perspectives',
-        responseData,
-        undefined,
-        {
-          ...timer.toMetadata(),
-          operation: 'query',
-          total_count: tasks.length,
-          filter_rules_applied: !!(rawData.filterRules),
-          formatting_applied: formatOutput,
-          grouping_applied: groupBy !== 'none',
-          fields_selected: fields ? fields.length : 'all',
-        },
-      );
+      const response = createSuccessResponseV2('perspectives', responseData, undefined, {
+        ...timer.toMetadata(),
+        operation: 'query',
+        total_count: tasks.length,
+        filter_rules_applied: !!rawData.filterRules,
+        formatting_applied: formatOutput,
+        grouping_applied: groupBy !== 'none',
+        fields_selected: fields ? fields.length : 'all',
+      });
 
       // Cache the result
       this.cache.set('tasks', cacheKey, response);
 
       return response;
-
     } catch (error) {
       return createErrorResponseV2(
         'perspectives',
@@ -522,16 +532,20 @@ export class PerspectivesTool extends BaseTool<typeof PerspectivesToolSchema> {
   /**
    * Generates metadata about the tasks
    */
-  private generateMetadata(tasks: PerspectiveTask[], groupBy: string, formatting: 'raw' | 'formatted'): PerspectiveMetadata {
+  private generateMetadata(
+    tasks: PerspectiveTask[],
+    groupBy: string,
+    formatting: 'raw' | 'formatted',
+  ): PerspectiveMetadata {
     const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(t => t.completed).length;
-    const flaggedTasks = tasks.filter(t => t.flagged).length;
-    const availableTasks = tasks.filter(t => t.available && !t.completed).length;
+    const completedTasks = tasks.filter((t) => t.completed).length;
+    const flaggedTasks = tasks.filter((t) => t.flagged).length;
+    const availableTasks = tasks.filter((t) => t.available && !t.completed).length;
 
     // Calculate overdue tasks
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Start of today
-    const overdueTasks = tasks.filter(t => {
+    const overdueTasks = tasks.filter((t) => {
       if (!t.dueDate || t.completed) return false;
       const dueDate = new Date(t.dueDate);
       dueDate.setHours(0, 0, 0, 0); // Start of due date

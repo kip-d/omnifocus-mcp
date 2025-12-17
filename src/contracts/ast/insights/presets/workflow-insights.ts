@@ -18,11 +18,7 @@
  * @see docs/plans/snug-foraging-sloth.md (Phase 4C)
  */
 
-import type {
-  InsightConfig,
-  RecommendationConfig,
-  InsightPriority,
-} from '../../../analytics-types.js';
+import type { InsightConfig, RecommendationConfig, InsightPriority } from '../../../analytics-types.js';
 
 // =============================================================================
 // PRODUCTIVITY INSIGHTS
@@ -44,12 +40,10 @@ export const PRODUCTIVITY_INSIGHTS: InsightConfig[] = [
     category: 'productivity',
     condition: (m) => m.tasks.overdue > 0,
     generate: (m) => {
-      const avgOverdue = m.time.avgOverdueDays > 0
-        ? Math.round(m.time.avgOverdueDays)
-        : 0;
+      const avgOverdue = m.time.avgOverdueDays > 0 ? Math.round(m.time.avgOverdueDays) : 0;
       return `${m.tasks.overdue} tasks are overdue${avgOverdue > 0 ? `, averaging ${avgOverdue} days late` : ''}`;
     },
-    priority: (m) => m.tasks.overdue > 10 ? 'high' : 'medium',
+    priority: (m) => (m.tasks.overdue > 10 ? 'high' : 'medium'),
   },
   {
     id: 'deferred-total',
@@ -66,9 +60,7 @@ export const PRODUCTIVITY_INSIGHTS: InsightConfig[] = [
     category: 'productivity',
     condition: (m) => m.deferrals.strategic > 0,
     generate: (m) => {
-      const rate = m.tasks.total > 0
-        ? ((m.deferrals.strategic / m.tasks.total) * 100).toFixed(1)
-        : '0';
+      const rate = m.tasks.total > 0 ? ((m.deferrals.strategic / m.tasks.total) * 100).toFixed(1) : '0';
       return `${rate}% are strategic deferrals (${m.deferrals.strategic} tasks) - Good GTD practice!`;
     },
     priority: 'low',
@@ -78,12 +70,10 @@ export const PRODUCTIVITY_INSIGHTS: InsightConfig[] = [
     category: 'productivity',
     condition: (m) => m.deferrals.problematic > 0,
     generate: (m) => {
-      const rate = m.tasks.total > 0
-        ? ((m.deferrals.problematic / m.tasks.total) * 100).toFixed(1)
-        : '0';
+      const rate = m.tasks.total > 0 ? ((m.deferrals.problematic / m.tasks.total) * 100).toFixed(1) : '0';
       return `${rate}% are problematic deferrals (${m.deferrals.problematic} tasks) - May need attention`;
     },
-    priority: (m) => m.deferrals.problematic > 10 ? 'high' : 'medium',
+    priority: (m) => (m.deferrals.problematic > 10 ? 'high' : 'medium'),
   },
 ];
 
@@ -108,7 +98,7 @@ export const WORKLOAD_INSIGHTS: InsightConfig[] = [
     category: 'workload',
     condition: (m) => m.tasks.flagged > 0,
     generate: (m) => `${m.tasks.flagged} tasks are flagged for attention`,
-    priority: (m) => m.tasks.flagged > 20 ? 'high' : 'medium',
+    priority: (m) => (m.tasks.flagged > 20 ? 'high' : 'medium'),
   },
 ];
 
@@ -130,7 +120,7 @@ export const BOTTLENECK_INSIGHTS: InsightConfig[] = [
   {
     id: 'high-overdue-rate',
     category: 'bottlenecks',
-    condition: (m) => m.tasks.total > 0 && (m.tasks.overdue / m.tasks.total) > 0.15,
+    condition: (m) => m.tasks.total > 0 && m.tasks.overdue / m.tasks.total > 0.15,
     generate: (m) => {
       const rate = ((m.tasks.overdue / m.tasks.total) * 100).toFixed(1);
       return `High overdue rate: ${rate}% of tasks are past due - workflow bottleneck detected`;
@@ -165,7 +155,7 @@ export const PROJECT_HEALTH_INSIGHTS: InsightConfig[] = [
     category: 'project_health',
     condition: (m) => m.projects.lowMomentum > m.projects.highMomentum,
     generate: (m) => `${m.projects.lowMomentum} projects have low momentum - may need attention`,
-    priority: (m) => m.projects.lowMomentum > 5 ? 'high' : 'medium',
+    priority: (m) => (m.projects.lowMomentum > 5 ? 'high' : 'medium'),
   },
 ];
 
@@ -179,7 +169,7 @@ export const TIME_PATTERN_INSIGHTS: InsightConfig[] = [
     category: 'time_patterns',
     condition: (m) => {
       const buckets = m.time.timeBuckets;
-      return Object.values(buckets).some(count => count > 5);
+      return Object.values(buckets).some((count) => count > 5);
     },
     generate: (m) => {
       const buckets = m.time.timeBuckets;
@@ -249,7 +239,7 @@ export const WORKFLOW_RECOMMENDATIONS: RecommendationConfig[] = [
   {
     id: 'high-overdue-rate',
     category: 'workflow_management',
-    threshold: (m) => m.tasks.total > 0 && (m.tasks.overdue / m.tasks.total) > 0.15,
+    threshold: (m) => m.tasks.total > 0 && m.tasks.overdue / m.tasks.total > 0.15,
     generate: () => 'High overdue rate suggests workflow bottlenecks - consider reviewing task flow and dependencies',
     priority: 'high',
     actionable: true,
@@ -265,8 +255,9 @@ export const WORKFLOW_RECOMMENDATIONS: RecommendationConfig[] = [
   {
     id: 'problematic-deferrals',
     category: 'deferral_optimization',
-    threshold: (m) => m.tasks.total > 0 && (m.deferrals.problematic / m.tasks.total) > 0.15,
-    generate: () => 'High problematic deferral rate suggests avoidance or overwhelm - review if these tasks are truly necessary or if you need to break them down',
+    threshold: (m) => m.tasks.total > 0 && m.deferrals.problematic / m.tasks.total > 0.15,
+    generate: () =>
+      'High problematic deferral rate suggests avoidance or overwhelm - review if these tasks are truly necessary or if you need to break them down',
     priority: 'high',
     actionable: true,
   },
@@ -274,7 +265,8 @@ export const WORKFLOW_RECOMMENDATIONS: RecommendationConfig[] = [
     id: 'good-deferral-practice',
     category: 'deferral_practice',
     threshold: (m) => m.deferrals.strategic > 0 && m.deferrals.strategic > m.deferrals.problematic * 2,
-    generate: () => 'Your strategic deferral practices are excellent! You are using deferrals appropriately for time-based and seasonal tasks',
+    generate: () =>
+      'Your strategic deferral practices are excellent! You are using deferrals appropriately for time-based and seasonal tasks',
     priority: 'low',
     actionable: false,
   },
@@ -298,7 +290,8 @@ export const WORKFLOW_RECOMMENDATIONS: RecommendationConfig[] = [
     id: 'low-momentum',
     category: 'momentum_building',
     threshold: (m) => m.projects.lowMomentum > m.projects.highMomentum * 2,
-    generate: () => 'Low project momentum suggests focus issues - consider concentrating on fewer, high-impact projects',
+    generate: () =>
+      'Low project momentum suggests focus issues - consider concentrating on fewer, high-impact projects',
     priority: 'medium',
     actionable: true,
   },
@@ -352,5 +345,5 @@ export function sortByPriority<T extends { priority: InsightPriority }>(items: T
  * Filter to high-priority insights only
  */
 export function highPriorityOnly<T extends { priority: InsightPriority }>(items: T[]): T[] {
-  return items.filter(item => item.priority === 'high');
+  return items.filter((item) => item.priority === 'high');
 }

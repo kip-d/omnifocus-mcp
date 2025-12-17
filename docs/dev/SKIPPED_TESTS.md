@@ -21,6 +21,7 @@ Quick guide to understanding which tests are skipped and why.
 **Why skipped**: `ENABLE_LLM_SIMULATION_TESTS` environment variable not set to `'true'`
 
 **To enable**:
+
 ```bash
 ENABLE_LLM_SIMULATION_TESTS=true npm test
 ```
@@ -31,15 +32,18 @@ ENABLE_LLM_SIMULATION_TESTS=true npm test
 
 #### 2. real-llm-integration.test.ts (8 skipped tests)
 
-**Purpose**: Uses actual AI models via Ollama for real LLM reasoning tests to validate that the MCP server works with real LLM decision-making.
+**Purpose**: Uses actual AI models via Ollama for real LLM reasoning tests to validate that the MCP server works with
+real LLM decision-making.
 
 **Why skipped**: `ENABLE_REAL_LLM_TESTS` environment variable not set to `'true'`
 
 **Requirements**:
+
 - Ollama installed and running locally
 - Small language models available (phi3.5:3.8b, qwen2.5:0.5b, etc.)
 
 **To enable**:
+
 ```bash
 ENABLE_REAL_LLM_TESTS=true npm test
 ```
@@ -57,6 +61,7 @@ ENABLE_REAL_LLM_TESTS=true npm test
 **Requirements**: macOS with OmniFocus installed
 
 **To enable**:
+
 ```bash
 VITEST_ALLOW_JXA=1 npm test
 ```
@@ -70,11 +75,13 @@ VITEST_ALLOW_JXA=1 npm test
 These tests run automatically when on macOS with OmniFocus installed.
 
 ### 1. data-lifecycle.test.ts (6 tests)
+
 - Tests CRUD operations on tasks and projects
 - Verifies data integrity across operations
 - **Cleanup**: Yes - uses `thoroughCleanup()` in `afterAll`
 
 ### 2. omnifocus-4.7-features.test.ts (15 tests)
+
 - Tests OmniFocus 4.7+ specific features:
   - Planned dates support
   - Mutually exclusive tags
@@ -83,16 +90,19 @@ These tests run automatically when on macOS with OmniFocus installed.
 - **Cleanup**: Has cleanup hooks but **⚠️ See Cleanup Issues below**
 
 ### 3. mcp-protocol.test.ts (7 tests)
+
 - Tests MCP protocol compliance
 - Read-only tests, no data creation
 - **Cleanup**: Not needed
 
 ### 4. edge-case-escaping.test.ts (11 tests)
+
 - Tests string escaping in scripts
 - Read-only tests, no data creation
 - **Cleanup**: Not needed
 
 ### 5. pattern-analysis-tool.test.ts (6 tests)
+
 - Tests pattern analysis algorithms
 - Read-only tests, no data creation
 - **Cleanup**: Not needed
@@ -103,14 +113,17 @@ These tests run automatically when on macOS with OmniFocus installed.
 
 ### Problem: Untracked Task Creation in omnifocus-4.7-features.test.ts
 
-**Issue**: 12 calls to `client.callTool('manage_task', { operation: 'create', ... })` are creating tasks directly instead of using the `client.createTestTask()` helper.
+**Issue**: 12 calls to `client.callTool('manage_task', { operation: 'create', ... })` are creating tasks directly
+instead of using the `client.createTestTask()` helper.
 
 **Result**: These tasks are NOT tracked for cleanup because:
+
 1. Session ID tag is not added
 2. Task ID is not recorded in `createdTaskIds[]`
 3. Cleanup code only deletes tracked IDs
 
-**Evidence**: Tasks with tags like `['test', 'planned-dates']` and `['test', 'planned-query']` are left in OmniFocus after test runs.
+**Evidence**: Tasks with tags like `['test', 'planned-dates']` and `['test', 'planned-query']` are left in OmniFocus
+after test runs.
 
 **Impact**: Database pollution accumulates with each test run.
 
@@ -124,13 +137,13 @@ await client.callTool('manage_task', {
   operation: 'create',
   name: 'Task with Planned Date',
   plannedDate: '2025-11-15 09:00',
-  tags: ['test', 'planned-dates']
+  tags: ['test', 'planned-dates'],
 });
 
 // ✅ CORRECT - Task is tracked and cleaned up
 await client.createTestTask('Task with Planned Date', {
   plannedDate: '2025-11-15 09:00',
-  tags: ['test', 'planned-dates']
+  tags: ['test', 'planned-dates'],
 });
 ```
 
@@ -158,26 +171,31 @@ Tests that use `client.createTestTask()` and `client.callTool('projects', { oper
 ## Running Tests with Different Configurations
 
 ### Run all unit tests only (fast, ~2 seconds)
+
 ```bash
 npm run test:quick
 ```
 
 ### Run all tests (unit + integration)
+
 ```bash
 npm test
 ```
 
 ### Run specific integration test file
+
 ```bash
 npm test -- tests/integration/omnifocus-4.7-features.test.ts
 ```
 
 ### Run only skipped tests (one example)
+
 ```bash
 ENABLE_LLM_SIMULATION_TESTS=true npm test -- tests/integration/llm-assistant-simulation.test.ts
 ```
 
 ### Run all tests including expensive ones
+
 ```bash
 ENABLE_LLM_SIMULATION_TESTS=true ENABLE_REAL_LLM_TESTS=true VITEST_ALLOW_JXA=1 npm test
 ```
@@ -201,14 +219,13 @@ For planning CI/CD and local development:
 
 ## Summary Table
 
-| Test File | Tests | Status | Cleanup | Notes |
-|-----------|-------|--------|---------|-------|
-| llm-assistant-simulation.test.ts | 14 | Skipped | N/A | Opt-in: `ENABLE_LLM_SIMULATION_TESTS=true` |
-| real-llm-integration.test.ts | 8 | Skipped | N/A | Opt-in: `ENABLE_REAL_LLM_TESTS=true` (requires Ollama) |
-| batch-operations.test.ts | 8 | Skipped | Yes | Opt-in: `VITEST_ALLOW_JXA=1` |
-| data-lifecycle.test.ts | 6 | Running | Yes ✅ | Auto-enabled on macOS |
-| omnifocus-4.7-features.test.ts | 15 | Running | Partial ⚠️ | Auto-enabled on macOS; 12 untracked creates |
-| mcp-protocol.test.ts | 7 | Running | N/A | Read-only, no cleanup needed |
-| edge-case-escaping.test.ts | 11 | Running | N/A | Read-only, no cleanup needed |
-| pattern-analysis-tool.test.ts | 6 | Running | N/A | Read-only, no cleanup needed |
-
+| Test File                        | Tests | Status  | Cleanup    | Notes                                                  |
+| -------------------------------- | ----- | ------- | ---------- | ------------------------------------------------------ |
+| llm-assistant-simulation.test.ts | 14    | Skipped | N/A        | Opt-in: `ENABLE_LLM_SIMULATION_TESTS=true`             |
+| real-llm-integration.test.ts     | 8     | Skipped | N/A        | Opt-in: `ENABLE_REAL_LLM_TESTS=true` (requires Ollama) |
+| batch-operations.test.ts         | 8     | Skipped | Yes        | Opt-in: `VITEST_ALLOW_JXA=1`                           |
+| data-lifecycle.test.ts           | 6     | Running | Yes ✅     | Auto-enabled on macOS                                  |
+| omnifocus-4.7-features.test.ts   | 15    | Running | Partial ⚠️ | Auto-enabled on macOS; 12 untracked creates            |
+| mcp-protocol.test.ts             | 7     | Running | N/A        | Read-only, no cleanup needed                           |
+| edge-case-escaping.test.ts       | 11    | Running | N/A        | Read-only, no cleanup needed                           |
+| pattern-analysis-tool.test.ts    | 6     | Running | N/A        | Read-only, no cleanup needed                           |

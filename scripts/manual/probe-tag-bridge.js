@@ -8,8 +8,8 @@ function runProbe() {
   const tagName = `BridgeProbeTag-${timestamp}`;
   const taskName = `BridgeProbeTask-${timestamp}`;
 
-const jxaScript = (() => {
-  const taskIdPlaceholder = '${TASK_ID_PLACEHOLDER}';
+  const jxaScript = (() => {
+    const taskIdPlaceholder = '${TASK_ID_PLACEHOLDER}';
     const addScript = [
       '(function () {',
       '  var task = Task.byIdentifier("' + taskIdPlaceholder + '");',
@@ -30,7 +30,7 @@ const jxaScript = (() => {
       '    }',
       '  }',
       '  return JSON.stringify({ success: added.length === tagNames.length, tags: added });',
-      '})()'
+      '})()',
     ].join('\n');
 
     const readScript = [
@@ -45,7 +45,7 @@ const jxaScript = (() => {
       '    }',
       '  }',
       '  return JSON.stringify(names);',
-      '})()'
+      '})()',
     ].join('\n');
 
     return `

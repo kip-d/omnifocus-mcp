@@ -5,6 +5,7 @@
 We've built 3 new unified MCP tools that potentially replace 17 existing tools:
 
 **New Tools:**
+
 - `omnifocus_read` - Query builder
 - `omnifocus_write` - Mutation builder
 - `omnifocus_analyze` - Analysis router
@@ -18,12 +19,15 @@ We've built 3 new unified MCP tools that potentially replace 17 existing tools:
 Test in TWO phases:
 
 ### Phase 1: Test with Both (3 new + 17 old tools)
+
 Verify the new tools work correctly alongside the old ones.
 
 ### Phase 2: Test with ONLY the 3 new tools 🚨
+
 **THIS IS THE CRITICAL TEST**
 
-Remove the 17 old tools and verify everything still works. If Phase 2 passes, we can confidently delete 17 tools from production and save massive context window space for LLMs.
+Remove the 17 old tools and verify everything still works. If Phase 2 passes, we can confidently delete 17 tools from
+production and save massive context window space for LLMs.
 
 ---
 
@@ -74,13 +78,16 @@ npm run test:integration -- tests/integration/tools/unified
 ## 🎯 Critical Success Criteria
 
 ### Phase 1 (All Tools): Must Pass ✅
+
 - Read operations work
 - Write operations work (create, update, complete, delete)
 - Analyze operations work
 - Legacy tools still work
 
 ### Phase 2 (Only 3 Tools): Must Pass ✅⚠️
+
 **SAME TESTS as Phase 1, but with 17 legacy tools disabled**
+
 - Read operations STILL work
 - Write operations STILL work
 - Analyze operations STILL work
@@ -89,11 +96,13 @@ npm run test:integration -- tests/integration/tools/unified
 ### Decision Point
 
 **If Phase 2 passes:** ✅
+
 - We can safely remove 17 legacy tools
 - Massive context window savings
 - Green light to merge and deploy
 
 **If Phase 2 fails:** ❌
+
 - Report what broke
 - Need to fix unified tools
 - Cannot remove legacy tools yet
@@ -117,13 +126,16 @@ A completed report answering:
 ## 💡 Testing Tips
 
 ### Use the Natural Language Prompt
+
 `TESTING_PROMPT.md` is designed to be copy/pasted directly into Claude Desktop. It walks Claude through:
+
 - Testing all read operations
 - Testing full CRUD cycle (create/update/complete/delete)
 - Testing analysis operations
 - Verifying legacy tools (Phase 1 only)
 
 ### The Toggle Script is Your Friend
+
 ```bash
 # For Phase 2 testing
 ./scripts/toggle-legacy-tools.sh disable
@@ -133,6 +145,7 @@ A completed report answering:
 ```
 
 ### Don't Panic If Something Breaks
+
 `TESTING_INSTRUCTIONS.md` has a troubleshooting section. Most issues are easy fixes.
 
 ---
@@ -160,6 +173,7 @@ A completed report answering:
 ## 📞 Questions?
 
 Check the docs:
+
 - Quick reference: `QUICK_START_TESTING.md`
 - Detailed guide: `TESTING_INSTRUCTIONS.md`
 - Testing script: `TESTING_PROMPT.md`

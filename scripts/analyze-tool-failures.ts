@@ -31,7 +31,7 @@ interface FailureStats {
 
 function analyzeFailures(days: number = 7, specificTool?: string): void {
   const logsDir = join(homedir(), '.omnifocus-mcp', 'tool-failures');
-  
+
   if (!existsSync(logsDir)) {
     console.log('No failure logs found. Logs will be created at:', logsDir);
     return;
@@ -40,10 +40,10 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
   // Get log files from the last N days
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
-  
+
   const logFiles = readdirSync(logsDir)
-    .filter(file => file.startsWith('failures-') && file.endsWith('.jsonl'))
-    .filter(file => {
+    .filter((file) => file.startsWith('failures-') && file.endsWith('.jsonl'))
+    .filter((file) => {
       const dateStr = file.replace('failures-', '').replace('.jsonl', '');
       const fileDate = new Date(dateStr);
       return fileDate >= cutoffDate;
@@ -61,7 +61,7 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
     const filePath = join(logsDir, file);
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.trim().split('\n');
-    
+
     for (const line of lines) {
       if (line) {
         try {
@@ -77,15 +77,13 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
   }
 
   if (failures.length === 0) {
-    console.log(specificTool 
-      ? `No failures found for tool: ${specificTool}`
-      : 'No failures found in logs');
+    console.log(specificTool ? `No failures found for tool: ${specificTool}` : 'No failures found in logs');
     return;
   }
 
   // Analyze failures by tool
   const statsByTool = new Map<string, FailureStats>();
-  
+
   for (const failure of failures) {
     let stats = statsByTool.get(failure.tool);
     if (!stats) {
@@ -100,12 +98,12 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
       };
       statsByTool.set(failure.tool, stats);
     }
-    
+
     stats.totalFailures++;
-    
+
     if (failure.errorType === 'VALIDATION_ERROR') {
       stats.validationErrors++;
-      
+
       // Extract field names from validation errors
       if (failure.validationErrors) {
         for (const error of failure.validationErrors) {
@@ -116,15 +114,15 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
     } else {
       stats.executionErrors++;
     }
-    
+
     // Track common error messages (simplified)
     const simpleError = failure.errorMessage
       .replace(/[0-9a-f]{8,}/gi, 'ID') // Replace IDs with placeholder
       .replace(/\d{4}-\d{2}-\d{2}/g, 'DATE') // Replace dates
       .substring(0, 100); // Truncate for grouping
-    
+
     stats.commonErrors.set(simpleError, (stats.commonErrors.get(simpleError) || 0) + 1);
-    
+
     // Keep a few examples
     if (stats.examples.length < 3) {
       stats.examples.push(failure);
@@ -136,68 +134,70 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
   console.log(`  TOOL FAILURE ANALYSIS - Last ${days} days`);
   console.log('═══════════════════════════════════════════════════════════════');
   console.log();
-  
+
   // Sort tools by failure count
-  const sortedTools = Array.from(statsByTool.values())
-    .sort((a, b) => b.totalFailures - a.totalFailures);
-  
+  const sortedTools = Array.from(statsByTool.values()).sort((a, b) => b.totalFailures - a.totalFailures);
+
   for (const stats of sortedTools) {
     console.log(`📊 ${stats.tool}`);
     console.log(`   Total Failures: ${stats.totalFailures}`);
-    console.log(`   Validation Errors: ${stats.validationErrors} (${Math.round(stats.validationErrors / stats.totalFailures * 100)}%)`);
-    console.log(`   Execution Errors: ${stats.executionErrors} (${Math.round(stats.executionErrors / stats.totalFailures * 100)}%)`);
-    
+    console.log(
+      `   Validation Errors: ${stats.validationErrors} (${Math.round((stats.validationErrors / stats.totalFailures) * 100)}%)`,
+    );
+    console.log(
+      `   Execution Errors: ${stats.executionErrors} (${Math.round((stats.executionErrors / stats.totalFailures) * 100)}%)`,
+    );
+
     if (stats.validationErrors > 0 && stats.commonFields.size > 0) {
       console.log('\n   Most Problematic Fields:');
       const topFields = Array.from(stats.commonFields.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5);
-      
+
       for (const [field, count] of topFields) {
         console.log(`   - ${field}: ${count} failures`);
       }
     }
-    
+
     if (stats.commonErrors.size > 0) {
       console.log('\n   Common Error Patterns:');
       const topErrors = Array.from(stats.commonErrors.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3);
-      
+
       for (const [error, count] of topErrors) {
         console.log(`   - "${error.substring(0, 60)}...": ${count} times`);
       }
     }
-    
+
     if (stats.examples.length > 0) {
       console.log('\n   Example Failure:');
       const example = stats.examples[0];
       console.log(`   Input: ${JSON.stringify(example.inputArgs).substring(0, 200)}`);
       console.log(`   Error: ${example.errorMessage.substring(0, 150)}`);
     }
-    
+
     console.log('\n───────────────────────────────────────────────────────────────');
   }
-  
+
   // Summary statistics
   console.log('\n📈 SUMMARY');
   console.log(`   Total Tools with Failures: ${statsByTool.size}`);
   console.log(`   Total Failures: ${failures.length}`);
-  
+
   const validationTotal = sortedTools.reduce((sum, s) => sum + s.validationErrors, 0);
   const executionTotal = sortedTools.reduce((sum, s) => sum + s.executionErrors, 0);
-  
-  console.log(`   Validation Errors: ${validationTotal} (${Math.round(validationTotal / failures.length * 100)}%)`);
-  console.log(`   Execution Errors: ${executionTotal} (${Math.round(executionTotal / failures.length * 100)}%)`);
-  
+
+  console.log(`   Validation Errors: ${validationTotal} (${Math.round((validationTotal / failures.length) * 100)}%)`);
+  console.log(`   Execution Errors: ${executionTotal} (${Math.round((executionTotal / failures.length) * 100)}%)`);
+
   // Recommendations
   console.log('\n💡 RECOMMENDATIONS');
-  
+
   for (const stats of sortedTools.slice(0, 3)) {
     if (stats.validationErrors > stats.executionErrors) {
-      const topField = Array.from(stats.commonFields.entries())
-        .sort((a, b) => b[1] - a[1])[0];
-      
+      const topField = Array.from(stats.commonFields.entries()).sort((a, b) => b[1] - a[1])[0];
+
       if (topField) {
         console.log(`   • ${stats.tool}: Improve description for field "${topField[0]}" (${topField[1]} failures)`);
       }
@@ -205,7 +205,7 @@ function analyzeFailures(days: number = 7, specificTool?: string): void {
       console.log(`   • ${stats.tool}: Focus on execution error handling`);
     }
   }
-  
+
   console.log('\n═══════════════════════════════════════════════════════════════');
 }
 

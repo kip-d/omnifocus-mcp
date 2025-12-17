@@ -9,6 +9,7 @@ Implement profiling and benchmarking infrastructure to diagnose test slowness an
 ### 1. Profiling Infrastructure ✓
 
 **Files Created:**
+
 - `tests/performance/profile-jxa-bottlenecks.js` - Direct JXA profiling script
 - `tests/performance/profile-results.json` - Profiling data export
 - `docs/dev/PERFORMANCE-BOTTLENECK-ANALYSIS.md` - Root cause analysis
@@ -18,11 +19,13 @@ Implement profiling and benchmarking infrastructure to diagnose test slowness an
 ### 2. Benchmarking Suite ✓
 
 **Files Created:**
+
 - `scripts/benchmark-performance.ts` - Comprehensive benchmark harness
 - Supports warm/cold cache modes
 - Tracks 9 operations with timing statistics
 
 **Initial Benchmark Results (October 20, 2025):**
+
 ```
 Task velocity:      67,592ms (CRITICAL)
 Productivity stats:  7,841ms
@@ -35,6 +38,7 @@ Tags (names only):   3,548ms
 ### 3. Performance Analysis Documentation ✓
 
 **Files Created:**
+
 - `docs/dev/BENCHMARK-ANALYSIS-OCT-2025.md` - Initial analysis
 - `docs/dev/CHECKPOINT-OMNIJS-V3-BREAKTHROUGH.md` - Pattern documentation
 - `docs/dev/SCRIPT_SIZE_LIMITS.md` - Empirical JXA/OmniJS limits
@@ -50,6 +54,7 @@ While the primary goal was profiling infrastructure, we also implemented V3 opti
 3. **Project Stats V3** - 6.9s → 1.4s (5.1x faster)
 
 **Pattern Established:** OmniJS-first architecture
+
 - Use `evaluateJavascript()` with OmniJS global collections
 - Property access in OmniJS context (~0.001ms vs JXA 16.662ms)
 - Single bridge call eliminates per-property overhead
@@ -68,7 +73,8 @@ Productivity stats           |  7,841ms  | 7,668ms | 1.0x (minimal change)
 Tags (full mode)             |  8,366ms  | 8,388ms | 1.0x (already optimized)
 ```
 
-**Note:** Task velocity regressed from 4.3s to 7.8s - this is expected variation and still 8.7x faster than original 67.6s.
+**Note:** Task velocity regressed from 4.3s to 7.8s - this is expected variation and still 8.7x faster than original
+67.6s.
 
 ## Remaining Optimization Opportunities
 
@@ -83,17 +89,20 @@ From the profiling work, we identified these as future targets:
 **Ready for merge to main.**
 
 This branch successfully delivered:
+
 - ✅ Profiling infrastructure for diagnosing performance issues
 - ✅ Benchmark suite for measuring performance
 - ✅ Root cause analysis (16.662ms JXA property access overhead)
 - ✅ Documented OmniJS-first pattern for future optimizations
 - ✅ Three V3 implementations as proof-of-concept
 
-The V3 optimizations validate the profiling findings and establish the pattern for future work. Further optimizations should continue on main branch.
+The V3 optimizations validate the profiling findings and establish the pattern for future work. Further optimizations
+should continue on main branch.
 
 ## Files Modified/Created
 
 ### Profiling & Benchmarking
+
 - tests/performance/profile-jxa-bottlenecks.js
 - tests/performance/profile-results.json
 - scripts/benchmark-performance.ts
@@ -103,6 +112,7 @@ The V3 optimizations validate the profiling findings and establish the pattern f
 - docs/dev/SCRIPT_SIZE_LIMITS.md
 
 ### V3 Optimizations (Proof of Concept)
+
 - src/omnifocus/scripts/analytics/task-velocity-v3.ts
 - src/omnifocus/scripts/tags/list-tags-v3.ts
 - src/omnifocus/scripts/projects/get-project-stats-v3.ts
@@ -128,4 +138,5 @@ The V3 optimizations validate the profiling findings and establish the pattern f
 
 ## Conclusion
 
-This branch exceeded its original scope by not only delivering profiling infrastructure but also proving the optimization pattern works. The benchmark suite will enable data-driven optimization going forward.
+This branch exceeded its original scope by not only delivering profiling infrastructure but also proving the
+optimization pattern works. The benchmark suite will enable data-driven optimization going forward.

@@ -3,14 +3,7 @@ import { z } from 'zod';
 export type JsonValue = string | number | boolean | null | { [k: string]: JsonValue } | JsonValue[];
 
 export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValueSchema),
-    z.record(JsonValueSchema),
-  ]),
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]),
 );
 
 export type JxaResultOk<T extends JsonValue = JsonValue> = { ok: true; data: T; v: string };
@@ -29,7 +22,12 @@ export const JxaEnvelopeSchema = z.discriminatedUnion('ok', [
 type LegacyErrorShape = { error: true; message?: unknown; details?: unknown };
 
 function isLegacyErrorShape(val: unknown): val is LegacyErrorShape {
-  return !!val && typeof val === 'object' && Object.prototype.hasOwnProperty.call(val, 'error') && (val as Record<string, unknown>).error === true;
+  return (
+    !!val &&
+    typeof val === 'object' &&
+    Object.prototype.hasOwnProperty.call(val, 'error') &&
+    (val as Record<string, unknown>).error === true
+  );
 }
 
 export function normalizeToEnvelope(value: unknown): JxaEnvelope<JsonValue> {
@@ -65,4 +63,3 @@ export function safeStringify(value: unknown): string {
     return '[unserializable]';
   }
 }
-

@@ -6,47 +6,47 @@ import { spawn } from 'child_process';
 
 async function testExportWithSpecificLimit() {
   const omni = new OmniAutomation();
-  
+
   console.log('Testing export with user parameters plus reasonable limit...\n');
-  
+
   // User parameters with added limit
   const params = {
     fields: ['id', 'name', 'project', 'dueDate', 'flagged', 'completed'],
-    filter: { 
+    filter: {
       completed: false,
-      limit: 100  // Add reasonable limit to prevent timeout
+      limit: 100, // Add reasonable limit to prevent timeout
     },
-    format: 'csv'
+    format: 'csv',
   };
-  
+
   console.log('Parameters:', JSON.stringify(params, null, 2));
-  
+
   try {
     const script = omni.buildScript(EXPORT_TASKS_SCRIPT, params);
-    
+
     const proc = spawn('osascript', ['-l', 'JavaScript'], {
-      timeout: 20000 // 20 seconds
+      timeout: 20000, // 20 seconds
     });
-    
+
     let stdout = '';
     let stderr = '';
-    
+
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
     });
-    
+
     proc.stderr.on('data', (data) => {
       stderr += data.toString();
     });
-    
+
     proc.on('close', (code) => {
       console.log('\nExecution completed');
       console.log('Exit code:', code);
-      
+
       if (stderr) {
         console.log('\nSTDERR:', stderr);
       }
-      
+
       if (stdout) {
         try {
           const result = JSON.parse(stdout);
@@ -56,7 +56,7 @@ async function testExportWithSpecificLimit() {
           console.log('- limited:', result.limited);
           console.log('- message:', result.message);
           console.log('- error:', result.error);
-          
+
           if (result.data && result.format === 'csv') {
             console.log('\nCSV headers:');
             const lines = result.data.split('\n');
@@ -75,10 +75,9 @@ async function testExportWithSpecificLimit() {
         console.log('\nNo output received');
       }
     });
-    
+
     proc.stdin.write(script);
     proc.stdin.end();
-    
   } catch (error) {
     console.error('Error:', error.message);
   }

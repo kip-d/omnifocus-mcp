@@ -97,27 +97,27 @@ export function asContextId(id: string): ContextId {
  * Optional Conversion Functions - Safe conversion that returns undefined for invalid IDs
  */
 export function tryAsTaskId(id: string): TaskId | undefined {
-  return isTaskId(id) ? id as TaskId : undefined;
+  return isTaskId(id) ? (id as TaskId) : undefined;
 }
 
 export function tryAsProjectId(id: string): ProjectId | undefined {
-  return isProjectId(id) ? id as ProjectId : undefined;
+  return isProjectId(id) ? (id as ProjectId) : undefined;
 }
 
 export function tryAsTagId(id: string): TagId | undefined {
-  return isTagId(id) ? id as TagId : undefined;
+  return isTagId(id) ? (id as TagId) : undefined;
 }
 
 export function tryAsFolderId(id: string): FolderId | undefined {
-  return isFolderId(id) ? id as FolderId : undefined;
+  return isFolderId(id) ? (id as FolderId) : undefined;
 }
 
 export function tryAsPerspectiveId(id: string): PerspectiveId | undefined {
-  return isPerspectiveId(id) ? id as PerspectiveId : undefined;
+  return isPerspectiveId(id) ? (id as PerspectiveId) : undefined;
 }
 
 export function tryAsContextId(id: string): ContextId | undefined {
-  return isContextId(id) ? id as ContextId : undefined;
+  return isContextId(id) ? (id as ContextId) : undefined;
 }
 
 /**
@@ -127,7 +127,10 @@ export function createBrandedType<T extends string, B extends string>(value: T, 
   return value as Brand<T, B>;
 }
 
-export function isBrandedType<T extends string>(value: unknown, validator: (v: string) => boolean): value is Brand<T, string> {
+export function isBrandedType<T extends string>(
+  value: unknown,
+  validator: (v: string) => boolean,
+): value is Brand<T, string> {
   return typeof value === 'string' && validator(value);
 }
 

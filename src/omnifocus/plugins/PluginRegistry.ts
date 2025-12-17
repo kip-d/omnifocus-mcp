@@ -13,7 +13,7 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
     logger.debug(`Registering recurring task analyzer: ${analyzer.name} (priority: ${analyzer.priority})`);
 
     // Check for duplicate names
-    if (this.analyzers.some(a => a.name === analyzer.name)) {
+    if (this.analyzers.some((a) => a.name === analyzer.name)) {
       logger.warn(`Analyzer with name "${analyzer.name}" already registered, skipping`);
       return;
     }
@@ -88,7 +88,7 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
   private formatFrequency(rule: RepetitionRule): string {
     if (!rule.unit || !rule.steps) return 'Custom';
 
-    switch(rule.unit) {
+    switch (rule.unit) {
       case 'hours':
         if (rule.steps === 1) return 'Hourly';
         else return `Every ${rule.steps} hours`;
@@ -111,4 +111,3 @@ export class RecurringTaskPluginRegistry implements PluginRegistry {
     }
   }
 }
-

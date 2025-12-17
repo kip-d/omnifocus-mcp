@@ -76,7 +76,7 @@ const testScript = `(() => {
 console.log('Running minimal get_task_count test...\n');
 
 const proc = spawn('osascript', ['-l', 'JavaScript'], {
-  timeout: 10000
+  timeout: 10000,
 });
 
 let stdout = '';

@@ -14,7 +14,7 @@ vi.mock('../../../src/utils/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  }))
+  })),
 }));
 
 describe('SystemTool', () => {
@@ -24,14 +24,14 @@ describe('SystemTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockCache = {
       get: vi.fn(() => null),
       set: vi.fn(),
       clear: vi.fn(),
       invalidate: vi.fn(),
     };
-    
+
     mockDiagnosticOmni = {
       execute: vi.fn(),
       executeJson: vi.fn(),
@@ -56,17 +56,17 @@ describe('SystemTool', () => {
           commitMessage: 'feat: add v2 tools',
           dirty: false,
           timestamp: '2024-01-01T12:00:00Z',
-          buildId: 'build123'
+          buildId: 'build123',
         },
         runtime: {
           node: 'v18.0.0',
           platform: 'darwin',
-          arch: 'arm64'
+          arch: 'arm64',
         },
         git: {
           repository: 'https://github.com/example/omnifocus-mcp',
-          homepage: 'https://example.com'
-        }
+          homepage: 'https://example.com',
+        },
       };
 
       vi.mocked(versionUtils.getVersionInfo).mockReturnValue(mockVersionInfo);
@@ -94,29 +94,32 @@ describe('SystemTool', () => {
   describe('diagnostics operation', () => {
     it('should run basic diagnostics', async () => {
       mockDiagnosticOmni.execute
-        .mockResolvedValueOnce({ // basic_connection test
+        .mockResolvedValueOnce({
+          // basic_connection test
           test: 'basic_connection',
           appName: 'OmniFocus',
-          docAvailable: true
+          docAvailable: true,
         })
-        .mockResolvedValueOnce({ // collection_access test
+        .mockResolvedValueOnce({
+          // collection_access test
           test: 'collection_access',
           collections: {
             tasks: { type: 'object', length: 100 },
             projects: { type: 'object', length: 20 },
-            tags: { type: 'object', length: 10 }
-          }
+            tags: { type: 'object', length: 10 },
+          },
         })
-        .mockResolvedValueOnce({ // property_access test
+        .mockResolvedValueOnce({
+          // property_access test
           test: 'property_access',
           tests: [
             { test: 'task_id', success: true, value: 'task123' },
-            { test: 'task_name', success: true, value: 'Test Task' }
-          ]
+            { test: 'task_name', success: true, value: 'Test Task' },
+          ],
         });
 
-      const result = await tool.executeValidated({ 
-        operation: 'diagnostics'
+      const result = await tool.executeValidated({
+        operation: 'diagnostics',
       });
 
       expect(result.success).toBe(true);
@@ -134,9 +137,9 @@ describe('SystemTool', () => {
         .mockResolvedValueOnce({ test: 'property_access', tests: [] })
         .mockResolvedValueOnce({ test: 'list_tasks', tasks: [] }); // Custom test
 
-      const result = await tool.executeValidated({ 
+      const result = await tool.executeValidated({
         operation: 'diagnostics',
-        testScript: 'list_tasks'
+        testScript: 'list_tasks',
       });
 
       expect(result.success).toBe(true);
@@ -151,8 +154,8 @@ describe('SystemTool', () => {
         .mockResolvedValueOnce({ test: 'collection_access', collections: {} })
         .mockResolvedValueOnce({ test: 'property_access', tests: [] });
 
-      const result = await tool.executeValidated({ 
-        operation: 'diagnostics'
+      const result = await tool.executeValidated({
+        operation: 'diagnostics',
       });
 
       expect(result.success).toBe(true);
@@ -165,8 +168,8 @@ describe('SystemTool', () => {
       // Mock all diagnostic executions to fail
       mockDiagnosticOmni.execute.mockRejectedValue(new Error('Critical failure'));
 
-      const result = await tool.executeValidated({ 
-        operation: 'diagnostics'
+      const result = await tool.executeValidated({
+        operation: 'diagnostics',
       });
 
       // Should still return success: true but with failed tests
@@ -178,8 +181,8 @@ describe('SystemTool', () => {
 
   describe('invalid operation', () => {
     it('should return error for invalid operation', async () => {
-      const result = await tool.executeValidated({ 
-        operation: 'invalid' as any
+      const result = await tool.executeValidated({
+        operation: 'invalid' as any,
       });
 
       expect(result.success).toBe(false);

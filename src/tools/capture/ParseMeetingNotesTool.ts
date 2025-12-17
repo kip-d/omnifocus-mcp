@@ -9,17 +9,14 @@ import { extractDates } from './date-extraction.js';
  * Schema for parse_meeting_notes tool
  */
 const ParseMeetingNotesSchema = z.object({
-  input: z.string()
-    .min(10)
-    .describe('Meeting notes, transcript, or other text to parse for action items'),
+  input: z.string().min(10).describe('Meeting notes, transcript, or other text to parse for action items'),
 
-  extractMode: z.enum(['action_items', 'projects', 'both'])
+  extractMode: z
+    .enum(['action_items', 'projects', 'both'])
     .default('both')
     .describe('What to extract: action_items (tasks only), projects (projects with tasks), or both'),
 
-  suggestProjects: coerceBoolean()
-    .default(true)
-    .describe('Auto-detect matches to existing projects'),
+  suggestProjects: coerceBoolean().default(true).describe('Auto-detect matches to existing projects'),
 
   suggestTags: coerceBoolean()
     .default(true)
@@ -29,25 +26,18 @@ const ParseMeetingNotesSchema = z.object({
     .default(true)
     .describe('Extract due dates from text (e.g., "by Friday", "next Tuesday")'),
 
-  suggestEstimates: coerceBoolean()
-    .default(true)
-    .describe('Estimate task duration based on keywords'),
+  suggestEstimates: coerceBoolean().default(true).describe('Estimate task duration based on keywords'),
 
-  returnFormat: z.enum(['preview', 'batch_ready'])
+  returnFormat: z
+    .enum(['preview', 'batch_ready'])
     .default('preview')
     .describe('Output format: preview (for user review) or batch_ready (for direct batch_create)'),
 
-  groupByProject: coerceBoolean()
-    .default(true)
-    .describe('Group tasks by detected project'),
+  groupByProject: coerceBoolean().default(true).describe('Group tasks by detected project'),
 
-  existingProjects: z.array(z.string())
-    .optional()
-    .describe('Known project names for better matching'),
+  existingProjects: z.array(z.string()).optional().describe('Known project names for better matching'),
 
-  defaultProject: z.string()
-    .optional()
-    .describe('Fallback project for unmatched items'),
+  defaultProject: z.string().optional().describe('Fallback project for unmatched items'),
 });
 
 type ParseMeetingNotesArgs = z.infer<typeof ParseMeetingNotesSchema>;
@@ -149,26 +139,24 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
       const extracted = this.extractActionItems(args.input, args);
 
       // Format output based on returnFormat
-      const result = args.returnFormat === 'preview'
-        ? this.formatPreview(extracted, args)
-        : this.formatBatchReady(extracted, args);
+      const result =
+        args.returnFormat === 'preview' ? this.formatPreview(extracted, args) : this.formatBatchReady(extracted, args);
 
-      return Promise.resolve(createSuccessResponseV2(
-        'parse_meeting_notes',
-        result,
-        undefined,
-        timer.toMetadata(),
-      ) as unknown);
+      return Promise.resolve(
+        createSuccessResponseV2('parse_meeting_notes', result, undefined, timer.toMetadata()) as unknown,
+      );
     } catch (error) {
       this.logger.error('Parse meeting notes failed', { error });
-      return Promise.resolve(createErrorResponseV2(
-        'parse_meeting_notes',
-        'PARSE_ERROR',
-        error instanceof Error ? error.message : 'Failed to parse meeting notes',
-        'Check that the input text contains actionable items',
-        undefined,
-        timer.toMetadata(),
-      ) as unknown);
+      return Promise.resolve(
+        createErrorResponseV2(
+          'parse_meeting_notes',
+          'PARSE_ERROR',
+          error instanceof Error ? error.message : 'Failed to parse meeting notes',
+          'Check that the input text contains actionable items',
+          undefined,
+          timer.toMetadata(),
+        ) as unknown,
+      );
     }
   }
 
@@ -176,7 +164,7 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
    * Extract action items from text
    */
   private extractActionItems(input: string, args: ParseMeetingNotesArgs): ExtractionResult {
-    const lines = input.split('\n').filter(line => line.trim());
+    const lines = input.split('\n').filter((line) => line.trim());
     const tasks: ExtractedTask[] = [];
     const projects: ExtractedProject[] = [];
 
@@ -245,13 +233,13 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     const nonActionablePatterns = [
       /^(meeting|agenda|action items?|discussion|attendees?|standalone task):/i,
       /^(date|time|location):/i,
-      /^meeting\s+notes:/i,  // "Meeting Notes:"
-      /^#+\s/,  // Markdown headers
+      /^meeting\s+notes:/i, // "Meeting Notes:"
+      /^#+\s/, // Markdown headers
       /^\*+\s/, // Bullet points without content
       /^-+\s*$/, // Dividers
     ];
 
-    return nonActionablePatterns.some(pattern => pattern.test(line));
+    return nonActionablePatterns.some((pattern) => pattern.test(line));
   }
 
   /**
@@ -312,7 +300,10 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     isUnderProject = false,
   ): ExtractedTask | null {
     // Remove common bullet points and numbering
-    let cleaned = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+    let cleaned = line
+      .replace(/^[-*•]\s*/, '')
+      .replace(/^\d+\.\s*/, '')
+      .trim();
 
     // Skip if too short to be a task
     if (cleaned.length < 5) {
@@ -321,15 +312,38 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
 
     // Look for action verbs (be more lenient for tasks under a project)
     const actionVerbs = [
-      'send', 'call', 'email', 'review', 'update', 'create', 'write', 'schedule',
-      'discuss', 'follow up', 'check', 'prepare', 'organize', 'plan', 'research',
-      'contact', 'complete', 'finish', 'implement', 'test', 'deploy', 'ask',
-      'buy', 'purchase', 'get', 'pick up', 'drop off', 'waiting', 'task',
+      'send',
+      'call',
+      'email',
+      'review',
+      'update',
+      'create',
+      'write',
+      'schedule',
+      'discuss',
+      'follow up',
+      'check',
+      'prepare',
+      'organize',
+      'plan',
+      'research',
+      'contact',
+      'complete',
+      'finish',
+      'implement',
+      'test',
+      'deploy',
+      'ask',
+      'buy',
+      'purchase',
+      'get',
+      'pick up',
+      'drop off',
+      'waiting',
+      'task',
     ];
 
-    const hasActionVerb = actionVerbs.some(verb =>
-      new RegExp(`\\b${verb}\\b`, 'i').test(cleaned),
-    );
+    const hasActionVerb = actionVerbs.some((verb) => new RegExp(`\\b${verb}\\b`, 'i').test(cleaned));
 
     // If no action verb and not under a project, skip
     if (!hasActionVerb && !isUnderProject) {
@@ -348,22 +362,16 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     const assigneeTags = this.detectAssignee(cleaned);
 
     // Suggest context tags
-    const contextTags = args.suggestTags
-      ? detectContextTags(cleaned)
-      : [];
+    const contextTags = args.suggestTags ? detectContextTags(cleaned) : [];
 
     // Combine all tags
     const allTags = [...new Set([...assigneeTags, ...contextTags])];
 
     // Extract dates
-    const dates = args.suggestDueDates
-      ? extractDates(cleaned)
-      : {};
+    const dates = args.suggestDueDates ? extractDates(cleaned) : {};
 
     // Estimate duration
-    const estimate = args.suggestEstimates
-      ? this.estimateDuration(cleaned)
-      : undefined;
+    const estimate = args.suggestEstimates ? this.estimateDuration(cleaned) : undefined;
 
     // Match to existing project if provided
     let projectMatch: { project: string | null; match: 'exact' | 'partial' | 'none' };
@@ -401,7 +409,10 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
 
     // Remove date/time references at end
     name = name.replace(/\s+(by|on|before|after|until)\s+[\w\s,]+$/i, '');
-    name = name.replace(/\s+(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week)$/i, '');
+    name = name.replace(
+      /\s+(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week)$/i,
+      '',
+    );
 
     return name.trim();
   }
@@ -459,7 +470,10 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
   /**
    * Match task to existing project
    */
-  private matchToProject(text: string, existingProjects: string[]): {
+  private matchToProject(
+    text: string,
+    existingProjects: string[],
+  ): {
     project: string | null;
     match: 'exact' | 'partial' | 'none';
   } {
@@ -475,8 +489,11 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
     // Check for partial match (keywords, excluding common words)
     const commonWords = ['project', 'task', 'the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in'];
     for (const project of existingProjects) {
-      const keywords = project.toLowerCase().split(/\s+/).filter(k => !commonWords.includes(k) && k.length > 2);
-      if (keywords.length > 0 && keywords.some(keyword => textLower.includes(keyword))) {
+      const keywords = project
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((k) => !commonWords.includes(k) && k.length > 2);
+      if (keywords.length > 0 && keywords.some((keyword) => textLower.includes(keyword))) {
         return { project, match: 'partial' };
       }
     }
@@ -513,22 +530,21 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
    * Format output as preview
    */
   private formatPreview(extracted: ExtractionResult, args: ParseMeetingNotesArgs): unknown {
-    const totalTasks = extracted.tasks.length +
-      extracted.projects.reduce((sum, p) => sum + p.tasks.length, 0);
+    const totalTasks = extracted.tasks.length + extracted.projects.reduce((sum, p) => sum + p.tasks.length, 0);
 
     const highConfidence = [
-      ...extracted.tasks.filter(t => t.confidence === 'high'),
-      ...extracted.projects.filter(p => p.confidence === 'high'),
+      ...extracted.tasks.filter((t) => t.confidence === 'high'),
+      ...extracted.projects.filter((p) => p.confidence === 'high'),
     ].length;
 
     const mediumConfidence = [
-      ...extracted.tasks.filter(t => t.confidence === 'medium'),
-      ...extracted.projects.filter(p => p.confidence === 'medium'),
+      ...extracted.tasks.filter((t) => t.confidence === 'medium'),
+      ...extracted.projects.filter((p) => p.confidence === 'medium'),
     ].length;
 
     const needsReview = extracted.tasks
-      .filter(t => t.confidence === 'low' || t.projectMatch === 'none')
-      .map(t => t.tempId);
+      .filter((t) => t.confidence === 'low' || t.projectMatch === 'none')
+      .map((t) => t.tempId);
 
     return {
       extracted: {
@@ -542,9 +558,10 @@ export class ParseMeetingNotesTool extends BaseTool<typeof ParseMeetingNotesSche
         mediumConfidence,
         needsReview,
       },
-      nextSteps: args.returnFormat === 'preview'
-        ? 'Review extracted items and use batch_create to add to OmniFocus'
-        : 'Ready for batch_create tool',
+      nextSteps:
+        args.returnFormat === 'preview'
+          ? 'Review extracted items and use batch_create to add to OmniFocus'
+          : 'Ready for batch_create tool',
     };
   }
 

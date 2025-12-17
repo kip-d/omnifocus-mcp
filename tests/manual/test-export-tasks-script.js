@@ -11,7 +11,7 @@ const omni = new OmniAutomation();
 const params1 = {
   format: 'csv',
   filter: {},
-  fields: null
+  fields: null,
 };
 
 console.log('Test 1 - Minimal CSV export:');
@@ -35,7 +35,7 @@ console.log('- fields:', hasFieldsDecl);
 const params2 = {
   format: 'csv',
   filter: { completed: false },
-  fields: ['id', 'name', 'project', 'dueDate', 'flagged', 'completed']
+  fields: ['id', 'name', 'project', 'dueDate', 'flagged', 'completed'],
 };
 
 console.log('\n\nTest 2 - With fields and filter:');

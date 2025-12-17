@@ -8,7 +8,7 @@ async function testPerspectiveTools() {
 
   const server = spawn('node', ['dist/index.js'], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, LOG_LEVEL: 'error' }
+    env: { ...process.env, LOG_LEVEL: 'error' },
   });
 
   let output = '';
@@ -21,7 +21,7 @@ async function testPerspectiveTools() {
   });
 
   // Wait for server to start
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Initialize the server
   const initRequest = {
@@ -29,13 +29,13 @@ async function testPerspectiveTools() {
     method: 'initialize',
     params: {
       protocolVersion: '2025-06-18',
-      capabilities: {}
+      capabilities: {},
     },
-    id: 1
+    id: 1,
   };
 
   server.stdin.write(JSON.stringify(initRequest) + '\n');
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   // Test list_perspectives
   console.log('1. Testing list_perspectives...');
@@ -46,14 +46,14 @@ async function testPerspectiveTools() {
       name: 'list_perspectives',
       arguments: {
         includeFilterRules: 'true',
-        sortBy: 'name'
-      }
+        sortBy: 'name',
+      },
     },
-    id: 2
+    id: 2,
   };
 
   server.stdin.write(JSON.stringify(listRequest) + '\n');
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   // Test query_perspective
   console.log('2. Testing query_perspective for "Flagged"...');
@@ -65,22 +65,22 @@ async function testPerspectiveTools() {
       arguments: {
         perspectiveName: 'Flagged',
         limit: '5',
-        includeDetails: 'false'
-      }
+        includeDetails: 'false',
+      },
     },
-    id: 3
+    id: 3,
   };
 
   server.stdin.write(JSON.stringify(queryRequest) + '\n');
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   // Parse and display results
-  const lines = output.split('\n').filter(l => l.trim());
-  
+  const lines = output.split('\n').filter((l) => l.trim());
+
   for (const line of lines) {
     try {
       const parsed = JSON.parse(line);
-      
+
       if (parsed.id === 2) {
         console.log('\nlist_perspectives result:');
         if (parsed.result?.content?.[0]?.text) {
@@ -89,16 +89,16 @@ async function testPerspectiveTools() {
             console.log(`✅ Found ${content.data.items.length} perspectives`);
             console.log(`   - Built-in: ${content.data.builtInCount || 0}`);
             console.log(`   - Custom: ${content.data.customCount || 0}`);
-            
+
             // Show first few perspective names
-            const names = content.data.items.slice(0, 5).map(p => p.name);
+            const names = content.data.items.slice(0, 5).map((p) => p.name);
             console.log(`   - First 5: ${names.join(', ')}`);
           } else {
             console.log('❌ Error:', content.error?.message);
           }
         }
       }
-      
+
       if (parsed.id === 3) {
         console.log('\nquery_perspective result:');
         if (parsed.result?.content?.[0]?.text) {
@@ -110,10 +110,10 @@ async function testPerspectiveTools() {
               console.log(`   - Type: ${content.perspectiveType || 'unknown'}`);
               console.log(`   - Simulated: ${content.simulatedQuery || false}`);
             }
-            
+
             // Show first few task names
             if (content.data.items.length > 0) {
-              const taskNames = content.data.items.slice(0, 3).map(t => t.name);
+              const taskNames = content.data.items.slice(0, 3).map((t) => t.name);
               console.log(`   - First 3 tasks: ${taskNames.join(', ')}`);
             }
           } else {

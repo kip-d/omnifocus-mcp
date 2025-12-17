@@ -6,11 +6,13 @@ Use this prompt for your daily Getting Things Done workflow with OmniFocus.
 
 Please help me with my morning review:
 
-1. **Today's Focus**: Show me what I need to focus on today - include overdue tasks, tasks due today, and any flagged items. Keep it concise.
+1. **Today's Focus**: Show me what I need to focus on today - include overdue tasks, tasks due today, and any flagged
+   items. Keep it concise.
 
 2. **Blocked Tasks**: Are there any tasks blocked by other incomplete tasks that I should be aware of?
 
-3. **Quick Wins**: Show me 5 available tasks that I can complete quickly (tasks without dependencies that are ready to work on).
+3. **Quick Wins**: Show me 5 available tasks that I can complete quickly (tasks without dependencies that are ready to
+   work on).
 
 ## Project Status Check
 
@@ -29,7 +31,8 @@ Please help me with my morning review:
 
 ## Focus Time
 
-7. **Context-Based Work**: Show me all tasks tagged with [specify your context tag, e.g., "computer", "office", "home", "errands"]
+7. **Context-Based Work**: Show me all tasks tagged with [specify your context tag, e.g., "computer", "office", "home",
+   "errands"]
 
 8. **Time-Based Work**: I have [X] minutes available. Show me tasks I can complete in that time.
 
@@ -40,7 +43,8 @@ Please help me with my morning review:
    - What's still pending?
    - What's become overdue?
 
-10. **Tomorrow's Prep**: What's on deck for tomorrow? Show me tasks due tomorrow and any deferred tasks that will become available.
+10. **Tomorrow's Prep**: What's on deck for tomorrow? Show me tasks due tomorrow and any deferred tasks that will become
+    available.
 
 ## Weekly Review Additions
 

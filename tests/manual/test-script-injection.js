@@ -15,7 +15,7 @@ const template1 = `(() => {
 
 const params1 = {
   projectId: 'test123',
-  completeAllTasks: false
+  completeAllTasks: false,
 };
 
 const script1 = omni.buildScript(template1, params1);
@@ -25,8 +25,8 @@ console.log('');
 
 // Test 2: With backticks in parameter (edge case from user report)
 const params2 = {
-  projectId: `paPQgPIw_ii`,  // Using backticks like in user report
-  completeAllTasks: `false`
+  projectId: `paPQgPIw_ii`, // Using backticks like in user report
+  completeAllTasks: `false`,
 };
 
 const script2 = omni.buildScript(template1, params2);
@@ -51,12 +51,12 @@ console.log('Note: This script will fail with "Can\'t find variable: projectId"\
 const params4 = {
   filter: {
     completed: false,
-    tags: ['work', 'urgent']
+    tags: ['work', 'urgent'],
   },
   options: {
     limit: 50,
-    includeDetails: false
-  }
+    includeDetails: false,
+  },
 };
 
 const template4 = `(() => {
