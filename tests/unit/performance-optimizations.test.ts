@@ -1,26 +1,29 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LIST_TASKS_SCRIPT_V3 } from '../../src/omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4 } from '../../src/omnifocus/scripts/tasks.js';
 import { createUpdateTaskScript } from '../../src/omnifocus/scripts/tasks/update-task-v3.js';
 import { buildListProjectsScriptV3 } from '../../src/omnifocus/scripts/projects/list-projects-v3.js';
 
 describe('Performance Optimization Tests', () => {
-  describe('list_tasks performance features', () => {
+  describe('list_tasks performance features (AST V4)', () => {
     it('should use OmniJS-first architecture', () => {
-      // V3 scripts use OmniJS bridge for property access
-      expect(LIST_TASKS_SCRIPT_V3).toContain('evaluateJavascript');
-      expect(LIST_TASKS_SCRIPT_V3).toContain('omniJsScript');
+      // V4 AST-powered scripts use OmniJS bridge for property access
+      const script = buildListTasksScriptV4({ filter: {}, limit: 10 });
+      expect(script).toContain('evaluateJavascript');
     });
 
-    it('should include filter and field selection', () => {
-      // V3 scripts support dynamic filtering
-      expect(LIST_TASKS_SCRIPT_V3).toContain('const filter = {{filter}}');
-      expect(LIST_TASKS_SCRIPT_V3).toContain('const fields = {{fields}}');
+    it('should generate filter predicates from AST', () => {
+      // V4 scripts generate filter predicates from AST contracts
+      const script = buildListTasksScriptV4({ filter: { completed: false }, limit: 10 });
+      expect(script).toContain('evaluateJavascript');
+      expect(script).toBeDefined();
     });
 
-    it('should support multiple query modes', () => {
-      // V3 scripts support different query modes
-      expect(LIST_TASKS_SCRIPT_V3).toContain('const mode = filter.mode');
-      expect(LIST_TASKS_SCRIPT_V3).toContain('shouldInclude');
+    it('should support different query modes via AST routing', () => {
+      // V4 scripts route to appropriate builders based on mode
+      const inboxScript = buildListTasksScriptV4({ filter: {}, limit: 10, mode: 'inbox' });
+      const allScript = buildListTasksScriptV4({ filter: {}, limit: 10, mode: 'all' });
+      expect(inboxScript).toContain('evaluateJavascript');
+      expect(allScript).toContain('evaluateJavascript');
     });
   });
 

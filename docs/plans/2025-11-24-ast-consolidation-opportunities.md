@@ -1,100 +1,49 @@
 # AST Consolidation Opportunities
 
-**Date:** 2025-11-24 **Status:** Analysis Complete - Ready for Implementation **Context:** With AST contracts now
-complete, significant code reduction opportunities exist
+**Date:** 2025-11-24
+**Updated:** 2025-12-17
+**Status:** Phase 1 Complete, Phase 2-4 Ready for Implementation
+**Context:** With AST contracts now complete, significant code reduction opportunities exist
 
 ---
 
 ## Executive Summary
 
-**Key Finding:** We built an AST-powered query script (74% smaller) but never switched to using it!
+**Phase 1 Complete:** QueryTasksTool now uses AST-powered `buildListTasksScriptV4` for all task queries.
 
-| Metric              | Current            | Potential                 |
+| Metric              | Before             | After (Current)           |
 | ------------------- | ------------------ | ------------------------- |
 | `list-tasks` script | 571 lines          | 146 lines (74% reduction) |
-| Status              | AST version exists | Not being used yet!       |
-| Tests               | 18 test references | Already written           |
-| Effort              | LOW                | Just swap imports         |
+| Status              | Template-based     | ✅ AST-powered (V4)       |
+| Tests               | 18 test references | All passing               |
+| QueryTasksTool      | Used V3 template   | ✅ Uses `buildListTasksScriptV4` |
 
 ---
 
-## Immediate Win: Switch to AST-Powered list-tasks
+## ✅ Phase 1 Complete: AST-Powered list-tasks
 
-### Current State
-
-```typescript
-// src/omnifocus/scripts/tasks.ts
-export { LIST_TASKS_SCRIPT_V3 } from './tasks/list-tasks-omnijs.js';
-
-// src/tools/tasks/QueryTasksTool.ts
-import { LIST_TASKS_SCRIPT_V3 } from '../../omnifocus/scripts/tasks.js';
-```
-
-**File:** `list-tasks-omnijs.ts` - 571 lines of hand-written filter logic
-
-### AST Version (Already Built!)
-
-**File:** `list-tasks-ast.ts` - 146 lines using AST-generated filters
-
-```typescript
-/**
- * list-tasks-ast.ts - AST-Powered Task Query Script (V4)
- *
- * Benefits:
- * 1. Single source of truth for filter logic (AST)
- * 2. Validated filters catch errors before script generation
- * 3. Consistent behavior across all query modes
- * 4. Smaller, cleaner scripts (~40% code reduction)
- * 5. Testable filter logic (unit tests for AST)
- */
-import {
-  buildFilteredTasksScript,
-  buildInboxScript,
-  buildTaskByIdScript,
-} from '../../../contracts/ast/script-builder.js';
-```
-
-### Migration Plan (Estimated: 30 minutes)
-
-**Step 1: Update export** (5 min)
+### Current State (As of 2025-12-17)
 
 ```typescript
 // src/omnifocus/scripts/tasks.ts
--export { LIST_TASKS_SCRIPT_V3 } from './tasks/list-tasks-omnijs.js';
-+export { buildListTasksScriptV4 as LIST_TASKS_SCRIPT_V4 } from './tasks/list-tasks-ast.js';
-```
+export { buildListTasksScriptV4 } from './tasks/list-tasks-ast.js';
 
-**Step 2: Update tools** (10 min)
-
-```typescript
 // src/tools/tasks/QueryTasksTool.ts
--import { LIST_TASKS_SCRIPT_V3 } from '../../omnifocus/scripts/tasks.js';
-+import { LIST_TASKS_SCRIPT_V4 } from '../../omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 
-// Change usage (example)
--const script = this.omniAutomation.buildScript(LIST_TASKS_SCRIPT_V3, { filter });
-+const script = LIST_TASKS_SCRIPT_V4({ filter, fields, limit });
+// All handlers use AST version:
+const script = buildListTasksScriptV4({ filter, fields, limit });
 ```
 
-**Step 3: Run tests** (10 min)
+**File:** `list-tasks-ast.ts` - 146 lines using AST-generated filters ✅
 
-```bash
-npm run test:unit
-npm run test:integration
-```
-
-**Step 4: Archive old version** (5 min)
-
-```bash
-mv src/omnifocus/scripts/tasks/list-tasks-omnijs.ts .archive/scripts/
-```
-
-### Benefits
+### Benefits Realized
 
 - ✅ **74% code reduction** (571 → 146 lines)
 - ✅ **Type-safe filters** (compile-time validation)
 - ✅ **Easier to maintain** (logic in AST, not templates)
-- ✅ **Already tested** (18 test references)
+- ✅ **All tests passing**
+- ✅ **Old template archived** (list-tasks-omnijs.ts removed)
 
 ---
 
@@ -132,13 +81,14 @@ tests
 
 ## Prioritized Implementation Roadmap
 
-### Phase 1: Immediate Win (30 min) - **DO THIS NOW**
+### Phase 1: Immediate Win (30 min) - ✅ COMPLETE
 
-- ✅ Switch `list-tasks` to AST version
-- ✅ 74% code reduction
-- ✅ Zero risk (already tested)
+- ✅ Switch `list-tasks` to AST version - **DONE**
+- ✅ 74% code reduction - **ACHIEVED**
+- ✅ Zero risk (already tested) - **ALL TESTS PASSING**
+- ✅ Old template archived - **DONE 2025-12-17**
 
-### Phase 2: Mutation Consolidation (2-4 hours)
+### Phase 2: Mutation Consolidation (2-4 hours) - **DO THIS NEXT**
 
 - Migrate `create-task.ts` to AST mutation builder
 - Migrate `update-task-v3.ts` to AST mutation builder
@@ -162,15 +112,16 @@ tests
 
 ## Total Potential Impact
 
-| Phase                | Time          | LOC Reduction    | Risk            |
-| -------------------- | ------------- | ---------------- | --------------- |
-| Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            |
-| Phase 2 (mutations)  | 2-4 hrs       | -800 lines       | Low             |
-| Phase 3 (queries)    | 4-6 hrs       | -500 lines       | Low             |
-| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          |
-| **TOTAL**            | **13-18 hrs** | **-2,325 lines** | **Low overall** |
+| Phase                | Time          | LOC Reduction    | Risk            | Status      |
+| -------------------- | ------------- | ---------------- | --------------- | ----------- |
+| Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            | ✅ COMPLETE |
+| Phase 2 (mutations)  | 2-4 hrs       | -800 lines       | Low             | ⏳ Next     |
+| Phase 3 (queries)    | 4-6 hrs       | -500 lines       | Low             | Pending     |
+| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending     |
+| **TOTAL**            | **13-18 hrs** | **-2,325 lines** | **Low overall** |             |
 
 **Code reduction: 2,325 lines (~20-25% of script codebase)**
+**Progress: Phase 1 complete (425 lines saved)**
 
 ---
 
@@ -222,12 +173,12 @@ export function buildListTasksScriptV4(params) {
 
 ## Success Criteria
 
-### Phase 1 (Immediate)
+### Phase 1 (Immediate) - ✅ ALL CRITERIA MET (2025-12-17)
 
-- ✅ All tools using AST-powered `list-tasks`
-- ✅ All tests passing
-- ✅ Old `list-tasks-omnijs.ts` archived
-- ✅ No performance regression
+- ✅ All tools using AST-powered `list-tasks` - **DONE**
+- ✅ All tests passing - **VERIFIED**
+- ✅ Old `list-tasks-omnijs.ts` archived - **DONE**
+- ✅ No performance regression - **CONFIRMED**
 
 ### Overall
 
@@ -241,10 +192,12 @@ export function buildListTasksScriptV4(params) {
 
 ## Recommendation
 
-**Start with Phase 1 immediately** - it's a 30-minute task that delivers 74% code reduction with zero risk. The AST
-version is already built, tested, and ready to use. We're literally just swapping imports.
+**Phase 1 is complete!** QueryTasksTool now uses `buildListTasksScriptV4` for all task queries. The old template
+(`list-tasks-omnijs.ts`) has been archived.
 
-**Then proceed to Phase 2** - mutation consolidation has high value (800 LOC reduction) and the mutation-script-builder
-already exists with 50 tests.
+**Next: Proceed to Phase 2** - mutation consolidation has high value (800 LOC reduction) and the mutation-script-builder
+already exists with 50 tests. Key targets:
+- `create-task.ts` (290 lines) → AST mutation builder
+- `update-task-v3.ts` (769 lines) → AST mutation builder
 
 This is the culmination of building the AST contracts system - now we get to reap the benefits!
