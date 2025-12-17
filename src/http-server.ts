@@ -392,11 +392,11 @@ export class HttpServerManager {
   /**
    * Parses request body as JSON
    */
-  private async parseRequestBody(req: IncomingMessage): Promise<unknown | null> {
+  private async parseRequestBody(req: IncomingMessage): Promise<unknown> {
     return new Promise((resolve) => {
       let body = '';
 
-      req.on('data', (chunk) => {
+      req.on('data', (chunk: Buffer) => {
         body += chunk.toString();
       });
 
@@ -407,7 +407,7 @@ export class HttpServerManager {
         }
 
         try {
-          const parsed = JSON.parse(body);
+          const parsed: unknown = JSON.parse(body);
           resolve(parsed);
         } catch (error) {
           logger.debug('Failed to parse request body as JSON', {

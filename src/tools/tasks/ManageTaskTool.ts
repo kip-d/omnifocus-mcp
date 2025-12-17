@@ -796,13 +796,10 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             }) as TaskOperationResponseV2;
           } catch (jxaError: unknown) {
             // If JXA fails with permission error, use URL scheme
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+            const errorMessage = jxaError instanceof Error ? jxaError.message : String(jxaError);
             if (
-              (jxaError as any).message &&
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-              ((jxaError as any).message.toLowerCase().includes('parameter is missing') ||
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-                (jxaError as any).message.toLowerCase().includes('access not allowed'))
+              errorMessage.toLowerCase().includes('parameter is missing') ||
+              errorMessage.toLowerCase().includes('access not allowed')
             ) {
               this.logger.info('JXA failed, falling back to URL scheme for task completion');
               // Note: URL scheme fallback would be implemented here if needed

@@ -656,11 +656,9 @@ export class PatternAnalysisTool extends BaseTool<typeof PatternAnalysisSchema, 
   private levenshteinDistance(str1: string, str2: string): number {
     const m = str1.length;
     const n = str2.length;
-    // Array creation with fill/map pattern is untyped but mathematically correct
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
     const dp: number[][] = Array(m + 1)
       .fill(null)
-      .map(() => Array(n + 1).fill(0));
+      .map((): number[] => Array(n + 1).fill(0) as number[]);
 
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;

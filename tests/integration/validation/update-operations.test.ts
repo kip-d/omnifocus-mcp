@@ -67,9 +67,8 @@ describe('Update Operations - Read-Back Validation', () => {
         target: 'task',
         data: {
           name: taskName,
-          tags,
           ...properties,
-          tags, // Ensure our processed tags override any in properties
+          tags, // Processed tags override any in properties
         },
       },
     });

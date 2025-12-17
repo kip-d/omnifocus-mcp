@@ -33,6 +33,13 @@ const SystemToolSchema = z.object({
     .optional()
     .default('summary')
     .describe('Type of metrics to return: summary for overview, detailed for full metrics'),
+
+  // Cache operation parameters
+  cacheAction: z
+    .enum(['stats', 'clear'])
+    .optional()
+    .default('stats')
+    .describe('Cache action: stats to get statistics, clear to invalidate all cached data'),
 });
 
 interface VersionInfo {
@@ -132,7 +139,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
       case 'metrics':
         return this.getMetrics(args);
       case 'cache':
-        return this.getCacheStats();
+        return this.handleCacheOperation(args);
       default:
         return createErrorResponseV2(
           'system',
@@ -496,10 +503,39 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
     }
   }
 
-  private async getCacheStats(): Promise<StandardResponseV2<Record<string, unknown>>> {
+  private async handleCacheOperation(
+    args: z.infer<typeof SystemToolSchema>,
+  ): Promise<StandardResponseV2<Record<string, unknown>>> {
     const timer = new OperationTimerV2();
+    const action = args.cacheAction || 'stats';
 
     try {
+      if (action === 'clear') {
+        // Clear all cached data
+        const statsBefore = this.cache.getStats();
+        const sizeBefore = statsBefore.size;
+        this.cache.clear();
+
+        const result = {
+          timestamp: new Date().toISOString(),
+          action: 'clear',
+          cleared: {
+            entriesRemoved: sizeBefore,
+            success: true,
+          },
+          description: 'All cached data has been invalidated',
+        };
+
+        return Promise.resolve(
+          createSuccessResponseV2('system', result, undefined, {
+            ...timer.toMetadata(),
+            operation: 'cache',
+            action: 'clear',
+          }),
+        );
+      }
+
+      // Default: get cache stats
       const cacheStats = this.cache.getStats();
 
       const result = {
@@ -538,9 +574,9 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         createErrorResponseV2(
           'system',
           'CACHE_ERROR',
-          error instanceof Error ? error.message : 'Failed to get cache statistics',
+          error instanceof Error ? error.message : 'Failed to perform cache operation',
           undefined,
-          { operation: 'cache' },
+          { operation: 'cache', action },
           timer.toMetadata(),
         ),
       );

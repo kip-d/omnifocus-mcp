@@ -7,12 +7,16 @@
  * - Minimal overhead (1 server lifecycle instead of N)
  * - Realistic performance testing
  * - Matches production usage pattern
+ *
+ * Cache Clearing: The cache is cleared between test file accesses to prevent
+ * test pollution. This ensures each test file starts with a fresh cache state.
  */
 
 import { MCPTestClient } from './mcp-test-client.js';
 
 let sharedClient: MCPTestClient | null = null;
 let initPromise: Promise<MCPTestClient> | null = null;
+let isFirstAccess = true;
 
 /**
  * Get or create the shared MCP client instance
@@ -21,9 +25,17 @@ let initPromise: Promise<MCPTestClient> | null = null;
  * Cache warming is ENABLED by default for the shared server to match real-world
  * Claude Desktop behavior. This significantly speeds up read operations (~10x faster)
  * by pre-caching projects, tags, and common task queries.
+ *
+ * NOTE: Cache is cleared on each call after the first to prevent test pollution
+ * between test files.
  */
 export async function getSharedClient(): Promise<MCPTestClient> {
   if (sharedClient) {
+    // Clear cache between test file accesses to prevent pollution
+    if (!isFirstAccess) {
+      await sharedClient.clearCache();
+    }
+    isFirstAccess = false;
     return sharedClient;
   }
 
@@ -37,6 +49,7 @@ export async function getSharedClient(): Promise<MCPTestClient> {
     sharedClient = new MCPTestClient({ enableCacheWarming: true });
     await sharedClient.startServer();
     console.log('✅ Shared MCP server ready (cache warmed)');
+    isFirstAccess = false; // First access complete
     return sharedClient;
   })();
 
@@ -53,6 +66,7 @@ export async function shutdownSharedClient(): Promise<void> {
     await sharedClient.stop();
     sharedClient = null;
     initPromise = null;
+    isFirstAccess = true; // Reset for next test run
     console.log('✅ Shared MCP server shutdown complete');
   }
 }

@@ -426,6 +426,19 @@ export class MCPTestClient {
     await this.quickCleanup();
   }
 
+  /**
+   * Clear all cached data in the MCP server.
+   * Use this between test files to prevent cache pollution.
+   */
+  async clearCache(): Promise<void> {
+    try {
+      await this.callTool('system', { operation: 'cache', cacheAction: 'clear' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`  ⚠️  Could not clear cache: ${message}`);
+    }
+  }
+
   async stop(): Promise<void> {
     if (this.server && !this.server.killed) {
       try {

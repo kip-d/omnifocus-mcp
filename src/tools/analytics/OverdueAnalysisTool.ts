@@ -175,21 +175,18 @@ export class OverdueAnalysisTool extends BaseTool<typeof OverdueAnalysisSchemaV2
           insights: { topRecommendations: getRecommendations(scriptData) },
         },
         groupedAnalysis: Object.fromEntries(
-          Object.entries(scriptData.groupedAnalysis ?? {}).map(([key, value]) => [
-            key,
-            {
-              // OmniFocus script results are untyped, requiring unsafe operations for data extraction
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-              count: typeof value === 'object' && value !== null && 'count' in value ? (value as any).count || 0 : 0,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-              averageDaysOverdue:
-                typeof value === 'object' && value !== null && 'averageDaysOverdue' in value
-                  ? (value as any).averageDaysOverdue
-                  : undefined,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-              tasks: typeof value === 'object' && value !== null && 'tasks' in value ? (value as any).tasks : undefined,
-            },
-          ]),
+          Object.entries(scriptData.groupedAnalysis ?? {}).map(([key, value]) => {
+            // OmniFocus script results are untyped, requiring type assertion for data extraction
+            const groupData = value as { count?: number; averageDaysOverdue?: number; tasks?: unknown[] } | null;
+            return [
+              key,
+              {
+                count: groupData?.count ?? 0,
+                averageDaysOverdue: groupData?.averageDaysOverdue,
+                tasks: groupData?.tasks,
+              },
+            ];
+          }),
         ),
       };
 
