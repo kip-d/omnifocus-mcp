@@ -1008,21 +1008,49 @@ export async function buildUpdateProjectScript(
       project.status = statusMap[changes.status] || 'active status';
     }
 
-    // Handle folder change
+    // Handle folder change via OmniJS bridge (JXA push doesn't persist)
     if (changes.folder !== undefined) {
-      if (changes.folder === null) {
-        // Move to root
-        doc.projects.push(project);
-      } else {
-        const folders = doc.flattenedFolders();
-        for (let i = 0; i < folders.length; i++) {
-          try {
-            if (folders[i].id() === changes.folder || folders[i].name() === changes.folder) {
-              folders[i].projects.push(project);
-              break;
+      const moveScript = changes.folder === null
+        ? \`(() => {
+            const project = Project.byIdentifier('\${projectId}');
+            if (!project) return JSON.stringify({ success: false, error: 'project_not_found' });
+            try {
+              moveSections([project], library.beginning);
+              return JSON.stringify({ success: true, moved: 'root' });
+            } catch (e) {
+              return JSON.stringify({ success: false, error: String(e) });
             }
-          } catch (e) {}
+          })()\`
+        : \`(() => {
+            const project = Project.byIdentifier('\${projectId}');
+            if (!project) return JSON.stringify({ success: false, error: 'project_not_found' });
+            const targetId = '\${changes.folder}';
+            // Try by ID first, then by name
+            let folder = Folder.byIdentifier(targetId);
+            if (!folder) {
+              folder = flattenedFolders.find(f => f.name === targetId);
+            }
+            if (!folder) return JSON.stringify({ success: false, error: 'folder_not_found: ' + targetId });
+            try {
+              moveSections([project], folder.beginning);
+              return JSON.stringify({ success: true, moved: 'folder', folderId: folder.id.primaryKey });
+            } catch (e) {
+              return JSON.stringify({ success: false, error: String(e) });
+            }
+          })()\`;
+      try {
+        const moveResult = JSON.parse(app.evaluateJavascript(moveScript));
+        if (!moveResult.success) {
+          return JSON.stringify({
+            error: true,
+            message: 'Failed to move project: ' + (moveResult.error || 'unknown error')
+          });
         }
+      } catch (e) {
+        return JSON.stringify({
+          error: true,
+          message: 'Failed to move project via bridge: ' + String(e)
+        });
       }
     }
 
