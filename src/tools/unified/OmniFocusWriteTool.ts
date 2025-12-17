@@ -6,11 +6,11 @@ import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
-import { TaskId, ProjectId, asTaskId, asProjectId } from '../../utils/branded-types.js';
+import { TaskId, ProjectId } from '../../utils/branded-types.js';
 
-// Convert string IDs to branded types for type safety
-const convertToTaskId = (id: string): TaskId => asTaskId(id);
-const convertToProjectId = (id: string): ProjectId => asProjectId(id);
+// Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
+const convertToTaskId = (id: string): TaskId => id as TaskId;
+const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';

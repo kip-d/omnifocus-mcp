@@ -9,6 +9,10 @@ import { ManageReviewsSchema, ManageReviewsInput } from '../schemas/consolidated
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { ReviewListData } from '../../omnifocus/script-response-types.js';
 import { ReviewsResponseV2, ReviewsDataV2 } from '../response-types-v2.js';
+import { ProjectId } from '../../utils/branded-types.js';
+
+// Convert string ID to branded ProjectId for type safety (compile-time only, no runtime validation)
+const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, ReviewsResponseV2> {
   name = 'manage_reviews';
@@ -210,12 +214,15 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   ): Promise<StandardResponseV2<unknown>> {
     const { projectId, reviewDate, updateNextReviewDate } = args;
 
+    // Convert to branded ProjectId for type safety
+    const brandedProjectId = projectId ? convertToProjectId(projectId) : undefined;
+
     // Use current date if no review date provided
     const actualReviewDate = reviewDate || new Date().toISOString();
 
     // Execute mark reviewed script
     const script = this.omniAutomation.buildScript(MARK_PROJECT_REVIEWED_SCRIPT, {
-      projectId,
+      projectId: brandedProjectId,
       reviewDate: actualReviewDate,
       updateNextReviewDate,
     });
@@ -249,9 +256,12 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   ): Promise<StandardResponseV2<unknown>> {
     const { projectIds, reviewInterval, nextReviewDate } = args;
 
+    // Convert to branded ProjectIds for type safety
+    const brandedProjectIds = projectIds?.map((id) => convertToProjectId(id));
+
     // Execute batch review schedule script
     const script = this.omniAutomation.buildScript(SET_REVIEW_SCHEDULE_SCRIPT, {
-      projectIds,
+      projectIds: brandedProjectIds,
       reviewInterval,
       nextReviewDate,
     });
@@ -285,9 +295,12 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
   ): Promise<StandardResponseV2<unknown>> {
     const { projectIds } = args;
 
+    // Convert to branded ProjectIds for type safety
+    const brandedProjectIds = projectIds?.map((id) => convertToProjectId(id));
+
     // Clear schedule by setting no review interval and null next review date
     const script = this.omniAutomation.buildScript(SET_REVIEW_SCHEDULE_SCRIPT, {
-      projectIds,
+      projectIds: brandedProjectIds,
       reviewInterval: null,
       nextReviewDate: null,
     });

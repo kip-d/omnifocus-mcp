@@ -19,10 +19,11 @@ import {
 } from '../../utils/error-messages.js';
 import type { TaskOperationResponseV2, TaskOperationDataV2 } from '../response-types-v2.js';
 import { RepeatRuleUserIntentSchema } from '../schemas/repeat-schemas.js';
-import {
-  TaskId, ProjectId,
-  asTaskId, asProjectId,
-} from '../../utils/branded-types.js';
+import { TaskId, ProjectId } from '../../utils/branded-types.js';
+
+// Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
+const convertToTaskId = (id: string): TaskId => id as TaskId;
+const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 // Type for branded ID arguments
 type BrandedTaskArgs = {
@@ -248,12 +249,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     // - projectId: undefined = Don't change project (preserve current)
     const brandedArgs: BrandedTaskArgs = {
       ...args,
-      taskId: args.taskId ? asTaskId(args.taskId) : undefined,
-      taskIds: args.taskIds ? args.taskIds.map(id => asTaskId(id)) : undefined,
+      taskId: args.taskId ? convertToTaskId(args.taskId) : undefined,
+      taskIds: args.taskIds ? args.taskIds.map(id => convertToTaskId(id)) : undefined,
       projectId: args.projectId !== undefined
-        ? (args.projectId === null || args.projectId === '' ? null : asProjectId(args.projectId))
+        ? (args.projectId === null || args.projectId === '' ? null : convertToProjectId(args.projectId))
         : undefined,
-      parentTaskId: args.parentTaskId ? asTaskId(args.parentTaskId) : undefined,
+      parentTaskId: args.parentTaskId ? convertToTaskId(args.parentTaskId) : undefined,
     };
 
     const { taskId: brandedTaskId, ...brandedParams } = brandedArgs;
@@ -1199,7 +1200,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
         const data = result.data as { tasks?: { id: string }[]; items?: { id: string }[] };
         const tasks = data.tasks || data.items || [];
-        targetTaskIds = tasks.map(task => asTaskId(task.id));
+        targetTaskIds = tasks.map(task => convertToTaskId(task.id));
 
         if (targetTaskIds.length === 0) {
           const error = createErrorResponseV2(

@@ -12,7 +12,7 @@ import { TagNameSchema } from '../schemas/shared-schemas.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import type { TagsResponseV2, TagOperationResponseV2, TagsDataV2, TagOperationDataV2 } from '../response-types-v2.js';
-import { TagId, asTagId } from '../../utils/branded-types.js';
+import { TagId } from '../../utils/branded-types.js';
 
 // Consolidated schema for all tag operations
 const TagsToolSchema = z.object({
@@ -70,10 +70,8 @@ const TagsToolSchema = z.object({
     ),
 });
 
-// Convert string ID to branded TagId for type safety
-const convertToTagId = (id: string): TagId => {
-  return asTagId(id);
-};
+// Convert string ID to branded TagId for type safety (compile-time only, no runtime validation)
+const convertToTagId = (id: string): TagId => id as TagId;
 
 type TagsToolInput = z.infer<typeof TagsToolSchema>;
 

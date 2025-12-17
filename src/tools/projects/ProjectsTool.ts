@@ -17,7 +17,7 @@ import {
 } from '../../utils/response-format.js';
 import { ProjectsResponseV2, ProjectOperationResponseV2 } from '../response-types-v2.js';
 import { CacheManager } from '../../cache/CacheManager.js';
-import { ProjectId, asProjectId } from '../../utils/branded-types.js';
+import { ProjectId } from '../../utils/branded-types.js';
 
 // Unified schema for all project operations
 const ProjectsToolSchemaV2 = z.object({
@@ -74,10 +74,8 @@ const ProjectsToolSchemaV2 = z.object({
     .describe('Include full project details'),
 });
 
-// Convert string ID to branded ProjectId for type safety
-const convertToProjectId = (id: string): ProjectId => {
-  return asProjectId(id);
-};
+// Convert string ID to branded ProjectId for type safety (compile-time only, no runtime validation)
+const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 type ProjectsArgsV2 = z.infer<typeof ProjectsToolSchemaV2>;
 

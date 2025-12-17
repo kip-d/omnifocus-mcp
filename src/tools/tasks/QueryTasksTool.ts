@@ -26,7 +26,7 @@ import {
   isDateFilter,
   isNumberFilter,
 } from './filter-types.js';
-import { TaskId, asTaskId } from '../../utils/branded-types.js';
+import { TaskId } from '../../utils/branded-types.js';
 
 // Simplified schema with clearer parameter names
 const QueryTasksToolSchemaV2 = z.object({
@@ -166,10 +166,8 @@ const QueryTasksToolSchemaV2 = z.object({
     ),
 });
 
-// Convert string ID to branded TaskId for type safety
-const convertToTaskId = (id: string): TaskId => {
-  return asTaskId(id);
-};
+// Convert string ID to branded TaskId for type safety (compile-time only, no runtime validation)
+const convertToTaskId = (id: string): TaskId => id as TaskId;
 
 type QueryTasksArgsV2 = z.infer<typeof QueryTasksToolSchemaV2>;
 

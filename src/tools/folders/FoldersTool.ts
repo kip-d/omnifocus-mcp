@@ -10,6 +10,10 @@ import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-ty
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { FoldersDataV2 } from '../response-types-v2.js';
+import { FolderId } from '../../utils/branded-types.js';
+
+// Convert string ID to branded FolderId for type safety (compile-time only, no runtime validation)
+const convertToFolderId = (id: string): FolderId => id as FolderId;
 
 // Consolidated folders schema
 const FoldersSchema = z.object({
@@ -101,6 +105,9 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
   async executeValidated(args: FoldersInput): Promise<StandardResponseV2<unknown>> {
     const timer = new OperationTimerV2();
     const { operation, ...params } = args;
+
+    // Convert to branded FolderId for type safety
+    const brandedFolderId = params.folderId ? convertToFolderId(params.folderId) : undefined;
 
     try {
       // Route to appropriate tool based on operation type
@@ -352,7 +359,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           if (params.status !== undefined) updates.status = params.status;
 
           const updateScript = this.omniAutomation.buildScript(UPDATE_FOLDER_SCRIPT, {
-            folderId: params.folderId,
+            folderId: brandedFolderId,
             updates,
           });
           const updateResult = await this.execJson(updateScript);
@@ -391,7 +398,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           }
 
           const deleteScript = this.omniAutomation.buildScript(DELETE_FOLDER_SCRIPT, {
-            folderId: params.folderId,
+            folderId: brandedFolderId,
             options: { moveContentsTo: params.parentFolderId, force: false },
           });
           const deleteResult = await this.execJson(deleteScript);
@@ -438,7 +445,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           }
 
           const moveScript = this.omniAutomation.buildScript(MOVE_FOLDER_SCRIPT, {
-            folderId: params.folderId,
+            folderId: brandedFolderId,
             options: { newParent: params.parentFolderId, position: undefined, relativeToFolder: undefined },
           });
           const moveResult = await this.execJson(moveScript);
@@ -506,7 +513,7 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
 
           // Status change is just an update operation
           const statusScript = this.omniAutomation.buildScript(UPDATE_FOLDER_SCRIPT, {
-            folderId: params.folderId,
+            folderId: brandedFolderId,
             updates: { status: params.status },
           });
           const statusResult = await this.execJson(statusScript);
