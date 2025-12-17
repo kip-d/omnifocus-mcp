@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { buildListProjectsScriptV3 } from '../../omnifocus/scripts/projects/list-projects-v3.js';
-import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
-import { COMPLETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/complete-project.js';
-import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
 import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
-import { buildUpdateProjectScript } from '../../contracts/ast/mutation-script-builder.js';
+import {
+  buildCreateProjectScript,
+  buildUpdateProjectScript,
+  buildCompleteScript,
+  buildDeleteScript,
+} from '../../contracts/ast/mutation-script-builder.js';
+import type { ProjectCreateData } from '../../contracts/mutations.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createSuccessResponseV2,
@@ -385,40 +388,20 @@ export class ProjectsTool extends BaseTool<
       );
     }
 
-    const projectData: {
-      note?: string;
-      dueDate?: string;
-      flagged?: boolean;
-      tags?: string[];
-      sequential: boolean;
-      reviewInterval?: {
-        unit: string;
-        steps: number;
-        fixed: boolean;
-      };
-    } = {
+    // Build ProjectCreateData for AST builder
+    const projectData: ProjectCreateData = {
+      name: args.name,
       note: args.note,
       dueDate: args.dueDate,
       flagged: args.flagged,
       tags: args.tags,
       sequential: false, // Default to parallel
+      reviewInterval: args.reviewInterval, // Days between reviews
     };
 
-    // Convert reviewInterval from days (number) to object format expected by script
-    if (args.reviewInterval) {
-      projectData.reviewInterval = {
-        unit: 'days',
-        steps: args.reviewInterval,
-        fixed: true, // Use fixed scheduling by default
-      };
-    }
-
-    // Execute creation - CREATE_PROJECT_SCRIPT expects {name, options} structure
-    const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
-      name: args.name,
-      options: projectData,
-    });
-    const result = await this.execJson(script);
+    // Use AST mutation builder
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
     if (isScriptError(result)) {
       // Check for specific error types first
       const specificError = this.getSpecificErrorResponse(result, 'create', timer);
@@ -550,13 +533,9 @@ export class ProjectsTool extends BaseTool<
     projectId: ProjectId,
     timer: OperationTimerV2,
   ): Promise<ProjectOperationResponseV2> {
-    // Execute completion
-    const script = this.omniAutomation.buildScript(COMPLETE_PROJECT_SCRIPT, {
-      projectId: projectId,
-      completeAllTasks: false, // Default to not completing all tasks
-    });
-
-    const result = await this.execJson(script);
+    // Use AST mutation builder
+    const generatedScript = await buildCompleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
@@ -584,13 +563,9 @@ export class ProjectsTool extends BaseTool<
     projectId: ProjectId,
     timer: OperationTimerV2,
   ): Promise<ProjectOperationResponseV2> {
-    // Execute deletion
-    const script = this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, {
-      projectId: projectId,
-      deleteTasks: false, // Don't delete tasks, move them to inbox
-    });
-
-    const result = await this.execJson(script);
+    // Use AST mutation builder
+    const generatedScript = await buildDeleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
     if (isScriptError(result)) {
       return createErrorResponseV2(
         'projects',
