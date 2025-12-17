@@ -20,7 +20,7 @@ export const DELETE_FOLDER_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const folderId = "{{folderId}}";
+          const folderId = {{folderId}};
 
           // Find the folder by ID using OmniJS
           const targetFolder = Folder.byIdentifier(folderId);

@@ -17,7 +17,7 @@ export const DELETE_PROJECT_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const projectId = "{{projectId}}";
+          const projectId = {{projectId}};
           const deleteTasks = {{deleteTasks}};
 
           // Find the project by ID using OmniJS

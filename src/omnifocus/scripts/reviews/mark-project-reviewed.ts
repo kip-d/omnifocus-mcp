@@ -17,8 +17,8 @@ export const MARK_PROJECT_REVIEWED_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const projectId = "{{projectId}}";
-          const reviewDate = "{{reviewDate}}";
+          const projectId = {{projectId}};
+          const reviewDate = {{reviewDate}};
           const updateNextReviewDate = {{updateNextReviewDate}};
 
           // Helper function to calculate next review date

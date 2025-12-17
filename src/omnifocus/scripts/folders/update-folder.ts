@@ -16,7 +16,7 @@ export const UPDATE_FOLDER_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const folderId = "{{folderId}}";
+          const folderId = {{folderId}};
           const updates = {{updates}};
 
           // Find the folder by ID using OmniJS

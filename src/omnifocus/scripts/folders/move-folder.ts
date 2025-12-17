@@ -17,7 +17,7 @@ export const MOVE_FOLDER_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const folderId = "{{folderId}}";
+          const folderId = {{folderId}};
           const options = {{options}};
 
           // Check if moving would create circular hierarchy

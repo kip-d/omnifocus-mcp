@@ -16,7 +16,7 @@ export const COMPLETE_PROJECT_SCRIPT = `
     try {
       const omniJsScript = \`
         (() => {
-          const projectId = "{{projectId}}";
+          const projectId = {{projectId}};
           const completeAllTasks = {{completeAllTasks}};
 
           // Find the project by ID using OmniJS
