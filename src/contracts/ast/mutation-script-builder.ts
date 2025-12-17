@@ -754,22 +754,49 @@ export async function buildUpdateTaskScript(
       task.estimatedMinutes = changes.estimatedMinutes;
     }
 
-    // Handle project change / move to inbox
+    // Handle project change / move to inbox via OmniJS bridge (JXA push doesn't persist)
     if (changes.project !== undefined) {
-      if (changes.project === null) {
-        // Move to inbox
-        doc.inboxTasks.push(task);
-      } else {
-        // Find and move to project
-        const projects = doc.flattenedProjects();
-        for (let i = 0; i < projects.length; i++) {
-          try {
-            if (projects[i].id() === changes.project || projects[i].name() === changes.project) {
-              projects[i].tasks.push(task);
-              break;
+      const moveScript = changes.project === null
+        ? \`(() => {
+            const task = Task.byIdentifier('\${taskId}');
+            if (!task) return JSON.stringify({ success: false, error: 'task_not_found' });
+            try {
+              moveTasks([task], inbox.beginning);
+              return JSON.stringify({ success: true, moved: 'inbox' });
+            } catch (e) {
+              return JSON.stringify({ success: false, error: String(e) });
             }
-          } catch (e) {}
+          })()\`
+        : \`(() => {
+            const task = Task.byIdentifier('\${taskId}');
+            if (!task) return JSON.stringify({ success: false, error: 'task_not_found' });
+            const targetId = '\${changes.project}';
+            // Try by ID first, then by name
+            let project = Project.byIdentifier(targetId);
+            if (!project) {
+              project = flattenedProjects.find(p => p.name === targetId);
+            }
+            if (!project) return JSON.stringify({ success: false, error: 'project_not_found: ' + targetId });
+            try {
+              moveTasks([task], project.beginning);
+              return JSON.stringify({ success: true, moved: 'project', projectId: project.id.primaryKey });
+            } catch (e) {
+              return JSON.stringify({ success: false, error: String(e) });
+            }
+          })()\`;
+      try {
+        const moveResult = JSON.parse(app.evaluateJavascript(moveScript));
+        if (!moveResult.success) {
+          return JSON.stringify({
+            error: true,
+            message: 'Failed to move task: ' + (moveResult.error || 'unknown error')
+          });
         }
+      } catch (e) {
+        return JSON.stringify({
+          error: true,
+          message: 'Failed to move task via bridge: ' + String(e)
+        });
       }
     }
 

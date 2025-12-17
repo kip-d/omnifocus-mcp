@@ -952,9 +952,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     }
 
     // Handle project ID (allow null/empty string)
-    // Map projectId to project for mutation contract compatibility
+    // Support both 'projectId' (legacy) and 'project' (unified API)
+    // Note: downstream mutation-script-builder.ts expects 'project' field
     if (updates.projectId !== undefined) {
       sanitized.project = updates.projectId;
+    } else if (updates.project !== undefined) {
+      sanitized.project = updates.project;
     }
 
     // Handle tags array (replaces all tags)
