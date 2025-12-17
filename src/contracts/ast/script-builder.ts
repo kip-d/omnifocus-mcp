@@ -13,8 +13,8 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter } from '../filters.js';
-import { generateFilterCode } from './filter-generator.js';
+import type { TaskFilter, ProjectFilter } from '../filters.js';
+import { generateFilterCode, generateProjectFilterCode, isEmptyProjectFilter, describeProjectFilter } from './filter-generator.js';
 import { buildAST } from './builder.js';
 
 // =============================================================================
@@ -647,4 +647,343 @@ function describeFilterForScript(filter: TaskFilter): string {
   }
 
   return conditions.length > 0 ? conditions.join(' AND ') : 'all tasks';
+}
+
+// =============================================================================
+// PROJECT SCRIPT BUILDER
+// =============================================================================
+
+/**
+ * Options for project queries
+ */
+export interface ProjectScriptOptions {
+  /** Maximum projects to return */
+  limit?: number;
+  /** Fields to include in response */
+  fields?: string[];
+  /** Include task statistics (expensive) */
+  includeStats?: boolean;
+  /** Performance mode: 'normal' includes task counts, 'lite' skips them */
+  performanceMode?: 'normal' | 'lite';
+}
+
+/**
+ * Default fields to include in project response
+ */
+const DEFAULT_PROJECT_FIELDS = [
+  'id',
+  'name',
+  'status',
+  'flagged',
+  'note',
+  'dueDate',
+  'deferDate',
+  'folder',
+  'folderPath',
+  'sequential',
+  'lastReviewDate',
+  'nextReviewDate',
+];
+
+/**
+ * Generate the field projection code for a project object
+ */
+function generateProjectFieldProjection(fields: string[]): string {
+  const fieldList = fields.length > 0 ? fields : DEFAULT_PROJECT_FIELDS;
+  const projections: string[] = [];
+
+  for (const field of fieldList) {
+    switch (field) {
+      case 'id':
+        projections.push('id: project.id.primaryKey');
+        break;
+      case 'name':
+        projections.push('name: project.name || "Unnamed Project"');
+        break;
+      case 'status':
+        projections.push('status: getProjectStatus(project)');
+        break;
+      case 'flagged':
+        projections.push('flagged: project.flagged || false');
+        break;
+      case 'note':
+        projections.push('note: project.note || ""');
+        break;
+      case 'dueDate':
+        projections.push('dueDate: project.dueDate ? project.dueDate.toISOString() : null');
+        break;
+      case 'deferDate':
+        projections.push('deferDate: project.deferDate ? project.deferDate.toISOString() : null');
+        break;
+      case 'folder':
+        projections.push('folder: project.parentFolder ? project.parentFolder.name : null');
+        break;
+      case 'folderPath':
+        projections.push('folderPath: project.parentFolder ? getFolderPath(project.parentFolder) : null');
+        break;
+      case 'folderId':
+        projections.push('folderId: project.parentFolder ? project.parentFolder.id.primaryKey : null');
+        break;
+      case 'sequential':
+        projections.push('sequential: project.sequential || false');
+        break;
+      case 'lastReviewDate':
+        projections.push('lastReviewDate: project.lastReviewDate ? project.lastReviewDate.toISOString() : null');
+        break;
+      case 'nextReviewDate':
+        projections.push('nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null');
+        break;
+      case 'completedDate':
+        projections.push('completedDate: project.completedDate ? project.completedDate.toISOString() : null');
+        break;
+      case 'defaultSingletonActionHolder':
+        projections.push('defaultSingletonActionHolder: project.defaultSingletonActionHolder || false');
+        break;
+    }
+  }
+
+  return projections.join(',\n                ');
+}
+
+/**
+ * Build an OmniJS script that filters projects using AST-generated predicates
+ *
+ * @param filter - The ProjectFilter to apply
+ * @param options - Script generation options
+ * @returns Generated script ready for execution
+ */
+export function buildFilteredProjectsScript(filter: ProjectFilter, options: ProjectScriptOptions = {}): GeneratedScript {
+  const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal' } = options;
+
+  // Generate the filter predicate code
+  const filterCode = generateProjectFilterCode(filter);
+  const isEmptyFilterValue = isEmptyProjectFilter(filter);
+  const filterDescription = describeProjectFilter(filter);
+
+  // Generate field projection
+  const fieldProjection = generateProjectFieldProjection(fields);
+
+  // Include task counts only in normal mode
+  const includeTaskCounts = performanceMode !== 'lite';
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`
+      (() => {
+        const results = [];
+        let count = 0;
+        const limit = ${limit};
+
+        // Helper to get project status string
+        function getProjectStatus(project) {
+          if (project.status === Project.Status.Done) return 'done';
+          if (project.status === Project.Status.Dropped) return 'dropped';
+          if (project.status === Project.Status.OnHold) return 'on-hold';
+          return 'active';
+        }
+
+        // Helper to build folder path
+        function getFolderPath(folder) {
+          if (!folder) return '';
+          const parts = [];
+          let current = folder;
+          while (current) {
+            parts.unshift(current.name);
+            current = current.parent;
+          }
+          return parts.join('/');
+        }
+
+        // AST-generated filter predicate
+        // Filter: ${filterDescription}
+        function matchesFilter(project) {
+          return ${filterCode};
+        }
+
+        flattenedProjects.forEach(project => {
+          if (count >= limit) return;
+
+          // Apply AST-generated filter
+          if (!matchesFilter(project)) return;
+
+          const proj = {
+            ${fieldProjection}
+          };
+
+          ${
+            includeTaskCounts
+              ? `
+          // Task counts (normal mode)
+          const rootTask = project.rootTask;
+          if (rootTask) {
+            proj.taskCounts = {
+              total: rootTask.numberOfTasks || 0,
+              available: rootTask.numberOfAvailableTasks || 0,
+              completed: rootTask.numberOfCompletedTasks || 0
+            };
+          }
+
+          // Next task
+          const nextTask = project.nextTask;
+          if (nextTask) {
+            proj.nextTask = {
+              id: nextTask.id.primaryKey,
+              name: nextTask.name,
+              flagged: nextTask.flagged || false,
+              dueDate: nextTask.dueDate ? nextTask.dueDate.toISOString() : null
+            };
+          }
+          `
+              : ''
+          }
+
+          ${
+            includeStats
+              ? `
+          // Include stats (expensive)
+          const tasks = project.flattenedTasks;
+          if (tasks && tasks.length > 0) {
+            let active = 0, completed = 0, overdue = 0, flagged = 0;
+            const now = new Date();
+
+            tasks.forEach(task => {
+              if (task.completed) {
+                completed++;
+              } else {
+                active++;
+                if (task.dueDate && task.dueDate < now) overdue++;
+              }
+              if (task.flagged) flagged++;
+            });
+
+            proj.stats = {
+              active: active,
+              completed: completed,
+              total: tasks.length,
+              completionRate: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
+              overdue: overdue,
+              flagged: flagged
+            };
+          }
+          `
+              : ''
+          }
+
+          results.push(proj);
+          count++;
+        });
+
+        return JSON.stringify({
+          projects: results,
+          count: results.length,
+          total_available: flattenedProjects.length
+        });
+      })()
+    \`;
+
+    const resultJson = app.evaluateJavascript(omniJsScript);
+    const result = JSON.parse(resultJson);
+
+    return JSON.stringify({
+      projects: result.projects,
+      metadata: {
+        total_available: result.total_available,
+        returned_count: result.count,
+        limit_applied: ${limit},
+        performance_mode: '${performanceMode}',
+        stats_included: ${includeStats},
+        optimization: 'ast_filtered',
+        filter_description: ${JSON.stringify(filterDescription)}
+      }
+    });
+
+  } catch (error) {
+    return JSON.stringify({
+      error: true,
+      message: error.message || String(error),
+      context: 'list_projects_ast'
+    });
+  }
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription,
+    isEmptyFilter: isEmptyFilterValue,
+  };
+}
+
+/**
+ * Build an OmniJS script for a specific project by ID
+ */
+export function buildProjectByIdScript(projectId: string, fields: string[] = []): GeneratedScript {
+  const fieldProjection = generateProjectFieldProjection(fields);
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`
+      (() => {
+        const results = [];
+        const targetId = ${JSON.stringify(projectId)};
+
+        function getProjectStatus(project) {
+          if (project.status === Project.Status.Done) return 'done';
+          if (project.status === Project.Status.Dropped) return 'dropped';
+          if (project.status === Project.Status.OnHold) return 'on-hold';
+          return 'active';
+        }
+
+        function getFolderPath(folder) {
+          if (!folder) return '';
+          const parts = [];
+          let current = folder;
+          while (current) {
+            parts.unshift(current.name);
+            current = current.parent;
+          }
+          return parts.join('/');
+        }
+
+        // Use Project.byIdentifier for O(1) lookup
+        const project = Project.byIdentifier(targetId);
+        if (project) {
+          results.push({
+            ${fieldProjection}
+          });
+        }
+
+        return JSON.stringify({
+          projects: results,
+          count: results.length,
+          mode: 'id_lookup',
+          targetId: targetId
+        });
+      })()
+    \`;
+
+    const resultJson = app.evaluateJavascript(omniJsScript);
+    return resultJson;
+
+  } catch (error) {
+    return JSON.stringify({
+      error: true,
+      message: error.message || String(error),
+      context: 'project_by_id'
+    });
+  }
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription: `id = ${projectId}`,
+    isEmptyFilter: false,
+  };
 }

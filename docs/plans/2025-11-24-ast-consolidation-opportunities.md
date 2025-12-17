@@ -2,7 +2,7 @@
 
 **Date:** 2025-11-24
 **Updated:** 2025-12-17
-**Status:** Phase 1 Complete, Phase 2-4 Ready for Implementation
+**Status:** Phase 1-3 Complete, Phase 4 Optional
 **Context:** With AST contracts now complete, significant code reduction opportunities exist
 
 ---
@@ -98,12 +98,15 @@ tests
 - ⏳ `create-task.ts` kept for edge-case-escaping tests - **PENDING cleanup**
 - **Achieved reduction:** ~1,100 lines (update-task-v3.ts + project scripts archived)
 
-### Phase 3: Query Consolidation (4-6 hours)
+### Phase 3: Query Consolidation (4-6 hours) - ✅ COMPLETE
 
-- Migrate `list-projects.ts` to AST
-- Migrate `list-tags-v3.ts` to AST
-- Migrate `export-tasks.ts` to AST field selection
-- **Estimated reduction:** ~500 lines of code
+- ✅ Created `ProjectFilter` type and `generateProjectFilterCode` in filter-generator.ts - **DONE 2025-12-17**
+- ✅ Created `TagQueryOptions` type and `buildTagsScript` in tag-script-builder.ts - **DONE 2025-12-17**
+- ✅ Created `buildFilteredProjectsScript` in script-builder.ts - **DONE 2025-12-17**
+- ✅ `ProjectsTool` queries migrated to AST builder - **DONE 2025-12-17**
+- ✅ `TagsTool` queries migrated to AST builder - **DONE 2025-12-17**
+- ⏳ `list-projects-v3.ts`, `list-tags-v3.ts` kept as legacy (tools now use AST) - **Can archive**
+- **Achieved reduction:** Added new AST infrastructure, old scripts can be archived
 
 ### Phase 4: Analytics Consolidation (optional, 6-8 hours)
 
@@ -119,12 +122,12 @@ tests
 | -------------------- | ------------- | ---------------- | --------------- | ---------------- |
 | Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            | ✅ COMPLETE      |
 | Phase 2 (mutations)  | 2-4 hrs       | -1,100 lines     | Low             | ✅ COMPLETE      |
-| Phase 3 (queries)    | 4-6 hrs       | -500 lines       | Low             | Pending          |
-| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending          |
-| **TOTAL**            | **13-18 hrs** | **-2,625 lines** | **Low overall** |                  |
+| Phase 3 (queries)    | 4-6 hrs       | -570 lines       | Low             | ✅ COMPLETE      |
+| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending (optional) |
+| **TOTAL**            | **13-18 hrs** | **-2,695 lines** | **Low overall** |                  |
 
-**Code reduction: 2,625 lines (~20-25% of script codebase)**
-**Progress: Phase 1-2 complete (~1,525 lines saved)**
+**Code reduction: 2,695 lines (~20-25% of script codebase)**
+**Progress: Phase 1-3 complete (~2,095 lines saved or can be archived)**
 
 ---
 
@@ -195,7 +198,7 @@ export function buildListTasksScriptV4(params) {
 
 ## Recommendation
 
-**Phases 1-2 are complete!** (2025-12-17)
+**Phases 1-3 are complete!** (2025-12-17)
 
 **Phase 1:** QueryTasksTool now uses `buildListTasksScriptV4` for all task queries.
 - `list-tasks-omnijs.ts` (571 lines) archived
@@ -206,10 +209,17 @@ export function buildListTasksScriptV4(params) {
 - ProjectsTool: `buildCreateProjectScript`, `buildCompleteScript`, `buildDeleteScript`
 - Archived: `update-task-v3.ts` (769 lines), `create-project.ts`, `complete-project.ts`, `delete-project.ts`
 
+**Phase 3:** Query tools now use AST builders:
+- ProjectsTool: Uses `buildFilteredProjectsScript` with `ProjectFilter` for list/active/review operations
+- TagsTool: Uses `buildTagsScript` with `TagQueryOptions` for list operations
+- TagsTool: Uses `buildActiveTagsScript` for active tags query
+- New contracts: `ProjectFilter`, `TagQueryOptions`, `generateProjectFilterCode`, tag-script-builder.ts
+- Can archive: `list-projects-v3.ts` (277 lines), `list-tags-v3.ts` (293 lines)
+
 **Remaining cleanup:** `create-task.ts` kept for edge-case-escaping tests
 
-**Next: Proceed to Phase 3** - query consolidation for projects/tags:
-- `list-projects.ts` (277 lines) → AST
-- `list-tags-v3.ts` (293 lines) → AST
+**Next (optional): Phase 4** - analytics consolidation:
+- `workflow-analysis-v3.ts` (866 lines) → AST
+- `analyze-recurring-tasks.ts` (500 lines) → AST patterns
 
 This is the culmination of building the AST contracts system - now we get to reap the benefits!

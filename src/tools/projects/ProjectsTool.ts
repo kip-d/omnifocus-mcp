@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { buildListProjectsScriptV3 } from '../../omnifocus/scripts/projects/list-projects-v3.js';
+// Note: buildListProjectsScriptV3 replaced by AST builder (Phase 3 consolidation)
 import { GET_PROJECT_STATS_SCRIPT } from '../../omnifocus/scripts/projects/get-project-stats.js';
 import {
   buildCreateProjectScript,
@@ -8,6 +8,8 @@ import {
   buildCompleteScript,
   buildDeleteScript,
 } from '../../contracts/ast/mutation-script-builder.js';
+import { buildFilteredProjectsScript } from '../../contracts/ast/script-builder.js';
+import type { ProjectFilter, ProjectStatus } from '../../contracts/filters.js';
 import type { ProjectCreateData } from '../../contracts/mutations.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
@@ -284,38 +286,42 @@ export class ProjectsTool extends BaseTool<
   }
 
   private async handleListProjects(args: ProjectsArgsV2, timer: OperationTimerV2): Promise<ProjectsResponseV2> {
-    const filter: {
-      limit?: number;
-      includeDropped?: boolean;
-      status?: string;
-      folder?: string;
-      search?: string;
-    } = {
-      limit: args.limit,
-      includeDropped: args.status === 'all' || args.status === 'dropped',
-    };
+    // Build ProjectFilter for AST builder
+    const projectFilter: ProjectFilter = {};
 
-    // Add status filter
+    // Map status filter (convert 'on-hold' to 'onHold' for ProjectStatus)
     if (args.status && args.status !== 'all') {
-      filter.status = args.status;
+      const statusMap: Record<string, ProjectStatus> = {
+        active: 'active',
+        'on-hold': 'onHold',
+        done: 'done',
+        dropped: 'dropped',
+      };
+      projectFilter.status = [statusMap[args.status]];
     }
 
     // Add folder filter
     if (args.folder) {
-      filter.folder = args.folder;
+      projectFilter.folderName = args.folder;
     }
 
     // Add search filter for name/note content
     if (args.search) {
-      filter.search = args.search;
+      projectFilter.text = args.search;
     }
 
     // Use simple cache keys that match cache warming
     // This ensures cache hits for common queries
+    // Include limit and includeStats in cache key for proper differentiation
+    const cacheParams = {
+      ...projectFilter,
+      limit: args.limit,
+      includeStats: args.details,
+    };
     const cacheKey =
       args.status === 'active' && !args.folder
         ? 'projects_active' // Matches cache warming key
-        : `projects_list_${JSON.stringify(filter)}`;
+        : `projects_list_${JSON.stringify(cacheParams)}`;
 
     // Check cache
     const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
@@ -327,23 +333,17 @@ export class ProjectsTool extends BaseTool<
       }) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query using fast OmniJS v3 pattern (15x faster than old helper-based)
+    // Execute query using AST-powered script builder (Phase 3 consolidation)
     const includeStats = args.details !== undefined ? args.details : false;
 
-    // Build v3 script with filters
-    const statusArray = filter.status ? [filter.status] : [];
-    const script = buildListProjectsScriptV3({
-      filter: {
-        status: statusArray,
-        folder: filter.folder,
-        search: filter.search,
-      },
+    // Use AST builder for project queries
+    const generatedScript = buildFilteredProjectsScript(projectFilter, {
       limit: args.limit || 50,
       includeStats: includeStats,
       performanceMode: includeStats ? 'normal' : 'lite',
     });
 
-    const result = await this.execJson(script);
+    const result = await this.execJson(generatedScript.script);
     if (isScriptError(result)) {
       // Check for specific error types first
       const specificError = this.getSpecificErrorResponse(result, 'list', timer);
@@ -602,16 +602,17 @@ export class ProjectsTool extends BaseTool<
       }) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query using fast OmniJS v3 pattern
-    const script = buildListProjectsScriptV3({
-      filter: {
-        needsReview: true,
-      },
+    // Execute query using AST-powered script builder (Phase 3 consolidation)
+    const projectFilter: ProjectFilter = {
+      needsReview: true,
+    };
+
+    const generatedScript = buildFilteredProjectsScript(projectFilter, {
       limit: args.limit || 50,
       includeStats: false,
       performanceMode: 'lite',
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(generatedScript.script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -655,17 +656,18 @@ export class ProjectsTool extends BaseTool<
       }) as unknown as ProjectsResponseV2;
     }
 
-    // Execute query using fast OmniJS v3 pattern (15x faster than old helper-based)
+    // Execute query using AST-powered script builder (Phase 3 consolidation)
     const includeStats = args.details !== undefined ? args.details : false;
-    const script = buildListProjectsScriptV3({
-      filter: {
-        status: ['active'],
-      },
+    const projectFilter: ProjectFilter = {
+      status: ['active'],
+    };
+
+    const generatedScript = buildFilteredProjectsScript(projectFilter, {
       limit: args.limit || 50,
       includeStats: includeStats,
       performanceMode: includeStats ? 'normal' : 'lite',
     });
-    const result = await this.execJson(script);
+    const result = await this.execJson(generatedScript.script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

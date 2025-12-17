@@ -129,6 +129,95 @@ export interface TaskFilter {
 }
 
 // =============================================================================
+// PROJECT FILTER INTERFACE
+// =============================================================================
+
+/**
+ * Project status values for filtering
+ */
+export type ProjectStatus = 'active' | 'onHold' | 'done' | 'dropped';
+
+/**
+ * ProjectFilter - Filter properties for project queries
+ *
+ * Simpler than TaskFilter since projects have fewer filterable properties.
+ * Uses filter-based queries (like TaskFilter), not mode-based queries (like tags).
+ *
+ * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
+ */
+export interface ProjectFilter {
+  // --- Status Filter ---
+  /**
+   * Filter by project status - can match multiple statuses
+   * e.g., ['active', 'onHold'] returns projects in either status
+   */
+  status?: ProjectStatus[];
+
+  // --- Boolean Flags ---
+  flagged?: boolean;
+  needsReview?: boolean;
+
+  // --- Text Search ---
+  /**
+   * Search term for name and note content
+   * Case-insensitive substring match
+   */
+  text?: string;
+
+  // --- Folder Filter ---
+  /**
+   * Filter by folder ID (exact match)
+   */
+  folderId?: string;
+  /**
+   * Filter by folder name (case-insensitive substring match)
+   */
+  folderName?: string;
+
+  // --- Pagination ---
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Known project filter property names (for validation)
+ */
+export const PROJECT_FILTER_PROPERTY_NAMES = [
+  'status',
+  'flagged',
+  'needsReview',
+  'text',
+  'folderId',
+  'folderName',
+  'limit',
+  'offset',
+] as const;
+
+/**
+ * Validate that a project filter only contains known properties
+ */
+export function validateProjectFilterProperties(filter: Record<string, unknown>): string[] {
+  const unknownProps: string[] = [];
+  const knownSet = new Set(PROJECT_FILTER_PROPERTY_NAMES);
+
+  for (const key of Object.keys(filter)) {
+    if (!knownSet.has(key as (typeof PROJECT_FILTER_PROPERTY_NAMES)[number])) {
+      unknownProps.push(key);
+    }
+  }
+
+  return unknownProps;
+}
+
+/**
+ * Ensure a project filter object conforms to ProjectFilter
+ * Use this when creating filters to get compile-time checking
+ */
+export function createProjectFilter(filter: ProjectFilter): ProjectFilter {
+  return filter;
+}
+
+// =============================================================================
 // FILTER METADATA (for response reporting)
 // =============================================================================
 

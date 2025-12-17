@@ -14,7 +14,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter } from '../filters.js';
+import type { TaskFilter, ProjectFilter, ProjectStatus } from '../filters.js';
 import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
@@ -203,6 +203,124 @@ export function describeFilter(filter: TaskFilter): string {
 
   if (conditions.length === 0) {
     return 'all tasks';
+  }
+
+  return conditions.join(' AND ');
+}
+
+// =============================================================================
+// PROJECT FILTER CODE GENERATION
+// =============================================================================
+
+/**
+ * OmniJS status enum mappings
+ */
+const PROJECT_STATUS_MAP: Record<ProjectStatus, string> = {
+  active: 'Project.Status.Active',
+  onHold: 'Project.Status.OnHold',
+  done: 'Project.Status.Done',
+  dropped: 'Project.Status.Dropped',
+};
+
+/**
+ * Generate OmniJS filter code for a ProjectFilter
+ *
+ * Unlike TaskFilter which uses AST → emit pipeline, ProjectFilter uses
+ * direct code generation since project filters are simpler.
+ *
+ * @param filter - The ProjectFilter to transform
+ * @returns JavaScript predicate code string for use in OmniJS
+ */
+export function generateProjectFilterCode(filter: ProjectFilter): string {
+  const conditions: string[] = [];
+
+  // Status filter - can match multiple statuses
+  if (filter.status && filter.status.length > 0) {
+    const statusChecks = filter.status.map((s) => `project.status === ${PROJECT_STATUS_MAP[s]}`);
+    conditions.push(`(${statusChecks.join(' || ')})`);
+  }
+
+  // Boolean flags
+  if (filter.flagged !== undefined) {
+    conditions.push(`(project.flagged === ${filter.flagged})`);
+  }
+
+  if (filter.needsReview !== undefined) {
+    // nextReviewDate is set if review is pending
+    // If needsReview is true, we want projects where nextReviewDate exists and is in the past
+    if (filter.needsReview) {
+      conditions.push('(project.nextReviewDate && project.nextReviewDate <= new Date())');
+    } else {
+      conditions.push('(!project.nextReviewDate || project.nextReviewDate > new Date())');
+    }
+  }
+
+  // Text search (case-insensitive on name and note)
+  if (filter.text) {
+    const escaped = JSON.stringify(filter.text.toLowerCase());
+    conditions.push(
+      `((project.name || '').toLowerCase().includes(${escaped}) || ` +
+        `(project.note || '').toLowerCase().includes(${escaped}))`,
+    );
+  }
+
+  // Folder filter by ID
+  if (filter.folderId) {
+    const escapedId = JSON.stringify(filter.folderId);
+    conditions.push(`(project.parentFolder && project.parentFolder.id.primaryKey === ${escapedId})`);
+  }
+
+  // Folder filter by name (case-insensitive)
+  if (filter.folderName) {
+    const escapedName = JSON.stringify(filter.folderName.toLowerCase());
+    conditions.push(`(project.parentFolder && (project.parentFolder.name || '').toLowerCase().includes(${escapedName}))`);
+  }
+
+  // Return 'true' if no conditions (match all projects)
+  return conditions.length > 0 ? conditions.join(' && ') : 'true';
+}
+
+/**
+ * Check if a project filter is empty (will match all projects)
+ */
+export function isEmptyProjectFilter(filter: ProjectFilter): boolean {
+  return (
+    (!filter.status || filter.status.length === 0) &&
+    filter.flagged === undefined &&
+    filter.needsReview === undefined &&
+    !filter.text &&
+    !filter.folderId &&
+    !filter.folderName
+  );
+}
+
+/**
+ * Get a human-readable description of the project filter
+ */
+export function describeProjectFilter(filter: ProjectFilter): string {
+  const conditions: string[] = [];
+
+  if (filter.status && filter.status.length > 0) {
+    conditions.push(`status in [${filter.status.join(', ')}]`);
+  }
+  if (filter.flagged !== undefined) {
+    conditions.push(filter.flagged ? 'flagged' : 'not flagged');
+  }
+  if (filter.needsReview !== undefined) {
+    conditions.push(filter.needsReview ? 'needs review' : 'does not need review');
+  }
+  if (filter.text) {
+    conditions.push(`text contains "${filter.text}"`);
+  }
+  if (filter.folderId) {
+    conditions.push(`folder ID = ${filter.folderId}`);
+  }
+  if (filter.folderName) {
+    conditions.push(`folder name contains "${filter.folderName}"`);
+  }
+
+  if (conditions.length === 0) {
+    return 'all projects';
   }
 
   return conditions.join(' AND ');

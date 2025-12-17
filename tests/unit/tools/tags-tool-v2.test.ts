@@ -82,7 +82,8 @@ describe('TagsTool', () => {
 
       expect(result.success).toBe(true);
       expect((result.data as any).items).toBeDefined();
-      expect(mockOmniAutomation.buildScript).toHaveBeenCalled();
+      // AST builder generates script directly, no longer uses buildScript
+      expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
     });
 
     it('should get active tags with operation="active"', async () => {
@@ -202,15 +203,17 @@ describe('TagsTool', () => {
 
     it('should support childrenAreMutuallyExclusive property in tag list results', async () => {
       mockCache.get.mockReturnValue(null);
-      mockOmniAutomation.buildScript.mockReturnValue('test script');
+      // AST builder generates script directly, mock the executeJson response in the new format
       mockOmniAutomation.executeJson.mockResolvedValue({
         success: true,
         data: {
-          tags: [
+          ok: true,
+          v: 'ast',
+          items: [
             { id: 'tag1', name: 'Priority', childrenAreMutuallyExclusive: true },
             { id: 'tag2', name: 'Status', childrenAreMutuallyExclusive: false },
           ],
-          count: 2,
+          summary: { total: 2 },
         },
       });
 

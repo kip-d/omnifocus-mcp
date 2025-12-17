@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { LIST_TAGS_SCRIPT, GET_ACTIVE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/list-tags-v3.js';
+// Note: LIST_TAGS_SCRIPT, GET_ACTIVE_TAGS_SCRIPT replaced by AST builder (Phase 3 consolidation)
 import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
+import { buildTagsScript, buildActiveTagsScript } from '../../contracts/ast/tag-script-builder.js';
+import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
 import {
   createListResponseV2,
   createSuccessResponseV2,
@@ -153,22 +155,28 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         return cached as TagsResponseV2; // Keep identity to satisfy test equality; cached object may already be a formatted response
       }
 
-      // Use V3 script with OmniJS for all modes
-      const scriptTemplate = LIST_TAGS_SCRIPT;
+      // Map legacy options to TagQueryMode (Phase 3 AST consolidation)
+      let mode: TagQueryMode;
+      if (namesOnly) {
+        mode = 'names';
+      } else if (fastMode && !includeUsageStats && !includeTaskCounts) {
+        mode = 'basic';
+      } else {
+        mode = 'full';
+      }
 
-      const script = this.omniAutomation.buildScript(scriptTemplate, {
-        options: {
-          sortBy,
-          includeEmpty,
-          includeUsageStats,
-          includeTaskCounts,
-          fastMode,
-          namesOnly,
-        },
-      });
+      // Build TagQueryOptions for AST builder
+      const tagOptions: TagQueryOptions = {
+        mode,
+        includeEmpty,
+        sortBy: sortBy as TagSortBy,
+        includeUsageStats: includeUsageStats || includeTaskCounts,
+      };
 
-      this.logger.debug('Executing consolidated list tags script');
-      const result = await this.execJson(script);
+      // Use AST-powered tag script builder (Phase 3 consolidation)
+      const generatedScript = buildTagsScript(tagOptions);
+      this.logger.debug('Executing AST-powered list tags script');
+      const result = await this.execJson(generatedScript.script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -181,16 +189,17 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         );
       }
 
-      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
-      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
-      const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
-      const parsedResult: TagListData = 'data' in envelope && envelope.data ? envelope.data : (envelope as TagListData);
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "ast", ...}, execJson wraps it again)
+      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number; summary?: { total?: number } };
+      const envelope = result.data as { ok?: boolean; v?: string; items?: unknown[]; summary?: { total?: number } } | TagListData;
+      const items = 'items' in envelope ? envelope.items : [];
+      const total = 'summary' in envelope && envelope.summary?.total ? envelope.summary.total : (items?.length || 0);
 
-      const response = createListResponseV2('tags', parsedResult.tags || parsedResult.items || [], 'other', {
+      const response = createListResponseV2('tags', items || [], 'other', {
         ...timer.toMetadata(),
-        total: parsedResult.count || parsedResult.tags?.length || 0,
+        total,
         operation: 'list',
-        mode: 'unified',
+        mode: 'ast_unified',
         options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly },
       }) as TagsResponseV2;
 
@@ -219,10 +228,10 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         return cached as TagsResponseV2;
       }
 
-      // Execute script
-      const script = this.omniAutomation.buildScript(GET_ACTIVE_TAGS_SCRIPT, {});
-      this.logger.debug('Executing get active tags script');
-      const result = await this.execJson(script);
+      // Use AST-powered active tags script builder (Phase 3 consolidation)
+      const generatedScript = buildActiveTagsScript();
+      this.logger.debug('Executing AST-powered get active tags script');
+      const result = await this.execJson(generatedScript.script);
 
       if (!isScriptSuccess(result)) {
         return createErrorResponseV2(
@@ -235,14 +244,15 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
         );
       }
 
-      // Unwrap double-wrapped data structure (script returns {ok: true, v: "1", data: {...}}, execJson wraps it again)
-      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number };
-      const envelope = result.data as { ok?: boolean; v?: string; data?: TagListData } | TagListData;
-      const parsedResult: TagListData = 'data' in envelope && envelope.data ? envelope.data : (envelope as TagListData);
+      // Unwrap double-wrapped data structure (script returns {ok: true, v: "ast", ...}, execJson wraps it again)
+      type TagListData = { tags?: unknown[]; items?: unknown[]; count?: number; summary?: { total?: number } };
+      const envelope = result.data as { ok?: boolean; v?: string; items?: unknown[]; summary?: { total?: number } } | TagListData;
+      const items = 'items' in envelope ? envelope.items : [];
+      const total = 'summary' in envelope && envelope.summary?.total ? envelope.summary.total : (items?.length || 0);
 
-      const response = createListResponseV2('tags', parsedResult.tags || parsedResult.items || [], 'other', {
+      const response = createListResponseV2('tags', items || [], 'other', {
         ...timer.toMetadata(),
-        count: parsedResult.count || parsedResult.tags?.length || 0,
+        count: total,
         operation: 'active',
         description: 'Tags with incomplete tasks',
       }) as TagsResponseV2;
