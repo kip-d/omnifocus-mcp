@@ -40,6 +40,7 @@ type BrandedTaskArgs = {
   taskId?: TaskId;
   taskIds?: TaskId[];
   projectId?: ProjectId | null;
+  project?: string | null;  // Alias for unified API compatibility
   parentTaskId?: TaskId;
   completionDate?: string | null;
   minimalResponse?: string | boolean;
@@ -89,6 +90,13 @@ const ManageTaskSchema = z.object({
     .nullable()
     .transform(val => val === '' || val === null ? null : val)
     .describe('Project ID to assign the task to (null/empty to move to inbox)'),
+
+  // Alias for unified API compatibility (uses 'project' instead of 'projectId')
+  project: z.union([z.string(), z.null()])
+    .optional()
+    .nullable()
+    .transform(val => val === '' || val === null ? null : val)
+    .describe('Project ID (alias for projectId, used by unified API)'),
 
   parentTaskId: z.union([z.string().min(1), z.literal(''), z.null()])
     .optional()
@@ -290,7 +298,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           // Filter out null/undefined values and convert dates
           const createArgs: Partial<TaskCreationArgs> = { name: brandedParams.name! };
           if (brandedParams.note) createArgs.note = brandedParams.note;
-          if (brandedParams.projectId) createArgs.projectId = brandedParams.projectId;
+          // Support both legacy 'projectId' and unified API 'project' field names
+          if (brandedParams.projectId) {
+            createArgs.projectId = brandedParams.projectId;
+          } else if (brandedParams.project) {
+            createArgs.projectId = brandedParams.project as string;
+          }
           if (brandedParams.parentTaskId) createArgs.parentTaskId = brandedParams.parentTaskId;
           if (brandedParams.dueDate) createArgs.dueDate = brandedParams.dueDate;
           if (brandedParams.deferDate) createArgs.deferDate = brandedParams.deferDate;
