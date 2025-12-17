@@ -13,10 +13,11 @@ export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task
 export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
 export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
-// Note: UPDATE_TASK_SCRIPT replaced by createUpdateTaskScript() in update-task-v3.ts
 
-// AST-powered V4 (74% smaller, type-safe filters) - replaces LIST_TASKS_SCRIPT_V3
-// Old template version archived to .archive/scripts/list-tasks-omnijs.ts (2025-12-17)
+// AST-powered scripts (Phase 1-2 migration complete 2025-12-17):
+// - list-tasks: buildListTasksScriptV4 from list-tasks-ast.ts (74% smaller)
+// - mutations: buildCreateTaskScript, buildUpdateTaskScript from mutation-script-builder.ts
+// Old templates archived: list-tasks-omnijs.ts, update-task-v3.ts
 export { buildListTasksScriptV4 } from './tasks/list-tasks-ast.js';
 
 // Legacy helper export

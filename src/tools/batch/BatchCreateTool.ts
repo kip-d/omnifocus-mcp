@@ -10,10 +10,12 @@ import { BatchCreateSchema, BatchCreateInput, BatchItem } from './batch-schemas.
 import { TempIdResolver } from './tempid-resolver.js';
 import { DependencyGraph, DependencyGraphError } from './dependency-graph.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
-import { CREATE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/create-project.js';
-import { DELETE_PROJECT_SCRIPT } from '../../omnifocus/scripts/projects/delete-project.js';
-import { CREATE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks/create-task.js';
-import { DELETE_TASK_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import {
+  buildCreateTaskScript,
+  buildCreateProjectScript,
+  buildDeleteScript,
+} from '../../contracts/ast/mutation-script-builder.js';
+import type { TaskCreateData, ProjectCreateData } from '../../contracts/mutations.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { localToUTC } from '../../utils/timezone.js';
 
@@ -233,25 +235,20 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
    * Create a project
    */
   private async createProject(item: BatchItem, _resolver: TempIdResolver): Promise<ItemCreationResult> {
-    const options: Record<string, unknown> = {
+    // Build ProjectCreateData for AST builder
+    const projectData: ProjectCreateData = {
+      name: item.name,
       note: item.note || '',
       flagged: item.flagged || false,
-      status: (item as { status?: string }).status || 'active',
+      status: ((item as { status?: string }).status as ProjectCreateData['status']) || 'active',
       sequential: (item as { sequential?: boolean }).sequential || false,
       tags: item.tags || [],
+      folder: (item as { folder?: string }).folder,
     };
 
-    // Add folder if specified
-    const folder = (item as { folder?: string }).folder;
-    if (folder) {
-      options.folder = folder;
-    }
-
-    const script = this.omniAutomation.buildScript(CREATE_PROJECT_SCRIPT, {
-      name: item.name,
-      options,
-    });
-    const result = await this.execJson(script);
+    // Use AST mutation builder
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
       return {
@@ -315,16 +312,6 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       }
     }
 
-    // Convert dates to UTC
-    const taskData: Record<string, unknown> = {
-      name: item.name,
-      note: item.note || '',
-      flagged: item.flagged || false,
-      projectId,
-      parentTaskId,
-      tags: item.tags || [],
-    };
-
     // Handle task-specific fields
     const taskItem = item as {
       dueDate?: string;
@@ -333,24 +320,27 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       sequential?: boolean;
     };
 
-    if (taskItem.dueDate) {
-      taskData.dueDate = localToUTC(taskItem.dueDate, 'due');
-    }
-    if (taskItem.deferDate) {
-      taskData.deferDate = localToUTC(taskItem.deferDate, 'defer');
-    }
-    if (taskItem.estimatedMinutes !== undefined) {
-      taskData.estimatedMinutes =
-        typeof taskItem.estimatedMinutes === 'string'
-          ? parseInt(taskItem.estimatedMinutes, 10)
-          : taskItem.estimatedMinutes;
-    }
-    if (taskItem.sequential !== undefined) {
-      taskData.sequential = taskItem.sequential;
-    }
+    // Build TaskCreateData for AST builder
+    const taskData: TaskCreateData = {
+      name: item.name,
+      note: item.note || '',
+      flagged: item.flagged || false,
+      project: projectId || undefined,
+      parentTaskId: parentTaskId || undefined,
+      tags: item.tags || [],
+      dueDate: taskItem.dueDate ? localToUTC(taskItem.dueDate, 'due') : undefined,
+      deferDate: taskItem.deferDate ? localToUTC(taskItem.deferDate, 'defer') : undefined,
+      estimatedMinutes:
+        taskItem.estimatedMinutes !== undefined
+          ? typeof taskItem.estimatedMinutes === 'string'
+            ? parseInt(taskItem.estimatedMinutes, 10)
+            : taskItem.estimatedMinutes
+          : undefined,
+    };
 
-    const script = this.omniAutomation.buildScript(CREATE_TASK_SCRIPT, { taskData });
-    const result = await this.execJson(script);
+    // Use AST mutation builder
+    const generatedScript = await buildCreateTaskScript(taskData);
+    const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
       return {
@@ -396,12 +386,9 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     for (let i = createdItems.length - 1; i >= 0; i--) {
       const item = createdItems[i];
       try {
-        const script =
-          item.type === 'project'
-            ? this.omniAutomation.buildScript(DELETE_PROJECT_SCRIPT, { projectId: item.realId })
-            : this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, { taskId: item.realId });
-
-        await this.execJson(script);
+        // Use AST mutation builder for delete
+        const generatedScript = await buildDeleteScript(item.type, item.realId);
+        await this.execJson(generatedScript.script);
         this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
       } catch (error) {
         this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);

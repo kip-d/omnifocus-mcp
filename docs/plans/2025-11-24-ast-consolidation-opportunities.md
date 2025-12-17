@@ -88,12 +88,14 @@ tests
 - ✅ Zero risk (already tested) - **ALL TESTS PASSING**
 - ✅ Old template archived - **DONE 2025-12-17**
 
-### Phase 2: Mutation Consolidation (2-4 hours) - **DO THIS NEXT**
+### Phase 2: Mutation Consolidation (2-4 hours) - ✅ MOSTLY COMPLETE
 
-- Migrate `create-task.ts` to AST mutation builder
-- Migrate `update-task-v3.ts` to AST mutation builder
-- Migrate `update-project.ts` to AST mutation builder
-- **Estimated reduction:** ~800 lines of code
+- ✅ `ManageTaskTool` uses AST `buildCreateTaskScript` and `buildUpdateTaskScript` - **DONE**
+- ✅ `BatchCreateTool` migrated to AST builders - **DONE 2025-12-17**
+- ✅ `update-task-v3.ts` archived (769 lines) - **DONE 2025-12-17**
+- ⏳ `ProjectsTool` still uses old templates for create/delete - **PENDING**
+- ⏳ `create-task.ts` kept for edge-case-escaping tests - **PENDING cleanup**
+- **Achieved reduction:** ~769 lines (update-task-v3.ts archived)
 
 ### Phase 3: Query Consolidation (4-6 hours)
 
@@ -112,16 +114,16 @@ tests
 
 ## Total Potential Impact
 
-| Phase                | Time          | LOC Reduction    | Risk            | Status      |
-| -------------------- | ------------- | ---------------- | --------------- | ----------- |
-| Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            | ✅ COMPLETE |
-| Phase 2 (mutations)  | 2-4 hrs       | -800 lines       | Low             | ⏳ Next     |
-| Phase 3 (queries)    | 4-6 hrs       | -500 lines       | Low             | Pending     |
-| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending     |
-| **TOTAL**            | **13-18 hrs** | **-2,325 lines** | **Low overall** |             |
+| Phase                | Time          | LOC Reduction    | Risk            | Status           |
+| -------------------- | ------------- | ---------------- | --------------- | ---------------- |
+| Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            | ✅ COMPLETE      |
+| Phase 2 (mutations)  | 2-4 hrs       | -769 lines       | Low             | ✅ MOSTLY DONE   |
+| Phase 3 (queries)    | 4-6 hrs       | -500 lines       | Low             | Pending          |
+| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending          |
+| **TOTAL**            | **13-18 hrs** | **-2,294 lines** | **Low overall** |                  |
 
-**Code reduction: 2,325 lines (~20-25% of script codebase)**
-**Progress: Phase 1 complete (425 lines saved)**
+**Code reduction: 2,294 lines (~20-25% of script codebase)**
+**Progress: Phase 1 complete, Phase 2 mostly complete (~1,194 lines saved)**
 
 ---
 
@@ -192,12 +194,15 @@ export function buildListTasksScriptV4(params) {
 
 ## Recommendation
 
-**Phase 1 is complete!** QueryTasksTool now uses `buildListTasksScriptV4` for all task queries. The old template
-(`list-tasks-omnijs.ts`) has been archived.
+**Phase 1 is complete!** QueryTasksTool now uses `buildListTasksScriptV4` for all task queries.
 
-**Next: Proceed to Phase 2** - mutation consolidation has high value (800 LOC reduction) and the mutation-script-builder
-already exists with 50 tests. Key targets:
-- `create-task.ts` (290 lines) → AST mutation builder
-- `update-task-v3.ts` (769 lines) → AST mutation builder
+**Phase 2 is mostly complete!** Key achievements (2025-12-17):
+- ManageTaskTool and BatchCreateTool now use AST mutation builders
+- `update-task-v3.ts` (769 lines) archived
+- Remaining: ProjectsTool migration, create-task.ts cleanup
+
+**Next: Proceed to Phase 3** - query consolidation for projects/tags:
+- `list-projects.ts` (277 lines) → AST
+- `list-tags-v3.ts` (293 lines) → AST
 
 This is the culmination of building the AST contracts system - now we get to reap the benefits!
