@@ -3,10 +3,13 @@
  *
  * This file now serves as a facade that re-exports scripts from
  * their modular locations while maintaining backward compatibility.
+ *
+ * Phase 2 AST consolidation (2025-12-18):
+ * - CREATE_TASK_SCRIPT archived, replaced by buildCreateTaskScript in mutation-script-builder.ts
  */
 
 // Re-export the modularized scripts
-export { CREATE_TASK_SCRIPT } from './tasks/create-task.js';
+// Note: CREATE_TASK_SCRIPT archived 2025-12-18, replaced by AST builder
 export { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from './tasks/complete-task.js';
 export { BULK_COMPLETE_TASKS_SCRIPT, buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
 export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task.js';

@@ -225,7 +225,7 @@ export function buildListTasksScriptV4(params) {
 - Archived: `analyze-recurring-tasks.ts` (500 lines)
 - Decision: `workflow-analysis-v3.ts` kept as-is (already optimized OmniJS with complex aggregation)
 
-**Remaining cleanup:** `create-task.ts` kept for edge-case-escaping tests
+**Final cleanup (2025-12-18):** `create-task.ts` archived - edge-case-escaping tests refactored to use minimal inline template
 
 **Total achieved:** ~2,600 lines archived/reduced across all four phases.
 

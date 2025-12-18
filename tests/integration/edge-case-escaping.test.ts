@@ -1,6 +1,5 @@
 import { describe, test, expect } from 'vitest';
 import { OmniAutomation } from '../../src/omnifocus/OmniAutomation.js';
-import { CREATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks/create-task.js';
 
 /**
  * Edge case tests for JSON escaping in script generation
@@ -12,7 +11,18 @@ import { CREATE_TASK_SCRIPT } from '../../src/omnifocus/scripts/tasks/create-tas
  * - Curly braces
  * - Unicode/emoji
  * - Mixed special characters
+ *
+ * Note: These tests use a minimal template to test buildScript() escaping.
+ * The actual task creation uses AST builders (Phase 2 consolidation).
  */
+
+// Minimal template for testing formatValue() escaping behavior
+const ESCAPING_TEST_TEMPLATE = `
+  (() => {
+    const taskData = {{taskData}};
+    return JSON.stringify(taskData);
+  })();
+`;
 
 describe('JSON Escaping Edge Cases', () => {
   const omni = new OmniAutomation();
@@ -31,7 +41,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should contain properly escaped quotes
       expect(script).toContain('Task \\"quoted\\" name');
@@ -52,7 +62,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Single quotes should be preserved (they're safe in double-quoted strings)
       expect(script).toContain("Task's name");
@@ -71,7 +81,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should contain escaped newlines
       expect(script).toContain('\\\\n');
@@ -92,7 +102,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should contain double-escaped backslashes
       expect(script).toContain('\\\\\\\\');
@@ -111,7 +121,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should preserve curly braces (they're safe in JSON strings)
       expect(script).toContain('{{variable}}');
@@ -130,7 +140,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should preserve emoji
       expect(script).toContain('🚀');
@@ -149,7 +159,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should be valid JavaScript (no syntax errors)
       expect(() => {
@@ -175,7 +185,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should contain properly formatted taskData with null values
       // (not the string 'undefined' as a value)
@@ -205,7 +215,7 @@ describe('JSON Escaping Edge Cases', () => {
         sequential: false,
       };
 
-      const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+      const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
       // Should properly escape each tag
       expect(script).toContain('urgent \\"high priority\\"');
@@ -250,7 +260,7 @@ describe('JSON Escaping Edge Cases', () => {
           sequential: false,
         };
 
-        const script = omni.buildScript(CREATE_TASK_SCRIPT, { taskData });
+        const script = omni.buildScript(ESCAPING_TEST_TEMPLATE, { taskData });
 
         // Basic syntax validation
         expect(() => {
