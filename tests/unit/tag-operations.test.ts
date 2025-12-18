@@ -1,14 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags-v3.js';
+import { buildTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Operations Fix Verification', () => {
-  it('should use OmniJS bridge for tag property access (v3)', () => {
-    // V3 uses pure OmniJS bridge - no safeGet needed
-    expect(LIST_TAGS_SCRIPT).toContain('evaluateJavascript');
-    expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.name');
-    expect(LIST_TAGS_SCRIPT).toContain('tag.id.primaryKey');
+  it('should use OmniJS bridge for tag property access (AST)', () => {
+    // AST builder uses pure OmniJS bridge - no safeGet needed
+    const { script } = buildTagsScript({ mode: 'full' });
+    expect(script).toContain('evaluateJavascript');
+    expect(script).toContain('flattenedTags.forEach');
+    expect(script).toContain('tag.name');
+    expect(script).toContain('tag.id.primaryKey');
   });
 
   it('should use plural methods for tag manipulation', () => {
@@ -33,7 +34,8 @@ describe('Tag Operations Fix Verification', () => {
   it('should return JSON stringified results', () => {
     // Verify all return statements use JSON.stringify
     const returnPattern = /return JSON\.stringify\(/g;
-    const listMatches = LIST_TAGS_SCRIPT.match(returnPattern);
+    const { script: listScript } = buildTagsScript({ mode: 'full' });
+    const listMatches = listScript.match(returnPattern);
     const manageMatches = MANAGE_TAGS_SCRIPT.match(returnPattern);
 
     expect(listMatches).not.toBeNull();

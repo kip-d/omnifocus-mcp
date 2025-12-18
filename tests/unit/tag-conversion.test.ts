@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LIST_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/list-tags-v3.js';
+import { buildTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
 import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
 
 describe('Tag Type Conversion Issues', () => {
@@ -12,6 +12,8 @@ describe('Tag Type Conversion Issues', () => {
       /Array\.from/g, // Array.from conversions
       /\.map\(/g, // map operations that might fail
     ];
+
+    const { script: LIST_TAGS_SCRIPT } = buildTagsScript({ mode: 'full' });
 
     const scripts = [
       { name: 'LIST_TAGS_SCRIPT', script: LIST_TAGS_SCRIPT },
@@ -31,7 +33,8 @@ describe('Tag Type Conversion Issues', () => {
   });
 
   it('should verify tag array handling patterns', () => {
-    // V3 uses OmniJS bridge - check for bridge patterns
+    // AST builder uses OmniJS bridge - check for bridge patterns
+    const { script: LIST_TAGS_SCRIPT } = buildTagsScript({ mode: 'full', includeUsageStats: true });
     expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags');
 
@@ -46,6 +49,8 @@ describe('Tag Type Conversion Issues', () => {
       /return\s+(?!JSON\.stringify)/g, // returns without JSON.stringify
       /\{[^}]*tags:[^}]*\}/g, // object literals with tags
     ];
+
+    const { script: LIST_TAGS_SCRIPT } = buildTagsScript({ mode: 'full' });
 
     complexPatterns.forEach((pattern) => {
       const listMatches = LIST_TAGS_SCRIPT.match(pattern);

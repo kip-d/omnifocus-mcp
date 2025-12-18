@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildListTasksScriptV4 } from '../../src/omnifocus/scripts/tasks.js';
 import { buildUpdateTaskScript } from '../../src/contracts/ast/mutation-script-builder.js';
-import { buildListProjectsScriptV3 } from '../../src/omnifocus/scripts/projects/list-projects-v3.js';
+import { buildFilteredProjectsScript } from '../../src/contracts/ast/script-builder.js';
 
 describe('Performance Optimization Tests', () => {
   describe('list_tasks performance features (AST V4)', () => {
@@ -27,32 +27,33 @@ describe('Performance Optimization Tests', () => {
     });
   });
 
-  describe('list_projects includeStats parameter (v3)', () => {
-    it('should generate script with includeStats parameter', () => {
-      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
-      expect(scriptWithStats).toContain('const includeStats = true');
+  describe('list_projects includeStats parameter (AST)', () => {
+    it('should generate script with includeStats option', () => {
+      const { script } = buildFilteredProjectsScript({}, { includeStats: true });
+      // AST builder includes stats logic when includeStats is true
+      expect(script).toContain('proj.stats');
     });
 
-    it('should only include stats logic when includeStats is true', () => {
-      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
-      expect(scriptWithStats).toContain('if (includeStats)');
-      expect(scriptWithStats).toContain('proj.stats =');
+    it('should include stats logic when includeStats is true', () => {
+      const { script } = buildFilteredProjectsScript({}, { includeStats: true });
+      expect(script).toContain('proj.stats');
+      expect(script).toContain('completionRate');
     });
 
     it('should include core statistics fields', () => {
-      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
-      // Check for stats fields in v3 format
-      expect(scriptWithStats).toContain('active:');
-      expect(scriptWithStats).toContain('completed:');
-      expect(scriptWithStats).toContain('completionRate:');
-      expect(scriptWithStats).toContain('overdue:');
-      expect(scriptWithStats).toContain('flagged:');
+      const { script } = buildFilteredProjectsScript({}, { includeStats: true });
+      // Check for stats fields in AST format
+      expect(script).toContain('active:');
+      expect(script).toContain('completed:');
+      expect(script).toContain('completionRate:');
+      expect(script).toContain('overdue:');
+      expect(script).toContain('flagged:');
     });
 
     it('should handle projects with no tasks', () => {
-      const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
-      // v3 checks tasks.length > 0 before calculating stats
-      expect(scriptWithStats).toContain('tasks.length > 0');
+      const { script } = buildFilteredProjectsScript({}, { includeStats: true });
+      // AST builder checks tasks.length > 0 before calculating stats
+      expect(script).toContain('tasks.length > 0');
     });
   });
 
@@ -188,12 +189,12 @@ describe('Cache Behavior Tests', () => {
 });
 
 describe('Error Handling Tests', () => {
-  it('should use v3 OmniJS architecture for stats', () => {
-    // v3 uses OmniJS with direct property access which handles errors differently
-    const scriptWithStats = buildListProjectsScriptV3({ includeStats: true });
-    // v3 wraps in try-catch at the outer level
-    expect(scriptWithStats).toContain('try {');
-    expect(scriptWithStats).toContain('catch (error)');
+  it('should use AST OmniJS architecture for stats', () => {
+    // AST builder uses OmniJS with direct property access which handles errors differently
+    const { script } = buildFilteredProjectsScript({}, { includeStats: true });
+    // AST builder wraps in try-catch at the outer level
+    expect(script).toContain('try {');
+    expect(script).toContain('catch (error)');
   });
 
   it('should perform safe and efficient task lookup', async () => {
