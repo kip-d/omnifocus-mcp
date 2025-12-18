@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { ANALYZE_RECURRING_TASKS_SCRIPT, GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
+// Note: ANALYZE_RECURRING_TASKS_SCRIPT replaced by AST builder (Phase 4 consolidation)
+import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
+import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
 import { CacheManager } from '../../cache/CacheManager.js';
@@ -72,13 +74,18 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
     try {
       switch (operation) {
         case 'analyze': {
-          // Direct implementation of recurring task analysis
+          // Direct implementation of recurring task analysis using AST builder (Phase 4)
           const analyzeOptions = {
             activeOnly: params.activeOnly ?? true,
             includeCompleted: params.includeCompleted ?? false,
             includeDropped: params.includeDropped ?? false,
             includeHistory: params.includeHistory ?? false,
-            sortBy: params.sortBy || 'dueDate',
+            sortBy: (params.sortBy === 'nextDue' ? 'dueDate' : params.sortBy) as
+              | 'name'
+              | 'dueDate'
+              | 'frequency'
+              | 'project'
+              | undefined,
           };
 
           // Try to use cache for recurring task analysis
@@ -88,11 +95,9 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
             return cachedAnalysis as RecurringTasksResponseV2;
           }
 
-          // Execute analysis script
-          const analyzeScript = this.omniAutomation.buildScript(ANALYZE_RECURRING_TASKS_SCRIPT, {
-            options: analyzeOptions,
-          });
-          const result = await this.execJson(analyzeScript);
+          // Execute analysis script using AST builder (Phase 4 consolidation)
+          const generatedScript = buildRecurringTasksScript(analyzeOptions);
+          const result = await this.execJson(generatedScript.script);
 
           if (isScriptError(result)) {
             return createErrorResponseV2(
@@ -116,9 +121,11 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
             );
           }
 
-          const analyzeResult = result.data as {
-            tasks: unknown[];
-            summary: Record<string, unknown>;
+          // Unwrap AST envelope (script returns {ok: true, v: "ast", tasks: [...], summary: {...}})
+          const envelope = result.data as { ok?: boolean; v?: string; tasks?: unknown[]; summary?: Record<string, unknown> };
+          const analyzeResult = {
+            tasks: envelope.tasks || [],
+            summary: envelope.summary || {},
           };
 
           // Add metadata
@@ -134,6 +141,7 @@ export class RecurringTasksTool extends BaseTool<typeof RecurringTasksSchema, Re
               operation: 'analyze',
               filters_applied: analyzeOptions,
               total_analyzed: analyzeResult.tasks?.length || 0,
+              optimization: 'ast_phase4',
             },
           );
 

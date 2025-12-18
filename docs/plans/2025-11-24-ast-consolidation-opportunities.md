@@ -2,7 +2,7 @@
 
 **Date:** 2025-11-24
 **Updated:** 2025-12-17
-**Status:** Phase 1-3 Complete, Phase 4 Optional
+**Status:** Phase 1-4 Complete
 **Context:** With AST contracts now complete, significant code reduction opportunities exist
 
 ---
@@ -108,11 +108,14 @@ tests
 - ⏳ `list-projects-v3.ts`, `list-tags-v3.ts` kept as legacy (tools now use AST) - **Can archive**
 - **Achieved reduction:** Added new AST infrastructure, old scripts can be archived
 
-### Phase 4: Analytics Consolidation (optional, 6-8 hours)
+### Phase 4: Analytics Consolidation (6-8 hours) - ✅ COMPLETE
 
-- Migrate `workflow-analysis-v3.ts` to AST
-- Migrate `analyze-recurring-tasks.ts` to AST patterns
-- **Estimated reduction:** ~600 lines of code
+- ✅ Created `analyze-recurring-tasks-ast.ts` with pure OmniJS builder - **DONE 2025-12-18**
+- ✅ Created `buildRecurringTasksScript` and `buildRecurringSummaryScript` - **DONE 2025-12-18**
+- ✅ Migrated `RecurringTasksTool` to use AST builder - **DONE 2025-12-18**
+- ✅ Archived `analyze-recurring-tasks.ts` (500 lines) - **DONE 2025-12-18**
+- ⏳ `workflow-analysis-v3.ts` kept (already optimized OmniJS, complex aggregation logic)
+- **Achieved reduction:** 500 lines archived
 
 ---
 
@@ -123,11 +126,11 @@ tests
 | Phase 1 (list-tasks) | 30 min        | -425 lines       | Zero            | ✅ COMPLETE      |
 | Phase 2 (mutations)  | 2-4 hrs       | -1,100 lines     | Low             | ✅ COMPLETE      |
 | Phase 3 (queries)    | 4-6 hrs       | -570 lines       | Low             | ✅ COMPLETE      |
-| Phase 4 (analytics)  | 6-8 hrs       | -600 lines       | Medium          | Pending (optional) |
-| **TOTAL**            | **13-18 hrs** | **-2,695 lines** | **Low overall** |                  |
+| Phase 4 (analytics)  | 2-3 hrs       | -500 lines       | Low             | ✅ COMPLETE      |
+| **TOTAL**            | **10-14 hrs** | **-2,595 lines** | **Low overall** |                  |
 
-**Code reduction: 2,695 lines (~20-25% of script codebase)**
-**Progress: Phase 1-3 complete (~2,095 lines saved or can be archived)**
+**Code reduction: 2,595 lines (~20-25% of script codebase)**
+**Progress: All 4 phases complete - 2,595 lines archived/reduced**
 
 ---
 
@@ -198,7 +201,7 @@ export function buildListTasksScriptV4(params) {
 
 ## Recommendation
 
-**Phases 1-3 are complete!** (2025-12-17)
+**All four phases complete!** (2025-12-18)
 
 **Phase 1:** QueryTasksTool now uses `buildListTasksScriptV4` for all task queries.
 - `list-tasks-omnijs.ts` (571 lines) archived
@@ -214,12 +217,16 @@ export function buildListTasksScriptV4(params) {
 - TagsTool: Uses `buildTagsScript` with `TagQueryOptions` for list operations
 - TagsTool: Uses `buildActiveTagsScript` for active tags query
 - New contracts: `ProjectFilter`, `TagQueryOptions`, `generateProjectFilterCode`, tag-script-builder.ts
-- Can archive: `list-projects-v3.ts` (277 lines), `list-tags-v3.ts` (293 lines)
+- Archived: `list-projects-v3.ts` (277 lines), `list-tags-v3.ts` (293 lines)
+
+**Phase 4:** RecurringTasksTool now uses AST builders:
+- RecurringTasksTool: Uses `buildRecurringTasksScript` for analyze operation
+- New builder: `analyze-recurring-tasks-ast.ts` with pure OmniJS pattern
+- Archived: `analyze-recurring-tasks.ts` (500 lines)
+- Decision: `workflow-analysis-v3.ts` kept as-is (already optimized OmniJS with complex aggregation)
 
 **Remaining cleanup:** `create-task.ts` kept for edge-case-escaping tests
 
-**Next (optional): Phase 4** - analytics consolidation:
-- `workflow-analysis-v3.ts` (866 lines) → AST
-- `analyze-recurring-tasks.ts` (500 lines) → AST patterns
+**Total achieved:** ~2,600 lines archived/reduced across all four phases.
 
-This is the culmination of building the AST contracts system - now we get to reap the benefits!
+This completes the AST consolidation project - all major script categories now use the AST contract system!

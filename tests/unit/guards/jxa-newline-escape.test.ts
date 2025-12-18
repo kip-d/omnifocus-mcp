@@ -3,10 +3,10 @@ import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 const filesRequiringEscapedJoins = [
-  'src/omnifocus/scripts/recurring/analyze-recurring-tasks.ts',
   'src/omnifocus/scripts/shared/minimal-tag-bridge.ts',
   // Note: list-tasks-omnijs.ts archived 2025-12-17, replaced by AST-powered list-tasks-ast.ts
   // Note: update-task-v3.ts archived 2025-12-17, replaced by AST mutation builder
+  // Note: analyze-recurring-tasks.ts archived 2025-12-18, replaced by AST-powered analyze-recurring-tasks-ast.ts
 ];
 
 describe('JXA script join escaping', () => {
