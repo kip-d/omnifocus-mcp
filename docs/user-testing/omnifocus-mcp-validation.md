@@ -75,6 +75,23 @@ query.filters.text.contains="<common_word>", query.limit=5
 
 **Pass**: Returns matching tasks (use a word you know exists).
 
+### B7. Count-Only Query (33x faster optimization)
+
+```
+omnifocus_read: query.type="tasks", query.filters.status="active",
+query.countOnly=true
+```
+
+**Pass**: Returns `metadata.total_count` (number), `metadata.count_only=true`. No task data in `data.items`.
+
+### B8. Query Active Projects Only (Phase 3 AST)
+
+```
+omnifocus_read: query.type="projects", query.filters.status="active", query.limit=5
+```
+
+**Pass**: Returns only active projects (not on-hold, completed, or dropped).
+
 ---
 
 ## Part C: Write Operations (omnifocus_write)
@@ -88,6 +105,16 @@ mutation.data.project="<any_project_id>", mutation.data.flagged=true
 ```
 
 **Pass**: Task created with `inInbox: false`, flagged, in correct project.
+
+### C1b. Create Task with Tags (Phase 2 AST tag bridge)
+
+```
+omnifocus_write: mutation.operation="create", mutation.target="task",
+mutation.data.name="__TEST__ Task With Tags",
+mutation.data.tags=["Errands", "Home"]
+```
+
+**Pass**: Task created with both tags attached. Verify tags visible in OmniFocus UI.
 
 ### C2. Update Task (Move to Different Project)
 
@@ -155,6 +182,24 @@ omnifocus_analyze: analysis.type="overdue_analysis"
 
 **Pass**: Returns overdue task analysis (may show 0 if none overdue).
 
+### D3. Recurring Tasks Analysis (Phase 4 AST)
+
+```
+omnifocus_analyze: analysis.type="recurring_tasks",
+analysis.params.operation="analyze"
+```
+
+**Pass**: Returns `recurringTasks` array with frequency info. Check `metadata.optimization="ast_phase4"`.
+
+### D4. Recurring Patterns
+
+```
+omnifocus_analyze: analysis.type="recurring_tasks",
+analysis.params.operation="patterns"
+```
+
+**Pass**: Returns `patterns`, `byProject`, and `mostCommon` data.
+
 ---
 
 ## Part E: Optional Extended Tests
@@ -180,15 +225,21 @@ omnifocus_read: query.type="perspectives", query.limit=5
 
 ## Success Summary
 
-| Part | Tests | Focus                     |
-| ---- | ----- | ------------------------- |
-| A    | 2     | System health             |
-| B    | 6     | Read/query operations     |
-| C    | 6     | Write/mutation operations |
-| D    | 2     | Analysis operations       |
-| E    | 2     | Optional extended         |
+| Part | Tests | Focus                                    |
+| ---- | ----- | ---------------------------------------- |
+| A    | 2     | System health                            |
+| B    | 8     | Read/query operations (incl. count-only) |
+| C    | 7     | Write/mutation operations (incl. tags)   |
+| D    | 4     | Analysis operations (incl. recurring)    |
+| E    | 2     | Optional extended                        |
 
-**Minimum validation**: Parts A-D (16 tests) **Full validation**: Parts A-E (18 tests)
+**Minimum validation**: Parts A-D (21 tests) **Full validation**: Parts A-E (23 tests)
+
+**AST Consolidation Coverage**:
+- Phase 1 (list-tasks): B1-B6 task queries
+- Phase 2 (mutations): C1b tags, C1-C6 create/update/delete
+- Phase 3 (projects/tags): B4, B5, B8 project/tag queries
+- Phase 4 (recurring): D3, D4 recurring task analysis
 
 ---
 
@@ -223,6 +274,8 @@ omnifocus_read: query.type="perspectives", query.limit=5
 
 During testing, note these IDs:
 - Task ID from C1: _______________
+- Task ID from C1b (tags test): _______________
 - Project ID used: _______________
 - Second project ID: _______________
-```
+
+**Cleanup reminder**: Delete test tasks (C1, C1b) after validation.
