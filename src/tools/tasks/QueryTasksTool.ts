@@ -699,8 +699,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    // Extract count from result
-    const data = result as { count?: number; warning?: string; filters_applied?: unknown; query_time_ms?: number };
+    // Extract count from result (result.data contains the script output)
+    const data = result.data as { count?: number; warning?: string; filters_applied?: unknown; query_time_ms?: number };
     const count = data.count ?? 0;
 
     // Return count in standardized format
