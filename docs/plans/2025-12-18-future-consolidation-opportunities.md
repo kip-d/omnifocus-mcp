@@ -32,15 +32,30 @@ These were useful during development but should be removed for cleaner productio
 
 **File:** `src/tools/tasks/QueryTasksTool.ts:462-491`
 
-### 2. Scripts That Could Benefit from AST
+### 2. export-tasks.ts Filter Duplication
 
-These scripts still use template-based approaches and could potentially use AST builders:
+**Priority:** Medium
+**Effort:** 2-3 hours
+**Status:** ✅ COMPLETED (2025-12-19)
+
+Lines 52-117 duplicated filter logic that already exists in `filter-generator.ts`:
+- completed, flagged, available filters
+- project name/ID filters
+- tags with AND/OR/NOT_IN operators
+- search text filter
+
+Refactored to use `generateFilterCode()` from AST system for consistency and maintainability.
+
+**File:** `src/omnifocus/scripts/export/export-tasks.ts`
+
+### 3. Scripts That Could Benefit from AST (Lower Priority)
+
+These scripts still use template-based approaches but are lower priority:
 
 | Script | Lines | Notes |
 |--------|-------|-------|
-| `manage-tags.ts` | 590 | Tag CRUD operations |
-| `export-tasks.ts` | 323 | Export with filters |
-| `date-range-queries.ts` | 329 | Date filter predicates |
+| `manage-tags.ts` | 590 | Tag CRUD mutations - would need tag-mutation-builder |
+| `date-range-queries.ts` | 329 | Ultra-optimized with specialized perf techniques |
 | `update-project.ts` | 311 | Project mutations |
 | `get-recurring-patterns.ts` | 266 | Pattern analysis |
 
@@ -49,11 +64,11 @@ These scripts still use template-based approaches and could potentially use AST 
 - New feature needs to be added
 - Performance issues identified
 
-### 3. workflow-analysis-v3.ts (866 lines)
+### 4. workflow-analysis-v3.ts (866 lines)
 
 **Decision:** Keep as-is. Already optimized OmniJS with complex aggregation logic that doesn't benefit from AST modularization. The script performs multi-pass analysis that isn't easily decomposed.
 
-### 4. Testing Prompt Response Path Consistency
+### 5. Testing Prompt Response Path Consistency
 
 The validation prompt tests check different response paths:
 - Tasks: `.data.tasks` or `.metadata.total_count`

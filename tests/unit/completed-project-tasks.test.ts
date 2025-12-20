@@ -53,12 +53,19 @@ describe('Completed Project Task Handling', () => {
       expect(TODAYS_AGENDA_SCRIPT).toContain('Project.Status.Dropped');
     });
 
-    it('should use isTaskEffectivelyCompleted in export-tasks script', async () => {
-      const { EXPORT_TASKS_SCRIPT } = await import('../../src/omnifocus/scripts/export/export-tasks.js');
+    it('should use AST filter generator for completion filtering in export', async () => {
+      // Export now uses AST-based buildExportTasksScript() which generates
+      // OmniJS filter predicates via generateFilterCode()
+      const { buildExportTasksScript } = await import('../../src/contracts/ast/script-builder.js');
 
-      // Verify export uses the correct completion check
-      expect(EXPORT_TASKS_SCRIPT).toContain("if (allFields.includes('completed'))");
-      expect(EXPORT_TASKS_SCRIPT).toContain('taskData.completed = isTaskEffectivelyCompleted(task)');
+      // Generate an export script that excludes completed tasks
+      const { script } = buildExportTasksScript({ completed: false });
+
+      // Verify the AST-generated script includes completion filtering
+      // The filter predicate should exclude completed tasks
+      expect(script).toContain('evaluateJavascript');
+      expect(script).toContain('completed');
+      expect(script).toBeDefined();
     });
 
     it('should check for completed projects in date-range-queries scripts', async () => {

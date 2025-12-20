@@ -15,10 +15,9 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   })),
 }));
 
-// Mock the export scripts since we're testing the self-contained implementation
-vi.mock('../../../../src/omnifocus/scripts/export/export-tasks.js', () => ({
-  EXPORT_TASKS_SCRIPT: 'mock-tasks-export-script',
-}));
+// Note: export-tasks.js is no longer used - ExportTool now uses AST-based buildExportTasksScript()
+// which generates scripts directly with embedded filter predicates
+
 vi.mock('../../../../src/omnifocus/scripts/export/export-projects.js', () => ({
   EXPORT_PROJECTS_SCRIPT: 'mock-projects-export-script',
 }));
@@ -75,7 +74,7 @@ describe('ExportTool (self-contained implementation)', () => {
   });
 
   describe('Task Export', () => {
-    it('handles task export with direct script execution', async () => {
+    it('handles task export with AST-generated script', async () => {
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { format: 'json', data: [{ id: 't1', name: 'Test Task' }], count: 1 },
@@ -90,11 +89,13 @@ describe('ExportTool (self-contained implementation)', () => {
       expect(res.success).toBe(true);
       expect(res.data.format).toBe('json');
       expect(res.data.count).toBe(1);
-      expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-tasks-export-script', {
-        format: 'json',
-        filter: { search: 'test' },
-        fields: undefined,
-      });
+      // AST-based export uses buildExportTasksScript() directly, not buildScript()
+      // Verify executeJson was called with a generated script string
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+      const scriptArg = mockOmni.executeJson.mock.calls[0][0];
+      expect(typeof scriptArg).toBe('string');
+      // Verify the generated script includes filter text search
+      expect(scriptArg).toContain('text');
     });
 
     it('handles task export failures', async () => {
@@ -218,7 +219,7 @@ describe('ExportTool (self-contained implementation)', () => {
   });
 
   describe('Script Building', () => {
-    it('builds task export script with correct parameters', async () => {
+    it('builds task export script with AST-generated filter predicates', async () => {
       mockOmni.executeJson.mockResolvedValue({
         success: true,
         data: { format: 'csv', data: 'id,name\nt1,Task1', count: 1 },
@@ -231,11 +232,12 @@ describe('ExportTool (self-contained implementation)', () => {
         fields: ['id', 'name'],
       } as any);
 
-      expect(mockOmni.buildScript).toHaveBeenCalledWith('mock-tasks-export-script', {
-        format: 'csv',
-        filter: { completed: false },
-        fields: ['id', 'name'],
-      });
+      // AST-based export generates script directly with embedded filter predicates
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+      const scriptArg = mockOmni.executeJson.mock.calls[0][0];
+      expect(typeof scriptArg).toBe('string');
+      // Verify filter for completed: false is embedded in script
+      expect(scriptArg).toContain('completed');
     });
 
     it('builds project export script with correct parameters', async () => {

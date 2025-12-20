@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { EXPORT_TASKS_SCRIPT } from '../../omnifocus/scripts/export/export-tasks.js';
+import { buildExportTasksScript, type ExportFilter } from '../../contracts/ast/script-builder.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { createErrorResponseV2, createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
@@ -168,7 +168,7 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
     }
   }
 
-  // Direct implementation of task export
+  // Direct implementation of task export using AST-powered filtering
   private async handleTaskExport(
     args: {
       format: string;
@@ -180,11 +180,25 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
     const { format = 'json', filter = {}, fields } = args;
 
     try {
-      const script = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
-        format,
-        filter,
+      // Build script with AST-generated filter at build time
+      const exportFilter: ExportFilter = {
+        available: typeof filter.available === 'boolean' ? filter.available : undefined,
+        completed: typeof filter.completed === 'boolean' ? filter.completed : undefined,
+        flagged: typeof filter.flagged === 'boolean' ? filter.flagged : undefined,
+        project: typeof filter.project === 'string' ? filter.project : undefined,
+        projectId: typeof filter.projectId === 'string' ? filter.projectId : undefined,
+        tags: Array.isArray(filter.tags) ? filter.tags : undefined,
+        tagsOperator: filter.tagsOperator as ExportFilter['tagsOperator'],
+        search: typeof filter.search === 'string' ? filter.search : undefined,
+      };
+      const limit = typeof filter.limit === 'number' ? filter.limit : 1000;
+
+      const { script } = buildExportTasksScript(exportFilter, {
+        limit,
         fields,
+        format: format as 'json' | 'csv' | 'markdown',
       });
+
       const anyOmni = this.omniAutomation as {
         executeJson?: (script: string) => Promise<unknown>;
         execute?: (script: string) => Promise<unknown>;
@@ -354,12 +368,11 @@ export class ExportTool extends BaseTool<typeof ExportSchema, ExportResponseV2> 
       > = {};
       let totalExported = 0;
 
-      // Export tasks directly using script
-      const taskFilter = includeCompleted ? {} : { completed: false };
-      const taskScript = this.omniAutomation.buildScript(EXPORT_TASKS_SCRIPT, {
-        format,
-        filter: taskFilter,
-        fields: undefined,
+      // Export tasks using AST-powered script
+      const taskExportFilter: ExportFilter = includeCompleted ? {} : { completed: false };
+      const { script: taskScript } = buildExportTasksScript(taskExportFilter, {
+        format: format as 'json' | 'csv' | 'markdown',
+        limit: 5000,
       });
       const anyOmni = this.omniAutomation as {
         executeJson?: (script: string) => Promise<unknown>;
