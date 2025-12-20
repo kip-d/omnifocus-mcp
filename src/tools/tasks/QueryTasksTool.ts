@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT, GET_TASK_COUNT_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { buildTaskCountScript } from '../../contracts/ast/script-builder.js';
 import {
   GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
   GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
@@ -277,7 +278,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       // Normalize inputs to prevent LLM errors
       const normalizedArgs = this.normalizeInputs(args);
 
-      // Special case: Count-only queries (33x faster - use optimized GET_TASK_COUNT_SCRIPT)
+      // Special case: Count-only queries (uses AST-powered buildTaskCountScript for maximum speed)
       if (normalizedArgs.countOnly) {
         return this.handleCountOnly(normalizedArgs, timer);
       }
@@ -676,11 +677,11 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleCountOnly(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    // Process filters into format expected by GET_TASK_COUNT_SCRIPT
+    // Process filters into TaskFilter format for AST generation
     const filter = this.processAdvancedFilters(args);
 
-    // Execute optimized count-only script (33x faster than fetching full tasks)
-    const script = this.omniAutomation.buildScript(GET_TASK_COUNT_SCRIPT, { filter });
+    // Execute AST-powered count script (uses OmniJS bridge for maximum speed)
+    const { script } = buildTaskCountScript(filter, { maxScan: 10000 });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -700,7 +701,14 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     }
 
     // Extract count from result (result.data contains the script output)
-    const data = result.data as { count?: number; warning?: string; filters_applied?: unknown; query_time_ms?: number };
+    const data = result.data as {
+      count?: number;
+      warning?: string;
+      filters_applied?: unknown;
+      query_time_ms?: number;
+      optimization?: string;
+      filter_description?: string;
+    };
     const count = data.count ?? 0;
 
     // Return count in standardized format
@@ -714,7 +722,8 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
         count_only: true,
         total_count: count,
         filters_applied: filter,
-        optimization: 'count_only_script_33x_faster',
+        optimization: data.optimization || 'ast_omnijs_bridge',
+        filter_description: data.filter_description,
         warning: data.warning,
       },
     );

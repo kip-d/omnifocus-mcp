@@ -13,6 +13,13 @@
 - [x] Testing prompt updated for AST coverage (23 tests)
 - [x] `create-task.ts` archived (final cleanup)
 
+## Completed 2025-12-19
+
+- [x] Phase 5: `export-tasks.ts` - Migrated to `buildExportTasksScript()` (323 lines removed)
+- [x] Phase 6: `get-task-count.ts` - Migrated to `buildTaskCountScript()` (204 lines removed)
+  - Added `filter.search` support to AST builder (alias for `filter.text`)
+  - Unified OmniJS-only approach (removed dual-path JXA/OmniJS architecture)
+
 ---
 
 ## Future Work
@@ -82,12 +89,14 @@ Consider standardizing or documenting the response structure differences more cl
 
 ### AST Consolidation Impact
 
-Total archived: ~2,900 lines
+Total archived: ~3,400 lines
 - Phase 1: list-tasks-omnijs.ts (571 lines)
 - Phase 2: update-task-v3.ts + project scripts (~1,100 lines)
 - Phase 3: list-projects-v3.ts, list-tags-v3.ts (570 lines)
 - Phase 4: analyze-recurring-tasks.ts (500 lines)
 - Final: create-task.ts (290 lines)
+- Phase 5: export-tasks.ts (323 lines)
+- Phase 6: get-task-count.ts (204 lines)
 
 ### Current Script Codebase
 

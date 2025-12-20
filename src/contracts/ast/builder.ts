@@ -66,9 +66,11 @@ export function buildAST(filter: TaskFilter): FilterNode {
   }
 
   // --- Text search ---
-  if (filter.text !== undefined) {
+  // Support both filter.text and filter.search (legacy alias for compatibility)
+  const searchTerm = filter.text ?? filter.search;
+  if (searchTerm !== undefined) {
     const operator = filter.textOperator === 'MATCHES' ? 'matches' : 'includes';
-    conditions.push(comparison('task.name', operator, filter.text));
+    conditions.push(comparison('task.name', operator, searchTerm));
   }
 
   // --- Due date filters ---

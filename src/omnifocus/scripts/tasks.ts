@@ -4,17 +4,18 @@
  * This file now serves as a facade that re-exports scripts from
  * their modular locations while maintaining backward compatibility.
  *
- * Phase 2 AST consolidation (2025-12-18):
- * - CREATE_TASK_SCRIPT archived, replaced by buildCreateTaskScript in mutation-script-builder.ts
+ * AST consolidation history:
+ * - Phase 2 (2025-12-18): CREATE_TASK_SCRIPT archived, replaced by buildCreateTaskScript
+ * - Phase 5 (2025-12-19): GET_TASK_COUNT_SCRIPT archived, replaced by buildTaskCountScript
  */
 
 // Re-export the modularized scripts
 // Note: CREATE_TASK_SCRIPT archived 2025-12-18, replaced by AST builder
+// Note: GET_TASK_COUNT_SCRIPT archived 2025-12-19, replaced by buildTaskCountScript in script-builder.ts
 export { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from './tasks/complete-task.js';
 export { BULK_COMPLETE_TASKS_SCRIPT, buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
 export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task.js';
 export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
-export { GET_TASK_COUNT_SCRIPT } from './tasks/get-task-count.js';
 export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
 
 // AST-powered scripts (Phase 1-2 migration complete 2025-12-17):

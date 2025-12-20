@@ -627,8 +627,8 @@ function describeFilterForScript(filter: TaskFilter): string {
   if (filter.tags && filter.tags.length > 0) {
     conditions.push(`tags[${filter.tagsOperator || 'AND'}]: ${filter.tags.join(', ')}`);
   }
-  if (filter.text) {
-    conditions.push(`text: "${filter.text}"`);
+  if (filter.text || filter.search) {
+    conditions.push(`text: "${filter.text || filter.search}"`);
   }
   if (filter.dueBefore || filter.dueAfter) {
     if (filter.dueBefore && filter.dueAfter) {
@@ -1282,5 +1282,125 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
     script: script.trim(),
     filterDescription,
     isEmptyFilter,
+  };
+}
+
+// =============================================================================
+// TASK COUNT SCRIPT BUILDER
+// =============================================================================
+
+/**
+ * Options for task count queries
+ */
+export interface TaskCountOptions {
+  /** Maximum tasks to scan (for performance) */
+  maxScan?: number;
+}
+
+/**
+ * Build an OmniJS script that counts tasks matching AST-generated filters
+ *
+ * This replaces the manual filter logic in get-task-count.ts with AST-powered
+ * filter generation, eliminating ~100 lines of duplicated filter code.
+ *
+ * Performance: Uses pure OmniJS bridge for fastest counting (~0.001ms per task)
+ *
+ * @param filter - TaskFilter criteria to count
+ * @param options - Count options (maxScan limit)
+ * @returns Complete JXA script ready for execution
+ */
+export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCountOptions = {}): GeneratedScript {
+  const { maxScan = 10000 } = options;
+
+  // Build AST and generate filter code
+  const ast = buildAST(filter);
+  const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
+  const filterCode = generateFilterCode(filter, 'omnijs');
+  const filterDescription = describeFilterForScript(filter);
+
+  // Determine if we're counting inbox tasks
+  const checkInbox = filter.inInbox === true;
+
+  // Build the complete script - pure OmniJS for maximum performance
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`
+      (() => {
+        const startTime = Date.now();
+        const maxScan = ${maxScan};
+        const checkInbox = ${checkInbox};
+        let count = 0;
+        let scanned = 0;
+
+        // AST-generated filter predicate
+        // Filter: ${filterDescription}
+        function matchesFilter(task) {
+          const taskTags = task.tags ? task.tags.map(t => t.name) : [];
+          return ${filterCode};
+        }
+
+        // Use inbox or flattenedTasks based on filter
+        const tasks = checkInbox ? document.inbox : flattenedTasks;
+        const totalTasks = tasks.length;
+
+        tasks.forEach(task => {
+          if (scanned >= maxScan) return;
+          scanned++;
+
+          try {
+            if (matchesFilter(task)) {
+              count++;
+            }
+          } catch (e) {
+            // Skip tasks that error during property access
+          }
+        });
+
+        const endTime = Date.now();
+
+        return JSON.stringify({
+          count: count,
+          scanned: scanned,
+          totalTasks: totalTasks,
+          limited: scanned >= maxScan,
+          queryTimeMs: endTime - startTime,
+          optimization: 'ast_omnijs_bridge'
+        });
+      })()
+    \`;
+
+    const resultJson = app.evaluateJavascript(omniJsScript);
+    const result = JSON.parse(resultJson);
+
+    return JSON.stringify({
+      count: result.count,
+      filters_applied: ${JSON.stringify(filter)},
+      query_time_ms: result.queryTimeMs,
+      optimization: result.optimization,
+      filter_description: ${JSON.stringify(filterDescription)},
+      ...(result.limited ? {
+        warning: 'Count may be incomplete due to scan limit',
+        tasks_scanned: result.scanned,
+        total_tasks: result.totalTasks
+      } : {})
+    });
+
+  } catch (error) {
+    return JSON.stringify({
+      error: true,
+      message: error.message || String(error),
+      context: 'task_count_ast'
+    });
+  }
+})()
+`;
+
+  return {
+    script: script.trim(),
+    filterDescription,
+    isEmptyFilter: isEmptyFilterValue,
   };
 }
