@@ -459,37 +459,13 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     if (args.dueBy) filter.dueBefore = args.dueBy;
     if (args.fastSearch) filter.fastSearch = args.fastSearch;
 
-    // DEBUG: Check if filters parameter made it through
-    if (typeof args.filters === 'string') {
-      filter._debug_filters_is_string = true;
-      filter._debug_filters_string_val = args.filters;
-      try {
-        const parsed: unknown = JSON.parse(args.filters);
-        filter._debug_filters_parsed = parsed;
-      } catch {
-        filter._debug_filters_parse_error = 'failed to parse';
-      }
-    } else if (typeof args.filters === 'object' && args.filters !== null) {
-      filter._debug_filters_is_object = true;
-      filter._debug_filters_obj_keys = Object.keys(args.filters as Record<string, unknown>);
-    } else {
-      filter._debug_filters_type = typeof args.filters;
-      filter._debug_filters_value = args.filters;
-    }
-
     // If no advanced filters provided, return simple filters
     if (!args.filters) {
-      // Add to filter object for debugging in metadata
-      filter._debug_no_filters_param = true;
       return filter;
     }
 
     // Process advanced filters
     const advancedFilters = args.filters as QueryFilters;
-    filter._debug_has_filters_param = true;
-    filter._debug_filter_type = typeof advancedFilters;
-    filter._debug_filter_keys = Object.keys(advancedFilters);
-    filter._debug_has_tags = !!advancedFilters.tags;
 
     // String filters (project, projectId, search)
     if (advancedFilters.project && !filter.project) {
@@ -523,12 +499,9 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
     // Array filters (tags, taskStatus)
     if (advancedFilters.tags && !filter.tags) {
-      filter._debug_tags_exists = true;
-      filter._debug_is_array_filter = isArrayFilter(advancedFilters.tags);
       if (isArrayFilter(advancedFilters.tags)) {
         filter.tags = advancedFilters.tags.values;
         filter.tagsOperator = advancedFilters.tags.operator;
-        filter._debug_tags_processed = true;
       }
     }
 
