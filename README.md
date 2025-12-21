@@ -15,6 +15,7 @@ and other MCP clients.
 - **Perspective Access**: Query any OmniFocus perspective programmatically
 - **Data Export**: Export data in JSON, CSV, or Markdown formats
 - **Performance**: Optimized queries handle 2000+ tasks in under 1 second
+- **Remote Access**: Optional HTTP transport for cross-platform access via Tailscale
 
 ## 🧭 Navigation Guide
 
@@ -52,6 +53,10 @@ npm run build
 ```
 
 ### MCP Client Setup
+
+#### Local (stdio) - Default
+
+For clients running on the same Mac as OmniFocus:
 
 **Claude Desktop:** Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -104,6 +109,42 @@ All clients use the same basic configuration structure:
 ```
 
 Refer to your client's documentation for specific configuration format and file location.
+
+#### Remote (HTTP) - Cross-Platform Access
+
+For accessing OmniFocus from another machine (Windows, Linux, or another Mac):
+
+**1. Start the server in HTTP mode on your Mac:**
+
+```bash
+node dist/index.js --http --port 3000
+```
+
+**2. Configure your remote MCP client:**
+
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "url": "http://your-mac-hostname:3000/mcp"
+    }
+  }
+}
+```
+
+**With Tailscale (recommended for remote access):**
+
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "url": "http://your-mac.tailnet-name.ts.net:3000/mcp"
+    }
+  }
+}
+```
+
+See **[HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md)** for authentication, service configuration, and troubleshooting.
 
 ## Documentation
 
