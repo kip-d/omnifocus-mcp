@@ -82,7 +82,7 @@ omnifocus_read: query.type="tasks", query.filters.status="active",
 query.countOnly=true
 ```
 
-**Pass**: Returns `metadata.total_count` (number), `metadata.count_only=true`. No task data in `data.items`.
+**Pass**: Returns `metadata.total_count` (number), `metadata.count_only=true`. No task data in `data.tasks`.
 
 ### B8. Query Active Projects Only (Phase 3 AST)
 

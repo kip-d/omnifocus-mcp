@@ -89,7 +89,7 @@ async function runTest() {
     });
 
     const listData = JSON.parse(listResult.result.content[0].text);
-    const project = listData.data.items.find((p: any) => p.id === seqProjectId);
+    const project = listData.data.projects.find((p: any) => p.id === seqProjectId);
 
     if (project) {
       console.log(`✅ Found project: ${project.name}`);
@@ -125,7 +125,7 @@ async function runTest() {
     });
 
     const finalData = JSON.parse(finalList.result.content[0].text);
-    const testProjects = finalData.data.items.filter(
+    const testProjects = finalData.data.projects.filter(
       (p: any) => p.name.includes('Sequential Test') || p.name.includes('Parallel Test'),
     );
 
@@ -134,7 +134,7 @@ async function runTest() {
     // If no test projects found, show all projects for debugging
     if (testProjects.length === 0) {
       console.log('No test projects found. All projects:');
-      finalData.data.items.forEach((p: any) => {
+      finalData.data.projects.forEach((p: any) => {
         console.log(`  - ${p.name} (sequential: ${p.sequential})`);
       });
     } else {

@@ -146,7 +146,7 @@ d('MCP Protocol Compliance Tests', () => {
       } else {
         expect(result.success).toBe(true);
         expect(result).toHaveProperty('data');
-        expect(result.data).toHaveProperty('items');
+        expect(result.data).toHaveProperty('projects'); // Entity-specific key
         expect(result).toHaveProperty('metadata');
         expect(result.metadata).toHaveProperty('from_cache');
       }

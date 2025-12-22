@@ -152,8 +152,8 @@ async function runTest() {
     });
 
     const listData = JSON.parse(listResult.result.content[0].text);
-    if (listData.data?.items) {
-      const parentTask = listData.data.items.find((t: any) => t.id === parentTaskId);
+    if (listData.data?.tasks) {
+      const parentTask = listData.data.tasks.find((t: any) => t.id === parentTaskId);
       if (parentTask) {
         console.log('\n📊 Parent task details:');
         console.log(`   Name: ${parentTask.name}`);

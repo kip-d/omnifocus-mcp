@@ -81,7 +81,7 @@ describe('TagsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect((result.data as any).items).toBeDefined();
+      expect((result.data as any).tags).toBeDefined();
       // AST builder generates script directly, no longer uses buildScript
       expect(mockOmniAutomation.executeJson).toHaveBeenCalled();
     });
@@ -108,7 +108,7 @@ describe('TagsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect((result.data as any).items).toBeDefined();
+      expect((result.data as any).tags).toBeDefined();
     });
   });
 
@@ -228,7 +228,7 @@ describe('TagsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      const tags = (result.data as any).items;
+      const tags = (result.data as any).tags;
       expect(tags.length).toBe(2);
       expect(tags[0].childrenAreMutuallyExclusive).toBe(true);
       expect(tags[1].childrenAreMutuallyExclusive).toBe(false);

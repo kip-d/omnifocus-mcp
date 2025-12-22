@@ -464,13 +464,20 @@ export function createErrorResponseV2<T = unknown>(
 
 /**
  * Create enhanced list response with automatic summary
+ *
+ * Response uses entity-specific data keys for clarity:
+ * - 'tasks' → data.tasks
+ * - 'projects' → data.projects
+ * - 'tags' → data.tags
+ * - 'folders' → data.folders
+ * - 'other' → data.items (generic fallback)
  */
 export function createListResponseV2<T>(
   operation: string,
   items: T[],
-  itemType: 'tasks' | 'projects' | 'other',
+  itemType: 'tasks' | 'projects' | 'tags' | 'folders' | 'other',
   metadata: Partial<StandardMetadataV2> = {},
-): StandardResponseV2<{ items: T[]; preview?: T[] }> {
+): StandardResponseV2<Record<string, T[]>> {
   // Generate summary based on item type
   let summary: TaskSummary | ProjectSummary | undefined;
   if (itemType === 'tasks') {
@@ -482,11 +489,14 @@ export function createListResponseV2<T>(
   // Create preview (first 5 items for quick processing)
   const preview = items.slice(0, 5);
 
+  // Use entity-specific key, fallback to 'items' for 'other'
+  const dataKey = itemType === 'other' ? 'items' : itemType;
+
   return {
     success: true,
     summary,
     data: {
-      items,
+      [dataKey]: items,
       preview,
     },
     metadata: {

@@ -63,7 +63,7 @@ describe('ManageReviewsTool', () => {
 
     expect(res.success).toBe(true);
     expect(res.metadata.operation).toBe('list_for_review');
-    expect(res.data.items.length).toBe(4);
+    expect(res.data.projects.length).toBe(4);
 
     const summary = res.metadata.review_summary;
     expect(summary.total_projects).toBe(4);
@@ -74,7 +74,7 @@ describe('ManageReviewsTool', () => {
   });
 
   it('returns cached response when available', async () => {
-    const cached = { success: true, data: { items: [] }, metadata: { operation: 'list_for_review' } };
+    const cached = { success: true, data: { projects: [] }, metadata: { operation: 'list_for_review' } };
     mockCache.get.mockReturnValue(cached);
 
     const res: any = await tool.executeValidated({ operation: 'list_for_review', overdue: false, daysAhead: 7 } as any);

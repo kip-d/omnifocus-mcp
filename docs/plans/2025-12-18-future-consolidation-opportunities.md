@@ -70,11 +70,17 @@ These scripts still use template-based approaches but are lower priority:
 
 ### 5. Testing Prompt Response Path Consistency
 
-The validation prompt tests check different response paths:
-- Tasks: `.data.tasks` or `.metadata.total_count`
-- Projects/Tags: `.data.items`
+**Priority:** Medium
+**Effort:** 2-3 hours
+**Status:** ✅ COMPLETED (2025-12-22)
 
-Consider standardizing or documenting the response structure differences more clearly.
+Standardized all list responses to use entity-specific keys:
+- Tasks: `.data.tasks`
+- Projects: `.data.projects`
+- Tags: `.data.tags`
+- Folders: `.data.folders`
+
+Updated `createListResponseV2` to accept entity-specific itemType parameter and generate appropriate data keys. All tests updated to use new paths.
 
 ---
 

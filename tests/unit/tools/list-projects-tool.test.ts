@@ -128,14 +128,14 @@ describe('ProjectsTool', () => {
 
       const result = await tool.executeValidated({ operation: 'list', includeStats: true });
 
-      expect(result.data.items[0]).toHaveProperty('stats');
-      expect(result.data.items[0].stats).toHaveProperty('active', 7);
-      expect(result.data.items[0].stats).toHaveProperty('completed', 3);
-      expect(result.data.items[0].stats).toHaveProperty('completionRate', 30);
-      expect(result.data.items[0].stats).toHaveProperty('overdue', 2);
-      expect(result.data.items[0].stats).toHaveProperty('flagged', 1);
-      expect(result.data.items[0].stats).toHaveProperty('estimatedHours', '5.5');
-      expect(result.data.items[0].stats).toHaveProperty('lastActivityDate');
+      expect(result.data.projects[0]).toHaveProperty('stats');
+      expect(result.data.projects[0].stats).toHaveProperty('active', 7);
+      expect(result.data.projects[0].stats).toHaveProperty('completed', 3);
+      expect(result.data.projects[0].stats).toHaveProperty('completionRate', 30);
+      expect(result.data.projects[0].stats).toHaveProperty('overdue', 2);
+      expect(result.data.projects[0].stats).toHaveProperty('flagged', 1);
+      expect(result.data.projects[0].stats).toHaveProperty('estimatedHours', '5.5');
+      expect(result.data.projects[0].stats).toHaveProperty('lastActivityDate');
     });
 
     it('should not include stats when disabled', async () => {
@@ -157,7 +157,7 @@ describe('ProjectsTool', () => {
 
       const result = await tool.executeValidated({ operation: 'list', includeStats: false });
 
-      expect(result.data.items[0]).not.toHaveProperty('stats');
+      expect(result.data.projects[0]).not.toHaveProperty('stats');
     });
   });
 
@@ -189,7 +189,7 @@ describe('ProjectsTool', () => {
       });
 
       const result = await tool.executeValidated({ operation: 'list', details: true });
-      const stats = result.data.items[0].stats;
+      const stats = result.data.projects[0].stats;
 
       expect(stats.total).toBe(0);
       expect(stats.completionRate).toBe(0);
@@ -216,8 +216,8 @@ describe('ProjectsTool', () => {
 
       const result = await tool.executeValidated({ operation: 'list', details: true });
 
-      expect(result.data.items[0]).toHaveProperty('statsError');
-      expect(result.data.items[0]).not.toHaveProperty('stats');
+      expect(result.data.projects[0]).toHaveProperty('statsError');
+      expect(result.data.projects[0]).not.toHaveProperty('stats');
     });
   });
 

@@ -52,12 +52,12 @@ rl.on('line', (line) => {
       console.log('\nResponse WITHOUT stats:');
       if (response.result?.content?.[0]?.text) {
         const result = JSON.parse(response.result.content[0].text);
-        if (result.data?.items?.[0]) {
-          console.log('First project:', JSON.stringify(result.data.items[0], null, 2));
+        if (result.data?.projects?.[0]) {
+          console.log('First project:', JSON.stringify(result.data.projects[0], null, 2));
           console.log('Query time:', result.metadata?.query_time_ms, 'ms');
         }
       }
-      
+
       // Test 2: List projects with stats (should be slower but include more data)
       console.log('\n📊 Test 2: List projects WITH stats...');
       const request2 = {
@@ -78,12 +78,12 @@ rl.on('line', (line) => {
       console.log('\nResponse WITH stats:');
       if (response.result?.content?.[0]?.text) {
         const result = JSON.parse(response.result.content[0].text);
-        if (result.data?.items?.[0]) {
-          console.log('First project:', JSON.stringify(result.data.items[0], null, 2));
+        if (result.data?.projects?.[0]) {
+          console.log('First project:', JSON.stringify(result.data.projects[0], null, 2));
           console.log('Query time:', result.metadata?.query_time_ms, 'ms');
         }
       }
-      
+
       console.log('\n✅ All tests completed');
       process.exit(0);
     }

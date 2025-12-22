@@ -42,50 +42,50 @@ async function runTests() {
   if (response1?.result?.content?.[0]?.text) {
     const result = JSON.parse(response1.result.content[0].text);
     console.log(`✅ Success! Query time: ${result.metadata?.query_time_ms}ms (total: ${time1}ms)`);
-    if (result.data?.items?.[0]) {
+    if (result.data?.projects?.[0]) {
       console.log('Sample project:', {
-        name: result.data.items[0].name,
-        hasStats: !!result.data.items[0].stats
+        name: result.data.projects[0].name,
+        hasStats: !!result.data.projects[0].stats
       });
     }
   } else {
     console.log('❌ Failed to get response');
   }
-  
+
   console.log('\n---\n');
-  
+
   // Test 2: With stats explicitly false
   console.log('📋 Test 2: list_projects with includeStats=false');
   const startTime2 = Date.now();
   const response2 = await testMCPCall('list_projects', { limit: 3, includeStats: false });
   const time2 = Date.now() - startTime2;
-  
+
   if (response2?.result?.content?.[0]?.text) {
     const result = JSON.parse(response2.result.content[0].text);
     console.log(`✅ Success! Query time: ${result.metadata?.query_time_ms}ms (total: ${time2}ms)`);
-    if (result.data?.items?.[0]) {
+    if (result.data?.projects?.[0]) {
       console.log('Sample project:', {
-        name: result.data.items[0].name,
-        hasStats: !!result.data.items[0].stats
+        name: result.data.projects[0].name,
+        hasStats: !!result.data.projects[0].stats
       });
     }
   } else {
     console.log('❌ Failed to get response');
   }
-  
+
   console.log('\n---\n');
-  
+
   // Test 3: With stats enabled
   console.log('📊 Test 3: list_projects with includeStats=true');
   const startTime3 = Date.now();
   const response3 = await testMCPCall('list_projects', { limit: 3, includeStats: true });
   const time3 = Date.now() - startTime3;
-  
+
   if (response3?.result?.content?.[0]?.text) {
     const result = JSON.parse(response3.result.content[0].text);
     console.log(`✅ Success! Query time: ${result.metadata?.query_time_ms}ms (total: ${time3}ms)`);
-    if (result.data?.items?.[0]) {
-      const project = result.data.items[0];
+    if (result.data?.projects?.[0]) {
+      const project = result.data.projects[0];
       console.log('Sample project with stats:', {
         name: project.name,
         stats: project.stats

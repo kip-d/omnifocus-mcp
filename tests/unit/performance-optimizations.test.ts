@@ -58,11 +58,12 @@ describe('Performance Optimization Tests', () => {
   });
 
   describe('Task lookup optimizations (AST mutation builder)', () => {
-    it('should avoid whose() and iterate safely', async () => {
+    it('should avoid whose() and use O(1) Task.byIdentifier lookup', async () => {
       // Test the AST-generated update script
       const generatedScript = await buildUpdateTaskScript('test-id-123', { name: 'Test Task' });
       expect(generatedScript.script).not.toContain('whose(');
-      expect(generatedScript.script).toContain('flattenedTasks');
+      // Uses Task.byIdentifier for O(1) lookup (not slow flattenedTasks scan)
+      expect(generatedScript.script).toContain('Task.byIdentifier');
     });
 
     it('should use Project.byIdentifier for O(1) lookups', async () => {
@@ -201,8 +202,8 @@ describe('Error Handling Tests', () => {
     // Test the AST-generated update script
     const generatedScript = await buildUpdateTaskScript('test-id-123', { name: 'Test Task' });
 
-    // AST builder uses safe iteration, not whose()
-    expect(generatedScript.script).toContain('flattenedTasks');
+    // AST builder uses O(1) Task.byIdentifier lookup, not whose() or slow flattenedTasks scan
+    expect(generatedScript.script).toContain('Task.byIdentifier');
     expect(generatedScript.script).not.toContain('whose(');
   });
 });

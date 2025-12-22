@@ -143,7 +143,7 @@ export interface TagV2 {
 }
 
 export interface TagsDataV2 {
-  items: TagV2[] | string[]; // Can be full objects or just names (matches createListResponseV2)
+  tags: TagV2[] | string[]; // Entity-specific key for consistency
   preview?: TagV2[] | string[];
 }
 

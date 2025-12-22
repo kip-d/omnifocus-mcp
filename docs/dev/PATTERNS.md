@@ -536,13 +536,13 @@ expect(task?.taskId).toBeDefined();
 ```typescript
 // tags tool has different structures per operation:
 // - manage: response.data.tagName
-// - list: response.data.items
+// - list: response.data.tags (entity-specific key)
 
 // Fix: Know which operation you're testing
 if (operation === 'manage') {
   expect(response.data?.tagName).toBeDefined();
 } else if (operation === 'list') {
-  expect(response.data?.items).toBeDefined();
+  expect(response.data?.tags).toBeDefined();
 }
 ```
 
@@ -574,11 +574,16 @@ if (operation === 'manage') {
 - Fix: Update all tests expecting old structure
 - Files affected: `tests/integration/omnifocus-4.7-features.test.ts`
 
-**Example 2: tags tool operation-specific responses**
+**Example 2: Entity-specific response keys**
 
+All list operations now use entity-specific keys:
+- Tasks: `data.tasks[]`
+- Projects: `data.projects[]`
+- Tags: `data.tags[]`
+- Folders: `data.folders[]`
+
+Manage operations use operation-specific structures:
 - `tags({operation: 'manage', action: 'create'})` → `data.tagName`
-- `tags({operation: 'list'})` → `data.items[]`
-- Lesson: Can't assume consistent structure within same tool
 
 ### Quick Diagnostic Commands
 

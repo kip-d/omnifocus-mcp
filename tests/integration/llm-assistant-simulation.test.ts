@@ -301,7 +301,7 @@ d('LLM Assistant Simulation Tests', () => {
       expect(projectsList).toHaveProperty('success');
 
       if (projectsList.success) {
-        const vacation = projectsList.data.items.find((p: any) => p.name === 'Plan Summer Vacation 2025');
+        const vacation = projectsList.data.projects.find((p: any) => p.name === 'Plan Summer Vacation 2025');
         expect(vacation).toBeDefined();
         if (vacation) {
           expect(vacation.id).toBe(createdProjectId);
@@ -323,8 +323,8 @@ d('LLM Assistant Simulation Tests', () => {
       expect(tagsResult).toHaveProperty('success');
 
       if (tagsResult.success) {
-        expect(tagsResult.data).toHaveProperty('items');
-        expect(Array.isArray(tagsResult.data.items)).toBe(true);
+        expect(tagsResult.data).toHaveProperty('tags');
+        expect(Array.isArray(tagsResult.data.tags)).toBe(true);
       }
     });
 

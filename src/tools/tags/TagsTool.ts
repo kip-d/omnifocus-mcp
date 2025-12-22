@@ -195,13 +195,13 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
       const items = 'items' in envelope ? envelope.items : [];
       const total = 'summary' in envelope && envelope.summary?.total ? envelope.summary.total : (items?.length || 0);
 
-      const response = createListResponseV2('tags', items || [], 'other', {
+      const response = createListResponseV2('tags', items || [], 'tags', {
         ...timer.toMetadata(),
         total,
         operation: 'list',
         mode: 'ast_unified',
         options: { sortBy, includeEmpty, includeUsageStats, includeTaskCounts, fastMode, namesOnly },
-      }) as TagsResponseV2;
+      }) as unknown as TagsResponseV2;
 
       // Cache the result
       this.cache.set('tags', cacheKey, response);
@@ -250,12 +250,12 @@ export class TagsTool extends BaseTool<typeof TagsToolSchema, TagsResponseV2 | T
       const items = 'items' in envelope ? envelope.items : [];
       const total = 'summary' in envelope && envelope.summary?.total ? envelope.summary.total : (items?.length || 0);
 
-      const response = createListResponseV2('tags', items || [], 'other', {
+      const response = createListResponseV2('tags', items || [], 'tags', {
         ...timer.toMetadata(),
         count: total,
         operation: 'active',
         description: 'Tags with incomplete tasks',
-      }) as TagsResponseV2;
+      }) as unknown as TagsResponseV2;
 
       // Cache the result (30 second TTL for active tags)
       this.cache.set('tags', cacheKey, response);

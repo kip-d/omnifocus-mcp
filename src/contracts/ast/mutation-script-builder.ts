@@ -685,115 +685,93 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
 
   const changesData = buildUpdateChangesObject(changes);
 
+  // Use pure OmniJS bridge for O(1) task lookup and all property changes
+  // This replaces the slow O(n) JXA linear scan that caused 60+ second timeouts
   const script = `
 (() => {
   const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
   const taskId = ${JSON.stringify(taskId)};
   const changes = ${JSON.stringify(changesData)};
 
   try {
-    // Find task
-    const allTasks = doc.flattenedTasks();
-    let task = null;
-    for (let i = 0; i < allTasks.length; i++) {
-      try {
-        if (allTasks[i].id() === taskId) {
-          task = allTasks[i];
-          break;
-        }
-      } catch (e) {}
-    }
+    // Use OmniJS bridge for O(1) task lookup and all property changes
+    const updateScript = \`
+      (() => {
+        const taskId = '\${taskId}';
+        const changes = \${JSON.stringify(changes)};
 
-    if (!task) {
-      return JSON.stringify({
-        error: true,
-        message: "Task not found: " + taskId
-      });
-    }
-
-    // Apply changes
-    if (changes.name !== undefined) task.name = changes.name;
-    if (changes.note !== undefined) task.note = changes.note;
-    if (changes.flagged !== undefined) task.flagged = changes.flagged;
-
-    // Handle dates
-    if (changes.dueDate !== undefined) {
-      task.dueDate = changes.dueDate ? new Date(changes.dueDate) : null;
-    }
-    if (changes.clearDueDate) task.dueDate = null;
-
-    if (changes.deferDate !== undefined) {
-      task.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
-    }
-    if (changes.clearDeferDate) task.deferDate = null;
-
-    if (changes.plannedDate !== undefined) {
-      task.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
-    }
-    if (changes.clearPlannedDate) task.plannedDate = null;
-
-    if (changes.clearEstimatedMinutes) {
-      task.estimatedMinutes = null;
-    } else if (changes.estimatedMinutes !== undefined) {
-      task.estimatedMinutes = changes.estimatedMinutes;
-    }
-
-    // Handle project change / move to inbox via OmniJS bridge (JXA push doesn't persist)
-    if (changes.project !== undefined) {
-      const moveScript = changes.project === null
-        ? \`(() => {
-            const task = Task.byIdentifier('\${taskId}');
-            if (!task) return JSON.stringify({ success: false, error: 'task_not_found' });
-            try {
-              moveTasks([task], inbox.beginning);
-              return JSON.stringify({ success: true, moved: 'inbox' });
-            } catch (e) {
-              return JSON.stringify({ success: false, error: String(e) });
-            }
-          })()\`
-        : \`(() => {
-            const task = Task.byIdentifier('\${taskId}');
-            if (!task) return JSON.stringify({ success: false, error: 'task_not_found' });
-            const targetId = '\${changes.project}';
-            // Try by ID first, then by name
-            let project = Project.byIdentifier(targetId);
-            if (!project) {
-              project = flattenedProjects.find(p => p.name === targetId);
-            }
-            if (!project) return JSON.stringify({ success: false, error: 'project_not_found: ' + targetId });
-            try {
-              moveTasks([task], project.beginning);
-              return JSON.stringify({ success: true, moved: 'project', projectId: project.id.primaryKey });
-            } catch (e) {
-              return JSON.stringify({ success: false, error: String(e) });
-            }
-          })()\`;
-      try {
-        const moveResult = JSON.parse(app.evaluateJavascript(moveScript));
-        if (!moveResult.success) {
+        // O(1) lookup using Task.byIdentifier
+        const task = Task.byIdentifier(taskId);
+        if (!task) {
           return JSON.stringify({
             error: true,
-            message: 'Failed to move task: ' + (moveResult.error || 'unknown error')
+            message: "Task not found: " + taskId
           });
         }
-      } catch (e) {
-        return JSON.stringify({
-          error: true,
-          message: 'Failed to move task via bridge: ' + String(e)
-        });
-      }
-    }
 
-    // Handle tags via bridge
-    if (changes.tags || changes.addTags || changes.removeTags) {
-      const tagScript = \`
-        (() => {
-          const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-          if (!task) return JSON.stringify({success: false});
+        // Apply simple property changes
+        if (changes.name !== undefined) task.name = changes.name;
+        if (changes.note !== undefined) task.note = changes.note;
+        if (changes.flagged !== undefined) task.flagged = changes.flagged;
 
-          const changes = \${JSON.stringify({tags: changes.tags, addTags: changes.addTags, removeTags: changes.removeTags})};
+        // Handle dates
+        if (changes.dueDate !== undefined) {
+          task.dueDate = changes.dueDate ? new Date(changes.dueDate) : null;
+        }
+        if (changes.clearDueDate) task.dueDate = null;
 
+        if (changes.deferDate !== undefined) {
+          task.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
+        }
+        if (changes.clearDeferDate) task.deferDate = null;
+
+        if (changes.plannedDate !== undefined) {
+          task.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
+        }
+        if (changes.clearPlannedDate) task.plannedDate = null;
+
+        if (changes.clearEstimatedMinutes) {
+          task.estimatedMinutes = null;
+        } else if (changes.estimatedMinutes !== undefined) {
+          task.estimatedMinutes = changes.estimatedMinutes;
+        }
+
+        // Handle project change / move to inbox
+        if (changes.project !== undefined) {
+          if (changes.project === null) {
+            try {
+              moveTasks([task], inbox.beginning);
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: 'Failed to move task to inbox: ' + String(e)
+              });
+            }
+          } else {
+            // Try by ID first, then by name
+            let project = Project.byIdentifier(changes.project);
+            if (!project) {
+              project = flattenedProjects.find(p => p.name === changes.project);
+            }
+            if (!project) {
+              return JSON.stringify({
+                error: true,
+                message: 'Project not found: ' + changes.project
+              });
+            }
+            try {
+              moveTasks([task], project.beginning);
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: 'Failed to move task to project: ' + String(e)
+              });
+            }
+          }
+        }
+
+        // Handle tags
+        if (changes.tags || changes.addTags || changes.removeTags) {
           if (changes.tags) {
             // Replace all tags
             task.clearTags();
@@ -818,21 +796,11 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
               if (tag) task.removeTag(tag);
             }
           }
+        }
 
-          return JSON.stringify({success: true});
-        })()
-      \`;
-      app.evaluateJavascript(tagScript);
-    }
-
-    // Handle repetition rule via bridge
-    if (changes.repetitionRule) {
-      const ruleScript = \`
-        (() => {
-          const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-          if (!task) return JSON.stringify({success: false, error: 'Task not found'});
-
-          const rule = \${JSON.stringify(changes.repetitionRule)};
+        // Handle repetition rule
+        if (changes.repetitionRule) {
+          const rule = changes.repetitionRule;
 
           // Map frequency to ICS RRULE FREQ value
           const freqMap = {
@@ -840,7 +808,12 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
             weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY'
           };
           const freq = freqMap[rule.frequency];
-          if (!freq) return JSON.stringify({success: false, error: 'Invalid frequency: ' + rule.frequency});
+          if (!freq) {
+            return JSON.stringify({
+              error: true,
+              message: 'Invalid frequency: ' + rule.frequency
+            });
+          }
 
           // Build ICS RRULE string with all supported parameters
           let rrule = 'FREQ=' + freq;
@@ -894,18 +867,18 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
             Task.AnchorDateKey.DueDate,
             true
           );
-          return JSON.stringify({success: true, rrule: rrule});
-        })()
-      \`;
-      app.evaluateJavascript(ruleScript);
-    }
+        }
 
-    return JSON.stringify({
-      taskId: taskId,
-      name: task.name(),
-      flagged: task.flagged(),
-      updated: true
-    });
+        return JSON.stringify({
+          taskId: taskId,
+          name: task.name,
+          flagged: task.flagged,
+          updated: true
+        });
+      })()
+    \`;
+
+    return app.evaluateJavascript(updateScript);
 
   } catch (error) {
     return JSON.stringify({

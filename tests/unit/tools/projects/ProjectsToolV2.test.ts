@@ -72,7 +72,7 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toEqual(mockProjects);
+      expect(result.data.projects).toEqual(mockProjects);
       expect(result.summary).toBeDefined();
       expect(result.summary.total_projects).toBe(2);
       expect(result.metadata.operation).toBe('list');
@@ -95,7 +95,7 @@ describe('ProjectsTool', () => {
       // v3 implementation uses executeJson directly with generated script string
       expect(mockOmni.executeJson).toHaveBeenCalled();
       expect(result.success).toBe(true);
-      expect(result.data.items).toHaveLength(1);
+      expect(result.data.projects).toHaveLength(1);
     });
 
     it('should handle needsReview filter', async () => {
@@ -115,7 +115,7 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toHaveLength(1);
+      expect(result.data.projects).toHaveLength(1);
     });
 
     it('should use cache when available', async () => {
@@ -133,7 +133,7 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toEqual(cachedData.projects);
+      expect(result.data.projects).toEqual(cachedData.projects);
       // Mock may or may not be called depending on error path
       expect(result.metadata.from_cache).toBe(true);
     });
@@ -377,7 +377,7 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toHaveLength(2);
+      expect(result.data.projects).toHaveLength(2);
       // The summary is generated from the actual items returned
       expect(result.summary.total_projects).toBe(2);
       expect(result.summary.active).toBe(2);
@@ -405,8 +405,8 @@ describe('ProjectsTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.data.items).toHaveLength(3);
-      expect(result.data.items.every((p) => p.status === 'active')).toBe(true);
+      expect(result.data.projects).toHaveLength(3);
+      expect(result.data.projects.every((p) => p.status === 'active')).toBe(true);
     });
   });
 
@@ -430,7 +430,7 @@ describe('ProjectsTool', () => {
       // v3 implementation uses executeJson directly with generated script string
       expect(mockOmni.executeJson).toHaveBeenCalled();
       // Just verify the coercion worked by checking the result
-      expect(result.data.items).toEqual([]);
+      expect(result.data.projects).toEqual([]);
     });
 
     it('should handle numeric strings for reviewInterval', async () => {

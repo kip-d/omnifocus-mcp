@@ -152,8 +152,8 @@ async function runTests() {
     if (listResult.result?.content?.[0]?.text) {
       try {
         const data = JSON.parse(listResult.result.content[0].text);
-        if (data.success && data.data?.items) {
-          const projects = data.data.items;
+        if (data.success && data.data?.projects) {
+          const projects = data.data.projects;
           console.log(`✅ Found ${projects.length} projects in sandbox folder`);
 
           // Check if our projects have the sequential property

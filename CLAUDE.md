@@ -78,7 +78,7 @@ When you only need to know "how many" tasks match a filter (not the actual task 
     limit: 10000
   }
 }
-// Then count: result.data.items.length
+// Then count: result.data.tasks.length
 
 // ✅ FAST: Uses optimized count-only script (306ms for 2089 tasks - 33x faster!)
 {
@@ -103,11 +103,11 @@ When you only need to know "how many" tasks match a filter (not the actual task 
 ```json
 {
   "success": true,
-  "data": { "items": [] }, // Empty - no task data
+  "data": { "tasks": [] },  // Empty - no task data
   "metadata": {
-    "total_count": 2089, // The count you need
+    "total_count": 2089,  // The count you need
     "count_only": true,
-    "optimization": "count_only_script_33x_faster",
+    "optimization": "ast_omnijs_bridge",
     "filters_applied": { "status": "active" }
   }
 }
@@ -526,6 +526,9 @@ If you see these in your plan, STOP and search for patterns:
 - **TypeScript only** - All files must be `.ts` (including tests and scripts)
 - **Never create `.js` files**
 - **Always run integration tests** before considering features complete
+  - Unit tests: ~20 seconds (1093 tests) - run frequently
+  - Integration tests: **~24 minutes** (123 tests) - run before commits/PRs
+  - Integration tests interact with real OmniFocus via osascript, hence the time
 - Build before running: `npm run build`
 
 ## 🚨 CRITICAL: Systematic Debugging Workflow
@@ -801,8 +804,8 @@ process.stdin.on('end', () => gracefulExit('stdin closed'));
 ```bash
 npm run build        # Compile TypeScript (required before running)
 npm run dev          # Watch mode
-npm test             # Unit tests
-npm run test:integration  # Integration tests
+npm test             # Unit tests (~20 seconds, 1093 tests)
+npm run test:integration  # Integration tests (~24 minutes, 123 tests)
 
 # Direct MCP Testing (Fast debugging - see docs/operational/TESTING_TOOLS.md)
 node emergency-diagnostic.js  # Test all tools quickly

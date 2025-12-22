@@ -120,8 +120,8 @@ async function runTest() {
     });
 
     const listData = JSON.parse(listResult.result.content[0].text);
-    if (listData.data?.items?.length > 0) {
-      const movedTask = listData.data.items[0];
+    if (listData.data?.tasks?.length > 0) {
+      const movedTask = listData.data.tasks[0];
       console.log('\n📊 Task details after move:');
       console.log(`   Name: ${movedTask.name}`);
       console.log(`   Parent ID: ${movedTask.parentTaskId || 'None'}`);
