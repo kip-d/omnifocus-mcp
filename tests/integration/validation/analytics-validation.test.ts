@@ -114,30 +114,15 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(typeof result.data.healthScore).toBe('number');
       expect(result.data.healthScore).toBeGreaterThanOrEqual(0);
       expect(result.data.healthScore).toBeLessThanOrEqual(100);
-    }, 150000); // 150s timeout: 5 creates + 3 completes + 1 query + 1 analytics = 10+ operations
 
-    it('should return non-zero stats when tasks exist', async () => {
-      // This test verifies the bug where ProductivityStats returned all 0s
-      await client.createTestTask('Task for non-zero test', { tags: [testSessionTag] });
-
-      const result = await client.callTool('omnifocus_analyze', {
-        analysis: {
-          type: 'productivity_stats',
-          params: { period: 'week' },
-        },
-      });
-
-      expect(result.success).toBe(true);
-
-      // At minimum, totalTasks should be > 0 since we just created tasks
-      // (There may be other tasks in the system too)
+      // Also validate non-zero stats (regression test for bug where all stats were 0)
       expect(result.data.stats.overview.totalTasks).toBeGreaterThan(0);
-    }, 120000);
+    }, 150000); // 150s timeout: 5 creates + 3 completes + 1 query + 1 analytics = 10+ operations
   });
 
   describe('OverdueAnalysis Calculation Validation', () => {
-    it('should correctly identify overdue tasks', async () => {
-      // Create task with past due date
+    it('should correctly identify overdue tasks and handle various date scenarios', async () => {
+      // Create task with past due date (should be overdue)
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 7); // 7 days ago
       const pastDateStr = pastDate.toISOString().split('T')[0];
@@ -145,6 +130,16 @@ describe('Analytics Validation - Actual Calculations', () => {
       await client.createTestTask('Overdue Task Test', {
         tags: [testSessionTag],
         dueDate: pastDateStr,
+      });
+
+      // Create task with future due date (should NOT be overdue)
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
+      const futureDateStr = futureDate.toISOString().split('T')[0];
+
+      await client.createTestTask('Future Task Test', {
+        tags: [testSessionTag],
+        dueDate: futureDateStr,
       });
 
       // Run overdue analysis
@@ -167,6 +162,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       // Validate summary contains required fields
       expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
       expect(typeof result.data.stats.summary.overduePercentage).toBe('number');
+      expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(0);
 
       // If there are overdue tasks, validate they have proper structure
       if (result.data.stats.overdueTasks && result.data.stats.overdueTasks.length > 0) {
@@ -175,31 +171,6 @@ describe('Analytics Validation - Actual Calculations', () => {
         expect(task.name).toBeDefined();
         expect(task.dueDate).toBeDefined();
       }
-    }, 120000);
-
-    it('should handle zero overdue tasks gracefully', async () => {
-      // Create task with future due date
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
-      const futureDateStr = futureDate.toISOString().split('T')[0];
-
-      await client.createTestTask('Future Task Test', {
-        tags: [testSessionTag],
-        dueDate: futureDateStr,
-      });
-
-      const result = await client.callTool('omnifocus_analyze', {
-        analysis: {
-          type: 'overdue_analysis',
-          params: { groupBy: 'tag', limit: 50 },
-        },
-      });
-
-      // ✅ Should succeed even with no/few overdue tasks
-      expect(result.success).toBe(true);
-      expect(result.data.stats.summary).toBeDefined();
-      expect(typeof result.data.stats.summary.totalOverdue).toBe('number');
-      expect(result.data.stats.summary.totalOverdue).toBeGreaterThanOrEqual(0);
     }, 120000);
   });
 
