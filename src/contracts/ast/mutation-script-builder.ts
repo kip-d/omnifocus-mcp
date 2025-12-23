@@ -100,70 +100,114 @@ async function getSandboxFolderId(): Promise<string | null> {
   }
 }
 
+// Cache validated project IDs to avoid repeated sandbox checks
+const validatedProjectIds = new Set<string>();
+
 /**
  * Check if a project is inside the sandbox folder
+ * Uses O(1) Project.byIdentifier via OmniJS bridge instead of O(n) iteration
  */
 async function isProjectInSandbox(projectId: string): Promise<boolean> {
+  // Fast path: already validated this project
+  if (validatedProjectIds.has(projectId)) {
+    return true;
+  }
+
   const sandboxId = await getSandboxFolderId();
   if (!sandboxId) return false;
 
+  // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
   const script = `
-    const projects = doc.flattenedProjects();
-    for (let i = 0; i < projects.length; i++) {
-      try {
-        if (projects[i].id() === '${projectId}') {
-          const folder = projects[i].folder();
-          if (folder && folder.id() === '${sandboxId}') {
-            return JSON.stringify({ inSandbox: true });
-          }
-          return JSON.stringify({ inSandbox: false });
+    const bridgeScript = \`
+      (() => {
+        const projectId = '${projectId}';
+        const sandboxId = '${sandboxId}';
+
+        // O(1) lookup using Project.byIdentifier
+        const project = Project.byIdentifier(projectId);
+        if (!project) {
+          return JSON.stringify({ inSandbox: false, error: 'not_found' });
         }
-      } catch (e) {}
-    }
-    return JSON.stringify({ inSandbox: false });
+
+        // Check if project's folder matches sandbox folder
+        const folder = project.parentFolder;
+        if (folder && folder.id.primaryKey === sandboxId) {
+          return JSON.stringify({ inSandbox: true });
+        }
+
+        return JSON.stringify({ inSandbox: false });
+      })()
+    \`;
+
+    return app.evaluateJavascript(bridgeScript);
   `;
 
   try {
     const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    if (result.inSandbox) {
+      validatedProjectIds.add(projectId);
+    }
     return result.inSandbox;
   } catch {
     return false;
   }
 }
 
+// Cache validated task IDs to avoid repeated sandbox checks
+const validatedTaskIds = new Set<string>();
+
 /**
  * Check if a task is inside the sandbox (via project) or has __TEST__ prefix
+ * Uses O(1) Task.byIdentifier via OmniJS bridge instead of O(n) iteration
  */
 async function isTaskInSandbox(taskId: string): Promise<boolean> {
+  // Fast path: already validated this task
+  if (validatedTaskIds.has(taskId)) {
+    return true;
+  }
+
   const sandboxId = await getSandboxFolderId();
 
+  // Use OmniJS bridge for O(1) lookup instead of O(n) iteration
   const script = `
-    const tasks = doc.flattenedTasks();
-    for (let i = 0; i < tasks.length; i++) {
-      try {
-        if (tasks[i].id() === '${taskId}') {
-          const name = tasks[i].name();
-          // Check if name starts with __TEST__ prefix
-          if (name && name.startsWith('${TEST_INBOX_PREFIX}')) {
+    const bridgeScript = \`
+      (() => {
+        const taskId = '${taskId}';
+        const sandboxId = '${sandboxId || ''}';
+        const testPrefix = '${TEST_INBOX_PREFIX}';
+
+        // O(1) lookup using Task.byIdentifier
+        const task = Task.byIdentifier(taskId);
+        if (!task) {
+          return JSON.stringify({ inSandbox: false, error: 'not_found' });
+        }
+
+        // Check if name starts with __TEST__ prefix
+        if (task.name && task.name.startsWith(testPrefix)) {
+          return JSON.stringify({ inSandbox: true });
+        }
+
+        // Check if task's project is in sandbox folder
+        const project = task.containingProject;
+        if (project) {
+          const folder = project.parentFolder;
+          if (folder && folder.id.primaryKey === sandboxId) {
             return JSON.stringify({ inSandbox: true });
           }
-          // Check if task's project is in sandbox
-          const project = tasks[i].containingProject();
-          if (project) {
-            const folder = project.folder();
-            if (folder && folder.id() === '${sandboxId || ''}') {
-              return JSON.stringify({ inSandbox: true });
-            }
-          }
-          return JSON.stringify({ inSandbox: false });
         }
-      } catch (e) {}
-    }
-    return JSON.stringify({ inSandbox: false });
+
+        return JSON.stringify({ inSandbox: false });
+      })()
+    \`;
+
+    return app.evaluateJavascript(bridgeScript);
   `;
 
   try {
     const result = await executeGuardJXA<{ inSandbox: boolean }>(script);
+    if (result.inSandbox) {
+      validatedTaskIds.add(taskId);
+    }
     return result.inSandbox;
   } catch {
     return false;
@@ -279,10 +323,12 @@ async function validateProjectInSandbox(projectId: string, operation: string): P
 }
 
 /**
- * Clear the cached sandbox folder ID (for testing)
+ * Clear all sandbox caches (for testing)
  */
 export function clearSandboxCache(): void {
   cachedSandboxFolderId = null;
+  validatedTaskIds.clear();
+  validatedProjectIds.clear();
 }
 
 // =============================================================================
