@@ -181,130 +181,85 @@ export async function isTaskInSandbox(taskId: string): Promise<boolean> {
 // =============================================================================
 
 /**
- * Delete all tasks with __TEST__ name prefix (inbox tasks)
- * Uses OmniJS deleteObject() for proper task deletion
+ * Delete all tasks with __TEST__ name prefix (inbox tasks only)
+ * Uses pure OmniJS for 50x+ faster performance than JXA iteration
+ * (JXA iteration: ~48s, OmniJS: <1s for 2000+ task database)
+ *
+ * Note: We only check the inbox. Tasks with __TEST__ prefix should only
+ * be created in inbox during tests, not in projects.
  */
 async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string[] }> {
+  // Use pure OmniJS to iterate inbox directly - very fast even with large databases
   const script = `
-    const result = { deleted: 0, errors: [] };
-    const tasks = doc.flattenedTasks();
-    const taskIds = [];
+    const result = app.evaluateJavascript(\`
+      (() => {
+        let deleted = 0;
+        const errors = [];
+        const prefix = '${TEST_INBOX_PREFIX}';
 
-    // Find tasks with __TEST__ prefix and collect their IDs
-    for (let i = 0; i < tasks.length; i++) {
-      try {
-        const name = tasks[i].name();
-        if (name && name.startsWith('${TEST_INBOX_PREFIX}')) {
-          taskIds.push(tasks[i].id());
+        // Iterate inbox directly (OmniJS global) - fast even with large databases
+        // Note: inbox is typically small, so this is O(inbox.length) not O(allTasks)
+        for (const task of inbox) {
+          if (task.name.startsWith(prefix)) {
+            try {
+              deleteObject(task);
+              deleted++;
+            } catch (e) {
+              errors.push('Task: ' + e.message);
+            }
+          }
         }
-      } catch (e) {}
-    }
 
-    // Delete using OmniJS bridge with deleteObject()
-    if (taskIds.length > 0) {
-      const deleteScript = '(' +
-        '(() => {' +
-          'const ids = ' + JSON.stringify(taskIds) + ';' +
-          'let deleted = 0;' +
-          'const errors = [];' +
-          'for (const id of ids) {' +
-            'try {' +
-              'const task = Task.byIdentifier(id);' +
-              'if (task) {' +
-                'deleteObject(task);' +
-                'deleted++;' +
-              '}' +
-            '} catch (e) {' +
-              'errors.push("Task " + id + ": " + e.message);' +
-            '}' +
-          '}' +
-          'return JSON.stringify({ deleted: deleted, errors: errors });' +
-        '})()' +
-      ')';
-
-      try {
-        const bridgeResult = JSON.parse(app.evaluateJavascript(deleteScript));
-        result.deleted = bridgeResult.deleted;
-        result.errors = bridgeResult.errors || [];
-      } catch (e) {
-        result.errors.push('Bridge error: ' + (e.message || e));
-      }
-    }
-
-    return JSON.stringify(result);
+        return JSON.stringify({ deleted, errors });
+      })()
+    \`);
+    return result;
   `;
   return executeJXA<{ deleted: number; errors: string[] }>(script);
 }
 
 /**
  * Delete all projects inside the sandbox folder
- * Uses OmniJS deleteObject() for true project deletion (not just marking as dropped)
+ * Uses pure OmniJS for faster performance than JXA iteration
  */
 async function deleteSandboxProjects(): Promise<{ deleted: number; errors: string[] }> {
+  // Use pure OmniJS - faster than JXA iteration through flattenedFolders/flattenedProjects
   const script = `
-    const result = { deleted: 0, errors: [] };
+    const result = app.evaluateJavascript(\`
+      (() => {
+        let deleted = 0;
+        const errors = [];
+        const sandboxName = '${SANDBOX_FOLDER_NAME}';
 
-    // Find sandbox folder
-    let sandboxFolder = null;
-    const folders = doc.flattenedFolders();
-    for (let i = 0; i < folders.length; i++) {
-      try {
-        if (folders[i].name() === '${SANDBOX_FOLDER_NAME}') {
-          sandboxFolder = folders[i];
-          break;
+        // Find sandbox folder using OmniJS
+        let sandboxFolder = null;
+        for (const folder of flattenedFolders) {
+          if (folder.name === sandboxName) {
+            sandboxFolder = folder;
+            break;
+          }
         }
-      } catch (e) {}
-    }
 
-    if (!sandboxFolder) {
-      return JSON.stringify(result);
-    }
-
-    // Get project IDs in sandbox folder
-    const projects = doc.flattenedProjects();
-    const projectIds = [];
-    const sandboxId = sandboxFolder.id();
-    for (let i = 0; i < projects.length; i++) {
-      try {
-        const folder = projects[i].folder();
-        if (folder && folder.id() === sandboxId) {
-          projectIds.push(projects[i].id());
+        if (!sandboxFolder) {
+          return JSON.stringify({ deleted: 0, errors: [] });
         }
-      } catch (e) {}
-    }
 
-    // Delete using OmniJS bridge with deleteObject() for true deletion
-    if (projectIds.length > 0) {
-      const deleteScript = '(' +
-        '(() => {' +
-          'const ids = ' + JSON.stringify(projectIds) + ';' +
-          'let deleted = 0;' +
-          'const errors = [];' +
-          'for (const id of ids) {' +
-            'try {' +
-              'const project = Project.byIdentifier(id);' +
-              'if (project) {' +
-                'deleteObject(project);' +
-                'deleted++;' +
-              '}' +
-            '} catch (e) {' +
-              'errors.push("Project " + id + ": " + e.message);' +
-            '}' +
-          '}' +
-          'return JSON.stringify({ deleted: deleted, errors: errors });' +
-        '})()' +
-      ')';
+        // Find and delete projects in sandbox folder
+        for (const project of flattenedProjects) {
+          if (project.parentFolder === sandboxFolder) {
+            try {
+              deleteObject(project);
+              deleted++;
+            } catch (e) {
+              errors.push('Project: ' + e.message);
+            }
+          }
+        }
 
-      try {
-        const bridgeResult = JSON.parse(app.evaluateJavascript(deleteScript));
-        result.deleted = bridgeResult.deleted;
-        result.errors = bridgeResult.errors || [];
-      } catch (e) {
-        result.errors.push('Bridge error: ' + (e.message || e));
-      }
-    }
-
-    return JSON.stringify(result);
+        return JSON.stringify({ deleted, errors });
+      })()
+    \`);
+    return result;
   `;
   return executeJXA<{ deleted: number; errors: string[] }>(script);
 }
