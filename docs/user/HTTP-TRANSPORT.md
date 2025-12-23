@@ -10,10 +10,23 @@ transport mode lets you run the server on your Mac and connect to it remotely fr
 
 **Common Use Case:** Run Claude Desktop on a Windows PC and access OmniFocus running on your Mac.
 
+## Important: Client Compatibility
+
+Different Claude clients support different transports:
+
+| Client | stdio | HTTP/SSE Remote |
+|--------|-------|-----------------|
+| Claude Desktop | ✅ | ❌ (requires bridge) |
+| Claude Code | ✅ | ✅ |
+| Claude.ai (web) | - | ✅ (Pro/Max/Team/Enterprise) |
+
+**Claude Desktop only supports stdio transport.** To connect to a remote HTTP server, you need to use `mcp-remote` as a
+bridge (see below).
+
 ## Prerequisites
 
 - **Mac (server):** OmniFocus 4.6+, Node.js 18+, the omnifocus-mcp server installed
-- **Remote device (client):** Claude Desktop or another MCP-compatible client
+- **Remote device (client):** Claude Desktop (with Node.js for the bridge) or Claude Code
 - **Network:** Both devices on same network, or connected via Tailscale/VPN
 
 ## Quick Start
@@ -35,7 +48,25 @@ You should see:
 [INFO] HTTP server ready and accepting connections
 ```
 
-### Step 2: Configure Claude Desktop on Windows
+**Note:** Cache warming takes 8-22 seconds. Wait for "HTTP server ready" before connecting clients.
+
+### Step 2: Configure the Client
+
+#### Option A: Claude Code (Recommended - Native HTTP Support)
+
+Claude Code supports remote HTTP servers directly:
+
+```bash
+claude mcp add omnifocus --transport http http://YOUR-MAC-IP:3000/mcp
+```
+
+Or add to your Claude Code settings.
+
+#### Option B: Claude Desktop (Requires mcp-remote Bridge)
+
+Claude Desktop only supports stdio, so you need `mcp-remote` to bridge to the HTTP server.
+
+**Prerequisites on Windows:** Install Node.js 18+ from https://nodejs.org
 
 Edit Claude Desktop's configuration file:
 
@@ -46,18 +77,19 @@ Edit Claude Desktop's configuration file:
 {
   "mcpServers": {
     "omnifocus": {
-      "url": "http://YOUR-MAC-IP:3000/mcp"
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://YOUR-MAC-IP:3000/mcp"]
     }
   }
 }
 ```
 
-Replace `YOUR-MAC-IP` with your Mac's IP address (e.g., `192.168.1.100` or your Tailscale hostname like
-`macbook.tailnet`).
+Replace `YOUR-MAC-IP` with your Mac's IP address (e.g., `192.168.1.100`) or Tailscale hostname (e.g.,
+`macbook.tailnet-name.ts.net`).
 
-### Step 3: Restart Claude Desktop
+### Step 3: Restart Your Client
 
-Fully quit and restart Claude Desktop. You should now be able to ask about your OmniFocus tasks!
+Fully quit and restart Claude Desktop or Claude Code. You should now be able to ask about your OmniFocus tasks!
 
 ## Secure Setup with Tailscale (Recommended)
 
@@ -85,15 +117,23 @@ node dist/index.js --http --port 3000
 ### On Your Windows PC:
 
 1. Install Tailscale and log in with the same account
-2. Configure Claude Desktop:
+2. Install Node.js 18+ from https://nodejs.org
+3. Configure Claude Desktop with mcp-remote bridge:
 
 ```json
 {
   "mcpServers": {
     "omnifocus": {
-      "url": "http://macbook.tailnet-name.ts.net:3000/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR-SECRET-TOKEN"
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://macbook.tailnet-name.ts.net:3000/mcp",
+        "--header",
+        "Authorization:${AUTH_TOKEN}"
+      ],
+      "env": {
+        "AUTH_TOKEN": "Bearer YOUR-SECRET-TOKEN"
       }
     }
   }
@@ -101,6 +141,16 @@ node dist/index.js --http --port 3000
 ```
 
 Replace `YOUR-SECRET-TOKEN` with the token you generated on your Mac.
+
+**Note:** The `env` workaround is required because Claude Desktop on Windows has a bug with spaces in args.
+
+### With Claude Code (Simpler):
+
+```bash
+claude mcp add omnifocus --transport http \
+  --header "Authorization: Bearer YOUR-SECRET-TOKEN" \
+  http://macbook.tailnet-name.ts.net:3000/mcp
+```
 
 ## CLI Options
 
@@ -253,15 +303,35 @@ curl -H "Authorization: Bearer YOUR-TOKEN" http://YOUR-MAC-IP:3000/health
 
 ### "401 Unauthorized"
 
-- Verify the `Authorization` header in your Claude Desktop config
+- Verify the `Authorization` header in your mcp-remote config
 - Make sure the token matches `MCP_AUTH_TOKEN` on the server
-- Token format must be: `Bearer YOUR-TOKEN` (with space after Bearer)
+- Use the `env` workaround for the "Bearer " prefix (see Tailscale section above)
+
+### mcp-remote not found or fails to start
+
+1. **Verify Node.js is installed:**
+   ```powershell
+   node --version   # Should show v18 or higher
+   npx --version    # Should work
+   ```
+
+2. **Test mcp-remote manually:**
+   ```powershell
+   npx -y mcp-remote http://YOUR-MAC-IP:3000/mcp
+   ```
+   If this fails, the issue is with mcp-remote or network connectivity.
+
+3. **Check npx cache issues:**
+   ```powershell
+   npx clear-npx-cache
+   ```
 
 ### Claude Desktop doesn't see the server
 
 1. **Check configuration file syntax:** JSON must be valid (no trailing commas)
 2. **Restart Claude Desktop completely:** Quit and reopen, don't just refresh
-3. **Check logs:**
+3. **Verify mcp-remote is being used:** Check that `command` is `npx`, not a `url` field
+4. **Check logs:**
    - Windows: `%APPDATA%\Claude\Logs\`
    - Mac: `~/Library/Logs/Claude/`
 

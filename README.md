@@ -120,31 +120,26 @@ For accessing OmniFocus from another machine (Windows, Linux, or another Mac):
 node dist/index.js --http --port 3000
 ```
 
-**2. Configure your remote MCP client:**
+**2. Configure your remote client:**
 
+**Claude Code** (native HTTP support):
+```bash
+claude mcp add omnifocus --transport http http://your-mac-ip:3000/mcp
+```
+
+**Claude Desktop** (requires mcp-remote bridge - Node.js needed on client):
 ```json
 {
   "mcpServers": {
     "omnifocus": {
-      "url": "http://your-mac-hostname:3000/mcp"
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://your-mac-ip:3000/mcp"]
     }
   }
 }
 ```
 
-**With Tailscale (recommended for remote access):**
-
-```json
-{
-  "mcpServers": {
-    "omnifocus": {
-      "url": "http://your-mac.tailnet-name.ts.net:3000/mcp"
-    }
-  }
-}
-```
-
-See **[HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md)** for authentication, service configuration, and troubleshooting.
+See **[HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md)** for Tailscale setup, authentication, and troubleshooting.
 
 ## Documentation
 
