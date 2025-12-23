@@ -24,8 +24,8 @@
 
 - **[docs/user/GETTING_STARTED.md](user/GETTING_STARTED.md)** - First conversation with Claude and natural language
   examples
-- **[docs/user/HTTP-TRANSPORT.md](user/HTTP-TRANSPORT.md)** - Remote access from Windows/other devices via HTTP
-  transport
+- **[docs/user/WINDOWS-SETUP.md](user/WINDOWS-SETUP.md)** - Step-by-step Windows setup for remote OmniFocus access
+- **[docs/user/HTTP-TRANSPORT.md](user/HTTP-TRANSPORT.md)** - Remote access architecture and advanced configuration
 - **[docs/user/SMART_CAPTURE.md](user/SMART_CAPTURE.md)** - Parse meeting notes and transcripts into tasks
 - **[docs/user/TROUBLESHOOTING.md](user/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[docs/user/PERMISSIONS.md](user/PERMISSIONS.md)** - macOS permissions setup and configuration
@@ -44,12 +44,15 @@
 
 - **[docs/dev/DEVELOPER_GUIDE.md](dev/DEVELOPER_GUIDE.md)** - Complete API reference with JSON examples
 - **[docs/dev/ARCHITECTURE.md](dev/ARCHITECTURE.md)** - JXA + OmniJS Bridge implementation patterns
+- **[docs/dev/AST_ARCHITECTURE.md](dev/AST_ARCHITECTURE.md)** - AST-based script generation architecture
 - **[docs/dev/PATTERNS.md](dev/PATTERNS.md)** - Quick symptom lookup and proven solutions
 - **[docs/dev/PATTERN_INDEX.md](dev/PATTERN_INDEX.md)** - Code pattern library (bridge helpers, field access patterns)
 - **[docs/dev/LESSONS_LEARNED.md](dev/LESSONS_LEARNED.md)** - Critical insights from development (MCP lifecycle, async
   operations, etc.)
 - **[docs/dev/DEBUGGING_WORKFLOW.md](dev/DEBUGGING_WORKFLOW.md)** - Systematic debugging methodology
 - **[docs/dev/JXA-VS-OMNIJS-PATTERNS.md](dev/JXA-VS-OMNIJS-PATTERNS.md)** - When to use JXA vs OmniJS bridge
+- **[docs/dev/OMNIJS-FIRST-PATTERN.md](dev/OMNIJS-FIRST-PATTERN.md)** - OmniJS-first script pattern for new development
+- **[docs/dev/GIT_WORKTREES.md](dev/GIT_WORKTREES.md)** - Using git worktrees for parallel development
 
 ### Technical Deep Dives
 
@@ -92,8 +95,20 @@
 
 - **[docs/dev/TEST_CLEANUP_GUIDE.md](dev/TEST_CLEANUP_GUIDE.md)** - Test suite maintenance guide
 - **[docs/dev/SKIPPED_TESTS.md](dev/SKIPPED_TESTS.md)** - Documentation of skipped tests and why
+- **[docs/dev/CONDITIONAL_TESTS.md](dev/CONDITIONAL_TESTS.md)** - Conditional test execution patterns
+- **[docs/dev/TEST_COVERAGE_GAPS.md](dev/TEST_COVERAGE_GAPS.md)** - Identified test coverage gaps
+- **[docs/dev/TEST_COVERAGE_IMPROVEMENTS_SUMMARY.md](dev/TEST_COVERAGE_IMPROVEMENTS_SUMMARY.md)** - Test coverage
+  improvements summary
+- **[docs/dev/TESTING_IMPROVEMENTS.md](dev/TESTING_IMPROVEMENTS.md)** - Testing infrastructure improvements
+- **[docs/dev/INTEGRATION_TEST_TIMING_BASELINE.md](dev/INTEGRATION_TEST_TIMING_BASELINE.md)** - Integration test timing
+  baseline for regression detection
 - **[docs/dev/TEST_PERFORMANCE_ANALYSIS_2025-10-20.md](dev/TEST_PERFORMANCE_ANALYSIS_2025-10-20.md)** - Test suite
   performance analysis
+
+### Research
+
+- **[docs/dev/remote-mcp-connection-research.md](dev/remote-mcp-connection-research.md)** - Remote MCP connection
+  options (mcp-remote, supergateway)
 
 ---
 
@@ -201,10 +216,43 @@
 
 ## 🗺️ Plans & Roadmap
 
-**Implementation plans:**
+**Active/Recent plans:**
 
+- **[docs/plans/2025-12-18-future-consolidation-opportunities.md](plans/2025-12-18-future-consolidation-opportunities.md)** -
+  Future consolidation opportunities
+- **[docs/plans/2025-12-15-repetition-rule-investigation.md](plans/2025-12-15-repetition-rule-investigation.md)** -
+  Repetition rule implementation investigation
+- **[docs/plans/2025-12-11-test-sandbox-design.md](plans/2025-12-11-test-sandbox-design.md)** - Test sandbox isolation
+  design
 - **[docs/plans/2025-12-04-streamable-http-transport-design.md](plans/2025-12-04-streamable-http-transport-design.md)** -
   HTTP transport design (remote access from Windows)
+- **[docs/plans/2025-01-04-omnifocus-dsl-design.md](plans/2025-01-04-omnifocus-dsl-design.md)** - OmniFocus DSL design
+- **[docs/plans/omnijs-migration-plan.md](plans/omnijs-migration-plan.md)** - OmniJS migration strategy
+- **[docs/plans/PLAN_STATUS_SUMMARY.md](plans/PLAN_STATUS_SUMMARY.md)** - Status summary of all plans
+
+**Consolidation plans (Nov 2025):**
+
+- **[docs/plans/2025-11-25-phase3-ast-extension-design.md](plans/2025-11-25-phase3-ast-extension-design.md)** - Phase 3
+  AST extension design
+- **[docs/plans/2025-11-24-querycompiler-taskfilter-implementation.md](plans/2025-11-24-querycompiler-taskfilter-implementation.md)** -
+  QueryCompiler task filter implementation
+- **[docs/plans/2025-11-24-ast-consolidation-opportunities.md](plans/2025-11-24-ast-consolidation-opportunities.md)** -
+  AST consolidation opportunities
+- **[docs/plans/2025-11-07-phase2-helper-refactoring-foundation.md](plans/2025-11-07-phase2-helper-refactoring-foundation.md)** -
+  Phase 2 helper refactoring
+- **[docs/plans/2025-11-06-script-helper-consolidation-design.md](plans/2025-11-06-script-helper-consolidation-design.md)** -
+  Script helper consolidation design
+- **[docs/plans/2025-11-06-phase1-script-consolidation.md](plans/2025-11-06-phase1-script-consolidation.md)** - Phase 1
+  script consolidation
+- **[docs/plans/2025-10-29-lightweight-testing-strategy-design.md](plans/2025-10-29-lightweight-testing-strategy-design.md)** -
+  Lightweight testing strategy
+
+**Completed plans:**
+
+- **[docs/plans/completed/](plans/completed/)** - Completed implementation plans (unified API, dry-run mode, etc.)
+
+**Legacy plans:**
+
 - **[docs/plans/2025-10-16-omnifocus-4.7-upgrade.md](plans/2025-10-16-omnifocus-4.7-upgrade.md)** - OmniFocus 4.7
   upgrade plan
 - **[docs/plans/2025-10-18-multi-machine-session-sync.md](plans/2025-10-18-multi-machine-session-sync.md)** -
@@ -224,6 +272,48 @@
 ## 🏗️ Infrastructure & CI/CD
 
 - **[docs/SELF_HOSTED_CI_MAC.md](SELF_HOSTED_CI_MAC.md)** - Self-hosted CI on macOS setup guide
+
+---
+
+## 🔬 Consolidation Analysis
+
+**Script and helper consolidation (Nov-Dec 2025):**
+
+- **[docs/consolidation/helper-usage-analysis.md](consolidation/helper-usage-analysis.md)** - Helper function usage
+  analysis
+- **[docs/consolidation/helper-inventory.md](consolidation/helper-inventory.md)** - Complete helper function inventory
+- **[docs/consolidation/helper-categorization.md](consolidation/helper-categorization.md)** - Helper categorization
+- **[docs/consolidation/helper-pain-points.md](consolidation/helper-pain-points.md)** - Helper pain points analysis
+- **[docs/consolidation/consolidation-opportunities.md](consolidation/consolidation-opportunities.md)** - Consolidation
+  opportunities
+- **[docs/consolidation/essential-bridge-design.md](consolidation/essential-bridge-design.md)** - Essential bridge
+  design
+- **[docs/consolidation/call-graph.md](consolidation/call-graph.md)** - Helper call graph analysis
+- **[docs/consolidation/dead-code.md](consolidation/dead-code.md)** - Dead code identification
+- **[docs/consolidation/conversion-templates.md](consolidation/conversion-templates.md)** - Script conversion templates
+- **[docs/consolidation/flaky-integration-tests.md](consolidation/flaky-integration-tests.md)** - Flaky test analysis
+- **[docs/consolidation/phase2a-summary.md](consolidation/phase2a-summary.md)** - Phase 2a summary
+
+---
+
+## 🐛 Bug Tracking
+
+- **[docs/bugs/analytics-validation-test-bug.md](bugs/analytics-validation-test-bug.md)** - Analytics validation test bug
+  analysis
+
+---
+
+## 🏆 Success Stories
+
+- **[docs/success-stories/2025-12-04-design-to-tasks-workflow.md](success-stories/2025-12-04-design-to-tasks-workflow.md)** -
+  Design to tasks workflow success story
+
+---
+
+## 🧪 User Testing
+
+- **[docs/user-testing/omnifocus-mcp-validation.md](user-testing/omnifocus-mcp-validation.md)** - OmniFocus MCP
+  validation testing
 
 ---
 
@@ -306,5 +396,5 @@
 
 ---
 
-**Last Updated**: 2025-10-29 **Total Documents**: 85+ **Documentation Coverage**: Comprehensive (user, developer, API,
-operations, evaluation)
+**Last Updated**: 2025-12-23 **Total Documents**: 120+ **Documentation Coverage**: Comprehensive (user, developer, API,
+operations, evaluation, consolidation, testing)
