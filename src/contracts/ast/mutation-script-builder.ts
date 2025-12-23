@@ -243,26 +243,42 @@ function validateProjectCreate(data: ProjectCreateData): void {
 async function validateTaskCreate(data: TaskCreateData): Promise<void> {
   if (!isTestMode()) return;
 
-  // If creating in inbox (no project), name must start with __TEST__
-  if (!data.project) {
+  // Case 1: Subtask (has parentTaskId) - validate parent task is in sandbox
+  if (data.parentTaskId) {
+    const parentInSandbox = await isTaskInSandbox(data.parentTaskId);
+    if (!parentInSandbox) {
+      throw new Error(
+        `TEST GUARD: Parent task "${data.parentTaskId}" is not inside sandbox. ` +
+          'Subtasks can only be created under tasks that are in the sandbox.',
+      );
+    }
+    // Parent task validated, subtask is allowed
+    // Fall through to validate tags
+  }
+  // Case 2: Task in project - validate project is in sandbox
+  else if (data.project) {
+    const inSandbox = await isProjectInSandbox(data.project);
+    if (!inSandbox) {
+      throw new Error(
+        `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
+          `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
+      );
+    }
+    // Project validated, task is allowed
+    // Fall through to validate tags
+  }
+  // Case 3: Inbox task (no project, no parent) - name must start with __TEST__
+  else {
     if (!data.name.startsWith(TEST_INBOX_PREFIX)) {
       throw new Error(
         `TEST GUARD: Inbox tasks must have name starting with "${TEST_INBOX_PREFIX}". ` + `Got: "${data.name}"`,
       );
     }
-    return; // Inbox task with correct prefix is allowed
+    // Inbox task with correct prefix is allowed
+    // Fall through to validate tags
   }
 
-  // If creating in a project, verify the project is in the sandbox
-  const inSandbox = await isProjectInSandbox(data.project);
-  if (!inSandbox) {
-    throw new Error(
-      `TEST GUARD: Project "${data.project}" is not inside sandbox folder. ` +
-        `Tasks can only be created in projects within "${SANDBOX_FOLDER_NAME}".`,
-    );
-  }
-
-  // Validate tags
+  // Validate tags (applies to all cases)
   if (data.tags && data.tags.length > 0) {
     const invalidTags = data.tags.filter((t) => !t.startsWith(TEST_TAG_PREFIX));
     if (invalidTags.length > 0) {
@@ -329,6 +345,20 @@ export function clearSandboxCache(): void {
   cachedSandboxFolderId = null;
   validatedTaskIds.clear();
   validatedProjectIds.clear();
+}
+
+/**
+ * Mark a project as validated in sandbox (for batch operations that create projects in sandbox)
+ */
+export function markProjectAsValidated(projectId: string): void {
+  validatedProjectIds.add(projectId);
+}
+
+/**
+ * Mark a task as validated in sandbox (for batch operations that create tasks in sandbox)
+ */
+export function markTaskAsValidated(taskId: string): void {
+  validatedTaskIds.add(taskId);
 }
 
 // =============================================================================

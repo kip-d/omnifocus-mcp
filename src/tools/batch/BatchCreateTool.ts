@@ -14,6 +14,8 @@ import {
   buildCreateTaskScript,
   buildCreateProjectScript,
   buildDeleteScript,
+  markProjectAsValidated,
+  markTaskAsValidated,
 } from '../../contracts/ast/mutation-script-builder.js';
 import type { TaskCreateData, ProjectCreateData } from '../../contracts/mutations.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
@@ -261,10 +263,15 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
     }
 
     if (isScriptSuccess(result) && result.data) {
-      const data = result.data as { project?: { id: string } };
-      const realId = data.project?.id;
+      // Script returns { projectId: "..." } directly, not nested under project
+      const data = result.data as { projectId?: string; project?: { id: string } };
+      const realId = data.projectId || data.project?.id;
 
       if (realId) {
+        // Mark this project as validated in the sandbox cache so child tasks can be created
+        // This is needed because the sandbox guard uses O(1) cache lookups
+        markProjectAsValidated(realId);
+
         return {
           tempId: item.tempId,
           realId,
@@ -357,6 +364,10 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       const realId = data.taskId;
 
       if (realId) {
+        // Mark this task as validated in the sandbox cache so subtasks can be created
+        // This is needed because the sandbox guard uses O(1) cache lookups
+        markTaskAsValidated(realId);
+
         return {
           tempId: item.tempId,
           realId,

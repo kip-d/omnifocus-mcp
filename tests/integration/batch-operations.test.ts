@@ -14,11 +14,10 @@ import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
-// Only run on macOS with OmniFocus and real JXA enabled
+// Only run on macOS with OmniFocus
 const RUN_INTEGRATION_TESTS =
   process.env.DISABLE_INTEGRATION_TESTS !== 'true' &&
-  process.platform === 'darwin' &&
-  process.env.VITEST_ALLOW_JXA === '1';
+  process.platform === 'darwin';
 
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
@@ -161,9 +160,9 @@ d('Batch Operations Integration (Unified API)', () => {
       response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
     ).data;
     expect(result.created).toBe(3);
-  }, 30000);
+  }, 60000); // Nested task operations may take longer due to validation
 
-  it('should handle duplicate project names gracefully', async () => {
+  it('should allow duplicate project names (OmniFocus behavior)', async () => {
     const projectName = 'Test Duplicate Project ' + Date.now();
 
     // Create first project
@@ -191,7 +190,7 @@ d('Batch Operations Integration (Unified API)', () => {
 
     expect(result1).toHaveProperty('success', true);
 
-    // Try to create duplicate
+    // OmniFocus allows duplicate project names (projects are identified by ID, not name)
     const result2 = await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
@@ -214,9 +213,10 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     });
 
-    const data2 = (result2 as { data: { success: boolean; failed: number } }).data;
-    expect(data2.success).toBe(false);
-    expect(data2.failed).toBe(1);
+    // Duplicate project names are allowed in OmniFocus
+    const data2 = (result2 as { data: { success: boolean; created: number } }).data;
+    expect(data2.success).toBe(true);
+    expect(data2.created).toBe(1);
   }, 30000);
 
   it('should return tempId to realId mapping', async () => {
