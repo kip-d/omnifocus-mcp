@@ -247,9 +247,9 @@
 - **[docs/plans/2025-10-29-lightweight-testing-strategy-design.md](plans/2025-10-29-lightweight-testing-strategy-design.md)** -
   Lightweight testing strategy
 
-**Completed plans:**
+**Completed plans:** (archived to https://github.com/kip-d/omnifocus-mcp-archive)
 
-- **[docs/plans/completed/](plans/completed/)** - Completed implementation plans (unified API, dry-run mode, etc.)
+- See archive repository `plans/` folder for completed implementation plans
 
 **Legacy plans:**
 
@@ -275,24 +275,13 @@
 
 ---
 
-## 🔬 Consolidation Analysis
+## 🔬 Documentation Meta-Analysis
 
-**Script and helper consolidation (Nov-Dec 2025):**
+- **[docs/DOCUMENTATION-CONSOLIDATION-ANALYSIS.md](DOCUMENTATION-CONSOLIDATION-ANALYSIS.md)** - Analysis of documentation
+  structure (Dec 2025)
 
-- **[docs/consolidation/helper-usage-analysis.md](consolidation/helper-usage-analysis.md)** - Helper function usage
-  analysis
-- **[docs/consolidation/helper-inventory.md](consolidation/helper-inventory.md)** - Complete helper function inventory
-- **[docs/consolidation/helper-categorization.md](consolidation/helper-categorization.md)** - Helper categorization
-- **[docs/consolidation/helper-pain-points.md](consolidation/helper-pain-points.md)** - Helper pain points analysis
-- **[docs/consolidation/consolidation-opportunities.md](consolidation/consolidation-opportunities.md)** - Consolidation
-  opportunities
-- **[docs/consolidation/essential-bridge-design.md](consolidation/essential-bridge-design.md)** - Essential bridge
-  design
-- **[docs/consolidation/call-graph.md](consolidation/call-graph.md)** - Helper call graph analysis
-- **[docs/consolidation/dead-code.md](consolidation/dead-code.md)** - Dead code identification
-- **[docs/consolidation/conversion-templates.md](consolidation/conversion-templates.md)** - Script conversion templates
-- **[docs/consolidation/flaky-integration-tests.md](consolidation/flaky-integration-tests.md)** - Flaky test analysis
-- **[docs/consolidation/phase2a-summary.md](consolidation/phase2a-summary.md)** - Phase 2a summary
+**Script consolidation work docs:** Archived to https://github.com/kip-d/omnifocus-mcp-archive
+- See archive repository `2025-12-23-consolidation-docs/` folder
 
 ---
 
@@ -396,5 +385,7 @@
 
 ---
 
-**Last Updated**: 2025-12-23 **Total Documents**: 120+ **Documentation Coverage**: Comprehensive (user, developer, API,
-operations, evaluation, consolidation, testing)
+**Last Updated**: 2025-12-24 **Total Documents**: ~117 **Documentation Coverage**: Comprehensive (user, developer, API,
+operations, evaluation, testing)
+
+**Archived to**: https://github.com/kip-d/omnifocus-mcp-archive (consolidation work docs, completed plans)
