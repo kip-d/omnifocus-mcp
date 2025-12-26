@@ -137,12 +137,14 @@ export async function runServer() {
 async function runStdioServer(cacheManager: CacheManager) {
   logger.info('Starting server in stdio mode');
 
-  // Create server instance
+  // Create server instance with MCP 2025-11-25 metadata
   const versionInfo = getVersionInfo();
   const stdioServer = new Server(
     {
       name: 'omnifocus-mcp-cached',
       version: versionInfo.version,
+      description: 'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
+      websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
     },
     {
       capabilities: {

@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { CacheManager } from '../cache/CacheManager.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
-// Remove conflicting import
-// import { RobustOmniAutomation } from '../omnifocus/RobustOmniAutomation.js';
 import { createLogger, Logger, redactArgs } from '../utils/logger.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { createErrorResponseV2, OperationTimerV2, StandardResponseV2 } from '../utils/response-format.js';
@@ -92,6 +90,21 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     performanceClass: 'fast' | 'moderate' | 'slow';
     tags?: string[];
     capabilities?: string[];
+  };
+
+  // MCP 2025-11-25 annotations - hints for LLM tool usage
+  // See: https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+  annotations?: {
+    /** Human-readable title for the tool */
+    title?: string;
+    /** If true, the tool only reads data and has no side effects */
+    readOnlyHint?: boolean;
+    /** If true, the tool may perform destructive operations (delete, overwrite) */
+    destructiveHint?: boolean;
+    /** If true, calling the tool multiple times with same args has same effect as once */
+    idempotentHint?: boolean;
+    /** If true, the tool may interact with external systems beyond MCP server */
+    openWorldHint?: boolean;
   };
 
   /**

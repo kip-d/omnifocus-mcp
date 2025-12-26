@@ -5,6 +5,7 @@ import { CacheManager } from './cache/CacheManager.js';
 import { registerTools } from './tools/index.js';
 import { registerPrompts } from './prompts/index.js';
 import { setPendingOperationsTracker } from './omnifocus/OmniAutomation.js';
+import { getVersionInfo } from './utils/version.js';
 
 const logger = createLogger('session-manager');
 
@@ -90,11 +91,14 @@ export class SessionManager {
       },
     });
 
-    // Create a new server instance for this session
+    // Create a new server instance for this session with MCP 2025-11-25 metadata
+    const versionInfo = getVersionInfo();
     const server = new Server(
       {
         name: 'omnifocus-mcp-cached',
-        version: '3.0.0',
+        version: versionInfo.version,
+        description: 'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
+        websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
       },
       {
         capabilities: {
