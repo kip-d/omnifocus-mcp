@@ -102,6 +102,14 @@ export class CircuitBreaker {
   }
 
   /**
+   * Manually record a failure without throwing an error.
+   * Useful when tracking failures from result objects rather than thrown errors.
+   */
+  recordFailureManually(): void {
+    this.recordFailure();
+  }
+
+  /**
    * Record a failure and update circuit breaker state
    */
   private recordFailure(): void {

@@ -354,41 +354,35 @@ export class ManageReviewsTool extends BaseTool<typeof ManageReviewsSchema, Revi
     });
   }
 
-  // Claude Desktop sends parameters as strings, requiring runtime conversion
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private normalizeArgs(args: any): ManageReviewsInput {
-    // Handle Claude Desktop sometimes sending stringified parameters
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const normalized = { ...args };
+  /**
+   * Normalize arguments from Claude Desktop which may send stringified JSON.
+   * Uses type-safe parsing with proper error handling.
+   */
+  private normalizeArgs(args: Record<string, unknown>): ManageReviewsInput {
+    const normalized: Record<string, unknown> = { ...args };
 
     // Parse projectIds if it's a string
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.projectIds === 'string') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
-        normalized.projectIds = JSON.parse(normalized.projectIds);
+        normalized.projectIds = JSON.parse(normalized.projectIds) as unknown;
       } catch {
         this.logger.warn('Failed to parse projectIds string, keeping as-is');
       }
     }
 
     // Parse reviewInterval if it's a string
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.reviewInterval === 'string') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
-        normalized.reviewInterval = JSON.parse(normalized.reviewInterval);
+        normalized.reviewInterval = JSON.parse(normalized.reviewInterval) as unknown;
       } catch {
         this.logger.warn('Failed to parse reviewInterval string, keeping as-is');
       }
     }
 
     // Parse other potentially stringified arrays/objects
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (typeof normalized.tags === 'string') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
-        normalized.tags = JSON.parse(normalized.tags);
+        normalized.tags = JSON.parse(normalized.tags) as unknown;
       } catch {
         this.logger.warn('Failed to parse tags string, keeping as-is');
       }

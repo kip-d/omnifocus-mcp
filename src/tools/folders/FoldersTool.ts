@@ -20,6 +20,18 @@ import { FolderId } from '../../utils/branded-types.js';
 // Convert string ID to branded FolderId for type safety (compile-time only, no runtime validation)
 const convertToFolderId = (id: string): FolderId => id as FolderId;
 
+// Type definitions for folder script results (OmniFocus returns these shapes)
+interface FolderScriptResult {
+  id?: string;
+  name?: string;
+  folder?: {
+    id?: string;
+    name?: string;
+    parent?: string;
+  };
+  changes?: unknown[];
+}
+
 // Consolidated folders schema
 const FoldersSchema = z.object({
   operation: z
@@ -479,22 +491,17 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           this.cache.invalidate('folders');
           this.cache.invalidate('projects');
 
-          // OmniFocus script results are untyped, requiring unsafe operations for data extraction
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-          const parsedDeleteResult = deleteResult.data as any;
+          const parsedDeleteResult = deleteResult.data as FolderScriptResult;
 
           return createSuccessResponseV2(
             'folders',
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             { folder: { ...parsedDeleteResult, operation: 'delete' } },
             undefined,
             {
               ...timer.toMetadata(),
               operation: 'delete',
               deleted_id: params.folderId,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               moved_to: parsedDeleteResult.folder?.parent,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               moved_contents: parsedDeleteResult.changes,
             },
           );
@@ -533,20 +540,16 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           // Invalidate cache after successful move
           this.cache.invalidate('folders');
 
-          // OmniFocus script results are untyped, requiring unsafe operations for data extraction
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-          const parsedMoveResult = moveResult.data as any;
+          const parsedMoveResult = moveResult.data as FolderScriptResult;
 
           return createSuccessResponseV2(
             'folders',
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             { folder: { ...parsedMoveResult, operation: 'move' } },
             undefined,
             {
               ...timer.toMetadata(),
               operation: 'move',
               moved_id: params.folderId,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               old_parent: parsedMoveResult.folder?.parent,
               new_parent: params.parentFolderId,
             },
@@ -611,13 +614,10 @@ export class FoldersTool extends BaseTool<typeof FoldersSchema> {
           this.cache.invalidate('folders');
           this.cache.invalidate('projects');
 
-          // OmniFocus script results are untyped, requiring unsafe operations for data extraction
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-          const parsedStatusResult = statusResult.data as any;
+          const parsedStatusResult = statusResult.data as FolderScriptResult;
 
           return createSuccessResponseV2(
             'folders',
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             { folder: { ...parsedStatusResult, operation: 'set_status' } },
             undefined,
             { ...timer.toMetadata(), operation: 'set_status', updated_id: params.folderId, new_status: params.status },

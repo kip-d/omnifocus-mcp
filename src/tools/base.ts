@@ -777,29 +777,8 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         errorMessage.includes('-1743');
 
       if (shouldCountError) {
-        // Manually track the failure since circuit breaker works with thrown errors
-        const state = this.circuitBreaker.getState();
-        const newFailureCount = state.failureCount + 1;
-
-        if (newFailureCount >= 3) {
-          // Open the circuit
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (this.circuitBreaker as any).state = {
-            isOpen: true,
-            isHalfOpen: false,
-            failureCount: newFailureCount,
-            lastFailureTime: Date.now(),
-            nextAttemptTime: Date.now() + 30000,
-          };
-        } else {
-          // Update failure count
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (this.circuitBreaker as any).state = {
-            ...state,
-            failureCount: newFailureCount,
-            lastFailureTime: Date.now(),
-          };
-        }
+        // Record failure using the circuit breaker's public API
+        this.circuitBreaker.recordFailureManually();
       }
     } else {
       // Reset on success
