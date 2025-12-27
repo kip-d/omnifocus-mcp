@@ -526,9 +526,9 @@ If you see these in your plan, STOP and search for patterns:
 - **TypeScript only** - All files must be `.ts` (including tests and scripts)
 - **Never create `.js` files**
 - **Always run integration tests** before considering features complete
-  - Unit tests: ~20 seconds (1093 tests) - run frequently
-  - Integration tests: **~24 minutes** (123 tests) - run before commits/PRs
-  - Integration tests interact with real OmniFocus via osascript, hence the time
+  - Unit tests: ~10 seconds (1104 tests) - run frequently
+  - Integration tests: **~5 minutes** (69 tests) - run before commits/PRs
+  - Integration tests interact with real OmniFocus via osascript
 - Build before running: `npm run build`
 
 ## 🚨 CRITICAL: Systematic Debugging Workflow
@@ -821,8 +821,8 @@ process.stdin.on('end', () => gracefulExit('stdin closed'));
 ```bash
 npm run build        # Compile TypeScript (required before running)
 npm run dev          # Watch mode
-npm test             # Unit tests (~20 seconds, 1093 tests)
-npm run test:integration  # Integration tests (~24 minutes, 123 tests)
+npm test             # Unit tests (~10 seconds, 1104 tests)
+npm run test:integration  # Integration tests (~5 minutes, 69 tests)
 
 # Direct MCP Testing (Fast debugging - see docs/operational/TESTING_TOOLS.md)
 node emergency-diagnostic.js  # Test all tools quickly
