@@ -11,6 +11,10 @@
  * - Tags prefixed with __test-
  * - Cleanup via sandbox manager
  *
+ * OPTIMIZATION (2025-12-26): Consolidated from 12 to 7 tests
+ * - Combines related operations into single tests to reduce task creation overhead
+ * - Estimated time savings: ~12.4 min → ~7 min (43% reduction)
+ *
  * @see docs/plans/2025-12-11-test-sandbox-design.md
  */
 
@@ -127,45 +131,53 @@ describe('Update Operations - Read-Back Validation', () => {
   }
 
   describe('Date Updates (Bug #11 Prevention)', () => {
-    it('should update dueDate and persist change', async () => {
-      // 1. Create task without due date
-      const taskId = await createTask('Test update dueDate');
+    it('should update dueDate, deferDate, and clear dates (consolidated)', async () => {
+      // CONSOLIDATED: Combines dueDate, deferDate, and clearDueDate tests
+      // Creates 1 task instead of 3, testing all date operations on the same task
 
-      // 2. Update due date
-      const updateResult = await updateTask(taskId, { dueDate: '2025-12-25' });
+      // 1. Create task without dates
+      const taskId = await createTask('Test date updates consolidated');
+
+      // 2. Update dueDate
+      let updateResult = await updateTask(taskId, { dueDate: '2025-12-25' });
       expect(updateResult.success).toBe(true);
 
-      // 3. Read back - VERIFY CHANGE PERSISTED
-      const task = await readTask(taskId);
+      // Verify dueDate persisted
+      let task = await readTask(taskId);
       expect(task.dueDate).toBeDefined();
-      const dueDateOnly = task.dueDate.split('T')[0];
-      expect(dueDateOnly).toBe('2025-12-25');
-    }, 120000);
+      expect(task.dueDate.split('T')[0]).toBe('2025-12-25');
 
-    it('should update deferDate and persist change', async () => {
-      const taskId = await createTask('Test update deferDate');
-
-      const updateResult = await updateTask(taskId, { deferDate: '2025-12-20' });
+      // 3. Update deferDate
+      updateResult = await updateTask(taskId, { deferDate: '2025-12-20' });
       expect(updateResult.success).toBe(true);
 
-      // Verify change persisted
-      const task = await readTask(taskId);
+      // Verify deferDate persisted (dueDate should still be set)
+      task = await readTask(taskId);
       expect(task.deferDate).toBeDefined();
-      const deferDateOnly = task.deferDate.split('T')[0];
-      expect(deferDateOnly).toBe('2025-12-20');
+      expect(task.deferDate.split('T')[0]).toBe('2025-12-20');
+      expect(task.dueDate.split('T')[0]).toBe('2025-12-25'); // Still set
+
+      // 4. Clear dueDate using clearDueDate flag
+      // Bug #14 Fix: Use clearDueDate boolean flag instead of dueDate: null
+      updateResult = await updateTask(taskId, { clearDueDate: true });
+      expect(updateResult.success).toBe(true);
+
+      // Verify dueDate was cleared
+      task = await readTask(taskId);
+      expect(task.dueDate).toBeUndefined();
+      expect(task.deferDate.split('T')[0]).toBe('2025-12-20'); // Still set
     }, 120000);
 
-    it('should update plannedDate and persist change (if database migrated)', async () => {
+    it('should update plannedDate (if database migrated)', async () => {
+      // KEPT SEPARATE: plannedDate requires database migration (OmniFocus 4.7+)
+      // If property is undefined/null, database hasn't been migrated - skip validation
       const taskId = await createTask('Test update plannedDate');
 
       const updateResult = await updateTask(taskId, { plannedDate: '2025-12-18' });
       expect(updateResult.success).toBe(true);
 
-      // Verify change persisted (or skip if database not migrated)
       const task = await readTask(taskId);
 
-      // plannedDate requires database migration (OmniFocus 4.7+)
-      // If property is undefined/null, database hasn't been migrated - skip validation
       if (task.plannedDate !== undefined && task.plannedDate !== null) {
         const plannedDateOnly = task.plannedDate.split('T')[0];
         expect(plannedDateOnly).toBe('2025-12-18');
@@ -173,22 +185,6 @@ describe('Update Operations - Read-Back Validation', () => {
         // Database not migrated - test passes but logs warning
         console.log('plannedDate not available - database may not be migrated for planned dates feature');
       }
-    }, 120000);
-
-    it('should clear dueDate using clearDueDate flag', async () => {
-      // Bug #14 Fix: Use clearDueDate boolean flag instead of dueDate: null
-      // OmniJS `task.dueDate = null` doesn't persist (API limitation)
-      // Solution: clearDueDate flag from git history (commit 78862c4)
-
-      // Create with date, then clear it using flag
-      const taskId = await createTask('Test clear dueDate', { dueDate: '2025-12-25' });
-
-      const updateResult = await updateTask(taskId, { clearDueDate: true });
-      expect(updateResult.success).toBe(true);
-
-      // Verify date was cleared
-      const task = await readTask(taskId);
-      expect(task.dueDate).toBeUndefined();
     }, 120000);
   });
 
@@ -215,26 +211,41 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).not.toContain(`${TEST_TAG_PREFIX}initial2`);
     }, 120000);
 
-    it('should support addTags (append to existing)', async () => {
+    it('should support addTags with deduplication (consolidated)', async () => {
+      // CONSOLIDATED: Combines addTags and addTags dedup tests
+      // Tests both append functionality and deduplication in one task
+
       // Create task with initial tags
-      const taskId = await createTask('Test addTags', {
+      const taskId = await createTask('Test addTags consolidated', {
         tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing1`, `${TEST_TAG_PREFIX}existing2`],
       });
 
-      // Add more tags
-      const updateResult = await updateTask(taskId, {
+      // Add new tags
+      let updateResult = await updateTask(taskId, {
         addTags: ['new1', 'new2'],
       });
       expect(updateResult.success).toBe(true);
 
-      // Verify tags appended (not replaced)
-      const task = await readTask(taskId);
+      // Verify tags appended
+      let task = await readTask(taskId);
       expect(task.tags).toContain(TEST_TAG);
       expect(task.tags).toContain(`${TEST_TAG_PREFIX}existing1`);
       expect(task.tags).toContain(`${TEST_TAG_PREFIX}existing2`);
       expect(task.tags).toContain(`${TEST_TAG_PREFIX}new1`);
       expect(task.tags).toContain(`${TEST_TAG_PREFIX}new2`);
       expect(task.tags.length).toBeGreaterThanOrEqual(5);
+
+      // Try to add tags that already exist (deduplication test)
+      updateResult = await updateTask(taskId, {
+        addTags: ['existing1', 'another-new'],
+      });
+      expect(updateResult.success).toBe(true);
+
+      // Verify no duplicates created
+      task = await readTask(taskId);
+      const existing1Count = task.tags.filter((t: string) => t === `${TEST_TAG_PREFIX}existing1`).length;
+      expect(existing1Count).toBe(1); // Should only appear once
+      expect(task.tags).toContain(`${TEST_TAG_PREFIX}another-new`);
     }, 120000);
 
     it('should support removeTags (filter out specified)', async () => {
@@ -263,60 +274,40 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).not.toContain(`${TEST_TAG_PREFIX}remove1`);
       expect(task.tags).not.toContain(`${TEST_TAG_PREFIX}remove2`);
     }, 120000);
-
-    it('should handle addTags with deduplication', async () => {
-      const taskId = await createTask('Test addTags dedup', {
-        tags: [TEST_TAG, `${TEST_TAG_PREFIX}existing`],
-      });
-
-      // Try to add tags that already exist
-      const updateResult = await updateTask(taskId, {
-        addTags: ['existing', 'new'],
-      });
-      expect(updateResult.success).toBe(true);
-
-      // Verify no duplicates created
-      const task = await readTask(taskId);
-      const existingCount = task.tags.filter((t: string) => t === `${TEST_TAG_PREFIX}existing`).length;
-      expect(existingCount).toBe(1); // Should only appear once
-      expect(task.tags).toContain(`${TEST_TAG_PREFIX}new`);
-    }, 120000);
   });
 
   describe('Basic Property Updates', () => {
-    it('should update note and persist change', async () => {
-      const taskId = await createTask('Test update note');
+    it('should update note, flagged, and estimatedMinutes (consolidated)', async () => {
+      // CONSOLIDATED: Combines note, flagged, and estimatedMinutes tests
+      // Tests all basic property updates on a single task
 
-      const updateResult = await updateTask(taskId, {
+      const taskId = await createTask('Test basic properties consolidated', { flagged: false });
+
+      // 1. Update note
+      let updateResult = await updateTask(taskId, {
         note: 'This is an updated note',
       });
       expect(updateResult.success).toBe(true);
 
-      // Verify note persisted
-      const task = await readTask(taskId);
+      let task = await readTask(taskId);
       expect(task.note).toBe('This is an updated note');
-    }, 120000);
 
-    it('should update flagged status and persist change', async () => {
-      const taskId = await createTask('Test update flagged', { flagged: false });
-
-      const updateResult = await updateTask(taskId, { flagged: true });
+      // 2. Update flagged status
+      updateResult = await updateTask(taskId, { flagged: true });
       expect(updateResult.success).toBe(true);
 
-      // Verify flagged persisted
-      const task = await readTask(taskId);
+      task = await readTask(taskId);
       expect(task.flagged).toBe(true);
-    }, 120000);
+      expect(task.note).toBe('This is an updated note'); // Still set
 
-    it('should update estimatedMinutes and persist change', async () => {
-      const taskId = await createTask('Test update estimatedMinutes');
-
-      const updateResult = await updateTask(taskId, { estimatedMinutes: 30 });
+      // 3. Update estimatedMinutes
+      updateResult = await updateTask(taskId, { estimatedMinutes: 30 });
       expect(updateResult.success).toBe(true);
 
-      // Verify estimatedMinutes persisted
-      const task = await readTask(taskId);
+      task = await readTask(taskId);
       expect(task.estimatedMinutes).toBe(30);
+      expect(task.flagged).toBe(true); // Still set
+      expect(task.note).toBe('This is an updated note'); // Still set
     }, 120000);
   });
 
