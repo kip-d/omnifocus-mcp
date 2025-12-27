@@ -1,205 +1,102 @@
-# Privacy and Logging - OmniFocus MCP Server
+# Privacy and Logging
 
-This document explains how the OmniFocus MCP server handles user data and ensures privacy-safe logging.
+## Principles
 
-## Privacy Principles
-
-1. **No data leaves your machine** - All operations are local to your Mac
-2. **Minimal logging** - Only what's needed for debugging and error analysis
-3. **Automatic redaction** - Sensitive fields are redacted from logs
-4. **Debug-only personal data** - User content only appears at DEBUG log level (off by default)
+1. **Local only** - No data leaves your Mac
+2. **Minimal logging** - Only what debugging requires
+3. **Automatic redaction** - Sensitive fields redacted
+4. **Debug-only content** - User data only at DEBUG level (off by default)
 
 ## What Gets Logged?
 
-### At INFO Level (Default)
+### INFO Level (Default)
 
-- ✅ Operation names and tool names
-- ✅ Error types and categories
-- ✅ Performance metrics (timing, counts)
-- ✅ System status (OmniFocus running, permissions granted)
-- ✅ Correlation IDs (for request tracking)
+- ✅ Operation/tool names, error types, performance metrics
+- ✅ System status, correlation IDs
 - ❌ **NO** task names, notes, or user content
 
-### At DEBUG Level (Opt-in)
+### DEBUG Level (Opt-in)
 
-- Includes user data BUT automatically redacted:
-  - Task/project/tag names → `[REDACTED]`
-  - Notes → `[REDACTED]`
-  - Script content → `[REDACTED]`
+User data included but redacted: names → `[REDACTED]`, notes → `[REDACTED]`, scripts → `[REDACTED]`
 
-### Error Metrics (Always Privacy-Safe)
+### Error Metrics (Privacy-Safe)
 
-Special `[ERROR_METRIC]` logs contain:
+`[ERROR_METRIC]` logs contain only error types and system info—no user data:
 
 ```json
-{
-  "timestamp": "2025-09-30T...",
-  "context": "ManageTaskTool",
-  "errorType": "SCRIPT_TIMEOUT",
-  "recoverable": true,
-  "correlationId": "abc123..."
-}
+{ "context": "ManageTaskTool", "errorType": "SCRIPT_TIMEOUT", "recoverable": true }
 ```
-
-**No user data** - only error types and system information.
 
 ## Redacted Fields
 
-The logger automatically redacts these field names:
-
-- `name` - task/project/tag names
-- `note`, `notes` - task notes
-- `taskName`, `projectName`, `tagName`
-- `title`
-- `script` - JXA script content
+`name`, `note`, `notes`, `taskName`, `projectName`, `tagName`, `title`, `script`
 
 ## Log Levels
 
-Set via environment variable:
-
 ```bash
-LOG_LEVEL=error  # Only errors (least verbose)
-LOG_LEVEL=warn   # Errors and warnings
-LOG_LEVEL=info   # Normal operation (default)
-LOG_LEVEL=debug  # Include user data (redacted)
+LOG_LEVEL=error  # Errors only
+LOG_LEVEL=warn   # Errors + warnings
+LOG_LEVEL=info   # Normal (default)
+LOG_LEVEL=debug  # User data (redacted)
 ```
 
-## Sharing Logs for Support
+## Sharing Logs
 
-**Safe to share:**
+**Safe:** INFO/ERROR level logs, `[ERROR_METRIC]` lines
 
-- Any logs at INFO or ERROR level
-- `[ERROR_METRIC]` lines (contain no user data)
-- Full logs if generated with `LOG_LEVEL=info` or higher
+**Careful:** DEBUG level logs—verify before sharing even though redacted
 
-**Be careful with:**
+### Log Locations
 
-- Logs generated with `LOG_LEVEL=debug`
-  - Even though redacted, verify before sharing
-  - Check for any `[REDACTED]` markers
+| Client | Path |
+|--------|------|
+| Claude Desktop | `~/Library/Logs/Claude/mcp*.log` |
+| Claude Code | `~/Library/Logs/claude-code/*.log` |
+| ChatGPT Desktop | stderr/stdout (or `log stream --process ChatGPT`) |
+| Custom | stderr by default |
 
-### Finding Your MCP Server Logs
-
-Log location depends on which MCP client you're using:
-
-**Claude Desktop (macOS):**
+### Extracting Error Metrics
 
 ```bash
-~/Library/Logs/Claude/mcp*.log
-```
-
-**Claude Code:**
-
-```bash
-~/Library/Logs/claude-code/*.log
-```
-
-**ChatGPT Desktop:**
-
-```bash
-# By default, logs are written to stderr/stdout
-# - If you launch ChatGPT Desktop from Terminal, check the terminal output
-# - If launched from Finder, logs go into the macOS unified log
-#   (view via Console.app or `log stream --process ChatGPT`)
-# - No ~/Library/Logs/ChatGPT directory is created unless you configure it
-```
-
-**Custom MCP Clients:**
-
-- Logs go to `stderr` by default
-- Check your client's documentation for log location
-
-### Extracting Error Metrics Only
-
-To share **only error statistics** (completely privacy-safe):
-
-**For Claude Desktop:**
-
-```bash
+# View errors
 grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | jq .
 
-# Or count error types:
-grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | \
-  jq -r '.errorType' | sort | uniq -c
+# Count by type
+grep ERROR_METRIC ~/Library/Logs/Claude/mcp*.log | jq -r '.errorType' | sort | uniq -c
 ```
 
-**For Claude Code:**
-
-```bash
-grep ERROR_METRIC ~/Library/Logs/claude-code/*.log | jq .
-```
-
-**For any client (if you know the log file):**
-
-```bash
-grep ERROR_METRIC /path/to/your/logs/*.log | jq .
-```
-
-Example output:
-
+Example output (no personal data):
 ```
    5 SCRIPT_TIMEOUT
    2 OMNIFOCUS_NOT_RUNNING
    1 PERMISSION_DENIED
 ```
 
-This shows **what went wrong** without any personal information.
-
 ## Analyzing Error Rates
-
-To measure if auto-recovery would help:
-
-```bash
-# Replace LOG_PATH with your client's log location from above
-
-# Total errors
-grep ERROR_METRIC $LOG_PATH/*.log | wc -l
-
-# Recoverable errors
-grep ERROR_METRIC $LOG_PATH/*.log | jq 'select(.recoverable == true)' | wc -l
-
-# Calculate percentage
-# If recoverable% > 10% → auto-recovery would help significantly
-```
-
-**Example for Claude Desktop users:**
 
 ```bash
 LOG_PATH=~/Library/Logs/Claude
+
+# Total errors
 grep ERROR_METRIC $LOG_PATH/mcp*.log | wc -l
+
+# Recoverable errors (if >10%, auto-recovery would help)
+grep ERROR_METRIC $LOG_PATH/mcp*.log | jq 'select(.recoverable == true)' | wc -l
 ```
 
-## Implementation Details
+## Implementation
 
-### Redaction Implementation
+| Component | File | Purpose |
+|-----------|------|---------|
+| Redaction | `src/utils/logger.ts` | `redactArgs()` recursively scans objects (max depth 6) |
+| Error types | `src/utils/error-taxonomy.ts` | Categorizes errors, marks recoverability |
 
-See `src/utils/logger.ts`:
+## Privacy Audit
 
-- `redactArgs()` function recursively scans objects
-- Deep redaction preserves structure for debugging
-- Maximum recursion depth of 6 to prevent pathological cases
+**September 2025:** Removed user data from INFO logs, added ERROR_METRIC, verified redaction.
 
-### Error Categorization
+**No known privacy issues.**
 
-See `src/utils/error-taxonomy.ts`:
+## Report Issues
 
-- All errors are categorized by type
-- Each type marked as recoverable or not
-- Used for metrics and auto-recovery decisions
-
-## Privacy Audit History
-
-**September 2025:**
-
-- Removed raw user data from INFO level logs in ManageTaskTool
-- Added ERROR_METRIC logging for privacy-safe telemetry
-- Changed sensitive logs from `logger.info()` to `logger.debug()`
-- Verified redaction working for all sensitive fields
-
-**No known privacy issues in current codebase.**
-
-## Questions?
-
-If you find any logs that contain user data inappropriately, please report as a security issue:
-
-- https://github.com/kip-d/omnifocus-mcp/security
+https://github.com/kip-d/omnifocus-mcp/security
