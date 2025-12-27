@@ -54,26 +54,28 @@ Now works:
 
 ---
 
-## 3. MCP Hot Reload for Development (2025-11-27)
+## 3. MCP Hot Reload for Development (2025-11-27) → ✅ SOLVED (Native Support)
 
 **Context:** When developing this MCP server, code changes require restarting Claude Code to pick up the new code.
 
-### Community Solution: mcp-hot-reload
+### Native Solution (Claude Code v1.0.64+)
 
-**Repository:** https://github.com/data-goblin/claude-code-mcp-reload
+**Command:** `/mcp reconnect <server_name>`
 
-A Python proxy wrapper that enables hot reloading of MCP servers during development.
+Restarts just the specified MCP server while maintaining conversation context.
 
-### Native Feature Requests
+**Development workflow:**
+1. Edit code in `src/`
+2. Run `npm run build`
+3. Run `/mcp reconnect omnifocus`
+4. Test changes immediately
 
-No built-in support yet. Open issues requesting this:
+**Alternative:** Use `/mcp` command and navigate to the server to reconnect via GUI.
 
-- [#2756](https://github.com/anthropics/claude-code/issues/2756) - `/reload-mcps` command
-- [#1026](https://github.com/anthropics/claude-code/issues/1026) - Reconnect MCP servers
+### Legacy Workarounds (No Longer Needed)
 
-### Current Workaround
-
-Without hot-reload, use `claude --resume` to restart Claude Code while preserving conversation context.
+- ~~Community proxy: mcp-hot-reload~~ - Native support is better
+- ~~`claude --resume`~~ - `/mcp reconnect` is faster and preserves more context
 
 ---
 
