@@ -181,22 +181,16 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 
 ## Tool Architecture
 
-15 self-contained tools with direct implementation (no delegation):
+4 unified tools (v3.0.0 Unified Builder API):
 
-- **Core:** tasks (8 modes), manage_task, projects, folders (10 ops), tags
-- **Analytics:** 5 GTD metric tools
-- **Utility:** export, perspectives, recurring, system
+| Tool | Purpose |
+|------|---------|
+| `omnifocus_read` | Query tasks, projects, tags, folders, perspectives |
+| `omnifocus_write` | Create, update, complete, delete tasks/projects |
+| `omnifocus_analyze` | Productivity stats, velocity, overdue, patterns |
+| `system` | Version, diagnostics, metrics |
 
-```typescript
-class ConsolidatedTool extends BaseTool {
-  async execute(args: ToolArgs): Promise<ToolResponse> {
-    switch (args.operation) {
-      case 'create': return await this.executeCreate(args);
-      case 'update': return await this.executeUpdate(args);
-    }
-  }
-}
-```
+Discriminated union schemas route to backend implementations.
 
 ---
 

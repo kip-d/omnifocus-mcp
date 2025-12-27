@@ -128,10 +128,9 @@ This bypasses shell `ARG_MAX` limits entirely through stdin piping.
 #### Helper Function Strategy
 
 ```typescript
-// ✅ Now safe to use comprehensive helpers
+// ✅ Safe to use unified helpers
 export const FULL_FEATURED_SCRIPT = `
-  ${getAllHelpers()}        // ~30KB - well within limits
-  ${getAnalyticsHelpers()}  // Additional complex helpers
+  ${getUnifiedHelpers()}  // ~16KB - well within limits
   // Your script logic here
 `;
 ```

@@ -11,7 +11,7 @@ For static template scripts, always use IIFE (Immediately Invoked Function Expre
 
 ```typescript
 export const EXAMPLE_SCRIPT = `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
 
   (() => {
     // Script logic here
@@ -28,7 +28,7 @@ For dynamic script generation with parameters, use direct function calls (not re
 ```typescript
 export function createExampleScript(param1: string, param2: any): string {
   return `
-  ${getMinimalHelpers()}
+  ${getUnifiedHelpers()}
 
   function performOperation(p1, p2) {
     // Script logic here
@@ -96,7 +96,7 @@ Before deploying any script generation function:
 - [ ] **No return statements outside functions** - Use direct function calls
 - [ ] **Proper IIFE wrapping** for template scripts
 - [ ] **Valid JavaScript syntax** - Test with `new Function(script)`
-- [ ] **Consistent helper imports** - Use `getMinimalHelpers()` when possible
+- [ ] **Consistent helper imports** - Use `getUnifiedHelpers()`
 - [ ] **Safe parameter passing** - Always use `JSON.stringify()` for parameters
 - [ ] **Error handling** - Include try/catch blocks in script logic
 - [ ] **Unit tests** - Verify both syntax and functionality

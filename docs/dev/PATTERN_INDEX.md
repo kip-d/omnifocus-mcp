@@ -49,8 +49,7 @@ grep -A 10 "bridgeSet\|bridgeGet" src/omnifocus/scripts/shared/
 
 | Need | Import |
 |------|--------|
-| Most scripts | `getUnifiedHelpers()` |
-| Size-critical | `getMinimalHelpers()` |
+| All scripts | `getUnifiedHelpers()` |
 | OmniJS operations | `getMinimalTagBridge()`, `getDateFieldsBridge()` |
 
 ---
