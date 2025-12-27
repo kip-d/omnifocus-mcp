@@ -33,3 +33,6 @@ diagnostic-*.json
 # Test output files (temporary JSON responses)
 output.json
 output_read.json
+
+# Generated process diagrams (regenerate with: dot -Tpng -Gdpi=120 file.dot -o file.png)
+.claude/processes/*.png

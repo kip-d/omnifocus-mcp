@@ -1,0 +1,217 @@
+// OmniFocus MCP Server - Claude Process Workflows
+//
+// To regenerate PNG:
+//   dot -Tpng -Gdpi=120 .claude/processes/CLAUDE-PROCESSES.dot -o .claude/processes/CLAUDE-PROCESSES.png
+//
+// Style Guide:
+//   ellipse      = entry points / states
+//   diamond      = decisions
+//   box          = actions to take
+//   plaintext    = commands to run
+//   octagon      = STOP/warnings (orange=caution, red=NEVER)
+//   doublecircle = completion states
+//   dotted edges = cross-process transitions
+
+digraph CLAUDE_OMNIFOCUS {
+    rankdir=LR;
+    compound=true;
+    node [fontsize=11];
+
+    // =========================================================
+    // CLUSTER: Critical Warnings
+    // =========================================================
+    subgraph cluster_warnings {
+        label="CRITICAL WARNINGS";
+        style=filled;
+        fillcolor=mistyrose;
+
+        "NEVER use .where()/.whose()" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+        "NEVER debug script before MCP test" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+        "NEVER assume bulk = multiple queries" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+        "NEVER skip pattern search" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+        "MEASURE before optimizing" [shape=octagon, style=filled, fillcolor=orange];
+        "Tags REQUIRE bridge" [shape=octagon, style=filled, fillcolor=orange];
+    }
+
+    // =========================================================
+    // CLUSTER: Understanding Check (from Jesse)
+    // =========================================================
+    subgraph cluster_understand {
+        label="0. UNDERSTAND REQUEST";
+        style=rounded;
+
+        "Request arrives" [shape=ellipse];
+        "Do I understand?" [shape=diamond];
+        "Ask specific questions" [shape=box];
+        "Will change >10 files?" [shape=diamond];
+        "STOP: Get permission" [shape=octagon, style=filled, fillcolor=orange];
+        "Proceed to search" [shape=doublecircle];
+
+        "Request arrives" -> "Do I understand?";
+        "Do I understand?" -> "Ask specific questions" [label="no"];
+        "Ask specific questions" -> "Do I understand?";
+        "Do I understand?" -> "Will change >10 files?" [label="yes"];
+        "Will change >10 files?" -> "STOP: Get permission" [label="yes"];
+        "Will change >10 files?" -> "Proceed to search" [label="no"];
+        "STOP: Get permission" -> "Request arrives" [label="denied"];
+        "STOP: Get permission" -> "Proceed to search" [label="approved"];
+    }
+
+    // =========================================================
+    // CLUSTER: Pre-Code Search (Before Writing ANY Code)
+    // =========================================================
+    subgraph cluster_pre_code {
+        label="1. BEFORE WRITING CODE";
+        style=rounded;
+
+        "Search shared helpers" [shape=box];
+        "grep -r 'keyword' src/shared/" [shape=plaintext, fontsize=9];
+        "Found pattern?" [shape=diamond];
+        "Read pattern COMPLETELY" [shape=box];
+        "Check PATTERN_INDEX.md" [shape=box];
+        "Ready to implement" [shape=doublecircle];
+
+        "Search shared helpers" -> "grep -r 'keyword' src/shared/";
+        "grep -r 'keyword' src/shared/" -> "Found pattern?";
+        "Found pattern?" -> "Read pattern COMPLETELY" [label="yes"];
+        "Found pattern?" -> "Check PATTERN_INDEX.md" [label="no"];
+        "Read pattern COMPLETELY" -> "Ready to implement";
+        "Check PATTERN_INDEX.md" -> "Ready to implement";
+    }
+
+    // =========================================================
+    // CLUSTER: Implementation (TDD via skill)
+    // =========================================================
+    subgraph cluster_implement {
+        label="1.5 IMPLEMENT (TDD)";
+        style=rounded;
+        fillcolor=lightcyan;
+
+        "Start implementing" [shape=ellipse];
+        "Use superpowers:test-driven-development" [shape=box, style=filled, fillcolor=lightblue];
+        "Red-Green-Refactor cycle" [shape=plaintext, fontsize=9];
+        "Feature complete" [shape=doublecircle];
+
+        "Start implementing" -> "Use superpowers:test-driven-development";
+        "Use superpowers:test-driven-development" -> "Red-Green-Refactor cycle";
+        "Red-Green-Refactor cycle" -> "Feature complete";
+    }
+
+    // =========================================================
+    // CLUSTER: JXA vs Bridge Decision
+    // =========================================================
+    subgraph cluster_jxa_bridge {
+        label="2. JXA vs BRIDGE DECISION";
+        style=rounded;
+
+        "Script needed" [shape=ellipse];
+        "Items > 100?" [shape=diamond];
+        "Needs tags/repetition?" [shape=diamond];
+        "Use streaming/pagination" [shape=box, style=filled, fillcolor=lightgreen];
+        "BRIDGE REQUIRED" [shape=octagon, style=filled, fillcolor=orange];
+        "Pure JXA OK" [shape=box, style=filled, fillcolor=lightgreen];
+        "Implementation ready" [shape=doublecircle];
+
+        "Script needed" -> "Items > 100?";
+        "Items > 100?" -> "Use streaming/pagination" [label="yes"];
+        "Items > 100?" -> "Needs tags/repetition?" [label="no"];
+        "Needs tags/repetition?" -> "BRIDGE REQUIRED" [label="yes"];
+        "Needs tags/repetition?" -> "Pure JXA OK" [label="no"];
+        "Use streaming/pagination" -> "Implementation ready";
+        "BRIDGE REQUIRED" -> "Implementation ready";
+        "Pure JXA OK" -> "Implementation ready";
+    }
+
+    // =========================================================
+    // CLUSTER: Being Stuck (from Jesse)
+    // =========================================================
+    subgraph cluster_stuck {
+        label="WHEN STUCK";
+        style=rounded;
+        fillcolor=lightyellow;
+
+        "I'm stuck" [shape=ellipse];
+        "Document the problem" [shape=box];
+        "Third attempt?" [shape=diamond];
+        "Say: I don't understand X" [shape=box, style=filled, fillcolor=lightblue];
+        "Remove half the code" [shape=box];
+        "Add debug output" [shape=box];
+        "Find working example" [shape=box];
+        "Unstuck" [shape=doublecircle];
+
+        "I'm stuck" -> "Document the problem";
+        "Document the problem" -> "Third attempt?";
+        "Third attempt?" -> "Say: I don't understand X" [label="yes"];
+        "Third attempt?" -> "Remove half the code" [label="no"];
+        "Say: I don't understand X" -> "Request arrives" [label="after help", style=dotted];
+        "Remove half the code" -> "Add debug output";
+        "Add debug output" -> "Find working example";
+        "Find working example" -> "I'm stuck" [label="still stuck"];
+        "Find working example" -> "Unstuck" [label="found it"];
+    }
+
+    // =========================================================
+    // CLUSTER: MCP-First Debugging Workflow
+    // =========================================================
+    subgraph cluster_debugging {
+        label="3. DEBUGGING (MCP-FIRST)";
+        style=rounded;
+
+        "Tool returns wrong data" [shape=ellipse];
+        "STOP: Don't open script" [shape=octagon, style=filled, fillcolor=orange];
+        "Test MCP tool call" [shape=box];
+        "echo '{...}' | node dist/index.js" [shape=plaintext, fontsize=9];
+        "Script output correct?" [shape=diamond];
+        "Fix WRAPPER not script" [shape=box, style=filled, fillcolor=pink];
+        "NOW open script" [shape=box];
+        "Issue resolved" [shape=doublecircle];
+
+        "Tool returns wrong data" -> "STOP: Don't open script";
+        "STOP: Don't open script" -> "Test MCP tool call";
+        "Test MCP tool call" -> "echo '{...}' | node dist/index.js";
+        "echo '{...}' | node dist/index.js" -> "Script output correct?";
+        "Script output correct?" -> "Fix WRAPPER not script" [label="yes"];
+        "Script output correct?" -> "NOW open script" [label="no"];
+        "Fix WRAPPER not script" -> "Issue resolved";
+        "NOW open script" -> "Issue resolved";
+    }
+
+    // =========================================================
+    // CLUSTER: Verification Before Completion
+    // =========================================================
+    subgraph cluster_verify {
+        label="4. VERIFICATION";
+        style=rounded;
+
+        "Ready to complete" [shape=ellipse];
+        "npm test" [shape=plaintext];
+        "Tests pass?" [shape=diamond];
+        "npm run build" [shape=plaintext];
+        "Build pass?" [shape=diamond];
+        "Fix issues" [shape=box];
+        "Task complete" [shape=doublecircle];
+
+        "Ready to complete" -> "npm test";
+        "npm test" -> "Tests pass?";
+        "Tests pass?" -> "npm run build" [label="yes"];
+        "Tests pass?" -> "Fix issues" [label="no"];
+        "npm run build" -> "Build pass?";
+        "Build pass?" -> "Task complete" [label="yes"];
+        "Build pass?" -> "Fix issues" [label="no"];
+        "Fix issues" -> "npm test";
+    }
+
+    // =========================================================
+    // Cross-process transitions (dotted lines)
+    // =========================================================
+    "Proceed to search" -> "Search shared helpers" [style=dotted];
+    "Ready to implement" -> "Start implementing" [style=dotted];
+    "Feature complete" -> "Script needed" [style=dotted, label="if script"];
+    "Feature complete" -> "Ready to complete" [style=dotted, label="if no script"];
+    "Implementation ready" -> "Ready to complete" [style=dotted];
+    "Task complete" -> "Request arrives" [style=dotted, label="next"];
+
+    // Stuck transitions
+    "npm test" -> "I'm stuck" [style=dotted, label="confused"];
+    "Unstuck" -> "Start implementing" [style=dotted];
+}

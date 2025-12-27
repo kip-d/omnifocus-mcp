@@ -2,6 +2,26 @@
 
 This file provides critical guidance to Claude Code (claude.ai/code) when working with this OmniFocus MCP server.
 
+## 🔄 Process Workflows (GraphViz DOT)
+
+**All process workflows are defined in:** `.claude/processes/CLAUDE-PROCESSES.dot`
+
+This DOT file contains executable process graphs for:
+- **Understand request** - "Do I understand?" loop + >10 files permission gate
+- **Pre-code search** - Search patterns before writing any code
+- **Implementation (TDD)** - Use `superpowers:test-driven-development` skill
+- **JXA vs Bridge decision tree** - Choose the right execution approach
+- **When stuck** - Third attempt rule: ask for help OR binary search debug
+- **MCP-first debugging** - Test integration before opening script files
+- **Verification** - Tests and build checks before completion
+- **Critical warnings** - Common mistakes to avoid
+
+**Required skill for implementation:** When implementing features or fixing bugs, invoke the `superpowers:test-driven-development` skill for the Red-Green-Refactor cycle.
+
+**Shape guide:** `ellipse`=entry, `diamond`=decision, `box`=action, `plaintext`=command, `octagon`=STOP/warning, `doublecircle`=completion
+
+---
+
 ## 📍 Complete Documentation Index
 
 **[docs/DOCS_MAP.md](docs/DOCS_MAP.md)** - Complete navigation index for all 85+ documentation files organized by
@@ -188,6 +208,8 @@ is designed for piping data to other tools, files, or external systems rather th
 
 # 🚨🚨🚨 STOP! Before Writing ANY Code 🚨🚨🚨
 
+> **DOT alternative:** See `cluster_pre_code` in `.claude/processes/CLAUDE-PROCESSES.dot`
+
 **This project has established patterns for common tasks. DON'T REINVENT THE WHEEL.**
 
 ### 1. Search for Existing Patterns FIRST
@@ -263,6 +285,8 @@ bridge for complex operations that JXA cannot handle.
 
 ## 🚨 BEFORE DEBUGGING - MANDATORY CHECKLIST
 
+> **DOT alternative:** See `cluster_debugging` in `.claude/processes/CLAUDE-PROCESSES.dot`
+
 **When encountering ANY issue, complete these steps IN ORDER:**
 
 □ **Step 1: Search PATTERNS.md**
@@ -298,6 +322,8 @@ grep -r "function_name" src/omnifocus/scripts/shared/  # Find helpers
 **This checklist saves 30+ minutes per issue by avoiding rediscovery of documented solutions.**
 
 ## 🚨 MANDATORY: Pre-Implementation Checklist
+
+> **DOT alternative:** See `cluster_pre_impl` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
 **BEFORE writing ANY new script or optimization, complete ALL steps:**
 
@@ -373,6 +399,8 @@ JXA is officially "legacy/sunset mode" per Omni Group. For new scripts, use the 
 ---
 
 ### For EXISTING Scripts: Decision Tree
+
+> **DOT alternative:** See `cluster_jxa_bridge` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
 **CRITICAL: Both JXA and Bridge have valid use cases. Choose based on CONTEXT, not just item count:**
 
@@ -586,6 +614,8 @@ If you see these in your plan, STOP and search for patterns:
 - Build before running: `npm run build`
 
 ## 🚨 CRITICAL: Systematic Debugging Workflow
+
+> **DOT alternative:** See `cluster_debugging` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
 **Before fixing ANY issues, consult `/docs/dev/DEBUGGING_WORKFLOW.md`** This document prevents the Fix → Lint → Build
 error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per
@@ -1021,6 +1051,8 @@ Success pattern: `[INFO] [tools] Executing tool → [INFO] stdin closed, exiting
 The graceful exit is NEVER an error - it's required MCP compliance!
 
 ## 🚨 Common Mistakes & How to Avoid Them
+
+> **DOT alternative:** See `cluster_warnings` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
 ### Mistake 1: "I'll optimize by reducing API calls"
 
