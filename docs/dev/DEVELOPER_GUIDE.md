@@ -1,108 +1,45 @@
-# Developer Guide - OmniFocus MCP Server
+# Developer Guide
 
-This guide is for developers who want to:
+For developers integrating or extending the OmniFocus MCP server.
 
-- Integrate this MCP server into their own tools
-- Understand the technical implementation
-- Call tools programmatically
-- Extend or modify the server
+**For end users:** See [GETTING_STARTED.md](../user/GETTING_STARTED.md).
 
-**For end users:** See [GETTING_STARTED.md](./GETTING_STARTED.md) instead.
+---
 
 ## Quick Reference
 
-- **[Complete API Reference](./API-REFERENCE-V2.md)** - All tools with schemas
-- **[Architecture](./ARCHITECTURE.md)** - Technical implementation details
-- **[Testing Guide](./REAL_LLM_TESTING.md)** - Testing with real LLMs
+| Doc | Content |
+|-----|---------|
+| [API-REFERENCE-V2.md](./API-REFERENCE-V2.md) | All tools with schemas |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Technical implementation |
+| [PATTERNS.md](./PATTERNS.md) | Symptom → solution lookup |
+
+---
 
 ## Tool Call Examples
-
-All examples use JSON format for programmatic tool calls. These are what the MCP protocol sends, not what users type.
 
 ### Query Tasks
 
 ```javascript
-// Get inbox tasks (not assigned to any project)
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "inbox",
-    "limit": "25",
-    "details": "false"
-  }
-}
+// Inbox tasks
+{ "tool": "tasks", "arguments": { "mode": "inbox", "limit": "25" } }
 
-// Alternative: Filter for inbox using project: null
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "all",
-    "project": "null",  // or null or ""
-    "limit": "25"
-  }
-}
+// Today's tasks
+{ "tool": "tasks", "arguments": { "mode": "today", "limit": "25" } }
 
-// Get today's tasks
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "today",
-    "limit": "25",
-    "details": "false"
-  }
-}
+// Search
+{ "tool": "tasks", "arguments": { "mode": "search", "search": "budget", "limit": "50" } }
 
-// Search tasks
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "search",
-    "search": "budget",
-    "limit": "50"
-  }
-}
-
-// Get overdue tasks
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "overdue",
-    "limit": "100"
-  }
-}
-
-// Get available tasks (ready to work on)
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "available",
-    "limit": "25"
-  }
-}
-
-// Advanced filtering with operators
+// Advanced filtering
 {
   "tool": "tasks",
   "arguments": {
     "mode": "all",
     "filters": {
-      "tags": {
-        "operator": "OR",
-        "values": ["urgent", "important"]
-      },
-      "dueDate": {
-        "operator": "<=",
-        "value": "2025-10-15"
-      },
-      "estimatedMinutes": {
-        "operator": "<=",
-        "value": 30
-      }
+      "tags": { "operator": "OR", "values": ["urgent", "important"] },
+      "dueDate": { "operator": "<=", "value": "2025-10-15" }
     },
-    "sort": [
-      { "field": "dueDate", "direction": "asc" },
-      { "field": "flagged", "direction": "desc" }
-    ],
+    "sort": [{ "field": "dueDate", "direction": "asc" }],
     "limit": "50"
   }
 }
@@ -111,96 +48,36 @@ All examples use JSON format for programmatic tool calls. These are what the MCP
 ### Manage Tasks
 
 ```javascript
-// Create task in inbox
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "create",
-    "name": "Review Q4 budget",
-    "note": "Include projections for next year"
-  }
-}
+// Create in inbox
+{ "tool": "manage_task", "arguments": { "operation": "create", "name": "Review Q4 budget" } }
 
-// Create task with full details
+// Create with details
 {
   "tool": "manage_task",
   "arguments": {
     "operation": "create",
-    "name": "Send proposal to client",
-    "projectId": "abc123xyz",
+    "name": "Send proposal",
+    "projectId": "abc123",
     "dueDate": "2025-01-15 17:00",
-    "deferDate": "2025-01-10 09:00",
     "tags": ["work", "urgent"],
-    "estimatedMinutes": "30",
-    "flagged": "true",
-    "note": "Use Q4 template"
+    "flagged": "true"
   }
 }
 
-// Update task
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "update",
-    "taskId": "taskId123",
-    "flagged": "true",
-    "dueDate": "2025-01-20 17:00"
-  }
-}
+// Update, complete, delete
+{ "tool": "manage_task", "arguments": { "operation": "update", "taskId": "id123", "flagged": "true" } }
+{ "tool": "manage_task", "arguments": { "operation": "complete", "taskId": "id123" } }
+{ "tool": "manage_task", "arguments": { "operation": "delete", "taskId": "id123" } }
 
-// Complete task
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "complete",
-    "taskId": "taskId123"
-  }
-}
-
-// Delete task
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "delete",
-    "taskId": "taskId123"
-  }
-}
-
-// Bulk complete by IDs
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "bulk_complete",
-    "taskIds": ["id1", "id2", "id3"]
-  }
-}
-
-// Bulk complete by criteria
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "bulk_complete",
-    "bulkCriteria": {
-      "tags": ["quick-win"],
-      "completed": false
-    }
-  }
-}
+// Bulk complete
+{ "tool": "manage_task", "arguments": { "operation": "bulk_complete", "taskIds": ["id1", "id2"] } }
 ```
 
-### Project Operations
+### Projects
 
 ```javascript
-// List projects
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "list",
-    "status": "active",
-    "limit": "50",
-    "details": "true"
-  }
-}
+// List active projects
+{ "tool": "projects", "arguments": { "operation": "list", "status": "active", "details": "true" } }
 
 // Create project
 {
@@ -209,67 +86,21 @@ All examples use JSON format for programmatic tool calls. These are what the MCP
     "operation": "create",
     "name": "Website Redesign",
     "sequential": "true",
-    "folder": "Work",
-    "note": "Complete by Q2",
-    "tags": ["web", "priority"]
-  }
-}
-
-// Update project
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "update",
-    "projectId": "projId123",
-    "flagged": "true",
-    "dueDate": "2025-03-31"
-  }
-}
-
-// Get projects needing review
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "review",
-    "limit": "20"
+    "folder": "Work"
   }
 }
 ```
 
 ### Batch Creation
 
-Create multiple projects and tasks atomically with hierarchical relationships:
-
 ```javascript
 {
   "tool": "batch_create",
   "arguments": {
     "items": [
-      {
-        "tempId": "proj1",
-        "type": "project",
-        "name": "Vacation Planning",
-        "sequential": "true"
-      },
-      {
-        "tempId": "task1",
-        "parentTempId": "proj1",
-        "type": "task",
-        "name": "Book flights",
-        "dueDate": "2025-02-01"
-      },
-      {
-        "tempId": "task2",
-        "parentTempId": "proj1",
-        "type": "task",
-        "name": "Reserve hotel"
-      },
-      {
-        "tempId": "subtask1",
-        "parentTempId": "task1",
-        "type": "task",
-        "name": "Compare prices"
-      }
+      { "tempId": "proj1", "type": "project", "name": "Vacation Planning", "sequential": "true" },
+      { "tempId": "task1", "parentTempId": "proj1", "type": "task", "name": "Book flights" },
+      { "tempId": "task2", "parentTempId": "proj1", "type": "task", "name": "Reserve hotel" }
     ],
     "createSequentially": "true",
     "atomicOperation": "true"
@@ -277,759 +108,169 @@ Create multiple projects and tasks atomically with hierarchical relationships:
 }
 ```
 
-### Smart Capture - Parse Meeting Notes
+### Tags & Folders
 
 ```javascript
-// Extract action items from meeting notes
-{
-  "tool": "parse_meeting_notes",
-  "arguments": {
-    "input": "Meeting Notes:\n- Send proposal to client by Friday\n- Call Sarah about budget\n- Review Q4 metrics before next week",
-    "returnFormat": "preview",
-    "extractMode": "action_items",
-    "suggestTags": "true",
-    "suggestDueDates": "true",
-    "suggestEstimates": "true",
-    "suggestProjects": "false",
-    "groupByProject": "false"
-  }
-}
-
-// Returns structured tasks with:
-// - Extracted task names
-// - Detected due dates ("by Friday" → date)
-// - Context tags (@phone, @computer, @urgent, etc.)
-// - Duration estimates
-// - Confidence scores
-
-// Use batch_ready format for direct creation
-{
-  "tool": "parse_meeting_notes",
-  "arguments": {
-    "input": "Meeting notes here...",
-    "returnFormat": "batch_ready",
-    "extractMode": "both",
-    "suggestTags": "true",
-    "suggestDueDates": "true"
-  }
-}
-// Returns format compatible with batch_create tool
-```
-
-### Workflow Analysis
-
-Deep dive into your GTD system health and efficiency:
-
-```javascript
-// Quick daily workflow check
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "quick",
-    "focusAreas": ["productivity", "bottlenecks"],
-    "includeRawData": "false",
-    "maxInsights": "10"
-  }
-}
-// Returns: Quick insights about productivity and current bottlenecks (~5-10 seconds)
-
-// Standard weekly review
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "standard",
-    "focusAreas": ["productivity", "workload", "project_health"],
-    "includeRawData": "false",
-    "maxInsights": "15"
-  }
-}
-// Returns: Comprehensive workflow health report with insights, patterns, and recommendations (~15-30 seconds)
-
-// Deep monthly analysis
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "deep",
-    "focusAreas": ["productivity", "workload", "project_health", "time_patterns", "bottlenecks", "opportunities"],
-    "includeRawData": "false",
-    "maxInsights": "25"
-  }
-}
-// Returns: Full workflow analysis with detailed patterns, bottlenecks, and optimization opportunities (~30-60 seconds)
-
-// Troubleshooting workflow issues (with raw data for LLM analysis)
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "standard",
-    "focusAreas": ["bottlenecks", "project_health"],
-    "includeRawData": "true",
-    "maxInsights": "20"
-  }
-}
-// Returns: Analysis focused on bottlenecks with raw task/project data for deeper investigation
-
-// Targeted productivity analysis
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "standard",
-    "focusAreas": ["productivity", "time_patterns"],
-    "includeRawData": "false",
-    "maxInsights": "15"
-  }
-}
-// Returns: Insights about when and how you complete tasks, productivity patterns
-```
-
-**Response Structure:**
-
-```json
-{
-  "success": true,
-  "operation": "workflow_analysis",
-  "title": "Workflow Analysis Results",
-  "summary": [
-    "Workflow health score: 78/100",
-    "Found 12 key patterns in your workflow",
-    "Recommended: Review 3 stagnant projects"
-  ],
-  "data": {
-    "analysis": {
-      "depth": "standard",
-      "focusAreas": ["productivity", "workload", "bottlenecks"],
-      "timestamp": "2025-10-14T12:00:00Z"
-    },
-    "insights": [
-      "You complete most tasks in the morning (80% before 12pm)",
-      "3 projects haven't had activity in 30+ days",
-      "Average task completion time has increased 20% this month"
-    ],
-    "patterns": [
-      {
-        "type": "completion_time",
-        "description": "Morning productivity peak",
-        "impact": "high"
-      },
-      {
-        "type": "project_stagnation",
-        "description": "3 inactive projects",
-        "impact": "medium"
-      }
-    ],
-    "recommendations": [
-      "Schedule complex tasks before noon to leverage peak productivity",
-      "Review or archive stagnant projects to reduce mental overhead"
-    ],
-    "metadata": {
-      "totalTasks": 245,
-      "totalProjects": 18,
-      "score": 78,
-      "dataPoints": 12
-    }
-  },
-  "metadata": {
-    "analysis_depth": "standard",
-    "focus_areas": ["productivity", "workload", "bottlenecks"],
-    "from_cache": false,
-    "execution_time_ms": 18432
-  }
-}
-```
-
-**Use Cases:**
-
-- **GTD Weekly Review**: Use `standard` depth with all focus areas to review your workflow health
-- **Daily Check-in**: Use `quick` depth focused on productivity and bottlenecks
-- **Troubleshooting**: Use `standard` or `deep` with `includeRawData: true` when you feel stuck
-- **Optimization**: Use `deep` analysis before major planning sessions or quarterly reviews
-- **Pattern Discovery**: Focus on `time_patterns` and `opportunities` to find workflow improvements
-
-**Performance Notes:**
-
-- Cached for 2 hours (analysis is computationally expensive)
-- `quick` depth: ~5-10 seconds
-- `standard` depth: ~15-30 seconds
-- `deep` depth: ~30-60 seconds
-- `includeRawData: true` increases response size significantly (for LLM analysis)
-
-### Tag Management
-
-```javascript
-// List all tags (fast, names only)
-{
-  "tool": "tags",
-  "arguments": {
-    "operation": "list",
-    "sortBy": "name",
-    "includeEmpty": "false",
-    "includeUsageStats": "false",
-    "includeTaskCounts": "false",
-    "fastMode": "false",
-    "namesOnly": "true"
-  }
-}
-
-// List active tags with usage stats
-{
-  "tool": "tags",
-  "arguments": {
-    "operation": "active",
-    "sortBy": "usage",
-    "includeEmpty": "false",
-    "includeUsageStats": "true",
-    "includeTaskCounts": "true",
-    "fastMode": "false",
-    "namesOnly": "false"
-  }
-}
+// List tags
+{ "tool": "tags", "arguments": { "operation": "list", "namesOnly": "true" } }
 
 // Create tag
-{
-  "tool": "tags",
-  "arguments": {
-    "operation": "manage",
-    "action": "create",
-    "tagName": "urgent"
-  }
-}
+{ "tool": "tags", "arguments": { "operation": "manage", "action": "create", "tagName": "urgent" } }
 
-// Create nested tag
-{
-  "tool": "tags",
-  "arguments": {
-    "operation": "manage",
-    "action": "create",
-    "tagName": "meetings",
-    "parentTagName": "work"
-  }
-}
-
-// Rename tag
-{
-  "tool": "tags",
-  "arguments": {
-    "operation": "manage",
-    "action": "rename",
-    "tagName": "urgent",
-    "newName": "high-priority"
-  }
-}
+// List folders
+{ "tool": "folders", "arguments": { "operation": "list", "includeProjects": "true" } }
 ```
 
-### Folder Management
-
-```javascript
-// List all folders
-{
-  "tool": "folders",
-  "arguments": {
-    "operation": "list",
-    "includeProjects": "true",
-    "includeSubfolders": "true"
-  }
-}
-
-// Get specific folder
-{
-  "tool": "folders",
-  "arguments": {
-    "operation": "get",
-    "folderId": "folderId123"
-  }
-}
-
-// Create folder
-{
-  "tool": "folders",
-  "arguments": {
-    "operation": "create",
-    "name": "Personal",
-    "parentFolderId": null
-  }
-}
-
-// Create nested folder
-{
-  "tool": "folders",
-  "arguments": {
-    "operation": "create",
-    "name": "Home Projects",
-    "parentFolderId": "personalFolderId"
-  }
-}
-```
-
-### Perspectives
-
-```javascript
-// List all perspectives
-{
-  "tool": "perspectives",
-  "arguments": {
-    "operation": "list",
-    "includeFilterRules": "false",
-    "sortBy": "name"
-  }
-}
-
-// Query a specific perspective
-{
-  "tool": "perspectives",
-  "arguments": {
-    "operation": "query",
-    "perspectiveName": "Today",
-    "limit": "50",
-    "includeDetails": "true",
-    "formatOutput": "true",
-    "groupBy": "project",
-    "includeMetadata": "true"
-  }
-}
-```
-
-### Analytics & Insights
+### Analytics
 
 ```javascript
 // Productivity stats
-{
-  "tool": "productivity_stats",
-  "arguments": {
-    "period": "week",
-    "includeProjectStats": "true",
-    "includeTagStats": "true"
-  }
-}
-
-// Task velocity
-{
-  "tool": "task_velocity",
-  "arguments": {
-    "days": "30",
-    "groupBy": "day",
-    "includeWeekends": "true"
-  }
-}
-
-// Analyze overdue tasks
-{
-  "tool": "analyze_overdue",
-  "arguments": {
-    "includeRecentlyCompleted": "true",
-    "groupBy": "project",
-    "limit": "50"
-  }
-}
+{ "tool": "productivity_stats", "arguments": { "period": "week" } }
 
 // Workflow analysis
-{
-  "tool": "workflow_analysis",
-  "arguments": {
-    "analysisDepth": "standard",
-    "focusAreas": "all",
-    "includeRawData": "false",
-    "maxInsights": "10"
-  }
-}
-
-// Pattern analysis
-{
-  "tool": "analyze_patterns",
-  "arguments": {
-    "patterns": ["duplicates", "dormant_projects", "deadline_health"],
-    "options": "{}"
-  }
-}
+{ "tool": "workflow_analysis", "arguments": { "analysisDepth": "standard", "focusAreas": ["productivity", "bottlenecks"] } }
 ```
 
-### Export Data
+### System
 
 ```javascript
-// Export tasks to JSON
-{
-  "tool": "export",
-  "arguments": {
-    "type": "tasks",
-    "format": "json",
-    "filter": {
-      "completed": false,
-      "flagged": true
-    },
-    "fields": ["id", "name", "dueDate", "project", "tags"]
-  }
-}
-
-// Export all active projects
-{
-  "tool": "export",
-  "arguments": {
-    "type": "projects",
-    "format": "csv",
-    "includeCompleted": false,
-    "includeProjectStats": true
-  }
-}
-
-// Complete database export
-{
-  "tool": "export",
-  "arguments": {
-    "type": "all",
-    "format": "json",
-    "outputDirectory": "/path/to/export",
-    "includeCompleted": false
-  }
-}
+{ "tool": "system", "arguments": { "operation": "version" } }
+{ "tool": "system", "arguments": { "operation": "diagnostics" } }
+{ "tool": "system", "arguments": { "operation": "metrics", "metricsType": "detailed" } }
 ```
 
-### System Tools
+---
 
-```javascript
-// Get version info
-{
-  "tool": "system",
-  "arguments": {
-    "operation": "version",
-    "testScript": "",
-    "metricsType": "summary"
-  }
-}
-
-// Run diagnostics
-{
-  "tool": "system",
-  "arguments": {
-    "operation": "diagnostics",
-    "testScript": "",
-    "metricsType": "summary"
-  }
-}
-
-// Get performance metrics
-{
-  "tool": "system",
-  "arguments": {
-    "operation": "metrics",
-    "testScript": "",
-    "metricsType": "detailed"
-  }
-}
-```
-
-## Important Implementation Notes
+## Implementation Notes
 
 ### Date Formats
 
-All date parameters accept:
-
-- `"YYYY-MM-DD"` - Date only (smart defaults: due=5pm, defer=8am)
-- `"YYYY-MM-DD HH:mm"` - Date and time in local timezone
-
-Basic natural language is supported:
-
-- `"today"`, `"tomorrow"` work
-- Complex phrases like "the 3rd Thursday after next week" should be converted to YYYY-MM-DD by the LLM first
+| Format | Example | Default Time |
+|--------|---------|--------------|
+| `YYYY-MM-DD` | `2025-01-15` | Due: 5pm, Defer: 8am |
+| `YYYY-MM-DD HH:mm` | `2025-01-15 17:00` | As specified |
 
 ### MCP Type Coercion
 
-**Critical:** Claude Desktop converts all parameters to strings during transport.
-
-All tool schemas handle both string and native types:
+Claude Desktop converts all parameters to strings. Schemas handle both:
 
 ```typescript
-// Schema handles both
-limit: z.union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+limit: z.union([z.number(), z.string().transform(v => parseInt(v, 10))])
   .pipe(z.number().min(1).max(200))
   .default(25);
 ```
 
-When testing:
+### Cache TTLs
 
-- Direct Node.js calls: Use native types
-- Claude Desktop calls: Everything becomes strings
+| Data | TTL |
+|------|-----|
+| Tasks | 30 seconds |
+| Projects | 5 minutes |
+| Tags | 5 minutes |
+| Analytics | 1 hour |
 
-### Parameter Defaults
+Cache invalidates automatically on writes.
 
-Most parameters have sensible defaults:
-
-- `limit`: 25 (tasks), 50 (projects)
-- `details`: false (for performance)
-- `completed`: false (exclude completed items)
-
-### Performance Considerations
-
-- **Field selection**: Use `fields` parameter to reduce payload
-- **Skip analysis**: Set `skipAnalysis: true` for faster queries
-- **Appropriate limits**: Don't request more data than needed
-- **Fast modes**: Use `fastMode`, `namesOnly` options when available
-
-### Cache Behavior
-
-The server uses TTL-based caching:
-
-- Tasks: 30 seconds
-- Projects: 5 minutes
-- Tags: 5 minutes
-- Analytics: 1 hour
-
-Cache automatically invalidates on write operations. For testing, changing any parameter creates a new cache key.
+---
 
 ## Testing
 
-### CLI Testing
-
 ```bash
-# Initialize server
+# CLI test
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
 
-# Call a tool
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tasks","arguments":{"mode":"today","limit":"3"}}}' | node dist/index.js
-```
-
-### MCP Inspector
-
-```bash
+# MCP Inspector
 npx @modelcontextprotocol/inspector dist/index.js
-```
 
-Interactive tool for testing all MCP functionality.
-
-### Integration Tests
-
-```bash
+# Tests
 npm test                  # Unit tests
-npm run test:integration  # Integration tests with real OmniFocus
+npm run test:integration  # Integration tests
 ```
+
+---
 
 ## Architecture Overview
 
-### Key Components
-
-- **Tools** (`src/tools/`): MCP tool implementations
-- **OmniFocus Scripts** (`src/omnifocus/scripts/`): JXA scripts for OmniFocus API
-- **Cache** (`src/cache/`): TTL-based caching layer
-- **Bridge** (`src/omnifocus/bridge/`): JXA ↔ OmniJS bridge
-
-### Execution Flow
-
 ```
-MCP Client → MCP Server → Tool → Cache Check → JXA Script → OmniFocus
-                                      ↓
-                                   Return cached
+MCP Client → MCP Server → Tool → Cache → JXA Script → OmniFocus
 ```
 
-### JXA + Bridge Approach
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Tools | `src/tools/` | MCP tool implementations |
+| Scripts | `src/omnifocus/scripts/` | JXA scripts |
+| Cache | `src/cache/` | TTL-based caching |
+| Bridge | `src/omnifocus/bridge/` | JXA ↔ OmniJS bridge |
 
-The server uses a hybrid approach:
+**Execution model:** Pure JXA for simple ops, JXA + Bridge for complex ops (tags, bulk, repetition).
 
-- **Pure JXA**: Simple operations (<100 items)
-- **JXA + Bridge**: Complex operations, bulk operations (>100 items), tag assignment, repetition rules
+---
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for complete details.
+## Response Format
 
-## Response Format Standards
-
-The codebase uses a **two-layer response system** that provides type safety from script execution through MCP tool
-responses.
-
-### Layer 1: ScriptResult (Script Execution)
-
-**File:** `src/omnifocus/script-result-types.ts`
-
-Used by JXA scripts and the `OmniAutomation.executeJson()` method. This is a discriminated union that eliminates
-scattered error checking.
+### ScriptResult (Layer 1 - Script Execution)
 
 ```typescript
-// The discriminated union
-type ScriptResult<T = unknown> = ScriptSuccess<T> | ScriptError;
+type ScriptResult<T> = ScriptSuccess<T> | ScriptError;
 
-interface ScriptSuccess<T = unknown> {
-  success: true;
-  data: T;
-}
-
-interface ScriptError {
-  success: false;
-  error: string;
-  context?: string;
-  details?: unknown;
-  stack?: string;
-}
-```
-
-**Type Guards:**
-
-```typescript
-import { isScriptSuccess, isScriptError } from '../omnifocus/script-result-types.js';
-
+// Usage
 const result = await omniAutomation.executeJson<TaskData>(script);
-
 if (isScriptSuccess(result)) {
-  // TypeScript knows result.data exists and is TaskData
   console.log(result.data);
 } else {
-  // TypeScript knows result.error exists
   console.error(result.error, result.context);
 }
 ```
 
-**Factory Functions:**
-
-```typescript
-import { createScriptSuccess, createScriptError } from '../omnifocus/script-result-types.js';
-
-// Success
-return createScriptSuccess({ tasks: [...], count: 10 });
-
-// Error
-return createScriptError(
-  'Task not found',           // error message
-  'delete_task',              // context (operation name)
-  { taskId: 'abc123' },       // details
-  error.stack                 // stack trace
-);
-```
-
-### Layer 2: StandardResponseV2 (MCP Tool Response)
-
-**File:** `src/utils/response-format.ts`
-
-Used by MCP tools to format responses for LLM consumption. Optimized for fast LLM processing with summary-first design.
+### StandardResponseV2 (Layer 2 - MCP Response)
 
 ```typescript
 interface StandardResponseV2<T> {
-  // Status - always first for fast parsing
   success: boolean;
-
-  // Quick summary for LLM (always second for fastest processing)
-  summary?: TaskSummary | ProjectSummary | AnalyticsSummary;
-
-  // Main payload (may be truncated/limited)
+  summary?: TaskSummary | ProjectSummary;
   data: T;
-
-  // Full metadata with performance metrics
   metadata: StandardMetadataV2;
-
-  // Error handling (only present on failure)
-  error?: {
-    code: string;
-    message: string;
-    suggestion?: string; // Help LLM fix the issue
-    details?: unknown;
-  };
-}
-
-interface StandardMetadataV2 {
-  operation: string;
-  timestamp: string;
-  from_cache: boolean;
-  query_time_ms?: number;
-  total_count?: number;
-  returned_count?: number;
-  has_more?: boolean;
-  // ... additional fields
+  error?: { code: string; message: string; suggestion?: string; };
 }
 ```
 
-**Factory Functions:**
+**Factory functions:**
+- `createSuccessResponseV2()` - Basic success
+- `createErrorResponseV2()` - Error with suggestion
+- `createListResponseV2()` - Auto-generates summary
+- `createTaskResponseV2()` - Task-specific
+
+---
+
+## Extending the Server
+
+### Adding a Tool
+
+1. Create `src/tools/your-tool/YourTool.ts`
+2. Extend `BaseTool`
+3. Implement schema and execute method
+4. Register in `src/tools/index.ts`
+
+### Adding JXA Scripts
+
+1. Create script in `src/omnifocus/scripts/`
+2. Export as template string
+3. Use `getUnifiedHelpers()` as needed
+4. Test with both direct execution and Claude Desktop
+
+### Cache Usage
 
 ```typescript
-import {
-  createSuccessResponseV2,
-  createErrorResponseV2,
-  createListResponseV2,
-  createTaskResponseV2,
-  createAnalyticsResponseV2,
-} from '../utils/response-format.js';
-
-// Basic success
-return createSuccessResponseV2('list_tasks', data, summary, { query_time_ms: 150 });
-
-// List response (auto-generates summary)
-return createListResponseV2('list_tasks', tasks, 'tasks', { from_cache: true });
-
-// Task-specific (includes insights, preview, truncation)
-return createTaskResponseV2('query_tasks', tasks, { query_time_ms: 200 });
-
-// Error response
-return createErrorResponseV2(
-  'create_task', // operation
-  'VALIDATION_ERROR', // error code
-  'Task name is required', // message
-  'Provide a name parameter', // suggestion for LLM
-  { field: 'name' }, // details
+const result = await this.cache.get(
+  cacheKey,
+  async () => executeScript(),
+  300000  // 5 minutes
 );
 ```
 
-### When to Use Each Layer
+---
 
-| Layer                   | Where                      | Purpose                                 |
-| ----------------------- | -------------------------- | --------------------------------------- |
-| `ScriptResult<T>`       | Inside tool implementation | Handle JXA script execution results     |
-| `StandardResponseV2<T>` | Tool's return value        | Format response for MCP/LLM consumption |
-
-**Typical flow in a tool:**
-
-```typescript
-async executeValidated(args: Input): Promise<StandardResponseV2<Output>> {
-  const timer = new OperationTimerV2();
-
-  // Execute script - returns ScriptResult
-  const scriptResult = await this.omniAutomation.executeJson<ScriptData>(script);
-
-  // Handle script-level errors
-  if (isScriptError(scriptResult)) {
-    return createErrorResponseV2(
-      'operation_name',
-      'SCRIPT_ERROR',
-      scriptResult.error,
-      'Check OmniFocus is running',
-      scriptResult.details
-    );
-  }
-
-  // Transform and return MCP response
-  const transformed = this.transformData(scriptResult.data);
-  return createSuccessResponseV2('operation_name', transformed, summary, timer.toMetadata());
-}
-```
-
-### Summary Types
-
-The response format includes specialized summary types for different data:
-
-- **TaskSummary** - Includes breakdown (overdue, due_today, flagged, etc.), key_insights, preview
-- **ProjectSummary** - Includes active/on_hold/completed counts, needs_review, bottlenecks
-- **AnalyticsSummary** - Includes analysis_type, key_findings, recommendations, health_score
-
-These are auto-generated by `generateTaskSummary()` and `generateProjectSummary()` helpers.
-
-### Performance Utilities
-
-```typescript
-// Timer for measuring operation duration
-const timer = new OperationTimerV2();
-// ... do work ...
-const metadata = timer.toMetadata(); // { query_time_ms: 150 }
-
-// Truncation for large responses
-const { data, truncation } = truncateResponse(largeArray, CHARACTER_LIMIT);
-if (truncation?.truncated) {
-  metadata.truncation_message = truncation.message;
-}
-```
-
-### Best Practices
-
-1. **Always use type guards** for ScriptResult - never access `.data` without checking `.success`
-2. **Include suggestions** in error responses - helps LLM self-correct
-3. **Use factory functions** - don't construct response objects manually
-4. **Include timing metadata** - helps identify performance issues
-5. **Generate summaries** for list operations - LLMs process these faster than raw data
-
-## Common Patterns
-
-### Error Handling
+## Error Handling
 
 All tools return structured errors:
 
@@ -1038,82 +279,17 @@ All tools return structured errors:
   "error": "SCRIPT_ERROR",
   "message": "Failed to execute OmniFocus script",
   "errorType": "TIMEOUT",
-  "recoverable": true,
-  "details": { ... }
+  "recoverable": true
 }
 ```
 
-See [Error Taxonomy](./TROUBLESHOOTING.md) for all error types.
+See [TROUBLESHOOTING.md](../user/TROUBLESHOOTING.md) for error types.
 
-### Correlation IDs
-
-All operations include correlation IDs for tracing:
-
-```javascript
-// Check logs for this ID
-[INFO] [tools] Executing tool: tasks [correlationId: abc-123-xyz]
-```
-
-### Performance Monitoring
-
-Enable detailed metrics:
-
-```javascript
-{
-  "tool": "system",
-  "arguments": {
-    "operation": "metrics",
-    "metricsType": "detailed"
-  }
-}
-```
-
-## Extending the Server
-
-### Adding a New Tool
-
-1. Create tool file in `src/tools/your-tool/YourTool.ts`
-2. Extend `BaseTool` class
-3. Implement schema and execute method
-4. Register in `src/tools/index.ts`
-
-See existing tools for patterns.
-
-### Adding JXA Scripts
-
-1. Create script in `src/omnifocus/scripts/`
-2. Export as template string
-3. Use `getAllHelpers()` or `getCoreHelpers()` as needed
-4. Test with both direct execution and Claude Desktop
-
-### Cache Strategies
-
-```typescript
-// Standard caching
-const result = await this.cache.get(
-  cacheKey,
-  async () => executeScript(),
-  300000, // 5 minutes
-);
-
-// No caching
-const result = await executeScript();
-```
+---
 
 ## Resources
 
-- **[Complete API Reference](./API-REFERENCE-V2.md)** - All tools, parameters, return types
-- **[Architecture Documentation](./ARCHITECTURE.md)** - Technical deep dive
-- **[Testing Framework](./REAL_LLM_TESTING.md)** - Real LLM integration testing
-- **[Lessons Learned](./LESSONS_LEARNED.md)** - Hard-won insights
-- **[Debugging Workflow](./DEBUGGING_WORKFLOW.md)** - Systematic debugging approach
-
-## Contributing
-
-See main repository for contribution guidelines. Key areas:
-
-- Performance optimizations
-- New tool implementations
-- Better LLM-friendly tool descriptions
-- Test coverage improvements
-- Documentation enhancements
+- [API Reference](./API-REFERENCE-V2.md) - Complete tool documentation
+- [Architecture](./ARCHITECTURE.md) - Technical deep dive
+- [Lessons Learned](./LESSONS_LEARNED.md) - Hard-won insights
+- [Patterns](./PATTERNS.md) - Symptom → solution lookup
