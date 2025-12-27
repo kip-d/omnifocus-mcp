@@ -1,172 +1,27 @@
 # Things to Check Out
 
-> **Note:** Completed investigations have been archived to `.archive/completed-investigations-2025-12.md`
+> **Note:** Completed investigations archived to `.archive/completed-investigations-2025-12.md`
 
 ---
 
-## 2. Unified API Filter Passthrough Issues (2025-11-27) → ✅ ALL FIXED (2025-12-26)
+## 10. Pending Utility Integration (2025-12-10)
 
-**Context:** When trying to query projects/tasks by folder or project name, filters were not being passed through the
-unified API correctly.
+Remaining items from merged utility PRs.
 
-### Issues Status - All Resolved
+### 10.1: Branded Types Extension
 
-#### Issue 2.1: Project Folder Filtering → ✅ FIXED (2025-11-27)
+**Status:** Integrated in `ManageTaskTool.ts`. Extend to other tools only if ID mixup bugs occur.
 
-See archived documentation for details.
+**Open question:** Current validation accepts 8-50 char IDs. OmniFocus IDs are typically 11 chars. May need adjustment.
 
-#### Issue 2.2: Project Name Filtering → ✅ FIXED (2025-12-26)
+### 10.2: withRetry Function
 
-**Was fixed as part of Issue 4.3** (archived). Verified working:
+**Location:** `src/utils/error-recovery.ts`
+
+**Status:** Function exists but not wired into any tool. Integrate if transient errors become common.
 
 ```typescript
-// ✅ NOW WORKS - Returns only matching projects
-{
-  query: {
-    type: "projects",
-    filters: { name: { contains: "OmniFocus MCP" } }
-  }
-}
-// Returns 3 projects: "OmniFocus MCP Server ongoing work", etc.
+// Available but unused
+import { withRetry } from './utils/error-recovery.js';
+await withRetry(() => someOperation(), { maxRetries: 3 });
 ```
-
-#### Issue 2.3: Search Mode Filter Handling → ✅ FIXED (2025-12-26)
-
-**Root cause:** OmniFocusReadTool.routeToTasksTool was not passing the `search` filter to QueryTasksTool.
-
-**Fix:** Added `search` filter mapping in `src/tools/unified/OmniFocusReadTool.ts`:
-```typescript
-if (compiled.filters.search) tasksArgs.search = compiled.filters.search;
-```
-
-Now works:
-```typescript
-// ✅ NOW WORKS - Searches tasks by name
-{
-  query: {
-    type: "tasks",
-    mode: "search",
-    filters: { name: { contains: "MCP" } }
-  }
-}
-// Returns tasks containing "MCP" in name or note
-```
-
----
-
-## 3. MCP Hot Reload for Development (2025-11-27) → ✅ SOLVED (Native Support)
-
-**Context:** When developing this MCP server, code changes require restarting Claude Code to pick up the new code.
-
-### Native Solution (Claude Code v1.0.64+)
-
-**Command:** `/mcp reconnect <server_name>`
-
-Restarts just the specified MCP server while maintaining conversation context.
-
-**Development workflow:**
-1. Edit code in `src/`
-2. Run `npm run build`
-3. Run `/mcp reconnect omnifocus`
-4. Test changes immediately
-
-**Alternative:** Use `/mcp` command and navigate to the server to reconnect via GUI.
-
-### Legacy Workarounds (No Longer Needed)
-
-- ~~Community proxy: mcp-hot-reload~~ - Native support is better
-- ~~`claude --resume`~~ - `/mcp reconnect` is faster and preserves more context
-
----
-
-## 7. Update Operations Test Consolidation (2025-11-28) → ✅ COMPLETE (2025-12-26)
-
-**Context:** The `update-operations.test.ts` integration test suite had 12 tests with significant redundancy.
-
-### Consolidation Applied
-
-| Before (12 tests)                                   | After (7 tests)                    |
-| --------------------------------------------------- | ---------------------------------- |
-| dueDate, deferDate, clearDueDate (3 tests)          | Date updates + clear (1 test)      |
-| plannedDate (1 test)                                | Planned date (1 test - kept separate) |
-| tags replacement, addTags, addTags dedup (3 tests)  | Tags replacement (1), AddTags+dedup (1) |
-| removeTags (1 test)                                 | RemoveTags (1 test)                |
-| note, flagged, estimatedMinutes (3 tests)           | Basic properties (1 test)          |
-| multiple updates (1 test)                           | Multiple updates (1 test)          |
-
-**Results:**
-- Tests reduced: 12 → 7 (42% reduction)
-- Time reduced: ~120s → ~88s (27% faster)
-- Full coverage maintained
-
----
-
-## 9. TypeScript Generics & Type Safety Improvements (2025-12-04) → ✅ Mostly Done
-
-**Status:** Updated 2025-12-26. Most items already implemented.
-
-### Implementation Status
-
-#### 9.1: Branded Types for IDs → ✅ Implemented
-
-Branded types (`TaskId`, `ProjectId`) implemented in `src/utils/branded-types.ts` and used in `ManageTaskTool.ts`.
-
-Extend to other tools only if ID mixup bugs become a recurring problem.
-
-#### 9.2: AST Filter Output Typing → ⏳ Low Value
-
-Make AST filter system output strongly typed based on filter configuration.
-
-**Trade-offs:**
-- Pro: Type-safe script results
-- Con: Runtime still dynamic (OmniJS scripts return strings parsed as JSON)
-
-**Recommendation:** Not worth the complexity given OmniJS dynamic nature.
-
-#### 9.3: CacheManager Generic Typing → ✅ Already Implemented
-
-CacheManager already has generic methods:
-```typescript
-get<T>(category, key): T | null
-set<T>(category, key, data): void
-```
-
----
-
-## 10. Merged Utility PRs - Integration Notes (2025-12-10) → Mostly Integrated
-
-**Context:** Three PRs merged adding new utility code. Status updated 2025-12-26.
-
-### 10.1: Branded Types (PR #41) → ✅ Partially Integrated
-
-**Location:** `src/utils/branded-types.ts`
-
-**Status:** Integrated in `ManageTaskTool.ts` - uses `TaskId`, `ProjectId` branded types with conversion functions.
-
-**Remaining:**
-- [ ] Extend to QueryTasksTool and other tools (if ID mixup bugs occur)
-- [ ] Consider whether 8-50 char length validation is correct (OmniFocus IDs are typically 11 chars)
-
-### 10.2: Error Handling Utilities (PR #40) → ✅ Mostly Integrated
-
-**Location:** `src/utils/circuit-breaker.ts`, `src/utils/error-recovery.ts`
-
-**Status:**
-- [x] Circuit breaker integrated in base.ts
-- [x] `classifyErrorWithContext` used in base.ts for error classification
-- [ ] `withRetry` function exists but not yet wired in (for transient error retry)
-
-### 10.3: AST Architecture Documentation (PR #39) → ✅ Complete
-
-**Location:** `docs/dev/AST_ARCHITECTURE.md`
-
-**No integration needed** - pure documentation of existing code.
-
-### Remaining Work
-
-| Utility         | Status                                                  |
-| --------------- | ------------------------------------------------------- |
-| Branded types   | ✅ ManageTaskTool uses them; extend if bugs occur       |
-| Circuit breaker | ✅ Done - integrated in base.ts                         |
-| Error context   | ✅ Done - classifyErrorWithContext in base.ts           |
-| Retry logic     | ⏳ `withRetry` exists, wire in if transient errors common |
