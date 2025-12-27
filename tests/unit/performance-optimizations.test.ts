@@ -66,12 +66,8 @@ describe('Performance Optimization Tests', () => {
       expect(generatedScript.script).toContain('Task.byIdentifier');
     });
 
-    it('should use Project.byIdentifier for O(1) lookups', async () => {
-      const { UPDATE_PROJECT_SCRIPT } = await import('../../src/omnifocus/scripts/projects/update-project.js');
-      // Project scripts still use iteration, but could be optimized
-      // This is a note for future optimization
-      expect(UPDATE_PROJECT_SCRIPT).toContain('projects[i].id() === projectId');
-    });
+    // Note: Project update is now handled through ManageTaskTool with target:'project'
+    // The old UPDATE_PROJECT_SCRIPT was removed as it was never connected to any tool
   });
 });
 
