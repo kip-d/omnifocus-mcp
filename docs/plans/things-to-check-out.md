@@ -101,36 +101,35 @@ Restarts just the specified MCP server while maintaining conversation context.
 
 ---
 
-## 9. TypeScript Generics & Type Safety Improvements (2025-12-04)
+## 9. TypeScript Generics & Type Safety Improvements (2025-12-04) → ✅ Mostly Done
 
-**Priority:** Low - The codebase already uses generics effectively.
+**Status:** Updated 2025-12-26. Most items already implemented.
 
-### Potential Improvements
+### Implementation Status
 
-#### 9.1: Branded Types for IDs (Low Priority)
+#### 9.1: Branded Types for IDs → ✅ Implemented
 
-Use TypeScript branded types to catch ID mixup bugs at compile time.
+Branded types (`TaskId`, `ProjectId`) implemented in `src/utils/branded-types.ts` and used in `ManageTaskTool.ts`.
 
-**Trade-offs:**
-- Pro: Catches ID mixup bugs at compile time
-- Con: Requires significant refactoring across codebase
+Extend to other tools only if ID mixup bugs become a recurring problem.
 
-**Status:** Partially implemented in `src/utils/branded-types.ts` (PR #41)
-
-#### 9.2: AST Filter Output Typing (Low Priority)
+#### 9.2: AST Filter Output Typing → ⏳ Low Value
 
 Make AST filter system output strongly typed based on filter configuration.
 
 **Trade-offs:**
 - Pro: Type-safe script results
-- Con: Runtime still dynamic (OmniJS scripts)
+- Con: Runtime still dynamic (OmniJS scripts return strings parsed as JSON)
 
-#### 9.3: CacheManager Generic Typing (Low Priority)
+**Recommendation:** Not worth the complexity given OmniJS dynamic nature.
 
-Add generic typing to cache entries.
+#### 9.3: CacheManager Generic Typing → ✅ Already Implemented
 
-**Recommendation:** None of these are urgent. Consider implementing branded types (9.1) only if ID mixup bugs become a
-recurring problem.
+CacheManager already has generic methods:
+```typescript
+get<T>(category, key): T | null
+set<T>(category, key, data): void
+```
 
 ---
 
