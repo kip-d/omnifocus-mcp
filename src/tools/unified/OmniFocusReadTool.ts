@@ -8,21 +8,28 @@ import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
+import { ExportTool } from '../export/ExportTool.js';
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
-  description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, or folders.
+  description = `Query OmniFocus data with flexible filtering. Returns tasks, projects, tags, perspectives, folders, or exports.
 
 COMMON QUERIES:
 - Inbox: { query: { type: "tasks", filters: { project: null } } }
 - Overdue: { query: { type: "tasks", filters: { dueDate: { before: "now" }, status: "active" } } }
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
+- Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
 - dates: { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
 - text: { contains: "..." }, { matches: "regex" }
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
+
+EXPORT OPTIONS:
+- exportType: "tasks", "projects", or "all" (bulk)
+- format: "json", "csv", or "markdown"
+- outputDirectory: required for exportType="all"
 
 PERFORMANCE:
 - Use fields parameter to select only needed data
@@ -35,8 +42,8 @@ PERFORMANCE:
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
-    tags: ['unified', 'read', 'query'],
-    capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest'],
+    tags: ['unified', 'read', 'query', 'export'],
+    capabilities: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'smart_suggest', 'export'],
   };
 
   annotations = {
@@ -53,6 +60,7 @@ PERFORMANCE:
   private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
   private foldersTool: FoldersTool;
+  private exportTool: ExportTool;
 
   constructor(cache: CacheManager) {
     super(cache);
@@ -64,6 +72,7 @@ PERFORMANCE:
     this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
     this.foldersTool = new FoldersTool(cache);
+    this.exportTool = new ExportTool(cache);
   }
 
   async executeValidated(args: ReadInput): Promise<unknown> {
@@ -81,6 +90,8 @@ PERFORMANCE:
         return this.routeToPerspectivesTool(compiled);
       case 'folders':
         return this.routeToFoldersTool(compiled);
+      case 'export':
+        return this.routeToExportTool(compiled);
       default: {
         // Exhaustiveness check
         const _exhaustive: never = compiled.type;
@@ -163,6 +174,47 @@ PERFORMANCE:
 
   private async routeToFoldersTool(_compiled: CompiledQuery): Promise<unknown> {
     return this.foldersTool.execute({ operation: 'list' });
+  }
+
+  private async routeToExportTool(compiled: CompiledQuery): Promise<unknown> {
+    // Map compiled query to ExportTool parameters
+    const exportArgs: Record<string, unknown> = {
+      type: compiled.exportType || 'tasks', // Default to tasks export
+      format: compiled.format || 'json',
+    };
+
+    // Map filters to export filter format
+    if (compiled.filters && Object.keys(compiled.filters).length > 0) {
+      const filter: Record<string, unknown> = {};
+      if (compiled.filters.search) filter.search = compiled.filters.search;
+      if (compiled.filters.projectId) filter.projectId = compiled.filters.projectId;
+      if (compiled.filters.tags) filter.tags = compiled.filters.tags;
+      if (compiled.filters.flagged !== undefined) filter.flagged = compiled.filters.flagged;
+      if (compiled.filters.completed !== undefined) filter.completed = compiled.filters.completed;
+      if (compiled.filters.available !== undefined) filter.available = compiled.filters.available;
+      if (compiled.limit) filter.limit = compiled.limit;
+      exportArgs.filter = filter;
+    }
+
+    // Pass export-specific fields
+    if (compiled.exportFields) {
+      exportArgs.fields = compiled.exportFields;
+    }
+
+    // Project export options
+    if (compiled.includeStats !== undefined) {
+      exportArgs.includeStats = compiled.includeStats;
+    }
+
+    // Bulk export options
+    if (compiled.outputDirectory) {
+      exportArgs.outputDirectory = compiled.outputDirectory;
+    }
+    if (compiled.includeCompleted !== undefined) {
+      exportArgs.includeCompleted = compiled.includeCompleted;
+    }
+
+    return this.exportTool.execute(exportArgs);
   }
 
   private needsAdvancedFilters(filters: TaskFilter): boolean {

@@ -143,9 +143,34 @@ const SortSchema = z.object({
   direction: z.enum(['asc', 'desc']),
 });
 
+// Export format enum
+const ExportFormatEnum = z.enum(['json', 'csv', 'markdown']);
+
+// Export type enum (what to export)
+const ExportTypeEnum = z.enum(['tasks', 'projects', 'all']);
+
+// Export field selection (matches ExportTool schema)
+const ExportFieldEnum = z.enum([
+  'id',
+  'name',
+  'note',
+  'project',
+  'tags',
+  'deferDate',
+  'dueDate',
+  'completed',
+  'completionDate',
+  'flagged',
+  'estimated',
+  'created',
+  'createdDate',
+  'modified',
+  'modifiedDate',
+]);
+
 // Query schema definition
 const QuerySchema = z.object({
-  type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders']),
+  type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export']),
   filters: FilterSchema.optional(),
   fields: z.array(TaskFieldEnum).optional(),
   sort: z.array(SortSchema).optional(),
@@ -174,6 +199,14 @@ const QuerySchema = z.object({
   fastSearch: z.boolean().optional(), // Search only names, not notes (performance)
   daysAhead: coerceNumber().min(1).max(30).optional(), // For upcoming mode: days to look ahead
   countOnly: z.boolean().optional(), // Return only count, not full task data (33x faster)
+
+  // Export parameters (when type='export')
+  exportType: ExportTypeEnum.optional().describe('What to export: tasks, projects, or all'),
+  format: ExportFormatEnum.optional().describe('Export format: json, csv, or markdown'),
+  exportFields: z.array(ExportFieldEnum).optional().describe('Fields to include in export'),
+  outputDirectory: z.string().optional().describe('Directory for bulk export (required when exportType=all)'),
+  includeStats: z.boolean().optional().describe('Include statistics in project export'),
+  includeCompleted: z.boolean().optional().describe('Include completed tasks in export'),
 });
 
 // Main read schema

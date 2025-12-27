@@ -5,7 +5,7 @@ import type { TaskFilter } from '../../../contracts/filters.js';
 export type QueryFilter = FilterValue;
 
 export interface CompiledQuery {
-  type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders';
+  type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders' | 'export';
   mode?:
     | 'all'
     | 'inbox'
@@ -27,6 +27,13 @@ export interface CompiledQuery {
   fastSearch?: boolean;
   daysAhead?: number;
   countOnly?: boolean; // Return only count (33x faster than fetching full tasks)
+  // Export parameters (when type='export')
+  exportType?: 'tasks' | 'projects' | 'all';
+  format?: 'json' | 'csv' | 'markdown';
+  exportFields?: string[];
+  outputDirectory?: string;
+  includeStats?: boolean;
+  includeCompleted?: boolean;
 }
 
 /**
@@ -52,6 +59,13 @@ export class QueryCompiler {
       fastSearch: query.fastSearch,
       daysAhead: query.daysAhead,
       countOnly: query.countOnly,
+      // Export parameters (passthrough when type='export')
+      exportType: query.exportType,
+      format: query.format,
+      exportFields: query.exportFields,
+      outputDirectory: query.outputDirectory,
+      includeStats: query.includeStats,
+      includeCompleted: query.includeCompleted,
     };
   }
 
