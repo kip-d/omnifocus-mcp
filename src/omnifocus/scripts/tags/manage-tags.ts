@@ -324,190 +324,217 @@ export const MANAGE_TAGS_SCRIPT = `
         }
         
       case 'nest':
-        // Move an existing tag under a parent tag
-        let tagToNest = null;
-        let newParentTag = null;
-        
-        // Find the tag to nest
-        for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name()) === tagName) {
-            tagToNest = allTags[i];
-            break;
-          }
-        }
-        
-        if (!tagToNest) {
-          return JSON.stringify({
-            error: true,
-            message: "Tag '" + tagName + "' not found"
-          });
-        }
-        
-        // Find the parent tag
-        if (parentTagName || parentTagId) {
-          for (let i = 0; i < allTags.length; i++) {
-            const tag = allTags[i];
-            if (parentTagId && safeGet(() => tag.id()) === parentTagId) {
-              newParentTag = tag;
-              break;
-            } else if (parentTagName && safeGet(() => tag.name()) === parentTagName) {
-              newParentTag = tag;
-              break;
-            }
-          }
-          
-          if (!newParentTag) {
-            return JSON.stringify({
-              error: true,
-              message: "Parent tag not found: " + (parentTagName || parentTagId)
-            });
-          }
-        } else {
+        // Move an existing tag under a parent tag using OmniJS bridge
+        // JXA's app.move() doesn't work for tag nesting - must use OmniJS moveTags()
+        if (!parentTagName && !parentTagId) {
           return JSON.stringify({
             error: true,
             message: "Parent tag name or ID is required for nest action"
           });
         }
-        
-        // Check for circular reference
-        if (safeGet(() => tagToNest.id()) === safeGet(() => newParentTag.id())) {
-          return JSON.stringify({
-            error: true,
-            message: "Cannot nest tag under itself"
-          });
-        }
-        
-        // Move the tag under the parent
+
+        // Use OmniJS bridge for tag nesting
+        const nestScript = \`
+          (() => {
+            const tagToNestName = \${JSON.stringify(tagName)};
+            const parentName = \${JSON.stringify(parentTagName || '')};
+            const parentId = \${JSON.stringify(parentTagId || '')};
+
+            // Find tag to nest using flattenedTags
+            let tagToNest = null;
+            flattenedTags.forEach(t => {
+              if (t.name === tagToNestName) tagToNest = t;
+            });
+
+            if (!tagToNest) {
+              return JSON.stringify({
+                error: true,
+                message: "Tag '" + tagToNestName + "' not found"
+              });
+            }
+
+            // Find parent tag
+            let parentTag = null;
+            flattenedTags.forEach(t => {
+              if (parentId && t.id.primaryKey === parentId) parentTag = t;
+              else if (parentName && t.name === parentName) parentTag = t;
+            });
+
+            if (!parentTag) {
+              return JSON.stringify({
+                error: true,
+                message: "Parent tag not found: " + (parentName || parentId)
+              });
+            }
+
+            // Check for self-reference
+            if (tagToNest.id.primaryKey === parentTag.id.primaryKey) {
+              return JSON.stringify({
+                error: true,
+                message: "Cannot nest tag under itself"
+              });
+            }
+
+            // Use OmniJS moveTags function
+            try {
+              moveTags([tagToNest], parentTag);
+              return JSON.stringify({
+                success: true,
+                action: 'nested',
+                tagName: tagToNestName,
+                parentTagName: parentTag.name,
+                parentTagId: parentTag.id.primaryKey,
+                message: "Tag '" + tagToNestName + "' nested under '" + parentTag.name + "'"
+              });
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: "Failed to nest tag: " + e.toString()
+              });
+            }
+          })()
+        \`;
+
         try {
-          app.move(tagToNest, { to: newParentTag.tags });
-          
-          return JSON.stringify({
-            success: true,
-            action: 'nested',
-            tagName: tagName,
-            parentTagName: safeGet(() => newParentTag.name()),
-            parentTagId: safeGet(() => newParentTag.id()),
-            message: "Tag '" + tagName + "' nested under '" + safeGet(() => newParentTag.name()) + "'"
-          });
-        } catch (nestError) {
+          const nestResult = app.evaluateJavascript(nestScript);
+          return nestResult;
+        } catch (bridgeError) {
           return JSON.stringify({
             error: true,
-            message: "Failed to nest tag: " + nestError.toString()
+            message: "Failed to execute nest operation: " + bridgeError.toString()
           });
         }
         
       case 'unparent':
-        // Move a tag to the root level
-        let tagToUnparent = null;
-        
-        // Find the tag to unparent
-        for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name()) === tagName) {
-            tagToUnparent = allTags[i];
-            break;
-          }
-        }
-        
-        if (!tagToUnparent) {
-          return JSON.stringify({
-            error: true,
-            message: "Tag '" + tagName + "' not found"
-          });
-        }
-        
-        // Move the tag to root
-        try {
-          app.move(tagToUnparent, { to: doc.tags });
-          
-          return JSON.stringify({
-            success: true,
-            action: 'unparented',
-            tagName: tagName,
-            message: "Tag '" + tagName + "' moved to root level"
-          });
-        } catch (unparentError) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to unparent tag: " + unparentError.toString()
-          });
-        }
-        
-      case 'reparent':
-        // Move a tag from one parent to another
-        let tagToReparent = null;
-        let newParent = null;
+        // Move a tag to the root level using OmniJS bridge
+        // JXA's app.move() doesn't work for tag hierarchy - must use OmniJS moveTags()
+        const unparentScript = \`
+          (() => {
+            const tagToUnparentName = \${JSON.stringify(tagName)};
 
-        // Find the tag to reparent
-        for (let i = 0; i < allTags.length; i++) {
-          if (safeGet(() => allTags[i].name()) === tagName) {
-            tagToReparent = allTags[i];
-            break;
-          }
-        }
+            // Find tag to unparent using flattenedTags
+            let tagToUnparent = null;
+            flattenedTags.forEach(t => {
+              if (t.name === tagToUnparentName) tagToUnparent = t;
+            });
 
-        if (!tagToReparent) {
-          return JSON.stringify({
-            error: true,
-            message: "Tag '" + tagName + "' not found"
-          });
-        }
-
-        // Find the new parent tag (if specified, otherwise move to root)
-        if (parentTagName || parentTagId) {
-          for (let i = 0; i < allTags.length; i++) {
-            const tag = allTags[i];
-            if (parentTagId && safeGet(() => tag.id()) === parentTagId) {
-              newParent = tag;
-              break;
-            } else if (parentTagName && safeGet(() => tag.name()) === parentTagName) {
-              newParent = tag;
-              break;
+            if (!tagToUnparent) {
+              return JSON.stringify({
+                error: true,
+                message: "Tag '" + tagToUnparentName + "' not found"
+              });
             }
-          }
 
-          if (!newParent) {
-            return JSON.stringify({
-              error: true,
-              message: "New parent tag not found: " + (parentTagName || parentTagId)
-            });
-          }
+            // Move to root (null parent means root level in moveTags)
+            try {
+              moveTags([tagToUnparent], null);
+              return JSON.stringify({
+                success: true,
+                action: 'unparented',
+                tagName: tagToUnparentName,
+                message: "Tag '" + tagToUnparentName + "' moved to root level"
+              });
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: "Failed to unparent tag: " + e.toString()
+              });
+            }
+          })()
+        \`;
 
-          // Check for circular reference
-          if (safeGet(() => tagToReparent.id()) === safeGet(() => newParent.id())) {
-            return JSON.stringify({
-              error: true,
-              message: "Cannot reparent tag under itself"
-            });
-          }
-        }
-
-        // Move the tag to new parent or root
         try {
-          if (newParent) {
-            app.move(tagToReparent, { to: newParent.tags });
-
-            return JSON.stringify({
-              success: true,
-              action: 'reparented',
-              tagName: tagName,
-              newParentTagName: safeGet(() => newParent.name()),
-              newParentTagId: safeGet(() => newParent.id()),
-              message: "Tag '" + tagName + "' moved under '" + safeGet(() => newParent.name()) + "'"
-            });
-          } else {
-            app.move(tagToReparent, { to: doc.tags });
-
-            return JSON.stringify({
-              success: true,
-              action: 'reparented',
-              tagName: tagName,
-              message: "Tag '" + tagName + "' moved to root level"
-            });
-          }
-        } catch (reparentError) {
+          const unparentResult = app.evaluateJavascript(unparentScript);
+          return unparentResult;
+        } catch (bridgeError) {
           return JSON.stringify({
             error: true,
-            message: "Failed to reparent tag: " + reparentError.toString()
+            message: "Failed to execute unparent operation: " + bridgeError.toString()
+          });
+        }
+
+      case 'reparent':
+        // Move a tag from one parent to another using OmniJS bridge
+        // JXA's app.move() doesn't work for tag hierarchy - must use OmniJS moveTags()
+        const reparentScript = \`
+          (() => {
+            const tagToReparentName = \${JSON.stringify(tagName)};
+            const parentName = \${JSON.stringify(parentTagName || '')};
+            const parentId = \${JSON.stringify(parentTagId || '')};
+
+            // Find tag to reparent using flattenedTags
+            let tagToReparent = null;
+            flattenedTags.forEach(t => {
+              if (t.name === tagToReparentName) tagToReparent = t;
+            });
+
+            if (!tagToReparent) {
+              return JSON.stringify({
+                error: true,
+                message: "Tag '" + tagToReparentName + "' not found"
+              });
+            }
+
+            // Find new parent tag (if specified)
+            let newParent = null;
+            if (parentName || parentId) {
+              flattenedTags.forEach(t => {
+                if (parentId && t.id.primaryKey === parentId) newParent = t;
+                else if (parentName && t.name === parentName) newParent = t;
+              });
+
+              if (!newParent) {
+                return JSON.stringify({
+                  error: true,
+                  message: "New parent tag not found: " + (parentName || parentId)
+                });
+              }
+
+              // Check for self-reference
+              if (tagToReparent.id.primaryKey === newParent.id.primaryKey) {
+                return JSON.stringify({
+                  error: true,
+                  message: "Cannot reparent tag under itself"
+                });
+              }
+            }
+
+            // Move to new parent or root
+            try {
+              moveTags([tagToReparent], newParent);
+              if (newParent) {
+                return JSON.stringify({
+                  success: true,
+                  action: 'reparented',
+                  tagName: tagToReparentName,
+                  newParentTagName: newParent.name,
+                  newParentTagId: newParent.id.primaryKey,
+                  message: "Tag '" + tagToReparentName + "' moved under '" + newParent.name + "'"
+                });
+              } else {
+                return JSON.stringify({
+                  success: true,
+                  action: 'reparented',
+                  tagName: tagToReparentName,
+                  message: "Tag '" + tagToReparentName + "' moved to root level"
+                });
+              }
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: "Failed to reparent tag: " + e.toString()
+              });
+            }
+          })()
+        \`;
+
+        try {
+          const reparentResult = app.evaluateJavascript(reparentScript);
+          return reparentResult;
+        } catch (bridgeError) {
+          return JSON.stringify({
+            error: true,
+            message: "Failed to execute reparent operation: " + bridgeError.toString()
           });
         }
 

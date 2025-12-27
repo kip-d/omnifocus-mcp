@@ -76,6 +76,17 @@ const BatchOperationSchema = z.discriminatedUnion('operation', [
   }),
 ]);
 
+// Tag management action enum
+const TagActionSchema = z.enum([
+  'create', // Create a new tag
+  'rename', // Rename a tag
+  'delete', // Delete a tag
+  'merge', // Merge source tag into target tag
+  'nest', // Move tag under a parent tag
+  'unnest', // Move tag to root level (alias for unparent)
+  'reparent', // Move tag to a different parent
+]);
+
 // Mutation schema - discriminated union by operation
 const MutationSchema = z.discriminatedUnion('operation', [
   // Create operation
@@ -124,6 +135,15 @@ const MutationSchema = z.discriminatedUnion('operation', [
     target: z.enum(['task', 'project']),
     ids: z.array(z.string()).min(1).max(100), // Limit to 100 items for safety
     dryRun: coerceBoolean().optional().default(false), // Preview without executing
+  }),
+  // Tag management operation
+  z.object({
+    operation: z.literal('tag_manage'),
+    action: TagActionSchema,
+    tagName: z.string().min(1).describe('The tag name to operate on'),
+    newName: z.string().optional().describe('New name for rename action'),
+    targetTag: z.string().optional().describe('Target tag for merge action'),
+    parentTag: z.string().optional().describe('Parent tag name for nest/reparent actions'),
   }),
 ]);
 

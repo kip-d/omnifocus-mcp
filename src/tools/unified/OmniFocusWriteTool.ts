@@ -5,6 +5,7 @@ import { MutationCompiler, type CompiledMutation } from './compilers/MutationCom
 import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
+import { TagsTool } from '../tags/TagsTool.js';
 import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TaskId, ProjectId } from '../../utils/branded-types.js';
 
@@ -22,6 +23,8 @@ OPERATIONS:
 - complete: Mark done (provide id)
 - delete: Remove permanently (provide id)
 - batch: Multiple operations in one call
+- bulk_delete: Delete multiple items by IDs
+- tag_manage: Manage tag hierarchy (create, rename, delete, merge, nest, unnest, reparent)
 
 BATCH OPERATIONS:
 - tempId: Optional for each item (auto-generated if not provided)
@@ -33,6 +36,15 @@ TAG OPERATIONS:
 - tags: [...] - Replace all tags
 - addTags: [...] - Add to existing
 - removeTags: [...] - Remove from existing
+
+TAG MANAGEMENT (tag_manage operation):
+- create: Create new tag (tagName required)
+- rename: Rename tag (tagName + newName required)
+- delete: Delete tag (tagName required)
+- merge: Merge source into target (tagName + targetTag required)
+- nest: Move tag under parent (tagName + parentTag required)
+- unnest: Move tag to root level (tagName required)
+- reparent: Move tag to different parent (tagName + parentTag required)
 
 DATE FORMATS:
 - Date only: "YYYY-MM-DD" (defaults: due=5pm, defer=8am)
@@ -52,8 +64,8 @@ SAFETY:
     stability: 'stable' as const,
     complexity: 'moderate' as const,
     performanceClass: 'fast' as const,
-    tags: ['unified', 'write', 'mutations'],
-    capabilities: ['create', 'update', 'complete', 'delete', 'batch'],
+    tags: ['unified', 'write', 'mutations', 'tags'],
+    capabilities: ['create', 'update', 'complete', 'delete', 'batch', 'tag_manage'],
   };
 
   annotations = {
@@ -68,6 +80,7 @@ SAFETY:
   private manageTaskTool: ManageTaskTool;
   private projectsTool: ProjectsTool;
   private batchTool: BatchCreateTool;
+  private tagsTool: TagsTool;
 
   constructor(cache: CacheManager) {
     super(cache);
@@ -75,10 +88,16 @@ SAFETY:
     this.manageTaskTool = new ManageTaskTool(cache);
     this.projectsTool = new ProjectsTool(cache);
     this.batchTool = new BatchCreateTool(cache);
+    this.tagsTool = new TagsTool(cache);
   }
 
   async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
+
+    // Route tag_manage operations to TagsTool
+    if (compiled.operation === 'tag_manage') {
+      return this.routeToTagsTool(compiled);
+    }
 
     // Handle dry-run for batch operations
     if (compiled.operation === 'batch' && compiled.dryRun) {
@@ -188,6 +207,31 @@ SAFETY:
     };
 
     return this.batchTool.execute(batchArgs);
+  }
+
+  private async routeToTagsTool(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
+    // Map unified API action to TagsTool action
+    // 'unnest' in unified API maps to 'unparent' in TagsTool
+    const tagsAction = compiled.action === 'unnest' ? 'unparent' : compiled.action;
+
+    const tagsArgs: Record<string, unknown> = {
+      operation: 'manage',
+      action: tagsAction,
+      tagName: compiled.tagName,
+    };
+
+    // Add optional parameters based on action
+    if (compiled.newName) {
+      tagsArgs.newName = compiled.newName;
+    }
+    if (compiled.targetTag) {
+      tagsArgs.targetTag = compiled.targetTag;
+    }
+    if (compiled.parentTag) {
+      tagsArgs.parentTagName = compiled.parentTag;
+    }
+
+    return this.tagsTool.execute(tagsArgs);
   }
 
   private async routeToBulkDelete(compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>): Promise<unknown> {

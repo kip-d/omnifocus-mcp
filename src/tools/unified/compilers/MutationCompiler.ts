@@ -105,6 +105,14 @@ export type CompiledMutation =
       target: 'task' | 'project';
       ids: string[];
       dryRun?: boolean;
+    }
+  | {
+      operation: 'tag_manage';
+      action: 'create' | 'rename' | 'delete' | 'merge' | 'nest' | 'unnest' | 'reparent';
+      tagName: string;
+      newName?: string;
+      targetTag?: string;
+      parentTag?: string;
     };
 
 export class MutationCompiler {
@@ -185,6 +193,16 @@ export class MutationCompiler {
           target: mutation.target,
           ids: mutation.ids,
           dryRun: mutation.dryRun,
+        };
+
+      case 'tag_manage':
+        return {
+          operation: 'tag_manage',
+          action: mutation.action,
+          tagName: mutation.tagName,
+          newName: mutation.newName,
+          targetTag: mutation.targetTag,
+          parentTag: mutation.parentTag,
         };
 
       default: {
