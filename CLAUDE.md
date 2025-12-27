@@ -15,7 +15,7 @@ audience (users, developers, operations) and topic (architecture, testing, perfo
 
 **Overview:** Three unified tools consolidate the MCP interface into a streamlined API for LLM optimization:
 
-- **`omnifocus_read`** - Unified query builder (routes to tasks, projects, tags, perspectives, folders tools)
+- **`omnifocus_read`** - Unified query builder (routes to tasks, projects, tags, perspectives, folders, export tools)
 - **`omnifocus_write`** - Unified mutation builder (routes to manage_task, batch_create tools)
 - **`omnifocus_analyze`** - Unified analysis router (routes to 8 analysis tools)
 
@@ -112,6 +112,60 @@ When you only need to know "how many" tasks match a filter (not the actual task 
   }
 }
 ```
+
+**Data Export:**
+
+Export tasks or projects in JSON, CSV, or Markdown format via `omnifocus_read`:
+
+```typescript
+// Export tasks as JSON
+{
+  query: {
+    type: "export",
+    exportType: "tasks",    // "tasks" | "projects" | "all"
+    format: "json",         // "json" | "csv" | "markdown"
+    limit: 100              // Optional limit
+  }
+}
+
+// Export projects with statistics
+{
+  query: {
+    type: "export",
+    exportType: "projects",
+    format: "csv",
+    includeStats: true
+  }
+}
+
+// Bulk export everything to files
+{
+  query: {
+    type: "export",
+    exportType: "all",
+    outputDirectory: "/path/to/output"  // Required for bulk export
+  }
+}
+```
+
+**Export Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "format": "json",
+    "exportType": "tasks",
+    "data": [
+      { "name": "Task 1", "project": "", "dueDate": "", "tags": [], "flagged": false, "note": "" },
+      ...
+    ]
+  }
+}
+```
+
+**Important:** Export results can be large (300KB+) and may exceed LLM context windows. This is expected - export
+is designed for piping data to other tools, files, or external systems rather than inline conversation display.
 
 **Current Status:**
 
