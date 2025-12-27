@@ -134,41 +134,40 @@ recurring problem.
 
 ---
 
-## 10. Merged Utility PRs - Integration Notes (2025-12-10)
+## 10. Merged Utility PRs - Integration Notes (2025-12-10) → Mostly Integrated
 
-**Context:** Three PRs merged adding new utility code. These are opt-in additions not yet wired into the main codebase.
+**Context:** Three PRs merged adding new utility code. Status updated 2025-12-26.
 
-### 10.1: Branded Types (PR #41)
+### 10.1: Branded Types (PR #41) → ✅ Partially Integrated
 
 **Location:** `src/utils/branded-types.ts`
 
-**Integration TODO:**
+**Status:** Integrated in `ManageTaskTool.ts` - uses `TaskId`, `ProjectId` branded types with conversion functions.
 
-- [ ] Update function signatures in ManageTaskTool, QueryTasksTool to use branded types
-- [ ] Add type assertions at API boundaries (where strings come in from MCP)
+**Remaining:**
+- [ ] Extend to QueryTasksTool and other tools (if ID mixup bugs occur)
 - [ ] Consider whether 8-50 char length validation is correct (OmniFocus IDs are typically 11 chars)
 
-### 10.2: Error Handling Utilities (PR #40)
+### 10.2: Error Handling Utilities (PR #40) → ✅ Mostly Integrated
 
 **Location:** `src/utils/circuit-breaker.ts`, `src/utils/error-recovery.ts`
 
-**Integration TODO:**
+**Status:**
+- [x] Circuit breaker integrated in base.ts
+- [x] `classifyErrorWithContext` used in base.ts for error classification
+- [ ] `withRetry` function exists but not yet wired in (for transient error retry)
 
-- [x] ~~Consider wrapping OmniFocus script execution with circuit breaker~~ (Done in base.ts)
-- [ ] Add retry logic for transient errors (timeouts, "not responding")
-- [ ] Wire enhanced error context into tool error responses
-
-### 10.3: AST Architecture Documentation (PR #39)
+### 10.3: AST Architecture Documentation (PR #39) → ✅ Complete
 
 **Location:** `docs/dev/AST_ARCHITECTURE.md`
 
 **No integration needed** - pure documentation of existing code.
 
-### When to Integrate
+### Remaining Work
 
-| Utility         | Integrate When                                          |
+| Utility         | Status                                                  |
 | --------------- | ------------------------------------------------------- |
-| Branded types   | ID mixup bugs become a problem                          |
+| Branded types   | ✅ ManageTaskTool uses them; extend if bugs occur       |
 | Circuit breaker | ✅ Done - integrated in base.ts                         |
-| Retry logic     | Transient errors are common in production               |
-| Enhanced errors | User feedback indicates error messages need improvement |
+| Error context   | ✅ Done - classifyErrorWithContext in base.ts           |
+| Retry logic     | ⏳ `withRetry` exists, wire in if transient errors common |
