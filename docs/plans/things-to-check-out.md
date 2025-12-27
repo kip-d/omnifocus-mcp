@@ -4,39 +4,44 @@
 
 ---
 
-## 2. Unified API Filter Passthrough Issues (2025-11-27)
+## 2. Unified API Filter Passthrough Issues (2025-11-27) → ✅ ALL FIXED (2025-12-26)
 
-**Context:** When trying to query projects/tasks by folder or project name, filters are not being passed through the
+**Context:** When trying to query projects/tasks by folder or project name, filters were not being passed through the
 unified API correctly.
 
-### Issues Status
+### Issues Status - All Resolved
 
 #### Issue 2.1: Project Folder Filtering → ✅ FIXED (2025-11-27)
 
 See archived documentation for details.
 
-#### Issue 2.2: Project Name Filtering Broken
+#### Issue 2.2: Project Name Filtering → ✅ FIXED (2025-12-26)
 
-**Symptom:** Querying projects with name filter returns ALL projects.
+**Was fixed as part of Issue 4.3** (archived). Verified working:
 
 ```typescript
-// ❌ BROKEN - Returns all projects, ignores name filter
+// ✅ NOW WORKS - Returns only matching projects
 {
   query: {
     type: "projects",
     filters: { name: { contains: "OmniFocus MCP" } }
   }
 }
+// Returns 3 projects: "OmniFocus MCP Server ongoing work", etc.
 ```
 
-**Expected:** Only projects containing "OmniFocus MCP" in name **Actual:** All 50 projects returned
+#### Issue 2.3: Search Mode Filter Handling → ✅ FIXED (2025-12-26)
 
-#### Issue 2.3: Search Mode Filter Handling
+**Root cause:** OmniFocusReadTool.routeToTasksTool was not passing the `search` filter to QueryTasksTool.
 
-**Symptom:** `mode: "search"` rejects filters even when provided.
-
+**Fix:** Added `search` filter mapping in `src/tools/unified/OmniFocusReadTool.ts`:
 ```typescript
-// ❌ BROKEN - Error: "Search mode requires a search term or filters"
+if (compiled.filters.search) tasksArgs.search = compiled.filters.search;
+```
+
+Now works:
+```typescript
+// ✅ NOW WORKS - Searches tasks by name
 {
   query: {
     type: "tasks",
@@ -44,21 +49,7 @@ See archived documentation for details.
     filters: { name: { contains: "MCP" } }
   }
 }
-```
-
-The filters object is not being passed through to the backend TasksTool.
-
-### What Works
-
-```typescript
-// ✅ WORKS - Task text filtering with mode: "all"
-{
-  query: {
-    type: "tasks",
-    mode: "all",
-    filters: { text: { contains: "MCP" } }
-  }
-}
+// Returns tasks containing "MCP" in name or note
 ```
 
 ---

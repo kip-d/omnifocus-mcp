@@ -115,6 +115,10 @@ PERFORMANCE:
     // Map filters to existing parameters (already transformed by QueryCompiler)
     if (compiled.filters.completed !== undefined) tasksArgs.completed = compiled.filters.completed;
 
+    // Map search filter (from name filter transformation)
+    // This enables mode:"search" with filters:{name:{contains:"..."}}
+    if (compiled.filters.search) tasksArgs.search = compiled.filters.search;
+
     // REMOVED: Simple tags parameter - all tag filters now use advanced filters
     // This fixes Bug #1: tags.any not working (was being passed as simple array)
 
