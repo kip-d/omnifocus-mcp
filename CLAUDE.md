@@ -609,6 +609,23 @@ Instead, preserve historical documentation:
 
 Active documentation stays in `docs/`, historical context goes to archive repo.
 
+## Documentation Style
+
+Follow Strunk's Elements of Style. Most common violations in this codebase:
+
+| Rule | Violation | Fix |
+|------|-----------|-----|
+| 13: Omit needless words | "This document provides an overview of..." | Just start with the content |
+| 15: Parallel structure | Prose lists with varying formats | Use tables for reference material |
+| 10: Active voice | "is managed by", "are processed" | "manages", "processes" |
+| 18: Emphatic endings | Trailing explanations | End sections with key takeaway |
+
+**Quick checklist:**
+- Start docs with purpose, not preamble
+- Tables > prose for lookups and comparisons
+- One idea per sentence
+- Cut "that", "very", "really", "basically"
+
 ## 🚨 Critical: MCP Bridge Type Coercion
 
 **Claude Desktop converts ALL parameters to strings during transport.**
