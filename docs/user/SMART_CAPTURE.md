@@ -1,11 +1,10 @@
 # Smart Capture: Meeting Notes → OmniFocus Tasks
 
-Extract action items from unstructured text (meeting notes, transcripts, emails) and convert them into structured
-OmniFocus tasks and projects.
+Extracts action items from unstructured text (meeting notes, transcripts, emails) and creates OmniFocus tasks.
 
 ## Overview
 
-The `parse_meeting_notes` tool analyzes text and automatically:
+The `parse_meeting_notes` tool:
 
 - **Extracts action items** - Identifies tasks from natural language
 - **Detects projects** - Recognizes multi-step work as projects
@@ -124,8 +123,6 @@ also ask Bob about timeline
 
 ## Context Tag Detection
 
-The tool auto-suggests tags based on content:
-
 ### Location Tags
 
 - `@computer` - email, code, document, write, research
@@ -156,25 +153,18 @@ The tool auto-suggests tags based on content:
 
 ## Natural Language Date Parsing
 
-Supported date formats:
+| Input | Result |
+|-------|--------|
+| `today` | current date |
+| `tomorrow` | next day |
+| `Monday`, `Tuesday`, etc. | next occurrence |
+| `next week` | +7 days |
+| `this week` / `end of week` | next Friday |
+| `end of month` | last day of month |
 
-- `today` → current date
-- `tomorrow` → next day
-- `Monday`, `Tuesday`, etc. → next occurrence
-- `next week` → +7 days
-- `this week` / `end of week` → next Friday
-- `end of month` → last day of current month
-
-**Date phrases:**
-
-- "by Friday" → due date
-- "after Monday" → defer date
-- "follow up next Tuesday" → defer date
-- "before end of week" → due date - 1 day
+**Date phrases:** "by Friday" → due date, "after Monday" → defer date, "before end of week" → due date - 1 day
 
 ## Duration Estimation
-
-Automatic time estimates based on keywords:
 
 | Keyword Pattern         | Estimate   |
 | ----------------------- | ---------- |
@@ -186,8 +176,6 @@ Automatic time estimates based on keywords:
 | deep work, focus        | 3 hours    |
 
 ## Project Detection
-
-The tool identifies projects by:
 
 1. **Explicit markers**: "Project:", "includes:", "involves:"
 2. **Sequential steps**: "then", "after that", "followed by"
@@ -232,17 +220,13 @@ Website Redesign project:
 
 ## Confidence Scoring
 
-Each extracted item gets a confidence score:
-
 - **High** - Clear action verb + tags/dates + good length
 - **Medium** - Some indicators but missing context
 - **Low** - Ambiguous or minimal information
 
-Use `needsReview` in summary to identify low-confidence items.
+Check `needsReview` in summary for low-confidence items.
 
 ## Integration with batch_create
-
-The tool outputs batch-ready format compatible with `batch_create`:
 
 ```javascript
 // Step 1: Extract
@@ -262,37 +246,29 @@ await batch_create({
 
 ### 1. Structure Your Notes
 
-**Good:**
-
+**Clear:**
 ```
 Action Items:
 - Send proposal by Friday
 - Call client tomorrow
-- Review budget next week
 ```
 
-**Works But Less Optimal:**
-
+**Vague:**
 ```
-We should probably send the proposal sometime soon and
-maybe call the client if we get a chance and review budgets
+We should probably send the proposal sometime soon...
 ```
 
 ### 2. Use Action Verbs
 
-**Good:** Send, Call, Review, Update, Create, Schedule
+**Clear:** Send, Call, Review, Update, Create, Schedule
 
-**Avoid:** Maybe think about possibly doing something
+**Vague:** Maybe think about possibly doing something
 
 ### 3. Include Context
 
-**Good:** "Send Q4 proposal to Acme Corp by Friday"
-
-**Better:** Includes recipient, deadline, and specifics
+"Send Q4 proposal to Acme Corp by Friday" beats "send proposal"
 
 ### 4. Mark Assignees Clearly
-
-**Good:**
 
 - "John to send report"
 - "Waiting for Sarah's approval"
@@ -300,9 +276,9 @@ maybe call the client if we get a chance and review budgets
 
 ### 5. Specify Dates
 
-**Good:** "by Friday", "next Tuesday", "end of month"
+**Clear:** "by Friday", "next Tuesday", "end of month"
 
-**Avoid:** "soon", "later", "sometime"
+**Vague:** "soon", "later", "sometime"
 
 ## Examples
 
@@ -388,27 +364,17 @@ Then development and testing
 
 ### Batch Multiple Meetings
 
-Process multiple meetings in one go:
-
 ```javascript
-const meetings = ['Meeting 1 notes: ...', 'Meeting 2 notes: ...', 'Meeting 3 notes: ...'];
-
+const meetings = ['Meeting 1: ...', 'Meeting 2: ...'];
 const allItems = [];
 for (const meeting of meetings) {
-  const result = await parse_meeting_notes({
-    input: meeting,
-    returnFormat: 'batch_ready',
-  });
+  const result = await parse_meeting_notes({ input: meeting, returnFormat: 'batch_ready' });
   allItems.push(...result.batchItems);
 }
-
-// Create all at once
 await batch_create({ items: allItems });
 ```
 
 ### Match to Existing Projects
-
-If you have consistent project names:
 
 ```javascript
 await parse_meeting_notes({
@@ -416,76 +382,38 @@ await parse_meeting_notes({
   existingProjects: ['Client Onboarding', 'Documentation'],
   defaultProject: 'Miscellaneous',
 });
+// → Task matched to "Client Onboarding" project
 ```
-
-Result: Task matched to "Client Onboarding" project
 
 ### Review Before Creating
 
-Always use preview mode first:
-
 ```javascript
 // 1. Preview
-const preview = await parse_meeting_notes({
-  input: '...',
-  returnFormat: 'preview',
-});
-
-// 2. Review extracted items
+const preview = await parse_meeting_notes({ input: '...', returnFormat: 'preview' });
 console.log(preview.summary);
-console.log(preview.extracted.tasks);
 
-// 3. If good, get batch_ready format
-const batch = await parse_meeting_notes({
-  input: '...', // same input
-  returnFormat: 'batch_ready',
-});
-
-// 4. Create
+// 2. Create if good
+const batch = await parse_meeting_notes({ input: '...', returnFormat: 'batch_ready' });
 await batch_create({ items: batch.batchItems });
 ```
 
 ## Limitations
 
-### What It Can't Do
+1. **Can't complete tasks** - Only you can mark physical tasks done
+2. **Can't decide for you** - Tool suggests, you confirm
+3. **Can't handle conditionals** - "If X then Y" needs manual review
+4. **Needs explicit language** - Action verbs and dates required
 
-1. **Complete tasks for you** - Only the user can mark physical tasks complete
-2. **Make project decisions** - Tool suggests, user confirms
-3. **Handle complex logic** - "If X then Y" requires manual review
-4. **Understand context** - Needs explicit action verbs and dates
-
-### When to Review Manually
-
-- Low confidence items (`needsReview` array)
-- Ambiguous assignees
-- Complex multi-step dependencies
-- Sensitive or critical tasks
+**Review manually:** Low confidence items, ambiguous assignees, complex dependencies, sensitive tasks.
 
 ## Troubleshooting
 
-### No Tasks Extracted
-
-**Cause:** No action verbs found
-
-**Fix:** Add action verbs (Send, Call, Review, Update, etc.)
-
-### Wrong Tags Suggested
-
-**Cause:** Keyword matching is imperfect
-
-**Fix:** Review tags in preview mode before creating
-
-### Dates Not Parsed
-
-**Cause:** Unsupported date format
-
-**Fix:** Use supported formats (today, Friday, next week, etc.)
-
-### Tasks Not Grouped
-
-**Cause:** Project indicators not detected
-
-**Fix:** Use "Project:", headers, or explicit multi-step indicators
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| No tasks extracted | No action verbs | Add: Send, Call, Review, Update |
+| Wrong tags | Keyword matching imperfect | Review in preview mode |
+| Dates not parsed | Unsupported format | Use: today, Friday, next week |
+| Tasks not grouped | No project indicators | Use "Project:" or headers |
 
 ## See Also
 
