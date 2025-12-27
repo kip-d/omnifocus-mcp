@@ -1,12 +1,10 @@
 # Troubleshooting Guide
 
-## Common Issues and Solutions
-
-### Installation Issues
+## Installation Issues
 
 #### "command not found" after npm install
 
-**Solution**: Make sure the package is built:
+Build the package:
 
 ```bash
 npm run build
@@ -14,204 +12,122 @@ npm run build
 
 #### TypeScript compilation errors
 
-**Solution**: Ensure you have Node.js 18+ and run:
+Requires Node.js 18+:
 
 ```bash
 npm install
 npm run build
 ```
 
-#### package-lock.json shows as dirty after build
+#### package-lock.json dirty after build
 
-**Solution**: This is normal if dependencies were updated. Best practices:
+Normal if dependencies updated. Best practices:
 
-1. **Use `npm ci` in production/deployment**:
+1. **Production**: Use `npm ci` (installs from lock file exactly)
+2. **Legitimate changes**: Commit them
+3. **Common causes**: Different npm/Node versions, `npm install` vs `npm ci`
+4. **Prevention**: Use `.nvmrc`, prefer `npm ci` for builds
 
-   ```bash
-   npm ci          # Installs from lock file exactly
-   npm run build   # Should not modify lock file
-   ```
+Always commit package-lock.json. Only build artifacts belong in .gitignore.
 
-2. **If package-lock.json changes are legitimate**:
-
-   ```bash
-   git add package-lock.json
-   git commit -m "Update package-lock.json"
-   ```
-
-3. **Common causes of package-lock.json changes**:
-   - Different npm/Node versions between environments
-   - Running `npm install` instead of `npm ci`
-   - Automatic dependency updates
-
-4. **Prevention**:
-   - Use `.nvmrc` file to ensure consistent Node versions
-   - Always use `npm ci` for production builds
-   - Commit package-lock.json changes when they occur
-
-**Note**: package-lock.json should always be committed to the repository. Only build artifacts (dist/, build/) should be
-in .gitignore.
-
-### Connection Issues
+## Connection Issues
 
 #### "OmniFocus permissions not granted"
 
-**Solution**: See [PERMISSIONS.md](PERMISSIONS.md) for detailed setup instructions.
+See [PERMISSIONS.md](PERMISSIONS.md).
 
 #### "Failed to connect to OmniFocus"
 
-**Solution**:
+1. Confirm OmniFocus is running
+2. Close any blocking dialogs
+3. Test: `osascript -l JavaScript -e "Application('OmniFocus').name()"`
 
-1. Ensure OmniFocus is running
-2. Check that no dialogs are blocking OmniFocus
-3. Try running a simple test: `osascript -l JavaScript -e "Application('OmniFocus').name()"`
-
-### Performance Issues
+## Performance Issues
 
 #### Operations timing out
 
-**Solution**:
+1. Reduce limits: `limit: 50`
+2. Add `skipAnalysis: true` for task queries
+3. Use specific filters
+4. Large databases slow everything—performance scales with task count
 
-1. Use smaller limits: `limit: 50` instead of default
-2. Enable performance mode: `skipAnalysis: true` for list_tasks
-3. Use specific filters to reduce result set
-4. Check your database size - performance scales with task count
+#### todays_agenda slow
 
-#### todays_agenda takes too long
+Optimized in v1.5.0+. If still slow:
 
-**Solution**: Already optimized in v1.5.0+. If still slow:
-
-- Reduce limit further: `limit: 25`
+- Use `limit: 25`
 - Set `includeDetails: false`
-- Use list_tasks with date filters instead
+- Try `list_tasks` with date filters
 
-### Data Issues
+## Data Issues
 
-#### Tasks not appearing in results
+#### Tasks not appearing
 
-**Possible causes**:
-
-1. Tasks may be in trash - we filter these out
-2. Cache may be stale - wait 1 minute or modify a task to invalidate
-3. Check your filters - they may be too restrictive
+1. Trashed tasks are filtered out
+2. Cache stale—wait 1 minute or modify a task to refresh
+3. Filters too restrictive
 
 #### "Cannot convert undefined or null to object"
 
-**Solution**: Update to latest version. This was fixed in v1.4.0.
+Fixed in v1.4.0. Update to latest version.
 
-#### "Project not found" Errors with Numeric IDs
+#### "Project not found" with Numeric IDs
 
-**CRITICAL ISSUE**: Claude Desktop has a confirmed bug where it extracts numeric portions from alphanumeric project IDs.
+**Claude Desktop bug**: Extracts numbers from alphanumeric IDs. ID `"az5Ieo4ip7K"` becomes `"547"`.
 
-**Example**: When you provide project ID `"az5Ieo4ip7K"`, Claude Desktop may pass only `"547"` to the tool, causing
-"Project not found" errors.
-
-**Symptoms**:
-
-- Task updates fail with "Project not found" errors
-- Error messages show numeric IDs (like "547") instead of full alphanumeric IDs
-- Occurs even when full project IDs are provided in prompts
-
-**Solutions**:
-
-1. Use `list_projects` to get the correct full project ID:
-   ```javascript
-   {
-     "tool": "list_projects",
-     "arguments": {
-       "search": "your project name"
-     }
-   }
-   ```
-2. Copy the full alphanumeric ID (e.g., `"az5Ieo4ip7K"`) from results
-3. Alternative workaround - move to inbox first, then manually assign in OmniFocus:
-   ```javascript
-   {
-     "tool": "update_task",
-     "arguments": {
-       "taskId": "your-task-id",
-       "projectId": null  // Move to inbox
-     }
-   }
-   ```
-
-#### ~~Tags not being assigned~~ ✅ FIXED in v2.0.0
-
-**Previous limitation**: Tags could not be assigned during task creation.
-
-**Current Status (v2.0.0+)**: ✅ **Tag assignment now works during creation!**
+**Fix**: Get fresh IDs via `list_projects`:
 
 ```javascript
-// ✅ Now works in single step!
-const task = await manage_task({
+{ "tool": "list_projects", "arguments": { "search": "project name" } }
+```
+
+Use the full alphanumeric ID from results.
+
+#### ~~Tags not assigned~~ ✅ FIXED v2.0.0
+
+Tag assignment during creation now works:
+
+```javascript
+manage_task({
   operation: 'create',
   name: 'My Task',
-  projectId: 'someProjectId',
-  tags: ['work', 'urgent'], // Works perfectly!
+  tags: ['work', 'urgent'], // Works!
 });
 ```
 
-This limitation was resolved using the `evaluateJavascript()` bridge. See
-[JXA Limitations and Workarounds](JXA-LIMITATIONS-AND-WORKAROUNDS.md) for technical details.
+See [JXA Limitations](JXA-LIMITATIONS-AND-WORKAROUNDS.md) for details.
 
 #### Project Movement Issues
 
-**Known Limitation**: Moving tasks between projects using JXA has reliability issues.
+Moving tasks between projects may recreate the task with a new ID. Properties preserved; ID changes. Check `result.note` for recreation notices.
 
-**What happens**:
+## MCP-Specific Issues
 
-- The server may need to delete and recreate the task
-- Task maintains all properties but gets a new ID
-- Response includes note about recreation
+#### "No prompts available"
 
-**Example**:
+- **Claude Desktop**: Click "+" → "Add from omnifocus"
+- **Other clients**: Check MCP prompt support
+- **Fallback**: [GTD-WORKFLOW-MANUAL.md](GTD-WORKFLOW-MANUAL.md)
 
-```javascript
-// Moving a task to a project
-const result = await update_task({
-  taskId: 'abc123',
-  projectId: 'xyz789',
-});
+#### No progress indicators
 
-// Check if task was recreated
-if (result.note && result.note.includes('recreated')) {
-  console.log('Task was moved via recreation. New ID:', result.id);
-}
-```
+MCP is request-response only. No streaming.
 
-### MCP-Specific Issues
-
-#### "No prompts available" in MCP client
-
-**Solution**:
-
-- **Claude Desktop**: Click "+" button → "Add from omnifocus" to access MCP prompts
-- **ChatGPT/Other clients**: Check if your client version supports MCP prompts
-- **Fallback**: Use manual workflows from [GTD-WORKFLOW-MANUAL.md](GTD-WORKFLOW-MANUAL.md)
-
-#### Progress indicators not showing
-
-**MCP limitation**: MCP is request-response only. No streaming or progress updates possible.
-
-### Debugging Tips
+## Debugging
 
 #### Enable debug logging
-
-Set environment variable:
 
 ```bash
 export LOG_LEVEL=debug
 ```
 
-#### Check MCP Inspector
-
-Test your server:
+#### MCP Inspector
 
 ```bash
 npx @modelcontextprotocol/inspector dist/index.js
 ```
 
-**Note**: If Inspector won't start, ensure you've built the project first with `npm run build`.
+Build first with `npm run build` if Inspector fails.
 
 #### Verify installation
 
@@ -219,153 +135,82 @@ npx @modelcontextprotocol/inspector dist/index.js
 node dist/index.js --version
 ```
 
-#### Test Basic Connection
+#### Test connection
 
 ```javascript
-{
-  "tool": "get_version_info",
-  "arguments": {}
-}
+{ "tool": "get_version_info", "arguments": {} }
 ```
 
-### Known Claude Desktop Bugs
+## Known Claude Desktop Bugs
 
 1. **ID Parsing**: Extracts numbers from alphanumeric IDs
-2. **Type Conversion**: May convert strings to numbers
-3. **JSON Parsing**: Complex nested objects may fail
+2. **Type Conversion**: Strings become numbers
+3. **JSON Parsing**: Complex nested objects fail
 
-These are Claude Desktop issues, not server bugs. Use workarounds provided above.
+These are client bugs, not server bugs.
 
 ## Additional Common Issues
 
 ### 1. "Script execution failed with code 1"
 
-**Symptoms**: 75% of functions return this error
-
-**Cause**: Missing IIFE wrapper after script modularization
-
-**Solution**: Ensure all scripts have proper wrapper (fixed in current version):
-
-```javascript
-(() => {
-  // script content
-})();
-```
+Fixed in current version. If persists, rebuild: `npm run build`
 
 ### 2. "Task/Project not found" with Numeric IDs
 
-**Symptoms**: `Project with ID '547' not found`
-
-**Cause**: Claude Desktop bug converting string IDs to numbers
-
-**Solution**:
+Claude Desktop converts string IDs to numbers. Always fetch fresh IDs:
 
 ```javascript
-// Always get fresh IDs from list operations
 const projects = await projects({ operation: 'list', search: 'project name' });
-const projectId = projects.data[0].id; // Use this string ID
+const projectId = projects.data[0].id; // Use this
 ```
 
-### 3. Slow Performance Issues
+### 3. Slow Performance (3+ seconds)
 
-**Symptoms**: Operations taking 3+ seconds
-
-**Common Causes & Solutions**:
-
-1. **Using wrong tool**:
-   - ❌ `tasks({ mode: 'all' })` for today → ✅ `tasks({ mode: 'today' })`
-   - ❌ `tags({ operation: 'list' })` for dropdown → ✅ `tags({ operation: 'list', namesOnly: true })`
-
-2. **Missing performance flags**:
-   - Add `details: false` to tasks queries
-   - Use `fastMode: true` for tags when IDs needed
-
-3. **Requesting too much data**:
-   - Use `limit` parameter (defaults: 25-100)
-   - Avoid `includeUsageStats` unless needed
+1. **Wrong tool**: Use `tasks({ mode: 'today' })` not `mode: 'all'`
+2. **Missing flags**: Add `details: false`, `fastMode: true`
+3. **Too much data**: Use `limit` parameter, skip `includeUsageStats`
 
 ### 4. Permission Errors
 
-**Symptoms**: "Failed to get OmniFocus document"
+1. System Settings → Privacy & Security → Automation
+2. Enable OmniFocus for your app
+3. Test: `system({ operation: 'diagnostics' })`
 
-**Solution**:
+### 5. Wrong Times on Tasks
 
-1. Open System Settings → Privacy & Security → Automation
-2. Enable OmniFocus for your terminal/app
-3. Run diagnostic: `system({ operation: 'diagnostics' })`
-
-### 5. Date/Time Issues
-
-**Symptoms**: Tasks created with wrong times
-
-**Cause**: Timezone handling
-
-**Solution**: Use local time format
+Use local time format:
 
 ```javascript
-// Correct formats:
-'2024-01-15'; // Date only (smart defaults: due=5pm, defer=8am)
-'2024-01-15 14:30'; // Date and time (local)
-
-// Avoid: ISO format with Z suffix
-'2024-01-15T14:30:00Z'; // May cause timezone confusion
+'2024-01-15';       // Date only (defaults: due=5pm, defer=8am)
+'2024-01-15 14:30'; // Date+time (local)
+// Avoid: '2024-01-15T14:30:00Z' (timezone confusion)
 ```
 
-### 6. Cache-Related Issues
+### 6. Cache Issues
 
-**Symptoms**: Not seeing recent changes
+**Durations**: Tasks 30s, Projects/Tags 5m, Analytics 1h
 
-**Cache Durations**:
+**Force refresh**: Change any parameter (e.g., `limit: 51` vs `limit: 50`)
 
-- Tasks: 30 seconds
-- Projects: 5 minutes
-- Tags: 5 minutes
-- Analytics: 1 hour
+### 7. "Invalid period" Errors
 
-**Force Refresh**: Change any parameter
+Valid periods: `today`, `week`, `month`, `quarter`, `year`
 
-```javascript
-// These hit different cache keys:
-tasks({ mode: 'all', limit: 50 });
-tasks({ mode: 'all', limit: 51 }); // Forces fresh data
-```
+Invalid: `last_week`, `this_week`, `current_week`
 
-### 7. Invalid Period Values
-
-**Symptoms**: "Invalid period" errors in analytics tools
-
-**Solution**: Use exact strings only
+### 8. V2 Migration
 
 ```javascript
-// ✅ Valid periods:
-('today', 'week', 'month', 'quarter', 'year');
-
-// ❌ Invalid:
-('last_week', 'this_week', 'current_week');
-```
-
-### 8. V2 Tool Migration Issues
-
-**Symptoms**: "Tool not found" errors
-
-**Solution**: Update to V2 consolidated tools:
-
-```javascript
-// ❌ Old V1 tools (removed):
-create_task({ name: 'Task' });
-list_tasks({ completed: false });
-
-// ✅ New V2 tools:
-manage_task({ operation: 'create', name: 'Task' });
-tasks({ mode: 'all', completed: false });
+// ❌ Old: create_task({ name: 'Task' })
+// ✅ New: manage_task({ operation: 'create', name: 'Task' })
 ```
 
 ### JXA whose() Constraints
 
-- Cannot query for "not null" directly (use `{_not: null}` syntax)
-- String operators require underscore prefix: `_contains`, `_beginsWith`, `_endsWith`
-- Date operators use symbols (`>`, `<`), NOT underscores
-- Complex queries may timeout with large databases
+- No "not null" queries (use `{_not: null}`)
+- String operators: `_contains`, `_beginsWith`, `_endsWith`
+- Date operators: `>`, `<` (not underscores)
+- Complex queries timeout on large databases
 
 ## Emergency Recovery
 
