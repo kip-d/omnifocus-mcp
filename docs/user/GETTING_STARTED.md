@@ -1,27 +1,24 @@
 # Getting Started with OmniFocus MCP
 
-Welcome! This guide will help you start using your AI assistant as your personal executive secretary for OmniFocus.
+Your AI assistant becomes an executive secretary for OmniFocus.
 
 ## What This Does
 
-This MCP server lets you talk to your AI assistant (like Claude) in plain English about your tasks, and it handles all
-the OmniFocus complexity for you. Think of it as having an executive assistant who:
+Talk to Claude in plain English about your tasks. The server handles OmniFocus for you—an assistant who:
 
-- Knows what's on your plate
-- Reminds you what's urgent
-- Creates and organizes tasks for you
-- Helps you plan your day
-- Captures meeting notes into actionable tasks
+- Knows your commitments
+- Flags what's urgent
+- Creates and organizes tasks
+- Plans your day
+- Turns meeting notes into actions
 
-You don't need to be an OmniFocus expert - just ask questions naturally.
+Ask questions naturally. OmniFocus expertise is optional.
 
 ## Prerequisites
 
-Before you begin, make sure you have:
-
-- **OmniFocus 4.6+** installed on your Mac
-- **Node.js 18+** installed ([download here](https://nodejs.org/))
-- **An MCP-compatible AI assistant** (Claude Desktop, Claude Code, Cursor, Windsurf, etc.)
+- **OmniFocus 4.6+** on macOS
+- **Node.js 18+** ([download](https://nodejs.org/))
+- **An MCP client**: Claude Desktop, Claude Code, Cursor, or Windsurf
 
 ## Installation
 
@@ -36,10 +33,7 @@ npm run build
 
 ### Step 2: Connect to Your AI Assistant
 
-**For Claude Desktop:**
-
-1. Open or create this file: `~/Library/Application Support/Claude/claude_desktop_config.json`
-2. Add this configuration (replace `/absolute/path/to/` with your actual path):
+**Claude Desktop:** Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -52,65 +46,49 @@ npm run build
 }
 ```
 
-3. **Restart Claude Desktop** completely (Quit and reopen)
+Restart Claude Desktop completely.
 
-**For Other AI Assistants:**
+**Other clients** use the same format:
+- **Claude Code**: `.vscode/settings.json`
+- **Cursor**: `.cursor/mcp.json`
+- **Windsurf**: MCP settings
+- **Cline**: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 
-- **Claude Code**: Add to VS Code settings (`.vscode/settings.json` or User Settings)
-- **Cursor**: Settings > MCP or create `.cursor/mcp.json`
-- **Windsurf**: Configure via MCP settings
-- **Cline**:
-  `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+See [Configuration Details](./claude-desktop-config.md).
 
-All use the same configuration format - see [Configuration Details](./claude-desktop-config.md) for specifics.
+### Step 3: Grant Permissions
 
-### Step 3: Grant OmniFocus Permissions
+On first use, macOS requests permission to control OmniFocus. Click "OK".
 
-When you first use the server, macOS will ask for permission to control OmniFocus. Click "OK" to allow this.
-
-**If you don't see the permission prompt:**
-
-1. Open **System Settings** > **Privacy & Security** > **Automation**
-2. Find your AI assistant (Terminal, Code, etc.)
-3. Enable **OmniFocus** access
+**No prompt?** Open System Settings > Privacy & Security > Automation and enable OmniFocus for your AI app.
 
 ## Your First Conversation
 
-Now comes the fun part. Open your AI assistant (like Claude Desktop) and try these:
+Open Claude Desktop and try these:
 
-### Test 1: Check It's Working
+### Test 1: Check Connection
 
-> **You:** "What's in my OmniFocus inbox?"
+> "What's in my OmniFocus inbox?"
 
-**What should happen:** Claude will list any tasks currently in your OmniFocus inbox. If your inbox is empty, Claude
-will tell you that too.
+Claude lists your inbox tasks, or confirms it's empty.
 
-**If Claude says:** "I don't have access to OmniFocus" or gives an error → See [Troubleshooting](#quick-troubleshooting)
-below.
+**Error?** See [Troubleshooting](#quick-troubleshooting).
 
 ### Test 2: See Today's Tasks
 
-> **You:** "What do I need to do today?"
+> "What do I need to do today?"
 
-or
-
-> **You:** "What's on my plate today?"
-
-Claude will show you tasks that are due today, available to work on, or flagged as important.
+Claude shows tasks due today, available, or flagged.
 
 ### Test 3: Add a Task
 
-> **You:** "Add 'Call dentist' to my inbox"
+> "Add 'Call dentist' to my inbox"
 
-or
+Claude creates the task. Check OmniFocus to confirm.
 
-> **You:** "Remind me to review the budget by Friday"
+## Common Requests
 
-Claude will create the task in OmniFocus for you. You can check OmniFocus to see it there.
-
-## Common Things You Can Do
-
-Just talk naturally! Here are examples, but don't memorize these - ask in your own words:
+Examples—use your own words:
 
 ### Checking Your Tasks
 
@@ -134,14 +112,13 @@ Just talk naturally! Here are examples, but don't memorize these - ask in your o
 
 ### Capturing Meeting Notes
 
-> **You:** "I just got out of a meeting. Here are my notes:
->
+> "I just got out of a meeting. Here are my notes:
 > - Send proposal to client by Friday
 > - Call Sarah about the budget
 > - Review Q4 metrics before next week
 > - Schedule follow-up meeting"
 
-Claude will parse this and help you create organized tasks with appropriate tags and due dates.
+Claude parses these into organized tasks with tags and due dates.
 
 ### Daily Planning
 
@@ -149,166 +126,131 @@ Claude will parse this and help you create organized tasks with appropriate tags
 - "What should I focus on this afternoon?"
 - "Show me quick tasks I can knock out in 15 minutes"
 
-## Understanding OmniFocus Concepts
+## OmniFocus Vocabulary
 
-Your AI assistant understands these OmniFocus terms, so you can use them naturally:
+Claude understands these terms:
 
-- **Inbox**: Where new tasks go before you organize them
-- **Projects**: Collections of related tasks (like "Website Redesign" or "Plan Vacation")
-- **Tags**: Labels to categorize tasks (like "urgent", "phone calls", "15 minutes")
-- **Defer Date**: When a task becomes relevant (hides it until then)
-- **Due Date**: When a task must be completed
-- **Flagged**: Mark something as high priority
-- **Sequential Projects**: Tasks must be done in order
-- **Parallel Projects**: Tasks can be done in any order
-- **Perspectives**: Saved views of your tasks (like "Today", "Flagged", "Overdue")
+- **Inbox**: Unsorted new tasks
+- **Projects**: Related task groups ("Website Redesign", "Plan Vacation")
+- **Tags**: Categories ("urgent", "phone", "15 minutes")
+- **Defer Date**: When a task becomes available
+- **Due Date**: Deadline
+- **Flagged**: High priority
+- **Sequential/Parallel Projects**: Ordered vs. any-order tasks
+- **Perspectives**: Saved views ("Today", "Flagged", "Overdue")
 
-**Don't worry if you don't know all these!** Just describe what you want in plain English, and Claude will figure out
-the OmniFocus details.
+Describe what you want; Claude handles the OmniFocus details.
 
-## Tips for Natural Conversation
+## Tips
 
-### You Don't Need to Be Precise
+### Skip the Technical Jargon
 
-❌ **Don't say:** "Use the tasks tool with mode parameter 'today' and limit 10"
+❌ "Use the tasks tool with mode parameter 'today' and limit 10"
 
-✅ **Just say:** "What's on my to-do list today?"
+✅ "What's on my to-do list today?"
 
-### The Assistant Understands Context
+### Claude Remembers Context
 
-You can have a natural back-and-forth:
+> "What's due today?"
+> _[shows 5 tasks]_
+> "Flag the budget review as urgent"
+> _[flags it]_
+> "Move it to tomorrow"
+> _[reschedules]_
 
-> **You:** "What's due today?" **Claude:** _[shows 5 tasks]_ **You:** "Flag the budget review one as urgent" **Claude:**
-> _[flags it]_ **You:** "Actually, move it to tomorrow instead" **Claude:** _[reschedules it]_
-
-### Be as Casual or Detailed as You Want
-
-Both of these work fine:
+### Casual or Detailed—Both Work
 
 **Casual:** "Remind me to email John"
 
-**Detailed:** "Create a task in my Work project to email John about the Q4 budget, tag it as urgent, and make it due
-this Friday at 5pm"
+**Detailed:** "Create a task in Work to email John about Q4 budget, tag urgent, due Friday 5pm"
 
 ## Quick Troubleshooting
 
-### "I don't have access to OmniFocus" or Permission Errors
+### Permission Errors
 
-**Fix:**
+1. Confirm OmniFocus is running
+2. Open System Settings > Privacy & Security > Automation
+3. Enable OmniFocus for your AI app
+4. Restart the AI assistant
 
-1. Make sure OmniFocus is running
-2. Check System Settings > Privacy & Security > Automation
-3. Enable OmniFocus for your AI assistant's app
-4. Restart your AI assistant completely
+### "Tool not found"
 
-### Claude says "Tool not found" or doesn't see OmniFocus
+1. Run `npm run build`
+2. Verify the path in your config
+3. Quit and restart the AI assistant
 
-**Fix:**
+### OmniFocus Running but Unresponsive
 
-1. Make sure you ran `npm run build`
-2. Check your configuration file has the correct path
-3. **Fully quit and restart** your AI assistant (don't just refresh)
+1. Close any OmniFocus dialogs (they block automation)
+2. Dismiss sync conflict prompts
+3. Ask Claude: "Check if OmniFocus is accessible"
 
-### OmniFocus is running but nothing works
+### Tasks Missing from OmniFocus
 
-**Fix:**
+- Wait 30 seconds for cache sync
+- Check perspective filters
+- Look in Inbox
 
-1. Close any dialog boxes in OmniFocus (they can block access)
-2. Make sure OmniFocus isn't showing a dialog asking for sync resolution
-3. Try: "Check if OmniFocus is accessible" (Claude will run diagnostics)
-
-### Tasks appear in Claude but not in OmniFocus
-
-**Fix:**
-
-- Wait 30 seconds for cache to sync
-- Check OmniFocus isn't filtered to hide the task
-- Look in Inbox if you can't find it elsewhere
-
-### More detailed troubleshooting
-
-See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for complete troubleshooting guide.
+**More help:** [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 
 ## What's Next?
 
-### Explore GTD Workflows
+### GTD Workflows
 
-If you're interested in Getting Things Done (GTD) methodology, try:
+Try these if you use Getting Things Done:
 
-- "Help me process my inbox" (processes tasks one by one)
-- "Guide me through a weekly review" (comprehensive review workflow)
-- "What does GTD recommend I do with this task?"
+- "Help me process my inbox"
+- "Guide me through a weekly review"
+- "What does GTD recommend for this task?"
 
-See [GTD Workflow Guide](./GTD-WORKFLOW-MANUAL.md) for more.
+See [GTD Workflow Guide](./GTD-WORKFLOW-MANUAL.md).
 
 ### Built-in Prompts
 
-Your AI assistant has access to several pre-built workflows:
+**Claude Desktop:** Click "+" → "Add from omnifocus"
 
-**In Claude Desktop:** Click the "+" button and select "Add from omnifocus" to see available prompts.
+**Other clients:** Ask naturally: "Help me process my inbox using GTD"
 
-**In Claude Code or other assistants:** Just ask naturally - for example, "Help me process my inbox using the GTD
-method"
+### Remote Access
 
-### Remote Access (Windows to Mac)
-
-Want to use Claude Desktop on a Windows PC to access OmniFocus on your Mac? The HTTP transport mode enables this:
+Access OmniFocus from Windows or Linux via HTTP transport:
 
 ```bash
-# On your Mac - start in HTTP mode
+# On your Mac
 node dist/index.js --http --port 3000
 ```
 
-Then configure Claude Desktop on Windows to connect to your Mac's IP address or Tailscale hostname.
+Configure your remote client to connect via IP or Tailscale hostname.
 
-See **[HTTP Transport Guide](./HTTP-TRANSPORT.md)** for complete setup instructions including:
-
-- Secure access with authentication tokens
-- Tailscale/VPN configuration
-- Running as a background service
-- Troubleshooting remote connections
+See **[HTTP Transport Guide](./HTTP-TRANSPORT.md)** for authentication, VPN setup, and troubleshooting.
 
 ### Advanced Features
 
-Once you're comfortable with basics, you can explore:
-
 - **Batch operations**: Create multiple tasks at once
-- **Export data**: Export tasks to CSV, JSON, or Markdown
-- **Analytics**: "Show me my productivity stats for this week"
-- **Perspective queries**: "Show me my custom 'Evening Review' perspective"
+- **Export**: CSV, JSON, or Markdown
+- **Analytics**: "Show my productivity stats this week"
+- **Perspectives**: "Show my 'Evening Review' perspective"
 
-See [API Reference for LLMs](../api/API-REFERENCE-LLM.md) for complete capabilities.
+See [API Reference for LLMs](../api/API-REFERENCE-LLM.md).
 
 ## For Developers
 
-If you're a developer wanting to integrate this into your own tools or understand the technical details:
+- **[API Reference](./API-REFERENCE-V2.md)** - Tool reference with JSON examples
+- **[Architecture](./ARCHITECTURE.md)** - Implementation details
+- **[Testing Guide](./REAL_LLM_TESTING.md)** - Testing with real AI models
 
-- **[API Reference](./API-REFERENCE-V2.md)** - Complete tool reference with JSON examples
-- **[Architecture Documentation](./ARCHITECTURE.md)** - Technical implementation details
-- **[Testing Guide](./REAL_LLM_TESTING.md)** - How to test with real AI models
+## Privacy
 
-## Privacy & Data
-
-- **All processing happens locally** on your Mac
-- No data is sent to external servers (except your AI assistant's normal operation)
+- All processing runs locally on your Mac
 - OmniFocus data stays in OmniFocus
-- The MCP server only accesses OmniFocus when you ask it to
+- The server accesses OmniFocus only when you ask
 
 ## Getting Help
 
-If you run into issues:
-
 1. Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 2. Search [existing issues](https://github.com/kip-d/omnifocus-mcp/issues)
-3. Open a new issue with:
-   - Your OmniFocus version
-   - Your AI assistant and version
-   - What you asked and what happened
-   - Any error messages
+3. Open a new issue with your OmniFocus version, AI client, what you asked, and any errors
 
 ## Remember
 
-**This is your executive assistant.** Just talk naturally about what you need to do, and let the AI handle the OmniFocus
-complexity. You don't need to learn every feature - discover them as you need them.
-
-Start simple, and explore more as you get comfortable. Enjoy having a personal productivity assistant!
+Talk naturally. The AI handles OmniFocus. Start simple; discover features as you need them.
