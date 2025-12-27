@@ -48,7 +48,10 @@ describe('TaskVelocityTool', () => {
     const res: any = await tool.execute({ days: 7, groupBy: 'day' } as any);
     expect(res.success).toBe(true);
     expect(res.metadata.from_cache).toBe(true);
-    expect(res.metadata.days).toBe(7);
+    // Metadata now uses startDate/endDate instead of days
+    expect(res.metadata.startDate).toBeDefined();
+    expect(res.metadata.endDate).toBeDefined();
+    expect(res.metadata.groupBy).toBe('day');
   });
 
   it('should handle script error result with structured error', async () => {

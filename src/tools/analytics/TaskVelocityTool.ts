@@ -73,10 +73,27 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
     const timer = new OperationTimerV2();
 
     try {
-      const { days = 7, groupBy = 'day', includeWeekends = true } = args;
+      const { days = 7, groupBy = 'day', includeWeekends = true, startDate, endDate } = args;
 
-      // Create cache key
-      const cacheKey = `velocity_v2_${days}_${groupBy}_${includeWeekends}`;
+      // Compute actual date range
+      let rangeStart: string;
+      let rangeEnd: string;
+
+      if (startDate && endDate) {
+        // Use provided date range
+        rangeStart = startDate;
+        rangeEnd = endDate;
+      } else {
+        // Default to 'days' days ago until now
+        const now = new Date();
+        const start = new Date(now);
+        start.setDate(start.getDate() - days);
+        rangeStart = start.toISOString().split('T')[0];
+        rangeEnd = now.toISOString().split('T')[0];
+      }
+
+      // Create cache key including date range
+      const cacheKey = `velocity_v2_${rangeStart}_${rangeEnd}_${groupBy}_${includeWeekends}`;
 
       // Check cache (1 hour TTL for analytics)
       // Cached velocity data structure matches our response interface
@@ -94,15 +111,19 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
           this.extractKeyFindings(cached as Parameters<typeof this.extractKeyFindings>[0]),
           {
             from_cache: true,
-            days,
+            startDate: rangeStart,
+            endDate: rangeEnd,
+            groupBy,
+            includeWeekends,
             ...timer.toMetadata(),
           },
         );
       }
 
       // Execute script - V3 uses period instead of groupBy
+      // Pass date range so script filters completions correctly
       const script = this.omniAutomation.buildScript(TASK_VELOCITY_SCRIPT, {
-        options: { period: groupBy },
+        options: { period: groupBy, startDate: rangeStart, endDate: rangeEnd },
       });
 
       // Schema matching the V3 velocity payload
@@ -161,7 +182,8 @@ export class TaskVelocityTool extends BaseTool<typeof TaskVelocitySchemaV2> {
 
       return createAnalyticsResponseV2('task_velocity', responseData, 'Task Velocity Analysis', keyFindings, {
         from_cache: false,
-        days,
+        startDate: rangeStart,
+        endDate: rangeEnd,
         groupBy,
         includeWeekends,
         ...timer.toMetadata(),

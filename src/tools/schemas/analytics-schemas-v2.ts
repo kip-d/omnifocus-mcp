@@ -25,7 +25,7 @@ export const TaskVelocitySchemaV2 = z.object({
     .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
     .pipe(z.number().min(1).max(365))
     .default(7)
-    .describe('Number of days to analyze'),
+    .describe('Number of days to analyze (used if startDate/endDate not provided)'),
 
   groupBy: z.enum(['day', 'week', 'project']).default('day').describe('How to group velocity data'),
 
@@ -33,6 +33,10 @@ export const TaskVelocitySchemaV2 = z.object({
     .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
     .default(true)
     .describe('Include weekend days in analysis'),
+
+  startDate: z.string().optional().describe('Start of date range (YYYY-MM-DD)'),
+
+  endDate: z.string().optional().describe('End of date range (YYYY-MM-DD)'),
 });
 
 // Overdue analysis parameters for V2 (same as V1)

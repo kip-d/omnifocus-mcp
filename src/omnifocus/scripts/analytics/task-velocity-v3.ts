@@ -19,25 +19,40 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
     try {
       // Build OmniJS script for data collection
       const period = options.period || 'week';
+      const startDateStr = options.startDate;
+      const endDateStr = options.endDate;
       const intervalDays = period === 'day' ? 1 : period === 'week' ? 7 : 30;
-      const numIntervals = period === 'day' ? 30 : period === 'week' ? 12 : 12;
+
+      // Calculate number of intervals to cover the date range
+      const startMs = new Date(startDateStr + 'T00:00:00').getTime();
+      const endMs = new Date(endDateStr + 'T23:59:59').getTime();
+      const rangeDays = Math.ceil((endMs - startMs) / (1000 * 60 * 60 * 24));
+      const numIntervals = Math.max(1, Math.ceil(rangeDays / intervalDays));
 
       const velocityScript = \`
         (() => {
-          const now = new Date();
+          // Parse date range from options
+          const rangeStart = new Date('$\{startDateStr}T00:00:00');
+          const rangeEnd = new Date('$\{endDateStr}T23:59:59');
           const intervalDays = $\{intervalDays};
           const numIntervals = $\{numIntervals};
 
-          // Calculate period intervals
+          // Calculate period intervals within the date range
           const intervals = [];
           for (let i = 0; i < numIntervals; i++) {
-            const intervalEnd = new Date(now);
+            const intervalEnd = new Date(rangeEnd);
             intervalEnd.setDate(intervalEnd.getDate() - (i * intervalDays));
             const intervalStart = new Date(intervalEnd);
             intervalStart.setDate(intervalStart.getDate() - intervalDays);
 
+            // Skip intervals that are entirely before the range start
+            if (intervalEnd < rangeStart) continue;
+
+            // Clamp interval start to range start
+            const clampedStart = intervalStart < rangeStart ? rangeStart : intervalStart;
+
             intervals.push({
-              start: intervalStart,
+              start: clampedStart,
               end: intervalEnd,
               created: 0,
               completed: 0,
@@ -46,15 +61,16 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
           }
 
           // Collect task data in OmniJS context - FAST!
+          // Only count tasks completed within the specified date range
           let totalCompleted = 0;
           let totalCreated = 0;
           const completionTimes = [];
 
           flattenedTasks.forEach(task => {
             try {
-              // Completion analysis
+              // Completion analysis - only count if within date range
               const completionDate = task.completionDate;
-              if (completionDate) {
+              if (completionDate && completionDate >= rangeStart && completionDate <= rangeEnd) {
                 totalCompleted++;
 
                 // Find interval for completion
@@ -76,8 +92,9 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
 
             try {
               // Creation analysis (use modified date as proxy for creation)
+              // Only count if within date range
               const modified = task.modified;
-              if (modified) {
+              if (modified && modified >= rangeStart && modified <= rangeEnd) {
                 for (const interval of intervals) {
                   if (modified >= interval.start && modified < interval.end) {
                     interval.created++;
@@ -99,10 +116,15 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
               : completionTimes[mid];
           }
 
-          // Calculate velocity metrics
-          const recentIntervals = intervals.slice(0, 4);
-          const avgCompleted = recentIntervals.reduce((sum, i) => sum + i.completed, 0) / recentIntervals.length;
-          const avgCreated = recentIntervals.reduce((sum, i) => sum + i.created, 0) / recentIntervals.length;
+          // Calculate velocity metrics based on actual intervals
+          const activeIntervals = intervals.filter(i => i.completed > 0 || i.created > 0);
+          const recentIntervals = activeIntervals.length > 0 ? activeIntervals.slice(0, Math.min(4, activeIntervals.length)) : intervals.slice(0, 4);
+          const avgCompleted = recentIntervals.length > 0
+            ? recentIntervals.reduce((sum, i) => sum + i.completed, 0) / recentIntervals.length
+            : 0;
+          const avgCreated = recentIntervals.length > 0
+            ? recentIntervals.reduce((sum, i) => sum + i.created, 0) / recentIntervals.length
+            : 0;
 
           const velocity = avgCompleted / intervalDays;
           const backlogGrowth = avgCreated - avgCompleted;
@@ -132,7 +154,11 @@ export const TASK_VELOCITY_SCRIPT_V3 = `
                 tasksPerWeek: (velocity * 7).toFixed(1),
                 tasksPerMonth: (velocity * 30).toFixed(1)
               },
-              optimization: 'omnijs_v3'
+              optimization: 'omnijs_v3',
+              dateRange: {
+                start: '$\{startDateStr}',
+                end: '$\{endDateStr}'
+              }
             }
           });
         })()
