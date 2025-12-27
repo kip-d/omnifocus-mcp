@@ -25,12 +25,20 @@ digraph CLAUDE_OMNIFOCUS {
         style=filled;
         fillcolor=mistyrose;
 
+        // Project-specific (red = NEVER)
         "NEVER use .where()/.whose()" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
         "NEVER debug script before MCP test" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
         "NEVER assume bulk = multiple queries" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
         "NEVER skip pattern search" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+
+        // Generic best practices (red = NEVER)
+        "NEVER git add -A" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+        "Test MUST come first" [shape=octagon, style=filled, fillcolor=red, fontcolor=white];
+
+        // Cautions (orange = STOP and think)
         "MEASURE before optimizing" [shape=octagon, style=filled, fillcolor=orange];
         "Tags REQUIRE bridge" [shape=octagon, style=filled, fillcolor=orange];
+        "Say: I don't understand" [shape=octagon, style=filled, fillcolor=orange];
     }
 
     // =========================================================
@@ -177,6 +185,41 @@ digraph CLAUDE_OMNIFOCUS {
     }
 
     // =========================================================
+    // CLUSTER: General Debugging (complements MCP-first)
+    // =========================================================
+    subgraph cluster_general_debug {
+        label="3b. DEBUGGING (GENERAL)";
+        style=rounded;
+
+        "Test is failing" [shape=ellipse];
+        "Read error CAREFULLY" [shape=box];
+        "Can reproduce?" [shape=diamond];
+        "Simplify test case" [shape=box];
+        "git diff HEAD~1" [shape=plaintext, fontsize=9];
+        "Find working example" [shape=box];
+        "grep -r 'working_pattern' ." [shape=plaintext, fontsize=9];
+        "Compare differences" [shape=box];
+        "Form ONE hypothesis" [shape=box];
+        "Hypothesis correct?" [shape=diamond];
+        "Apply minimal fix" [shape=box];
+        "Bug fixed" [shape=doublecircle];
+
+        "Test is failing" -> "Read error CAREFULLY";
+        "Read error CAREFULLY" -> "Can reproduce?";
+        "Can reproduce?" -> "Simplify test case" [label="no"];
+        "Can reproduce?" -> "git diff HEAD~1" [label="yes"];
+        "Simplify test case" -> "Can reproduce?";
+        "git diff HEAD~1" -> "Find working example";
+        "Find working example" -> "grep -r 'working_pattern' .";
+        "grep -r 'working_pattern' ." -> "Compare differences";
+        "Compare differences" -> "Form ONE hypothesis";
+        "Form ONE hypothesis" -> "Hypothesis correct?";
+        "Hypothesis correct?" -> "Apply minimal fix" [label="yes"];
+        "Hypothesis correct?" -> "Form ONE hypothesis" [label="no"];
+        "Apply minimal fix" -> "Bug fixed";
+    }
+
+    // =========================================================
     // CLUSTER: Verification Before Completion
     // =========================================================
     subgraph cluster_verify {
@@ -184,21 +227,34 @@ digraph CLAUDE_OMNIFOCUS {
         style=rounded;
 
         "Ready to complete" [shape=ellipse];
-        "npm test" [shape=plaintext];
+        "npm test (verify)" [shape=plaintext];
         "Tests pass?" [shape=diamond];
         "npm run build" [shape=plaintext];
         "Build pass?" [shape=diamond];
+        "npm run lint" [shape=plaintext];
+        "Lint pass?" [shape=diamond];
+        "Debug output removed?" [shape=diamond];
+        "grep -r 'console.log' src/" [shape=plaintext, fontsize=9];
+        "TODOs updated?" [shape=diamond];
         "Fix issues" [shape=box];
         "Task complete" [shape=doublecircle];
 
-        "Ready to complete" -> "npm test";
-        "npm test" -> "Tests pass?";
+        "Ready to complete" -> "npm test (verify)";
+        "npm test (verify)" -> "Tests pass?";
         "Tests pass?" -> "npm run build" [label="yes"];
         "Tests pass?" -> "Fix issues" [label="no"];
         "npm run build" -> "Build pass?";
-        "Build pass?" -> "Task complete" [label="yes"];
+        "Build pass?" -> "npm run lint" [label="yes"];
         "Build pass?" -> "Fix issues" [label="no"];
-        "Fix issues" -> "npm test";
+        "npm run lint" -> "Lint pass?";
+        "Lint pass?" -> "Debug output removed?" [label="yes"];
+        "Lint pass?" -> "Fix issues" [label="no"];
+        "Debug output removed?" -> "grep -r 'console.log' src/" [label="check"];
+        "grep -r 'console.log' src/" -> "TODOs updated?" [label="clean"];
+        "grep -r 'console.log' src/" -> "Fix issues" [label="found"];
+        "TODOs updated?" -> "Task complete" [label="yes"];
+        "TODOs updated?" -> "Fix issues" [label="no"];
+        "Fix issues" -> "npm test (verify)";
     }
 
     // =========================================================
@@ -212,6 +268,11 @@ digraph CLAUDE_OMNIFOCUS {
     "Task complete" -> "Request arrives" [style=dotted, label="next"];
 
     // Stuck transitions
-    "npm test" -> "I'm stuck" [style=dotted, label="confused"];
+    "npm test (verify)" -> "I'm stuck" [style=dotted, label="confused"];
     "Unstuck" -> "Start implementing" [style=dotted];
+
+    // Debugging transitions
+    "npm test (verify)" -> "Test is failing" [style=dotted, label="fails"];
+    "Bug fixed" -> "npm test (verify)" [style=dotted];
+    "Issue resolved" -> "npm test (verify)" [style=dotted];
 }
