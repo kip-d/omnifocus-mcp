@@ -1,20 +1,19 @@
 # OmniFocus MCP Server
 
-A Model Context Protocol (MCP) server that provides programmatic access to OmniFocus task management via Claude Desktop
-and other MCP clients.
+A Model Context Protocol (MCP) server that connects OmniFocus to Claude Desktop and other MCP clients.
 
-> **Personal Project Notice**: This is a hobby project designed for my specific OmniFocus workflow automation needs.
-> It's MIT licensed and you're welcome to use or adapt it, but no support or maintenance is guaranteed.
+> **Personal Project Notice**: A hobby project for my workflow automation. MIT licensed—use or adapt freely, but
+> provided as-is.
 
 ## Features
 
 - **Task Operations**: Create, update, complete, delete tasks with full property support
 - **Project Management**: Create and manage projects with folders, sequential/parallel modes
-- **GTD Analytics**: Productivity insights, workflow analysis, and bottleneck detection
-- **Tag Management**: Complete tag operations including hierarchy and bulk operations
+- **GTD Analytics**: Analyze productivity, workflows, and bottlenecks
+- **Tag Management**: Manage tags with hierarchy and bulk operations
 - **Perspective Access**: Query any OmniFocus perspective programmatically
 - **Data Export**: Export data in JSON, CSV, or Markdown formats
-- **Performance**: Optimized queries handle 2000+ tasks in under 1 second
+- **Performance**: Query 2000+ tasks in under 1 second
 - **Remote Access**: Optional HTTP transport for cross-platform access via Tailscale
 
 ## 🧭 Navigation Guide
@@ -56,7 +55,7 @@ npm run build
 
 #### Local (stdio) - Default
 
-For clients running on the same Mac as OmniFocus:
+For local access:
 
 **Claude Desktop:** Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -193,7 +192,7 @@ Nine pre-built prompts for common workflows:
 
 ### For End Users: Just Talk Naturally
 
-Once set up, simply open your AI assistant and ask questions in plain English:
+Once set up, ask questions naturally:
 
 - "What do I need to do today?"
 - "Show me everything that's overdue"
@@ -225,7 +224,7 @@ If you're integrating this server into your own tools, see the [Developer Guide]
 - **`parse_meeting_notes`** - Extract action items from meeting notes, transcripts, or unstructured text with AI
 - **`projects`** - Project operations (list, create, update, delete, statistics)
 - **`folders`** - Folder management and hierarchical organization
-- **`tags`** - Complete tag operations including hierarchy, nesting, and bulk management
+- **`tags`** - Tag operations with hierarchy and bulk management
 
 ### Organization & Reviews (3)
 
@@ -326,7 +325,7 @@ Fast tests with no external dependencies. Use for rapid development cycles.
 npm run test:integration
 ```
 
-End-to-end tests that require OmniFocus running on macOS. Tests actual MCP protocol and data persistence.
+End-to-end tests requiring OmniFocus on macOS. Tests MCP protocol and data persistence.
 
 - **Protocol Tests**: MCP server initialization, tool discovery, error handling
 - **Data Lifecycle Tests**: Task/project CRUD operations, tag-based tracking, cleanup verification
