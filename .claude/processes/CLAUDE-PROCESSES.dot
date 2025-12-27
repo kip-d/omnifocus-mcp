@@ -235,6 +235,8 @@ digraph CLAUDE_OMNIFOCUS {
         "Lint pass?" [shape=diamond];
         "Debug output removed?" [shape=diamond];
         "grep -r 'console.log' src/" [shape=plaintext, fontsize=9];
+        "Changed docs?" [shape=diamond];
+        "Use elements-of-style skill" [shape=box, style=filled, fillcolor=lightblue];
         "TODOs updated?" [shape=diamond];
         "Fix issues" [shape=box];
         "Task complete" [shape=doublecircle];
@@ -250,8 +252,11 @@ digraph CLAUDE_OMNIFOCUS {
         "Lint pass?" -> "Debug output removed?" [label="yes"];
         "Lint pass?" -> "Fix issues" [label="no"];
         "Debug output removed?" -> "grep -r 'console.log' src/" [label="check"];
-        "grep -r 'console.log' src/" -> "TODOs updated?" [label="clean"];
+        "grep -r 'console.log' src/" -> "Changed docs?" [label="clean"];
         "grep -r 'console.log' src/" -> "Fix issues" [label="found"];
+        "Changed docs?" -> "Use elements-of-style skill" [label="yes"];
+        "Changed docs?" -> "TODOs updated?" [label="no"];
+        "Use elements-of-style skill" -> "TODOs updated?";
         "TODOs updated?" -> "Task complete" [label="yes"];
         "TODOs updated?" -> "Fix issues" [label="no"];
         "Fix issues" -> "npm test (verify)";
