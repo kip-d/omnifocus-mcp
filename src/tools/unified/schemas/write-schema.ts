@@ -46,6 +46,7 @@ const UpdateChangesSchema = z
     flagged: z.boolean().optional(),
     status: z.enum(['completed', 'dropped']).optional(),
     project: z.union([z.string(), z.null()]).optional(),
+    parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
     estimatedMinutes: z.number().optional(),
     clearEstimatedMinutes: z.boolean().optional(), // Bug #18: Clear estimated time
     clearRepeatRule: z.boolean().optional(), // Bug #19: Clear repetition rule

@@ -44,7 +44,7 @@ type BrandedTaskArgs = {
   taskIds?: TaskId[];
   projectId?: ProjectId | null;
   project?: string | null; // Alias for unified API compatibility
-  parentTaskId?: TaskId;
+  parentTaskId?: TaskId | null;
   completionDate?: string | null;
   minimalResponse?: string | boolean;
   bulkCriteria?: {
@@ -262,7 +262,12 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             ? null
             : convertToProjectId(args.projectId)
           : undefined,
-      parentTaskId: args.parentTaskId ? convertToTaskId(args.parentTaskId) : undefined,
+      parentTaskId:
+        args.parentTaskId !== undefined
+          ? args.parentTaskId === null || args.parentTaskId === ''
+            ? null
+            : convertToTaskId(args.parentTaskId)
+          : undefined,
     };
 
     const { taskId: brandedTaskId, ...brandedParams } = brandedArgs;

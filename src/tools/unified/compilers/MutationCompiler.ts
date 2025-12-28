@@ -45,6 +45,7 @@ interface UpdateChanges {
   flagged?: boolean;
   status?: 'completed' | 'dropped';
   project?: string | null;
+  parentTaskId?: string | null; // Bug OMN-5: Update parent task relationship
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean; // Bug #18: Clear estimated time
   clearRepeatRule?: boolean; // Bug #19: Clear repetition rule

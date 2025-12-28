@@ -152,6 +152,7 @@ export interface TaskUpdateData {
   name?: string;
   note?: string;
   project?: string | null; // null = move to inbox
+  parentTaskId?: string | null; // Move task to be subtask of this parent (null = move to project root)
   tags?: string[]; // Replace all tags
   addTags?: string[]; // Add to existing tags
   removeTags?: string[]; // Remove from existing tags

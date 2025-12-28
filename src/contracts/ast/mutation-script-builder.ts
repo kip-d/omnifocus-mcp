@@ -846,6 +846,45 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           }
         }
 
+        // Handle parentTaskId change (move task to different parent)
+        if (changes.parentTaskId !== undefined) {
+          if (changes.parentTaskId === null || changes.parentTaskId === '') {
+            // Move to project/inbox root (remove parent)
+            const proj = task.containingProject;
+            try {
+              if (proj) {
+                // Task is in a project, move to project root
+                moveTasks([task], proj.beginning);
+              } else {
+                // Task is in inbox, move to inbox root
+                moveTasks([task], inbox.beginning);
+              }
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: 'Failed to remove parent: ' + String(e)
+              });
+            }
+          } else {
+            // Move to specified parent task
+            const parentTask = Task.byIdentifier(changes.parentTaskId);
+            if (!parentTask) {
+              return JSON.stringify({
+                error: true,
+                message: 'Parent task not found: ' + changes.parentTaskId
+              });
+            }
+            try {
+              moveTasks([task], parentTask);
+            } catch (e) {
+              return JSON.stringify({
+                error: true,
+                message: 'Failed to move task to parent: ' + String(e)
+              });
+            }
+          }
+        }
+
         // Handle tags
         if (changes.tags || changes.addTags || changes.removeTags) {
           if (changes.tags) {

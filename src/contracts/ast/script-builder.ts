@@ -62,6 +62,8 @@ const DEFAULT_FIELDS = [
   'project',
   'projectId',
   'estimatedMinutes',
+  'parentTaskId',
+  'parentTaskName',
 ];
 
 /**

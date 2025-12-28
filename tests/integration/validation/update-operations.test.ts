@@ -334,4 +334,52 @@ describe('Update Operations - Read-Back Validation', () => {
       expect(task.tags).toContain(`${TEST_TAG_PREFIX}priority`);
     }, 120000);
   });
+
+  describe('Parent Task Updates (Bug OMN-5 Fix)', () => {
+    it('should move task to become subtask of parent (parentTaskId update)', async () => {
+      // 1. Create a parent task (action group)
+      const parentTaskId = await createTask('Action Group Parent');
+
+      // 2. Create a standalone task
+      const childTaskId = await createTask('Standalone becomes subtask');
+
+      // 3. Update standalone task with parentTaskId to move it under parent
+      const updateResult = await updateTask(childTaskId, {
+        parentTaskId: parentTaskId,
+      });
+      expect(updateResult.success).toBe(true);
+
+      // 4. Read back and verify parent-child relationship
+      const task = await readTask(childTaskId);
+      expect(task.parentTaskId).toBe(parentTaskId);
+      expect(task.parentTaskName).toContain('Action Group Parent');
+    }, 120000);
+
+    it('should move subtask back to project root (parentTaskId = null)', async () => {
+      // 1. Create parent task and child task
+      const parentTaskId = await createTask('Parent for removal test');
+      const childTaskId = await createTask('Child to be orphaned');
+
+      // 2. First move child to parent
+      let updateResult = await updateTask(childTaskId, {
+        parentTaskId: parentTaskId,
+      });
+      expect(updateResult.success).toBe(true);
+
+      // Verify it's a subtask
+      let task = await readTask(childTaskId);
+      expect(task.parentTaskId).toBe(parentTaskId);
+
+      // 3. Now move child back to project root (remove parent)
+      updateResult = await updateTask(childTaskId, {
+        parentTaskId: null,
+      });
+      expect(updateResult.success).toBe(true);
+
+      // 4. Verify parent relationship removed
+      task = await readTask(childTaskId);
+      // parentTaskId is null when task has no parent (field projection returns null, not undefined)
+      expect(task.parentTaskId).toBeNull();
+    }, 120000);
+  });
 });
