@@ -984,6 +984,13 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           );
         }
 
+        // Handle status changes (completed/dropped)
+        if (changes.status === 'completed') {
+          task.markComplete(new Date());
+        } else if (changes.status === 'dropped') {
+          task.drop(true, new Date());
+        }
+
         return JSON.stringify({
           taskId: taskId,
           name: task.name,

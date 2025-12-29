@@ -47,6 +47,7 @@ type BrandedTaskArgs = {
   parentTaskId?: TaskId | null;
   completionDate?: string | null;
   minimalResponse?: string | boolean;
+  status?: 'completed' | 'dropped'; // For update operations
   bulkCriteria?: {
     tags?: string[];
     projectName?: string;
@@ -203,6 +204,9 @@ const ManageTaskSchema = z.object({
   repeatRule: RepeatRuleUserIntentSchema.optional().describe(
     'Repeat/recurrence rule for the task. Specify frequency (RRULE format), anchorTo (when-due/when-deferred/when-marked-done/planned-date), and skipMissed. Examples: frequency="FREQ=DAILY", frequency="FREQ=WEEKLY;BYDAY=MO,WE,FR"',
   ),
+
+  // Status field for update operations (completed/dropped)
+  status: z.enum(['completed', 'dropped']).optional().describe('Set task status: completed (mark done) or dropped (cancel task)'),
 });
 
 type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
@@ -1135,6 +1139,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     // Handle clear repeat rule flag
     if (updates.clearRepeatRule === true) {
       sanitized.clearRepeatRule = true;
+    }
+
+    // Handle status field (completed/dropped)
+    if (updates.status === 'completed' || updates.status === 'dropped') {
+      sanitized.status = updates.status;
     }
 
     return sanitized;
