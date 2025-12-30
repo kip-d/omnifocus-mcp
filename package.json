@@ -22,7 +22,7 @@
     "test": "npm run test:unit && npm run test:integration",
     "test:watch": "vitest tests/unit",
     "test:pre-commit": "npm run test:unit && npm run test:smoke",
-    "test:pre-push": "npm run lint && npm run test:unit",
+    "test:pre-push": "npm run typecheck && npm run lint && npm run test:unit",
     "test:ci": "npm run test:unit && npm run test:smoke && npm run test:integration",
     "test:quick": "vitest tests/unit --run",
     "test:llm-simulation": "ENABLE_LLM_SIMULATION_TESTS=true vitest tests/integration/llm-assistant-simulation.test.ts --run",

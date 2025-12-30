@@ -1,1 +1,8 @@
+# Symlinks - prettier can't process these
 src/omnifocus/api/OmniFocus.d.ts
+
+# Build output
+dist/
+
+# Generated files
+*.generated.ts

@@ -1,9 +1,13 @@
 #!/bin/sh
 
-# Pre-push: run full lint + unit tests before pushing
+# Pre-push: run typecheck, lint, and unit tests before pushing
 # This ensures no broken code reaches the remote
 echo "Running pre-push checks..."
 
+# Typecheck first (catches type errors that tests might miss)
+npm run typecheck || exit 1
+
+# Lint and test
 npm run lint && npm run test:unit
 
 # Note: Smoke tests excluded due to flakiness (2+ min, often timeout)
