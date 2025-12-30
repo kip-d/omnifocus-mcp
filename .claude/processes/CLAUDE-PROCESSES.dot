@@ -234,7 +234,7 @@ digraph CLAUDE_OMNIFOCUS {
         "npm run lint" [shape=plaintext];
         "Lint pass?" [shape=diamond];
         "Debug output removed?" [shape=diamond];
-        "grep -r 'console.log' src/" [shape=plaintext, fontsize=9];
+        "grep -rE 'console\\.(log|error|warn)' src/" [shape=plaintext, fontsize=9];
         "Changed docs?" [shape=diamond];
         "Use elements-of-style skill" [shape=box, style=filled, fillcolor=lightblue];
         "TODOs updated?" [shape=diamond];

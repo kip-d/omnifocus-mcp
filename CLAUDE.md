@@ -209,39 +209,23 @@ designed for piping data to other tools, files, or external systems rather than 
 
 ---
 
-# 🚨🚨🚨 STOP! Before Writing ANY Code 🚨🚨🚨
+# 🚨 Before Writing ANY Code
 
-> **DOT alternative:** See `cluster_pre_code` in `.claude/processes/CLAUDE-PROCESSES.dot`
+> **Process:** See `cluster_pre_code` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
-**This project has established patterns for common tasks. DON'T REINVENT THE WHEEL.**
-
-### 1. Search for Existing Patterns FIRST
+**Search commands for pattern discovery:**
 
 ```bash
-# Before implementing, search shared helpers:
 grep -r "your_task_keyword" src/omnifocus/scripts/shared/
-
-# Examples:
 grep -r "bridge" src/omnifocus/scripts/shared/          # Bridge patterns
 grep -r "evaluateJavascript" src/omnifocus/scripts/    # OmniJS usage
 grep -r "tag" src/omnifocus/scripts/shared/             # Tag operations
 ```
 
-### 2. Check the Pattern Index
+**Reference:** `docs/dev/PATTERN_INDEX.md` - Bridge helpers, field access, script embedding patterns.
 
-See **`docs/dev/PATTERN_INDEX.md`** for:
-
-- Bridge helper patterns (tags, dates, repetition)
-- Field access patterns (JXA vs OmniJS)
-- Script embedding patterns
-- Common solutions to known problems
-
-### 3. Read Existing Code COMPLETELY
-
-If you find similar code, **READ IT IN FULL** before implementing your solution.
-
-**Real Cost of Skipping This:** We spent 2+ hours reinventing the bridge pattern that already existed in
-`minimal-tag-bridge.ts`. The solution took 10 minutes once we found the pattern.
+**Real Cost of Skipping:** 2+ hours reinventing bridge pattern that existed in `minimal-tag-bridge.ts`. Solution took 10
+minutes once found.
 
 ---
 
@@ -286,80 +270,20 @@ bridge for complex operations that JXA cannot handle.
 
 **Not listed? Search `/docs/dev/PATTERNS.md` for keywords before debugging!**
 
-## 🚨 BEFORE DEBUGGING - MANDATORY CHECKLIST
+## Debugging & Implementation
 
-> **DOT alternative:** See `cluster_debugging` in `.claude/processes/CLAUDE-PROCESSES.dot`
+> **Process:** See `cluster_debugging` and `cluster_pre_code` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
-**When encountering ANY issue, complete these steps IN ORDER:**
-
-□ **Step 1: Search PATTERNS.md**
-
-- Open `/docs/dev/PATTERNS.md` and search for symptom keywords
-- Example: "tags not working" → direct solution with code location
-
-□ **Step 2: Search existing documentation**
-
-```bash
-grep -r "keyword" docs/  # Search all documentation
-grep -r "function_name" src/omnifocus/scripts/shared/  # Find helpers
-```
-
-□ **Step 3: Check for existing helper functions**
+**Key helper files:**
 
 - `src/omnifocus/scripts/shared/helpers.ts` - Core utilities
 - `src/omnifocus/scripts/shared/bridge-helpers.ts` - Bridge operations
 - `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Tag operations
 
-□ **Step 4: Verify current implementation**
-
-- Read the existing code in the file you're modifying
-- Check what helpers are already included (e.g., `getMinimalTagBridge()`)
-- Don't reinvent - use what's already there!
-
-□ **Step 5: ONLY THEN - Begin implementation**
-
-- Follow the patterns found in documentation
-- Use existing helper functions
-- Test with the documented approach
-
-**This checklist saves 30+ minutes per issue by avoiding rediscovery of documented solutions.**
-
-## 🚨 MANDATORY: Pre-Implementation Checklist
-
-> **DOT alternative:** See `cluster_pre_impl` in `.claude/processes/CLAUDE-PROCESSES.dot`
-
-**BEFORE writing ANY new script or optimization, complete ALL steps:**
-
-□ **Step 1: Classify the operation**
-
-- How many items will be processed? (>100 = bulk operation)
-- Does it create/update tasks with tags? (REQUIRES bridge)
-- Does it need repetition rules? (REQUIRES bridge)
-
-□ **Step 2: Search for existing patterns**
-
-```bash
-# Search for similar operations
-grep -r "evaluateJavascript" src/omnifocus/scripts/ --include="*.ts"
-grep -r "flattenedTasks" src/omnifocus/scripts/ --include="*.ts"
-grep -r "forEach" src/omnifocus/scripts/ --include="*.ts"
-```
-
-□ **Step 3: Review the decision tree below**
-
-- Match your operation to the tree
-- If bulk operation (>100 items) → CHECK EXISTING BRIDGE PATTERNS FIRST
-
-□ **Step 4: Find reference implementation**
+**Reference implementations:**
 
 - Perspectives: `src/omnifocus/scripts/perspectives/query-perspective.ts`
 - Bulk operations: `src/omnifocus/scripts/perspectives/query-perspective.ts` (lines 14-36)
-- Tag operations: Search for bridge patterns in codebase
-
-□ **Step 5: Test your assumption**
-
-- If optimizing, MEASURE the current bottleneck first
-- Don't assume - profile to find what's actually slow
 
 ## 🚨 JavaScript Execution: OmniJS-First Pattern (UPDATED - November 2025)
 
@@ -401,46 +325,11 @@ JXA is officially "legacy/sunset mode" per Omni Group. For new scripts, use the 
 
 ---
 
-### For EXISTING Scripts: Decision Tree
+### For EXISTING Scripts: JXA vs Bridge
 
-> **DOT alternative:** See `cluster_jxa_bridge` in `.claude/processes/CLAUDE-PROCESSES.dot`
+> **Decision tree:** See `cluster_jxa_bridge` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
-**CRITICAL: Both JXA and Bridge have valid use cases. Choose based on CONTEXT, not just item count:**
-
-```
-HOW WILL YOU USE THE DATA?
-├── Streaming/Processing as collected
-│   └── Use INLINE JXA (per-item, simple, no bottleneck)
-│       ├── Good for: Query responses, real-time processing
-│       ├── Performance: ~1-2ms per item (acceptable in stream)
-│       └── Example: tags during buildTaskObject()
-│
-└── Bulk operation after collection
-    ├── If < 50 items → Bridge can be fast (single call)
-    ├── If 50-100 items → Measure! (bridge script size matters)
-    └── If > 100 items → Prefer streaming/pagination over bulk bridge
-        └── Why: Embedded-ID scripts cause timeouts (Issue #27)
-
-OPERATION TYPE?
-├── Reading data (tasks, projects, tags)
-│   ├── During task building → Pure JXA (inline, no overhead)
-│   ├── After bulk collection → CAREFUL with bridge (script size!)
-│   └── Bulk property access without filtering → Use bridge sparingly
-│
-├── Creating/Updating tasks
-│   ├── Without tags → Pure JXA
-│   ├── With tags → JXA for creation + Bridge for assignment (REQUIRED)
-│   └── With repetition → JXA + Bridge (REQUIRED)
-│
-├── Task movement/organization
-│   ├── Single task → Pure JXA
-│   └── Bulk movement → Consider pagination vs bridge
-│
-└── Property access on ALL tasks (flattenedTasks)
-    └── Context matters: Use bridge for analysis, JXA for streaming responses
-```
-
-**Performance Reality Check (with lessons from Issue #27):**
+**Performance Reality Check (Issue #27):**
 
 - JXA direct property access: ~1-2ms per item
 - Bridge per-task overhead: More than JXA when streaming
@@ -616,42 +505,17 @@ If you see these in your plan, STOP and search for patterns:
   - Integration tests interact with real OmniFocus via osascript
 - Build before running: `npm run build`
 
-## 🚨 CRITICAL: Systematic Debugging Workflow
+## Debugging Workflow
 
-> **DOT alternative:** See `cluster_debugging` in `.claude/processes/CLAUDE-PROCESSES.dot`
+> **Process:** See `cluster_debugging` in `.claude/processes/CLAUDE-PROCESSES.dot` **Reference:**
+> `/docs/dev/DEBUGGING_WORKFLOW.md`
 
-**Before fixing ANY issues, consult `/docs/dev/DEBUGGING_WORKFLOW.md`** This document prevents the Fix → Lint → Build
-error cycle by establishing proper analysis and implementation patterns. Following this workflow saves 10+ minutes per
-fix and creates better code.
+**Real example - productivity_stats bug:**
 
-### 🚨 CRITICAL DEBUGGING RULE: Test MCP Integration First
-
-**⚠️ STOP! Before opening ANY script file to debug, follow this order:**
-
-1. ✅ **Test the full MCP tool call** with actual parameters
-2. ✅ **Check logs** for what the SCRIPT returns (`stdout data received`)
-3. ✅ **Compare** SCRIPT output to TOOL output in response
-4. ✅ **Identify which layer is wrong** (script vs tool wrapper)
-5. ❌ **Do NOT open script files** until you confirm the problem is in the script
-
-**Testing approach:** See Quick Reference → Testing Pattern below for complete MCP testing commands. Key: check logs for
-what SCRIPT returns vs what TOOL returns.
-
-**Why this order saves hours:**
-
-- Scripts might be working perfectly (productivity_stats was!)
-- Tool wrappers might process data wrong (double-unwrapping issue)
-- Debugging the wrong layer wastes time
-- **Real example:** productivity_stats took 7 cycles debugging script when wrapper was the issue
-
-**Cost of not following this rule:**
-
-- Example: 2 hours wasted fixing script bugs that weren't the problem
-- Added debug logging that broke the script (console.error in JXA)
-- Fixed date logic that was already correct
+- 7 cycles debugging script when wrapper was the issue
+- 2 hours wasted fixing bugs that weren't the problem
+- Added console.error() debug logging → broke the script (doesn't exist in JXA)
 - Finally tested MCP integration → found wrapper issue in 5 minutes
-
-**Do NOT debug isolated scripts/components until MCP integration test shows script output is wrong.**
 
 ### 🚨 CRITICAL: Response Structure Validation Pattern
 
@@ -1054,74 +918,23 @@ Success pattern: `[INFO] [tools] Executing tool → [INFO] stdin closed, exiting
 
 The graceful exit is NEVER an error - it's required MCP compliance!
 
-## 🚨 Common Mistakes & How to Avoid Them
+## Common Mistakes
 
-> **DOT alternative:** See `cluster_warnings` in `.claude/processes/CLAUDE-PROCESSES.dot`
+> **Warnings:** See `cluster_warnings` in `.claude/processes/CLAUDE-PROCESSES.dot`
 
-### Mistake 1: "I'll optimize by reducing API calls"
+**Case study: productivity_stats bug hunt (2 hours → should have been 10 minutes)**
 
-**Wrong focus:** Reducing osascript calls from 3→1 **Actual bottleneck:** JXA property access overhead (1000+ calls)
-**How to avoid:** Profile FIRST, then optimize the actual slow part **Example:** Cache warming - flattenedTasks() was
-fast (160ms), property access was slow (5+ min)
+| Step | What happened                       | What should have happened     |
+| ---- | ----------------------------------- | ----------------------------- |
+| 1    | User reports tool returns all 0s    | Run MCP integration test      |
+| 2    | Opened script file immediately      | Compare script vs tool output |
+| 3    | Found/fixed date logic bugs         | Identify which layer is wrong |
+| 4    | Still broken, added console.error() | (console.error breaks JXA!)   |
+| 5    | User: "Run the test yourself"       |                               |
+| 6    | MCP test: script=95, tool=0         | Found it: wrapper issue       |
+| 7    | Fixed ProductivityStatsTool.ts      | 10 min fix, 2 hours wasted    |
 
-### Mistake 2: "I'll just write the code directly"
-
-**Missing step:** Search for existing patterns **Result:** Reinvent the wheel, miss better approach **How to avoid:**
-Run grep commands from checklist above BEFORE implementing
-
-### Mistake 3: "Bulk operations = multiple queries"
-
-**Wrong assumption:** Bulk means many API calls **Reality:** Bulk means processing many items (use bridge!) **How to
-avoid:** Count items, not API calls. >100 items = bulk operation.
-
-### Mistake 4: "JXA is fine for everything"
-
-**Missing context:** JXA property access has overhead (~1-2ms per item) **Reality:** Bridge is 1000x faster for bulk
-property access (~0.001ms per item) **How to avoid:** Check decision tree when processing >100 items **Proof:** Cache
-warming - JXA timed out (5+ min), bridge completed in 2.4s (125x faster)
-
-### Mistake 5: "I optimized it, it should be faster"
-
-**Wrong approach:** Implement optimization without measuring **Missing step:** Profile to identify actual bottleneck
-**How to avoid:** Always test/profile BEFORE and AFTER optimization **Tools:** `time node script.js`, add timing
-instrumentation, check logs
-
-### Mistake 6: "Tool returns wrong data, must be the script"
-
-**Wrong assumption:** The script logic is broken **Missing step:** Test MCP integration to see what script actually
-returns **Reality:** Script might be working perfectly, tool wrapper processes it wrong **How to avoid:** ALWAYS run MCP
-integration test before opening script files
-
-**Real example: productivity_stats bug hunt**
-
-- User reported: Tool returns all 0s (totalTasks: 0, completedTasks: 0)
-- I debugged: Opened productivity-stats.ts script file immediately
-- Found bugs: Missing date upper bound, period not normalized to midnight
-- Fixed bugs: Commit e88c50e - script logic improved
-- Still broken: User still sees 0s
-- Added logging: console.error() debug statements → broke the script!
-- User suggested: "Run the test yourself"
-- **Finally tested MCP integration:** Script returns completedInPeriod: 95 ✓, tool returns 0 ✗
-- **Root cause found:** Tool wrapper double-unwrapping issue in ProductivityStatsTool.ts
-- **Fix applied:** Commit 84c01cc - unwrap both layers, works perfectly
-
-**Cost of not following the rule:**
-
-- 7 debugging cycles instead of 1
-- 2 hours wasted debugging the wrong layer
-- Fixed 2 real bugs that weren't causing the issue
-- Broke the script with console.error() (doesn't exist in JXA)
-- Required user to suggest testing myself
-
-**What I should have done:**
-
-1. Run MCP integration test FIRST (5 minutes)
-2. Compare script output (95) vs tool output (0)
-3. Identify: Wrapper issue, not script issue
-4. Fix: ProductivityStatsTool.ts unwrapping logic
-5. Total time: 10 minutes vs 2 hours
-
-**Lesson:** See `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values" for diagnostic commands
+**Reference:** `/docs/dev/PATTERNS.md` → "Tool Returns Empty/Zero Values"
 
 ## Known Limitations & Workarounds
 
