@@ -2,10 +2,15 @@ import type { WriteInput } from '../schemas/write-schema.js';
 
 // Type definitions for mutation data structures
 interface RepetitionRule {
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
-  interval: number;
+  frequency: 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval?: number;
   daysOfWeek?: number[];
   endDate?: string;
+  // OmniFocus 4.7+ repetition method control
+  method?: 'fixed' | 'due-after-completion' | 'defer-after-completion' | 'none';
+  scheduleType?: 'regularly' | 'from-completion' | 'none';
+  anchorDateKey?: 'due-date' | 'defer-date' | 'planned-date';
+  catchUpAutomatically?: boolean;
 }
 
 interface CreateData {
