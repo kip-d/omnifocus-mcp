@@ -51,6 +51,12 @@ export const GET_PROJECT_STATS_SCRIPT = `
               if (project.deferDate) {
                 projectObj.deferDate = project.deferDate.toISOString();
               }
+              if (project.plannedDate) {
+                projectObj.plannedDate = project.plannedDate.toISOString();
+              }
+              if (project.effectivePlannedDate) {
+                projectObj.effectivePlannedDate = project.effectivePlannedDate.toISOString();
+              }
               if (project.completionDate) {
                 projectObj.completionDate = project.completionDate.toISOString();
               }

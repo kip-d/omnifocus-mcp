@@ -14,7 +14,12 @@
  */
 
 import type { TaskFilter, ProjectFilter } from '../filters.js';
-import { generateFilterCode, generateProjectFilterCode, isEmptyProjectFilter, describeProjectFilter } from './filter-generator.js';
+import {
+  generateFilterCode,
+  generateProjectFilterCode,
+  isEmptyProjectFilter,
+  describeProjectFilter,
+} from './filter-generator.js';
 import { buildAST } from './builder.js';
 
 // =============================================================================
@@ -57,6 +62,7 @@ const DEFAULT_FIELDS = [
   'dueDate',
   'deferDate',
   'plannedDate',
+  'effectivePlannedDate',
   'tags',
   'note',
   'project',
@@ -105,6 +111,11 @@ function generateFieldProjection(fields: string[]): string {
         break;
       case 'plannedDate':
         projections.push('plannedDate: task.plannedDate ? task.plannedDate.toISOString() : null');
+        break;
+      case 'effectivePlannedDate':
+        projections.push(
+          'effectivePlannedDate: task.effectivePlannedDate ? task.effectivePlannedDate.toISOString() : null',
+        );
         break;
       case 'completionDate':
         projections.push('completionDate: task.completionDate ? task.completionDate.toISOString() : null');
@@ -754,7 +765,10 @@ function generateProjectFieldProjection(fields: string[]): string {
  * @param options - Script generation options
  * @returns Generated script ready for execution
  */
-export function buildFilteredProjectsScript(filter: ProjectFilter, options: ProjectScriptOptions = {}): GeneratedScript {
+export function buildFilteredProjectsScript(
+  filter: ProjectFilter,
+  options: ProjectScriptOptions = {},
+): GeneratedScript {
   const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal' } = options;
 
   // Generate the filter predicate code

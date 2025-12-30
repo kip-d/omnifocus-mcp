@@ -92,6 +92,7 @@ export interface TaskData {
   dueDate: string | null;
   deferDate?: string | null;
   plannedDate?: string | null;
+  effectivePlannedDate?: string | null;
   added?: string | null;
   modified?: string | null;
   completionDate?: string | null;
@@ -117,6 +118,8 @@ export interface ProjectData {
   flagged?: boolean;
   dueDate?: string | null;
   deferDate?: string | null;
+  plannedDate?: string | null;
+  effectivePlannedDate?: string | null;
   completionDate?: string | null;
   note?: string;
   sequential?: boolean;

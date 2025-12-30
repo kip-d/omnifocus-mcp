@@ -67,6 +67,14 @@ export const EXPORT_PROJECTS_SCRIPT = `
                 projectData.dueDate = project.dueDate.toISOString();
               }
 
+              if (project.plannedDate) {
+                projectData.plannedDate = project.plannedDate.toISOString();
+              }
+
+              if (project.effectivePlannedDate) {
+                projectData.effectivePlannedDate = project.effectivePlannedDate.toISOString();
+              }
+
               if (project.completionDate) {
                 projectData.completionDate = project.completionDate.toISOString();
               }

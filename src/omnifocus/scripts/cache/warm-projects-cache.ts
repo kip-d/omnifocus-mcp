@@ -81,6 +81,14 @@ export const WARM_PROJECTS_CACHE_SCRIPT = `
               projectObj.deferDate = project.deferDate.toISOString();
             }
 
+            if (project.plannedDate) {
+              projectObj.plannedDate = project.plannedDate.toISOString();
+            }
+
+            if (project.effectivePlannedDate) {
+              projectObj.effectivePlannedDate = project.effectivePlannedDate.toISOString();
+            }
+
             // Review dates
             if (project.lastReviewDate) {
               projectObj.lastReviewDate = project.lastReviewDate.toISOString();

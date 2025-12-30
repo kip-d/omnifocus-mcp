@@ -163,6 +163,7 @@ export interface ProjectCreateData {
   tags?: string[];
   dueDate?: string;
   deferDate?: string;
+  plannedDate?: string;
   flagged?: boolean;
   sequential?: boolean;
   status?: 'active' | 'on_hold' | 'completed' | 'dropped';
@@ -210,8 +211,10 @@ export interface ProjectUpdateData {
   removeTags?: string[];
   dueDate?: string | null;
   deferDate?: string | null;
+  plannedDate?: string | null;
   clearDueDate?: boolean;
   clearDeferDate?: boolean;
+  clearPlannedDate?: boolean;
   flagged?: boolean;
   sequential?: boolean;
   status?: 'active' | 'on_hold' | 'completed' | 'dropped';

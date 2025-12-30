@@ -717,6 +717,9 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
     if (projectData.deferDate) {
       try { project.deferDate = new Date(projectData.deferDate); } catch (e) {}
     }
+    if (projectData.plannedDate) {
+      try { project.plannedDate = new Date(projectData.plannedDate); } catch (e) {}
+    }
 
     // Set status using OmniJS Project.Status enum
     if (projectData.status) {
@@ -771,6 +774,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       sequential: project.sequential(),
       dueDate: project.dueDate() ? project.dueDate().toISOString() : null,
       deferDate: project.deferDate() ? project.deferDate().toISOString() : null,
+      plannedDate: project.plannedDate() ? project.plannedDate().toISOString() : null,
       folder: targetFolder ? targetFolder.name() : null,
       tags: appliedTags,
       created: true
@@ -1162,6 +1166,11 @@ export async function buildUpdateProjectScript(
       project.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
     }
     if (changes.clearDeferDate) project.deferDate = null;
+
+    if (changes.plannedDate !== undefined) {
+      project.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
+    }
+    if (changes.clearPlannedDate) project.plannedDate = null;
 
     // Handle status using OmniJS Project.Status enum
     if (changes.status) {
