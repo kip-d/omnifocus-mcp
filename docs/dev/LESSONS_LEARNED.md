@@ -24,7 +24,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ## Pattern Search Before Implementation (October 2025)
 
-**Problem:** Spent 2+ hours implementing "two-stage query enrichment" that already existed as "embedded bridge helper" in `minimal-tag-bridge.ts`.
+**Problem:** Spent 2+ hours implementing "two-stage query enrichment" that already existed as "embedded bridge helper"
+in `minimal-tag-bridge.ts`.
 
 **Rule:** Search before implementing.
 
@@ -48,10 +49,10 @@ grep -r "bridge\|evaluateJavascript" src/omnifocus/scripts/shared/
 
 **Cause:** Mode-based filtering optimization only implemented tag filtering in all/default mode.
 
-| Filter | Before Fix | After Fix |
-|--------|------------|-----------|
+| Filter                       | Before Fix     | After Fix         |
+| ---------------------------- | -------------- | ----------------- |
 | Text `{contains: "meeting"}` | 10 wrong tasks | 12 matching tasks |
-| Date range | 0 in range | 9 in range |
+| Date range                   | 0 in range     | 9 in range        |
 
 **Lesson:** When refactoring filters, test ALL filter types, not just common ones.
 
@@ -63,11 +64,11 @@ grep -r "bridge\|evaluateJavascript" src/omnifocus/scripts/shared/
 
 **Problem:** Assumed 19KB script limit. **Reality: 523KB for JXA, 261KB for OmniJS (27x larger).**
 
-| Context | Assumed | Actual |
-|---------|---------|--------|
-| JXA | 19KB | 523KB |
-| OmniJS | 19KB | 261KB |
-| Our largest | - | 31KB (6% of actual) |
+| Context     | Assumed | Actual              |
+| ----------- | ------- | ------------------- |
+| JXA         | 19KB    | 523KB               |
+| OmniJS      | 19KB    | 261KB               |
+| Our largest | -       | 31KB (6% of actual) |
 
 **Cost:** Months of unnecessary optimization solving non-existent problems.
 
@@ -94,8 +95,8 @@ for (let i = 0; i < tasks.length; i++) {
 
 ```javascript
 // ❌ Mixed contexts - changes invisible
-app.evaluateJavascript(`task.tags = [tag1]`);  // Write via bridge
-const tags = task.tags();  // Read via JXA - won't see changes!
+app.evaluateJavascript(`task.tags = [tag1]`); // Write via bridge
+const tags = task.tags(); // Read via JXA - won't see changes!
 
 // ✅ Same context
 app.evaluateJavascript(`
@@ -112,12 +113,12 @@ Claude Desktop converts ALL parameters to strings.
 
 ```typescript
 // ❌ Fails with Claude Desktop
-z.number()  // Receives "25" not 25
-z.boolean() // Receives "true" not true
+z.number(); // Receives "25" not 25
+z.boolean(); // Receives "true" not true
 
 // ✅ Works everywhere
-z.union([z.number(), z.string().transform(v => parseInt(v, 10))])
-coerceBoolean()  // from coercion-helpers.ts
+z.union([z.number(), z.string().transform((v) => parseInt(v, 10))]);
+coerceBoolean(); // from coercion-helpers.ts
 ```
 
 ---
@@ -199,43 +200,78 @@ function createScript(updates: any): string {
 
 **Pattern:** 15+ bugs from property name mismatches between layers.
 
-| Layer | Used | Expected |
-|-------|------|----------|
-| QueryCompiler | `completed: true` | - |
-| OmniJS script | - | `includeCompleted` |
+| Layer         | Used              | Expected           |
+| ------------- | ----------------- | ------------------ |
+| QueryCompiler | `completed: true` | -                  |
+| OmniJS script | -                 | `includeCompleted` |
 
 **Solution:** Shared contracts in `src/contracts/`:
+
 - `TaskFilter` interface - canonical names
 - `unwrapScriptOutput()` - response handling
 - `generateFilterBlock()` - generate, don't copy-paste
 
 ---
 
+## Lint-Staged Stash Recovery (December 2025)
+
+**Problem:** CLAUDE.md (1138 lines) was completely wiped and committed as empty.
+
+**Cause:** lint-staged failed on a symlink, created a stash backup, then the restore failed due to a conflict. The stash
+was dropped without proper recovery.
+
+```bash
+# ❌ What happened - lost all changes
+git stash apply --index stash@{0}  # Failed with conflict
+git stash drop stash@{0}           # Dropped backup without recovering!
+git commit --no-verify             # Committed corrupted state
+
+# ✅ What should have happened
+git stash apply --index stash@{0}  # Failed with conflict
+git stash show -p stash@{0}        # Inspect the stash contents
+git checkout stash@{0} -- CLAUDE.md  # Recover specific files
+git stash drop stash@{0}           # Only drop after recovery
+```
+
+**Prevention:**
+
+1. Added `.prettierignore` to exclude symlinks
+2. Never drop stash after failed apply without investigating
+3. Always verify file contents after recovery: `wc -l FILE && head -5 FILE`
+4. Use `git diff --staged` before committing after any recovery
+
+**Cost:** Critical documentation file deleted, required git archaeology to restore.
+
+---
+
 ## Performance Benchmarks
 
-| Operation | Target | Killers |
-|-----------|--------|---------|
-| Queries (2000+ tasks) | <1s | `whose()`: +25s |
-| Write operations | <500ms | `safeGet()` in loops: +50% |
-| Analytics | <2s | Date objects in loops: +30% |
+| Operation             | Target | Killers                     |
+| --------------------- | ------ | --------------------------- |
+| Queries (2000+ tasks) | <1s    | `whose()`: +25s             |
+| Write operations      | <500ms | `safeGet()` in loops: +50%  |
+| Analytics             | <2s    | Date objects in loops: +30% |
 
 ---
 
 ## Best Practices
 
 ### Scripts
+
 - Use minimal helpers (avoid size bloat)
 - Never use `whose()`
 - Direct try/catch in hot paths
 - Cache expensive calls outside loops
 
 ### Tools
+
 - Consolidate related operations
 - Use operation parameters, not separate tools
 - Return summaries before data
 - Support minimal response mode
 
 ### Testing
+
 - Test with Claude Desktop (string coercion)
 - Test with 2000+ items (performance)
 - Test with real data (edge cases)
@@ -244,13 +280,14 @@ function createScript(updates: any): string {
 
 ## Quick Reference
 
-| Never | Always |
-|-------|--------|
-| Use `whose()` in JXA | Use minimal helpers |
-| Mix bridge and JXA contexts | Test with large datasets |
-| Trust Claude Desktop types | Return summaries first |
-| Assume without testing | Handle string coercion |
-| Skip pattern search | Validate full IDs |
+| Never                         | Always                              |
+| ----------------------------- | ----------------------------------- |
+| Use `whose()` in JXA          | Use minimal helpers                 |
+| Mix bridge and JXA contexts   | Test with large datasets            |
+| Trust Claude Desktop types    | Return summaries first              |
+| Assume without testing        | Handle string coercion              |
+| Skip pattern search           | Validate full IDs                   |
+| Drop stash after failed apply | Verify file contents after recovery |
 
 ---
 
