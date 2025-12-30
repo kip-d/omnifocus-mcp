@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Pre-push: run full lint + unit tests before pushing
+# This ensures no broken code reaches the remote
+echo "Running pre-push checks..."
+
+npm run lint && npm run test:unit
+
+# Note: Smoke tests excluded due to flakiness (2+ min, often timeout)
+# Run manually with: npm run test:smoke

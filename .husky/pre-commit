@@ -1,4 +1,5 @@
 #!/bin/sh
 
-# Run linting and pre-commit tests (format check disabled for now)
-npm run lint && npm run test:pre-commit
+# Fast pre-commit: only lint/format staged files
+# Full test suite runs on pre-push
+npx lint-staged
