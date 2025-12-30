@@ -718,15 +718,15 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try { project.deferDate = new Date(projectData.deferDate); } catch (e) {}
     }
 
-    // Set status
+    // Set status using OmniJS Project.Status enum
     if (projectData.status) {
       const statusMap = {
-        'active': 'active status',
-        'on_hold': 'on hold status',
-        'completed': 'done status',
-        'dropped': 'dropped status'
+        'active': Project.Status.Active,
+        'on_hold': Project.Status.OnHold,
+        'completed': Project.Status.Done,
+        'dropped': Project.Status.Dropped
       };
-      try { project.status = statusMap[projectData.status] || 'active status'; } catch (e) {}
+      try { project.status = statusMap[projectData.status] || Project.Status.Active; } catch (e) {}
     }
 
     // Set review interval
@@ -1163,15 +1163,15 @@ export async function buildUpdateProjectScript(
     }
     if (changes.clearDeferDate) project.deferDate = null;
 
-    // Handle status
+    // Handle status using OmniJS Project.Status enum
     if (changes.status) {
       const statusMap = {
-        'active': 'active status',
-        'on_hold': 'on hold status',
-        'completed': 'done status',
-        'dropped': 'dropped status'
+        'active': Project.Status.Active,
+        'on_hold': Project.Status.OnHold,
+        'completed': Project.Status.Done,
+        'dropped': Project.Status.Dropped
       };
-      project.status = statusMap[changes.status] || 'active status';
+      project.status = statusMap[changes.status] || Project.Status.Active;
     }
 
     // Handle folder change via OmniJS bridge (JXA push doesn't persist)
