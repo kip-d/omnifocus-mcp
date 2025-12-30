@@ -721,23 +721,37 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try { project.plannedDate = new Date(projectData.plannedDate); } catch (e) {}
     }
 
-    // Set status using OmniJS Project.Status enum
-    if (projectData.status) {
-      const statusMap = {
-        'active': Project.Status.Active,
-        'on_hold': Project.Status.OnHold,
-        'completed': Project.Status.Done,
-        'dropped': Project.Status.Dropped
-      };
-      try { project.status = statusMap[projectData.status] || Project.Status.Active; } catch (e) {}
-    }
-
     // Set review interval
     if (projectData.reviewInterval) {
       try { project.reviewInterval = projectData.reviewInterval * 24 * 60 * 60; } catch (e) {}
     }
 
     const projectId = project.id();
+
+    // Set status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
+    if (projectData.status && projectData.status !== 'active') {
+      try {
+        const statusScript = \`
+          (() => {
+            const proj = Project.byIdentifier('\${projectId}');
+            if (!proj) return JSON.stringify({success: false});
+
+            const statusMap = {
+              'active': Project.Status.Active,
+              'on_hold': Project.Status.OnHold,
+              'completed': Project.Status.Done,
+              'dropped': Project.Status.Dropped
+            };
+            const targetStatus = statusMap['\${projectData.status}'];
+            if (targetStatus) {
+              proj.status = targetStatus;
+            }
+            return JSON.stringify({success: true});
+          })()
+        \`;
+        app.evaluateJavascript(statusScript);
+      } catch (e) {}
+    }
 
     // Set tags via bridge
     let appliedTags = [];
@@ -1172,15 +1186,29 @@ export async function buildUpdateProjectScript(
     }
     if (changes.clearPlannedDate) project.plannedDate = null;
 
-    // Handle status using OmniJS Project.Status enum
+    // Handle status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
     if (changes.status) {
-      const statusMap = {
-        'active': Project.Status.Active,
-        'on_hold': Project.Status.OnHold,
-        'completed': Project.Status.Done,
-        'dropped': Project.Status.Dropped
-      };
-      project.status = statusMap[changes.status] || Project.Status.Active;
+      try {
+        const statusScript = \`
+          (() => {
+            const proj = Project.byIdentifier('\${projectId}');
+            if (!proj) return JSON.stringify({success: false, error: 'project_not_found'});
+
+            const statusMap = {
+              'active': Project.Status.Active,
+              'on_hold': Project.Status.OnHold,
+              'completed': Project.Status.Done,
+              'dropped': Project.Status.Dropped
+            };
+            const targetStatus = statusMap['\${changes.status}'];
+            if (targetStatus) {
+              proj.status = targetStatus;
+            }
+            return JSON.stringify({success: true});
+          })()
+        \`;
+        app.evaluateJavascript(statusScript);
+      } catch (e) {}
     }
 
     // Handle folder change via OmniJS bridge (JXA push doesn't persist)
