@@ -102,6 +102,34 @@ export interface RepetitionRule {
 
   /** BYSETPOS - Filter to specific positions within the period (-1 = last, 1 = first) */
   setPositions?: number[];
+
+  /**
+   * Repetition method - how the next occurrence is calculated.
+   * - 'fixed': Repeat on schedule regardless of completion (default)
+   * - 'due-after-completion': Next due date is calculated from completion date
+   * - 'defer-after-completion': Next defer date is calculated from completion date
+   * - 'none': No repetition method
+   */
+  method?: 'fixed' | 'due-after-completion' | 'defer-after-completion' | 'none';
+
+  /**
+   * Schedule type - when repetitions are calculated.
+   * - 'regularly': Repeat on fixed schedule (default)
+   * - 'from-completion': Calculate from when task is completed/dropped
+   * - 'none': No schedule
+   */
+  scheduleType?: 'regularly' | 'from-completion' | 'none';
+
+  /**
+   * Anchor date key - which date the repetition is based on.
+   * - 'due-date': Anchor to due date (default)
+   * - 'defer-date': Anchor to defer date
+   * - 'planned-date': Anchor to planned date
+   */
+  anchorDateKey?: 'due-date' | 'defer-date' | 'planned-date';
+
+  /** Whether to catch up on missed occurrences. Default: true */
+  catchUpAutomatically?: boolean;
 }
 
 // =============================================================================

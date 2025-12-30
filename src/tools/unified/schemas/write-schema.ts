@@ -3,10 +3,15 @@ import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
 
 // Repetition rule schema
 const RepetitionRuleSchema = z.object({
-  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
-  interval: z.number().min(1),
+  frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
+  interval: z.number().min(1).optional().default(1),
   daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
   endDate: z.string().optional(),
+  // New fields for OmniFocus 4.7+ repetition method control
+  method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
+  scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
+  anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
+  catchUpAutomatically: z.boolean().optional(),
 });
 
 // Create data schema

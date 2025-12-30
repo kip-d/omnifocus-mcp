@@ -40,6 +40,7 @@ type BrandedTaskArgs = {
   plannedDate?: string | null;
   sequential?: string | boolean;
   repeatRule?: unknown;
+  repetitionRule?: unknown; // Unified API format
   taskId?: TaskId;
   taskIds?: TaskId[];
   projectId?: ProjectId | null;
@@ -205,6 +206,18 @@ const ManageTaskSchema = z.object({
     'Repeat/recurrence rule for the task. Specify frequency (RRULE format), anchorTo (when-due/when-deferred/when-marked-done/planned-date), and skipMissed. Examples: frequency="FREQ=DAILY", frequency="FREQ=WEEKLY;BYDAY=MO,WE,FR"',
   ),
 
+  // Unified API repetition rule format - passes through to mutation script builder
+  repetitionRule: z.object({
+    frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
+    interval: z.number().min(1).optional().default(1),
+    daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
+    endDate: z.string().optional(),
+    method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
+    scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
+    anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
+    catchUpAutomatically: z.boolean().optional(),
+  }).optional().describe('Repetition rule in unified API format (used by omnifocus_write)'),
+
   // Status field for update operations (completed/dropped)
   status: z.enum(['completed', 'dropped']).optional().describe('Set task status: completed (mark done) or dropped (cancel task)'),
 });
@@ -340,10 +353,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
               typeof brandedParams.sequential === 'string'
                 ? brandedParams.sequential === 'true'
                 : brandedParams.sequential;
-          const repeatRuleForUpdate = this.normalizeRepeatRuleInput(brandedParams.repeatRule);
-          if (repeatRuleForUpdate) {
-            this.logger.debug('Normalized repeat rule for creation', { repeatRule: repeatRuleForUpdate });
-            createArgs.repeatRule = repeatRuleForUpdate;
+          // Handle repetition rules - prefer unified API format (repetitionRule) over legacy format (repeatRule)
+          let repetitionRuleForCreate: import('../../contracts/mutations.js').RepetitionRule | undefined;
+          if (brandedParams.repetitionRule && typeof brandedParams.repetitionRule === 'object') {
+            // Unified API format - use directly
+            repetitionRuleForCreate = brandedParams.repetitionRule as import('../../contracts/mutations.js').RepetitionRule;
+            this.logger.debug('Using unified API repetitionRule for creation', { repetitionRule: repetitionRuleForCreate });
+          } else {
+            // Legacy format - normalize and convert
+            const repeatRuleForUpdate = this.normalizeRepeatRuleInput(brandedParams.repeatRule);
+            if (repeatRuleForUpdate) {
+              this.logger.debug('Normalized repeat rule for creation', { repeatRule: repeatRuleForUpdate });
+              createArgs.repeatRule = repeatRuleForUpdate;
+              repetitionRuleForCreate = this.convertToRepetitionRule(repeatRuleForUpdate);
+            }
           }
 
           // Convert local dates to UTC for OmniFocus with error handling
@@ -499,23 +522,17 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             null;
           this.logger.debug('Post-create task ID', { createdTaskId });
 
-          if (repeatRuleForUpdate && createdTaskId) {
+          if (repetitionRuleForCreate && createdTaskId) {
             try {
-              this.logger.debug('Applying repeat rule via update');
-              // Use AST-powered mutation builder (Phase 2 consolidation)
-              // Convert RepeatRule (OmniFocus format) to RepetitionRule (contract format)
-              const repetitionRule = this.convertToRepetitionRule(repeatRuleForUpdate);
-              if (!repetitionRule) {
-                this.logger.warn('Could not convert repeat rule to repetition rule format');
+              this.logger.debug('Applying repeat rule via update', { repetitionRule: repetitionRuleForCreate });
+              // Use AST-powered mutation builder - repetitionRuleForCreate is already in contract format
+              const repeatOnlyScript = (await buildUpdateTaskScript(createdTaskId, { repetitionRule: repetitionRuleForCreate })).script;
+              const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+              this.logger.debug('Repeat rule update result', { repeatUpdateResult });
+              if (isScriptError(repeatUpdateResult)) {
+                this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
               } else {
-                const repeatOnlyScript = (await buildUpdateTaskScript(createdTaskId, { repetitionRule })).script;
-                const repeatUpdateResult = await this.execJson(repeatOnlyScript);
-                this.logger.debug('Repeat rule update result', { repeatUpdateResult });
-                if (isScriptError(repeatUpdateResult)) {
-                  this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
-                } else {
-                  this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
-                }
+                this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
               }
             } catch (repeatError) {
               this.logger.warn('Exception applying repeat rule post-creation', repeatError);
@@ -552,7 +569,7 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
                 has_due_date: !!createArgs.dueDate,
                 has_planned_date: !!createArgs.plannedDate,
                 has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
-                has_repeat_rule: !!repeatRuleForUpdate,
+                has_repeat_rule: !!repetitionRuleForCreate,
               },
             },
           ) as unknown as TaskOperationResponseV2;
@@ -1260,9 +1277,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
 
   /**
    * Convert RepeatRule (OmniFocus format) to RepetitionRule (mutation contract format)
-   * RepeatRule: { unit: 'day', steps: 2 } -> RepetitionRule: { frequency: 'daily', interval: 2 }
+   * RepeatRule: { unit: 'day', steps: 2, method: 'fixed' }
+   *   -> RepetitionRule: { frequency: 'daily', interval: 2, method: 'fixed' }
    *
    * The RepetitionRule frequency maps to ICS RRULE FREQ values used by OmniFocus.
+   * Method maps to Task.RepetitionMethod enum values.
    */
   private convertToRepetitionRule(
     rule: TaskCreationArgs['repeatRule'],
@@ -1284,9 +1303,38 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       return { frequency: 'daily', interval: rule.steps || 1 };
     }
 
+    // Map method from RepeatRule format to RepetitionRule format
+    // 'start-after-completion' -> 'defer-after-completion' (defer date calculated from completion)
+    // 'due-after-completion' -> 'due-after-completion' (due date calculated from completion)
+    // 'fixed' -> 'fixed' (fixed schedule regardless of completion)
+    // 'none' -> 'none'
+    const methodMap: Record<string, 'fixed' | 'due-after-completion' | 'defer-after-completion' | 'none'> = {
+      'fixed': 'fixed',
+      'due-after-completion': 'due-after-completion',
+      'start-after-completion': 'defer-after-completion',
+      'none': 'none',
+    };
+    const method = rule.method ? methodMap[rule.method] || 'fixed' : 'fixed';
+
+    // Determine scheduleType based on method
+    // 'fixed' uses 'regularly', completion-based methods use 'from-completion'
+    const scheduleType = (method === 'due-after-completion' || method === 'defer-after-completion')
+      ? 'from-completion' as const
+      : 'regularly' as const;
+
+    // Determine anchorDateKey based on method
+    // 'defer-after-completion' anchors to defer date, others anchor to due date
+    const anchorDateKey = (method === 'defer-after-completion')
+      ? 'defer-date' as const
+      : 'due-date' as const;
+
     return {
       frequency,
       interval: rule.steps || 1,
+      method,
+      scheduleType,
+      anchorDateKey,
+      catchUpAutomatically: true, // Default to true (skip missed = false)
     };
   }
 

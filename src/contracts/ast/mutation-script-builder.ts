@@ -574,15 +574,58 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
               rrule += ';BYSETPOS=' + rule.setPositions.join(',');
             }
 
-            // Use constructor (fromString does not exist)
+            // OmniFocus 4.7+ uses modern API: scheduleType + anchorDateKey (method is deprecated)
+            // IMPORTANT: method and scheduleType/anchorDateKey are mutually exclusive!
+            // If both are provided, OmniFocus throws an error.
+
+            // Map scheduleType string to Task.RepetitionScheduleType enum
+            // If user specified method, derive scheduleType from it
+            let scheduleType;
+            if (rule.scheduleType) {
+              const scheduleMap = {
+                'regularly': Task.RepetitionScheduleType.Regularly,
+                'from-completion': Task.RepetitionScheduleType.FromCompletion,
+                'none': Task.RepetitionScheduleType.None
+              };
+              scheduleType = scheduleMap[rule.scheduleType] || Task.RepetitionScheduleType.Regularly;
+            } else if (rule.method) {
+              // Derive scheduleType from deprecated method parameter
+              // 'fixed' -> Regularly, completion-based -> FromCompletion
+              scheduleType = (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion')
+                ? Task.RepetitionScheduleType.FromCompletion
+                : Task.RepetitionScheduleType.Regularly;
+            } else {
+              scheduleType = Task.RepetitionScheduleType.Regularly;
+            }
+
+            // Map anchorDateKey string to Task.AnchorDateKey enum
+            let anchorDateKey;
+            if (rule.anchorDateKey) {
+              const anchorMap = {
+                'due-date': Task.AnchorDateKey.DueDate,
+                'defer-date': Task.AnchorDateKey.DeferDate,
+                'planned-date': Task.AnchorDateKey.PlannedDate
+              };
+              anchorDateKey = anchorMap[rule.anchorDateKey] || Task.AnchorDateKey.DueDate;
+            } else if (rule.method === 'defer-after-completion') {
+              // defer-after-completion implies anchoring to defer date
+              anchorDateKey = Task.AnchorDateKey.DeferDate;
+            } else {
+              anchorDateKey = Task.AnchorDateKey.DueDate;
+            }
+
+            // catchUpAutomatically defaults to true
+            const catchUp = rule.catchUpAutomatically !== false;
+
+            // Use modern API: pass null for deprecated method parameter
             task.repetitionRule = new Task.RepetitionRule(
               rrule,
-              null,
-              Task.RepetitionScheduleType.Regularly,
-              Task.AnchorDateKey.DueDate,
-              true
+              null,  // method is deprecated, use scheduleType/anchorDateKey instead
+              scheduleType,
+              anchorDateKey,
+              catchUp
             );
-            return JSON.stringify({success: true, rrule: rrule});
+            return JSON.stringify({success: true, rrule: rrule, scheduleType: String(scheduleType), anchorDateKey: String(anchorDateKey)});
           })()
         \`;
         app.evaluateJavascript(ruleScript);
@@ -974,13 +1017,56 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
             rrule += ';BYSETPOS=' + rule.setPositions.join(',');
           }
 
-          // Use constructor (fromString does not exist)
+          // OmniFocus 4.7+ uses modern API: scheduleType + anchorDateKey (method is deprecated)
+          // IMPORTANT: method and scheduleType/anchorDateKey are mutually exclusive!
+          // If both are provided, OmniFocus throws an error.
+
+          // Map scheduleType string to Task.RepetitionScheduleType enum
+          // If user specified method, derive scheduleType from it
+          let scheduleType;
+          if (rule.scheduleType) {
+            const scheduleMap = {
+              'regularly': Task.RepetitionScheduleType.Regularly,
+              'from-completion': Task.RepetitionScheduleType.FromCompletion,
+              'none': Task.RepetitionScheduleType.None
+            };
+            scheduleType = scheduleMap[rule.scheduleType] || Task.RepetitionScheduleType.Regularly;
+          } else if (rule.method) {
+            // Derive scheduleType from deprecated method parameter
+            // 'fixed' -> Regularly, completion-based -> FromCompletion
+            scheduleType = (rule.method === 'due-after-completion' || rule.method === 'defer-after-completion')
+              ? Task.RepetitionScheduleType.FromCompletion
+              : Task.RepetitionScheduleType.Regularly;
+          } else {
+            scheduleType = Task.RepetitionScheduleType.Regularly;
+          }
+
+          // Map anchorDateKey string to Task.AnchorDateKey enum
+          let anchorDateKey;
+          if (rule.anchorDateKey) {
+            const anchorMap = {
+              'due-date': Task.AnchorDateKey.DueDate,
+              'defer-date': Task.AnchorDateKey.DeferDate,
+              'planned-date': Task.AnchorDateKey.PlannedDate
+            };
+            anchorDateKey = anchorMap[rule.anchorDateKey] || Task.AnchorDateKey.DueDate;
+          } else if (rule.method === 'defer-after-completion') {
+            // defer-after-completion implies anchoring to defer date
+            anchorDateKey = Task.AnchorDateKey.DeferDate;
+          } else {
+            anchorDateKey = Task.AnchorDateKey.DueDate;
+          }
+
+          // catchUpAutomatically defaults to true
+          const catchUp = rule.catchUpAutomatically !== false;
+
+          // Use modern API: pass null for deprecated method parameter
           task.repetitionRule = new Task.RepetitionRule(
             rrule,
-            null,
-            Task.RepetitionScheduleType.Regularly,
-            Task.AnchorDateKey.DueDate,
-            true
+            null,  // method is deprecated, use scheduleType/anchorDateKey instead
+            scheduleType,
+            anchorDateKey,
+            catchUp
           );
         }
 
