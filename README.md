@@ -122,11 +122,13 @@ node dist/index.js --http --port 3000
 **2. Configure your remote client:**
 
 **Claude Code** (native HTTP support):
+
 ```bash
 claude mcp add omnifocus --transport http http://your-mac-ip:3000/mcp
 ```
 
 **Claude Desktop** (requires mcp-remote bridge - Node.js needed on client):
+
 ```json
 {
   "mcpServers": {
@@ -212,58 +214,55 @@ If you're integrating this server into your own tools, see the [Developer Guide]
 - Testing patterns
 - Integration examples
 
-## Available Tools
+## Available Tools (v3.0.0 Unified API)
 
-**18 Total Tools** providing complete OmniFocus automation:
+Four unified tools provide complete OmniFocus automation:
 
-### Core Operations (7)
+| Tool                    | Purpose     | Operations                                           |
+| ----------------------- | ----------- | ---------------------------------------------------- |
+| **`omnifocus_read`**    | Query data  | Tasks, projects, tags, perspectives, folders, export |
+| **`omnifocus_write`**   | Modify data | Create, update, complete, delete tasks and projects  |
+| **`omnifocus_analyze`** | Analytics   | Productivity stats, velocity, patterns, reviews      |
+| **`system`**            | Diagnostics | Version info, metrics, cache stats                   |
 
-- **`tasks`** - Query tasks with modes (today, overdue, search, flagged, available, blocked, etc.)
-- **`manage_task`** - Create, update, complete, delete tasks with full property support
-- **`batch_create`** - Create multiple projects and tasks in hierarchies with atomic operations
-- **`parse_meeting_notes`** - Extract action items from meeting notes, transcripts, or unstructured text with AI
-- **`projects`** - Project operations (list, create, update, delete, statistics)
-- **`folders`** - Folder management and hierarchical organization
-- **`tags`** - Tag operations with hierarchy and bulk management
+### Query Examples
 
-### Organization & Reviews (3)
+```javascript
+// Today's tasks
+{ query: { type: "tasks", mode: "today" } }
 
-- **`manage_reviews`** - Project review workflow and scheduling
-- **`export`** - Data export in JSON, CSV, or Markdown formats
-- **`recurring_tasks`** - Recurring task analysis and pattern detection
+// Overdue items
+{ query: { type: "tasks", mode: "overdue" } }
 
-### Analytics (5)
+// Count active tasks (fast)
+{ query: { type: "tasks", filters: { status: "active" }, countOnly: true } }
 
-- **`productivity_stats`** - GTD health metrics and completion statistics
-- **`task_velocity`** - Completion trends and velocity analysis
-- **`analyze_overdue`** - Bottleneck analysis for overdue and blocked items
-- **`workflow_analysis`** - Deep workflow pattern analysis and insights
-- **`analyze_patterns`** - Database-wide pattern detection with 10 analysis modes
-
-### Pattern Analysis (via `analyze_patterns` tool)
-
-- **`review_gaps`** - Find projects overdue for weekly review or never reviewed
-- **`next_actions`** - Analyze task names for actionability (clear action verbs vs vague descriptions)
-- **`wip_limits`** - Identify projects with too many available tasks (configurable threshold, default: 5)
-- **`due_date_bunching`** - Detect workload imbalances and deadline clustering (configurable threshold, default: 8/day)
-- Plus 6 additional analysis modes (duplicates, dormant_projects, tag_audit, deadline_health, waiting_for,
-  estimation_bias)
-
-**GTD Workflow Health Example:**
-
-```bash
-# Analyze complete GTD health
-analyze_patterns({
-  patterns: ["review_gaps", "next_actions", "wip_limits", "due_date_bunching"],
-  options: { wipLimit: 5, bunchingThreshold: 8 }
-})
+// Export to JSON
+{ query: { type: "export", exportType: "tasks", format: "json" } }
 ```
 
-### Utilities (3)
+### Write Examples
 
-- **`perspectives`** - Query any OmniFocus perspective with rich formatting and metadata
-- **`system`** - Version, diagnostics, and metrics information
-- (Total: 18 tools)
+```javascript
+// Create task
+{ mutation: { operation: "create", target: "task", data: { name: "Call dentist" } } }
+
+// Complete task
+{ mutation: { operation: "complete", target: "task", id: "abc123" } }
+
+// Batch create with hierarchy
+{ mutation: { operation: "batch", target: "task", operations: [...] } }
+```
+
+### Analysis Examples
+
+```javascript
+// Productivity stats
+{ analysis: { type: "productivity_stats", params: { groupBy: "week" } } }
+
+// Pattern analysis (review gaps, WIP limits, due date bunching)
+{ analysis: { type: "pattern_analysis", params: { patterns: ["review_gaps", "wip_limits"] } } }
+```
 
 ## Recurring Tasks
 

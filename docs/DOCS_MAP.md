@@ -253,8 +253,6 @@
 
 **Legacy plans:**
 
-- **[docs/plans/2025-10-16-omnifocus-4.7-upgrade.md](plans/2025-10-16-omnifocus-4.7-upgrade.md)** - OmniFocus 4.7
-  upgrade plan
 - **[docs/plans/2025-10-18-multi-machine-session-sync.md](plans/2025-10-18-multi-machine-session-sync.md)** -
   Multi-machine session sync plan
 - **[docs/plans/README-MULTI-MACHINE-SYNC.md](plans/README-MULTI-MACHINE-SYNC.md)** - Multi-machine sync overview
@@ -262,10 +260,6 @@
 **Project status:**
 
 - **[docs/IMPROVEMENT_ROADMAP.md](IMPROVEMENT_ROADMAP.md)** - Completed features and future plans
-- **[docs/NEXT_PRIORITIES_2025-10-16.md](NEXT_PRIORITIES_2025-10-16.md)** - Development priorities as of Oct 2025
-- **[docs/OMNIFOCUS_4.7_UPGRADE_PLAN.md](OMNIFOCUS_4.7_UPGRADE_PLAN.md)** - OmniFocus 4.7 upgrade planning
-- **[docs/OMNIFOCUS_4.7_UPGRADE_COMPLETE.md](OMNIFOCUS_4.7_UPGRADE_COMPLETE.md)** - OmniFocus 4.7 upgrade completion
-  summary
 
 ---
 
@@ -277,18 +271,19 @@
 
 ## 🔬 Documentation Meta-Analysis
 
-- **[docs/DOCUMENTATION-CONSOLIDATION-ANALYSIS.md](DOCUMENTATION-CONSOLIDATION-ANALYSIS.md)** - Analysis of documentation
-  structure (Dec 2025)
+- **[docs/DOCUMENTATION-CONSOLIDATION-ANALYSIS.md](DOCUMENTATION-CONSOLIDATION-ANALYSIS.md)** - Analysis of
+  documentation structure (Dec 2025)
 
 **Script consolidation work docs:** Archived to https://github.com/kip-d/omnifocus-mcp-archive
+
 - See archive repository `2025-12-23-consolidation-docs/` folder
 
 ---
 
 ## 🐛 Bug Tracking
 
-- **[docs/bugs/analytics-validation-test-bug.md](bugs/analytics-validation-test-bug.md)** - Analytics validation test bug
-  analysis
+- **[docs/bugs/analytics-validation-test-bug.md](bugs/analytics-validation-test-bug.md)** - Analytics validation test
+  bug analysis
 
 ---
 
