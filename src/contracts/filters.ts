@@ -123,8 +123,21 @@ export interface TaskFilter {
   // --- Mode (for backward compat with existing code) ---
   mode?: 'all' | 'inbox' | 'today' | 'overdue' | 'flagged' | 'available' | 'search';
 
-  // --- Legacy (deprecated, use 'completed' instead) ---
-  /** @deprecated Use `completed: true` instead */
+  // --- Legacy (PUBLIC API deprecation) ---
+  /**
+   * @deprecated PUBLIC API ONLY - Use `completed: true` instead
+   *
+   * INTERNAL DESIGN NOTE: The codebase intentionally uses dual naming:
+   * - PUBLIC API: `completed` (what users should use)
+   * - INTERNAL: `includeCompleted` (used in scripts, compilers, tools)
+   *
+   * This is NOT technical debt - it's a deliberate boundary:
+   * - Migration layer in normalizeFilter() handles the conversion
+   * - Internal code uses includeCompleted for historical consistency
+   * - Changing internal naming would require ~60 file changes with no user benefit
+   *
+   * See: normalizeFilter() in this file for the conversion logic
+   */
   includeCompleted?: boolean;
 }
 
