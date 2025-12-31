@@ -1,235 +1,348 @@
-# OmniFocus MCP Test Suite - EXECUTE NOW
+# OmniFocus MCP Test Suite
 
-**INSTRUCTION:** Execute this test suite immediately. Do not ask clarifying questions. Start with Step 1 below and
-proceed through each test sequentially, reporting results as you go.
-
----
-
-## Step 1: Version Check (START HERE)
-
-**ACTION:** Call the system tool with `operation: "version"` to get version info.
-
-**Report:** State the version number (e.g., "Testing OmniFocus MCP v3.0.0, build xyz")
-
-**Then immediately proceed to Step 2.**
+**Version:** v3.0.0+ Unified API **Time:** ~10 minutes **Purpose:** Validate MCP server functionality with real
+OmniFocus operations
 
 ---
 
-## Step 2: Generate Test Session ID
+## Output Format
 
-**ACTION:** Generate a unique test tag using today's date and time: `@mcp-test-YYYYMMDD-HHMM`
+**Follow these rules strictly:**
 
-Example: `@mcp-test-20251123-1430`
-
-**Report:** "Using test tag: @mcp-test-YYYYMMDD-HHMM" (with actual values)
-
-**Then immediately proceed to Step 3.**
-
----
-
-## Step 3: Diagnostic Check
-
-**ACTION:** Call the system tool with `operation: "diagnostics"` to verify OmniFocus connection.
-
-**If health = "healthy":** Report "Diagnostics passed" and proceed to Core Tests. **If health = "degraded":** Report
-which tests failed and STOP - do not continue testing.
+- Success: `✅ Test N: description - brief result`
+- Failure: `❌ Test N: description - ERROR` + full details
+- No explanatory commentary between tests
+- Save verbose output for failures only
 
 ---
 
-## Reference: Date Handling
+## Pre-Flight Check
 
-You must convert natural language dates to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` format before calling tools. This is
-handled automatically - just note it in your mental model.
+**Before manual testing, verify automated tests pass:**
 
----
+```bash
+npm run test:smoke      # 21 seconds - critical path
+npm run test:integration  # 6 minutes - comprehensive (optional)
+```
 
-## Core Tests (Execute All Sequentially)
-
-**IMPORTANT:** Include your test tag (from Step 2) on ALL created items for cleanup.
-
----
-
-### Test 4: Read Operations
-
-**4a. Query today's tasks:**
-
-- ACTION: Query tasks with mode "today"
-- REPORT: Number of tasks returned, sample task names
-
-**4b. Query overdue tasks:**
-
-- ACTION: Query tasks with mode "overdue"
-- REPORT: Number of overdue tasks, or "none overdue"
-
-**4c. List projects:**
-
-- ACTION: Query projects with limit 5
-- REPORT: Number returned, sample project names
-
-**PASS/FAIL:** All three queries returned data without errors
+If automated tests fail, fix those first.
 
 ---
 
-### Test 5: Create Task
+## Test Suite
 
-**ACTION:** Create a task with these properties:
+### Test 1: Version Check
 
-- name: "Test Task Alpha"
-- tags: [your-test-tag, "urgent"]
-- dueDate: tomorrow's date in YYYY-MM-DD format
-- note: "Created by MCP test suite"
+**ACTION:**
 
-**REPORT:**
+```json
+system({operation: "version"})
+```
 
-- Success/failure
-- Task ID returned
-- Any errors
-
-**PASS/FAIL:** Task created with ID returned
+**REPORT:** `✅ Test 1: OmniFocus MCP v3.x.x`
 
 ---
 
-### Test 6: Create Project
+### Test 2: Generate Test Tag
 
-**ACTION:** Create a project with:
+**ACTION:** Generate unique tag using millisecond timestamp:
 
-- name: "Test Project Beta"
-- tags: [your-test-tag]
+```
+mcp-test-[Date.now()]-[random]
+```
 
-**REPORT:**
+Example: `mcp-test-1735600000000-x7k`
 
-- Success/failure
-- Project ID returned (should start with project identifier, not task)
-- Any errors
+**REPORT:** `✅ Test 2: Using tag [your-tag]`
 
-**PASS/FAIL:** Project created with project ID (not task ID)
-
----
-
-### Test 7: Update Task
-
-**ACTION:** Update "Test Task Alpha" (use ID from Test 5):
-
-- Add note text: "Updated by test suite"
-- Change dueDate to day after tomorrow
-
-**REPORT:** Success/failure, updated fields confirmed
-
-**PASS/FAIL:** Task updated successfully
+**SAVE:** This tag for all created items
 
 ---
 
-### Test 8: Tag Filtering (BEFORE completion!)
+### Test 3: Diagnostics
 
-**ACTION:** Query all **active** tasks with your test tag
+**ACTION:**
 
-**REPORT:**
+```json
+system({operation: "diagnostics"})
+```
 
-- Number of tasks found
-- Task names returned
+**EXPECT:** `health: "healthy"`
 
-**PASS/FAIL:** Returns "Test Task Alpha" (still active at this point)
-
-**NOTE:** This test must run BEFORE Test 9 (complete) because completed tasks are excluded by default.
+**REPORT:** `✅ Test 3: System healthy` or `❌ Test 3: [failure details] - STOP TESTING`
 
 ---
 
-### Test 9: Complete Task
+### Test 4: Query Today's Tasks
 
-**ACTION:** Mark "Test Task Alpha" as complete (use ID from Test 5)
+**ACTION:**
 
-**REPORT:**
+```json
+omnifocus_read({
+  query: {
+    type: "tasks",
+    mode: "today",
+    limit: 10
+  }
+})
+```
 
-- Success/failure
-- Completion time (should be < 10 seconds)
+**REPORT:** `✅ Test 4: Found N tasks due today`
 
-**PASS/FAIL:** Task completed in reasonable time
+---
+
+### Test 5: Query Projects
+
+**ACTION:**
+
+```json
+omnifocus_read({
+  query: {
+    type: "projects",
+    limit: 5
+  }
+})
+```
+
+**REPORT:** `✅ Test 5: Found N projects`
+
+---
+
+### Test 6: Create Task
+
+**ACTION:**
+
+```json
+omnifocus_write({
+  mutation: {
+    operation: "create",
+    target: "task",
+    data: {
+      name: "MCP Test Task",
+      tags: ["[your-test-tag]", "urgent"],
+      dueDate: "[tomorrow YYYY-MM-DD]",
+      note: "Created by MCP test suite"
+    }
+  }
+})
+```
+
+**EXPECT:** `success: true`, `taskId` present
+
+**REPORT:** `✅ Test 6: Created task [taskId]`
+
+**SAVE:** Task ID for later tests
+
+---
+
+### Test 7: Verify Task by ID
+
+**ACTION:**
+
+```json
+omnifocus_read({
+  query: {
+    type: "tasks",
+    filters: {id: "[taskId-from-test-6]"},
+    fields: ["id", "name", "tags", "dueDate"]
+  }
+})
+```
+
+**EXPECT:** Task returned with correct name and tags
+
+**REPORT:** `✅ Test 7: Verified task has correct properties`
+
+---
+
+### Test 8: Update Task
+
+**ACTION:**
+
+```json
+omnifocus_write({
+  mutation: {
+    operation: "update",
+    target: "task",
+    id: "[taskId-from-test-6]",
+    changes: {
+      flagged: true,
+      note: "Updated by MCP test suite"
+    }
+  }
+})
+```
+
+**REPORT:** `✅ Test 8: Updated task (flagged, note added)`
+
+---
+
+### Test 9: Create Project
+
+**ACTION:**
+
+```json
+omnifocus_write({
+  mutation: {
+    operation: "create",
+    target: "project",
+    data: {
+      name: "MCP Test Project",
+      tags: ["[your-test-tag]"]
+    }
+  }
+})
+```
+
+**EXPECT:** `success: true`, `projectId` present
+
+**REPORT:** `✅ Test 9: Created project [projectId]`
+
+**SAVE:** Project ID for cleanup
 
 ---
 
 ### Test 10: Analytics
 
-**ACTION:** Run productivity_stats analysis with groupBy: "week"
+**ACTION:**
 
-**REPORT:**
+```json
+omnifocus_analyze({
+  analysis: {
+    type: "productivity_stats",
+    scope: {
+      dateRange: {
+        start: "[7-days-ago YYYY-MM-DD]",
+        end: "[today YYYY-MM-DD]"
+      }
+    }
+  }
+})
+```
 
-- Success/failure
-- Key metrics returned (completed count, etc.)
-
-**PASS/FAIL:** Analytics returned data without errors
+**REPORT:** `✅ Test 10: Stats - N total, M completed`
 
 ---
 
-## Cleanup (Execute After All Tests)
-
-### Test 11: Delete Test Data
+### Test 11: Complete Task
 
 **ACTION:**
 
-1. Query all tasks with your test tag
-2. Delete each test task found
-3. Delete "Test Project Beta" project
+```json
+omnifocus_write({
+  mutation: {
+    operation: "complete",
+    target: "task",
+    id: "[taskId-from-test-6]"
+  }
+})
+```
 
-**REPORT:**
-
-- Number of items deleted
-- Any deletion errors
-
-**PASS/FAIL:** All test data cleaned up
+**REPORT:** `✅ Test 11: Task completed`
 
 ---
 
-### Test 12: Verify Cleanup
+### Test 12: Cleanup
 
-**ACTION:** Query tasks with your test tag again
+**ACTION:** Delete test items by ID:
 
-**REPORT:** Should return 0 tasks
+12a. Delete task:
 
-**PASS/FAIL:** No test data remains
+```json
+omnifocus_write({
+  mutation: {
+    operation: "delete",
+    target: "task",
+    id: "[taskId-from-test-6]"
+  }
+})
+```
+
+12b. Delete project:
+
+```json
+omnifocus_write({
+  mutation: {
+    operation: "delete",
+    target: "project",
+    id: "[projectId-from-test-9]"
+  }
+})
+```
+
+**REPORT:** `✅ Test 12: Cleanup complete (2 items deleted)`
+
+---
+
+### Test 13: Verify Cleanup
+
+**ACTION:** Query for deleted IDs:
+
+```json
+omnifocus_read({query: {type: "tasks", filters: {id: "[taskId]"}}})
+omnifocus_read({query: {type: "projects", filters: {id: "[projectId]"}}})
+```
+
+**EXPECT:** Both return empty results
+
+**REPORT:** `✅ Test 13: Verified - no test data remains`
 
 ---
 
 ## Final Report
 
-After completing all tests, provide a summary:
-
 ```
-## Test Results Summary
+TEST RESULTS
+============
+Total: 13 tests
+Passed: N
+Failed: M
 
-**Version Tested:** [from Step 1]
-**Test Tag Used:** [from Step 2]
+| Test | Result |
+|------|--------|
+| 1. Version | ✅/❌ |
+| 2. Test Tag | ✅/❌ |
+| 3. Diagnostics | ✅/❌ |
+| 4. Query Today | ✅/❌ |
+| 5. Query Projects | ✅/❌ |
+| 6. Create Task | ✅/❌ |
+| 7. Verify Task | ✅/❌ |
+| 8. Update Task | ✅/❌ |
+| 9. Create Project | ✅/❌ |
+| 10. Analytics | ✅/❌ |
+| 11. Complete Task | ✅/❌ |
+| 12. Cleanup | ✅/❌ |
+| 13. Verify Cleanup | ✅/❌ |
 
-| Test | Result | Notes |
-|------|--------|-------|
-| 1. Version Check | PASS/FAIL | |
-| 2. Test Tag | PASS/FAIL | |
-| 3. Diagnostics | PASS/FAIL | |
-| 4. Read Operations | PASS/FAIL | |
-| 5. Create Task | PASS/FAIL | |
-| 6. Create Project | PASS/FAIL | |
-| 7. Update Task | PASS/FAIL | |
-| 8. Tag Filtering | PASS/FAIL | Must run before completion |
-| 9. Complete Task | PASS/FAIL | Time: Xs |
-| 10. Analytics | PASS/FAIL | |
-| 11. Cleanup | PASS/FAIL | |
-| 12. Verify Cleanup | PASS/FAIL | |
-
-**Issues Found:** [List any failures with details]
+Status: ✅ ALL PASS or ❌ FAILURES DETECTED
 ```
 
 ---
 
-## Known Issues (Reference Only)
+## Troubleshooting
 
-If a test fails, check if it matches these known behaviors:
+**Common issues:**
 
-1. **Tags may not appear in OmniFocus UI immediately** - Refresh or wait 1-2 seconds
-2. **Dates must be YYYY-MM-DD format** - You handle the conversion
-3. **Completed tasks excluded by default** - Tag/status queries exclude completed tasks unless explicitly requested with
-   `status: "completed"` filter
+| Problem           | Cause                 | Fix                           |
+| ----------------- | --------------------- | ----------------------------- |
+| Date format error | Not YYYY-MM-DD        | Convert before calling        |
+| Task not found    | Wrong ID reference    | Use ID from creation response |
+| Tags missing      | Array syntax          | Use `["tag1", "tag2"]`        |
+| Stale test data   | Previous run orphaned | Query by ID, not tag          |
+
+**If failures occur:**
+
+1. Include full tool call JSON
+2. Include complete response
+3. Run `npm run test:integration` to check if systemic
+4. Check `src/tools/unified/` for implementation
 
 ---
 
-## BEGIN TESTING NOW
+## Testing Methods Comparison
 
-**Start with Step 1: Version Check**
+| Method                     | Time  | When to Use       |
+| -------------------------- | ----- | ----------------- |
+| `npm run test:smoke`       | 21s   | Pre-commit        |
+| This prompt                | 10min | Before releases   |
+| `npm run test:integration` | 6min  | CI, major changes |
