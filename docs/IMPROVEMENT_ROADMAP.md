@@ -1298,83 +1298,28 @@ _Based on analysis of CODEX_SUGGESTED_ROADMAP.md and IMPROVEMENT_ROADMAP.md conv
 
 ## 🧹 Technical Debt & Cleanup Opportunities
 
-### Legacy Version Code Cleanup (OmniFocus 4.7+ Requirement)
+### ✅ Legacy Version Code Cleanup (OmniFocus 4.7+ Requirement) - COMPLETED
 
-**Analysis Date**: October 20, 2025 **Context**: After updating README to require OmniFocus 4.7+ (released August 2025),
-identified legacy 4.6.1 compatibility code that is no longer needed.
+**Status**: ✅ COMPLETED (January 2026)
 
-#### Safe to Remove (Never Used in Production)
+**What Was Cleaned Up**:
 
-1. **`featureRequires4_7Plus()` function** (`src/omnifocus/scripts/shared/repeat-translation.ts:93-96`)
-   - Only used in unit tests
-   - The `requiresVersion` field it checks is never actually used in production code
-   - Can remove both the function and the `requiresVersion` field entirely
-   - **Impact**: ~40 lines removed from repeat-translation.ts
+1. ✅ **Version detection fallback** - Already updated to 4.7.0 (lines 79-80 in version-detection.ts)
+2. ✅ **`featureRequires4_7Plus()` function** - Already removed (never existed in current codebase)
+3. ✅ **`supportsFeature()` function** - Already removed (never existed in current codebase)
+4. ✅ **`requiresVersion` field annotations** - Already removed (repeat-translation.ts was refactored to
+   repeat-helpers.ts)
+5. ✅ **OmniFocus-4.6.1-d.ts** - Already archived/removed (not present in current codebase)
+6. ✅ **repeat-schemas.ts comments** - Updated to remove "(4.6.1+)" version annotations
+7. ✅ **api/README.md** - Updated to remove 4.6.1 references and document 4.7.0 as minimum required
 
-2. **`supportsFeature()` function** (`src/omnifocus/version-detection.ts:115-130`)
-   - Only used in unit tests and documentation
-   - Never imported or called in production code
-   - Feature flags themselves ARE used (reported in SystemToolV2 metadata), but this checking function is unused
-   - **Impact**: ~15 lines removed from version-detection.ts
-
-3. **`requiresVersion` field annotations** (`src/omnifocus/scripts/shared/repeat-translation.ts`)
-   - Lines 42, 49, 55, 61, 67: Comments and field declarations
-   - Never accessed in production code
-   - Only read by `featureRequires4_7Plus()` which is unused
-   - **Impact**: Cleaner mapping structure
-
-4. **OmniFocus-4.6.1-d.ts** type definitions
-   - Located at `src/omnifocus/api/versions/OmniFocus-4.6.1-d.ts`
-   - Only version-specific type file (60KB)
-   - Should be archived if we only support 4.7+
-   - **Impact**: 60KB removed from codebase
-
-#### Update (Not Remove)
-
-5. **Version detection fallback** (`src/omnifocus/version-detection.ts:76-81`)
-   - Currently falls back to 4.6.1 if detection fails
-   - Should update to 4.7.0 since that's our minimum requirement
-
-   ```typescript
-   // Current:
-   let detectedVersion: OmniFocusVersion = {
-     version: 'unknown',
-     major: 4,
-     minor: 6, // ← Should be 7
-     patch: 1, // ← Should be 0
-   };
-   ```
-
-   - **Impact**: More accurate fallback behavior
-
-#### Keep (Actually Used)
+**What's Preserved (Actually Used)**:
 
 - `getOmniFocusVersion()` - Used by SystemToolV2 to report version
 - Feature flags (`hasPlannedDates`, `hasMutuallyExclusiveTags`, `hasEnhancedRepeats`) - Reported in system tool metadata
 - Version detection infrastructure - Still useful for diagnostics and future version differences
 
-#### Implementation Summary
-
-**Removable Code**:
-
-- `featureRequires4_7Plus()` function + associated tests
-- `requiresVersion` field from repeat translation mapping
-- `supportsFeature()` function + associated tests
-- `OmniFocus-4.6.1-d.ts` type definitions (archive)
-
-**Updates Required**:
-
-- Change version fallback from 4.6.1 → 4.7.0
-
-**Total Impact**:
-
-- Removes ~150 lines of unused version-checking code
-- Simplifies repeat-translation.ts by removing version annotations
-- Cleanup ~60KB of obsolete type definitions
-- More accurate fallback behavior
-
-**Effort**: 2-3 hours (code removal, test cleanup, verification) **Risk**: Low (unused code paths) **Priority**: Medium
-(technical debt cleanup, not blocking features)
+**Impact**: Codebase now consistently reflects OmniFocus 4.7+ as minimum requirement with no legacy 4.6.1 references
 
 ---
 

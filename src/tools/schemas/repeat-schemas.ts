@@ -82,14 +82,14 @@ export const RepeatRuleSchema = z.object({
 // Anchor intent for repeat rules (what date the repeat anchors to)
 export const RepeatAnchorIntentSchema = z
   .enum([
-    'when-deferred', // Count from defer date (4.6.1+)
-    'when-due', // Count from due date (4.6.1+) - DEFAULT
-    'when-marked-done', // Count from completion (4.7+)
-    'planned-date', // Count from planned date (4.7+)
+    'when-deferred', // Count from defer date
+    'when-due', // Count from due date - DEFAULT
+    'when-marked-done', // Count from completion
+    'planned-date', // Count from planned date
   ])
   .default('when-due')
   .describe(
-    'What date to anchor the repeat to: "when-deferred" = count from defer date, "when-due" = count from due date (default), "when-marked-done" = count from completion (OmniFocus 4.7+), "planned-date" = count from planned date (OmniFocus 4.7+)',
+    'What date to anchor the repeat to: "when-deferred" = count from defer date, "when-due" = count from due date (default), "when-marked-done" = count from completion, "planned-date" = count from planned date',
   );
 
 // End condition for repeats (when should repeat stop?)

@@ -6,7 +6,8 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 
 - **Current**: `OmniFocus.d.ts` (symlink to latest version)
 - **Latest Version**: OmniFocus 4.8.6
-- **Previous Versions**: OmniFocus 4.8.3, 4.6.1 (archived in `versions/`)
+- **Previous Version**: OmniFocus 4.8.3 (kept for reference)
+- **Minimum Required**: OmniFocus 4.7+
 
 ## File Structure
 
@@ -14,8 +15,6 @@ This directory contains the official TypeScript definitions for OmniFocus automa
 - `OmniFocus-4.8.6-d.ts` - Official TypeScript definitions for OmniFocus 4.8.6
 - `OmniFocus-4.8.3-d.ts` - TypeScript definitions for OmniFocus 4.8.3
 - `OmniFocus-extensions.d.ts` - Undocumented but working properties (empirically verified)
-- `versions/` - Archived previous versions (excluded from TypeScript compilation)
-  - `OmniFocus-4.6.1-d.ts` - TypeScript definitions for OmniFocus 4.6.1
 
 ## Usage
 
@@ -138,8 +137,8 @@ git commit -m "feat: update OmniFocus API definitions to version [VERSION]"
   - New: Library class
 - **4.8.3** - Previous version (October 2025)
   - New features: Anchor Dates and other 4.8.x improvements
-- **4.6.1** - Archived version (July 2025)
-  - Baseline version for this MCP server
+- **4.7.0** - Minimum required version (August 2025)
+  - Required for: planned dates, mutually exclusive tags, enhanced repeats
 
 ## Integration with MCP Bridge
 
