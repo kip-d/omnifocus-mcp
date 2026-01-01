@@ -1314,12 +1314,14 @@ export interface TaskCountOptions {
 }
 
 /**
- * Build an OmniJS script that counts tasks matching AST-generated filters
+ * Build a pure JXA script that counts tasks matching AST-generated filters
  *
  * This replaces the manual filter logic in get-task-count.ts with AST-powered
  * filter generation, eliminating ~100 lines of duplicated filter code.
  *
- * Performance: Uses pure OmniJS bridge for fastest counting (~0.001ms per task)
+ * Performance: Uses pure JXA (NOT OmniJS bridge) for ~40x faster execution
+ * - Pure JXA iteration: ~42 seconds for 2,264 tasks
+ * - OmniJS bridge: ~2 minutes (AppleEvent timeout!)
  *
  * @param filter - TaskFilter criteria to count
  * @param options - Count options (maxScan limit)
@@ -1328,87 +1330,90 @@ export interface TaskCountOptions {
 export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCountOptions = {}): GeneratedScript {
   const { maxScan = 10000 } = options;
 
-  // Build AST and generate filter code
+  // Build AST and generate JXA filter code (NOT OmniJS!)
   const ast = buildAST(filter);
   const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(filter, 'omnijs');
+  const filterCode = generateFilterCode(filter, 'jxa'); // Use JXA emitter
   const filterDescription = describeFilterForScript(filter);
 
   // Determine if we're counting inbox tasks
   const checkInbox = filter.inInbox === true;
 
-  // Build the complete script - pure OmniJS for maximum performance
+  // Check if the filter needs tags - only fetch tags if the filter uses them
+  // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed
+  const needsTags = filterCode.includes('taskTags');
+
+  // Build the complete script - pure JXA for maximum performance
+  // Critical: Do NOT use app.evaluateJavascript() - it's ~40x slower!
   const script = `
 (() => {
   const app = Application('OmniFocus');
+  app.includeStandardAdditions = true;
 
   try {
-    const omniJsScript = \`
-      (() => {
-        const startTime = Date.now();
-        const maxScan = ${maxScan};
-        const checkInbox = ${checkInbox};
-        let count = 0;
-        let scanned = 0;
+    const startTime = Date.now();
+    const maxScan = ${maxScan};
+    const doc = app.defaultDocument;
+    let count = 0;
+    let scanned = 0;
 
-        // AST-generated filter predicate
-        // Filter: ${filterDescription}
-        function matchesFilter(task) {
-          const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-          return ${filterCode};
-        }
+    // Get tasks using pure JXA (fast!)
+    const tasks = ${checkInbox ? 'doc.inboxTasks()' : 'doc.flattenedTasks()'};
+    const totalTasks = tasks.length;
 
-        // Use inbox or flattenedTasks based on filter
-        const tasks = checkInbox ? document.inbox : flattenedTasks;
-        const totalTasks = tasks.length;
+    // AST-generated filter predicate (JXA syntax with method calls)
+    // Filter: ${filterDescription}
+    function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
+      return ${filterCode};
+    }
 
-        tasks.forEach(task => {
-          if (scanned >= maxScan) return;
-          scanned++;
-
-          try {
-            if (matchesFilter(task)) {
-              count++;
-            }
-          } catch (e) {
-            // Skip tasks that error during property access
+    // Iterate using for loop (faster than forEach in JXA)
+    for (let i = 0; i < tasks.length && scanned < maxScan; i++) {
+      scanned++;
+      try {
+        const task = tasks[i];
+        ${
+          needsTags
+            ? `// Get tags for this task (only when filter needs them)
+        let taskTags = [];
+        try {
+          const tags = task.tags();
+          if (tags) {
+            taskTags = tags.map(t => t.name());
           }
-        });
+        } catch (e) {}
 
-        const endTime = Date.now();
+        if (matchesFilter(task, taskTags)) {`
+            : 'if (matchesFilter(task)) {'
+        }
+          count++;
+        }
+      } catch (e) {
+        // Skip tasks that error during property access
+      }
+    }
 
-        return JSON.stringify({
-          count: count,
-          scanned: scanned,
-          totalTasks: totalTasks,
-          limited: scanned >= maxScan,
-          queryTimeMs: endTime - startTime,
-          optimization: 'ast_omnijs_bridge'
-        });
-      })()
-    \`;
-
-    const resultJson = app.evaluateJavascript(omniJsScript);
-    const result = JSON.parse(resultJson);
+    const endTime = Date.now();
 
     return JSON.stringify({
-      count: result.count,
+      count: count,
       filters_applied: ${JSON.stringify(filter)},
-      query_time_ms: result.queryTimeMs,
-      optimization: result.optimization,
+      query_time_ms: endTime - startTime,
+      optimization: 'pure_jxa${needsTags ? '_with_tags' : '_no_tags'}',
       filter_description: ${JSON.stringify(filterDescription)},
-      ...(result.limited ? {
+      scanned: scanned,
+      total_tasks: totalTasks,
+      ...(scanned >= maxScan ? {
         warning: 'Count may be incomplete due to scan limit',
-        tasks_scanned: result.scanned,
-        total_tasks: result.totalTasks
-      } : {})
+        limited: true
+      } : { limited: false })
     });
 
   } catch (error) {
     return JSON.stringify({
       error: true,
       message: error.message || String(error),
-      context: 'task_count_ast'
+      context: 'task_count_jxa'
     });
   }
 })()

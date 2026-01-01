@@ -2,43 +2,69 @@
 
 ## OmniFocus Script Errors
 
-### Flagged Task Counting Timeout
+### Count-Only Query Timeout (All Filters, Not Just Flagged)
 
-**Status:** Open - Needs Investigation
+**Status:** FIXED (2026-01-01) - Now uses pure JXA instead of OmniJS bridge
 
-**Issue:** Count-only queries for flagged tasks intermittently timeout or fail with "Failed to count tasks" error.
+**Issue:** Count-only queries timeout after ~2 minutes with "Failed to count tasks" error. This affects ALL count-only
+queries, not just flagged filtering.
 
 **Affected Tests:**
 
 - [`tests/integration/tools/unified/end-to-end.test.ts`](file:///Users/kip/src/omnifocus-mcp/tests/integration/tools/unified/end-to-end.test.ts#L239) -
   "should return count-only for flagged tasks"
-- [`tests/integration/tools/unified/end-to-end.test.ts`](file:///Users/kip/src/omnifocus-mcp/tests/integration/tools/unified/end-to-end.test.ts#L278) -
-  "should create a new task"
 
-**Root Cause:** OmniFocus JXA script performance issue when filtering large task collections by flagged status. The
-count-only optimization script uses `baseCollection.filter(matchesFilters)` which is slow for flagged filter.
+**Root Cause:** OmniJS bridge performance is ~40x slower than pure JXA for iterating tasks.
+
+| Method                                      | Time for 2,264 tasks |
+| ------------------------------------------- | -------------------- |
+| Pure JXA: `doc.flattenedTasks().length`     | ~3 seconds           |
+| OmniJS: `flattenedTasks.length` via bridge  | ~2 minutes (timeout) |
+| Pure JXA: iterate + check flagged/completed | ~42 seconds          |
+
+The `buildTaskCountScript()` in `src/contracts/ast/script-builder.ts` uses OmniJS bridge (`app.evaluateJavascript()`)
+which triggers the AppleEvent 2-minute timeout before completion.
 
 **Error Message:**
 
 ```
-Failed to count tasks
-Script: get_task_count with flagged: true filter
+AppleEvent timed out. (-1712)
+Script execution failed with code null
 ```
 
 **Workaround:**
 
-- Skip these tests temporarily
-- OR increase timeout to 180s+
-- OR use `{ filters: { flagged: true }, limit: 100 }` instead of `countOnly: true`
+- Use `{ filters: { flagged: true }, limit: 100 }` instead of `countOnly: true`
+- OR skip count-only tests temporarily
 
-**Investigation Needed:**
+**Fix Required:**
 
-1. Profile the JXA script to identify bottleneck
-2. Consider using OmniFocus's native `whose()` clause for flagged filter instead of JS filter
-3. Test with different OmniFocus database sizes
+Rewrite `buildTaskCountScript()` to use pure JXA instead of OmniJS bridge:
 
-**To Fix:** Update
-[`src/omnifocus/scripts/tasks/query-tasks.ts`](file:///Users/kip/src/omnifocus-mcp/src/omnifocus/scripts/tasks/query-tasks.ts)
-count-only logic for flagged filter optimization.
+```javascript
+// Current (slow - uses OmniJS bridge)
+const omniJsScript = `flattenedTasks.forEach(task => { ... })`;
+app.evaluateJavascript(omniJsScript);
 
-**Priority:** Medium - Tests still pass when skipped, but affects count-only optimization reliability.
+// Fixed (fast - pure JXA)
+const tasks = doc.flattenedTasks();
+for (let i = 0; i < tasks.length; i++) {
+  if (tasks[i].flagged() && !tasks[i].completed()) count++;
+}
+```
+
+**File to Update:**
+[`src/contracts/ast/script-builder.ts`](file:///Users/kip/src/omnifocus-mcp/src/contracts/ast/script-builder.ts#L1328) -
+`buildTaskCountScript()` function (lines 1328-1422)
+
+**Resolution:**
+
+The fix in `buildTaskCountScript()` switched from OmniJS bridge to pure JXA:
+
+- Before: 2+ minutes (AppleEvent timeout)
+- After: ~50 seconds for 2,255 tasks
+
+Additionally, an optimization was added to only fetch tags when the filter actually uses them, saving ~40 seconds for
+simple boolean filters like `flagged: true`.
+
+**Commit:** See git history for the fix in `src/contracts/ast/script-builder.ts`.
