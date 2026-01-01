@@ -227,7 +227,8 @@ describe('Unified Tools End-to-End Integration', () => {
       // Verify metadata includes count and optimization flag
       expect(parsed.metadata).toHaveProperty('total_count');
       expect(parsed.metadata).toHaveProperty('count_only', true);
-      expect(parsed.metadata).toHaveProperty('optimization', 'ast_omnijs_bridge');
+      // Accept any pure JXA optimization (faster than OmniJS bridge)
+      expect(parsed.metadata.optimization).toMatch(/^pure_jxa/);
       expect(typeof parsed.metadata.total_count).toBe('number');
 
       // Verify no task data returned (just count in metadata)
