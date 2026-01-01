@@ -207,19 +207,25 @@ const ManageTaskSchema = z.object({
   ),
 
   // Unified API repetition rule format - passes through to mutation script builder
-  repetitionRule: z.object({
-    frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
-    interval: z.number().min(1).optional().default(1),
-    daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
-    endDate: z.string().optional(),
-    method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
-    scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
-    anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
-    catchUpAutomatically: z.boolean().optional(),
-  }).optional().describe('Repetition rule in unified API format (used by omnifocus_write)'),
+  repetitionRule: z
+    .object({
+      frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().min(1).optional().default(1),
+      daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
+      endDate: z.string().optional(),
+      method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
+      scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
+      anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
+      catchUpAutomatically: z.boolean().optional(),
+    })
+    .optional()
+    .describe('Repetition rule in unified API format (used by omnifocus_write)'),
 
   // Status field for update operations (completed/dropped)
-  status: z.enum(['completed', 'dropped']).optional().describe('Set task status: completed (mark done) or dropped (cancel task)'),
+  status: z
+    .enum(['completed', 'dropped'])
+    .optional()
+    .describe('Set task status: completed (mark done) or dropped (cancel task)'),
 });
 
 type ManageTaskInput = z.infer<typeof ManageTaskSchema>;
@@ -357,8 +363,11 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
           let repetitionRuleForCreate: import('../../contracts/mutations.js').RepetitionRule | undefined;
           if (brandedParams.repetitionRule && typeof brandedParams.repetitionRule === 'object') {
             // Unified API format - use directly
-            repetitionRuleForCreate = brandedParams.repetitionRule as import('../../contracts/mutations.js').RepetitionRule;
-            this.logger.debug('Using unified API repetitionRule for creation', { repetitionRule: repetitionRuleForCreate });
+            repetitionRuleForCreate =
+              brandedParams.repetitionRule as import('../../contracts/mutations.js').RepetitionRule;
+            this.logger.debug('Using unified API repetitionRule for creation', {
+              repetitionRule: repetitionRuleForCreate,
+            });
           } else {
             // Legacy format - normalize and convert
             const repeatRuleForUpdate = this.normalizeRepeatRuleInput(brandedParams.repeatRule);
@@ -526,7 +535,9 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
             try {
               this.logger.debug('Applying repeat rule via update', { repetitionRule: repetitionRuleForCreate });
               // Use AST-powered mutation builder - repetitionRuleForCreate is already in contract format
-              const repeatOnlyScript = (await buildUpdateTaskScript(createdTaskId, { repetitionRule: repetitionRuleForCreate })).script;
+              const repeatOnlyScript = (
+                await buildUpdateTaskScript(createdTaskId, { repetitionRule: repetitionRuleForCreate })
+              ).script;
               const repeatUpdateResult = await this.execJson(repeatOnlyScript);
               this.logger.debug('Repeat rule update result', { repeatUpdateResult });
               if (isScriptError(repeatUpdateResult)) {
@@ -1064,6 +1075,39 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       }
     }
 
+    // Handle plannedDate (OmniFocus 4.7+ feature)
+    if (updates.clearPlannedDate) {
+      this.logger.info('Clearing plannedDate (clearPlannedDate flag set)');
+      sanitized.plannedDate = null; // Clear the date
+    } else if (updates.plannedDate !== undefined) {
+      this.logger.info('Processing plannedDate:', {
+        value: updates.plannedDate,
+        type: typeof updates.plannedDate,
+      });
+
+      if (typeof updates.plannedDate === 'string') {
+        try {
+          // Convert local time to UTC for OmniFocus
+          const utcDate = localToUTC(updates.plannedDate, 'planned');
+          this.logger.info('PlannedDate converted to UTC:', {
+            original: updates.plannedDate,
+            converted: utcDate,
+          });
+          sanitized.plannedDate = utcDate;
+        } catch (error) {
+          this.logger.warn(`Invalid plannedDate format: ${updates.plannedDate}`, error);
+        }
+      } else if (updates.plannedDate === null) {
+        // Allow explicit null to clear the date
+        sanitized.plannedDate = null;
+      } else {
+        this.logger.warn('Unexpected plannedDate type:', {
+          value: updates.plannedDate,
+          type: typeof updates.plannedDate,
+        });
+      }
+    }
+
     // Handle completion date (for complete operation)
     if (updates.completionDate !== undefined && updates.completionDate !== null) {
       this.logger.info('Processing completionDate:', {
@@ -1309,24 +1353,23 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
     // 'fixed' -> 'fixed' (fixed schedule regardless of completion)
     // 'none' -> 'none'
     const methodMap: Record<string, 'fixed' | 'due-after-completion' | 'defer-after-completion' | 'none'> = {
-      'fixed': 'fixed',
+      fixed: 'fixed',
       'due-after-completion': 'due-after-completion',
       'start-after-completion': 'defer-after-completion',
-      'none': 'none',
+      none: 'none',
     };
     const method = rule.method ? methodMap[rule.method] || 'fixed' : 'fixed';
 
     // Determine scheduleType based on method
     // 'fixed' uses 'regularly', completion-based methods use 'from-completion'
-    const scheduleType = (method === 'due-after-completion' || method === 'defer-after-completion')
-      ? 'from-completion' as const
-      : 'regularly' as const;
+    const scheduleType =
+      method === 'due-after-completion' || method === 'defer-after-completion'
+        ? ('from-completion' as const)
+        : ('regularly' as const);
 
     // Determine anchorDateKey based on method
     // 'defer-after-completion' anchors to defer date, others anchor to due date
-    const anchorDateKey = (method === 'defer-after-completion')
-      ? 'defer-date' as const
-      : 'due-date' as const;
+    const anchorDateKey = method === 'defer-after-completion' ? ('defer-date' as const) : ('due-date' as const);
 
     return {
       frequency,
