@@ -1188,13 +1188,20 @@ export class ManageTaskTool extends BaseTool<typeof ManageTaskSchema, TaskOperat
       sanitized.sequential = updates.sequential === 'true';
     }
 
-    // Handle repeat rule
+    // Handle repeat rule (legacy format)
     if (updates.repeatRule !== undefined) {
       const normalizedRepeat = this.normalizeRepeatRuleInput(updates.repeatRule);
       if (normalizedRepeat) {
         sanitized.repeatRule = normalizedRepeat;
         this.logger.debug('Sanitized repeatRule:', normalizedRepeat);
       }
+    }
+
+    // Handle repetitionRule (unified API format - OmniFocus 4.7+)
+    // This is the preferred format used by omnifocus_write
+    if (updates.repetitionRule !== undefined && typeof updates.repetitionRule === 'object') {
+      sanitized.repetitionRule = updates.repetitionRule;
+      this.logger.debug('Passing through repetitionRule:', updates.repetitionRule);
     }
 
     // Handle clear repeat rule flag
