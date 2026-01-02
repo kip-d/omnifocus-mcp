@@ -188,39 +188,56 @@ describe('buildAST', () => {
   });
 
   describe('text filters', () => {
-    it('transforms text with CONTAINS operator', () => {
+    it('transforms text with CONTAINS operator - checks both name AND note', () => {
       const filter: TaskFilter = { text: 'review', textOperator: 'CONTAINS' };
       const ast = buildAST(filter);
 
+      // Should generate OR node that matches either name or note
       expect(ast).toEqual({
-        type: 'comparison',
-        field: 'task.name',
-        operator: 'includes',
-        value: 'review',
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'review' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'review' },
+        ],
       });
     });
 
-    it('transforms text with MATCHES operator', () => {
+    it('transforms text with MATCHES operator - checks both name AND note', () => {
       const filter: TaskFilter = { text: '^review.*', textOperator: 'MATCHES' };
       const ast = buildAST(filter);
 
       expect(ast).toEqual({
-        type: 'comparison',
-        field: 'task.name',
-        operator: 'matches',
-        value: '^review.*',
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'matches', value: '^review.*' },
+          { type: 'comparison', field: 'task.note', operator: 'matches', value: '^review.*' },
+        ],
       });
     });
 
-    it('defaults to CONTAINS operator', () => {
+    it('defaults to CONTAINS operator for both name and note', () => {
       const filter: TaskFilter = { text: 'review' };
       const ast = buildAST(filter);
 
       expect(ast).toEqual({
-        type: 'comparison',
-        field: 'task.name',
-        operator: 'includes',
-        value: 'review',
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'review' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'review' },
+        ],
+      });
+    });
+
+    it('transforms search alias (legacy) the same as text', () => {
+      const filter: TaskFilter = { search: 'meeting notes' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.name', operator: 'includes', value: 'meeting notes' },
+          { type: 'comparison', field: 'task.note', operator: 'includes', value: 'meeting notes' },
+        ],
       });
     });
   });
@@ -292,6 +309,58 @@ describe('buildAST', () => {
         children: [
           { type: 'exists', field: 'task.deferDate', exists: true },
           { type: 'comparison', field: 'task.deferDate', operator: '>=', value: '2025-01-01' },
+        ],
+      });
+    });
+
+    it('transforms dueBefore with exclusive operator', () => {
+      const filter: TaskFilter = { dueBefore: '2025-12-31', dueDateOperator: '<' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.dueDate', exists: true },
+          { type: 'comparison', field: 'task.dueDate', operator: '<', value: '2025-12-31' },
+        ],
+      });
+    });
+
+    it('transforms dueAfter with exclusive operator', () => {
+      const filter: TaskFilter = { dueAfter: '2025-01-01', dueDateOperator: '>' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.dueDate', exists: true },
+          { type: 'comparison', field: 'task.dueDate', operator: '>', value: '2025-01-01' },
+        ],
+      });
+    });
+
+    it('transforms deferBefore with exclusive operator', () => {
+      const filter: TaskFilter = { deferBefore: '2025-12-31', deferDateOperator: '<' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.deferDate', exists: true },
+          { type: 'comparison', field: 'task.deferDate', operator: '<', value: '2025-12-31' },
+        ],
+      });
+    });
+
+    it('transforms deferAfter with exclusive operator', () => {
+      const filter: TaskFilter = { deferAfter: '2025-01-01', deferDateOperator: '>' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.deferDate', exists: true },
+          { type: 'comparison', field: 'task.deferDate', operator: '>', value: '2025-01-01' },
         ],
       });
     });

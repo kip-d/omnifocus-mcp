@@ -40,8 +40,9 @@ export type TextOperator = 'CONTAINS' | 'MATCHES';
 
 /**
  * Date filter operators
+ * Supports both inclusive (<=, >=) and exclusive (<, >) comparisons
  */
-export type DateOperator = 'BETWEEN' | '<=' | '>=';
+export type DateOperator = 'BETWEEN' | '<' | '<=' | '>' | '>=';
 
 // =============================================================================
 // THE MASTER FILTER INTERFACE
@@ -82,6 +83,7 @@ export interface TaskFilter {
 
   deferAfter?: string;
   deferBefore?: string;
+  deferDateOperator?: DateOperator; // How to compare defer dates
 
   // --- Boolean Flags ---
   flagged?: boolean;

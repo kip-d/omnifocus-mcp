@@ -7,8 +7,8 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter } from '../filters.js';
-import type { FilterNode, ComparisonNode, AndNode, ExistsNode, NotNode } from './types.js';
+import type { TaskFilter, DateOperator } from '../filters.js';
+import type { FilterNode, ComparisonNode, AndNode, OrNode, ExistsNode, NotNode } from './types.js';
 
 /**
  * Build an AST from a TaskFilter
@@ -67,20 +67,34 @@ export function buildAST(filter: TaskFilter): FilterNode {
 
   // --- Text search ---
   // Support both filter.text and filter.search (legacy alias for compatibility)
+  // Per spec (filters.ts:113-115), search checks BOTH name AND note
   const searchTerm = filter.text ?? filter.search;
   if (searchTerm !== undefined) {
     const operator = filter.textOperator === 'MATCHES' ? 'matches' : 'includes';
-    conditions.push(comparison('task.name', operator, searchTerm));
+    // Match if either name OR note contains/matches the search term
+    conditions.push(
+      or(comparison('task.name', operator, searchTerm), comparison('task.note', operator, searchTerm)),
+    );
   }
 
   // --- Due date filters ---
-  const dueDateConditions = buildDateConditions('task.dueDate', filter.dueAfter, filter.dueBefore);
+  const dueDateConditions = buildDateConditions(
+    'task.dueDate',
+    filter.dueAfter,
+    filter.dueBefore,
+    filter.dueDateOperator,
+  );
   if (dueDateConditions.length > 0) {
     conditions.push(and(exists('task.dueDate', true), ...dueDateConditions));
   }
 
   // --- Defer date filters ---
-  const deferDateConditions = buildDateConditions('task.deferDate', filter.deferAfter, filter.deferBefore);
+  const deferDateConditions = buildDateConditions(
+    'task.deferDate',
+    filter.deferAfter,
+    filter.deferBefore,
+    filter.deferDateOperator,
+  );
   if (deferDateConditions.length > 0) {
     conditions.push(and(exists('task.deferDate', true), ...deferDateConditions));
   }
@@ -121,15 +135,28 @@ function buildTagsNode(tags: string[], operator: 'AND' | 'OR' | 'NOT_IN'): Filte
   }
 }
 
-function buildDateConditions(field: string, after?: string, before?: string): ComparisonNode[] {
+function buildDateConditions(
+  field: string,
+  after?: string,
+  before?: string,
+  dateOperator?: DateOperator,
+): ComparisonNode[] {
   const conditions: ComparisonNode[] = [];
 
   if (after !== undefined) {
-    conditions.push(comparison(field, '>=', after));
+    // Use the specified operator for "after" comparisons, default to >= (inclusive)
+    // For operators like > and >=, use them directly
+    // For BETWEEN, use >= for the lower bound
+    const afterOp = dateOperator === '>' ? '>' : '>=';
+    conditions.push(comparison(field, afterOp, after));
   }
 
   if (before !== undefined) {
-    conditions.push(comparison(field, '<=', before));
+    // Use the specified operator for "before" comparisons, default to <= (inclusive)
+    // For operators like < and <=, use them directly
+    // For BETWEEN, use <= for the upper bound
+    const beforeOp = dateOperator === '<' ? '<' : '<=';
+    conditions.push(comparison(field, beforeOp, before));
   }
 
   return conditions;
@@ -145,6 +172,10 @@ function comparison(field: string, operator: ComparisonNode['operator'], value: 
 
 function and(...children: FilterNode[]): AndNode {
   return { type: 'and', children };
+}
+
+function or(...children: FilterNode[]): OrNode {
+  return { type: 'or', children };
 }
 
 function exists(field: string, existsValue: boolean): ExistsNode {
