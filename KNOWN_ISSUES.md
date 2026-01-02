@@ -11,8 +11,8 @@ queries, not just flagged filtering.
 
 **Affected Tests:**
 
-- [`tests/integration/tools/unified/end-to-end.test.ts`](file:///Users/kip/src/omnifocus-mcp/tests/integration/tools/unified/end-to-end.test.ts#L239) -
-  "should return count-only for flagged tasks"
+- [`tests/integration/tools/unified/end-to-end.test.ts`](tests/integration/tools/unified/end-to-end.test.ts)
+  (line 239) - "should return count-only for flagged tasks"
 
 **Root Cause:** OmniJS bridge performance is ~40x slower than pure JXA for iterating tasks.
 
@@ -53,8 +53,7 @@ for (let i = 0; i < tasks.length; i++) {
 }
 ```
 
-**File to Update:**
-[`src/contracts/ast/script-builder.ts`](file:///Users/kip/src/omnifocus-mcp/src/contracts/ast/script-builder.ts#L1328) -
+**File to Update:** [`src/contracts/ast/script-builder.ts`](src/contracts/ast/script-builder.ts) -
 `buildTaskCountScript()` function (lines 1328-1422)
 
 **Resolution:**

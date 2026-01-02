@@ -131,8 +131,8 @@ export-tasks **Estimated reduction:** ~773 lines (87% of target scripts) **Effor
 ### 2025-10-18-multi-machine-session-sync.md
 
 **Status:** ⚪ Moved to Separate Repository **Related:** `README-MULTI-MACHINE-SYNC.md` (quick reference) **Location:**
-`/Users/kip/src/multi-machine-claude-resume` **Notes:** General-purpose tool for managing work across multiple machines.
-Not mixed with OmniFocus MCP code.
+`~/src/multi-machine-claude-resume` **Notes:** General-purpose tool for managing work across multiple machines. Not
+mixed with OmniFocus MCP code.
 
 ---
 

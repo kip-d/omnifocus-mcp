@@ -56,7 +56,7 @@ async function testLifeAnalysisPerformance() {
 
     const result = await new Promise((resolve, reject) => {
       const child = spawn('node', ['dist/index.js'], {
-        cwd: '/Users/kip/src/omnifocus-mcp',
+        cwd: process.cwd(),
         env: { ...process.env, LOG_LEVEL: 'error' },
       });
 
@@ -117,7 +117,7 @@ async function testLifeAnalysisPerformance() {
         if (data.data?.insights) {
           insightCount = data.data.insights.length;
         }
-      } catch (e) {
+      } catch {
         console.log('   ⚠️  Could not parse response data');
       }
     }

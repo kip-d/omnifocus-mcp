@@ -9,7 +9,7 @@
 The multi-machine session sync project has been **moved to a separate repository** to keep it independent from the
 OmniFocus MCP server work.
 
-**Separate Repository:** `/Users/kip/src/multi-machine-claude-resume`
+**Separate Repository:** `~/src/multi-machine-claude-resume`
 
 This is a general-purpose tool for managing work across multiple machines and should not be mixed with OmniFocus
 MCP-specific code.
@@ -66,8 +66,8 @@ Syncs via iCloud Drive for automatic cross-machine synchronization.
 
 ## Original Planning Document
 
-See `/Users/kip/src/omnifocus-mcp/docs/plans/2025-10-18-multi-machine-session-sync.md` for the original design
-exploration and requirements gathering.
+See `docs/plans/2025-10-18-multi-machine-session-sync.md` for the original design exploration and requirements
+gathering.
 
 This design document is kept here for historical context and shows the design thinking that led to the separate
 repository approach.
@@ -79,4 +79,4 @@ repository approach.
 3. Repeat on secondary machines
 4. Test sync workflow
 
-See `/Users/kip/src/multi-machine-claude-resume` for complete instructions.
+See `~/src/multi-machine-claude-resume` for complete instructions.

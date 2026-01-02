@@ -7,6 +7,6 @@
     "allowJs": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["tests/**/*", "src/**/*"],
+  "include": ["tests/**/*", "src/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist", "dist-test"]
 }

@@ -1,6 +1,0 @@
-
- RUN  v3.2.4 /Users/kip/codex/omnifocus-mcp
-      Coverage enabled with v8
-
- ✓ tests/unit/tools/base.test.ts (30 tests) 61ms
- ✓ tests/unit/tools/system-v2.test.ts (8 tests) 67ms

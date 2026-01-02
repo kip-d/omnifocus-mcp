@@ -26,7 +26,7 @@ export ANTHROPIC_API_KEY=your_key_here
 
 ```bash
 # Navigate to the OmniFocus MCP directory
-cd /Users/kip/src/omnifocus-mcp
+cd ~/src/omnifocus-mcp  # Or wherever your project is located
 
 # Run the evaluation with stdio transport
 python3 << 'EVAL_SCRIPT'
@@ -227,5 +227,5 @@ After running evaluations:
 
 ---
 
-For more information on the MCP evaluation framework, see the
-[MCP Builder Skill Evaluation Guide](/Users/kip/.claude/plugins/marketplaces/anthropic-agent-skills/mcp-builder/reference/evaluation.md).
+For more information on the MCP evaluation framework, see the MCP Builder Skill documentation in your Claude plugins
+directory.

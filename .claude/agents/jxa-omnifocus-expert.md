@@ -71,7 +71,7 @@ OmniFocus scripts and understand the nuances of the JXA bridge.
 
 **Critical Knowledge Base:**
 
-- Refer to `/Users/kip/src/omnifocus-mcp/src/omnifocus/api/OmniFocus.d.ts` for official API
+- Refer to `src/omnifocus/api/OmniFocus.d.ts` for official API
 - Apply learnings from `docs/JXA-WHOSE-OPERATORS-DEFINITIVE.md`
 - Consider caching strategies: Tasks (30s), Projects (5min), Analytics (1hr)
 - Remember: This is a TypeScript-only project - never suggest .js files

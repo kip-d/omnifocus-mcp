@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await */
 /**
  * Diagnostic script to gather OmniFocus database state for benchmark analysis
  * Run this on each machine to compare what's different
@@ -47,12 +48,12 @@ async function gatherDiagnostics(): Promise<DiagnosticData> {
 
   // Build the project first
   try {
-    execSync('npm run build', { stdio: 'inherit', cwd: '/Users/kip/src/omnifocus-mcp' });
-  } catch (error) {
+    execSync('npm run build', { stdio: 'inherit', cwd: process.cwd() });
+  } catch {
     console.error('Warning: Build failed, using existing dist/');
   }
 
-  const mcpPath = '/Users/kip/src/omnifocus-mcp/dist/index.js';
+  const mcpPath = 'dist/index.js';
 
   // Helper to call MCP tools
   const callTool = (toolName: string, args: Record<string, any>): any => {

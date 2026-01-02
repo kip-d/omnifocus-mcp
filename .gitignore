@@ -39,3 +39,10 @@ output_read.json
 
 # MCP server config (contains API tokens)
 .mcp.json
+mcp-config.json
+
+# Log files directory (test output logs)
+logs/
+
+# Timing baseline data (machine-specific)
+docs/dev/integration-test-timing-baseline.json
