@@ -1,67 +1,65 @@
 # API Reference Documentation
 
-Complete API specifications for the OmniFocus MCP server. We maintain three versions optimized for different use cases:
+Complete API specifications for the OmniFocus MCP server v3.0.0.
 
-## API Reference Versions
+## Current API (v3.0.0 Unified Builder API)
 
-### **API-REFERENCE-V2.md** - Main Developer Reference
+### **API-COMPACT-UNIFIED.md** - Primary Reference
 
-Comprehensive specification of all tools, parameters, return values, and error codes. Use this when:
+The v3.0.0 API consolidates 17 legacy tools into **4 unified tools**:
 
-- Implementing against the API
-- Debugging tool call failures
-- Understanding complete parameter schemas
-- Learning about all available options and modes
+| Tool                | Purpose                                     |
+| ------------------- | ------------------------------------------- |
+| `omnifocus_read`    | Query tasks, projects, tags, perspectives   |
+| `omnifocus_write`   | Create, update, complete, delete, batch ops |
+| `omnifocus_analyze` | Productivity stats, velocity, patterns      |
+| `system`            | Version, diagnostics, metrics, cache        |
 
-**Best for:** Implementation, detailed specifications, complete reference
+**Benefits:**
 
----
+- 76% reduction in tool schemas (4 vs 17)
+- Discriminated unions for type safety
+- countOnly queries (33x faster for counts)
+- dryRun mode for batch preview
+- Export to JSON/CSV/Markdown
 
-### **API-REFERENCE-LLM.md** - Claude Desktop Instructions Version
+**Use this for:**
 
-Optimized for Claude Desktop's Instructions feature. This version is designed to be loaded into Claude's system prompt
-to improve how the AI assistant uses your tools.
-
-**Use this by:**
-
-1. Opening Claude Desktop
-2. Going to Settings → Developer
-3. Loading this document into the Instructions/System Prompt section
-
-**Benefits:** Better tool selection, fewer errors, more natural task completion
-
-**Best for:** Improving Claude's understanding of your tools
+- All new implementations
+- Claude Desktop Instructions
+- LLM system prompts
+- API reference
 
 ---
 
-### **API-COMPACT.md** - Context Window Optimized
+## Legacy API (Archived)
 
-Ultra-compact version for use in scenarios with limited token budgets. Includes essential information while minimizing
-token usage (~30% of full reference).
+The v2.x API documentation (18 individual tools) has been archived to `.archive/api-v2-legacy/`:
 
-**Use this when:**
+- `API-REFERENCE-V2.md` - Full v2 reference
+- `API-REFERENCE-LLM.md` - v2 LLM-optimized
+- `API-COMPACT.md` - v2 compact version
+- `API-REFERENCE.md` - v2 original
+- `TOOLS.md` - v2 tool documentation
 
-- Embedding API docs in limited-context scenarios
-- Working with smaller AI models with tight context windows
-- Creating custom system prompts with strict token limits
-
-**Best for:** Token efficiency, embedded scenarios, resource-constrained environments
-
----
-
-## Choosing the Right Reference
-
-| Use Case                          | Version     | Reason                           |
-| --------------------------------- | ----------- | -------------------------------- |
-| Implementing code against the API | **V2**      | Need complete specifications     |
-| Improving Claude's tool usage     | **LLM**     | Optimized for AI understanding   |
-| Limited context window            | **Compact** | ~30% token usage                 |
-| Debugging specific tool           | **V2**      | Full error details and specs     |
-| Quick reference                   | **Compact** | Fast lookup, essential info only |
+These are preserved for historical reference but should not be used for new implementations.
 
 ---
 
-## API Stability
+## Quick Start
 
-All API reference documents are maintained in sync. If you find inconsistencies between versions, please report them as
-bugs.
+```typescript
+// Query inbox tasks
+{query: {type: "tasks", filters: {project: null}}}
+
+// Create task
+{mutation: {operation: "create", target: "task", data: {name: "Call Sarah", flagged: true}}}
+
+// Get productivity stats
+{analysis: {type: "productivity_stats", params: {groupBy: "week"}}}
+
+// System version
+{operation: "version"}
+```
+
+See [API-COMPACT-UNIFIED.md](./API-COMPACT-UNIFIED.md) for complete documentation.

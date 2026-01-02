@@ -59,7 +59,6 @@
 - **[docs/dev/SCRIPT_SIZE_LIMITS.md](dev/SCRIPT_SIZE_LIMITS.md)** - Empirical JXA/OmniJS script size testing (523KB JXA,
   261KB bridge)
 - **[docs/dev/BENCHMARK_RESULTS.md](dev/BENCHMARK_RESULTS.md)** - Performance metrics across hardware (M1, M2, M4)
-- **[docs/dev/BENCHMARK-ANALYSIS-OCT-2025.md](dev/BENCHMARK-ANALYSIS-OCT-2025.md)** - October 2025 benchmark deep dive
 - **[docs/dev/HARDWARE_PERFORMANCE_ANALYSIS.md](dev/HARDWARE_PERFORMANCE_ANALYSIS.md)** - Hardware-specific performance
   characteristics
 - **[docs/dev/PERFORMANCE_COMPARISON_CHARTS.md](dev/PERFORMANCE_COMPARISON_CHARTS.md)** - Visual performance comparisons
@@ -68,16 +67,9 @@
 - **[docs/dev/INSTRUMENTS_PROFILING_GUIDE.md](dev/INSTRUMENTS_PROFILING_GUIDE.md)** - Using Xcode Instruments for
   profiling
 
-### Implementation Checkpoints
+### Historical Checkpoints (Archived)
 
-- **[docs/dev/CHECKPOINT-OMNIJS-V3-BREAKTHROUGH.md](dev/CHECKPOINT-OMNIJS-V3-BREAKTHROUGH.md)** - OmniJS v3
-  implementation breakthrough
-- **[docs/dev/CHECKPOINT-ADDED-DATE-FIELDS-OCT-2025.md](dev/CHECKPOINT-ADDED-DATE-FIELDS-OCT-2025.md)** - Date field
-  additions checkpoint
-- **[docs/dev/SESSION-CHECKPOINT-OCT-2025.md](dev/SESSION-CHECKPOINT-OCT-2025.md)** - October 2025 development session
-  summary
-- **[docs/dev/BRANCH-SUMMARY-profiling-benchmarking.md](dev/BRANCH-SUMMARY-profiling-benchmarking.md)** -
-  Profiling/benchmarking branch summary
+October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025/` for historical reference.
 
 ### Specific Technical Topics
 
@@ -114,21 +106,21 @@
 
 ## 📖 API Reference
 
-**Three versions optimized for different use cases:**
+**v3.0.0 Unified Builder API (4 Tools):**
 
-- **[docs/api/API-REFERENCE-V2.md](api/API-REFERENCE-V2.md)** - Main developer reference (complete specifications)
-- **[docs/api/API-REFERENCE-LLM.md](api/API-REFERENCE-LLM.md)** - Optimized for Claude Desktop Instructions
-- **[docs/api/API-COMPACT.md](api/API-COMPACT.md)** - Context window optimized (~30% of full reference)
+- **[docs/api/API-COMPACT-UNIFIED.md](api/API-COMPACT-UNIFIED.md)** - Primary API reference for v3.0.0
+- **[docs/api/README.md](api/README.md)** - API documentation overview
 
-**Version selection guide:**
+**The 4 unified tools:**
 
-| Use Case                          | Version     | Reason                         |
-| --------------------------------- | ----------- | ------------------------------ |
-| Implementing code against the API | **V2**      | Complete specifications        |
-| Improving Claude's tool usage     | **LLM**     | Optimized for AI understanding |
-| Limited context window            | **Compact** | ~30% token usage               |
-| Debugging specific tool           | **V2**      | Full error details             |
-| Quick reference                   | **Compact** | Fast lookup                    |
+| Tool                | Purpose                                     |
+| ------------------- | ------------------------------------------- |
+| `omnifocus_read`    | Query tasks, projects, tags, perspectives   |
+| `omnifocus_write`   | Create, update, complete, delete, batch ops |
+| `omnifocus_analyze` | Productivity stats, velocity, patterns      |
+| `system`            | Version, diagnostics, metrics, cache        |
+
+**Legacy API (archived):** v2.x documentation preserved in `.archive/api-v2-legacy/`
 
 ---
 
@@ -154,7 +146,6 @@
 
 **Feature-specific references:**
 
-- **[docs/TOOLS.md](TOOLS.md)** - Complete tool listing and descriptions
 - **[docs/reference/BATCH_OPERATIONS.md](reference/BATCH_OPERATIONS.md)** - Batch task operations reference
 - **[docs/reference/GTD-WORKFLOW-MANUAL.md](reference/GTD-WORKFLOW-MANUAL.md)** - GTD workflow implementation guide
 - **[docs/reference/LLM_FILTER_CONVERSION.md](reference/LLM_FILTER_CONVERSION.md)** - Converting natural language to
@@ -165,9 +156,7 @@
 - **[docs/reference/PERFORMANCE.md](reference/PERFORMANCE.md)** - Performance optimization techniques
 - **[docs/reference/PERFORMANCE_EXPECTATIONS.md](reference/PERFORMANCE_EXPECTATIONS.md)** - Performance characteristics
   by hardware
-- **[docs/PERFORMANCE_M4PRO_2025-10-20.md](PERFORMANCE_M4PRO_2025-10-20.md)** - M4 Pro performance benchmarks
-- **[docs/PERFORMANCE_M4_COMPARISON_2025-10-21.md](PERFORMANCE_M4_COMPARISON_2025-10-21.md)** - M4 vs other hardware
-  comparison
+- **[docs/PERFORMANCE_API_METHODS.md](PERFORMANCE_API_METHODS.md)** - API method performance characteristics
 
 **Technical patterns:**
 
@@ -351,7 +340,7 @@
 - **Debugging**: PATTERNS.md, DEBUGGING_WORKFLOW.md, LESSONS_LEARNED.md
 - **Performance**: BENCHMARK_RESULTS.md, PERFORMANCE.md, Hardware analysis docs
 - **Testing**: TEST_CLEANUP_GUIDE.md, REAL_LLM_TESTING.md, Evaluation suite
-- **API**: API-REFERENCE-V2.md, API-REFERENCE-LLM.md, API-COMPACT.md
+- **API**: API-COMPACT-UNIFIED.md (v3.0.0 unified 4-tool API)
 - **Workflows**: GTD-WORKFLOW-MANUAL.md, SMART_CAPTURE.md, Built-in prompts
 
 ---
@@ -380,7 +369,8 @@
 
 ---
 
-**Last Updated**: 2025-12-24 **Total Documents**: ~117 **Documentation Coverage**: Comprehensive (user, developer, API,
-operations, evaluation, testing)
+**Last Updated**: 2026-01-02 **Total Documents**: ~100 (after archiving historical docs) **Documentation Coverage**:
+Comprehensive (user, developer, API, operations, evaluation, testing)
 
-**Archived to**: https://github.com/kip-d/omnifocus-mcp-archive (consolidation work docs, completed plans)
+**Archived to**: `.archive/` directory and https://github.com/kip-d/omnifocus-mcp-archive (completed plans, Oct 2025
+checkpoints, v2 API docs)

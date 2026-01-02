@@ -60,7 +60,20 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
     // Response control
     details?: boolean,      // Include full details vs minimal
     fastSearch?: boolean,   // Search names only (performance)
-    daysAhead?: number      // For upcoming mode (1-30 days)
+    daysAhead?: number,     // For upcoming mode (1-30 days)
+    countOnly?: boolean     // Return count only (33x faster for "how many" queries)
+  }
+}
+
+// Export query
+{
+  query: {
+    type: "export",
+    exportType: "tasks" | "projects" | "all",
+    format: "json" | "csv" | "markdown",
+    limit?: number,
+    includeStats?: boolean,
+    outputDirectory?: string  // Required for "all" exportType
   }
 }
 ```
@@ -108,9 +121,19 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 
 // Tasks with ALL of these tags
 {query: {type: "tasks", filters: {tags: {all: ["work", "today"]}}}}
+
+// Count-only query (33x faster - for "how many" questions)
+{query: {type: "tasks", filters: {status: "active"}, countOnly: true}}
+// Returns: {metadata: {total_count: 2089, count_only: true}}
+
+// Export tasks as CSV
+{query: {type: "export", exportType: "tasks", format: "csv", limit: 100}}
+
+// Export projects with stats
+{query: {type: "export", exportType: "projects", format: "json", includeStats: true}}
 ```
 
-**Routes to:** tasks, projects, tags, perspectives, folders tools
+**Routes to:** tasks, projects, tags, perspectives, folders, export tools
 
 ---
 
@@ -149,7 +172,8 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
     changes?: {...},  // Same fields as data
 
     // For batch
-    operations?: Array<{target, data}>
+    operations?: Array<{target, data}>,
+    dryRun?: boolean  // Preview what would happen without executing
   }
 }
 ```
@@ -210,6 +234,15 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
       {target: "project", data: {name: "Q4 Goals"}},
       {target: "task", data: {name: "Review metrics"}}
     ]
+  }
+}
+
+// Dry run (preview without executing)
+{
+  mutation: {
+    operation: "batch",
+    operations: [...],
+    dryRun: true  // Returns preview of what would happen
   }
 }
 
@@ -517,6 +550,6 @@ parse_meeting_notes, manage_reviews tools
 ## 📖 Additional Resources
 
 - **Implementation Guide:** [CLAUDE.md](../../CLAUDE.md) - Unified Builder API section
-- **Full API Reference:** [API-REFERENCE-LLM.md](./API-REFERENCE-LLM.md)
 - **Testing Guide:** [TESTING_PROMPT.md](../../TESTING_PROMPT.md)
 - **Documentation Map:** [DOCS_MAP.md](../DOCS_MAP.md) - Complete documentation index
+- **Legacy API (archived):** `.archive/api-v2-legacy/` - v2.x documentation for reference
