@@ -1,5 +1,10 @@
 # OmniFocus MCP v3.0.0 - Unified Builder API (4 Tools)
 
+> **⚠️ For Claude Desktop Users:** Do NOT add this document to your system prompt or instructions. The MCP tool
+> descriptions already provide ~11,200 tokens of comprehensive documentation. Instead, use the slim
+> [OMNIFOCUS_GOTCHAS.md](../../prompts/OMNIFOCUS_GOTCHAS.md) (~250 tokens) which covers critical tips without
+> duplicating what MCP already provides. See [Context Window Guidance](#context-window-guidance) below.
+
 **Status:** STABLE - Production-ready unified API with comprehensive testing and validation
 
 **📖 More Resources:** [Testing Prompt](../../TESTING_PROMPT.md) | [Full Docs](../../CLAUDE.md)
@@ -547,9 +552,37 @@ parse_meeting_notes, manage_reviews tools
 
 ---
 
+## 🎯 Context Window Guidance
+
+**For Claude Desktop / LLM System Prompts:**
+
+When you connect the OmniFocus MCP server, the LLM automatically receives:
+
+| Component         | Tokens      | Content                    |
+| ----------------- | ----------- | -------------------------- |
+| Tool descriptions | ~1,000      | Operations, examples, tips |
+| JSON schemas      | ~10,200     | All parameters and types   |
+| **Total via MCP** | **~11,200** | Complete API reference     |
+
+**This document adds ~3,750 tokens** that largely duplicate what MCP already provides.
+
+**Recommended approach:**
+
+1. **Don't add this document** to Claude Desktop Instructions or system prompts
+2. **Use [OMNIFOCUS_GOTCHAS.md](../../prompts/OMNIFOCUS_GOTCHAS.md) instead** (~250 tokens)
+   - Covers date conversion, inbox assignment, countOnly, tag operations
+   - Complements (doesn't duplicate) MCP tool descriptions
+3. **Keep this document** for human reference and implementation details
+
+**Why the change?** Analysis showed the API reference is 93% redundant with MCP tool descriptions. The gotchas prompt
+provides higher value per token by focusing on common mistakes rather than repeating parameter documentation.
+
+---
+
 ## 📖 Additional Resources
 
 - **Implementation Guide:** [CLAUDE.md](../../CLAUDE.md) - Unified Builder API section
 - **Testing Guide:** [TESTING_PROMPT.md](../../TESTING_PROMPT.md)
 - **Documentation Map:** [DOCS_MAP.md](../DOCS_MAP.md) - Complete documentation index
+- **Gotchas Prompt:** [OMNIFOCUS_GOTCHAS.md](../../prompts/OMNIFOCUS_GOTCHAS.md) - Recommended for system prompts
 - **Legacy API (archived):** `.archive/api-v2-legacy/` - v2.x documentation for reference

@@ -1,14 +1,32 @@
-# OmniFocus MCP V2 Prompts
+# OmniFocus MCP v3.0.0 Prompts
 
 This directory contains ready-to-use prompts for testing and using the OmniFocus MCP server with Claude Desktop.
+
+## ⭐ For Claude Desktop System Prompts
+
+### [OMNIFOCUS_GOTCHAS.md](./OMNIFOCUS_GOTCHAS.md) - Recommended (~250 tokens)
+
+**Use this in your Claude Desktop Instructions or system prompt.**
+
+The MCP server automatically provides ~11,200 tokens of tool documentation. This slim gotchas prompt covers critical
+tips that complement (not duplicate) that information:
+
+- Date format conversion (natural language → YYYY-MM-DD)
+- Inbox assignment (`project: null`)
+- Fast counting (`countOnly: true`)
+- Tag operations (replace vs add/remove)
+- Batch preview (`dryRun: true`)
+
+**Why not use the full API reference?** Analysis showed it's 93% redundant with MCP tool descriptions. The gotchas
+prompt provides higher value per token.
+
+---
 
 **📚 Related Documentation:**
 
 - **[Main README](../README.md)** - Installation, setup, and overview
 - **[Programmatic Prompts](../src/prompts/README.md)** - Built-in MCP prompts (TypeScript-based)
-- **[API Documentation](../docs/)** - Complete tool references and guides
-- **[Performance Docs](../docs/PERFORMANCE_EXPECTATIONS.md)** - Hardware requirements and benchmarks
-- **[Real LLM Testing](../docs/REAL_LLM_TESTING.md)** - AI model integration and testing
+- **[API Documentation](../docs/api/)** - Complete tool references (for human readers)
 
 ## Available Prompts
 
@@ -18,8 +36,8 @@ This directory contains ready-to-use prompts for testing and using the OmniFocus
 
 | I want to...                 | Use This Prompt                                        | Type            |
 | ---------------------------- | ------------------------------------------------------ | --------------- |
+| Add to Claude Desktop config | [OMNIFOCUS_GOTCHAS.md](./OMNIFOCUS_GOTCHAS.md)         | System Prompt   |
 | Test if everything works     | [test-v2-comprehensive.md](./test-v2-comprehensive.md) | Manual Template |
-| Check V2 new features        | [v2-features-test.md](./v2-features-test.md)           | Manual Template |
 | Start daily GTD routine      | [daily-gtd-workflow.md](./daily-gtd-workflow.md)       | Manual Template |
 | Do a weekly review           | Ask Claude: "Use the gtd_weekly_review prompt"         | MCP Prompt      |
 | Process my inbox             | Ask Claude: "Use the gtd_process_inbox prompt"         | MCP Prompt      |
@@ -87,29 +105,25 @@ Complete GTD (Getting Things Done) workflow for daily use.
 2. Customize the sections you need
 3. Save your own variations for different contexts (work, personal, etc.)
 
-## V2 Tools Overview
+## v3.0.0 Unified API
 
-The V2 tools provide a more natural, efficient interface:
+The v3.0.0 API consolidates everything into **4 unified tools**:
 
-### Primary Tools
+| Tool                | Purpose                                     |
+| ------------------- | ------------------------------------------- |
+| `omnifocus_read`    | Query tasks, projects, tags, perspectives   |
+| `omnifocus_write`   | Create, update, complete, delete, batch ops |
+| `omnifocus_analyze` | Productivity stats, velocity, patterns      |
+| `system`            | Version, diagnostics, metrics, cache        |
 
-- **tasks** - Unified task queries with modes (today, overdue, search, etc.)
-- **projects** - Project management with operations (list, create, update, etc.)
-- **create_task** - Create tasks with all properties including tags
-- **update_task** - Update tasks including reparenting
-- **complete_task** - Mark tasks complete
-- **delete_task** - Remove tasks
-- **productivity_stats** - GTD analytics and insights
+### Key Features
 
-### Key Improvements
-
-- ✅ Tags assigned during creation (not after)
+- ✅ 76% fewer tool schemas (4 vs 17 legacy)
+- ✅ countOnly queries (33x faster for counting)
+- ✅ dryRun mode for batch preview
+- ✅ Tags assigned during creation
 - ✅ Complex repeat rules supported
-- ✅ Task reparenting between projects
-- ✅ Perspective queries without window changes
-- ✅ 95% faster query performance
-- ✅ Summary-first responses for better UX
-- ✅ Natural language friendly
+- ✅ Export to JSON/CSV/Markdown
 
 ## Troubleshooting
 

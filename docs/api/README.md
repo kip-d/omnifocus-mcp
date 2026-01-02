@@ -2,9 +2,23 @@
 
 Complete API specifications for the OmniFocus MCP server v3.0.0.
 
+## ⚠️ Important: Context Window Guidance
+
+**For Claude Desktop users adding instructions/system prompts:**
+
+The MCP server already provides ~11,200 tokens of tool documentation automatically. Adding API reference docs duplicates
+this information.
+
+**Recommended:** Use [prompts/OMNIFOCUS_GOTCHAS.md](../../prompts/OMNIFOCUS_GOTCHAS.md) (~250 tokens) instead. It covers
+critical tips (date conversion, inbox assignment, countOnly, tags) without duplication.
+
+---
+
 ## Current API (v3.0.0 Unified Builder API)
 
-### **API-COMPACT-UNIFIED.md** - Primary Reference
+### **API-COMPACT-UNIFIED.md** - Human Reference
+
+For developers and human readers. **Not recommended for LLM system prompts.**
 
 The v3.0.0 API consolidates 17 legacy tools into **4 unified tools**:
 
