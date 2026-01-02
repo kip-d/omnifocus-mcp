@@ -23,7 +23,7 @@ This document tracks the status of all implementation plans in this directory.
 | 2025-11-06-phase1-script-consolidation.md           | ✅ Complete       | Script consolidation done            |
 | 2025-10-18-multi-machine-session-sync.md            | ✅ Moved          | To ~/src/multi-machine-claude-resume |
 
-## Ready to Archive (Completed in docs/plans/)
+## Recently Archived (`.archive/plans-completed-dec-2025/`)
 
 | Plan                                             | Status      | Notes                                     |
 | ------------------------------------------------ | ----------- | ----------------------------------------- |
