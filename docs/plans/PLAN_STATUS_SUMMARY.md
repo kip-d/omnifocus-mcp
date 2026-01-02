@@ -23,6 +23,16 @@ This document tracks the status of all implementation plans in this directory.
 | 2025-11-06-phase1-script-consolidation.md           | ✅ Complete       | Script consolidation done            |
 | 2025-10-18-multi-machine-session-sync.md            | ✅ Moved          | To ~/src/multi-machine-claude-resume |
 
+## Ready to Archive (Completed in docs/plans/)
+
+| Plan                                             | Status      | Notes                                     |
+| ------------------------------------------------ | ----------- | ----------------------------------------- |
+| 2025-12-04-streamable-http-transport-design.md   | ✅ Complete | HTTP server + tests implemented           |
+| 2025-12-11-test-sandbox-design.md                | ✅ Complete | Sandbox manager + test client implemented |
+| 2025-12-18-future-consolidation-opportunities.md | ✅ Complete | All items done (debug fields, exports)    |
+| omnijs-migration-plan.md                         | ✅ Complete | All 3 phases done (2025-11-27)            |
+| 2025-12-15-repetition-rule-investigation.md      | ✅ Complete | Investigation done, no bugs found         |
+
 ---
 
 ## Partially Implemented
@@ -43,13 +53,14 @@ This document tracks the status of all implementation plans in this directory.
 
 ---
 
-### 2025-10-16-omnifocus-4.7-upgrade.md
+### OmniFocus 4.7+ Features
 
 **Status:** 🟡 Partially Implemented **What was built:**
 
 - Planned Dates: Implemented in ManageTaskTool
 - Date schemas module
 - Version detection
+- repetitionRule support in updates
 
 **Remaining unimplemented:**
 

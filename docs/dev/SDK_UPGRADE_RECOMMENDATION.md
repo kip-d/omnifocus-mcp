@@ -1,8 +1,11 @@
 # MCP SDK Upgrade Recommendation
 
-**Previous Version**: @modelcontextprotocol/sdk@^1.13.0 **Current Version**: @modelcontextprotocol/sdk@^1.20.1 ✅
-**COMPLETED** **Upgrade Path**: 1.13.0 → 1.20.1 (7 minor versions, no breaking changes) **Date**: October 2025 **Upgrade
-Status**: ✅ **SUCCESSFULLY COMPLETED** (Commit 21816fe)
+**Previous Version**: @modelcontextprotocol/sdk@^1.13.0 **Current Version**: @modelcontextprotocol/sdk@^1.25.1 ✅
+**COMPLETED** **Upgrade Path**: 1.13.0 → 1.25.1 (12 minor versions, no breaking changes) **Date**: October 2025 →
+January 2026 **Upgrade Status**: ✅ **SUCCESSFULLY COMPLETED** (Multiple commits)
+
+> **Note:** This document was written during the 1.20.1 upgrade. The SDK has since been upgraded to 1.25.1 following the
+> same low-risk pattern. All tests continue to pass.
 
 ---
 
