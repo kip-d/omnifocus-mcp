@@ -6,18 +6,22 @@ This document tracks the status of all implementation plans in this directory.
 
 ---
 
-## Fully Implemented (Moved to `completed/`)
+## Fully Implemented (Archived to `.archive/plans-completed/`)
 
-| Plan                                                | Status            | Notes                             |
-| --------------------------------------------------- | ----------------- | --------------------------------- |
-| 2025-11-04-three-tool-builder-api-design.md         | ✅ Shipped v3.0.0 | Unified API design                |
-| 2025-11-04-three-tool-builder-api-implementation.md | ✅ Shipped v3.0.0 | Implementation steps              |
-| 2025-11-24-ast-filter-contracts-design.md           | ✅ Complete       | AST-based contracts system        |
-| 2025-11-06-unified-api-cleanup-plan.md              | ✅ Complete       | ID filter fix, merged to main     |
-| 2025-11-24-tiered-test-pipeline-design.md           | ✅ Complete       | Unit/smoke/integration tiers      |
-| 2025-11-26-dry-run-mode-design.md                   | ✅ Complete       | Preview bulk operations           |
-| 2025-11-24-ast-consolidation-opportunities.md       | ✅ Complete       | All 4 phases done, 2600 LOC saved |
-| 2025-11-25-phase3-ast-extension-design.md           | ✅ Complete       | ProjectFilter, TagQueryOptions    |
+| Plan                                                | Status            | Notes                                |
+| --------------------------------------------------- | ----------------- | ------------------------------------ |
+| 2025-11-04-three-tool-builder-api-design.md         | ✅ Shipped v3.0.0 | Unified API design                   |
+| 2025-11-04-three-tool-builder-api-implementation.md | ✅ Shipped v3.0.0 | Implementation steps                 |
+| 2025-11-24-ast-filter-contracts-design.md           | ✅ Complete       | AST-based contracts system           |
+| 2025-11-06-unified-api-cleanup-plan.md              | ✅ Complete       | ID filter fix, merged to main        |
+| 2025-11-24-tiered-test-pipeline-design.md           | ✅ Complete       | Unit/smoke/integration tiers         |
+| 2025-11-26-dry-run-mode-design.md                   | ✅ Complete       | Preview bulk operations              |
+| 2025-11-24-ast-consolidation-opportunities.md       | ✅ Complete       | All 4 phases done, 2600 LOC saved    |
+| 2025-11-25-phase3-ast-extension-design.md           | ✅ Complete       | ProjectFilter, TagQueryOptions       |
+| 2025-10-29-lightweight-testing-strategy-design.md   | ✅ Superseded     | By tiered-test-pipeline              |
+| 2025-11-24-querycompiler-taskfilter-\*.md           | ✅ Superseded     | By AST Contracts system              |
+| 2025-11-06-phase1-script-consolidation.md           | ✅ Complete       | Script consolidation done            |
+| 2025-10-18-multi-machine-session-sync.md            | ✅ Moved          | To ~/src/multi-machine-claude-resume |
 
 ---
 
@@ -85,40 +89,6 @@ This document tracks the status of all implementation plans in this directory.
 - Design modular helper architecture
 - Implement helper modules
 - Migrate scripts to new helpers
-
----
-
-## Superseded
-
-### 2025-10-29-lightweight-testing-strategy-design.md
-
-**Status:** ✅ Superseded **Superseded By:** `2025-11-24-tiered-test-pipeline-design.md` +
-`TESTING_PROMPT_LIGHTWEIGHT.md` **Notes:** Core ideas incorporated into tiered test pipeline (automated) and lightweight
-testing prompt (manual v3.0 approach).
-
----
-
-### 2025-11-24-querycompiler-taskfilter-integration.md
-
-**Status:** ✅ Superseded **Superseded By:** AST Contracts system **Notes:** Original design evolved into the broader
-AST contracts system.
-
----
-
-### 2025-11-24-querycompiler-taskfilter-implementation.md
-
-**Status:** ✅ Superseded **Superseded By:** AST Contracts system **Notes:** Implementation plan evolved into AST
-contracts implementation.
-
----
-
-## External / Moved
-
-### 2025-10-18-multi-machine-session-sync.md
-
-**Status:** ⚪ Moved to Separate Repository **Related:** `README-MULTI-MACHINE-SYNC.md` (quick reference) **Location:**
-`~/src/multi-machine-claude-resume` **Notes:** General-purpose tool for managing work across multiple machines. Not
-mixed with OmniFocus MCP code.
 
 ---
 
