@@ -1,7 +1,7 @@
 # OmniFocus MCP Server - Improvement Roadmap
 
-_Generated: September 19, 2025_ _Updated: October 8, 2025_ _Status: ALL Quick Win Phases COMPLETED + Advanced Search +
-Smart Capture - Foundation solid, high-value features delivered_
+_Generated: September 19, 2025_ _Updated: January 2, 2026_ _Status: ALL Quick Win Phases COMPLETED + Advanced Search +
+Smart Capture + AST Bug Fixes - Foundation solid, high-value features delivered_
 
 ## 🎉 Progress Summary
 
@@ -20,8 +20,19 @@ Smart Capture - Foundation solid, high-value features delivered_
 - **Phase 6 Smart Capture (6 hours)**: AI-powered meeting notes extraction, context tag detection, natural language date
   parsing, batch integration
 - **Quality Improvements**: JavaScript syntax fixes, TypeScript safety enhancements, comprehensive unit test coverage
-  (740+ tests)
+  (1108+ tests)
 - **Total Progress**: 20 major roadmap items completed, ~71 hours of implementation
+
+**✅ COMPLETED (January 2026):**
+
+- **AST Builder Bug Fixes**: Fixed two critical bugs in the filter AST builder
+  - Text/search filter now generates OR(name, note) - searches both fields as designed
+  - Date operators (dueDateOperator, deferDateOperator) now properly respected instead of hardcoded inclusive
+    comparisons
+- **ESLint Configuration Fix**: Updated ESLint to reference both tsconfigs for type-aware test linting
+  - Fixes lint-staged pre-commit hook failures on test files
+  - Both `eslint.config.js` and `.eslintrc.json` now include `tsconfig.test.json`
+- **Test Coverage**: Added 4 new date operator tests, updated 4 text filter tests (1108 unit tests total)
 
 **🚀 IMPACT ACHIEVED:**
 
