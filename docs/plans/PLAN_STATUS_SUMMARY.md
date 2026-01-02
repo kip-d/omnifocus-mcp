@@ -1,6 +1,6 @@
 # Plan Status Summary
 
-**Last Updated:** 2025-11-26
+**Last Updated:** 2026-01-02
 
 This document tracks the status of all implementation plans in this directory.
 
@@ -8,14 +8,16 @@ This document tracks the status of all implementation plans in this directory.
 
 ## Fully Implemented (Moved to `completed/`)
 
-| Plan                                                | Status            | Notes                         |
-| --------------------------------------------------- | ----------------- | ----------------------------- |
-| 2025-11-04-three-tool-builder-api-design.md         | ✅ Shipped v3.0.0 | Unified API design            |
-| 2025-11-04-three-tool-builder-api-implementation.md | ✅ Shipped v3.0.0 | Implementation steps          |
-| 2025-11-24-ast-filter-contracts-design.md           | ✅ Complete       | AST-based contracts system    |
-| 2025-11-06-unified-api-cleanup-plan.md              | ✅ Complete       | ID filter fix, merged to main |
-| 2025-11-24-tiered-test-pipeline-design.md           | ✅ Complete       | Unit/smoke/integration tiers  |
-| 2025-11-26-dry-run-mode-design.md                   | ✅ Complete       | Preview bulk operations       |
+| Plan                                                | Status            | Notes                             |
+| --------------------------------------------------- | ----------------- | --------------------------------- |
+| 2025-11-04-three-tool-builder-api-design.md         | ✅ Shipped v3.0.0 | Unified API design                |
+| 2025-11-04-three-tool-builder-api-implementation.md | ✅ Shipped v3.0.0 | Implementation steps              |
+| 2025-11-24-ast-filter-contracts-design.md           | ✅ Complete       | AST-based contracts system        |
+| 2025-11-06-unified-api-cleanup-plan.md              | ✅ Complete       | ID filter fix, merged to main     |
+| 2025-11-24-tiered-test-pipeline-design.md           | ✅ Complete       | Unit/smoke/integration tiers      |
+| 2025-11-26-dry-run-mode-design.md                   | ✅ Complete       | Preview bulk operations           |
+| 2025-11-24-ast-consolidation-opportunities.md       | ✅ Complete       | All 4 phases done, 2600 LOC saved |
+| 2025-11-25-phase3-ast-extension-design.md           | ✅ Complete       | ProjectFilter, TagQueryOptions    |
 
 ---
 
@@ -110,22 +112,6 @@ contracts implementation.
 
 ---
 
-## Not Started (Ready for Implementation)
-
-### 2025-11-24-ast-consolidation-opportunities.md
-
-**Status:** ⚪ Analysis Complete - Ready for Implementation **Key Finding:** AST-powered `list-tasks-ast.ts` exists (74%
-smaller) but isn't being used yet! **Effort:** LOW - Just swap imports **Potential:** 571 → 146 lines (74% reduction)
-
----
-
-### 2025-11-25-phase3-ast-extension-design.md
-
-**Status:** ⚪ Approved - Ready for Implementation **Scope:** Extend AST to support ProjectFilter, TagQueryOptions,
-export-tasks **Estimated reduction:** ~773 lines (87% of target scripts) **Effort:** MEDIUM
-
----
-
 ## External / Moved
 
 ### 2025-10-18-multi-machine-session-sync.md
@@ -151,23 +137,21 @@ _(None currently - recent sessions cleared the high priority backlog)_
 
 ### MEDIUM Priority
 
-1. **AST Consolidation** - Switch to `list-tasks-ast.ts` (LOW effort, 74% code reduction)
-2. **Phase 3 AST Extension** - ProjectFilter, TagQueryOptions (MEDIUM effort)
-3. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
-4. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
+1. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
+2. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
 
 ### LOW Priority
 
-5. **Human-friendly Text Syntax** - DSL text layer on top of JSON
-6. **Enhanced Repeats (Intent Keywords)** - "when-marked-done" translating to RRULE
-7. **Transaction Support** - Multi-operation atomicity
-8. **Query Optimization Engine** - Auto-apply performance patterns
+3. **Human-friendly Text Syntax** - DSL text layer on top of JSON
+4. **Enhanced Repeats (Intent Keywords)** - "when-marked-done" translating to RRULE
+5. **Transaction Support** - Multi-operation atomicity
+6. **Query Optimization Engine** - Auto-apply performance patterns
 
 ### Consolidation Work (from Phase 2B/2C)
 
-9. **Delete Duplicate Functions** - 79 LOC consolidation
-10. **Convert 28 Scripts to OmniJS v3** - Performance gains (if needed)
-11. **Modular Helper Architecture** - Clean separation of concerns
+7. **Delete Duplicate Functions** - 79 LOC consolidation
+8. **Convert remaining scripts to OmniJS v3** - Performance gains (if needed)
+9. **Modular Helper Architecture** - Clean separation of concerns
 
 ---
 
@@ -202,11 +186,31 @@ _(None currently - recent sessions cleared the high priority backlog)_
 
 ---
 
+## Recently Completed (December 2025 - January 2026)
+
+### AST Consolidation (All 4 Phases Complete - 2025-12-17/18)
+
+- **Phase 1:** QueryTasksTool uses `buildListTasksScriptV4` (571→146 lines, 74% reduction)
+- **Phase 2:** All mutation tools use AST builders (~1,100 lines archived)
+- **Phase 3:** Query tools (Projects, Tags) use AST builders (~570 lines reduced)
+- **Phase 4:** RecurringTasksTool uses AST builders (500 lines archived)
+- **Total:** ~2,600 lines archived/reduced
+
+### January 2026 Fixes
+
+- **Count-only query optimization** - Pure JXA, 40x faster than OmniJS bridge
+- **plannedDate support** - Added to task update operations
+- **repetitionRule support** - Added to task update operations
+- **AST builder fixes** - Text search checks both name AND note, date operators respected
+- **ESLint config** - Both tsconfigs referenced for type-aware test linting
+- **Path cleanup** - Removed hardcoded /Users/kip paths from codebase
+
+---
+
 ## Next Recommendations
 
-**Quick Win (Next Session):**
+**Feature Work:**
 
-1. **AST Consolidation** - Switch to `list-tasks-ast.ts` (5 min, huge code reduction)
-
-**Feature Work:** 2. **Phase 3 AST Extension** - If more code reduction desired 3. **REPL/CLI Tool** - If interactive
-automation needed 4. **Mutually Exclusive Tags** - If OmniFocus 4.7 features needed
+1. **REPL/CLI Tool** - If interactive automation needed
+2. **Mutually Exclusive Tags** - If OmniFocus 4.7 features needed
+3. **Human-friendly Text Syntax** - If DSL text layer desired
