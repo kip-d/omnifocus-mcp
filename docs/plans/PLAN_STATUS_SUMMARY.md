@@ -130,7 +130,8 @@ _(None currently - recent sessions cleared the high priority backlog)_
 
 ### Consolidation Work (from Phase 2B/2C)
 
-7. **Delete Duplicate Functions** - 79 LOC consolidation
+7. ~~**Delete Duplicate Functions** - 79 LOC consolidation~~ ✅ DONE (2026-01-04) - Deleted 1,338 LOC of unused helper
+   code
 8. **Convert remaining scripts to OmniJS v3** - Performance gains (if needed)
 9. **Modular Helper Architecture** - Clean separation of concerns
 
