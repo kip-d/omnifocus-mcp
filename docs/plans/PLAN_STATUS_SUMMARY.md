@@ -1,6 +1,6 @@
 # Plan Status Summary
 
-**Last Updated:** 2026-01-02
+**Last Updated:** 2026-01-04
 
 This document tracks the status of all implementation plans in this directory.
 
@@ -55,17 +55,17 @@ This document tracks the status of all implementation plans in this directory.
 
 ### OmniFocus 4.7+ Features
 
-**Status:** 🟡 Partially Implemented **What was built:**
+**Status:** 🟢 Mostly Complete **What was built:**
 
 - Planned Dates: Implemented in ManageTaskTool
 - Date schemas module
 - Version detection
 - repetitionRule support in updates
+- Mutually Exclusive Tags: `set_mutual_exclusivity` action + `childrenAreMutuallyExclusive` read (commit 6922060)
 
-**Remaining unimplemented:**
+**Remaining (LOW priority):**
 
-- Mutually Exclusive Tags: Read/toggle functionality (MEDIUM)
-- Enhanced Repeats: User-intent keywords translating to RRULE (LOW - current RRULE works)
+- Enhanced Repeats: User-intent keywords translating to RRULE (current RRULE works fine)
 
 ---
 
@@ -82,7 +82,7 @@ This document tracks the status of all implementation plans in this directory.
 **Remaining (Phase 2B/2C):**
 
 - Modular helper architecture
-- Delete duplicate functions (79 LOC)
+- ~~Delete duplicate functions (79 LOC)~~ ✅ DONE (2026-01-04) - Deleted 1,338 LOC
 - Convert remaining 28 scripts to OmniJS v3
 
 ---
@@ -119,21 +119,20 @@ _(None currently - recent sessions cleared the high priority backlog)_
 ### MEDIUM Priority
 
 1. **REPL/CLI Tool** - Interactive OmniFocus automation without MCP
-2. **Mutually Exclusive Tags Support** - OmniFocus 4.7 feature
 
 ### LOW Priority
 
-3. **Human-friendly Text Syntax** - DSL text layer on top of JSON
-4. **Enhanced Repeats (Intent Keywords)** - "when-marked-done" translating to RRULE
-5. **Transaction Support** - Multi-operation atomicity
-6. **Query Optimization Engine** - Auto-apply performance patterns
+2. **Human-friendly Text Syntax** - DSL text layer on top of JSON
+3. **Enhanced Repeats (Intent Keywords)** - "when-marked-done" translating to RRULE
+4. **Transaction Support** - Multi-operation atomicity
+5. **Query Optimization Engine** - Auto-apply performance patterns
 
 ### Consolidation Work (from Phase 2B/2C)
 
-7. ~~**Delete Duplicate Functions** - 79 LOC consolidation~~ ✅ DONE (2026-01-04) - Deleted 1,338 LOC of unused helper
+6. ~~**Delete Duplicate Functions** - 79 LOC consolidation~~ ✅ DONE (2026-01-04) - Deleted 1,338 LOC of unused helper
    code
-8. **Convert remaining scripts to OmniJS v3** - Performance gains (if needed)
-9. **Modular Helper Architecture** - Clean separation of concerns
+7. **Convert remaining scripts to OmniJS v3** - Performance gains (if needed)
+8. **Modular Helper Architecture** - Clean separation of concerns
 
 ---
 
@@ -194,5 +193,4 @@ _(None currently - recent sessions cleared the high priority backlog)_
 **Feature Work:**
 
 1. **REPL/CLI Tool** - If interactive automation needed
-2. **Mutually Exclusive Tags** - If OmniFocus 4.7 features needed
-3. **Human-friendly Text Syntax** - If DSL text layer desired
+2. **Human-friendly Text Syntax** - If DSL text layer desired
