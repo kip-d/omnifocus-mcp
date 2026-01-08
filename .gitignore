@@ -1,5 +1,8 @@
 node_modules/
 dist/
+
+# Bun lockfile (we use npm for package management)
+bun.lock
 *.log
 .DS_Store
 .env

@@ -500,10 +500,10 @@ If you see these in your plan, STOP and search for patterns:
 - **TypeScript only** - All files must be `.ts` (including tests and scripts)
 - **Never create `.js` files**
 - **Always run integration tests** before considering features complete
-  - Unit tests: ~10 seconds (1104 tests) - run frequently
-  - Integration tests: **~5 minutes** (69 tests) - run before commits/PRs
+  - Unit tests: ~2 seconds (1,075 tests) - run frequently
+  - Integration tests: ~2 minutes (71 tests) - run before commits/PRs
   - Integration tests interact with real OmniFocus via osascript
-- Build before running: `npm run build`
+- Build before running: `bun run build`
 
 ## Debugging Workflow
 
@@ -770,11 +770,21 @@ process.stdin.on('end', () => gracefulExit('stdin closed'));
 
 ### Commands
 
+**Bun vs npm:** Use `bun run` for fast script execution, but `npm` for tests. Bun's built-in test runner (`bun test`) is
+incompatible with vitest APIs (`vi.resetModules`, `vi.hoisted`, etc.) that our tests use.
+
 ```bash
-npm run build        # Compile TypeScript (required before running)
-npm run dev          # Watch mode
-npm test             # Unit tests (~10 seconds, 1104 tests)
-npm run test:integration  # Integration tests (~5 minutes, 69 tests)
+# Build & Development (bun run = faster startup)
+bun run build        # Compile TypeScript (required before running)
+bun run dev          # Watch mode
+bun run lint         # Run linter
+
+# Testing (use npm - vitest incompatible with bun test)
+npm test             # Unit + integration tests
+npm run test:unit    # Unit tests only (~2 seconds, 1075 tests)
+npm run test:integration  # Integration tests (~2 minutes, 71 tests)
+
+# ❌ AVOID: bun test (uses Bun's test runner, not vitest)
 
 # Direct MCP Testing (Fast debugging - see docs/operational/TESTING_TOOLS.md)
 node emergency-diagnostic.js  # Test all tools quickly
@@ -907,7 +917,7 @@ Always reference the official specification rather than making assumptions about
 
 ## Debugging Tips
 
-- **Server won't start?** Run `npm run build` - usually missing dist/
+- **Server won't start?** Run `bun run build` - usually missing dist/
 - **Script timeouts?** Check OmniFocus not blocked by dialogs
 - **ID issues?** See src/omnifocus/scripts/tasks.ts for extraction patterns
 
