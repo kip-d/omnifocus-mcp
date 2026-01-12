@@ -1,6 +1,6 @@
 # Plan Status Summary
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2025-01-12
 
 This document tracks the status of all implementation plans in this directory.
 
@@ -188,7 +188,35 @@ _(None currently - recent sessions cleared the high priority backlog)_
 
 ---
 
+## Investigation Complete, Pending Implementation
+
+### 2025-01-12-code-cleanup-investigation.md
+
+**Status:** 🔵 Investigation Complete, Implementation Pending
+
+**What was found:**
+
+- ~3,600+ lines of potentially removable dead code
+- Unused plugin system (188 lines)
+- Legacy generator code superseded by AST builders (281 lines)
+- Unused migration examples (182 lines)
+- Unused insights module (~350 lines)
+- Duplicate OmniFocus type definitions (2,224 lines)
+- Various unused types and functions
+
+**Next steps:**
+
+1. Run verification commands in the plan document
+2. Confirm each item is safe to remove
+3. Remove in phases with build/test verification between each
+
+---
+
 ## Next Recommendations
+
+**Cleanup Work:**
+
+1. **Code Cleanup** - Execute `2025-01-12-code-cleanup-investigation.md` (~3,600 lines)
 
 **Feature Work:**
 
