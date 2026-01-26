@@ -488,9 +488,9 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       try {
         const tagScript = \`
           (() => {
-            const task = document.windows[0].selection.tasks[0] ||
-              flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-            if (!task) return JSON.stringify({success: false, error: 'Task not found'});
+            // Use O(1) lookup - same reliable pattern as update script
+            const task = Task.byIdentifier('\${taskId}');
+            if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
 
             const tagNames = \${JSON.stringify(taskData.tags)};
             const appliedTags = [];
@@ -508,8 +508,12 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
           })()
         \`;
         const result = JSON.parse(app.evaluateJavascript(tagScript));
-        if (result.success) appliedTags = result.tags;
-      } catch (e) {}
+        if (result.success) {
+          appliedTags = result.tags;
+        }
+      } catch (e) {
+        // Tag assignment errors don't fail task creation - tags can be added later
+      }
     }
 
     // Apply repeat rule if provided
@@ -517,8 +521,9 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       try {
         const ruleScript = \`
           (() => {
-            const task = flattenedTasks.find(t => t.id.primaryKey === '\${taskId}');
-            if (!task) return JSON.stringify({success: false, error: 'Task not found'});
+            // Use O(1) lookup - same reliable pattern as update script
+            const task = Task.byIdentifier('\${taskId}');
+            if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
 
             const rule = \${JSON.stringify(taskData.repeatRule)};
 
@@ -753,14 +758,15 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       } catch (e) {}
     }
 
-    // Set tags via bridge
+    // Set tags via bridge using reliable O(1) lookup
     let appliedTags = [];
     if (projectData.tags && projectData.tags.length > 0) {
       try {
         const tagScript = \`
           (() => {
-            const proj = flattenedProjects.find(p => p.id.primaryKey === '\${projectId}');
-            if (!proj) return JSON.stringify({success: false});
+            // Use O(1) lookup - same reliable pattern as update script
+            const proj = Project.byIdentifier('\${projectId}');
+            if (!proj) return JSON.stringify({success: false, error: 'Project not found by ID: ' + '\${projectId}'});
 
             const tagNames = \${JSON.stringify(projectData.tags)};
             const appliedTags = [];
@@ -776,8 +782,12 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
           })()
         \`;
         const result = JSON.parse(app.evaluateJavascript(tagScript));
-        if (result.success) appliedTags = result.tags;
-      } catch (e) {}
+        if (result.success) {
+          appliedTags = result.tags;
+        }
+      } catch (e) {
+        // Tag assignment errors don't fail project creation - tags can be added later
+      }
     }
 
     return JSON.stringify({
