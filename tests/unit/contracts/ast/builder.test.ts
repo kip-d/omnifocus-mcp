@@ -79,7 +79,7 @@ describe('buildAST', () => {
 
       expect(ast).toEqual({
         type: 'comparison',
-        field: 'task.effectiveInInbox',
+        field: 'task.inInbox',
         operator: '==',
         value: true,
       });

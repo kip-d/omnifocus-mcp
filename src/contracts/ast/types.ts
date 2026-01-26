@@ -139,7 +139,7 @@ export const KNOWN_FIELDS = [
   'task.flagged',
   'task.blocked',
   'task.available',
-  'task.effectiveInInbox',
+  'task.inInbox',
 
   // Status properties
   'task.taskStatus', // TaskStatus enum: active, completed, dropped

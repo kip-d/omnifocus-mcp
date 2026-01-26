@@ -43,7 +43,8 @@ export function buildAST(filter: TaskFilter): FilterNode {
   }
 
   if (filter.inInbox !== undefined) {
-    conditions.push(comparison('task.effectiveInInbox', '==', filter.inInbox));
+    // OmniJS property is 'inInbox', not 'effectiveInInbox'
+    conditions.push(comparison('task.inInbox', '==', filter.inInbox));
   }
 
   // --- Status filters ---
@@ -72,9 +73,7 @@ export function buildAST(filter: TaskFilter): FilterNode {
   if (searchTerm !== undefined) {
     const operator = filter.textOperator === 'MATCHES' ? 'matches' : 'includes';
     // Match if either name OR note contains/matches the search term
-    conditions.push(
-      or(comparison('task.name', operator, searchTerm), comparison('task.note', operator, searchTerm)),
-    );
+    conditions.push(or(comparison('task.name', operator, searchTerm), comparison('task.note', operator, searchTerm)));
   }
 
   // --- Due date filters ---

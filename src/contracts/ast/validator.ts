@@ -47,7 +47,7 @@ const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array'> = {
   'task.flagged': 'boolean',
   'task.blocked': 'boolean',
   'task.available': 'boolean',
-  'task.effectiveInInbox': 'boolean',
+  'task.inInbox': 'boolean',
   'task.dueDate': 'date',
   'task.deferDate': 'date',
   'task.effectiveDueDate': 'date',
