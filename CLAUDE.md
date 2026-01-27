@@ -1,5 +1,12 @@
 # CLAUDE.md - Essential Guide for Claude Code
 
+## 🧠 User-Facing Guidance
+
+For intent interpretation, GTD methodology, date conversion, and result interpretation, see
+**`skills/omnifocus-assistant.md`**. This CLAUDE.md focuses on developer implementation details.
+
+---
+
 ## 🔄 Process Workflows
 
 **All workflows in:** `.claude/processes/CLAUDE-PROCESSES.dot` (read this file for decision trees)
