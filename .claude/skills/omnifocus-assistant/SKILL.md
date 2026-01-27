@@ -1,3 +1,8 @@
+---
+name: omnifocus-assistant
+description: Use when user asks about tasks, projects, OmniFocus, GTD, productivity, or task management
+---
+
 # OmniFocus Assistant
 
 > **Brain + Hands Architecture**: This skill provides the "brain" (methodology, intent interpretation, guidance). The
