@@ -3,7 +3,8 @@
 ## 🧠 User-Facing Guidance
 
 For intent interpretation, GTD methodology, date conversion, and result interpretation, see
-**`skills/omnifocus-assistant.md`**. This CLAUDE.md focuses on developer implementation details.
+**`.claude/skills/omnifocus-assistant/SKILL.md`** (auto-discovered by Claude Code). This CLAUDE.md focuses on developer
+implementation details.
 
 ---
 
