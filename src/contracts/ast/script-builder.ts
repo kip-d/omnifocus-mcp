@@ -243,7 +243,7 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
  * Build an OmniJS script for inbox tasks with optional additional filters
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, fields = [] } = options;
+  const { limit = 50, fields = [], includeCompleted = false } = options;
 
   // Merge inbox filter with additional filters
   const filter: TaskFilter = { ...additionalFilter, inInbox: true };
@@ -251,6 +251,14 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   const filterCode = generateFilterCode(filter, 'omnijs');
   const filterDescription = describeFilterForScript(filter);
   const fieldProjection = generateFieldProjection(fields);
+
+  // Determine completion filter - exclude completed by default for inbox
+  const completionCheck =
+    filter.completed !== undefined
+      ? '' // AST handles it if explicitly set in filter
+      : includeCompleted
+        ? ''
+        : 'if (task.completed) return;';
 
   const script = `
 (() => {
@@ -266,6 +274,9 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
 
   inbox.forEach(task => {
     if (count >= limit) return;
+
+    // Exclude completed tasks by default
+    ${completionCheck}
 
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;

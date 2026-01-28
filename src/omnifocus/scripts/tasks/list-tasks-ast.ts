@@ -49,10 +49,14 @@ export function buildListTasksScriptV4(params: {
     // ID lookup mode
     generatedScript = buildTaskByIdScript(filter.id, fields);
   } else if (mode === 'inbox' || filter.inInbox) {
-    // Inbox mode
+    // Inbox mode - exclude completed items by default
     const inboxFilter = { ...filter };
     delete inboxFilter.inInbox; // Already handled by inbox collection
-    generatedScript = buildInboxScript(inboxFilter, { limit, fields });
+    generatedScript = buildInboxScript(inboxFilter, {
+      limit,
+      fields,
+      includeCompleted: filter.completed === true,
+    });
   } else {
     // General filtered query
     generatedScript = buildFilteredTasksScript(filter, {
