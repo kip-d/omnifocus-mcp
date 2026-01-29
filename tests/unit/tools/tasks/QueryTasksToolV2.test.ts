@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryTasksTool } from '../../../../src/tools/tasks/QueryTasksTool';
 import { CacheManager } from '../../../../src/cache/CacheManager';
-import { OmniAutomation } from '../../../../src/omnifocus/OmniAutomation';
-import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
@@ -244,6 +242,44 @@ describe('QueryTasksTool', () => {
         tool.execute({
           mode: 'all',
           limit: 201,
+        }),
+      ).rejects.toThrow('Invalid parameters');
+    });
+
+    it('should handle offset parameter for pagination', async () => {
+      mockOmni.executeJson.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+
+      const result = await tool.execute({
+        mode: 'all',
+        limit: 100,
+        offset: 200,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should coerce string offset to number', async () => {
+      mockOmni.executeJson.mockResolvedValueOnce({
+        tasks: [],
+        summary: { total_tasks: 0, completed: 0, incomplete: 0 },
+      });
+
+      const result = await tool.execute({
+        mode: 'all',
+        offset: '100' as any,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject negative offset', async () => {
+      await expect(
+        tool.execute({
+          mode: 'all',
+          offset: -1,
         }),
       ).rejects.toThrow('Invalid parameters');
     });

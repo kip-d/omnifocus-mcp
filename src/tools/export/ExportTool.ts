@@ -41,6 +41,7 @@ const ExportSchema = z.object({
         'tags',
         'deferDate',
         'dueDate',
+        'plannedDate',
         'completed',
         'completionDate',
         'flagged',

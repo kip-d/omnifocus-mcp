@@ -137,9 +137,9 @@ export class QueryCompiler {
     // Date transformation helper
     const transformDateFilter = (
       dateFilter: { before?: string; after?: string; between?: [string, string] } | undefined,
-      beforeKey: 'dueBefore' | 'deferBefore',
-      afterKey: 'dueAfter' | 'deferAfter',
-      operatorKey?: 'dueDateOperator',
+      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore',
+      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter',
+      operatorKey?: 'dueDateOperator' | 'plannedDateOperator',
     ) => {
       if (!dateFilter) return;
 
@@ -171,6 +171,14 @@ export class QueryCompiler {
       input.deferDate as { before?: string; after?: string; between?: [string, string] },
       'deferBefore',
       'deferAfter',
+    );
+
+    // Planned date transformation
+    transformDateFilter(
+      input.plannedDate as { before?: string; after?: string; between?: [string, string] },
+      'plannedBefore',
+      'plannedAfter',
+      'plannedDateOperator',
     );
 
     // Text transformation

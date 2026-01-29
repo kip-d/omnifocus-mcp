@@ -158,6 +158,7 @@ const ExportFieldEnum = z.enum([
   'tags',
   'deferDate',
   'dueDate',
+  'plannedDate',
   'completed',
   'completionDate',
   'flagged',

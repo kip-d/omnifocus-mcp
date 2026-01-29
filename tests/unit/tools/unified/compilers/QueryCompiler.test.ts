@@ -160,6 +160,32 @@ describe('QueryCompiler', () => {
         });
         expect(result.deferBefore).toBe('2025-06-01');
       });
+
+      it('transforms plannedDate.before to plannedBefore', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          plannedDate: { before: '2026-02-01' },
+        });
+        expect(result.plannedBefore).toBe('2026-02-01');
+      });
+
+      it('transforms plannedDate.after to plannedAfter', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          plannedDate: { after: '2026-01-15' },
+        });
+        expect(result.plannedAfter).toBe('2026-01-15');
+      });
+
+      it('transforms plannedDate.between to plannedAfter + plannedBefore + operator', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({
+          plannedDate: { between: ['2026-01-01', '2026-01-31'] },
+        });
+        expect(result.plannedAfter).toBe('2026-01-01');
+        expect(result.plannedBefore).toBe('2026-01-31');
+        expect(result.plannedDateOperator).toBe('BETWEEN');
+      });
     });
 
     describe('text transformation', () => {
@@ -277,6 +303,21 @@ describe('QueryCompiler', () => {
       expect(result.filters.dueBefore).toBe('2025-12-31');
       expect(result.filters.flagged).toBe(true);
       expect(result.limit).toBe(10);
+    });
+
+    it('passes offset through for pagination', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          mode: 'all',
+          limit: 100,
+          offset: 200,
+        },
+      });
+
+      expect(result.limit).toBe(100);
+      expect(result.offset).toBe(200);
     });
   });
 });

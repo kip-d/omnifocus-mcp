@@ -55,7 +55,7 @@ describe('Response Format Utilities', () => {
     });
 
     it('should measure accurate time differences', () => {
-      const start = timer.toMetadata();
+      const _start = timer.toMetadata();
       vi.advanceTimersByTime(500);
       const mid = timer.toMetadata();
       vi.advanceTimersByTime(500);
@@ -417,6 +417,45 @@ describe('Response Format Utilities', () => {
       expect(summary.key_insights).toBeDefined();
       expect(summary.key_insights?.length).toBeGreaterThan(0);
       expect(summary.key_insights?.[0]).toContain('overdue');
+    });
+
+    it('should count tasks with planned dates', () => {
+      const now = new Date();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      // Use end of today to ensure it's counted as "today" not "past"
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 0, 0);
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 5);
+
+      const tasks = [
+        { id: '1', name: 'Planned past', completed: false, plannedDate: yesterday.toISOString() },
+        { id: '2', name: 'Planned today', completed: false, plannedDate: todayEnd.toISOString() },
+        { id: '3', name: 'Planned future', completed: false, plannedDate: nextWeek.toISOString() },
+        { id: '4', name: 'No planned date', completed: false },
+      ];
+
+      const summary = generateTaskSummary(tasks);
+
+      expect(summary.breakdown?.planned_past).toBe(1);
+      expect(summary.breakdown?.planned_today).toBe(1);
+      expect(summary.breakdown?.planned_upcoming).toBe(1);
+      expect(summary.breakdown?.has_planned_date).toBe(3);
+    });
+
+    it('should handle tasks with no planned dates', () => {
+      const tasks = [
+        { id: '1', name: 'Task 1', completed: false },
+        { id: '2', name: 'Task 2', completed: false },
+      ];
+
+      const summary = generateTaskSummary(tasks);
+
+      expect(summary.breakdown?.planned_past).toBe(0);
+      expect(summary.breakdown?.planned_today).toBe(0);
+      expect(summary.breakdown?.planned_upcoming).toBe(0);
+      expect(summary.breakdown?.has_planned_date).toBe(0);
     });
   });
 

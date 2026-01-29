@@ -85,6 +85,10 @@ export interface TaskFilter {
   deferBefore?: string;
   deferDateOperator?: DateOperator; // How to compare defer dates
 
+  plannedAfter?: string;
+  plannedBefore?: string;
+  plannedDateOperator?: DateOperator; // How to compare planned dates
+
   // --- Boolean Flags ---
   flagged?: boolean;
   blocked?: boolean;
@@ -276,6 +280,10 @@ export const FILTER_PROPERTY_NAMES = [
   'dueDateOperator',
   'deferAfter',
   'deferBefore',
+  'deferDateOperator',
+  'plannedAfter',
+  'plannedBefore',
+  'plannedDateOperator',
   'flagged',
   'blocked',
   'available',

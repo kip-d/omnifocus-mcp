@@ -79,6 +79,11 @@ const QueryTasksToolSchemaV2 = z.object({
     .pipe(z.number().min(1).max(200))
     .default(25)
     .describe('Maximum tasks to return (default: 25)'),
+  offset: z
+    .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+    .pipe(z.number().min(0).max(10000))
+    .optional()
+    .describe('Skip first N tasks for pagination (default: 0). Use with limit to page through results.'),
   details: z
     .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
     .default(false)

@@ -11,6 +11,7 @@ interface OmniFocusTask {
   flagged?: boolean;
   status?: string;
   dueDate?: string | Date | null;
+  plannedDate?: string | Date | null;
   project?: string | null;
   [key: string]: unknown;
 }
@@ -45,6 +46,11 @@ export interface TaskSummary extends Record<string, unknown> {
     completed?: number;
     available?: number;
     blocked?: number;
+    // Planned date metrics
+    planned_today?: number;
+    planned_upcoming?: number;
+    planned_past?: number;
+    has_planned_date?: number;
   };
   key_insights?: string[];
   preview?: Array<{
@@ -147,6 +153,11 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
       completed: 0,
       available: 0,
       blocked: 0,
+      // Planned date metrics
+      planned_today: 0,
+      planned_upcoming: 0,
+      planned_past: 0,
+      has_planned_date: 0,
     },
     key_insights: [],
     preview: [],
@@ -180,6 +191,20 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
         summary.breakdown!.due_today = (summary.breakdown!.due_today || 0) + 1;
       } else if (dueDate <= tomorrowEnd) {
         summary.breakdown!.due_tomorrow = (summary.breakdown!.due_tomorrow || 0) + 1;
+      }
+    }
+
+    // Count by planned date
+    if (task.plannedDate) {
+      summary.breakdown!.has_planned_date = (summary.breakdown!.has_planned_date || 0) + 1;
+      const plannedDate = new Date(task.plannedDate);
+
+      if (plannedDate < now && !task.completed) {
+        summary.breakdown!.planned_past = (summary.breakdown!.planned_past || 0) + 1;
+      } else if (plannedDate <= todayEnd) {
+        summary.breakdown!.planned_today = (summary.breakdown!.planned_today || 0) + 1;
+      } else {
+        summary.breakdown!.planned_upcoming = (summary.breakdown!.planned_upcoming || 0) + 1;
       }
     }
   }

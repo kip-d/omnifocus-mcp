@@ -216,6 +216,17 @@ describe('ExportTool (self-contained implementation)', () => {
       expect(res.error.code).toBe('INVALID_TYPE');
       expect(res.error.message).toContain('Invalid export type');
     });
+
+    it('accepts plannedDate as a valid export field', () => {
+      // Get the schema from the tool and verify plannedDate is valid
+      const schema = tool.schema;
+      const result = schema.safeParse({
+        type: 'tasks',
+        format: 'json',
+        fields: ['id', 'name', 'plannedDate'],
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('Script Building', () => {

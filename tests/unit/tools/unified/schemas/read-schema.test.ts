@@ -41,4 +41,39 @@ describe('ReadSchema', () => {
     const result = ReadSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  it('should validate query with offset for pagination', () => {
+    const input = {
+      query: {
+        type: 'tasks',
+        mode: 'all',
+        limit: 100,
+        offset: 200,
+      },
+    };
+
+    const result = ReadSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.query.offset).toBe(200);
+    }
+  });
+
+  it('should coerce string offset to number', () => {
+    const input = {
+      query: {
+        type: 'tasks',
+        mode: 'all',
+        limit: '100',
+        offset: '200',
+      },
+    };
+
+    const result = ReadSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.query.offset).toBe(200);
+      expect(result.data.query.limit).toBe(100);
+    }
+  });
 });

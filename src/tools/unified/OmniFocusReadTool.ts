@@ -105,6 +105,7 @@ PERFORMANCE:
     const tasksArgs: Record<string, unknown> = {
       mode: compiled.mode,
       limit: compiled.limit || 25,
+      offset: compiled.offset,
       fields: compiled.fields,
       sort: compiled.sort,
       countOnly: compiled.countOnly,
