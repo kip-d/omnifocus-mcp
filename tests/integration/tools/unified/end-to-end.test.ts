@@ -4,14 +4,14 @@ import path from 'path';
 
 describe('Unified Tools End-to-End Integration', () => {
   let serverProcess: ChildProcess;
-  let serverReady = false;
+  let _serverReady = false;
 
   // Helper to send JSON-RPC request and get response
   async function sendRequest(request: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const requestStr = JSON.stringify(request) + '\n';
       let response = '';
-      let errorOutput = '';
+      let _errorOutput = '';
 
       const timeout = setTimeout(() => {
         reject(new Error('Request timeout after 120s'));
@@ -39,7 +39,7 @@ describe('Unified Tools End-to-End Integration', () => {
                 reject(new Error(`MCP error: ${JSON.stringify(parsed.error)}`));
                 return;
               }
-            } catch (e) {
+            } catch {
               // Not valid JSON yet, continue collecting
             }
           }
@@ -47,7 +47,7 @@ describe('Unified Tools End-to-End Integration', () => {
       };
 
       const onError = (data: Buffer) => {
-        errorOutput += data.toString();
+        _errorOutput += data.toString();
       };
 
       serverProcess.stdout?.on('data', onData);
@@ -81,7 +81,7 @@ describe('Unified Tools End-to-End Integration', () => {
     });
 
     expect(initResult).toBeDefined();
-    serverReady = true;
+    _serverReady = true;
   }, 30000);
 
   afterAll(() => {
@@ -271,6 +271,85 @@ describe('Unified Tools End-to-End Integration', () => {
       expect(parsed.metadata.count_only).toBe(true);
       expect(typeof parsed.metadata.total_count).toBe('number');
     }, 120000);
+
+    describe('offset pagination', () => {
+      it('should return different tasks when offset is applied', async () => {
+        // First request: get tasks 0-4
+        const firstResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 100,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_read',
+            arguments: {
+              query: {
+                type: 'tasks',
+                limit: 5,
+                offset: 0,
+              },
+            },
+          },
+        });
+
+        const firstContent = (firstResult as { content: Array<{ type: string; text: string }> }).content;
+        const firstParsed = JSON.parse(firstContent[0].text);
+        expect(firstParsed.success).toBe(true);
+        const firstTaskIds = firstParsed.data?.tasks?.map((t: { id: string }) => t.id) || [];
+
+        // Second request: get tasks 5-9
+        const secondResult = await sendRequest({
+          jsonrpc: '2.0',
+          id: 101,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_read',
+            arguments: {
+              query: {
+                type: 'tasks',
+                limit: 5,
+                offset: 5,
+              },
+            },
+          },
+        });
+
+        const secondContent = (secondResult as { content: Array<{ type: string; text: string }> }).content;
+        const secondParsed = JSON.parse(secondContent[0].text);
+        expect(secondParsed.success).toBe(true);
+        const secondTaskIds = secondParsed.data?.tasks?.map((t: { id: string }) => t.id) || [];
+
+        // Verify no overlap between first and second page
+        if (firstTaskIds.length > 0 && secondTaskIds.length > 0) {
+          const overlap = firstTaskIds.filter((id: string) => secondTaskIds.includes(id));
+          expect(overlap.length).toBe(0);
+        }
+      }, 120000);
+
+      it('should include offset_applied in metadata when offset > 0', async () => {
+        const result = await sendRequest({
+          jsonrpc: '2.0',
+          id: 102,
+          method: 'tools/call',
+          params: {
+            name: 'omnifocus_read',
+            arguments: {
+              query: {
+                type: 'tasks',
+                limit: 5,
+                offset: 10,
+              },
+            },
+          },
+        });
+
+        const content = (result as { content: Array<{ type: string; text: string }> }).content;
+        const parsed = JSON.parse(content[0].text);
+        expect(parsed.success).toBe(true);
+        // The offset should be reflected in the response metadata
+        expect(parsed.metadata).toHaveProperty('offset');
+        expect(parsed.metadata.offset).toBe(10);
+      }, 60000);
+    });
   });
 
   describe('omnifocus_write', () => {

@@ -38,9 +38,10 @@ export function buildListTasksScriptV4(params: {
   filter: TaskFilter;
   fields?: string[];
   limit?: number;
+  offset?: number;
   mode?: string;
 }): string {
-  const { filter, fields = [], limit = 50, mode = 'all' } = params;
+  const { filter, fields = [], limit = 50, offset = 0, mode = 'all' } = params;
 
   // Route to appropriate script builder based on mode
   let generatedScript;
@@ -54,6 +55,7 @@ export function buildListTasksScriptV4(params: {
     delete inboxFilter.inInbox; // Already handled by inbox collection
     generatedScript = buildInboxScript(inboxFilter, {
       limit,
+      offset,
       fields,
       includeCompleted: filter.completed === true,
     });
@@ -61,6 +63,7 @@ export function buildListTasksScriptV4(params: {
     // General filtered query
     generatedScript = buildFilteredTasksScript(filter, {
       limit,
+      offset,
       fields,
       includeCompleted: filter.completed === true,
     });
@@ -83,6 +86,8 @@ export function buildListTasksScriptV4(params: {
       metadata: {
         total_count: result.count,
         limit_applied: ${limit},
+        offset: ${offset},
+        offset_applied: result.offset_applied,
         mode: result.mode,
         filter_description: result.filter_description,
         optimization: 'ast_v4',

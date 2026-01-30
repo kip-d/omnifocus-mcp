@@ -155,6 +155,41 @@ describe('buildFilteredTasksScript', () => {
   });
 });
 
+describe('buildFilteredTasksScript offset pagination', () => {
+  it('skips first N tasks when offset is specified', () => {
+    const result = buildFilteredTasksScript({}, { offset: 10, limit: 25 });
+
+    // Should include offset tracking
+    expect(result.script).toContain('const offset = 10');
+    // Should skip tasks before adding to results
+    expect(result.script).toMatch(/skipped\s*<\s*offset/);
+  });
+
+  it('generates correct slice logic with offset and limit', () => {
+    const result = buildFilteredTasksScript({}, { offset: 5, limit: 10 });
+
+    // Should have both offset and limit variables
+    expect(result.script).toContain('const offset = 5');
+    expect(result.script).toContain('const limit = 10');
+    // Should track skipped count
+    expect(result.script).toContain('skipped');
+  });
+
+  it('does not include offset logic when offset is 0 or not specified', () => {
+    const result = buildFilteredTasksScript({}, { limit: 25 });
+
+    // Should not have offset tracking when not needed
+    expect(result.script).not.toContain('const offset =');
+    expect(result.script).not.toContain('skipped');
+  });
+
+  it('includes offset in metadata', () => {
+    const result = buildFilteredTasksScript({}, { offset: 10 });
+
+    expect(result.script).toContain('offset_applied');
+  });
+});
+
 describe('buildInboxScript', () => {
   it('generates script using inbox collection', () => {
     const result = buildInboxScript();
@@ -181,6 +216,20 @@ describe('buildInboxScript', () => {
 
     expect(result.script).toContain('id: task.id.primaryKey');
     expect(result.script).toContain('name: task.name');
+  });
+
+  it('skips first N tasks when offset is specified', () => {
+    const result = buildInboxScript({}, { offset: 5, limit: 10 });
+
+    expect(result.script).toContain('const offset = 5');
+    expect(result.script).toMatch(/skipped\s*<\s*offset/);
+  });
+
+  it('does not include offset logic when offset is 0 or not specified', () => {
+    const result = buildInboxScript({}, { limit: 10 });
+
+    expect(result.script).not.toContain('const offset =');
+    expect(result.script).not.toContain('skipped');
   });
 });
 

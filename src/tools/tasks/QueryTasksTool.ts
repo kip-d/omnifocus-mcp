@@ -994,6 +994,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter: { ...filter, mode: 'search' },
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
 
@@ -1060,6 +1061,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
 
@@ -1123,6 +1125,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
 
@@ -1210,6 +1213,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
       mode: 'inbox',
     });
     const result = await this.execJson(script);
@@ -1244,6 +1248,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'inbox',
+      offset: args.offset || 0,
       filters_applied: filter,
       sort_applied: args.sort ? true : false,
     });
@@ -1262,6 +1267,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
 
@@ -1284,7 +1290,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       );
     }
 
-    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const data = result.data as { tasks?: unknown[]; items?: unknown[]; metadata?: { offset?: number } };
     const tasks = this.parseTasks(data.tasks || data.items || []);
 
     // Apply sorting if requested
@@ -1295,6 +1301,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'all',
+      offset: args.offset || 0,
       filters_applied: filter,
       sort_applied: args.sort ? true : false,
     });
@@ -1331,6 +1338,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       filter,
       fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
 

@@ -29,6 +29,8 @@ import { buildAST } from './builder.js';
 export interface ScriptOptions {
   /** Maximum tasks to return */
   limit?: number;
+  /** Number of tasks to skip (for pagination) */
+  offset?: number;
   /** Fields to include in response */
   fields?: string[];
   /** Whether to include completed tasks (for modes that don't specify) */
@@ -172,7 +174,7 @@ function generateFieldProjection(fields: string[]): string {
  * @returns Generated script ready for execution
  */
 export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, fields = [], includeCompleted = false } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
 
   // Build the AST to check if empty
   const ast = buildAST(filter);
@@ -197,11 +199,18 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
         ? ''
         : 'if (task.completed) return;';
 
+  // Only include offset logic when offset > 0
+  const useOffset = offset > 0;
+  const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
+  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
+  const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
+
   const script = `
 (() => {
   const results = [];
   let count = 0;
   const limit = ${limit};
+  ${offsetVars}
 
   // AST-generated filter predicate
   // Filter: ${filterDescription}
@@ -217,6 +226,8 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;
 
+    ${offsetCheck}
+
     results.push({
       ${fieldProjection}
     });
@@ -226,6 +237,7 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
   return JSON.stringify({
     tasks: results,
     count: results.length,
+    ${offsetMetadata}
     mode: 'ast_filtered',
     filter_description: ${JSON.stringify(filterDescription)}
   });
@@ -243,7 +255,7 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
  * Build an OmniJS script for inbox tasks with optional additional filters
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, fields = [], includeCompleted = false } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
 
   // Merge inbox filter with additional filters
   const filter: TaskFilter = { ...additionalFilter, inInbox: true };
@@ -260,11 +272,18 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
         ? ''
         : 'if (task.completed) return;';
 
+  // Only include offset logic when offset > 0
+  const useOffset = offset > 0;
+  const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
+  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
+  const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
+
   const script = `
 (() => {
   const results = [];
   let count = 0;
   const limit = ${limit};
+  ${offsetVars}
 
   // AST-generated filter predicate for inbox
   function matchesFilter(task) {
@@ -281,6 +300,8 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
     // Apply AST-generated filter
     if (!matchesFilter(task)) return;
 
+    ${offsetCheck}
+
     results.push({
       ${fieldProjection}
     });
@@ -290,6 +311,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   return JSON.stringify({
     tasks: results,
     count: results.length,
+    ${offsetMetadata}
     mode: 'inbox_ast',
     filter_description: ${JSON.stringify(filterDescription)}
   });
