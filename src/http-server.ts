@@ -1,4 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse, Server as HttpServer } from 'node:http';
+import { URL } from 'node:url';
 import { createLogger } from './utils/logger.js';
 import { SessionManager } from './session-manager.js';
 import { randomUUID } from 'node:crypto';
@@ -122,8 +123,12 @@ export class HttpServerManager {
         return;
       }
 
-      // Route requests
-      switch (req.url) {
+      // Parse URL to handle query strings and trailing slashes
+      const parsedUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+      const pathname = parsedUrl.pathname.replace(/\/$/, '') || '/';
+
+      // Route requests based on pathname
+      switch (pathname) {
         case '/mcp':
           await this.handleMcpRequest(req, res, requestId);
           break;
@@ -228,7 +233,18 @@ export class HttpServerManager {
   ): Promise<void> {
     try {
       // Parse request body
-      const body = await this.parseRequestBody(_req);
+      let body: unknown;
+      try {
+        body = await this.parseRequestBody(_req);
+      } catch (error) {
+        if (error instanceof Error && error.message === 'PAYLOAD_TOO_LARGE') {
+          logger.warn('Request body too large', { requestId });
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payload Too Large', message: 'Request body exceeds maximum size' }));
+          return;
+        }
+        throw error;
+      }
       if (!body) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Bad Request', message: 'Request body is required' }));
@@ -389,14 +405,24 @@ export class HttpServerManager {
     res.end(JSON.stringify({ error: 'Not Found', message: 'Endpoint not found' }));
   }
 
+  // Maximum request body size (5MB - generous for JSON-RPC payloads)
+  private static readonly MAX_BODY_SIZE = 5 * 1024 * 1024;
+
   /**
-   * Parses request body as JSON
+   * Parses request body as JSON with size limit enforcement
    */
   private async parseRequestBody(req: IncomingMessage): Promise<unknown> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let body = '';
+      let size = 0;
 
       req.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > HttpServerManager.MAX_BODY_SIZE) {
+          req.destroy();
+          reject(new Error('PAYLOAD_TOO_LARGE'));
+          return;
+        }
         body += chunk.toString();
       });
 
@@ -415,6 +441,10 @@ export class HttpServerManager {
           });
           resolve(null);
         }
+      });
+
+      req.on('error', (error) => {
+        reject(error);
       });
     });
   }

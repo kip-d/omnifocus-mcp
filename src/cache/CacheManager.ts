@@ -32,8 +32,9 @@ export class CacheManager {
       this.config = { ...this.config, ...config };
     }
 
-    // Start cleanup interval
-    setInterval(() => this.cleanup(), 60 * 1000); // Every minute
+    // Start cleanup interval (unref prevents keeping the event loop alive)
+    const cleanupInterval = setInterval(() => this.cleanup(), 60 * 1000);
+    cleanupInterval.unref();
   }
 
   /**
