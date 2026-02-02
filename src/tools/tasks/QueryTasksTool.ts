@@ -1204,9 +1204,12 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   private async handleInboxTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
     // Inbox mode: Use V4 AST-powered implementation
     // AST version uses OmniJS global collections for optimal performance
-    const filter = {
-      includeCompleted: args.completed || false,
-    };
+    // Note: Use 'completed' not 'includeCompleted' - buildListTasksScriptV4 checks filter.completed
+    const filter: { completed?: boolean } = {};
+    if (args.completed !== undefined) {
+      filter.completed = args.completed;
+    }
+    // When completed is undefined, buildListTasksScriptV4 will default to excluding completed tasks
 
     // Execute V4 query with inbox mode
     const script = buildListTasksScriptV4({
