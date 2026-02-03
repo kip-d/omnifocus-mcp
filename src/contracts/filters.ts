@@ -369,18 +369,19 @@ export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): f
  * all filters have been properly processed.
  */
 export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const normalized: any = { ...filter };
+  // Destructure to separate legacy property from the rest
+  // This gives us type safety: rest is Omit<TaskFilter, 'includeCompleted'>
+  const { includeCompleted, ...rest } = filter;
+
+  // Start with the non-legacy properties (properly typed)
+  const normalized: Omit<TaskFilter, 'includeCompleted'> = { ...rest };
 
   // Handle legacy includeCompleted → completed conversion
-  if (normalized.includeCompleted !== undefined) {
-    if (normalized.completed === undefined) {
-      // Convert includeCompleted to completed
-      // includeCompleted: true means show completed tasks
-      // includeCompleted: false means exclude completed tasks
-      normalized.completed = normalized.includeCompleted;
-    }
-    delete normalized.includeCompleted;
+  if (includeCompleted !== undefined && normalized.completed === undefined) {
+    // Convert includeCompleted to completed
+    // includeCompleted: true means show completed tasks
+    // includeCompleted: false means exclude completed tasks
+    normalized.completed = includeCompleted;
   }
 
   // Default tagsOperator
@@ -393,8 +394,7 @@ export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
     normalized.textOperator = 'CONTAINS';
   }
 
-  // Brand the filter as normalized
-  normalized[NORMALIZED_FILTER_BRAND as string] = true;
-
-  return normalized as NormalizedTaskFilter;
+  // Brand the filter as normalized using Object.assign to add the symbol property
+  // This is the only place we need a type assertion - for the brand itself
+  return Object.assign(normalized, { [NORMALIZED_FILTER_BRAND]: true as const }) as NormalizedTaskFilter;
 }
