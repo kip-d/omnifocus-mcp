@@ -18,6 +18,7 @@
  */
 
 import type { TaskFilter } from '../../../contracts/filters.js';
+import { normalizeFilter } from '../../../contracts/filters.js';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
@@ -43,29 +44,33 @@ export function buildListTasksScriptV4(params: {
 }): string {
   const { filter, fields = [], limit = 50, offset = 0, mode = 'all' } = params;
 
+  // Normalize filter to ensure consistent property names
+  // This catches legacy properties like includeCompleted → completed
+  const normalizedFilter = normalizeFilter(filter);
+
   // Route to appropriate script builder based on mode
   let generatedScript;
 
-  if (filter.id) {
+  if (normalizedFilter.id) {
     // ID lookup mode
-    generatedScript = buildTaskByIdScript(filter.id, fields);
-  } else if (mode === 'inbox' || filter.inInbox) {
+    generatedScript = buildTaskByIdScript(normalizedFilter.id, fields);
+  } else if (mode === 'inbox' || normalizedFilter.inInbox) {
     // Inbox mode - exclude completed items by default
-    const inboxFilter = { ...filter };
+    const inboxFilter = { ...filter }; // Use raw filter, buildInboxScript normalizes internally
     delete inboxFilter.inInbox; // Already handled by inbox collection
     generatedScript = buildInboxScript(inboxFilter, {
       limit,
       offset,
       fields,
-      includeCompleted: filter.completed === true,
+      includeCompleted: normalizedFilter.completed === true,
     });
   } else {
-    // General filtered query
-    generatedScript = buildFilteredTasksScript(filter, {
+    // General filtered query - use normalized filter
+    generatedScript = buildFilteredTasksScript(normalizedFilter, {
       limit,
       offset,
       fields,
-      includeCompleted: filter.completed === true,
+      includeCompleted: normalizedFilter.completed === true,
     });
   }
 

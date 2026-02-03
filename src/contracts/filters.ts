@@ -319,22 +319,67 @@ export function validateFilterProperties(filter: Record<string, unknown>): strin
 }
 
 // =============================================================================
+// BRANDED FILTER TYPE
+// =============================================================================
+
+/**
+ * Brand key for normalized filters (runtime value)
+ * This key is used to mark filters that have been processed through normalizeFilter()
+ */
+const NORMALIZED_FILTER_BRAND = '__normalized__' as const;
+
+/**
+ * NormalizedTaskFilter - A TaskFilter that has been validated and normalized
+ *
+ * This branded type ensures compile-time safety by requiring all filters
+ * to pass through normalizeFilter() before being used in script builders.
+ *
+ * Benefits:
+ * - Catches property name mismatches at compile time (e.g., includeCompleted vs completed)
+ * - Ensures default operators are set (tagsOperator, textOperator)
+ * - Guarantees legacy properties have been converted
+ *
+ * Usage:
+ *   const filter: TaskFilter = { completed: false };
+ *   const normalized = normalizeFilter(filter);  // Returns NormalizedTaskFilter
+ *   buildFilteredTasksScript(normalized);        // Only accepts NormalizedTaskFilter
+ */
+export type NormalizedTaskFilter = Omit<TaskFilter, 'includeCompleted'> & {
+  readonly [NORMALIZED_FILTER_BRAND]?: true;
+};
+
+/**
+ * Type guard to check if a filter has been normalized
+ */
+export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): filter is NormalizedTaskFilter {
+  return (filter as Record<string, unknown>)[NORMALIZED_FILTER_BRAND] === true;
+}
+
+// =============================================================================
 // NORMALIZATION
 // =============================================================================
 
 /**
  * Normalize legacy filter properties to current standard
  *
- * This handles the `includeCompleted` → `completed` migration
+ * This handles the `includeCompleted` → `completed` migration and returns
+ * a branded NormalizedTaskFilter that can be used with script builders.
+ *
+ * IMPORTANT: Script builders only accept NormalizedTaskFilter to ensure
+ * all filters have been properly processed.
  */
-export function normalizeFilter(filter: TaskFilter): TaskFilter {
-  const normalized = { ...filter };
+export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const normalized: any = { ...filter };
 
-  // Handle legacy includeCompleted
-  if (normalized.includeCompleted !== undefined && normalized.completed === undefined) {
-    // includeCompleted: true means "don't filter by completion" (include all)
-    // We don't have a direct equivalent, but completed: undefined is close
-    // For explicit "only completed", user should use completed: true
+  // Handle legacy includeCompleted → completed conversion
+  if (normalized.includeCompleted !== undefined) {
+    if (normalized.completed === undefined) {
+      // Convert includeCompleted to completed
+      // includeCompleted: true means show completed tasks
+      // includeCompleted: false means exclude completed tasks
+      normalized.completed = normalized.includeCompleted;
+    }
     delete normalized.includeCompleted;
   }
 
@@ -348,5 +393,8 @@ export function normalizeFilter(filter: TaskFilter): TaskFilter {
     normalized.textOperator = 'CONTAINS';
   }
 
-  return normalized;
+  // Brand the filter as normalized
+  normalized[NORMALIZED_FILTER_BRAND as string] = true;
+
+  return normalized as NormalizedTaskFilter;
 }

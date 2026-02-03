@@ -13,7 +13,8 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, ProjectFilter } from '../filters.js';
+import type { TaskFilter, ProjectFilter, NormalizedTaskFilter } from '../filters.js';
+import { normalizeFilter } from '../filters.js';
 import {
   generateFilterCode,
   generateProjectFilterCode,
@@ -169,11 +170,16 @@ function generateFieldProjection(fields: string[]): string {
 /**
  * Build an OmniJS script that filters tasks using AST-generated predicates
  *
- * @param filter - The TaskFilter to apply
+ * @param filter - A NormalizedTaskFilter (must pass through normalizeFilter() first)
  * @param options - Script generation options
  * @returns Generated script ready for execution
+ *
+ * IMPORTANT: This function requires a NormalizedTaskFilter to ensure:
+ * - Legacy properties (includeCompleted) have been converted
+ * - Default operators are set
+ * - Property name mismatches are caught at compile time
  */
-export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOptions = {}): GeneratedScript {
+export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
 
   // Build the AST to check if empty
@@ -253,12 +259,15 @@ export function buildFilteredTasksScript(filter: TaskFilter, options: ScriptOpti
 
 /**
  * Build an OmniJS script for inbox tasks with optional additional filters
+ *
+ * This function accepts a raw TaskFilter and normalizes it internally
+ * after merging with the inbox filter (inInbox: true).
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
 
-  // Merge inbox filter with additional filters
-  const filter: TaskFilter = { ...additionalFilter, inInbox: true };
+  // Merge inbox filter with additional filters, then normalize
+  const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
 
   const filterCode = generateFilterCode(filter, 'omnijs');
   const filterDescription = describeFilterForScript(filter);
@@ -425,12 +434,15 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
     filter.projectId = projectId;
   }
 
+  // Normalize the filter before generating code
+  const normalizedFilter = normalizeFilter(filter);
+
   // Generate the filter predicate using AST
-  const filterCode = generateFilterCode(filter, 'omnijs');
-  const filterDescription = describeFilterForScript(filter);
+  const filterCode = generateFilterCode(normalizedFilter, 'omnijs');
+  const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Build the AST to check if empty (it won't be - we always have hasRepetitionRule)
-  const ast = buildAST(filter);
+  const ast = buildAST(normalizedFilter);
   const isEmptyFilter = ast.type === 'literal' && ast.value === true;
 
   // The script with AST-generated filter predicate and domain-specific inference logic
@@ -1356,21 +1368,24 @@ export interface TaskCountOptions {
  * - Pure JXA iteration: ~42 seconds for 2,264 tasks
  * - OmniJS bridge: ~2 minutes (AppleEvent timeout!)
  *
- * @param filter - TaskFilter criteria to count
+ * @param filter - TaskFilter criteria to count (normalized internally)
  * @param options - Count options (maxScan limit)
  * @returns Complete JXA script ready for execution
  */
 export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCountOptions = {}): GeneratedScript {
   const { maxScan = 10000 } = options;
 
+  // Normalize filter to ensure consistent property names
+  const normalizedFilter = normalizeFilter(filter);
+
   // Build AST and generate JXA filter code (NOT OmniJS!)
-  const ast = buildAST(filter);
+  const ast = buildAST(normalizedFilter);
   const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(filter, 'jxa'); // Use JXA emitter
-  const filterDescription = describeFilterForScript(filter);
+  const filterCode = generateFilterCode(normalizedFilter, 'jxa'); // Use JXA emitter
+  const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Determine if we're counting inbox tasks
-  const checkInbox = filter.inInbox === true;
+  const checkInbox = normalizedFilter.inInbox === true;
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
   // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed

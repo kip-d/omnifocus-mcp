@@ -14,7 +14,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, ProjectFilter, ProjectStatus } from '../filters.js';
+import type { TaskFilter, ProjectFilter, ProjectStatus, NormalizedTaskFilter } from '../filters.js';
 import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
@@ -50,12 +50,13 @@ export interface GenerateFilterCodeError {
  * Generate filter code from a TaskFilter
  *
  * This is the main entry point for the AST pipeline.
+ * Accepts both raw TaskFilter and NormalizedTaskFilter.
  *
- * @param filter - The TaskFilter to transform
+ * @param filter - The TaskFilter or NormalizedTaskFilter to transform
  * @param target - The target language ('jxa' or 'omnijs')
  * @returns Generated code string, or throws if validation fails
  */
-export function generateFilterCode(filter: TaskFilter, target: EmitTarget = 'omnijs'): string {
+export function generateFilterCode(filter: TaskFilter | NormalizedTaskFilter, target: EmitTarget = 'omnijs'): string {
   const result = generateFilterCodeSafe(filter, target);
 
   if (!result.success) {
@@ -70,12 +71,12 @@ export function generateFilterCode(filter: TaskFilter, target: EmitTarget = 'omn
  *
  * Returns validation errors/warnings instead of throwing.
  *
- * @param filter - The TaskFilter to transform
+ * @param filter - The TaskFilter or NormalizedTaskFilter to transform
  * @param target - The target language ('jxa' or 'omnijs')
  * @returns Full result with AST, validation, and generated code
  */
 export function generateFilterCodeSafe(
-  filter: TaskFilter,
+  filter: TaskFilter | NormalizedTaskFilter,
   target: EmitTarget = 'omnijs',
 ): GenerateFilterCodeResult | GenerateFilterCodeError {
   // Step 1: Build AST
@@ -110,11 +111,14 @@ export function generateFilterCodeSafe(
  *
  * This generates a function that can be called with a task object.
  *
- * @param filter - The TaskFilter to transform
+ * @param filter - The TaskFilter or NormalizedTaskFilter to transform
  * @param target - The target language ('jxa' or 'omnijs')
  * @returns JavaScript function code string
  */
-export function generateFilterFunction(filter: TaskFilter, target: EmitTarget = 'omnijs'): string {
+export function generateFilterFunction(
+  filter: TaskFilter | NormalizedTaskFilter,
+  target: EmitTarget = 'omnijs',
+): string {
   const code = generateFilterCode(filter, target);
 
   // Wrap in a function that receives task and taskTags
@@ -273,7 +277,9 @@ export function generateProjectFilterCode(filter: ProjectFilter): string {
   // Folder filter by name (case-insensitive)
   if (filter.folderName) {
     const escapedName = JSON.stringify(filter.folderName.toLowerCase());
-    conditions.push(`(project.parentFolder && (project.parentFolder.name || '').toLowerCase().includes(${escapedName}))`);
+    conditions.push(
+      `(project.parentFolder && (project.parentFolder.name || '').toLowerCase().includes(${escapedName}))`,
+    );
   }
 
   // Return 'true' if no conditions (match all projects)

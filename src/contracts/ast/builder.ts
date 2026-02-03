@@ -7,16 +7,16 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter, DateOperator } from '../filters.js';
+import type { TaskFilter, DateOperator, NormalizedTaskFilter } from '../filters.js';
 import type { FilterNode, ComparisonNode, AndNode, OrNode, ExistsNode, NotNode } from './types.js';
 
 /**
  * Build an AST from a TaskFilter
  *
- * @param filter - The TaskFilter to transform
+ * @param filter - The TaskFilter or NormalizedTaskFilter to transform
  * @returns FilterNode representing the filter logic
  */
-export function buildAST(filter: TaskFilter): FilterNode {
+export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode {
   const conditions: FilterNode[] = [];
 
   // --- ID filter ---
