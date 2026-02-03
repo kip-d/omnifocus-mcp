@@ -34,6 +34,7 @@ export const TEST_INBOX_PREFIX = '__TEST__';
 
 export interface CleanupReport {
   inboxTasksDeleted: number;
+  orphanedTasksDeleted: number;
   projectsDeleted: number;
   foldersDeleted: number;
   tagsDeleted: number;
@@ -207,6 +208,128 @@ async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string
             } catch (e) {
               errors.push('Task: ' + e.message);
             }
+          }
+        }
+
+        return JSON.stringify({ deleted, errors });
+      })()
+    \`);
+    return result;
+  `;
+  return executeJXA<{ deleted: number; errors: string[] }>(script);
+}
+
+/**
+ * Common test task name patterns that indicate orphaned test data.
+ * These are checked in addition to __TEST__ prefix.
+ * Only tasks in "Miscellaneous" or "Inbox" with no tags are deleted.
+ */
+const ORPHAN_TASK_PATTERNS = [
+  // Common test task naming patterns (prefix match)
+  'Test Task',
+  'Test update',
+  'Test delete',
+  'Test create',
+  'Test batch',
+  'Test clear',
+  'Test tags',
+  'Test addTags',
+  'Test removeTags',
+  'Test flag',
+  'Test multiple',
+  'Test urgent',
+  'Test Project',
+  'Test Op ',
+  'MCP Test',
+  'MCP Final Test',
+  'E2E Test',
+  'Smoke Test',
+  'Integration Test',
+  'Performance Test',
+  'Lightweight Test',
+  'MCP Coercion Test',
+  'Quick Test',
+  'v2.2.0 Test',
+  // Builder API / Concurrent / Sequential test patterns
+  'Builder API test',
+  'Task for non-zero',
+  'Concurrent Task',
+  'Timing Test',
+  'Debug Timing Test',
+  'Sequential Test',
+  'BrandedType Test',
+  // Planned date test patterns (without __TEST__ prefix)
+  'Task with Planned Date',
+  'Task to Update Planned Date',
+  'Task to Clear Planned Date',
+  // Analytics test patterns
+  'Completed 1',
+  'Completed 2',
+  'Completed 3',
+  'Completed Task for Stats',
+  'Another Completed',
+  'Overdue Task Test',
+  'Future Task Test',
+  'Velocity Test Task',
+  'Consistency Test',
+];
+
+/**
+ * Delete all tasks with __TEST__ name prefix ANYWHERE in OmniFocus
+ * This catches orphaned test tasks that ended up in projects like "Miscellaneous"
+ * instead of the sandbox folder.
+ *
+ * Note: This is slower than deleteTestInboxTasks since it scans all tasks,
+ * but necessary to clean up tasks that escaped the sandbox.
+ */
+async function deleteTestTasksEverywhere(): Promise<{ deleted: number; errors: string[] }> {
+  const patternsJson = JSON.stringify(ORPHAN_TASK_PATTERNS);
+  const script = `
+    const result = app.evaluateJavascript(\`
+      (() => {
+        let deleted = 0;
+        const errors = [];
+        const prefix = '${TEST_INBOX_PREFIX}';
+        const orphanPatterns = ${patternsJson};
+
+        // Collect tasks to delete first (avoid modifying while iterating)
+        const toDelete = [];
+        for (const task of flattenedTasks) {
+          try {
+            const name = task.name;
+            if (!name) continue;
+
+            // Check 1: __TEST__ prefix (always delete)
+            if (name.startsWith(prefix)) {
+              toDelete.push(task);
+              continue;
+            }
+
+            // Check 2: Orphan patterns (only in Miscellaneous/Inbox with no tags)
+            const project = task.containingProject;
+            const projName = project ? project.name : 'Inbox';
+            const tagCount = task.tags.length;
+
+            if ((projName === 'Miscellaneous' || projName === 'Inbox') && tagCount === 0) {
+              for (const pattern of orphanPatterns) {
+                if (name.startsWith(pattern) || name.includes(pattern)) {
+                  toDelete.push(task);
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Skip invalid/dropped tasks
+          }
+        }
+
+        // Delete collected tasks
+        for (const task of toDelete) {
+          try {
+            deleteObject(task);
+            deleted++;
+          } catch (e) {
+            errors.push('Task (everywhere): ' + e.message);
           }
         }
 
@@ -400,12 +523,14 @@ async function deleteTestTags(): Promise<{ deleted: number; errors: string[] }> 
  * 2. Delete projects in sandbox (cascades to their tasks)
  * 3. Delete sub-folders (bottom-up)
  * 4. Delete sandbox folder itself
- * 5. Delete __test- tags
+ * 5. Delete orphaned __TEST__ tasks anywhere (catches tasks that escaped sandbox)
+ * 6. Delete __test- tags (must be after tasks so tags aren't referenced)
  */
 export async function fullCleanup(): Promise<CleanupReport> {
   const startTime = Date.now();
   const report: CleanupReport = {
     inboxTasksDeleted: 0,
+    orphanedTasksDeleted: 0,
     projectsDeleted: 0,
     foldersDeleted: 0,
     tagsDeleted: 0,
@@ -452,7 +577,17 @@ export async function fullCleanup(): Promise<CleanupReport> {
     report.errors.push(`Sandbox folder: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // Step 5: Delete test tags
+  // Step 5: Delete orphaned __TEST__ tasks anywhere in OmniFocus
+  // This catches tasks that ended up in projects like "Miscellaneous" instead of sandbox
+  try {
+    const orphanedResult = await deleteTestTasksEverywhere();
+    report.orphanedTasksDeleted = orphanedResult.deleted;
+    report.errors.push(...orphanedResult.errors);
+  } catch (error) {
+    report.errors.push(`Orphaned tasks: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Step 6: Delete test tags (must be after all task deletions)
   try {
     const tagsResult = await deleteTestTags();
     report.tagsDeleted = tagsResult.deleted;

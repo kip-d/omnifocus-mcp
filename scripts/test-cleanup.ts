@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   console.log('  - Tasks with __TEST__ name prefix (inbox tasks)');
   console.log('  - Projects inside __MCP_TEST_SANDBOX__ folder');
   console.log('  - The __MCP_TEST_SANDBOX__ folder itself');
+  console.log('  - Orphaned __TEST__ tasks anywhere (e.g., in Miscellaneous)');
   console.log('  - Tags starting with __test-');
   console.log('');
   console.log('Starting cleanup...');
@@ -32,11 +33,12 @@ async function main(): Promise<void> {
 
     console.log('Cleanup Complete!');
     console.log('-'.repeat(40));
-    console.log(`  Inbox tasks deleted:  ${report.inboxTasksDeleted}`);
-    console.log(`  Projects deleted:     ${report.projectsDeleted}`);
-    console.log(`  Folders deleted:      ${report.foldersDeleted}`);
-    console.log(`  Tags deleted:         ${report.tagsDeleted}`);
-    console.log(`  Duration:             ${report.durationMs}ms`);
+    console.log(`  Inbox tasks deleted:    ${report.inboxTasksDeleted}`);
+    console.log(`  Orphaned tasks deleted: ${report.orphanedTasksDeleted}`);
+    console.log(`  Projects deleted:       ${report.projectsDeleted}`);
+    console.log(`  Folders deleted:        ${report.foldersDeleted}`);
+    console.log(`  Tags deleted:           ${report.tagsDeleted}`);
+    console.log(`  Duration:               ${report.durationMs}ms`);
 
     if (report.errors.length > 0) {
       console.log('');
