@@ -213,6 +213,55 @@ function createScript(updates: any): string {
 
 ---
 
+## Eliminating `any` with Destructuring (February 2026)
+
+**Problem:** Filter normalization used `any` to handle legacy property migration, causing ESLint warnings and losing
+type safety.
+
+```typescript
+// ❌ Uses any - no type checking, ESLint warnings
+export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
+  const normalized: any = { ...filter };
+  if (normalized.includeCompleted !== undefined) {
+    normalized.completed = normalized.includeCompleted;
+    delete normalized.includeCompleted;
+  }
+  return normalized as NormalizedTaskFilter;
+}
+```
+
+**Solution:** Use destructuring with rest spread to separate properties, then use `Omit<>` for the intermediate type.
+
+```typescript
+// ✅ Full type safety, no any needed
+export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
+  // Destructure separates legacy property from rest
+  const { includeCompleted, ...rest } = filter;
+
+  // rest is automatically typed as Omit<TaskFilter, 'includeCompleted'>
+  const normalized: Omit<TaskFilter, 'includeCompleted'> = { ...rest };
+
+  // Type-checked assignment
+  if (includeCompleted !== undefined && normalized.completed === undefined) {
+    normalized.completed = includeCompleted;
+  }
+
+  // Only assertion needed is for the brand
+  return Object.assign(normalized, { [BRAND]: true }) as NormalizedTaskFilter;
+}
+```
+
+**When to use this pattern:**
+
+- Removing a property from an object while transforming it
+- Migrating legacy property names to new names
+- Any transformation where you'd otherwise reach for `any`
+
+**Key insight:** Destructuring with `...rest` automatically creates a properly typed object without the extracted
+properties. No `delete` needed, no `any` needed.
+
+---
+
 ## Lint-Staged Stash Recovery (December 2025)
 
 **Problem:** CLAUDE.md (1138 lines) was completely wiped and committed as empty.
@@ -288,6 +337,7 @@ git stash drop stash@{0}           # Only drop after recovery
 | Assume without testing        | Handle string coercion              |
 | Skip pattern search           | Validate full IDs                   |
 | Drop stash after failed apply | Verify file contents after recovery |
+| Use `any` for transformations | Use destructuring + `Omit<>`        |
 
 ---
 
