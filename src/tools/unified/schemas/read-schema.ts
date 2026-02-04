@@ -172,7 +172,8 @@ const ExportFieldEnum = z.enum([
 // Query schema definition
 const QuerySchema = z.object({
   type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export']),
-  filters: FilterSchema.optional(),
+  // Handle MCP Bridge Type Coercion: LLMs may stringify nested objects
+  filters: coerceObject(FilterSchema).optional(),
   fields: z.array(TaskFieldEnum).optional(),
   sort: z.array(SortSchema).optional(),
   // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings

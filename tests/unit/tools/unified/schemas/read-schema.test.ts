@@ -76,4 +76,50 @@ describe('ReadSchema', () => {
       expect(result.data.query.limit).toBe(100);
     }
   });
+
+  it('should coerce stringified filters JSON to object', () => {
+    // LLMs may accidentally stringify nested objects when calling MCP tools
+    const input = {
+      query: {
+        type: 'tasks',
+        filters: '{"name": {"contains": "macOS"}}',
+      },
+    };
+
+    const result = ReadSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.query.filters).toEqual({ name: { contains: 'macOS' } });
+    }
+  });
+
+  it('should coerce stringified filters with complex nested structure', () => {
+    const input = {
+      query: {
+        type: 'tasks',
+        filters: '{"tags": {"any": ["work", "urgent"]}, "dueDate": {"before": "2025-01-31"}}',
+      },
+    };
+
+    const result = ReadSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.query.filters).toEqual({
+        tags: { any: ['work', 'urgent'] },
+        dueDate: { before: '2025-01-31' },
+      });
+    }
+  });
+
+  it('should reject invalid stringified filters JSON', () => {
+    const input = {
+      query: {
+        type: 'tasks',
+        filters: 'not valid json',
+      },
+    };
+
+    const result = ReadSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
 });
