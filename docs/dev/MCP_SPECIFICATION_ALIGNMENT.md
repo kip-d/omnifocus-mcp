@@ -1,6 +1,6 @@
 # OmniFocus MCP - MCP Specification Alignment Report
 
-**MCP Spec Version**: 2025-06-18 **OmniFocus MCP Version**: 2.2.0 **Last Updated**: October 2025 **Status**: ✅ **FULLY
+**MCP Spec Version**: 2025-06-18 **OmniFocus MCP Version**: 3.0.0 **Last Updated**: February 2026 **Status**: ✅ **FULLY
 COMPLIANT**
 
 ---
@@ -29,32 +29,22 @@ security principles are enforced, and best practices are followed.
 | Component             | Status | Implementation                             |
 | --------------------- | ------ | ------------------------------------------ |
 | Server initialization | ✅     | `new Server()` with proper config          |
-| Tool registration     | ✅     | 17 consolidated tools registered           |
+| Tool registration     | ✅     | 4 unified tools registered                 |
 | Prompt support        | ✅     | 5 GTD prompts registered                   |
 | Resource handling     | ✅     | Not required but available via export tool |
 | Error handling        | ✅     | McpError with proper error codes           |
 
 ### 3. Tool Implementation ✅
 
-**17 Tools Implemented:**
+**4 Unified Tools (v3.0.0 API):**
 
-- ✅ **tasks** - Query/search/manage tasks
-- ✅ **manage_task** - Create/update/complete/delete
-- ✅ **projects** - Project operations
-- ✅ **folders** - Folder management
-- ✅ **tags** - Tag operations with hierarchy
-- ✅ **recurring_tasks** - Recurrence analysis
-- ✅ **perspectives** - Perspective querying
-- ✅ **productivity_stats** - GTD analytics
-- ✅ **task_velocity** - Completion trends
-- ✅ **analyze_overdue** - Bottleneck detection
-- ✅ **workflow_analysis** - Deep workflow insights
-- ✅ **analyze_patterns** - Pattern detection
-- ✅ **manage_reviews** - Review scheduling
-- ✅ **batch_create** - Batch operations
-- ✅ **export** - Data export (JSON/CSV/Markdown)
-- ✅ **parse_meeting_notes** - Smart capture
+- ✅ **omnifocus_read** - Query tasks, projects, tags, perspectives, folders, export
+- ✅ **omnifocus_write** - Create/update/complete/delete tasks and projects, batch operations
+- ✅ **omnifocus_analyze** - Productivity stats, velocity, overdue analysis, patterns, workflows, reviews
 - ✅ **system** - Version & diagnostics
+
+The v3.0.0 unified API consolidates 17 legacy tools into 4 discriminated-union-based tools, reducing context window
+usage by 76% while maintaining full functionality.
 
 **All tools implement:**
 
@@ -91,7 +81,7 @@ if (!result.hasPermission) {
 
 ```typescript
 capabilities: {
-  tools: {},        // All 17 tools available
+  tools: {},        // 4 unified tools available
   prompts: {},      // 5 GTD prompts available
 }
 ```
@@ -239,16 +229,16 @@ setPendingOperationsTracker(pendingOperations);
 
 ## Specification Alignment Score
 
-| Category            | Score | Details                        |
-| ------------------- | ----- | ------------------------------ |
-| Core Protocol       | 100%  | All JSON-RPC requirements met  |
-| Tool Implementation | 100%  | 17 tools with full schemas     |
-| Security            | 100%  | All 4 principles enforced      |
-| Error Handling      | 100%  | Proper error codes & messages  |
-| Response Format     | 100%  | Standard MCP format throughout |
-| Input Validation    | 100%  | Zod schemas with coercion      |
-| Lifecycle           | 100%  | Proper startup & shutdown      |
-| Performance         | 100%  | Caching & optimization         |
+| Category            | Score | Details                                   |
+| ------------------- | ----- | ----------------------------------------- |
+| Core Protocol       | 100%  | All JSON-RPC requirements met             |
+| Tool Implementation | 100%  | 4 unified tools with discriminated unions |
+| Security            | 100%  | All 4 principles enforced                 |
+| Error Handling      | 100%  | Proper error codes & messages             |
+| Response Format     | 100%  | Standard MCP format throughout            |
+| Input Validation    | 100%  | Zod schemas with coercion                 |
+| Lifecycle           | 100%  | Proper startup & shutdown                 |
+| Performance         | 100%  | Caching & optimization                    |
 
 **Overall**: ✅ **100% - FULLY COMPLIANT**
 
@@ -355,7 +345,7 @@ Your implementation has been tested against:
 ### Monitor in Future Releases
 
 1. **MCP SDK Updates**: Watch for @modelcontextprotocol/sdk updates
-   - Current: v1.13.0
+   - Current: v1.25.1
    - Latest: Check `npm view @modelcontextprotocol/sdk version`
 
 2. **Spec Evolution**: Monitor for 2025-Q3+ specification updates
@@ -391,4 +381,4 @@ Caching, performance optimization, async handling
 
 ---
 
-_Generated: October 2025_ _MCP Specification Version: 2025-06-18_ _OmniFocus MCP Version: 2.2.0_
+_Updated: February 2026_ _MCP Specification Version: 2025-06-18_ _OmniFocus MCP Version: 3.0.0_
