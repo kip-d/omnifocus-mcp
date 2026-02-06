@@ -946,7 +946,7 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
               });
             }
             try {
-              moveTasks([task], parentTask);
+              moveTasks([task], parentTask.ending);
             } catch (e) {
               return JSON.stringify({
                 error: true,

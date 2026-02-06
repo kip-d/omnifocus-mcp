@@ -283,6 +283,23 @@ describe('buildUpdateTaskScript', () => {
 
     expect(result.script).toContain('inbox');
   });
+
+  it('handles parentTaskId update using parentTask.ending for subtask relationship', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
+      parentTaskId: 'parent-456',
+    });
+
+    expect(result.script).toContain('parent-456');
+    expect(result.script).toContain('parentTask.ending');
+  });
+
+  it('handles parentTaskId: null to unparent using .beginning', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
+      parentTaskId: null,
+    });
+
+    expect(result.script).toContain('.beginning');
+  });
 });
 
 describe('buildUpdateProjectScript', () => {
