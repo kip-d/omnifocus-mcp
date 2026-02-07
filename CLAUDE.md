@@ -191,6 +191,11 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 - `src/tools/` - MCP tools
 - `src/cache/` - TTL-based caching (30s tasks, 5m projects, 1h analytics)
 
+## Git Workflow
+
+Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
+multiple machines or sessions).
+
 ## Debugging Tips
 
 - **Server won't start?** Run `bun run build`
