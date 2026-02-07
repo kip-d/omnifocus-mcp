@@ -109,9 +109,10 @@ const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 
 **Function:** `bridgeSetTags()` in `src/omnifocus/scripts/shared/minimal-tag-bridge.ts:41`
 
-## Development Rules
+## Code & Writing Standards
 
-- **TypeScript only** - Never create `.js` files
+- **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
+- **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
 - **Build before running:** `bun run build`
 - **Run integration tests** before considering features complete
 
@@ -196,7 +197,10 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 Run `git pull --rebase` before `git push` to avoid failures from diverged remote branches (common when work spans
 multiple machines or sessions).
 
-## Debugging Tips
+## Debugging & Investigation
+
+When diagnosing issues, analyze carefully before suggesting a cause. Do not guess (e.g., "cache warming") or suggest
+confidently wrong solutions (e.g., "/verbose command"). If uncertain, say so and investigate systematically.
 
 - **Server won't start?** Run `bun run build`
 - **Script timeouts?** Check OmniFocus not blocked by dialogs
