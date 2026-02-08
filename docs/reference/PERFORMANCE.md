@@ -15,14 +15,14 @@ The server has been optimized to handle large OmniFocus databases (2000+ tasks) 
 
 The server implements intelligent caching with different TTLs based on data volatility:
 
-| Data Type | TTL        | Rationale                                 |
-| --------- | ---------- | ----------------------------------------- |
-| Tasks     | 30 seconds | ↓ Reduced for faster GTD inbox processing |
-| Projects  | 5 minutes  | ↓ Reduced for weekly review workflows     |
-| Folders   | 10 minutes | Stable hierarchy                          |
-| Tags      | 10 minutes | ↓ Reduced for active tag assignments      |
-| Reviews   | 3 minutes  | ↓ Reduced for GTD review workflow         |
-| Analytics | 1 hour     | Expensive computations                    |
+| Data Type | TTL        | Rationale                             |
+| --------- | ---------- | ------------------------------------- |
+| Tasks     | 5 minutes  | Balanced freshness with cache warming |
+| Projects  | 5 minutes  | Reduced for weekly review workflows   |
+| Folders   | 10 minutes | Stable hierarchy                      |
+| Tags      | 10 minutes | Reduced for active tag assignments    |
+| Reviews   | 3 minutes  | Reduced for GTD review workflow       |
+| Analytics | 1 hour     | Expensive computations                |
 
 Cache is automatically invalidated on write operations to ensure data consistency.
 
@@ -65,27 +65,18 @@ stable queries.
 
 ### The skipAnalysis Parameter
 
-The `list_tasks` tool includes a `skipAnalysis` parameter that can improve performance by ~30%:
+The `omnifocus_read` tool supports a `skipAnalysis` parameter that can improve performance by ~30%:
 
 ```javascript
 // Fast query - skip recurring task analysis
-{
-  "tool": "list_tasks",
-  "arguments": {
-    "completed": false,
-    "limit": 50,
-    "skipAnalysis": true
-  }
-}
+omnifocus_read({
+  query: { type: 'tasks', filters: { status: 'active' }, limit: 50, skipAnalysis: true },
+});
 
 // Normal query - includes full recurring task analysis
-{
-  "tool": "list_tasks",
-  "arguments": {
-    "completed": false,
-    "limit": 50
-  }
-}
+omnifocus_read({
+  query: { type: 'tasks', filters: { status: 'active' }, limit: 50 },
+});
 ```
 
 **Performance metrics:**
@@ -96,49 +87,33 @@ The `list_tasks` tool includes a `skipAnalysis` parameter that can improve perfo
 
 ### Tag Performance Modes
 
-The `list_tags` tool offers three performance modes:
+Tag queries via `omnifocus_read` offer different performance modes:
 
 1. **Ultra-fast (namesOnly)**
 
    ```javascript
-   {
-     "tool": "list_tags",
-     "arguments": {
-       "namesOnly": true  // ~130ms for 100+ tags
-     }
-   }
+   omnifocus_read({ query: { type: 'tags', namesOnly: true } }); // ~130ms for 100+ tags
    ```
 
 2. **Fast Mode (no hierarchy)**
 
    ```javascript
-   {
-     "tool": "list_tags",
-     "arguments": {
-       "fastMode": true,      // ~270ms
-       "includeEmpty": false
-     }
-   }
+   omnifocus_read({ query: { type: 'tags', fastMode: true, includeEmpty: false } }); // ~270ms
    ```
 
 3. **Full Mode (with usage stats)**
+
    ```javascript
-   {
-     "tool": "list_tags",
-     "arguments": {
-       "includeUsageStats": true,  // ~3s - use sparingly
-       "sortBy": "usage"
-     }
-   }
+   omnifocus_read({ query: { type: 'tags', includeUsageStats: true } }); // ~3s - use sparingly
    ```
 
 ## Optimized Defaults
 
 Tools have been optimized with sensible defaults to prevent timeouts:
 
-- `todays_agenda`: Limit reduced from 200 to 50
-- `list_tasks`: Default limit of 100 (max 1000)
-- `includeDetails`: Defaults to false for agenda queries
+- `mode: "today"`: Default limit of 50
+- Task queries: Default limit of 25 (max 200)
+- Count queries: Use `countOnly: true` for 33x faster counts
 
 ## Large Database Handling
 
@@ -147,29 +122,18 @@ For databases with 2000+ tasks:
 1. **Use pagination**:
 
    ```javascript
-   {
-     "tool": "list_tasks",
-     "arguments": {
-       "limit": 100,
-       "offset": 0
-     }
-   }
+   omnifocus_read({ query: { type: 'tasks', limit: 100 } });
    ```
 
 2. **Apply filters** to reduce result sets:
    - Filter by project, tags, or date ranges
-   - Use `completed: false` to exclude completed tasks
-   - Use `available: true` to show only actionable tasks
+   - Use `status: "active"` to exclude completed tasks
+   - Use `mode: "today"` or `mode: "upcoming"` for time-scoped views
 
 3. **Use count-only queries** when you don't need task data:
+
    ```javascript
-   {
-     "tool": "get_task_count",
-     "arguments": {
-       "completed": false,
-       "projectId": "xyz789"
-     }
-   }
+   omnifocus_read({ query: { type: 'tasks', filters: { status: 'active' }, countOnly: true } });
    ```
 
 ## Performance Monitoring
@@ -193,54 +157,41 @@ When working with tags in OmniFocus, choose the right tool and options based on 
 
 ### Quick Decision Tree
 
-1. **Need only tags with active tasks?** → Use `tags({ operation: 'active' })`
-   - Returns: Simple array of tag names
-   - Performance: Very fast (processes only incomplete tasks)
-   - Best for: GTD workflows, filtering, autocomplete
-
-2. **Need just tag names for UI/autocomplete?** → Use `tags({ operation: 'list', namesOnly: true })`
+1. **Need just tag names?** → Use `omnifocus_read({ query: { type: "tags", namesOnly: true } })`
    - Returns: Array of tag names only
    - Performance: ~130ms for 100+ tags
    - Best for: Dropdowns, autocomplete, quick lists
 
-3. **Need tag IDs but not hierarchy?** → Use `tags({ operation: 'list', fastMode: true })`
+2. **Need tag IDs but not hierarchy?** → Use `omnifocus_read({ query: { type: "tags", fastMode: true } })`
    - Returns: Tags with IDs and names only
    - Performance: ~270ms for 100+ tags
    - Best for: Basic tag management, simple listings
 
-4. **Need full tag information?** → Use `tags({ operation: 'list' })` (default)
+3. **Need full tag information?** → Use `omnifocus_read({ query: { type: "tags" } })` (default)
    - Returns: Complete tag data with hierarchy
    - Performance: ~700ms for 100+ tags
    - Best for: Tag organization, full analysis
 
 ### Tag Performance Comparison
 
-| Mode        | Method                          | Speed   | Returns              |
-| ----------- | ------------------------------- | ------- | -------------------- |
-| Active only | `tags({ operation: 'active' })` | Fastest | Tag names with tasks |
-| Names only  | `namesOnly: true`               | ~130ms  | Just tag names       |
-| Fast mode   | `fastMode: true`                | ~270ms  | IDs + names          |
-| Full mode   | (default)                       | ~700ms  | Everything           |
-| With stats  | `includeUsageStats: true`       | ~3s+    | Full + task counts   |
+| Mode       | Query                                       | Speed  | Returns        |
+| ---------- | ------------------------------------------- | ------ | -------------- |
+| Names only | `{ type: "tags", namesOnly: true }`         | ~130ms | Just tag names |
+| Fast mode  | `{ type: "tags", fastMode: true }`          | ~270ms | IDs + names    |
+| Full mode  | `{ type: "tags" }`                          | ~700ms | Everything     |
+| With stats | `{ type: "tags", includeUsageStats: true }` | ~3s+   | Full + counts  |
 
 ### Tag Usage Examples
 
 ```javascript
-// For task creation/filtering
-tags({ operation: 'active' }); // Only shows relevant tags
-
 // For quick tag lists
-tags({ operation: 'list', namesOnly: true }); // Dropdown lists
+omnifocus_read({ query: { type: 'tags', namesOnly: true } });
 
 // For tag management
-tags({ operation: 'list', fastMode: true }); // IDs for operations
+omnifocus_read({ query: { type: 'tags', fastMode: true } });
 
 // For tag analysis
-tags({
-  operation: 'list',
-  includeUsageStats: true,
-  includeEmpty: false,
-}); // Full hierarchy and usage
+omnifocus_read({ query: { type: 'tags', includeUsageStats: true, includeEmpty: false } });
 ```
 
 **Tips**: Users with 100+ tags benefit significantly from these optimizations. Default to performance modes unless you

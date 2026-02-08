@@ -58,14 +58,14 @@ The `parse_meeting_notes` tool:
 ### Direct Creation
 
 ```javascript
-// Format for batch_create
+// Format for batch creation
 {
   input: "...",
   returnFormat: "batch_ready"
 }
 
-// Then use batch_create
-batch_create({ items: result.batchItems })
+// Then use omnifocus_write with batch mutation
+omnifocus_write({ mutation: { operation: "batch", target: "task", operations: result.batchItems } })
 ```
 
 ## Use Cases
@@ -153,14 +153,14 @@ also ask Bob about timeline
 
 ## Natural Language Date Parsing
 
-| Input | Result |
-|-------|--------|
-| `today` | current date |
-| `tomorrow` | next day |
-| `Monday`, `Tuesday`, etc. | next occurrence |
-| `next week` | +7 days |
-| `this week` / `end of week` | next Friday |
-| `end of month` | last day of month |
+| Input                       | Result            |
+| --------------------------- | ----------------- |
+| `today`                     | current date      |
+| `tomorrow`                  | next day          |
+| `Monday`, `Tuesday`, etc.   | next occurrence   |
+| `next week`                 | +7 days           |
+| `this week` / `end of week` | next Friday       |
+| `end of month`              | last day of month |
 
 **Date phrases:** "by Friday" → due date, "after Monday" → defer date, "before end of week" → due date - 1 day
 
@@ -226,7 +226,7 @@ Website Redesign project:
 
 Check `needsReview` in summary for low-confidence items.
 
-## Integration with batch_create
+## Integration with Batch Operations
 
 ```javascript
 // Step 1: Extract
@@ -236,9 +236,12 @@ const result = await parse_meeting_notes({
 });
 
 // Step 2: Create (one call for everything)
-await batch_create({
-  items: result.batchItems,
-  atomicOperation: true,
+await omnifocus_write({
+  mutation: {
+    operation: 'batch',
+    target: 'task',
+    operations: result.batchItems,
+  },
 });
 ```
 
@@ -247,6 +250,7 @@ await batch_create({
 ### 1. Structure Your Notes
 
 **Clear:**
+
 ```
 Action Items:
 - Send proposal by Friday
@@ -254,6 +258,7 @@ Action Items:
 ```
 
 **Vague:**
+
 ```
 We should probably send the proposal sometime soon...
 ```
@@ -371,7 +376,7 @@ for (const meeting of meetings) {
   const result = await parse_meeting_notes({ input: meeting, returnFormat: 'batch_ready' });
   allItems.push(...result.batchItems);
 }
-await batch_create({ items: allItems });
+await omnifocus_write({ mutation: { operation: 'batch', target: 'task', operations: allItems } });
 ```
 
 ### Match to Existing Projects
@@ -394,7 +399,7 @@ console.log(preview.summary);
 
 // 2. Create if good
 const batch = await parse_meeting_notes({ input: '...', returnFormat: 'batch_ready' });
-await batch_create({ items: batch.batchItems });
+await omnifocus_write({ mutation: { operation: 'batch', target: 'task', operations: batch.batchItems } });
 ```
 
 ## Limitations
@@ -408,15 +413,15 @@ await batch_create({ items: batch.batchItems });
 
 ## Troubleshooting
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| No tasks extracted | No action verbs | Add: Send, Call, Review, Update |
-| Wrong tags | Keyword matching imperfect | Review in preview mode |
-| Dates not parsed | Unsupported format | Use: today, Friday, next week |
-| Tasks not grouped | No project indicators | Use "Project:" or headers |
+| Problem            | Cause                      | Fix                             |
+| ------------------ | -------------------------- | ------------------------------- |
+| No tasks extracted | No action verbs            | Add: Send, Call, Review, Update |
+| Wrong tags         | Keyword matching imperfect | Review in preview mode          |
+| Dates not parsed   | Unsupported format         | Use: today, Friday, next week   |
+| Tasks not grouped  | No project indicators      | Use "Project:" or headers       |
 
 ## See Also
 
-- [batch_create documentation](BATCH_OPERATIONS.md) - For creating items in bulk
-- [API Reference](API-REFERENCE-LLM.md) - Complete parameter list
-- [GTD Workflow Manual](GTD-WORKFLOW-MANUAL.md) - Inbox processing workflows
+- [Batch Operations](../reference/BATCH_OPERATIONS.md) - For creating items in bulk
+- [API Reference](../api/API-COMPACT-UNIFIED.md) - Complete unified API reference
+- [GTD Workflow Manual](../reference/GTD-WORKFLOW-MANUAL.md) - Inbox processing workflows

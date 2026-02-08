@@ -101,9 +101,8 @@ For users who prefer copy/paste templates or need offline access, see the
 **[Manual Templates Documentation](../../prompts/README.md)** which contains:
 
 - **[Manual Templates](../../prompts/)**: Ready-to-copy Markdown files
-- **[Testing Prompts](../../prompts/test-v2-comprehensive.md)**: Comprehensive validation workflows
+- **[Testing Prompts](../../prompts/TESTING_PROMPT.md)**: Comprehensive v3 validation workflows
 - **[Daily Use Templates](../../prompts/daily-gtd-workflow.md)**: GTD workflows and productivity patterns
-- **[Feature Testing](../../prompts/v2-features-test.md)**: V2-specific functionality validation
 
 ### Choosing Between Approaches
 
@@ -114,7 +113,7 @@ For users who prefer copy/paste templates or need offline access, see the
 
 Both approaches:
 
-- Use the same underlying V2 tools
+- Use the same underlying v3 unified API tools
 - Provide similar functionality through different interfaces
 - Are maintained in parallel for different user needs
 

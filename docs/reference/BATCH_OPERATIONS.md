@@ -335,8 +335,8 @@ Create multi-level task hierarchies:
 ## Limitations
 
 - **Max items per batch:** 100 items
-- **No updates:** Only creates new items (use `manage_task` for updates)
-- **No folder assignment:** Projects created in root (use `projects` tool to move)
+- **No updates:** Only creates new items (use `omnifocus_write` with `update` mutation for updates)
+- **No folder assignment:** Projects created in root (specify `folder` in project data to assign)
 - **Sequential order required:** Dependencies must respect parent-child relationships
 
 ## Error Codes
@@ -399,6 +399,6 @@ Create multi-level task hierarchies:
 
 ## See Also
 
-- [OmniFocus Scripts Documentation](./OMNIFOCUS_SCRIPTS.md)
-- [Architecture Overview](./ARCHITECTURE.md)
-- [Testing Guide](./TESTING_TOOLS.md)
+- [Architecture Overview](../dev/ARCHITECTURE.md)
+- [Developer Guide](../dev/DEVELOPER_GUIDE.md)
+- [API Reference](../api/API-COMPACT-UNIFIED.md)
