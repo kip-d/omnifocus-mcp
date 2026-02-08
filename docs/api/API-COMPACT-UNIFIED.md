@@ -138,7 +138,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 {query: {type: "export", exportType: "projects", format: "json", includeStats: true}}
 ```
 
-**Routes to:** tasks, projects, tags, perspectives, folders, export tools
+**Internal routing:** QueryTasksTool, ProjectsTool, TagsTool, PerspectivesTool, FoldersTool, ExportTool
 
 ---
 
@@ -276,7 +276,7 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 }
 ```
 
-**Routes to:** manage_task, batch_create tools
+**Internal routing:** ManageTaskTool, BatchCreateTool, ProjectsTool, TagsTool
 
 ---
 
@@ -413,8 +413,8 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 }
 ```
 
-**Routes to:** productivity_stats, task_velocity, analyze_overdue, analyze_patterns, workflow_analysis, recurring_tasks,
-parse_meeting_notes, manage_reviews tools
+**Internal routing:** ProductivityStatsTool, TaskVelocityTool, OverdueAnalysisTool, PatternAnalysisTool,
+WorkflowAnalysisTool, RecurringTasksTool, ParseMeetingNotesTool, ManageReviewsTool
 
 ---
 
