@@ -56,7 +56,7 @@ Restart Claude Desktop completely.
 - **Cline**:
   `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 
-See [Configuration Details](./claude-desktop-config.md).
+See [Configuration Details](../claude-desktop-config.md).
 
 ### Step 3: Grant Permissions
 
@@ -202,7 +202,7 @@ Try these if you use Getting Things Done:
 - "Guide me through a weekly review"
 - "What does GTD recommend for this task?"
 
-See [GTD Workflow Guide](./GTD-WORKFLOW-MANUAL.md).
+See [GTD Workflow Guide](../reference/GTD-WORKFLOW-MANUAL.md).
 
 ### Built-in Prompts
 
@@ -230,13 +230,13 @@ See **[HTTP Transport Guide](./HTTP-TRANSPORT.md)** for authentication, VPN setu
 - **Analytics**: "Show my productivity stats this week"
 - **Perspectives**: "Show my 'Evening Review' perspective"
 
-See [API Reference for LLMs](../api/API-REFERENCE-LLM.md).
+See [API Reference](../api/API-COMPACT-UNIFIED.md).
 
 ## For Developers
 
-- **[API Reference](./API-REFERENCE-V2.md)** - Tool reference with JSON examples
-- **[Architecture](./ARCHITECTURE.md)** - Implementation details
-- **[Testing Guide](./REAL_LLM_TESTING.md)** - Testing with real AI models
+- **[API Reference](../api/API-COMPACT-UNIFIED.md)** - Unified API schemas with JSON examples
+- **[Architecture](../dev/ARCHITECTURE.md)** - Implementation details
+- **[Testing Guide](../operational/REAL_LLM_TESTING.md)** - Testing with real AI models
 
 ## Privacy
 

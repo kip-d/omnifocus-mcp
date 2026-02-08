@@ -113,7 +113,7 @@ const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 
 - **TypeScript only** - Never create `.js` files. Follow existing patterns in the codebase.
 - **Markdown for documentation** - Apply Elements of Style: tables over prose, omit needless words, active voice.
-- **Build before running:** `bun run build`
+- **Build before running:** `npm run build`
 - **Run integration tests** before considering features complete
 
 ## Documentation
@@ -146,7 +146,7 @@ Convert natural language ("tomorrow") to `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` befo
 ## Script Size Limits
 
 - **JXA Direct:** 523KB limit
-- **OmniJS Bridge:** 255KB limit
+- **OmniJS Bridge:** 261KB limit
 - **Current largest script:** 31KB (6% of limit)
 
 **See:** `/docs/dev/SCRIPT_SIZE_LIMITS.md`
@@ -167,8 +167,8 @@ process.stdin.on('end', async () => {
 
 ```bash
 # Build & Test
-bun run build                    # Required before running
-npm run test:unit                # ~2 seconds, 1075 tests
+npm run build                    # Required before running
+npm run test:unit                # ~2 seconds, 1098 tests
 npm run test:integration         # ~2 minutes, 71 tests (use npm, not bun)
 
 # MCP Testing
@@ -202,6 +202,6 @@ multiple machines or sessions).
 When diagnosing issues, analyze carefully before suggesting a cause. Do not guess (e.g., "cache warming") or suggest
 confidently wrong solutions (e.g., "/verbose command"). If uncertain, say so and investigate systematically.
 
-- **Server won't start?** Run `bun run build`
+- **Server won't start?** Run `npm run build`
 - **Script timeouts?** Check OmniFocus not blocked by dialogs
 - **Graceful exit is NOT an error** - it's required MCP compliance

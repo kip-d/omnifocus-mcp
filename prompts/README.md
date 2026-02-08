@@ -34,15 +34,15 @@ prompt provides higher value per token.
 
 **Need help choosing? Here's a quick guide:**
 
-| I want to...                 | Use This Prompt                                        | Type            |
-| ---------------------------- | ------------------------------------------------------ | --------------- |
-| Add to Claude Desktop config | [OMNIFOCUS_GOTCHAS.md](./OMNIFOCUS_GOTCHAS.md)         | System Prompt   |
-| Test if everything works     | [test-v2-comprehensive.md](./test-v2-comprehensive.md) | Manual Template |
-| Start daily GTD routine      | [daily-gtd-workflow.md](./daily-gtd-workflow.md)       | Manual Template |
-| Do a weekly review           | Ask Claude: "Use the gtd_weekly_review prompt"         | MCP Prompt      |
-| Process my inbox             | Ask Claude: "Use the gtd_process_inbox prompt"         | MCP Prompt      |
-| Learn GTD principles         | Ask Claude: "Show me the gtd_principles prompt"        | MCP Prompt      |
-| Get quick commands reference | Ask Claude: "Use the quick_reference prompt"           | MCP Prompt      |
+| I want to...                 | Use This Prompt                                  | Type            |
+| ---------------------------- | ------------------------------------------------ | --------------- |
+| Add to Claude Desktop config | [OMNIFOCUS_GOTCHAS.md](./OMNIFOCUS_GOTCHAS.md)   | System Prompt   |
+| Test if everything works     | [TESTING_PROMPT.md](./TESTING_PROMPT.md)         | Manual Template |
+| Start daily GTD routine      | [daily-gtd-workflow.md](./daily-gtd-workflow.md) | Manual Template |
+| Do a weekly review           | Ask Claude: "Use the gtd_weekly_review prompt"   | MCP Prompt      |
+| Process my inbox             | Ask Claude: "Use the gtd_process_inbox prompt"   | MCP Prompt      |
+| Learn GTD principles         | Ask Claude: "Show me the gtd_principles prompt"  | MCP Prompt      |
+| Get quick commands reference | Ask Claude: "Use the quick_reference prompt"     | MCP Prompt      |
 
 **🆚 Manual Templates vs MCP Prompts:**
 
@@ -51,24 +51,14 @@ prompt provides higher value per token.
 
 ### 🧪 Testing & Verification
 
-#### [test-v2-comprehensive.md](./test-v2-comprehensive.md)
+#### [TESTING_PROMPT.md](./TESTING_PROMPT.md)
 
-Comprehensive test suite covering all V2 functionality. Use this to verify your installation is working correctly.
+Comprehensive test suite for the v3.0.0 unified API. Use this to verify your installation is working correctly.
 
-- Tests all CRUD operations
-- Validates advanced features
+- Tests all CRUD operations via `omnifocus_read` and `omnifocus_write`
+- Validates advanced features (batch, export, analytics)
 - Checks performance
-- Includes diagnostic commands
-
-#### [v2-features-test.md](./v2-features-test.md)
-
-Quick test of V2-specific improvements over V1.
-
-- Tag assignment during creation
-- Complex repeat rules
-- Task reparenting
-- Perspective queries
-- Summary-first responses
+- Includes diagnostic commands and cleanup
 
 ### 📅 Daily Use
 
@@ -95,9 +85,8 @@ Complete GTD (Getting Things Done) workflow for daily use.
 
 ### For Testing
 
-1. Start with `v2-features-test.md` for a quick health check
-2. Run `test-v2-comprehensive.md` for full validation
-3. Note any failures and check the troubleshooting section
+1. Run `TESTING_PROMPT.md` for comprehensive validation
+2. Note any failures and check the troubleshooting section
 
 ### For Daily Use
 
@@ -129,22 +118,15 @@ The v3.0.0 API consolidates everything into **4 unified tools**:
 
 ### If tools aren't working:
 
-1. Check version: Should be 2.0.0-beta.4 or higher
-2. Verify V2 mode: OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS should NOT be set
-3. Run diagnostics using the commands in test prompts
-4. Check Claude Desktop logs for errors
-
-### For V1 compatibility:
-
-- Set `OMNIFOCUS_MCP_ENABLE_LEGACY_TOOLS=true` to enable V1 tools
-- Both V1 and V2 tools will be available
-- V1 tools are frozen and won't receive updates
+1. Check version: Should be 3.0.0 or higher
+2. Run diagnostics: `system` tool with `{ query: { type: "system", operation: "diagnostics" } }`
+3. Check Claude Desktop logs for errors
 
 ## Creating Custom Prompts
 
 When creating your own prompts:
 
-1. Use natural language - V2 tools understand context
+1. Use natural language - the unified API tools understand context
 2. Specify dates clearly: "tomorrow at 2pm", "next Monday"
 3. Include validation steps to confirm operations worked
 4. Add placeholder {{variables}} for dynamic content
@@ -188,7 +170,7 @@ You can access these prompts by asking Claude to "use the [prompt_name] prompt":
 | **[Manual Templates](.)** (this directory)        | Beginners, customization, offline use | Copy/paste entire prompt into Claude         |
 | **[MCP Prompts](../src/prompts/)** (programmatic) | Advanced users, integrated workflows  | Ask Claude to "use the [prompt_name] prompt" |
 
-Both approaches use the same underlying V2 tools and provide similar functionality through different interfaces.
+Both approaches use the same underlying v3 unified API and provide similar functionality through different interfaces.
 
 ## Support
 

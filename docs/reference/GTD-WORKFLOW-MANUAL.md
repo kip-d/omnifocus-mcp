@@ -15,60 +15,59 @@ Here's how to conduct a GTD weekly review using the available tools:
 ### Step 1: Process Your Inbox
 
 ```
-Please check my OmniFocus inbox using list_tasks with inInbox: true
+Show me my OmniFocus inbox
 ```
+
+Uses `omnifocus_read` with `{ query: { type: "tasks", filters: { project: null } } }` (inbox = no project).
 
 ### Step 2: Review Completed Tasks
 
 ```
-Show me all tasks completed in the last 7 days using list_tasks with:
-- completed: true
-- limit: 100
-- sortBy: completionDate
-- sortOrder: desc
+Show me all tasks completed in the last 7 days
 ```
+
+Uses `omnifocus_read` with `{ query: { type: "tasks", filters: { status: "completed" }, limit: 100 } }`.
 
 ### Step 3: Identify Stale Projects
 
 ```
-List all active projects and show their task counts using list_projects with:
-- status: ["active"]
-- includeTaskCounts: true
-- sortBy: name
-
-For each project with 0 available tasks, these might be stale and need review.
+List all active projects with their task counts
 ```
+
+Uses `omnifocus_read` with `{ query: { type: "projects", filters: { status: "active" } } }`. Projects with 0 available
+tasks may be stale and need review.
 
 ### Step 4: Review Project Health
 
 ```
-For projects that seem stale, get more details using list_tasks with:
-- projectId: [the project's ID]
-- includeCompleted: false
-- limit: 10
-
-This helps determine if the project needs next actions defined.
+Show me the tasks in [project name]
 ```
+
+Uses `omnifocus_read` with `{ query: { type: "tasks", filters: { project: "Project Name" } } }`.
 
 ### Step 5: Check Overdue Tasks
 
 ```
-Show me all overdue tasks using get_overdue_tasks with limit: 50
+Show me all overdue tasks
 ```
+
+Uses `omnifocus_analyze` with `{ analysis: { type: "overdue_analysis" } }`.
 
 ### Step 6: Review Upcoming Week
 
 ```
-Show me tasks for the next 7 days using get_upcoming_tasks with:
-- days: 7
-- includeToday: true
+Show me tasks due in the next 7 days
 ```
+
+Uses `omnifocus_read` with `{ query: { type: "tasks", mode: "upcoming" } }`.
 
 ### Step 7: Analyze Productivity
 
 ```
-Show me my productivity stats using get_productivity_stats
+Show me my productivity stats
 ```
+
+Uses `omnifocus_analyze` with `{ analysis: { type: "productivity_stats" } }`.
 
 ## Inbox Processing Workflow
 
@@ -122,7 +121,7 @@ If you prefer manual control, you can process items yourself:
    - If YES → Continue
 
 2. **Will it take less than 2 minutes?**
-   - If YES → Do it now using manage_task (complete)
+   - If YES → Do it now, then complete the task via `omnifocus_write` (complete)
    - If NO → Continue
 
 3. **Am I the right person?**
@@ -130,36 +129,34 @@ If you prefer manual control, you can process items yourself:
    - If YES → Continue
 
 4. **Is it a project or single action?**
-   - Single action → Move to appropriate project using manage_task (update)
-   - Project → Use batch_create to create project with next actions
+   - Single action → Move to appropriate project via `omnifocus_write` (update)
+   - Project → Use `omnifocus_write` batch to create project with next actions
 
 #### Example Commands:
 
 ```
 # Get inbox items
-Show me my inbox items with: mode="inbox", limit=10
+Show me my inbox items
 
 # Delete non-actionable item
-Use manage_task to delete task [taskId]
+Delete task [taskId]
 
 # Quick 2-minute task
-Use manage_task to complete task [taskId]
+Complete task [taskId]
 
 # Delegate task
-Use manage_task to update task [taskId] with tags: ["@waiting-for", "delegated-to-john"]
+Update task [taskId] with tags: ["@waiting-for", "delegated-to-john"]
 
 # Move to project with context
-Use manage_task to update task [taskId] with:
-- projectId: [targetProjectId]
-- tags: ["@computer", "@15min"]
+Update task [taskId] to project [projectName] with tags: ["@computer", "@15min"]
 
-# Create project for multi-step item (using batch_create)
-Use batch_create with:
-  items:
-    - tempId: "proj1", type: "project", name: "Project Name"
-    - tempId: "task1", parentTempId: "proj1", type: "task", name: "First action"
-    - tempId: "task2", parentTempId: "proj1", type: "task", name: "Second action"
+# Create project for multi-step item (batch operation)
+Create a project "Project Name" with tasks:
+  1. First action
+  2. Second action
 ```
+
+All write operations use `omnifocus_write` with the appropriate mutation.
 
 ### Recommended Context Tags
 

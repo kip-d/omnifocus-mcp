@@ -1,4 +1,4 @@
-# Daily GTD Workflow with OmniFocus V2
+# Daily GTD Workflow with OmniFocus MCP
 
 Use this prompt for your daily Getting Things Done workflow with OmniFocus.
 
@@ -75,4 +75,4 @@ For weekly reviews, also ask:
 - Review projects weekly to keep them active
 - Use defer dates to hide tasks until they're relevant
 
-This workflow helps you maintain GTD best practices while leveraging the power of V2 tools!
+This workflow helps you maintain GTD best practices while leveraging the OmniFocus MCP server.

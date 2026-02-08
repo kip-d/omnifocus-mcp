@@ -51,13 +51,12 @@ See [PERMISSIONS.md](PERMISSIONS.md).
 3. Use specific filters
 4. Large databases slow everything—performance scales with task count
 
-#### todays_agenda slow
+#### Today's tasks slow
 
-Optimized in v1.5.0+. If still slow:
+If slow with large databases:
 
 - Use `limit: 25`
-- Set `includeDetails: false`
-- Try `list_tasks` with date filters
+- Use `omnifocus_read` with `{ query: { type: "tasks", mode: "today", limit: 25 } }`
 
 ## Data Issues
 
@@ -75,10 +74,10 @@ Fixed in v1.4.0. Update to latest version.
 
 **Claude Desktop bug**: Extracts numbers from alphanumeric IDs. ID `"az5Ieo4ip7K"` becomes `"547"`.
 
-**Fix**: Get fresh IDs via `list_projects`:
+**Fix**: Get fresh IDs via `omnifocus_read`:
 
 ```javascript
-{ "tool": "list_projects", "arguments": { "search": "project name" } }
+{ "tool": "omnifocus_read", "arguments": { "query": { "type": "projects", "filters": { "status": "active" } } } }
 ```
 
 Use the full alphanumeric ID from results.
@@ -88,18 +87,19 @@ Use the full alphanumeric ID from results.
 Tag assignment during creation now works:
 
 ```javascript
-manage_task({
-  operation: 'create',
-  name: 'My Task',
-  tags: ['work', 'urgent'], // Works!
+omnifocus_write({
+  mutation: {
+    operation: 'create',
+    target: 'task',
+    data: { name: 'My Task', tags: ['work', 'urgent'] }, // Works!
+  },
 });
 ```
 
-See [JXA Limitations](JXA-LIMITATIONS-AND-WORKAROUNDS.md) for details.
-
 #### Project Movement Issues
 
-Moving tasks between projects may recreate the task with a new ID. Properties preserved; ID changes. Check `result.note` for recreation notices.
+Moving tasks between projects may recreate the task with a new ID. Properties preserved; ID changes. Check `result.note`
+for recreation notices.
 
 ## MCP-Specific Issues
 
@@ -107,7 +107,7 @@ Moving tasks between projects may recreate the task with a new ID. Properties pr
 
 - **Claude Desktop**: Click "+" → "Add from omnifocus"
 - **Other clients**: Check MCP prompt support
-- **Fallback**: [GTD-WORKFLOW-MANUAL.md](GTD-WORKFLOW-MANUAL.md)
+- **Fallback**: [GTD-WORKFLOW-MANUAL.md](../reference/GTD-WORKFLOW-MANUAL.md)
 
 #### No progress indicators
 
@@ -138,7 +138,7 @@ node dist/index.js --version
 #### Test connection
 
 ```javascript
-{ "tool": "get_version_info", "arguments": {} }
+{ "tool": "system", "arguments": { "query": { "type": "system", "operation": "version" } } }
 ```
 
 ## Known Claude Desktop Bugs
@@ -160,35 +160,35 @@ Fixed in current version. If persists, rebuild: `npm run build`
 Claude Desktop converts string IDs to numbers. Always fetch fresh IDs:
 
 ```javascript
-const projects = await projects({ operation: 'list', search: 'project name' });
-const projectId = projects.data[0].id; // Use this
+omnifocus_read({ query: { type: 'projects', filters: { status: 'active' } } });
+// Use the full alphanumeric ID from results
 ```
 
 ### 3. Slow Performance (3+ seconds)
 
-1. **Wrong tool**: Use `tasks({ mode: 'today' })` not `mode: 'all'`
-2. **Missing flags**: Add `details: false`, `fastMode: true`
-3. **Too much data**: Use `limit` parameter, skip `includeUsageStats`
+1. **Wrong mode**: Use `mode: "today"` not querying all tasks
+2. **Too much data**: Use `limit` parameter
+3. **Count queries**: Use `countOnly: true` for "how many" questions (33x faster)
 
 ### 4. Permission Errors
 
 1. System Settings → Privacy & Security → Automation
 2. Enable OmniFocus for your app
-3. Test: `system({ operation: 'diagnostics' })`
+3. Test: `system({ query: { type: "system", operation: "diagnostics" } })`
 
 ### 5. Wrong Times on Tasks
 
 Use local time format:
 
 ```javascript
-'2024-01-15';       // Date only (defaults: due=5pm, defer=8am)
+'2024-01-15'; // Date only (defaults: due=5pm, defer=8am)
 '2024-01-15 14:30'; // Date+time (local)
 // Avoid: '2024-01-15T14:30:00Z' (timezone confusion)
 ```
 
 ### 6. Cache Issues
 
-**Durations**: Tasks 30s, Projects/Tags 5m, Analytics 1h
+**Durations**: Tasks 5m, Projects 5m, Tags 10m, Analytics 1h
 
 **Force refresh**: Change any parameter (e.g., `limit: 51` vs `limit: 50`)
 
@@ -198,11 +198,13 @@ Valid periods: `today`, `week`, `month`, `quarter`, `year`
 
 Invalid: `last_week`, `this_week`, `current_week`
 
-### 8. V2 Migration
+### 8. V3 Unified API
+
+All operations now use 4 tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 
 ```javascript
-// ❌ Old: create_task({ name: 'Task' })
-// ✅ New: manage_task({ operation: 'create', name: 'Task' })
+// ❌ Old v2: manage_task({ operation: 'create', name: 'Task' })
+// ✅ New v3: omnifocus_write({ mutation: { operation: 'create', target: 'task', data: { name: 'Task' } } })
 ```
 
 ### JXA whose() Constraints
@@ -220,7 +222,7 @@ If nothing works:
 2. Rebuild the server: `npm run build`
 3. Clear Claude Desktop config and re-add
 4. Grant permissions again in System Settings
-5. Test with simple query like `get_version_info`
+5. Test with simple query: `system` tool with `{ query: { type: "system", operation: "version" } }`
 
 ## Getting Help
 
