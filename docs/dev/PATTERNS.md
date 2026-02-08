@@ -201,20 +201,22 @@ if (data && 'ok' in data && 'data' in data) {
 
 **Symptom:** Test expects `response.data.id` but gets `undefined`.
 
-### Standard V2 Response
+### Standard Response (Internal Tool Output)
 
 ```typescript
 { success: boolean; data?: {...}; error?: {...}; metadata?: {...}; }
 ```
 
-### Tool-Specific Structures
+### Internal Tool Response Structures
 
-| Tool/Operation     | Structure                          |
-| ------------------ | ---------------------------------- |
-| manage_task create | `data.task.{taskId, name, ...}`    |
-| tasks query        | `data.tasks[].{taskId, name, ...}` |
-| tags manage        | `data.{tagName, action, ...}`      |
-| tags list          | `data.items[].{name, id, ...}`     |
+These are the response shapes from internal tools that the unified API wraps:
+
+| Internal Tool/Operation | Structure                          |
+| ----------------------- | ---------------------------------- |
+| ManageTaskTool create   | `data.task.{taskId, name, ...}`    |
+| tasks query             | `data.tasks[].{taskId, name, ...}` |
+| tags manage             | `data.{tagName, action, ...}`      |
+| tags list               | `data.items[].{name, id, ...}`     |
 
 **Diagnostic:**
 

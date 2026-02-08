@@ -18,15 +18,20 @@ This tool analyzes your tasks and projects to identify:
 
 ## Basic Usage
 
+Via the unified `omnifocus_analyze` tool:
+
 ```javascript
-// Analyze all patterns
-await mcp.analyze_patterns({
-  patterns: ['all'],
+// Analyze all patterns (default when no insights specified)
+omnifocus_analyze({
+  analysis: { type: 'pattern_analysis' },
 });
 
 // Analyze specific patterns
-await mcp.analyze_patterns({
-  patterns: ['duplicates', 'dormant_projects', 'tag_audit'],
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['duplicates', 'dormant_projects', 'tag_audit'] },
+  },
 });
 ```
 
@@ -39,13 +44,13 @@ Finds tasks with similar names that might be duplicates.
 **Example Request:**
 
 ```javascript
-await mcp.analyze_patterns({
-  patterns: ['duplicates'],
-  options: {
-    duplicate_similarity_threshold: '0.85', // 85% similarity
-    max_tasks: '500',
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['duplicates'] },
   },
 });
+// Internal tool defaults: 85% similarity threshold, max 3000 tasks
 ```
 
 **Example Response:**
@@ -79,12 +84,13 @@ Identifies projects that haven't been modified recently.
 **Example Request:**
 
 ```javascript
-await mcp.analyze_patterns({
-  patterns: ['dormant_projects'],
-  options: {
-    dormant_threshold_days: '60', // Projects inactive for 60+ days
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['dormant_projects'] },
   },
 });
+// Internal tool default: 90 days dormant threshold
 ```
 
 **Example Response:**
@@ -119,8 +125,11 @@ Analyzes tag usage patterns, finds underused tags, and identifies potential syno
 **Example Request:**
 
 ```javascript
-await mcp.analyze_patterns({
-  patterns: ['tag_audit'],
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['tag_audit'] },
+  },
 });
 ```
 
@@ -157,8 +166,11 @@ Analyzes overdue tasks and deadline clustering.
 **Example Request:**
 
 ```javascript
-await mcp.analyze_patterns({
-  patterns: ['deadline_health'],
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['deadline_health'] },
+  },
 });
 ```
 
@@ -279,14 +291,15 @@ Identifies projects that need review attention.
 
 ## Options
 
-All options are optional and have sensible defaults:
+The internal `PatternAnalysisTool` uses these defaults (not directly configurable via the unified API):
 
-| Option                           | Type   | Default | Description                                            |
-| -------------------------------- | ------ | ------- | ------------------------------------------------------ |
-| `dormant_threshold_days`         | string | "90"    | Days without activity to consider a project dormant    |
-| `duplicate_similarity_threshold` | string | "0.85"  | Similarity threshold for duplicate detection (0.5-1.0) |
-| `include_completed`              | string | "false" | Include completed tasks in analysis                    |
-| `max_tasks`                      | string | "3000"  | Maximum number of tasks to analyze                     |
+| Option                           | Default | Description                                            |
+| -------------------------------- | ------- | ------------------------------------------------------ |
+| `dormant_threshold_days`         | 90      | Days without activity to consider a project dormant    |
+| `duplicate_similarity_threshold` | 0.85    | Similarity threshold for duplicate detection (0.5-1.0) |
+| `include_completed`              | false   | Include completed tasks in analysis                    |
+| `max_tasks`                      | 3000    | Maximum number of tasks to analyze                     |
+| `wip_limit`                      | 5       | WIP limit threshold for analysis                       |
 
 ## Complete Examples
 
@@ -294,11 +307,12 @@ All options are optional and have sensible defaults:
 
 ```javascript
 // Get a comprehensive weekly review analysis
-const weeklyReview = await mcp.analyze_patterns({
-  patterns: ['dormant_projects', 'review_gaps', 'deadline_health', 'waiting_for'],
-  options: {
-    dormant_threshold_days: '30',
-    include_completed: 'false',
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: {
+      insights: ['dormant_projects', 'review_gaps', 'deadline_health', 'waiting_for'],
+    },
   },
 });
 
@@ -313,11 +327,12 @@ const weeklyReview = await mcp.analyze_patterns({
 
 ```javascript
 // Find inefficiencies and cleanup opportunities
-const cleanup = await mcp.analyze_patterns({
-  patterns: ['duplicates', 'tag_audit', 'next_actions'],
-  options: {
-    duplicate_similarity_threshold: '0.8',
-    max_tasks: '1000',
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: {
+      insights: ['duplicates', 'tag_audit', 'next_actions'],
+    },
   },
 });
 
@@ -330,14 +345,9 @@ const cleanup = await mcp.analyze_patterns({
 ### Project Health Check
 
 ```javascript
-// Analyze overall system health
-const healthCheck = await mcp.analyze_patterns({
-  patterns: ['all'],
-  options: {
-    dormant_threshold_days: '45',
-    include_completed: 'false',
-    max_tasks: '5000',
-  },
+// Analyze overall system health (default: all patterns)
+omnifocus_analyze({
+  analysis: { type: 'pattern_analysis' },
 });
 
 // Returns comprehensive analysis with health score
@@ -426,9 +436,9 @@ When taking over or auditing a system:
 3. **Regular Reviews**: Run pattern analysis weekly or monthly as part of your review process.
 
 4. **Act on Findings**: The tool identifies issues but doesn't fix them automatically. Use other MCP tools to:
-   - Update tasks (`update_task`)
-   - Complete projects (`projects` with operation: 'complete')
-   - Manage tags (`tags` with operation: 'manage')
+   - Update tasks via `omnifocus_write` with `operation: "update", target: "task"`
+   - Complete projects via `omnifocus_write` with `operation: "complete", target: "project"`
+   - Manage tags via `omnifocus_write` with `target: "tag"`
 
 5. **Monitor Trends**: Save results over time to track improvement in your system's health score.
 
@@ -446,29 +456,30 @@ Combine with other MCP tools for a complete workflow:
 
 ```javascript
 // 1. Analyze patterns
-const analysis = await mcp.analyze_patterns({
-  patterns: ['duplicates', 'dormant_projects'],
+omnifocus_analyze({
+  analysis: {
+    type: 'pattern_analysis',
+    params: { insights: ['duplicates', 'dormant_projects'] },
+  },
 });
 
 // 2. Complete a dormant project
-if (analysis.findings.dormant_projects.count > 0) {
-  const dormantProject = analysis.findings.dormant_projects.items[0];
-  await mcp.projects({
+omnifocus_write({
+  mutation: {
     operation: 'complete',
-    projectId: dormantProject.id,
-  });
-}
+    target: 'project',
+    id: 'proj789', // from analysis results
+  },
+});
 
-// 3. Merge duplicate tags
-if (analysis.findings.tag_audit.items.potential_synonyms.length > 0) {
-  const synonyms = analysis.findings.tag_audit.items.potential_synonyms[0];
-  await mcp.tags({
-    operation: 'manage',
-    action: 'merge',
-    tagName: synonyms.tag2,
-    targetTag: synonyms.tag1,
-  });
-}
+// 3. Delete a duplicate task
+omnifocus_write({
+  mutation: {
+    operation: 'delete',
+    target: 'task',
+    id: 'task456', // from analysis results
+  },
+});
 ```
 
 ## Troubleshooting
