@@ -4,21 +4,22 @@ Access OmniFocus on your Mac from another device (Windows PC, etc.) using HTTP t
 
 ## Overview
 
-Default stdio transport requires the server on the same machine as OmniFocus. HTTP transport enables remote access from any network device.
+Default stdio transport requires the server on the same machine as OmniFocus. HTTP transport enables remote access from
+any network device.
 
 **Common Use Case:** Claude Desktop on Windows PC → OmniFocus on Mac.
 
 ## Client Compatibility
 
-| Client | stdio | HTTP/SSE |
-|--------|-------|----------|
-| Claude Desktop | ✅ | ❌ (needs mcp-remote bridge) |
-| Claude Code | ✅ | ✅ |
-| Claude.ai (web) | - | ✅ (Pro/Max/Team/Enterprise) |
+| Client          | stdio | HTTP/SSE                     |
+| --------------- | ----- | ---------------------------- |
+| Claude Desktop  | ✅    | ❌ (needs mcp-remote bridge) |
+| Claude Code     | ✅    | ✅                           |
+| Claude.ai (web) | -     | ✅ (Pro/Max/Team/Enterprise) |
 
 ## Prerequisites
 
-- **Mac (server):** OmniFocus 4.6+, Node.js 18+, omnifocus-mcp installed
+- **Mac (server):** OmniFocus 4.7+, Node.js 18+, omnifocus-mcp installed
 - **Client:** Claude Desktop (with Node.js) or Claude Code
 - **Network:** Same network, or Tailscale/VPN
 
@@ -46,6 +47,7 @@ claude mcp add omnifocus --transport http http://YOUR-MAC-IP:3000/mcp
 Install Node.js 18+ on Windows: https://nodejs.org
 
 Edit config file:
+
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **Mac:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
@@ -92,8 +94,13 @@ For remote access outside your local network, use [Tailscale](https://tailscale.
   "mcpServers": {
     "omnifocus": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://macbook.tailnet-name.ts.net:3000/mcp",
-               "--header", "Authorization:${AUTH_TOKEN}"],
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://macbook.tailnet-name.ts.net:3000/mcp",
+        "--header",
+        "Authorization:${AUTH_TOKEN}"
+      ],
       "env": { "AUTH_TOKEN": "Bearer YOUR-SECRET-TOKEN" }
     }
   }
@@ -252,12 +259,12 @@ Normal. HTTP creates sessions per connection; they auto-cleanup after 30 minutes
 
 ## stdio vs HTTP
 
-| Feature | stdio | HTTP |
-|---------|-------|------|
-| Network | Same machine | Remote |
-| Setup | Simple | Moderate |
-| Auth | Process isolation | Bearer token |
-| Clients | One at a time | Concurrent |
+| Feature | stdio             | HTTP         |
+| ------- | ----------------- | ------------ |
+| Network | Same machine      | Remote       |
+| Setup   | Simple            | Moderate     |
+| Auth    | Process isolation | Bearer token |
+| Clients | One at a time     | Concurrent   |
 
 ## See Also
 

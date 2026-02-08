@@ -16,7 +16,7 @@ Ask questions naturally. OmniFocus expertise is optional.
 
 ## Prerequisites
 
-- **OmniFocus 4.6+** on macOS
+- **OmniFocus 4.7+** on macOS
 - **Node.js 18+** ([download](https://nodejs.org/))
 - **An MCP client**: Claude Desktop, Claude Code, Cursor, or Windsurf
 
@@ -49,10 +49,12 @@ npm run build
 Restart Claude Desktop completely.
 
 **Other clients** use the same format:
+
 - **Claude Code**: `.vscode/settings.json`
 - **Cursor**: `.cursor/mcp.json`
 - **Windsurf**: MCP settings
-- **Cline**: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- **Cline**:
+  `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 
 See [Configuration Details](./claude-desktop-config.md).
 
@@ -113,6 +115,7 @@ Examples—use your own words:
 ### Capturing Meeting Notes
 
 > "I just got out of a meeting. Here are my notes:
+>
 > - Send proposal to client by Friday
 > - Call Sarah about the budget
 > - Review Q4 metrics before next week
@@ -151,11 +154,7 @@ Describe what you want; Claude handles the OmniFocus details.
 
 ### Claude Remembers Context
 
-> "What's due today?"
-> _[shows 5 tasks]_
-> "Flag the budget review as urgent"
-> _[flags it]_
-> "Move it to tomorrow"
+> "What's due today?" _[shows 5 tasks]_ "Flag the budget review as urgent" _[flags it]_ "Move it to tomorrow"
 > _[reschedules]_
 
 ### Casual or Detailed—Both Work

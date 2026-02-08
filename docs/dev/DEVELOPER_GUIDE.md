@@ -8,135 +8,107 @@ For developers integrating or extending the OmniFocus MCP server.
 
 ## Quick Reference
 
-| Doc | Content |
-|-----|---------|
-| [API-REFERENCE-V2.md](./API-REFERENCE-V2.md) | All tools with schemas |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Technical implementation |
-| [PATTERNS.md](./PATTERNS.md) | Symptom → solution lookup |
+| Doc                                                     | Content                   |
+| ------------------------------------------------------- | ------------------------- |
+| [API-COMPACT-UNIFIED.md](../api/API-COMPACT-UNIFIED.md) | Unified API schemas       |
+| [ARCHITECTURE.md](./ARCHITECTURE.md)                    | Technical implementation  |
+| [PATTERNS.md](./PATTERNS.md)                            | Symptom → solution lookup |
 
 ---
 
-## Tool Call Examples
+## Unified API (v3.0.0)
 
-### Query Tasks
+Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
+
+### Query Tasks (omnifocus_read)
 
 ```javascript
 // Inbox tasks
-{ "tool": "tasks", "arguments": { "mode": "inbox", "limit": "25" } }
+{ "query": { "type": "tasks", "filters": { "project": null }, "limit": 25 } }
 
 // Today's tasks
-{ "tool": "tasks", "arguments": { "mode": "today", "limit": "25" } }
+{ "query": { "type": "tasks", "mode": "today", "limit": 25 } }
 
 // Search
-{ "tool": "tasks", "arguments": { "mode": "search", "search": "budget", "limit": "50" } }
+{ "query": { "type": "tasks", "mode": "search", "search": "budget", "limit": 50 } }
 
 // Advanced filtering
-{
-  "tool": "tasks",
-  "arguments": {
-    "mode": "all",
-    "filters": {
-      "tags": { "operator": "OR", "values": ["urgent", "important"] },
-      "dueDate": { "operator": "<=", "value": "2025-10-15" }
-    },
-    "sort": [{ "field": "dueDate", "direction": "asc" }],
-    "limit": "50"
-  }
-}
+{ "query": { "type": "tasks", "filters": { "tags": { "any": ["urgent", "important"] }, "dueDate": { "before": "2026-01-15" } }, "limit": 50 } }
+
+// Count only (33x faster for "how many" questions)
+{ "query": { "type": "tasks", "filters": { "status": "active" }, "countOnly": true } }
 ```
 
-### Manage Tasks
+### Manage Tasks (omnifocus_write)
 
 ```javascript
 // Create in inbox
-{ "tool": "manage_task", "arguments": { "operation": "create", "name": "Review Q4 budget" } }
+{ "mutation": { "operation": "create", "target": "task", "data": { "name": "Review Q4 budget" } } }
 
 // Create with details
-{
-  "tool": "manage_task",
-  "arguments": {
-    "operation": "create",
-    "name": "Send proposal",
-    "projectId": "abc123",
-    "dueDate": "2025-01-15 17:00",
-    "tags": ["work", "urgent"],
-    "flagged": "true"
-  }
-}
+{ "mutation": { "operation": "create", "target": "task", "data": { "name": "Send proposal", "project": "Work", "dueDate": "2026-01-15 17:00", "tags": ["work", "urgent"], "flagged": true } } }
 
-// Update, complete, delete
-{ "tool": "manage_task", "arguments": { "operation": "update", "taskId": "id123", "flagged": "true" } }
-{ "tool": "manage_task", "arguments": { "operation": "complete", "taskId": "id123" } }
-{ "tool": "manage_task", "arguments": { "operation": "delete", "taskId": "id123" } }
+// Update
+{ "mutation": { "operation": "update", "target": "task", "id": "id123", "changes": { "flagged": true } } }
 
-// Bulk complete
-{ "tool": "manage_task", "arguments": { "operation": "bulk_complete", "taskIds": ["id1", "id2"] } }
+// Complete
+{ "mutation": { "operation": "complete", "target": "task", "id": "id123" } }
+
+// Delete
+{ "mutation": { "operation": "delete", "target": "task", "id": "id123" } }
 ```
 
-### Projects
+### Projects (omnifocus_read / omnifocus_write)
 
 ```javascript
 // List active projects
-{ "tool": "projects", "arguments": { "operation": "list", "status": "active", "details": "true" } }
+{ "query": { "type": "projects", "filters": { "status": "active" } } }
 
 // Create project
-{
-  "tool": "projects",
-  "arguments": {
-    "operation": "create",
-    "name": "Website Redesign",
-    "sequential": "true",
-    "folder": "Work"
-  }
-}
+{ "mutation": { "operation": "create", "target": "project", "data": { "name": "Website Redesign", "sequential": true, "folder": "Work" } } }
 ```
 
-### Batch Creation
+### Batch Operations (omnifocus_write)
 
 ```javascript
-{
-  "tool": "batch_create",
-  "arguments": {
-    "items": [
-      { "tempId": "proj1", "type": "project", "name": "Vacation Planning", "sequential": "true" },
-      { "tempId": "task1", "parentTempId": "proj1", "type": "task", "name": "Book flights" },
-      { "tempId": "task2", "parentTempId": "proj1", "type": "task", "name": "Reserve hotel" }
-    ],
-    "createSequentially": "true",
-    "atomicOperation": "true"
-  }
-}
+{ "mutation": { "operation": "batch", "target": "project", "operations": [
+    { "operation": "create", "target": "project", "data": { "name": "Vacation Planning", "sequential": true, "tempId": "proj1" } },
+    { "operation": "create", "target": "task", "data": { "name": "Book flights", "parentTempId": "proj1" } },
+    { "operation": "create", "target": "task", "data": { "name": "Reserve hotel", "parentTempId": "proj1" } }
+  ], "createSequentially": true, "returnMapping": true } }
 ```
 
-### Tags & Folders
+### Tags & Folders (omnifocus_read)
 
 ```javascript
 // List tags
-{ "tool": "tags", "arguments": { "operation": "list", "namesOnly": "true" } }
-
-// Create tag
-{ "tool": "tags", "arguments": { "operation": "manage", "action": "create", "tagName": "urgent" } }
+{ "query": { "type": "tags" } }
 
 // List folders
-{ "tool": "folders", "arguments": { "operation": "list", "includeProjects": "true" } }
+{ "query": { "type": "folders" } }
 ```
 
-### Analytics
+### Analytics (omnifocus_analyze)
 
 ```javascript
 // Productivity stats
-{ "tool": "productivity_stats", "arguments": { "period": "week" } }
+{ "analysis": { "type": "productivity_stats", "params": { "groupBy": "week" } } }
 
 // Workflow analysis
-{ "tool": "workflow_analysis", "arguments": { "analysisDepth": "standard", "focusAreas": ["productivity", "bottlenecks"] } }
+{ "analysis": { "type": "workflow_analysis" } }
+
+// Overdue analysis
+{ "analysis": { "type": "overdue_analysis" } }
+
+// Parse meeting notes
+{ "analysis": { "type": "parse_meeting_notes", "params": { "text": "Action items from standup..." } } }
 ```
 
 ### System
 
 ```javascript
-{ "tool": "system", "arguments": { "operation": "version" } }
-{ "tool": "system", "arguments": { "operation": "diagnostics" } }
-{ "tool": "system", "arguments": { "operation": "metrics", "metricsType": "detailed" } }
+{ "query": { "type": "system", "operation": "version" } }
+{ "query": { "type": "system", "operation": "diagnostics" } }
 ```
 
 ---
@@ -145,29 +117,32 @@ For developers integrating or extending the OmniFocus MCP server.
 
 ### Date Formats
 
-| Format | Example | Default Time |
-|--------|---------|--------------|
-| `YYYY-MM-DD` | `2025-01-15` | Due: 5pm, Defer: 8am |
-| `YYYY-MM-DD HH:mm` | `2025-01-15 17:00` | As specified |
+| Format             | Example            | Default Time         |
+| ------------------ | ------------------ | -------------------- |
+| `YYYY-MM-DD`       | `2026-01-15`       | Due: 5pm, Defer: 8am |
+| `YYYY-MM-DD HH:mm` | `2026-01-15 17:00` | As specified         |
+
+Never use ISO-8601 with Z suffix.
 
 ### MCP Type Coercion
 
 Claude Desktop converts all parameters to strings. Schemas handle both:
 
 ```typescript
-limit: z.union([z.number(), z.string().transform(v => parseInt(v, 10))])
+limit: z.union([z.number(), z.string().transform((v) => parseInt(v, 10))])
   .pipe(z.number().min(1).max(200))
   .default(25);
 ```
 
 ### Cache TTLs
 
-| Data | TTL |
-|------|-----|
-| Tasks | 30 seconds |
-| Projects | 5 minutes |
-| Tags | 5 minutes |
-| Analytics | 1 hour |
+| Data      | TTL        |
+| --------- | ---------- |
+| Tasks     | 5 minutes  |
+| Projects  | 5 minutes  |
+| Tags      | 10 minutes |
+| Folders   | 10 minutes |
+| Analytics | 1 hour     |
 
 Cache invalidates automatically on writes.
 
@@ -195,12 +170,13 @@ npm run test:integration  # Integration tests
 MCP Client → MCP Server → Tool → Cache → JXA Script → OmniFocus
 ```
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| Tools | `src/tools/` | MCP tool implementations |
-| Scripts | `src/omnifocus/scripts/` | JXA scripts |
-| Cache | `src/cache/` | TTL-based caching |
-| Bridge | `src/omnifocus/bridge/` | JXA ↔ OmniJS bridge |
+| Component | Location                        | Purpose             |
+| --------- | ------------------------------- | ------------------- |
+| Tools     | `src/tools/unified/`            | Unified MCP tools   |
+| Scripts   | `src/omnifocus/scripts/`        | JXA scripts         |
+| Cache     | `src/cache/`                    | TTL-based caching   |
+| Bridge    | `src/omnifocus/scripts/shared/` | JXA ↔ OmniJS bridge |
+| AST       | `src/contracts/ast/`            | Script generation   |
 
 **Execution model:** Pure JXA for simple ops, JXA + Bridge for complex ops (tags, bulk, repetition).
 
@@ -230,11 +206,12 @@ interface StandardResponseV2<T> {
   summary?: TaskSummary | ProjectSummary;
   data: T;
   metadata: StandardMetadataV2;
-  error?: { code: string; message: string; suggestion?: string; };
+  error?: { code: string; message: string; suggestion?: string };
 }
 ```
 
 **Factory functions:**
+
 - `createSuccessResponseV2()` - Basic success
 - `createErrorResponseV2()` - Error with suggestion
 - `createListResponseV2()` - Auto-generates summary
@@ -244,12 +221,15 @@ interface StandardResponseV2<T> {
 
 ## Extending the Server
 
-### Adding a Tool
+### Adding Functionality
 
-1. Create `src/tools/your-tool/YourTool.ts`
-2. Extend `BaseTool`
-3. Implement schema and execute method
-4. Register in `src/tools/index.ts`
+The unified API uses discriminated unions in `src/tools/unified/`. To add new query types or mutations, extend the
+schemas and compilers:
+
+1. Add schema types in `src/tools/unified/schemas/`
+2. Add compilation logic in `src/tools/unified/compilers/`
+3. Add or update JXA scripts in `src/omnifocus/scripts/`
+4. Register in the appropriate tool handler
 
 ### Adding JXA Scripts
 
@@ -264,7 +244,7 @@ interface StandardResponseV2<T> {
 const result = await this.cache.get(
   cacheKey,
   async () => executeScript(),
-  300000  // 5 minutes
+  300000, // 5 minutes
 );
 ```
 
@@ -289,7 +269,7 @@ See [TROUBLESHOOTING.md](../user/TROUBLESHOOTING.md) for error types.
 
 ## Resources
 
-- [API Reference](./API-REFERENCE-V2.md) - Complete tool documentation
+- [API Reference](../api/API-COMPACT-UNIFIED.md) - Unified API schemas
 - [Architecture](./ARCHITECTURE.md) - Technical deep dive
 - [Lessons Learned](./LESSONS_LEARNED.md) - Hard-won insights
 - [Patterns](./PATTERNS.md) - Symptom → solution lookup

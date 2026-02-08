@@ -4,11 +4,11 @@ Connect Claude Desktop on Windows to OmniFocus MCP server running on your Mac.
 
 ## Prerequisites
 
-| Machine | Requirements |
-|---------|-------------|
-| **Mac (server)** | OmniFocus 4.6+, Node.js 18+, omnifocus-mcp installed |
-| **Windows (client)** | Claude Desktop, Node.js 18+ |
-| **Network** | Both on same network (or Tailscale) |
+| Machine              | Requirements                                         |
+| -------------------- | ---------------------------------------------------- |
+| **Mac (server)**     | OmniFocus 4.7+, Node.js 18+, omnifocus-mcp installed |
+| **Windows (client)** | Claude Desktop, Node.js 18+                          |
+| **Network**          | Both on same network (or Tailscale)                  |
 
 ## Setup
 
@@ -35,6 +35,7 @@ If this fails: check Mac firewall, verify same network, confirm IP.
 ### Step 3: Install Node.js (Windows)
 
 Install from https://nodejs.org (LTS), then verify:
+
 ```powershell
 node --version  # Need v18+
 ```
@@ -46,6 +47,7 @@ notepad $env:APPDATA\Claude\claude_desktop_config.json
 ```
 
 Add (replace `YOUR-MAC-IP`):
+
 ```json
 {
   "mcpServers": {
@@ -65,15 +67,16 @@ Add (replace `YOUR-MAC-IP`):
 
 ## Troubleshooting
 
-| Problem | Check |
-|---------|-------|
-| Cannot connect | `curl http://localhost:3000/health` (Mac), firewall settings |
+| Problem            | Check                                                                   |
+| ------------------ | ----------------------------------------------------------------------- |
+| Cannot connect     | `curl http://localhost:3000/health` (Mac), firewall settings            |
 | No OmniFocus tools | Config JSON valid? Fully restart Claude. Check `%APPDATA%\Claude\Logs\` |
-| mcp-remote errors | `npx -y mcp-remote http://YOUR-MAC-IP:3000/mcp` (test manually) |
+| mcp-remote errors  | `npx -y mcp-remote http://YOUR-MAC-IP:3000/mcp` (test manually)         |
 
 ## With Tailscale (Remote Access)
 
 Install Tailscale on both machines, then use hostname instead of IP:
+
 ```json
 { "args": ["-y", "mcp-remote", "http://your-mac.tailnet-name.ts.net:3000/mcp"] }
 ```
@@ -81,6 +84,7 @@ Install Tailscale on both machines, then use hostname instead of IP:
 ## With Authentication
 
 **Mac:**
+
 ```bash
 export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
 echo "Token: $MCP_AUTH_TOKEN"  # Save this!
@@ -88,13 +92,13 @@ node dist/index.js --http --port 3000
 ```
 
 **Windows config:**
+
 ```json
 {
   "mcpServers": {
     "omnifocus": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://YOUR-MAC-IP:3000/mcp",
-               "--header", "Authorization:${AUTH_TOKEN}"],
+      "args": ["-y", "mcp-remote", "http://YOUR-MAC-IP:3000/mcp", "--header", "Authorization:${AUTH_TOKEN}"],
       "env": { "AUTH_TOKEN": "Bearer YOUR-TOKEN-HERE" }
     }
   }
@@ -103,8 +107,8 @@ node dist/index.js --http --port 3000
 
 ## Quick Reference
 
-| Item | Value |
-|------|-------|
-| Server | `http://MAC-IP:3000/mcp` |
-| Health | `http://MAC-IP:3000/health` |
+| Item   | Value                                         |
+| ------ | --------------------------------------------- |
+| Server | `http://MAC-IP:3000/mcp`                      |
+| Health | `http://MAC-IP:3000/health`                   |
 | Config | `%APPDATA%\Claude\claude_desktop_config.json` |

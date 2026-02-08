@@ -16,7 +16,7 @@ practices to ensure consistent, high-quality contributions.
 ### Prerequisites
 
 - Node.js 18+
-- OmniFocus 4.6+ Pro (required for full automation API support)
+- OmniFocus 4.7+ Pro (required for full automation API support)
 - macOS (required for OmniAutomation)
 - TypeScript knowledge
 
@@ -63,32 +63,24 @@ git checkout -b fix/issue-description
 git checkout -b docs/what-you-are-documenting
 ```
 
-### 3. Follow MCP Tool Standards
+### 3. Follow Unified API Standards
 
-When creating new tools, follow this structure:
+The v3.0.0 API uses 4 unified tools (`omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`). To add new
+functionality, extend the schemas and compilers:
 
-```typescript
-// src/tools/category/YourNewTool.ts
-import { BaseTool } from '../base.js';
-import { CacheManager } from '../../cache/CacheManager.js';
-
-export class YourNewTool extends BaseTool {
-  name = 'your_new_tool';
-  description = 'Clear, concise description of what this tool does';
-
-  inputSchema = {
-    type: 'object',
-    properties: {
-      // Define all parameters with proper types
-    },
-    required: ['requiredParam'],
-  };
-
-  async execute(args: YourToolArgs): Promise<YourToolResponse> {
-    // Implementation
-  }
-}
 ```
+src/tools/unified/
+├── schemas/     # Zod schemas for tool inputs
+├── compilers/   # Transform validated input → JXA scripts
+└── tools/       # Tool handlers (read, write, analyze, system)
+```
+
+1. Add schema types in `src/tools/unified/schemas/`
+2. Add compilation logic in `src/tools/unified/compilers/`
+3. Add or update JXA scripts in `src/omnifocus/scripts/`
+4. Register in the appropriate tool handler
+
+See [DEVELOPER_GUIDE.md](docs/dev/DEVELOPER_GUIDE.md) for full details.
 
 ### 4. Write Comprehensive Tests
 
@@ -191,12 +183,13 @@ npm run test:all
 
 #### Local OmniFocus smoke check
 
-When working on JXA/OmniAutomation scripts locally, build the project and run a real `manage_task` request against
-OmniFocus to catch escaping issues that unit mocks miss:
+When working on JXA/OmniAutomation scripts locally, build the project and run a real request against OmniFocus to catch
+escaping issues that unit mocks miss:
 
 ```bash
 npm run build
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"manage_task","arguments":{"operation":"create","name":"Smoke Test Task","projectId":null}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"omnifocus_write","arguments":{"mutation":{"operation":"create","target":"task","data":{"name":"Smoke Test Task"}}}}}' | node dist/index.js
 ```
 
 The command creates a temporary inbox task—delete it afterwards. Always perform this check before pushing changes that
@@ -249,10 +242,11 @@ throw new McpError(ErrorCode.INVALID_PARAMS, 'Clear error message', {
 
 ### Caching Strategy
 
-- Tasks: 30 second TTL
+- Tasks: 5 minute TTL
 - Projects: 5 minute TTL
-- Analytics: 1 hour TTL
 - Tags: 10 minute TTL
+- Folders: 10 minute TTL
+- Analytics: 1 hour TTL
 
 ### Query Optimization
 
@@ -337,7 +331,7 @@ Add screenshots for UI changes
 
 - [OmniAutomation](https://omni-automation.com/) - Official automation documentation
 - [OmniFocus Specifications](https://www.omnigroup.com/omnifocus/specs/) - File formats and sync specifications
-- [Local API Reference](src/omnifocus/api/OmniFocus.d.ts) - TypeScript definitions extracted from OmniFocus 4.6.1
+- [Local API Reference](src/omnifocus/api/OmniFocus.d.ts) - TypeScript definitions extracted from OmniFocus 4.7+
 
 **Why OmniFocus Pro?** The Pro version includes:
 
@@ -351,9 +345,9 @@ is only available on macOS. Mobile devices cannot run MCP servers.
 
 ### Project Documentation
 
-- [Architecture Decisions](docs/architecture-decisions.md)
-- [Performance Guide](docs/PERFORMANCE_ISSUE.md)
-- [JXA Limitations](docs/JXA-WHOSE-LIMITATIONS.md)
+- [Architecture](docs/dev/ARCHITECTURE.md) - Technical implementation details
+- [Patterns](docs/dev/PATTERNS.md) - Symptom → solution lookup
+- [Lessons Learned](docs/dev/LESSONS_LEARNED.md) - Hard-won development insights
 
 ## ❓ Getting Help
 

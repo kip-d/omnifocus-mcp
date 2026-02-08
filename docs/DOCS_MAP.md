@@ -197,54 +197,28 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 **Testing prompts:**
 
-- **[TESTING_PROMPT.md](../TESTING_PROMPT.md)** - Unified testing guide for v3.0.0 API (4 tools) with natural language
-  scenarios, technical validation, error handling, performance tests, and cleanup system
+- **[TESTING_PROMPT.md](../prompts/TESTING_PROMPT.md)** - Unified testing guide for v3.0.0 API (4 tools) with natural
+  language scenarios, technical validation, error handling, performance tests, and cleanup system
 - **[.archive/testing-prompts/](../.archive/testing-prompts/)** - Archived testing prompts (consolidated November 2025)
 
 ---
 
 ## 🗺️ Plans & Roadmap
 
-**Active/Recent plans:**
+**Current plans:**
 
-- **[docs/plans/2025-12-18-future-consolidation-opportunities.md](plans/2025-12-18-future-consolidation-opportunities.md)** -
-  Future consolidation opportunities
-- **[docs/plans/2025-12-15-repetition-rule-investigation.md](plans/2025-12-15-repetition-rule-investigation.md)** -
-  Repetition rule implementation investigation
-- **[docs/plans/2025-12-11-test-sandbox-design.md](plans/2025-12-11-test-sandbox-design.md)** - Test sandbox isolation
-  design
-- **[docs/plans/2025-12-04-streamable-http-transport-design.md](plans/2025-12-04-streamable-http-transport-design.md)** -
-  HTTP transport design (remote access from Windows)
-- **[docs/plans/2025-01-04-omnifocus-dsl-design.md](plans/2025-01-04-omnifocus-dsl-design.md)** - OmniFocus DSL design
-- **[docs/plans/omnijs-migration-plan.md](plans/omnijs-migration-plan.md)** - OmniJS migration strategy
 - **[docs/plans/PLAN_STATUS_SUMMARY.md](plans/PLAN_STATUS_SUMMARY.md)** - Status summary of all plans
-
-**Consolidation plans (Nov 2025):**
-
-- **[docs/plans/2025-11-25-phase3-ast-extension-design.md](plans/2025-11-25-phase3-ast-extension-design.md)** - Phase 3
-  AST extension design
-- **[docs/plans/2025-11-24-querycompiler-taskfilter-implementation.md](plans/2025-11-24-querycompiler-taskfilter-implementation.md)** -
-  QueryCompiler task filter implementation
-- **[docs/plans/2025-11-24-ast-consolidation-opportunities.md](plans/2025-11-24-ast-consolidation-opportunities.md)** -
-  AST consolidation opportunities
-- **[docs/plans/2025-11-07-phase2-helper-refactoring-foundation.md](plans/2025-11-07-phase2-helper-refactoring-foundation.md)** -
-  Phase 2 helper refactoring
+- **[docs/plans/2025-01-04-omnifocus-dsl-design.md](plans/2025-01-04-omnifocus-dsl-design.md)** - OmniFocus DSL design
+- **[docs/plans/2025-01-12-code-cleanup-investigation.md](plans/2025-01-12-code-cleanup-investigation.md)** - Code
+  cleanup investigation
 - **[docs/plans/2025-11-06-script-helper-consolidation-design.md](plans/2025-11-06-script-helper-consolidation-design.md)** -
   Script helper consolidation design
-- **[docs/plans/2025-11-06-phase1-script-consolidation.md](plans/2025-11-06-phase1-script-consolidation.md)** - Phase 1
-  script consolidation
-- **[docs/plans/2025-10-29-lightweight-testing-strategy-design.md](plans/2025-10-29-lightweight-testing-strategy-design.md)** -
-  Lightweight testing strategy
-
-**Completed plans:** (archived to https://github.com/kip-d/omnifocus-mcp-archive)
-
-- See archive repository `plans/` folder for completed implementation plans
-
-**Legacy plans:**
-
-- **[docs/plans/2025-10-18-multi-machine-session-sync.md](plans/2025-10-18-multi-machine-session-sync.md)** -
-  Multi-machine session sync plan
+- **[docs/plans/2025-11-07-phase2-helper-refactoring-foundation.md](plans/2025-11-07-phase2-helper-refactoring-foundation.md)** -
+  Phase 2 helper refactoring
 - **[docs/plans/README-MULTI-MACHINE-SYNC.md](plans/README-MULTI-MACHINE-SYNC.md)** - Multi-machine sync overview
+- **[docs/plans/things-to-check-out.md](plans/things-to-check-out.md)** - Ideas and items to investigate
+
+**Completed plans:** Archived to https://github.com/kip-d/omnifocus-mcp-archive (`plans/` folder)
 
 **Project status:**
 
@@ -369,7 +343,7 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 ---
 
-**Last Updated**: 2026-01-02 **Total Documents**: ~100 (after archiving historical docs) **Documentation Coverage**:
+**Last Updated**: 2026-02-08 **Total Documents**: ~100 (after archiving historical docs) **Documentation Coverage**:
 Comprehensive (user, developer, API, operations, evaluation, testing)
 
 **Archived to**: `.archive/` directory and https://github.com/kip-d/omnifocus-mcp-archive (completed plans, Oct 2025

@@ -190,7 +190,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 - `src/omnifocus/` - OmniAutomation integration via JXA
 - `src/tools/` - MCP tools
-- `src/cache/` - TTL-based caching (30s tasks, 5m projects, 1h analytics)
+- `src/cache/` - TTL-based caching (5m tasks, 5m projects, 10m tags, 1h analytics)
 
 ## Git Workflow
 

@@ -242,7 +242,7 @@ Real AI testing revealed sophisticated behaviors not seen in simulations:
 - **Primary Model**: `phi3.5:3.8b` (Microsoft Phi-3.5, 2.2GB)
 - **Fallback Model**: `qwen2.5:0.5b` (Qwen2.5, 352MB)
 - **Ollama Version**: Latest stable
-- **Platform**: macOS with OmniFocus 4.6+
+- **Platform**: macOS with OmniFocus 4.7+
 - **Test Duration**: ~2-3 minutes per query
 - **Success Rate**: 100% tool selection accuracy in tested scenarios
 
