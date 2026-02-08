@@ -169,7 +169,7 @@ process.stdin.on('end', async () => {
 # Build & Test
 npm run build                    # Required before running
 npm run test:unit                # ~2 seconds, 1098 tests
-npm run test:integration         # ~2 minutes, 71 tests (use npm, not bun)
+npm run test:integration         # ~6 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
