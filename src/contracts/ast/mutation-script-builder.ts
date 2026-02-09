@@ -1309,50 +1309,31 @@ export async function buildCompleteScript(
   }
 
   const isTask = target === 'task';
-  const collection = isTask ? 'flattenedTasks' : 'flattenedProjects';
+  const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
   const idField = isTask ? 'taskId' : 'projectId';
 
   // Build the markComplete call argument
   const markCompleteArg = completionDate ? `new Date('${completionDate}')` : '';
-  const flattenedCollection = isTask ? 'flattenedTasks' : 'flattenedProjects';
 
   const script = `
 (() => {
   const app = Application('OmniFocus');
   const doc = app.defaultDocument();
   const targetId = ${JSON.stringify(id)};
-  const completionDateStr = ${completionDate ? JSON.stringify(completionDate) : 'null'};
 
   try {
-    // Find item
-    const items = doc.${collection}();
-    let item = null;
-    for (let i = 0; i < items.length; i++) {
-      try {
-        if (items[i].id() === targetId) {
-          item = items[i];
-          break;
-        }
-      } catch (e) {}
-    }
-
-    if (!item) {
-      return JSON.stringify({
-        error: true,
-        message: "${target} not found: " + targetId
-      });
-    }
-
-    // Mark complete via bridge for reliable completion
+    // Find and complete via bridge (OmniJS-only for correct id.primaryKey lookup)
     const completeScript = '(' +
       '() => {' +
         'const item = ${flattenedCollection}.find(i => i.id.primaryKey === "' + targetId + '");' +
         'if (!item) return JSON.stringify({success: false, error: "Not found"});' +
+        'const name = item.name;' +
         'item.markComplete(${markCompleteArg});' +
         'return JSON.stringify({' +
           'success: true,' +
           '${idField}: item.id.primaryKey,' +
-          'name: item.name,' +
+          'name: name,' +
+          'completed: true,' +
           'completionDate: item.completionDate ? item.completionDate.toISOString() : null' +
         '});' +
       '}' +
@@ -1360,12 +1341,14 @@ export async function buildCompleteScript(
 
     const result = JSON.parse(app.evaluateJavascript(completeScript));
 
-    return JSON.stringify({
-      ${idField}: targetId,
-      name: item.name(),
-      completed: true,
-      completionDate: result.completionDate || null
-    });
+    if (!result.success) {
+      return JSON.stringify({
+        error: true,
+        message: result.error || "${target} not found: " + targetId
+      });
+    }
+
+    return JSON.stringify(result);
 
   } catch (error) {
     return JSON.stringify({

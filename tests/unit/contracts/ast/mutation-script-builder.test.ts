@@ -363,6 +363,38 @@ describe('buildCompleteScript', () => {
 
     expect(result.script).toContain('markComplete');
   });
+
+  it('does not hardcode completed: true in outer return for projects', async () => {
+    const result = await buildCompleteScript('project', 'project-123');
+
+    // The outer script should return the bridge result directly (like buildDeleteScript),
+    // not construct a new object with hardcoded completed: true.
+    // The correct pattern is: return JSON.stringify(result)
+    expect(result.script).toContain('return JSON.stringify(result)');
+  });
+
+  it('checks result.success before reporting completion for projects', async () => {
+    const result = await buildCompleteScript('project', 'project-123');
+
+    // Like buildDeleteScript, should check result.success and return error if not successful
+    expect(result.script).toContain('result.success');
+  });
+
+  it('passes completionDate to markComplete for projects', async () => {
+    const result = await buildCompleteScript('project', 'project-123', '2025-11-24');
+
+    // markComplete should receive the completion date inside the bridge script
+    expect(result.script).toContain('markComplete');
+    expect(result.script).toContain('2025-11-24');
+  });
+
+  it('uses OmniJS bridge for project lookup by id.primaryKey', async () => {
+    const result = await buildCompleteScript('project', 'project-123');
+
+    // Should use id.primaryKey for lookup (correct for both tasks and projects)
+    expect(result.script).toContain('id.primaryKey');
+    expect(result.script).toContain('flattenedProjects');
+  });
 });
 
 describe('buildDeleteScript', () => {
