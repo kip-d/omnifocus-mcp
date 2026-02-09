@@ -320,6 +320,54 @@ eliminates string-construction bugs by design.
 
 ---
 
+## Flagged & Upcoming Mode AST Migration (February 2026)
+
+**Context:** After the overdue migration proved the AST builder works, we migrated the two remaining eligible modes.
+
+### Flagged mode
+
+Replaced `FLAGGED_TASKS_PERSPECTIVE_SCRIPT` (OmniJS-first template) with `buildListTasksScriptV4({ flagged: true })`.
+
+**Benchmark results (8 flagged tasks):**
+
+| Metric           | Legacy  | AST (script only) | AST (total w/ MCP startup) |
+| ---------------- | ------- | ----------------- | -------------------------- |
+| Avg execution    | ~6150ms | ~6480ms           | ~18100ms                   |
+| Task count       | 8       | 8                 | 8                          |
+| MCP startup cost | —       | —                 | ~11000ms                   |
+
+**Finding:** Script execution parity. Task counts match exactly.
+
+### Upcoming mode
+
+Replaced `GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT` (JXA + unified helpers) with
+`buildListTasksScriptV4({ dueAfter, dueBefore })`.
+
+**Benchmark results (7 days ahead):**
+
+| Metric           | Legacy            | AST (script only) | AST (total w/ MCP startup) |
+| ---------------- | ----------------- | ----------------- | -------------------------- |
+| Avg execution    | **timeout (60s)** | ~7860ms           | ~21300ms                   |
+| Task count       | 0 (timeout)       | 13                | 13                         |
+| MCP startup cost | —                 | —                 | ~9350ms                    |
+
+**Finding:** The legacy JXA script timed out at 60s because `doc.flattenedTasks()` with per-task JXA method calls
+(`.dueDate()`, `.name()`, `.id()`) is too slow. The AST builder uses OmniJS bridge (direct property access), completing
+in ~8s. This migration is a clear performance win, not just a maintenance improvement.
+
+**Gains from migration:**
+
+- Advanced filter support (tags, project, text search) for free on both modes
+- Sorting support (flagged didn't sort before; upcoming now defaults to soonest-due-first)
+- Cache keys include filter params, preventing incorrect cache hits
+- 837 lines of legacy script code deleted
+
+**What stayed legacy:** Today mode (`TODAYS_AGENDA_SCRIPT`) — its OR logic (overdue OR due_today OR flagged) with
+per-task reason fields can't be expressed by the AST `TaskFilter` (AND-only). Low ROI since the legacy script already
+uses OmniJS bridge.
+
+---
+
 ## Writing Integration Benchmarks for MCP Servers (February 2026)
 
 **Problem:** The overdue AST benchmark took three iterations to work. Each fix revealed the next failure.
