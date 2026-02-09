@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getUnifiedHelpers } from '../../src/omnifocus/scripts/shared/helpers.js';
 
 /**
@@ -72,19 +72,14 @@ describe('Completed Project Task Handling', () => {
       // Scripts use OmniJS bridge which checks completion via:
       // 1. task.completed (direct property)
       // 2. Project.Status.Done / Project.Status.Dropped (project status)
-      const {
-        GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT,
-        GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-        GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-      } = await import('../../src/omnifocus/scripts/date-range-queries.js');
+      const { GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT, GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT } =
+        await import('../../src/omnifocus/scripts/date-range-queries.js');
 
       // Verify date range queries check project completion status (OmniJS pattern)
       expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
 
-      // Overdue and upcoming now use OmniJS bridge with direct property checks
-      // They check for task.completed and Project.Status.Done/Dropped
-      expect(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('task.completed');
-      expect(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('Project.Status.Done');
+      // Overdue mode now uses AST builder (completed: false filter handles project completion)
+      // Upcoming still uses legacy OmniJS bridge with direct property checks
       expect(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
     });
   });
@@ -94,7 +89,7 @@ describe('Completed Project Task Handling', () => {
       // This test simulates the scenario where a project is marked as completed
       // and we want to ensure its tasks are not returned when filtering for incomplete tasks
 
-      const mockScript = `
+      const _mockScript = `
         ${getUnifiedHelpers()}
         
         // Simulate a task in a completed project

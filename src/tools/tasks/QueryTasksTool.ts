@@ -2,10 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { buildTaskCountScript } from '../../contracts/ast/script-builder.js';
-import {
-  GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-  GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT,
-} from '../../omnifocus/scripts/date-range-queries.js';
+import { GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/date-range-queries.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
@@ -780,9 +777,20 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleOverdueTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    const cacheKey = `tasks_overdue_${args.limit}_${args.completed}`;
+    // AST-based implementation: uses buildListTasksScriptV4 with dueBefore filter
+    const now = new Date();
+    const filter = {
+      ...this.processAdvancedFilters(args),
+      completed: false,
+      dueBefore: now.toISOString(),
+      dueDateOperator: '<' as const,
+      limit: args.limit,
+    };
 
-    // Check cache for speed
+    // Cache key includes advanced filter params for accuracy
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_overdue_${args.limit}_${args.completed}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
+
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
@@ -793,34 +801,39 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       });
     }
 
-    // Execute optimized overdue script
-    const script = this.omniAutomation.buildScript(GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: args.fields || [],
       limit: args.limit,
-      includeCompleted: args.completed || false,
+      offset: args.offset,
     });
-
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
-        result.error,
-        'Check if OmniFocus is running and not blocked by dialogs',
-        result.details,
+        'Failed to get overdue tasks',
+        'Try using all mode with dueBefore filter',
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    // Parse and cache
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
-    this.cache.set('tasks', cacheKey, { tasks, summary: (result.data as { summary?: unknown }).summary });
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
-    return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: false, mode: 'overdue' });
+    // Default sort: most overdue first (ascending dueDate)
+    const sortedTasks = this.sortTasks(tasks, args.sort || [{ field: 'dueDate', direction: 'asc' }]);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
+
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'overdue',
+      sort_applied: true,
+    });
   }
 
   private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {

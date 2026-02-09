@@ -139,23 +139,13 @@ export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
           'flattenedTasks.forEach(task => {' +
             'if (tasks.length >= limit) return;' +
             'processedCount++;' +
-            '' +
-            '// Skip completed tasks (unless includeCompleted)' +
             'if (!includeCompleted && task.completed) return;' +
-            '' +
-            '// Skip if project is completed/dropped' +
             'const proj = task.containingProject;' +
             'if (!includeCompleted && proj && (proj.status === Project.Status.Done || proj.status === Project.Status.Dropped)) return;' +
-            '' +
-            '// Check due date exists' +
             'const dueDate = task.dueDate;' +
             'if (!dueDate) return;' +
-            '' +
-            '// Check if overdue' +
             'const dueTime = dueDate.getTime();' +
             'if (dueTime >= nowTime) return;' +
-            '' +
-            '// Calculate days overdue' +
             'const daysOverdue = Math.floor((nowTime - dueTime) / dayMs);' +
             '' +
             'tasks.push({' +
@@ -170,10 +160,7 @@ export const GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT = `
               'note: task.note || null' +
             '});' +
           '});' +
-          '' +
-          '// Sort by most overdue first' +
           'tasks.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());' +
-          '' +
           'return JSON.stringify({' +
             'tasks: tasks,' +
             'summary: {' +

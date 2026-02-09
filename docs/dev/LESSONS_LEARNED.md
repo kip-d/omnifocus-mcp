@@ -293,6 +293,67 @@ git stash drop stash@{0}           # Only drop after recovery
 
 ---
 
+## Overdue Mode AST Migration (February 2026)
+
+**Problem:** The overdue mode used a hand-concatenated OmniJS script (`GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT`) that
+broke when `//` comments were introduced — the string concatenation collapsed them into a single line, commenting out
+everything after them. We patched the comments, but the root fix was migrating to the AST builder.
+
+**Migration:** Replaced the legacy handler with `buildListTasksScriptV4()` using `dueBefore` + `dueDateOperator: '<'`.
+This follows the same pattern as `handleAvailableTasks()` and gives overdue mode advanced filter support (tags, project,
+text search) for free.
+
+**Benchmark results (26 overdue tasks):**
+
+| Metric           | Legacy  | AST (script only) | AST (total w/ MCP startup) |
+| ---------------- | ------- | ----------------- | -------------------------- |
+| Avg execution    | ~6800ms | ~6750ms           | ~17100ms                   |
+| Task count       | 26      | 26                | 26                         |
+| MCP startup cost | —       | —                 | ~10300ms                   |
+| Routing/parsing  | —       | —                 | ~60ms                      |
+
+**Key findings:** Script execution time is identical. The ~10s overhead in end-to-end MCP benchmarks is server cold
+start (Node.js process + module loading), irrelevant in real usage where the server stays running.
+
+**Lesson:** Hand-concatenated scripts and AST-generated scripts perform identically. Prefer the AST builder — it
+eliminates string-construction bugs by design.
+
+---
+
+## Writing Integration Benchmarks for MCP Servers (February 2026)
+
+**Problem:** The overdue AST benchmark took three iterations to work. Each fix revealed the next failure.
+
+| Attempt | Failure                                   | Root Cause                                                                           | Fix                                                |
+| ------- | ----------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| 1       | Legacy: `SyntaxError: Invalid escape`     | `osascript -e` chokes on multi-line scripts with quotes                              | Write script to temp file, run `osascript FILE`    |
+| 1       | AST: "Unexpected response format"         | Fixed 10s timeout, but `waitForJsonResponse` re-registered listeners                 | (deferred — masked by attempt 2)                   |
+| 2       | AST: "Timeout waiting for response" (5s)  | `spawn` stdout listener removed after init, missed tool response                     | Replaced with persistent `MCPClient` class         |
+| 3       | AST: "Timeout waiting for response" (10s) | `drain()` split on `\n` but response sat in buffer without trailing newline to flush | Abandoned `spawn`; used `execSync` with shell pipe |
+
+**Root insight:** Three independent bugs stacked. Each fix only exposed the next. The spawn-based approach had a
+fundamental design flaw: re-registering listeners between messages creates race conditions when data arrives between
+unregister and re-register. The `MCPClient` class with a persistent buffer fixed that — but still failed because
+`drain()` relied on `\n` splitting, and the last chunk (potentially the entire response) stayed in the buffer as
+"incomplete."
+
+**The fix that worked:** `execSync` with `cat input.txt | node server.js`. Shell pipe handles all buffering. Simple
+beats clever.
+
+**Rules for MCP integration benchmarks:**
+
+1. **Never pass scripts to `osascript -e`** — write to a temp file
+2. **Never re-register stdout listeners** between MCP messages — use a persistent buffer
+3. **Send `notifications/initialized`** after init (MCP protocol requirement; easy to forget)
+4. **Prefer shell pipes** (`execSync` with `cat | node`) over `spawn` for benchmarks — the shell handles buffering
+   correctly and the code is 10x simpler
+5. **Measure startup separately** — cold start dominates wall-clock time but is irrelevant for real usage
+
+**Cost:** ~45 minutes debugging benchmark infrastructure instead of measuring what we built. The migration itself took
+10 minutes.
+
+---
+
 ## Performance Benchmarks
 
 | Operation             | Target | Killers                     |
@@ -329,15 +390,18 @@ git stash drop stash@{0}           # Only drop after recovery
 
 ## Quick Reference
 
-| Never                         | Always                              |
-| ----------------------------- | ----------------------------------- |
-| Use `whose()` in JXA          | Use minimal helpers                 |
-| Mix bridge and JXA contexts   | Test with large datasets            |
-| Trust Claude Desktop types    | Return summaries first              |
-| Assume without testing        | Handle string coercion              |
-| Skip pattern search           | Validate full IDs                   |
-| Drop stash after failed apply | Verify file contents after recovery |
-| Use `any` for transformations | Use destructuring + `Omit<>`        |
+| Never                           | Always                                     |
+| ------------------------------- | ------------------------------------------ |
+| Use `whose()` in JXA            | Use minimal helpers                        |
+| Mix bridge and JXA contexts     | Test with large datasets                   |
+| Trust Claude Desktop types      | Return summaries first                     |
+| Assume without testing          | Handle string coercion                     |
+| Skip pattern search             | Validate full IDs                          |
+| Drop stash after failed apply   | Verify file contents after recovery        |
+| Use `any` for transformations   | Use destructuring + `Omit<>`               |
+| Hand-concatenate OmniJS scripts | Use AST builder (`buildListTasksScriptV4`) |
+| Pass multi-line scripts to `-e` | Write to temp file for `osascript`         |
+| Re-register stdout listeners    | Use persistent buffer or shell pipe        |
 
 ---
 

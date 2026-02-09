@@ -481,6 +481,23 @@ describe('QueryTasksTool', () => {
       expect(result.success).toBe(true);
     });
 
+    it('should handle overdue mode via AST builder (not legacy buildScript)', async () => {
+      mockOmni.executeJson.mockResolvedValueOnce({
+        tasks: [{ id: 't1', name: 'Overdue task', dueDate: '2020-01-01T17:00:00.000Z' }],
+      });
+
+      const result = await tool.execute({ mode: 'overdue' });
+
+      expect(result.success).toBe(true);
+      // AST-based overdue does NOT call buildScript — it generates the script directly
+      expect(mockOmni.buildScript).not.toHaveBeenCalled();
+      // It should still call executeJson (via execJson)
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+      // Metadata should indicate sort was applied
+      expect(result.metadata.mode).toBe('overdue');
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+
     it('should handle upcoming mode with daysAhead', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],
