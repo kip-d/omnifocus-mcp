@@ -72,15 +72,12 @@ describe('Completed Project Task Handling', () => {
       // Scripts use OmniJS bridge which checks completion via:
       // 1. task.completed (direct property)
       // 2. Project.Status.Done / Project.Status.Dropped (project status)
-      const { GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT, GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT } =
+      // Note: overdue and upcoming modes now use AST builder (completed: false filter handles project completion)
+      const { GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT } =
         await import('../../src/omnifocus/scripts/date-range-queries.js');
 
       // Verify date range queries check project completion status (OmniJS pattern)
       expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
-
-      // Overdue and upcoming modes now use AST builder (completed: false filter handles project completion)
-      // Legacy upcoming script retained for benchmark — verify it still checks project completion
-      expect(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
     });
   });
 
