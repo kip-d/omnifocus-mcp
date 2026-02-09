@@ -3,11 +3,11 @@ import { GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT } from '../../../../src/omnifo
 import { buildListTasksScriptV4 } from '../../../../src/omnifocus/scripts/tasks/list-tasks-ast';
 
 /**
- * Overdue mode migration: The overdue handler in QueryTasksTool now uses the AST builder
- * (buildListTasksScriptV4) instead of GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT.
+ * Overdue & upcoming mode migration: Both handlers in QueryTasksTool now use the AST builder
+ * (buildListTasksScriptV4) instead of legacy scripts.
  *
- * The legacy script is retained for the benchmark comparison test only.
- * These tests verify both the legacy script integrity and the AST approach.
+ * The legacy scripts are retained for benchmark comparison tests only.
+ * These tests verify both legacy script integrity and the AST approach.
  */
 
 describe('GET_OVERDUE_TASKS_ULTRA_OPTIMIZED_SCRIPT (legacy, retained for benchmark)', () => {
@@ -148,5 +148,120 @@ describe('AST-based overdue query (current implementation)', () => {
 
     expect(typeof script).toBe('string');
     expect(script.length).toBeGreaterThan(0);
+  });
+});
+
+describe('AST-based upcoming query (current implementation)', () => {
+  it('should build a script with dueAfter/dueBefore date range and completed: false', () => {
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 7);
+
+    const filter = {
+      completed: false,
+      dueAfter: startDate.toISOString(),
+      dueBefore: endDate.toISOString(),
+      limit: 50,
+    };
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: [],
+      limit: 50,
+    });
+
+    expect(typeof script).toBe('string');
+    expect(script.length).toBeGreaterThan(0);
+    expect(script).toContain('evaluateJavascript');
+  });
+
+  it('should support tag filters in upcoming query', () => {
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 7);
+
+    const filter = {
+      completed: false,
+      dueAfter: startDate.toISOString(),
+      dueBefore: endDate.toISOString(),
+      tags: ['work'],
+      tagsOperator: 'OR',
+      limit: 25,
+    };
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: [],
+      limit: 25,
+    });
+
+    expect(typeof script).toBe('string');
+    expect(script).toContain('work');
+  });
+
+  it('should support project filter in upcoming query', () => {
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 14);
+
+    const filter = {
+      completed: false,
+      dueAfter: startDate.toISOString(),
+      dueBefore: endDate.toISOString(),
+      project: 'My Project',
+      limit: 25,
+    };
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: [],
+      limit: 25,
+    });
+
+    expect(typeof script).toBe('string');
+    expect(script).toContain('My Project');
+  });
+});
+
+describe('AST-based flagged query (current implementation)', () => {
+  it('should build a script with flagged: true filter', () => {
+    const filter = {
+      flagged: true,
+      completed: false,
+      limit: 50,
+    };
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: [],
+      limit: 50,
+    });
+
+    expect(typeof script).toBe('string');
+    expect(script.length).toBeGreaterThan(0);
+    expect(script).toContain('evaluateJavascript');
+    expect(script).toContain('flagged');
+  });
+
+  it('should support tag filters in flagged query', () => {
+    const filter = {
+      flagged: true,
+      completed: false,
+      tags: ['urgent'],
+      tagsOperator: 'OR',
+      limit: 25,
+    };
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: [],
+      limit: 25,
+    });
+
+    expect(typeof script).toBe('string');
+    expect(script).toContain('urgent');
   });
 });

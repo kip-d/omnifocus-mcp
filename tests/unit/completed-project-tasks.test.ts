@@ -78,8 +78,8 @@ describe('Completed Project Task Handling', () => {
       // Verify date range queries check project completion status (OmniJS pattern)
       expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
 
-      // Overdue mode now uses AST builder (completed: false filter handles project completion)
-      // Upcoming still uses legacy OmniJS bridge with direct property checks
+      // Overdue and upcoming modes now use AST builder (completed: false filter handles project completion)
+      // Legacy upcoming script retained for benchmark — verify it still checks project completion
       expect(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT).toContain('isTaskEffectivelyCompleted(task)) continue');
     });
   });

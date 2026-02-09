@@ -2,9 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
 import { buildTaskCountScript } from '../../contracts/ast/script-builder.js';
-import { GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT } from '../../omnifocus/scripts/date-range-queries.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
-import { FLAGGED_TASKS_PERSPECTIVE_SCRIPT } from '../../omnifocus/scripts/tasks/flagged-tasks-perspective.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
   createTaskResponseV2,
@@ -837,10 +835,26 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleUpcomingTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
+    // AST-based implementation: uses buildListTasksScriptV4 with date range filters
     const days = args.daysAhead || 7;
-    const cacheKey = `tasks_upcoming_${days}_${args.limit}`;
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setHours(0, 0, 0, 0); // Start of today
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days);
 
-    // Check cache
+    const filter = {
+      ...this.processAdvancedFilters(args),
+      completed: false,
+      dueAfter: startDate.toISOString(),
+      dueBefore: endDate.toISOString(),
+      limit: args.limit,
+    };
+
+    // Cache key includes advanced filter params for accuracy
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_upcoming_${days}_${args.limit}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
+
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
@@ -852,39 +866,39 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       });
     }
 
-    // Execute optimized upcoming script
-    const script = this.omniAutomation.buildScript(GET_UPCOMING_TASKS_ULTRA_OPTIMIZED_SCRIPT, {
-      days,
-      includeToday: true,
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: args.fields || [],
       limit: args.limit,
+      offset: args.offset,
     });
-
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
-        result.error,
+        'Failed to get upcoming tasks',
         'Try reducing the days_ahead parameter',
-        result.details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    // Parse and cache
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
-    this.cache.set('tasks', cacheKey, { tasks });
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
+    // Default sort: soonest due first
+    const sortedTasks = this.sortTasks(tasks, args.sort || [{ field: 'dueDate', direction: 'asc' }]);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
+
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
     return createTaskResponseV2('tasks', projectedTasks, {
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'upcoming',
       days_ahead: days,
+      sort_applied: true,
     });
   }
 
@@ -1172,9 +1186,18 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleFlaggedTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    const cacheKey = `tasks_flagged_${args.limit}_${args.completed}`;
+    // AST-based implementation: uses buildListTasksScriptV4 with flagged filter
+    const filter = {
+      ...this.processAdvancedFilters(args),
+      flagged: true,
+      completed: args.completed || false,
+      limit: args.limit,
+    };
 
-    // Check cache
+    // Cache key includes advanced filter params for accuracy
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_flagged_${args.limit}_${args.completed}_${args.project || 'all'}_${sortedTags ? sortedTags.join(',') : 'no-tags'}`;
+
     const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
     if (cached) {
       const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
@@ -1185,33 +1208,37 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       });
     }
 
-    // Use perspective-based flagged script for best performance
-    const script = this.omniAutomation.buildScript(FLAGGED_TASKS_PERSPECTIVE_SCRIPT, {
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: args.fields || [],
       limit: args.limit,
-      includeCompleted: args.completed || false,
-      includeDetails: args.details || false,
+      offset: args.offset,
     });
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
-        result.error,
-        undefined,
-        result.details,
+        'Failed to get flagged tasks',
+        'Try using all mode with flagged filter',
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const tasks = this.parseTasks(data.tasks || data.items || []);
-    this.cache.set('tasks', cacheKey, { tasks });
+    const sortedTasks = this.sortTasks(tasks, args.sort);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
 
-    const projectedTasks = this.projectFields(tasks, args.fields);
-    return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: false, mode: 'flagged' });
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'flagged',
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleInboxTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {

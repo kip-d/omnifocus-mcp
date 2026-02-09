@@ -498,10 +498,9 @@ describe('QueryTasksTool', () => {
       expect(result.metadata.sort_applied).toBe(true);
     });
 
-    it('should handle upcoming mode with daysAhead', async () => {
+    it('should handle upcoming mode via AST builder (not legacy buildScript)', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
-        tasks: [],
-        summary: { total_tasks: 10, completed: 0, incomplete: 10 },
+        tasks: [{ id: 'abc', name: 'Upcoming task', dueDate: '2026-02-10T17:00:00.000Z' }],
       });
 
       const result = await tool.execute({
@@ -510,29 +509,26 @@ describe('QueryTasksTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockOmni.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          days: 14,
-        }),
-      );
+      // AST-based upcoming does NOT call buildScript — it generates the script directly
+      expect(mockOmni.buildScript).not.toHaveBeenCalled();
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+      expect(result.metadata.mode).toBe('upcoming');
+      expect(result.metadata.days_ahead).toBe(14);
+      expect(result.metadata.sort_applied).toBe(true);
     });
 
-    it('should handle flagged mode', async () => {
+    it('should handle flagged mode via AST builder (not legacy buildScript)', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
-        tasks: [],
-        summary: {
-          total_tasks: 7,
-          completed: 0,
-          incomplete: 7,
-          flagged: 7,
-        },
+        tasks: [{ id: 'abc', name: 'Flagged task', flagged: true }],
       });
 
       const result = await tool.execute({ mode: 'flagged' });
 
       expect(result.success).toBe(true);
-      expect(result.summary).toBeDefined();
+      // AST-based flagged does NOT call buildScript — it generates the script directly
+      expect(mockOmni.buildScript).not.toHaveBeenCalled();
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+      expect(result.metadata.mode).toBe('flagged');
     });
   });
 
