@@ -645,7 +645,7 @@ function bridgeSetPlannedDate(app, taskId, dateValue) {
 - `/docs/dev/PATTERNS.md` - Common solutions
 - `/docs/dev/LESSONS_LEARNED.md` - Historical context
 - `src/omnifocus/scripts/shared/minimal-tag-bridge.ts` - Bridge examples
-- `src/omnifocus/scripts/tasks/list-tasks.ts` - JXA property access examples
+- `src/omnifocus/scripts/tasks/list-tasks-ast.ts` - JXA property access examples
 
 ---
 

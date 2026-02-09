@@ -346,7 +346,7 @@ Runs both unit and integration tests.
 ### For Contributors & Advanced Users
 
 - **[`/scripts/`](scripts/)** - Utility scripts and testing tools
-- **[`/tests/`](tests/)** - Unit and integration test suites (740+ tests)
+- **[`/tests/`](tests/)** - Unit and integration test suites (1,098 tests)
 - **[Performance Benchmarks](docs/dev/BENCHMARK_RESULTS.md)** - Real-world performance data across hardware
 - **[Architecture Deep Dive](docs/dev/ARCHITECTURE.md)** - JXA + OmniJS Bridge implementation
 - **[Lessons Learned](docs/dev/LESSONS_LEARNED.md)** - Hard-won insights from development

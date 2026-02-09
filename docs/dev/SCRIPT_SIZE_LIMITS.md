@@ -42,7 +42,7 @@ assumption was only **3.6%** of actual JXA capacity!
 ```
 helpers.ts              31,681 chars  ✅ 6.1% of JXA limit
 workflow-analysis.ts    29,957 chars  ✅ 5.7% of JXA limit
-list-tasks.ts           26,347 chars  ✅ 5.0% of JXA limit
+list-tasks-ast.ts       26,347 chars  ✅ 5.0% of JXA limit
 update-task.ts          25,745 chars  ✅ 4.9% of JXA limit
 ```
 
@@ -54,7 +54,7 @@ All these scripts **work perfectly** despite exceeding the old assumption:
 
 - `helpers.ts` (31,681 chars) - 167% of old assumption
 - `workflow-analysis.ts` (29,957 chars) - 158% of old assumption
-- `list-tasks.ts` (26,347 chars) - 139% of old assumption
+- `list-tasks-ast.ts` (26,347 chars) - 139% of old assumption
 - `update-task.ts` (25,745 chars) - 135% of old assumption
 
 ## Test Methodology & Validation

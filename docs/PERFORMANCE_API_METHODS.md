@@ -47,7 +47,7 @@ task.numberOfCompletedTasks(); // Completed direct children
 
 **Used in:**
 
-- `src/omnifocus/scripts/tasks/list-tasks.ts:577-582`
+- `src/omnifocus/scripts/tasks/list-tasks-ast.ts:577-582`
 - `src/omnifocus/scripts/shared/helpers.ts:137, 649, 658, 662, 672, 676`
 
 ### ✅ Tag Properties - IMPLEMENTED
