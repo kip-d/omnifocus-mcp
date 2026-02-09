@@ -54,7 +54,7 @@ export interface GeneratedScript {
 /**
  * Default fields to include in task response
  */
-const DEFAULT_FIELDS = [
+export const DEFAULT_FIELDS = [
   'id',
   'name',
   'completed',
@@ -78,8 +78,9 @@ const DEFAULT_FIELDS = [
 /**
  * Generate the field projection code for a task object
  */
-function generateFieldProjection(fields: string[]): string {
+function generateFieldProjection(fields: string[], context?: { dueSoonDays?: number }): string {
   const fieldList = fields.length > 0 ? fields : DEFAULT_FIELDS;
+  const dueSoonDays = context?.dueSoonDays ?? 3;
 
   const projections: string[] = [];
 
@@ -157,6 +158,27 @@ function generateFieldProjection(fields: string[]): string {
       case 'parentTaskName':
         projections.push('parentTaskName: task.parent ? task.parent.name : null');
         break;
+      case 'reason':
+        projections.push(`reason: (() => {
+    const _today = new Date(); _today.setHours(0, 0, 0, 0);
+    const _cutoff = new Date(_today); _cutoff.setDate(_cutoff.getDate() + ${dueSoonDays});
+    if (task.dueDate && task.dueDate < _today) return 'overdue';
+    if (task.dueDate && task.dueDate < _cutoff) return 'due_soon';
+    if (task.flagged) return 'flagged';
+    return null;
+  })()`);
+        break;
+      case 'daysOverdue':
+        projections.push(`daysOverdue: (() => {
+    if (!task.dueDate) return 0;
+    const _now = new Date(); _now.setHours(0, 0, 0, 0);
+    const diff = Math.floor((_now.getTime() - task.dueDate.getTime()) / 86400000);
+    return diff > 0 ? diff : 0;
+  })()`);
+        break;
+      case 'modified':
+        projections.push('modified: task.modified ? task.modified.toISOString() : null');
+        break;
     }
   }
 
@@ -192,8 +214,10 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Build description
   const filterDescription = describeFilterForScript(filter);
 
-  // Generate field projection
-  const fieldProjection = generateFieldProjection(fields);
+  // Generate field projection (thread dueSoonDays from filter for reason field)
+  const fieldProjection = generateFieldProjection(fields, {
+    dueSoonDays: (filter as TaskFilter).dueSoonDays,
+  });
 
   // Determine completion filter behavior
   // If filter explicitly sets completed, use that

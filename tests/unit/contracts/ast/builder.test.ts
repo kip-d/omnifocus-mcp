@@ -436,4 +436,134 @@ describe('buildAST', () => {
       expect(ast.type).toBe('comparison');
     });
   });
+
+  describe('todayMode filters', () => {
+    it('produces OR node with dueSoon AND flagged when todayMode is true', () => {
+      const filter: TaskFilter = {
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        completed: false,
+        dropped: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Should have OR node as one of the children
+      const orNode = ast.children.find((c) => c.type === 'or');
+      expect(orNode).toBeDefined();
+      if (!orNode || orNode.type !== 'or') return;
+
+      // OR node should have 2 children: dueSoon condition and flagged condition
+      expect(orNode.children).toHaveLength(2);
+
+      // First child: AND(exists(dueDate), dueDate < cutoff)
+      expect(orNode.children[0].type).toBe('and');
+      if (orNode.children[0].type === 'and') {
+        expect(orNode.children[0].children).toHaveLength(2);
+        expect(orNode.children[0].children[0]).toEqual({
+          type: 'exists',
+          field: 'task.dueDate',
+          exists: true,
+        });
+        expect(orNode.children[0].children[1]).toEqual({
+          type: 'comparison',
+          field: 'task.dueDate',
+          operator: '<',
+          value: '2026-02-12T00:00:00.000Z',
+        });
+      }
+
+      // Second child: flagged == true
+      expect(orNode.children[1]).toEqual({
+        type: 'comparison',
+        field: 'task.flagged',
+        operator: '==',
+        value: true,
+      });
+    });
+
+    it('skips regular flagged handler when todayMode is active', () => {
+      const filter: TaskFilter = {
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        flagged: true,
+        completed: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Should NOT have a standalone flagged comparison (it's consumed by OR node)
+      const standaloneFlagged = ast.children.filter(
+        (c) => c.type === 'comparison' && (c as { field: string }).field === 'task.flagged',
+      );
+      expect(standaloneFlagged).toHaveLength(0);
+    });
+
+    it('skips regular due date handlers when todayMode is active', () => {
+      const filter: TaskFilter = {
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        completed: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Should NOT have a standalone AND(exists(dueDate), dueDate <= ...) node
+      // from the regular due date handler. The only dueDate references should be
+      // inside the OR node.
+      const topLevelDueDateExists = ast.children.filter(
+        (c) => c.type === 'and' && c.children.some((gc) => gc.type === 'exists' && gc.field === 'task.dueDate'),
+      );
+      // The only AND with dueDate exists should be inside the OR node, not at top level
+      expect(topLevelDueDateExists).toHaveLength(0);
+    });
+
+    it('does not produce OR node when todayMode is false or missing', () => {
+      const filter: TaskFilter = {
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        flagged: true,
+        completed: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Should NOT have an OR node
+      const orNode = ast.children.find((c) => c.type === 'or');
+      expect(orNode).toBeUndefined();
+    });
+  });
+
+  describe('tagStatusValid filter', () => {
+    it('transforms tagStatusValid: true to comparison node', () => {
+      const filter: TaskFilter = { tagStatusValid: true };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '==',
+        value: true,
+      });
+    });
+
+    it('transforms tagStatusValid: false to comparison node', () => {
+      const filter: TaskFilter = { tagStatusValid: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '==',
+        value: false,
+      });
+    });
+  });
 });

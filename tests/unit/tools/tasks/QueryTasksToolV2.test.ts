@@ -465,6 +465,30 @@ describe('QueryTasksTool', () => {
       expect(result.summary).toBeDefined();
     });
 
+    it('should handle today mode via AST builder with metadata', async () => {
+      mockOmni.executeJson.mockResolvedValueOnce({
+        tasks: [
+          { id: 't1', name: 'Overdue task', reason: 'overdue', daysOverdue: 3 },
+          { id: 't2', name: 'Due soon task', reason: 'due_soon', daysOverdue: 0 },
+          { id: 't3', name: 'Flagged task', reason: 'flagged', daysOverdue: 0 },
+        ],
+      });
+
+      const result = await tool.execute({ mode: 'today' });
+
+      expect(result.success).toBe(true);
+      expect(result.metadata).toBeDefined();
+      if (result.metadata) {
+        expect(result.metadata.mode).toBe('today');
+        expect(result.metadata.overdue_count).toBe(1);
+        expect(result.metadata.due_soon_count).toBe(1);
+        expect(result.metadata.flagged_count).toBe(1);
+        expect(result.metadata.due_soon_days).toBe(3);
+      }
+      // Should use AST builder (executeJson), not legacy buildScript
+      expect(mockOmni.executeJson).toHaveBeenCalled();
+    });
+
     it('should handle overdue mode', async () => {
       mockOmni.executeJson.mockResolvedValueOnce({
         tasks: [],

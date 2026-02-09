@@ -95,6 +95,23 @@ export interface TaskFilter {
   available?: boolean;
   inInbox?: boolean;
 
+  // --- Today Mode ---
+  /**
+   * Today mode: OR logic (Due Soon OR Flagged) matching OmniFocus Today perspective.
+   * When true, buildAST() combines dueBefore + flagged into an OR node.
+   * Requires dueBefore to be set (the Due Soon cutoff date).
+   */
+  todayMode?: boolean;
+
+  /**
+   * Tag status filter: requires task to have at least one active/on-hold tag, OR be untagged.
+   * Matches OmniFocus perspective rule: "Has a tag that is active or on hold" OR "Untagged".
+   */
+  tagStatusValid?: boolean;
+
+  /** Due Soon interval in days (used by reason field computation, default: 3) */
+  dueSoonDays?: number;
+
   // --- Status Filters (for analytics) ---
   /**
    * Filter by dropped status
@@ -290,6 +307,9 @@ export const FILTER_PROPERTY_NAMES = [
   'inInbox',
   'dropped', // NEW: Filter by dropped status
   'hasRepetitionRule', // NEW: Filter for recurring tasks
+  'todayMode',
+  'tagStatusValid',
+  'dueSoonDays',
   'projectId',
   'folder', // NEW: Filter projects by folder name
   'limit',

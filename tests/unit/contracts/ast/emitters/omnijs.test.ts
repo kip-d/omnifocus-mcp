@@ -225,6 +225,47 @@ describe('emitOmniJS', () => {
     });
   });
 
+  describe('tagStatusValid comparisons', () => {
+    it('emits tag status check for tagStatusValid: true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '==',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('task.tags.length === 0');
+      expect(code).toContain('Tag.Status.Active');
+      expect(code).toContain('Tag.Status.OnHold');
+      expect(code).toContain('||');
+    });
+
+    it('emits negated tag status check for tagStatusValid: false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '==',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('task.tags.length > 0');
+      expect(code).toContain('!task.tags.some');
+    });
+
+    it('emits negated check for tagStatusValid != true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '!=',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      // != true should be same as == false
+      expect(code).toContain('task.tags.length > 0');
+      expect(code).toContain('!task.tags.some');
+    });
+  });
+
   describe('logical nodes', () => {
     it('emits AND with && operator', () => {
       const ast: FilterNode = {

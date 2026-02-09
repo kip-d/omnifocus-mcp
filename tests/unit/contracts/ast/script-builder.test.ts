@@ -257,6 +257,42 @@ describe('buildTaskByIdScript', () => {
   });
 });
 
+describe('field projections for today mode', () => {
+  it('generates reason field IIFE with default 3-day dueSoonDays', () => {
+    const result = buildFilteredTasksScript({}, { fields: ['id', 'name', 'reason'] });
+
+    expect(result.script).toContain('reason:');
+    expect(result.script).toContain("return 'overdue'");
+    expect(result.script).toContain("return 'due_soon'");
+    expect(result.script).toContain("return 'flagged'");
+    // Default dueSoonDays is 3
+    expect(result.script).toContain('getDate() + 3');
+  });
+
+  it('generates daysOverdue field IIFE', () => {
+    const result = buildFilteredTasksScript({}, { fields: ['id', 'daysOverdue'] });
+
+    expect(result.script).toContain('daysOverdue:');
+    expect(result.script).toContain('86400000');
+    expect(result.script).toContain('task.dueDate');
+  });
+
+  it('generates modified field projection', () => {
+    const result = buildFilteredTasksScript({}, { fields: ['id', 'modified'] });
+
+    expect(result.script).toContain('modified:');
+    expect(result.script).toContain('task.modified');
+    expect(result.script).toContain('toISOString');
+  });
+
+  it('threads dueSoonDays to reason field when provided via filter', () => {
+    const filter = { todayMode: true, dueBefore: '2026-02-12', dueSoonDays: 5 };
+    const result = buildFilteredTasksScript(filter, { fields: ['reason'] });
+
+    expect(result.script).toContain('getDate() + 5');
+  });
+});
+
 describe('buildRecurringTasksScript', () => {
   describe('basic script generation', () => {
     it('generates valid OmniJS script for recurring tasks', () => {

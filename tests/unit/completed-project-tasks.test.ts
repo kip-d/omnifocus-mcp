@@ -43,14 +43,21 @@ describe('Completed Project Task Handling', () => {
       expect(script).toBeDefined();
     });
 
-    it('should check for completed tasks and projects in todays-agenda script', async () => {
-      const { TODAYS_AGENDA_SCRIPT } = await import('../../src/omnifocus/scripts/tasks/todays-agenda.js');
+    it('should check for completed and dropped tasks in AST-powered today filter', async () => {
+      const { buildFilteredTasksScript } = await import('../../src/contracts/ast/script-builder.js');
 
-      // Today's agenda now uses OmniJS bridge with direct property checks
-      // It checks for task.completed and Project.Status.Done/Dropped
-      expect(TODAYS_AGENDA_SCRIPT).toContain('task.completed');
-      expect(TODAYS_AGENDA_SCRIPT).toContain('Project.Status.Done');
-      expect(TODAYS_AGENDA_SCRIPT).toContain('Project.Status.Dropped');
+      // Today mode uses AST builder with todayMode filter which includes
+      // completed: false and dropped: false via the handler
+      const { script } = buildFilteredTasksScript({
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        completed: false,
+        dropped: false,
+        tagStatusValid: true,
+      });
+
+      expect(script).toContain('task.completed === false');
+      expect(script).toContain('Task.Status.Dropped');
     });
 
     it('should use AST filter generator for completion filtering in export', async () => {

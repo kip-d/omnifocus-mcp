@@ -144,6 +144,7 @@ export const KNOWN_FIELDS = [
   // Status properties
   'task.taskStatus', // TaskStatus enum: active, completed, dropped
   'task.dropped', // Synthetic: taskStatus === Task.Status.Dropped (computed in emitter)
+  'task.tagStatusValid', // Synthetic: has active/on-hold tag or untagged (computed in emitter)
 
   // Date properties
   'task.dueDate',

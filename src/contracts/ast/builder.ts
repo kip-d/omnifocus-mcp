@@ -29,8 +29,22 @@ export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode 
     conditions.push(comparison('task.completed', '==', filter.completed));
   }
 
+  // --- Today Mode (OR logic: Due Soon OR Flagged) ---
+  // Must come BEFORE flagged and due date handlers to consume those properties
+  if (filter.todayMode && filter.dueBefore) {
+    const dueSoonCondition = and(exists('task.dueDate', true), comparison('task.dueDate', '<', filter.dueBefore));
+    const flaggedCondition = comparison('task.flagged', '==', true);
+    conditions.push(or(dueSoonCondition, flaggedCondition));
+  }
+
+  // --- Tag status filter ---
+  if (filter.tagStatusValid !== undefined) {
+    conditions.push(comparison('task.tagStatusValid', '==', filter.tagStatusValid));
+  }
+
   // --- Boolean flags ---
-  if (filter.flagged !== undefined) {
+  // Skip flagged when todayMode is active (consumed by OR node above)
+  if (filter.flagged !== undefined && !filter.todayMode) {
     conditions.push(comparison('task.flagged', '==', filter.flagged));
   }
 
@@ -77,14 +91,17 @@ export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode 
   }
 
   // --- Due date filters ---
-  const dueDateConditions = buildDateConditions(
-    'task.dueDate',
-    filter.dueAfter,
-    filter.dueBefore,
-    filter.dueDateOperator,
-  );
-  if (dueDateConditions.length > 0) {
-    conditions.push(and(exists('task.dueDate', true), ...dueDateConditions));
+  // Skip when todayMode is active (consumed by OR node above)
+  if (!filter.todayMode) {
+    const dueDateConditions = buildDateConditions(
+      'task.dueDate',
+      filter.dueAfter,
+      filter.dueBefore,
+      filter.dueDateOperator,
+    );
+    if (dueDateConditions.length > 0) {
+      conditions.push(and(exists('task.dueDate', true), ...dueDateConditions));
+    }
   }
 
   // --- Defer date filters ---

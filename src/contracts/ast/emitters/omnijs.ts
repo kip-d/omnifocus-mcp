@@ -77,6 +77,12 @@ function emitComparison(node: ComparisonNode): string {
     return emitBlockedComparison(operator, value as boolean);
   }
 
+  // Special handling for 'tagStatusValid' synthetic field
+  // Matches OmniFocus perspective: "Has a tag that is active or on hold" OR "Untagged"
+  if (field === 'task.tagStatusValid') {
+    return emitTagStatusValidComparison(operator, value as boolean);
+  }
+
   // Get the field accessor (OmniJS uses direct property access)
   const accessor = getFieldAccessor(field);
 
@@ -218,6 +224,27 @@ function emitBlockedComparison(operator: ComparisonOperator, isBlocked: boolean)
       }
     default:
       throw new Error(`Unsupported blocked operator: ${operator}`);
+  }
+}
+
+function emitTagStatusValidComparison(operator: ComparisonOperator, isValid: boolean): string {
+  // OmniFocus perspective rule: task must have an active/on-hold tag, or have no tags at all.
+  // This excludes tasks whose ONLY tags are dropped/inactive.
+  switch (operator) {
+    case '==':
+      if (isValid) {
+        return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
+      } else {
+        return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
+      }
+    case '!=':
+      if (isValid) {
+        return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
+      } else {
+        return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
+      }
+    default:
+      throw new Error(`Unsupported tagStatusValid operator: ${operator}`);
   }
 }
 

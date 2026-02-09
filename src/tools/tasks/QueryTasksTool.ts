@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '../base.js';
-import { buildListTasksScriptV4, TODAYS_AGENDA_SCRIPT } from '../../omnifocus/scripts/tasks.js';
-import { buildTaskCountScript } from '../../contracts/ast/script-builder.js';
+import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
+import { buildTaskCountScript, DEFAULT_FIELDS } from '../../contracts/ast/script-builder.js';
 import { isScriptError } from '../../omnifocus/script-result-types.js';
 import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
@@ -903,78 +903,92 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private async handleTodaysTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {
-    // Use the ultra-fast optimized script for today's agenda
-    const cacheKey = `tasks_today_${args.limit}_${args.details}`;
+    // AST-based implementation: OR logic (Due Soon OR Flagged) matching OmniFocus Today perspective
+    const dueSoonDays = args.daysAhead || 3;
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const dueSoonCutoff = new Date(todayStart);
+    dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
 
-    // Check cache
-    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
-    if (cached) {
-      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
-      return createTaskResponseV2('tasks', projectedTasks, { ...timer.toMetadata(), from_cache: true, mode: 'today' });
-    }
-
-    // Use the ultra-fast single-pass algorithm
-    const options = {
-      includeOverdue: true,
-      includeFlagged: true,
-      includeAvailable: true,
-      includeDetails: args.details,
+    const filter = {
+      ...this.processAdvancedFilters(args),
+      todayMode: true,
+      dueBefore: dueSoonCutoff.toISOString(),
+      completed: false,
+      dropped: false,
+      tagStatusValid: true,
+      dueSoonDays,
       limit: args.limit,
     };
 
-    // Use the optimized today's agenda script
-    const script = this.omniAutomation.buildScript(TODAYS_AGENDA_SCRIPT, {
-      options,
-      fields: args.fields || [],
+    const sortedTags = args.tags ? [...args.tags].sort() : undefined;
+    const cacheKey = `tasks_today_${dueSoonDays}_${args.limit}_${args.project || 'all'}_${sortedTags?.join(',') || 'no-tags'}`;
+
+    const cached = this.cache.get<{ tasks: OmniFocusTask[] }>('tasks', cacheKey);
+    if (cached) {
+      const projectedTasks = this.projectFields(cached?.tasks || [], args.fields);
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: true,
+        mode: 'today',
+      });
+    }
+
+    // Ensure reason + daysOverdue + modified are projected for category counting and sorting.
+    // When user specifies no fields, use DEFAULT_FIELDS as the base.
+    const fields = args.fields || [];
+    const baseFields = fields.length > 0 ? fields : DEFAULT_FIELDS;
+    const scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
+
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: scriptFields,
+      limit: args.limit,
+      offset: args.offset,
     });
-
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
         'SCRIPT_ERROR',
-        result.error,
+        'Failed to get today tasks',
         'Check if OmniFocus is running and not blocked by dialogs',
-        result.details,
+        isScriptError(result) ? result.details : undefined,
         timer.toMetadata(),
       );
     }
 
-    // Unwrap nested data structure (script returns { ok: true, v: '1', data: { tasks: [...] } })
-    type TodayDataStructure = {
-      tasks?: unknown[];
-      overdueCount?: number;
-      dueTodayCount?: number;
-      flaggedCount?: number;
-      processedCount?: number;
-      totalTasks?: number;
-      optimizationUsed?: string;
-    };
-    const envelope = result.data as { ok?: boolean; v?: string; data?: TodayDataStructure } | TodayDataStructure;
-    const data: TodayDataStructure =
-      'data' in envelope && envelope.data ? envelope.data : (envelope as TodayDataStructure);
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = this.parseTasks(data.tasks || data.items || []);
 
-    const todayTasks = this.parseTasks(data.tasks || []);
+    // Compute category counts from reason field
+    let overdueCount = 0,
+      dueSoonCount = 0,
+      flaggedCount = 0;
+    for (const task of tasks) {
+      const reason = (task as unknown as Record<string, unknown>).reason;
+      if (reason === 'overdue') overdueCount++;
+      else if (reason === 'due_soon') dueSoonCount++;
+      else if (reason === 'flagged') flaggedCount++;
+    }
 
-    // Cache the results
-    this.cache.set('tasks', cacheKey, { tasks: todayTasks });
+    // Default sort: modified date descending (matches OmniFocus Today perspective "Changed Date")
+    const sortedTasks = this.sortTasks(tasks, args.sort || [{ field: 'modified', direction: 'desc' }]);
+    this.cache.set('tasks', cacheKey, { tasks: sortedTasks });
 
-    // Return with additional metadata from the ultra-fast script
-    const metadata = {
+    const projectedTasks = this.projectFields(sortedTasks, args.fields);
+    return createTaskResponseV2('tasks', projectedTasks, {
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'today',
-      overdue_count: data.overdueCount || 0,
-      due_today_count: data.dueTodayCount || 0,
-      flagged_count: data.flaggedCount || 0,
-      optimization: data.optimizationUsed || 'ultra_fast',
-    };
-
-    const projectedTasks = this.projectFields(todayTasks, args.fields);
-    return createTaskResponseV2('tasks', projectedTasks, metadata);
+      due_soon_days: dueSoonDays,
+      overdue_count: overdueCount,
+      due_soon_count: dueSoonCount,
+      flagged_count: flaggedCount,
+      sort_applied: args.sort ? true : false,
+    });
   }
 
   private async handleSearchTasks(args: QueryTasksArgsV2, timer: OperationTimerV2): Promise<TasksResponseV2> {

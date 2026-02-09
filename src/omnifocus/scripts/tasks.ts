@@ -16,7 +16,7 @@ export { COMPLETE_TASK_SCRIPT, COMPLETE_TASK_OMNI_SCRIPT } from './tasks/complet
 export { BULK_COMPLETE_TASKS_SCRIPT, buildBulkCompleteTasksScript } from './tasks/complete-tasks-bulk.js';
 export { DELETE_TASK_SCRIPT, DELETE_TASK_OMNI_SCRIPT } from './tasks/delete-task.js';
 export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
-export { TODAYS_AGENDA_SCRIPT } from './tasks/todays-agenda.js';
+// Note: TODAYS_AGENDA_SCRIPT archived 2026-02-09, replaced by AST builder (todayMode in buildAST)
 
 // AST-powered scripts (Phase 1-2 migration complete 2025-12-17):
 // - list-tasks: buildListTasksScriptV4 from list-tasks-ast.ts (74% smaller)
