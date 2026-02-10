@@ -115,6 +115,17 @@ export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode 
     conditions.push(and(exists('task.deferDate', true), ...deferDateConditions));
   }
 
+  // --- Planned date filters ---
+  const plannedDateConditions = buildDateConditions(
+    'task.plannedDate',
+    filter.plannedAfter,
+    filter.plannedBefore,
+    filter.plannedDateOperator,
+  );
+  if (plannedDateConditions.length > 0) {
+    conditions.push(and(exists('task.plannedDate', true), ...plannedDateConditions));
+  }
+
   // --- Project filter ---
   // Support both filter.projectId (from advanced filters) and filter.project (from simple project param)
   const projectFilter = filter.projectId ?? filter.project;

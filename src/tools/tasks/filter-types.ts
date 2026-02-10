@@ -68,6 +68,7 @@ export interface QueryFilters {
   // Date filters
   dueDate?: DateFilter;
   deferDate?: DateFilter;
+  plannedDate?: DateFilter;
   completionDate?: DateFilter;
   added?: DateFilter;
 

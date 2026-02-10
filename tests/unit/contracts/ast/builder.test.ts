@@ -366,6 +366,78 @@ describe('buildAST', () => {
     });
   });
 
+  describe('planned date filters', () => {
+    it('transforms plannedBefore', () => {
+      const filter: TaskFilter = { plannedBefore: '2025-12-31' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.plannedDate', exists: true },
+          { type: 'comparison', field: 'task.plannedDate', operator: '<=', value: '2025-12-31' },
+        ],
+      });
+    });
+
+    it('transforms plannedAfter', () => {
+      const filter: TaskFilter = { plannedAfter: '2025-01-01' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.plannedDate', exists: true },
+          { type: 'comparison', field: 'task.plannedDate', operator: '>=', value: '2025-01-01' },
+        ],
+      });
+    });
+
+    it('transforms planned date range (BETWEEN)', () => {
+      const filter: TaskFilter = {
+        plannedAfter: '2025-01-01',
+        plannedBefore: '2025-12-31',
+        plannedDateOperator: 'BETWEEN',
+      };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.plannedDate', exists: true },
+          { type: 'comparison', field: 'task.plannedDate', operator: '>=', value: '2025-01-01' },
+          { type: 'comparison', field: 'task.plannedDate', operator: '<=', value: '2025-12-31' },
+        ],
+      });
+    });
+
+    it('transforms plannedBefore with exclusive operator', () => {
+      const filter: TaskFilter = { plannedBefore: '2025-12-31', plannedDateOperator: '<' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.plannedDate', exists: true },
+          { type: 'comparison', field: 'task.plannedDate', operator: '<', value: '2025-12-31' },
+        ],
+      });
+    });
+
+    it('transforms plannedAfter with exclusive operator', () => {
+      const filter: TaskFilter = { plannedAfter: '2025-01-01', plannedDateOperator: '>' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'and',
+        children: [
+          { type: 'exists', field: 'task.plannedDate', exists: true },
+          { type: 'comparison', field: 'task.plannedDate', operator: '>', value: '2025-01-01' },
+        ],
+      });
+    });
+  });
+
   describe('project filter', () => {
     it('transforms projectId', () => {
       const filter: TaskFilter = { projectId: 'abc123' };

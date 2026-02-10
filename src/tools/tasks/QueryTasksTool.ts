@@ -594,6 +594,38 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       }
     }
 
+    // Planned date filters
+    if (advancedFilters.plannedDate && !filter.plannedBefore && !filter.plannedAfter) {
+      if (isDateFilter(advancedFilters.plannedDate)) {
+        const normalizedDate = normalizeDateInput(advancedFilters.plannedDate.value, 'due');
+        if (normalizedDate) {
+          const isoDate = normalizedDate.toISOString();
+          switch (advancedFilters.plannedDate.operator) {
+            case '<':
+            case '<=':
+              filter.plannedBefore = isoDate;
+              filter.plannedDateOperator = advancedFilters.plannedDate.operator;
+              break;
+            case '>':
+            case '>=':
+              filter.plannedAfter = isoDate;
+              filter.plannedDateOperator = advancedFilters.plannedDate.operator;
+              break;
+            case 'BETWEEN':
+              filter.plannedAfter = isoDate;
+              if (advancedFilters.plannedDate.upperBound) {
+                const upperDate = normalizeDateInput(advancedFilters.plannedDate.upperBound, 'due');
+                if (upperDate) {
+                  filter.plannedBefore = upperDate.toISOString();
+                }
+              }
+              filter.plannedDateOperator = 'BETWEEN';
+              break;
+          }
+        }
+      }
+    }
+
     // Added date filters
     if (advancedFilters.added && !filter.addedBefore && !filter.addedAfter) {
       if (isDateFilter(advancedFilters.added)) {

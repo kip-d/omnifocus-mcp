@@ -226,6 +226,8 @@ PERFORMANCE:
       filters.dueAfter ||
       filters.deferBefore ||
       filters.deferAfter ||
+      filters.plannedBefore ||
+      filters.plannedAfter ||
       filters.flagged !== undefined ||
       filters.blocked !== undefined ||
       filters.available !== undefined ||
@@ -257,6 +259,21 @@ PERFORMANCE:
         advanced.dueDate = { operator: '<=', value: filters.dueBefore };
       } else if (filters.dueAfter) {
         advanced.dueDate = { operator: '>=', value: filters.dueAfter };
+      }
+    }
+
+    // Planned date filters (already transformed to plannedBefore/plannedAfter)
+    if (filters.plannedBefore || filters.plannedAfter) {
+      if (filters.plannedDateOperator === 'BETWEEN' && filters.plannedAfter && filters.plannedBefore) {
+        advanced.plannedDate = {
+          operator: 'BETWEEN',
+          value: filters.plannedAfter,
+          upperBound: filters.plannedBefore,
+        };
+      } else if (filters.plannedBefore) {
+        advanced.plannedDate = { operator: '<=', value: filters.plannedBefore };
+      } else if (filters.plannedAfter) {
+        advanced.plannedDate = { operator: '>=', value: filters.plannedAfter };
       }
     }
 
