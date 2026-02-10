@@ -8,7 +8,118 @@
  */
 
 import type { OmniFocusTask } from '../../omnifocus/types.js';
+import type { TaskFilter } from '../../contracts/filters.js';
 import type { SortOption } from './filter-types.js';
+
+// =============================================================================
+// MODE-SPECIFIC FILTER AUGMENTATION
+// =============================================================================
+
+export type TaskQueryMode =
+  | 'all'
+  | 'inbox'
+  | 'search'
+  | 'overdue'
+  | 'today'
+  | 'upcoming'
+  | 'available'
+  | 'blocked'
+  | 'flagged'
+  | 'smart_suggest';
+
+interface ModeOptions {
+  daysAhead?: number;
+}
+
+/**
+ * Augment a TaskFilter with mode-specific constraints.
+ *
+ * Mirrors the filter augmentation that each QueryTasksTool handler applies
+ * (e.g. overdue adds dueBefore: now with operator '<').
+ */
+export function augmentFilterForMode(
+  mode: TaskQueryMode | undefined,
+  filter: TaskFilter,
+  options: ModeOptions = {},
+): TaskFilter {
+  const result = { ...filter };
+
+  switch (mode) {
+    case 'overdue': {
+      result.completed = false;
+      result.dueBefore = new Date().toISOString();
+      result.dueDateOperator = '<';
+      break;
+    }
+    case 'today': {
+      const dueSoonDays = options.daysAhead || 3;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const dueSoonCutoff = new Date(todayStart);
+      dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
+
+      result.todayMode = true;
+      result.dueBefore = dueSoonCutoff.toISOString();
+      result.completed = false;
+      result.dropped = false;
+      result.tagStatusValid = true;
+      result.dueSoonDays = dueSoonDays;
+      break;
+    }
+    case 'upcoming': {
+      const days = options.daysAhead || 7;
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + days);
+
+      result.completed = false;
+      result.dueAfter = startDate.toISOString();
+      result.dueBefore = endDate.toISOString();
+      break;
+    }
+    case 'available': {
+      result.completed = false;
+      result.available = true;
+      break;
+    }
+    case 'blocked': {
+      result.completed = false;
+      result.blocked = true;
+      break;
+    }
+    case 'flagged': {
+      result.flagged = true;
+      if (result.completed === undefined) result.completed = false;
+      break;
+    }
+    case 'smart_suggest': {
+      result.completed = false;
+      break;
+    }
+    // 'all', 'inbox', 'search', undefined — no augmentation needed
+    default:
+      break;
+  }
+
+  return result;
+}
+
+/**
+ * Get the default sort for a given mode.
+ * Returns undefined if the mode has no default sort.
+ */
+export function getDefaultSort(mode: TaskQueryMode | undefined): SortOption[] | undefined {
+  switch (mode) {
+    case 'overdue':
+    case 'upcoming':
+      return [{ field: 'dueDate', direction: 'asc' }];
+    case 'today':
+      return [{ field: 'modified', direction: 'desc' }];
+    default:
+      return undefined;
+  }
+}
 
 // =============================================================================
 // TASK PARSING

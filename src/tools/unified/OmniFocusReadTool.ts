@@ -2,8 +2,19 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
 import { QueryCompiler, type CompiledQuery } from './compilers/QueryCompiler.js';
-import type { TaskFilter } from '../../contracts/filters.js';
-import { QueryTasksTool } from '../tasks/QueryTasksTool.js';
+import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
+import { buildTaskCountScript, DEFAULT_FIELDS } from '../../contracts/ast/script-builder.js';
+import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
+import { createTaskResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import {
+  augmentFilterForMode,
+  getDefaultSort,
+  parseTasks,
+  sortTasks,
+  projectFields,
+  scoreForSmartSuggest,
+  type TaskQueryMode,
+} from '../tasks/task-query-pipeline.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
@@ -55,7 +66,6 @@ PERFORMANCE:
   };
 
   private compiler: QueryCompiler;
-  private tasksTool: QueryTasksTool;
   private projectsTool: ProjectsTool;
   private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
@@ -66,8 +76,7 @@ PERFORMANCE:
     super(cache);
     this.compiler = new QueryCompiler();
 
-    // Instantiate existing tools for routing
-    this.tasksTool = new QueryTasksTool(cache);
+    // Instantiate existing tools for routing (non-task types)
     this.projectsTool = new ProjectsTool(cache);
     this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
@@ -101,46 +110,121 @@ PERFORMANCE:
   }
 
   private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
-    // Map compiled query to existing tasks tool parameters
-    const tasksArgs: Record<string, unknown> = {
-      mode: compiled.mode,
-      limit: compiled.limit || 25,
+    const timer = new OperationTimerV2();
+    const limit = compiled.limit || 25;
+    const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
+
+    // Augment filters with mode-specific constraints (e.g. overdue → dueBefore: now)
+    const filter = augmentFilterForMode(mode, compiled.filters, {
+      daysAhead: compiled.daysAhead,
+    });
+
+    // --- Count-only fast path ---
+    if (compiled.countOnly) {
+      const { script } = buildTaskCountScript(filter, { maxScan: 10000 });
+      const result = await this.execJson(script);
+
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
+          'tasks',
+          'SCRIPT_ERROR',
+          'Failed to count tasks',
+          'Check if OmniFocus is running and filters are valid',
+          isScriptError(result) ? result.details : undefined,
+          timer.toMetadata(),
+        );
+      }
+
+      const data = result.data as {
+        count?: number;
+        warning?: string;
+        optimization?: string;
+        filter_description?: string;
+      };
+      return createTaskResponseV2('tasks', [], {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: mode || 'count_only',
+        count_only: true,
+        total_count: data.count ?? 0,
+        filters_applied: filter as unknown as Record<string, unknown>,
+        optimization: data.optimization || 'ast_omnijs_bridge',
+        filter_description: data.filter_description,
+        warning: data.warning,
+      });
+    }
+
+    // --- Today mode: extra fields for category counting ---
+    let scriptFields = compiled.fields || [];
+    if (mode === 'today') {
+      const baseFields = scriptFields.length > 0 ? scriptFields : DEFAULT_FIELDS;
+      scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
+    }
+
+    // --- Build and execute query ---
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: scriptFields,
+      limit,
       offset: compiled.offset,
-      fields: compiled.fields,
-      sort: compiled.sort,
-      countOnly: compiled.countOnly,
-      response_format: 'json', // Optimized for LLM token efficiency
+      mode: mode === 'inbox' ? 'inbox' : undefined,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        `Failed to get tasks (mode: ${mode || 'all'})`,
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    let tasks = parseTasks(data.tasks || data.items || []);
+
+    // --- Smart suggest: score and rank ---
+    if (mode === 'smart_suggest') {
+      tasks = scoreForSmartSuggest(tasks, limit);
+    }
+
+    // --- Sort (user-specified or mode default) ---
+    const sortOptions = compiled.sort || getDefaultSort(mode as TaskQueryMode);
+    if (sortOptions) {
+      tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);
+    }
+
+    // --- Project fields ---
+    tasks = projectFields(tasks, compiled.fields);
+
+    // --- Build metadata ---
+    const metadata: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: mode || 'all',
+      sort_applied: !!sortOptions,
     };
 
-    // Map ID filter (exact match)
-    if (compiled.filters.id) {
-      tasksArgs.id = compiled.filters.id;
+    // Today mode: add category counts
+    if (mode === 'today') {
+      let overdueCount = 0,
+        dueSoonCount = 0,
+        flaggedCount = 0;
+      for (const task of tasks) {
+        const reason = (task as unknown as Record<string, unknown>).reason;
+        if (reason === 'overdue') overdueCount++;
+        else if (reason === 'due_soon') dueSoonCount++;
+        else if (reason === 'flagged') flaggedCount++;
+      }
+      metadata.due_soon_days = compiled.daysAhead || 3;
+      metadata.overdue_count = overdueCount;
+      metadata.due_soon_count = dueSoonCount;
+      metadata.flagged_count = flaggedCount;
     }
 
-    // Special case: inInbox means inbox mode (transformed from project: null)
-    if (compiled.filters.inInbox) {
-      tasksArgs.mode = 'inbox';
-    } else if (compiled.filters.projectId) {
-      tasksArgs.project = compiled.filters.projectId;
-    }
-
-    // Map filters to existing parameters (already transformed by QueryCompiler)
-    if (compiled.filters.completed !== undefined) tasksArgs.completed = compiled.filters.completed;
-
-    // Map search filter (from name filter transformation)
-    // This enables mode:"search" with filters:{name:{contains:"..."}}
-    if (compiled.filters.search) tasksArgs.search = compiled.filters.search;
-
-    // REMOVED: Simple tags parameter - all tag filters now use advanced filters
-    // This fixes Bug #1: tags.any not working (was being passed as simple array)
-
-    // Use advanced filters for complex queries
-    // ALL tag filters (any/all/none) now use advanced filters for consistency
-    if (this.needsAdvancedFilters(compiled.filters)) {
-      tasksArgs.filters = this.mapToAdvancedFilters(compiled.filters);
-    }
-
-    return this.tasksTool.execute(tasksArgs);
+    return createTaskResponseV2('tasks', tasks, metadata);
   }
 
   private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {
@@ -216,89 +300,5 @@ PERFORMANCE:
     }
 
     return this.exportTool.execute(exportArgs);
-  }
-
-  private needsAdvancedFilters(filters: TaskFilter): boolean {
-    // TaskFilter already has transformed properties
-    return Boolean(
-      filters.tags || // Tags are now string[] with tagsOperator
-      filters.dueBefore ||
-      filters.dueAfter ||
-      filters.deferBefore ||
-      filters.deferAfter ||
-      filters.plannedBefore ||
-      filters.plannedAfter ||
-      filters.flagged !== undefined ||
-      filters.blocked !== undefined ||
-      filters.available !== undefined ||
-      filters.text,
-    );
-  }
-
-  private mapToAdvancedFilters(filters: TaskFilter): Record<string, unknown> {
-    // Map TaskFilter to existing advanced filter structure for backend tools
-    const advanced: Record<string, unknown> = {};
-
-    // Tags are already transformed: tags: string[], tagsOperator: 'AND' | 'OR' | 'NOT_IN'
-    if (filters.tags && filters.tags.length > 0) {
-      advanced.tags = {
-        operator: filters.tagsOperator || 'AND',
-        values: filters.tags,
-      };
-    }
-
-    // Due date filters (already transformed to dueBefore/dueAfter)
-    if (filters.dueBefore || filters.dueAfter) {
-      if (filters.dueDateOperator === 'BETWEEN' && filters.dueAfter && filters.dueBefore) {
-        advanced.dueDate = {
-          operator: 'BETWEEN',
-          value: filters.dueAfter,
-          upperBound: filters.dueBefore,
-        };
-      } else if (filters.dueBefore) {
-        advanced.dueDate = { operator: '<=', value: filters.dueBefore };
-      } else if (filters.dueAfter) {
-        advanced.dueDate = { operator: '>=', value: filters.dueAfter };
-      }
-    }
-
-    // Planned date filters (already transformed to plannedBefore/plannedAfter)
-    if (filters.plannedBefore || filters.plannedAfter) {
-      if (filters.plannedDateOperator === 'BETWEEN' && filters.plannedAfter && filters.plannedBefore) {
-        advanced.plannedDate = {
-          operator: 'BETWEEN',
-          value: filters.plannedAfter,
-          upperBound: filters.plannedBefore,
-        };
-      } else if (filters.plannedBefore) {
-        advanced.plannedDate = { operator: '<=', value: filters.plannedBefore };
-      } else if (filters.plannedAfter) {
-        advanced.plannedDate = { operator: '>=', value: filters.plannedAfter };
-      }
-    }
-
-    // Boolean filters (direct passthrough)
-    if (filters.flagged !== undefined) {
-      advanced.flagged = filters.flagged;
-    }
-    if (filters.blocked !== undefined) {
-      advanced.blocked = filters.blocked;
-    }
-    if (filters.available !== undefined) {
-      advanced.available = filters.available;
-    }
-
-    // Text search filters (already transformed: text is string, textOperator is operator)
-    if (filters.text) {
-      advanced.text = {
-        operator: filters.textOperator || 'CONTAINS',
-        value: filters.text,
-      };
-    }
-
-    // Note: OR/AND/NOT are handled by QueryCompiler.transformFilters()
-    // and don't appear in the TaskFilter output (they're flattened/logged)
-
-    return advanced;
   }
 }
