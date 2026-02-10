@@ -154,6 +154,60 @@ PERFORMANCE:
       });
     }
 
+    // --- ID lookup fast path ---
+    if (filter.id) {
+      const script = buildListTasksScriptV4({
+        filter,
+        fields: compiled.fields || [],
+        limit: 1,
+      });
+      const result = await this.execJson(script);
+
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
+          'tasks',
+          'SCRIPT_ERROR',
+          `Failed to find task with ID: ${filter.id}`,
+          'Verify the task ID is correct and the task exists',
+          isScriptError(result) ? result.details : undefined,
+          timer.toMetadata(),
+        );
+      }
+
+      const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+      const tasks = parseTasks(data.tasks || data.items || []);
+
+      if (tasks.length === 0) {
+        return createErrorResponseV2(
+          'tasks',
+          'NOT_FOUND',
+          `Task not found with ID: ${filter.id}`,
+          'Verify the task ID is correct and the task exists',
+          undefined,
+          timer.toMetadata(),
+        );
+      }
+
+      if (tasks[0].id !== filter.id) {
+        return createErrorResponseV2(
+          'tasks',
+          'ID_MISMATCH',
+          `Task ID mismatch: requested ${filter.id}, received ${tasks[0].id}`,
+          'This indicates a potential issue with the OmniFocus script - please report this bug',
+          undefined,
+          timer.toMetadata(),
+        );
+      }
+
+      const projectedTasks = projectFields(tasks, compiled.fields);
+      return createTaskResponseV2('tasks', projectedTasks, {
+        ...timer.toMetadata(),
+        from_cache: false,
+        mode: 'id_lookup',
+        sort_applied: false,
+      });
+    }
+
     // --- Today mode: extra fields for category counting ---
     let scriptFields = compiled.fields || [];
     if (mode === 'today') {
@@ -196,9 +250,6 @@ PERFORMANCE:
       tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);
     }
 
-    // --- Project fields ---
-    tasks = projectFields(tasks, compiled.fields);
-
     // --- Build metadata ---
     const metadata: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
       ...timer.toMetadata(),
@@ -207,7 +258,7 @@ PERFORMANCE:
       sort_applied: !!sortOptions,
     };
 
-    // Today mode: add category counts
+    // Today mode: count categories BEFORE field projection (reason field may be projected away)
     if (mode === 'today') {
       let overdueCount = 0,
         dueSoonCount = 0,
@@ -223,6 +274,9 @@ PERFORMANCE:
       metadata.due_soon_count = dueSoonCount;
       metadata.flagged_count = flaggedCount;
     }
+
+    // --- Project fields (after counting, so category counts aren't affected) ---
+    tasks = projectFields(tasks, compiled.fields);
 
     return createTaskResponseV2('tasks', tasks, metadata);
   }

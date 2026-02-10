@@ -7,12 +7,195 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  augmentFilterForMode,
+  getDefaultSort,
   parseTasks,
   sortTasks,
   projectFields,
   scoreForSmartSuggest,
 } from '../../../../src/tools/tasks/task-query-pipeline.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
+import type { TaskFilter } from '../../../../src/contracts/filters.js';
+
+// =============================================================================
+// augmentFilterForMode
+// =============================================================================
+
+describe('augmentFilterForMode', () => {
+  const baseFilter: TaskFilter = { tags: ['work'] };
+
+  it('returns filter unchanged for undefined mode', () => {
+    const result = augmentFilterForMode(undefined, baseFilter);
+    expect(result).toEqual(baseFilter);
+  });
+
+  it('returns filter unchanged for "all" mode', () => {
+    const result = augmentFilterForMode('all', baseFilter);
+    expect(result).toEqual(baseFilter);
+  });
+
+  it('returns filter unchanged for "inbox" mode', () => {
+    const result = augmentFilterForMode('inbox', baseFilter);
+    expect(result).toEqual(baseFilter);
+  });
+
+  it('returns filter unchanged for "search" mode', () => {
+    const result = augmentFilterForMode('search', baseFilter);
+    expect(result).toEqual(baseFilter);
+  });
+
+  it('does not mutate the original filter', () => {
+    const original: TaskFilter = { flagged: true };
+    augmentFilterForMode('overdue', original);
+    expect(original.completed).toBeUndefined();
+    expect(original.dueBefore).toBeUndefined();
+  });
+
+  describe('overdue mode', () => {
+    it('sets completed=false, dueBefore to now, and operator "<"', () => {
+      const result = augmentFilterForMode('overdue', {});
+      expect(result.completed).toBe(false);
+      expect(result.dueBefore).toBeDefined();
+      expect(result.dueDateOperator).toBe('<');
+      // dueBefore should be close to now (within 2 seconds)
+      const dueBefore = new Date(result.dueBefore!);
+      expect(Math.abs(dueBefore.getTime() - Date.now())).toBeLessThan(2000);
+    });
+  });
+
+  describe('today mode', () => {
+    it('sets todayMode, completed=false, dropped=false, tagStatusValid', () => {
+      const result = augmentFilterForMode('today', {});
+      expect(result.todayMode).toBe(true);
+      expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
+      expect(result.tagStatusValid).toBe(true);
+    });
+
+    it('defaults dueSoonDays to 3', () => {
+      const result = augmentFilterForMode('today', {});
+      expect(result.dueSoonDays).toBe(3);
+    });
+
+    it('respects custom daysAhead option', () => {
+      const result = augmentFilterForMode('today', {}, { daysAhead: 7 });
+      expect(result.dueSoonDays).toBe(7);
+    });
+
+    it('sets dueBefore to days ahead from start of today', () => {
+      const result = augmentFilterForMode('today', {}, { daysAhead: 5 });
+      const dueBefore = new Date(result.dueBefore!);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const expected = new Date(todayStart);
+      expected.setDate(expected.getDate() + 5);
+      expect(dueBefore.getTime()).toBe(expected.getTime());
+    });
+  });
+
+  describe('upcoming mode', () => {
+    it('sets completed=false with dueAfter and dueBefore range', () => {
+      const result = augmentFilterForMode('upcoming', {});
+      expect(result.completed).toBe(false);
+      expect(result.dueAfter).toBeDefined();
+      expect(result.dueBefore).toBeDefined();
+    });
+
+    it('defaults to 7-day range', () => {
+      const result = augmentFilterForMode('upcoming', {});
+      const start = new Date(result.dueAfter!);
+      const end = new Date(result.dueBefore!);
+      const daysDiff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      expect(daysDiff).toBe(7);
+    });
+
+    it('respects custom daysAhead option', () => {
+      const result = augmentFilterForMode('upcoming', {}, { daysAhead: 14 });
+      const start = new Date(result.dueAfter!);
+      const end = new Date(result.dueBefore!);
+      const daysDiff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      expect(daysDiff).toBe(14);
+    });
+  });
+
+  describe('available mode', () => {
+    it('sets completed=false and available=true', () => {
+      const result = augmentFilterForMode('available', {});
+      expect(result.completed).toBe(false);
+      expect(result.available).toBe(true);
+    });
+  });
+
+  describe('blocked mode', () => {
+    it('sets completed=false and blocked=true', () => {
+      const result = augmentFilterForMode('blocked', {});
+      expect(result.completed).toBe(false);
+      expect(result.blocked).toBe(true);
+    });
+  });
+
+  describe('flagged mode', () => {
+    it('sets flagged=true and defaults completed=false', () => {
+      const result = augmentFilterForMode('flagged', {});
+      expect(result.flagged).toBe(true);
+      expect(result.completed).toBe(false);
+    });
+
+    it('preserves explicit completed value', () => {
+      const result = augmentFilterForMode('flagged', { completed: true });
+      expect(result.flagged).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+  });
+
+  describe('smart_suggest mode', () => {
+    it('sets completed=false', () => {
+      const result = augmentFilterForMode('smart_suggest', {});
+      expect(result.completed).toBe(false);
+    });
+  });
+
+  it('preserves existing filter properties', () => {
+    const result = augmentFilterForMode('overdue', { tags: ['urgent'], flagged: true });
+    expect(result.tags).toEqual(['urgent']);
+    expect(result.flagged).toBe(true);
+    expect(result.completed).toBe(false); // mode-added
+  });
+});
+
+// =============================================================================
+// getDefaultSort
+// =============================================================================
+
+describe('getDefaultSort', () => {
+  it('returns dueDate asc for overdue mode', () => {
+    expect(getDefaultSort('overdue')).toEqual([{ field: 'dueDate', direction: 'asc' }]);
+  });
+
+  it('returns dueDate asc for upcoming mode', () => {
+    expect(getDefaultSort('upcoming')).toEqual([{ field: 'dueDate', direction: 'asc' }]);
+  });
+
+  it('returns modified desc for today mode', () => {
+    expect(getDefaultSort('today')).toEqual([{ field: 'modified', direction: 'desc' }]);
+  });
+
+  it('returns undefined for all mode', () => {
+    expect(getDefaultSort('all')).toBeUndefined();
+  });
+
+  it('returns undefined for undefined mode', () => {
+    expect(getDefaultSort(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for flagged mode', () => {
+    expect(getDefaultSort('flagged')).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// parseTasks
+// =============================================================================
 
 describe('parseTasks', () => {
   it('returns empty array for null/undefined input', () => {

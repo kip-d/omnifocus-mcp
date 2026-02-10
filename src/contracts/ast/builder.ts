@@ -19,15 +19,15 @@ import type { FilterNode, ComparisonNode, AndNode, OrNode, ExistsNode, NotNode }
  * Adding a new date filter (e.g. completionDate) requires only one new entry here.
  *
  * - field: the AST field path (e.g. 'task.dueDate')
- * - after/before/operator: corresponding TaskFilter property names
+ * - after/before/operator: corresponding TaskFilter property names (keyof TaskFilter for compile-time safety)
  * - skipWhen: optional TaskFilter boolean property that suppresses this handler
  */
 interface DateFilterDef {
   readonly field: string;
-  readonly after: string;
-  readonly before: string;
-  readonly operator: string;
-  readonly skipWhen?: string;
+  readonly after: keyof TaskFilter;
+  readonly before: keyof TaskFilter;
+  readonly operator: keyof TaskFilter;
+  readonly skipWhen?: keyof TaskFilter;
 }
 
 export const DATE_FILTER_DEFS: readonly DateFilterDef[] = [
