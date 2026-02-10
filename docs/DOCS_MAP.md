@@ -45,6 +45,8 @@
 - **[docs/dev/DEVELOPER_GUIDE.md](dev/DEVELOPER_GUIDE.md)** - Complete API reference with JSON examples
 - **[docs/dev/ARCHITECTURE.md](dev/ARCHITECTURE.md)** - JXA + OmniJS Bridge implementation patterns
 - **[docs/dev/AST_ARCHITECTURE.md](dev/AST_ARCHITECTURE.md)** - AST-based script generation architecture
+- **[docs/dev/FILTER_PIPELINE.md](dev/FILTER_PIPELINE.md)** - End-to-end filter pipeline (4-layer checklist for adding
+  new filters)
 - **[docs/dev/PATTERNS.md](dev/PATTERNS.md)** - Quick symptom lookup and proven solutions
 - **[docs/dev/PATTERN_INDEX.md](dev/PATTERN_INDEX.md)** - Code pattern library (bridge helpers, field access patterns)
 - **[docs/dev/LESSONS_LEARNED.md](dev/LESSONS_LEARNED.md)** - Critical insights from development (MCP lifecycle, async
