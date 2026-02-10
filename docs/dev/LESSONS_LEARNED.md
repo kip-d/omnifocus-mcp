@@ -453,6 +453,43 @@ beats clever.
 
 ---
 
+## OmniFocus Forecast "Past" View Logic (February 2026)
+
+**Problem:** Matching the task count in OmniFocus Forecast's "Past" section requires understanding three non-obvious
+rules.
+
+**Forecast "Past" definition:**
+
+```
+(dueDate < start_of_today OR plannedDate < start_of_today)
+  AND NOT blocked
+  AND NOT completed
+```
+
+| Rule                       | Detail                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Start-of-day boundary      | Tasks due/planned _today_ appear in the Today row, not Past — even if the specific time has passed                  |
+| Blocked exclusion          | Tasks blocked by sequential project ordering or dependencies are excluded                                           |
+| OR logic across date types | A task appears if _either_ date is in the past — overdue (past due) and past-planned are unioned, then deduplicated |
+
+**Why this matters:** Our `overdue` mode uses `dueDate < now` (exact time, due dates only). Forecast "Past" is broader
+(includes planned dates) but stricter (day boundary, no blocked tasks). In testing with live data:
+
+| Bucket                             | Count  |
+| ---------------------------------- | ------ |
+| `dueDate < now` (our overdue mode) | 36     |
+| `dueDate < start_of_today`         | 33     |
+| `plannedDate < start_of_today`     | 19     |
+| Overlap (both dates in past)       | -3     |
+| Blocked                            | -1     |
+| **Forecast "Past"**                | **48** |
+
+**If you need to replicate Forecast "Past":** Query overdue tasks + past-planned tasks separately, merge by ID, then
+exclude blocked tasks. There is no single-query mode for this yet — our filter system doesn't support OR across
+different date fields (except the special `todayMode` for the Today perspective).
+
+---
+
 ## Related Docs
 
 - **PATTERNS.md** - Symptom → solution lookup
