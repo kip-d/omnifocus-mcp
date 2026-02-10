@@ -255,6 +255,7 @@ PERFORMANCE:
       ...timer.toMetadata(),
       from_cache: false,
       mode: mode || 'all',
+      offset: compiled.offset || 0,
       sort_applied: !!sortOptions,
     };
 
