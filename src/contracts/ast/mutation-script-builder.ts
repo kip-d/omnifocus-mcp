@@ -399,6 +399,58 @@ export interface BatchOperation {
 }
 
 // =============================================================================
+// OMNIJS TAG PATH HELPERS (interpolated into evaluateJavascript blocks)
+// =============================================================================
+
+/** OmniJS: parse ` : ` separated tag path into segments, or null for plain names */
+const OMNIJS_PARSE_TAG_PATH = `
+function parseTagPath(input) {
+  if (input.indexOf(' : ') === -1) return null;
+  var segs = input.split(' : ');
+  for (var i = 0; i < segs.length; i++) {
+    segs[i] = segs[i].trim();
+    if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
+  }
+  return segs;
+}`;
+
+/** OmniJS: walk tag tree creating missing segments (mkdir -p semantics) */
+const OMNIJS_RESOLVE_OR_CREATE_TAG_PATH = `
+function resolveOrCreateTagByPath(segments) {
+  var parent = null;
+  var current = null;
+  for (var i = 0; i < segments.length; i++) {
+    current = null;
+    var children = parent ? parent.children : tags;
+    for (var j = 0; j < children.length; j++) {
+      if (children[j].name === segments[i]) { current = children[j]; break; }
+    }
+    if (!current) {
+      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
+    }
+    parent = current;
+  }
+  return current;
+}`;
+
+/** OmniJS: walk tag tree returning null if any segment missing (read-only) */
+const OMNIJS_RESOLVE_TAG_PATH = `
+function resolveTagByPath(segments) {
+  var parent = null;
+  var current = null;
+  for (var i = 0; i < segments.length; i++) {
+    current = null;
+    var children = parent ? parent.children : tags;
+    for (var j = 0; j < children.length; j++) {
+      if (children[j].name === segments[i]) { current = children[j]; break; }
+    }
+    if (!current) return null;
+    parent = current;
+  }
+  return current;
+}`;
+
+// =============================================================================
 // SCRIPT BUILDERS
 // =============================================================================
 
@@ -488,32 +540,8 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       try {
         const tagScript = \`
           (() => {
-            function parseTagPath(input) {
-              if (input.indexOf(' : ') === -1) return null;
-              var segs = input.split(' : ');
-              for (var i = 0; i < segs.length; i++) {
-                segs[i] = segs[i].trim();
-                if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
-              }
-              return segs;
-            }
-
-            function resolveOrCreateTagByPath(segments) {
-              var parent = null;
-              var current = null;
-              for (var i = 0; i < segments.length; i++) {
-                current = null;
-                var children = parent ? parent.children : tags;
-                for (var j = 0; j < children.length; j++) {
-                  if (children[j].name === segments[i]) { current = children[j]; break; }
-                }
-                if (!current) {
-                  current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
-                }
-                parent = current;
-              }
-              return current;
-            }
+            \${OMNIJS_PARSE_TAG_PATH}
+            \${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
 
             const task = Task.byIdentifier('\${taskId}');
             if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
@@ -794,32 +822,8 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try {
         const tagScript = \`
           (() => {
-            function parseTagPath(input) {
-              if (input.indexOf(' : ') === -1) return null;
-              var segs = input.split(' : ');
-              for (var i = 0; i < segs.length; i++) {
-                segs[i] = segs[i].trim();
-                if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
-              }
-              return segs;
-            }
-
-            function resolveOrCreateTagByPath(segments) {
-              var parent = null;
-              var current = null;
-              for (var i = 0; i < segments.length; i++) {
-                current = null;
-                var children = parent ? parent.children : tags;
-                for (var j = 0; j < children.length; j++) {
-                  if (children[j].name === segments[i]) { current = children[j]; break; }
-                }
-                if (!current) {
-                  current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
-                }
-                parent = current;
-              }
-              return current;
-            }
+            \${OMNIJS_PARSE_TAG_PATH}
+            \${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
 
             const proj = Project.byIdentifier('\${projectId}');
             if (!proj) return JSON.stringify({success: false, error: 'Project not found by ID: ' + '\${projectId}'});
@@ -1018,47 +1022,9 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           }
         }
 
-        function parseTagPath(input) {
-          if (input.indexOf(' : ') === -1) return null;
-          var segs = input.split(' : ');
-          for (var i = 0; i < segs.length; i++) {
-            segs[i] = segs[i].trim();
-            if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
-          }
-          return segs;
-        }
-
-        function resolveOrCreateTagByPath(segments) {
-          var parent = null;
-          var current = null;
-          for (var i = 0; i < segments.length; i++) {
-            current = null;
-            var children = parent ? parent.children : tags;
-            for (var j = 0; j < children.length; j++) {
-              if (children[j].name === segments[i]) { current = children[j]; break; }
-            }
-            if (!current) {
-              current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
-            }
-            parent = current;
-          }
-          return current;
-        }
-
-        function resolveTagByPath(segments) {
-          var parent = null;
-          var current = null;
-          for (var i = 0; i < segments.length; i++) {
-            current = null;
-            var children = parent ? parent.children : tags;
-            for (var j = 0; j < children.length; j++) {
-              if (children[j].name === segments[i]) { current = children[j]; break; }
-            }
-            if (!current) return null;
-            parent = current;
-          }
-          return current;
-        }
+        ${OMNIJS_PARSE_TAG_PATH}
+        ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
+        ${OMNIJS_RESOLVE_TAG_PATH}
 
         // Handle tags
         if (changes.tags || changes.addTags || changes.removeTags) {
