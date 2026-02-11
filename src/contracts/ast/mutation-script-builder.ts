@@ -426,7 +426,7 @@ function resolveOrCreateTagByPath(segments) {
       if (children[j].name === segments[i]) { current = children[j]; break; }
     }
     if (!current) {
-      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
+      current = parent ? new Tag(segments[i], parent) : new Tag(segments[i], null);
     }
     parent = current;
   }
@@ -556,7 +556,7 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
                 tag = resolveOrCreateTagByPath(pathSegs);
               } else {
                 tag = flattenedTags.find(t => t.name === tagName);
-                if (!tag) tag = new Tag(tagName);
+                if (!tag) tag = new Tag(tagName, null);
               }
               task.addTag(tag);
               appliedTags.push(tag.name);
@@ -838,7 +838,7 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
                 tag = resolveOrCreateTagByPath(pathSegs);
               } else {
                 tag = flattenedTags.find(t => t.name === tagName);
-                if (!tag) tag = new Tag(tagName);
+                if (!tag) tag = new Tag(tagName, null);
               }
               proj.addTag(tag);
               appliedTags.push(tag.name);
@@ -1034,7 +1034,7 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
               return create ? resolveOrCreateTagByPath(pathSegs) : resolveTagByPath(pathSegs);
             }
             var found = flattenedTags.find(t => t.name === tagName);
-            if (!found && create) found = new Tag(tagName);
+            if (!found && create) found = new Tag(tagName, null);
             return found;
           }
 

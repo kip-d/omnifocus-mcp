@@ -50,8 +50,9 @@ describe('MANAGE_TAGS_SCRIPT - nested tag hierarchy syntax', () => {
     expect(MANAGE_TAGS_SCRIPT).toContain('function parseTagPath(');
   });
 
-  it('should contain resolveOrCreateTagByPath helper function', () => {
-    expect(MANAGE_TAGS_SCRIPT).toContain('function resolveOrCreateTagByPath(');
+  it('should use OmniJS bridge for path tag creation', () => {
+    // Path creation uses evaluateJavascript with new Tag(name, parent)
+    expect(MANAGE_TAGS_SCRIPT).toContain('new Tag(segments[i], parent)');
   });
 
   it('should check for path syntax conflict with parentTagName', () => {

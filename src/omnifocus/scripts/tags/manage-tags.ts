@@ -49,49 +49,6 @@ export const MANAGE_TAGS_SCRIPT = `
       return segments;
     }
 
-    function resolveOrCreateTagByPath(segments, app, doc) {
-      var parent = null;
-      var currentTag = null;
-      var created = [];
-
-      for (var si = 0; si < segments.length; si++) {
-        var segmentName = segments[si];
-        currentTag = null;
-
-        if (parent) {
-          var children = parent.tags();
-          for (var ci = 0; ci < children.length; ci++) {
-            if (safeGet(function() { return children[ci].name(); }) === segmentName) {
-              currentTag = children[ci];
-              break;
-            }
-          }
-        } else {
-          var rootTags = doc.tags();
-          for (var ri = 0; ri < rootTags.length; ri++) {
-            if (safeGet(function() { return rootTags[ri].name(); }) === segmentName) {
-              currentTag = rootTags[ri];
-              break;
-            }
-          }
-        }
-
-        if (!currentTag) {
-          var targetCollection = parent ? safeGet(function() { return parent.tags; }) : safeGet(function() { return doc.tags; });
-          currentTag = app.make({
-            new: 'tag',
-            withProperties: { name: segmentName },
-            at: targetCollection
-          });
-          created.push(segmentName);
-        }
-
-        parent = currentTag;
-      }
-
-      return { leaf: currentTag, created: created };
-    }
-
     switch(action) {
       case 'create':
         // Check for path syntax
@@ -107,20 +64,43 @@ export const MANAGE_TAGS_SCRIPT = `
             });
           }
 
+          // Use OmniJS bridge for path creation (JXA app.make() fails for nested tag refs)
+          const pathCreateScript = \`
+            (() => {
+              var segments = \${JSON.stringify(pathSegments)};
+              var pathStr = \${JSON.stringify(tagName)};
+              var parent = null;
+              var current = null;
+              var created = [];
+              for (var i = 0; i < segments.length; i++) {
+                current = null;
+                var children = parent ? parent.children : tags;
+                for (var j = 0; j < children.length; j++) {
+                  if (children[j].name === segments[i]) { current = children[j]; break; }
+                }
+                if (!current) {
+                  current = parent ? new Tag(segments[i], parent) : new Tag(segments[i], null);
+                  created.push(segments[i]);
+                }
+                parent = current;
+              }
+              return JSON.stringify({
+                success: true,
+                action: 'created',
+                tagName: current.name,
+                tagId: current.id.primaryKey,
+                path: pathStr,
+                createdSegments: created,
+                message: created.length === 0
+                  ? "Tag path '" + pathStr + "' already exists"
+                  : "Created " + created.length + " tag(s) in path '" + pathStr + "'"
+              });
+            })()
+          \`;
+
           try {
-            var pathResult = resolveOrCreateTagByPath(pathSegments, app, doc);
-            var leafTag = pathResult.leaf;
-            return JSON.stringify({
-              success: true,
-              action: 'created',
-              tagName: pathSegments[pathSegments.length - 1],
-              tagId: safeGet(function() { return leafTag.id(); }, 'unknown'),
-              path: tagName,
-              createdSegments: pathResult.created,
-              message: pathResult.created.length === 0
-                ? "Tag path '" + tagName + "' already exists"
-                : "Created " + pathResult.created.length + " tag(s) in path '" + tagName + "'"
-            });
+            var pathResult = app.evaluateJavascript(pathCreateScript);
+            return pathResult;
           } catch (pathError) {
             return JSON.stringify({
               error: true,
