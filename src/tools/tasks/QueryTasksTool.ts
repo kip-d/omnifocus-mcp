@@ -14,14 +14,13 @@ import {
 } from '../../utils/response-format.js';
 import { OmniFocusTask } from '../../omnifocus/types.js';
 import { TasksResponseV2 } from '../response-types-v2.js';
+import { QueryFilters, isStringFilter, isArrayFilter, isDateFilter, isNumberFilter } from './filter-types.js';
 import {
-  QueryFilters,
-  SortOption,
-  isStringFilter,
-  isArrayFilter,
-  isDateFilter,
-  isNumberFilter,
-} from './filter-types.js';
+  parseTasks as pipelineParseTasks,
+  sortTasks as pipelineSortTasks,
+  projectFields as pipelineProjectFields,
+  scoreForSmartSuggest,
+} from './task-query-pipeline.js';
 import { TaskId } from '../../utils/branded-types.js';
 
 // Simplified schema with clearer parameter names
@@ -1446,60 +1445,9 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
 
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     const allTasks = this.parseTasks(data.tasks || data.items || []);
-    const now = new Date();
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
 
-    // Smart prioritization algorithm
-    const scoredTasks = allTasks.map((task) => {
-      let score = 0;
-
-      // Overdue tasks get highest priority
-      if (task.dueDate) {
-        const dueDate = new Date(task.dueDate);
-        const isDueToday = dueDate.toDateString() === now.toDateString();
-        if (dueDate < now) {
-          const daysOverdue = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-          score += 100 + Math.min(daysOverdue * 10, 200); // Cap at 300 for very overdue
-        } else if (isDueToday || dueDate <= todayEnd) {
-          score += 80; // Due today
-        }
-      }
-
-      // Flagged tasks get bonus
-      if (task.flagged) score += 50;
-
-      // Available tasks get bonus (not blocked, not deferred)
-      // Note: Status checking available via task.blocked() and task.next() properties
-      if (task.available) score += 30;
-
-      // Tasks with short estimated duration get bonus (quick wins)
-      if (task.estimatedMinutes && task.estimatedMinutes <= 15) score += 20;
-
-      return { ...task, _score: score };
-    });
-
-    // Sort by score and take top items
-    let suggestedTasks = scoredTasks
-      .filter((t) => t._score > 0) // Only tasks with positive score
-      .sort((a, b) => b._score - a._score)
-      .slice(0, args.limit)
-      .map(({ _score, ...task }) => task); // Remove score from output
-
-    // Ensure at least one due-today task is surfaced if available
-    const dueTodayCandidate = allTasks.find(
-      (t) => t.dueDate && new Date(t.dueDate).toDateString() === now.toDateString(),
-    );
-    if (dueTodayCandidate) {
-      const alreadyIncluded = suggestedTasks.some((t) => t.id === dueTodayCandidate.id);
-      if (!alreadyIncluded) {
-        if (suggestedTasks.length < args.limit) {
-          suggestedTasks.push(dueTodayCandidate);
-        } else if (suggestedTasks.length > 0) {
-          suggestedTasks[suggestedTasks.length - 1] = dueTodayCandidate;
-        }
-      }
-    }
+    // Use extracted smart suggest scoring
+    const suggestedTasks = scoreForSmartSuggest(allTasks, args.limit);
 
     // Cache results
     this.cache.set('tasks', cacheKey, { tasks: suggestedTasks });
@@ -1514,135 +1462,17 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
   }
 
   private parseTasks(tasks: unknown[]): OmniFocusTask[] {
-    if (!tasks || !Array.isArray(tasks)) {
-      return [];
-    }
-    return tasks.map((task) => {
-      const t = task as {
-        dueDate?: string | Date;
-        deferDate?: string | Date;
-        completionDate?: string | Date;
-        added?: string | Date;
-        modified?: string | Date;
-        dropDate?: string | Date;
-        parentTaskId?: string;
-        parentTaskName?: string;
-        inInbox?: boolean;
-        [key: string]: unknown;
-      };
-      return {
-        ...t,
-        dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
-        deferDate: t.deferDate ? new Date(t.deferDate) : undefined,
-        completionDate: t.completionDate ? new Date(t.completionDate) : undefined,
-        added: t.added ? new Date(t.added) : undefined,
-        modified: t.modified ? new Date(t.modified) : undefined,
-        dropDate: t.dropDate ? new Date(t.dropDate) : undefined,
-        parentTaskId: t.parentTaskId,
-        parentTaskName: t.parentTaskName,
-        inInbox: t.inInbox,
-      } as unknown as OmniFocusTask;
-    });
+    return pipelineParseTasks(tasks);
   }
 
-  /**
-   * Project task fields based on user selection for performance optimization
-   */
   private projectFields(tasks: OmniFocusTask[], selectedFields?: string[]): OmniFocusTask[] {
-    // If no fields specified, return all fields
-    if (!selectedFields || selectedFields.length === 0) {
-      return tasks;
-    }
-
-    // Project each task to only include selected fields
-    return tasks.map((task) => {
-      const projectedTask: Partial<OmniFocusTask> = {};
-
-      // Always include id if not explicitly excluded (needed for identification)
-      if (selectedFields.includes('id') || !selectedFields.length) {
-        projectedTask.id = task.id;
-      }
-
-      // Project only requested fields
-      selectedFields.forEach((field) => {
-        if (field in task) {
-          const typedField = field as keyof OmniFocusTask;
-          (projectedTask as Record<string, unknown>)[field] = task[typedField];
-        }
-      });
-
-      return projectedTask as OmniFocusTask;
-    });
+    return pipelineProjectFields(tasks, selectedFields);
   }
 
-  /**
-   * Sort tasks based on provided sort options
-   *
-   * Applies multi-level sorting in the order specified.
-   * Applied after filtering in TypeScript (post-query) for simplicity.
-   */
-  private sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): OmniFocusTask[] {
-    if (!sortOptions || sortOptions.length === 0) {
-      return tasks;
-    }
-
-    return [...tasks].sort((a, b) => {
-      for (const option of sortOptions) {
-        // Safely access the field value
-        const aValue = (a as unknown as Record<string, unknown>)[option.field];
-        const bValue = (b as unknown as Record<string, unknown>)[option.field];
-
-        // Handle null/undefined values (push to end)
-        if (aValue === null || aValue === undefined) {
-          if (bValue === null || bValue === undefined) continue;
-          return 1; // a goes after b
-        }
-        if (bValue === null || bValue === undefined) {
-          return -1; // a goes before b
-        }
-
-        // Compare values based on type
-        let comparison = 0;
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          comparison = aValue.localeCompare(bValue, undefined, { sensitivity: 'base' });
-        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-          comparison = aValue - bValue;
-        } else if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
-          comparison = aValue === bValue ? 0 : aValue ? -1 : 1; // true before false
-        } else if (aValue instanceof Date && bValue instanceof Date) {
-          comparison = aValue.getTime() - bValue.getTime();
-        } else {
-          // Fallback: convert to string for comparison
-          // For objects, use JSON serialization to avoid [object Object]
-          let aStr: string;
-          let bStr: string;
-
-          if (typeof aValue === 'object' && aValue !== null) {
-            aStr = JSON.stringify(aValue);
-          } else {
-            // Cast to primitive to satisfy linter - we've already handled objects
-            aStr = String(aValue as string | number | boolean);
-          }
-
-          if (typeof bValue === 'object' && bValue !== null) {
-            bStr = JSON.stringify(bValue);
-          } else {
-            // Cast to primitive to satisfy linter - we've already handled objects
-            bStr = String(bValue as string | number | boolean);
-          }
-
-          comparison = aStr.localeCompare(bStr);
-        }
-
-        // Apply direction
-        if (comparison !== 0) {
-          return option.direction === 'desc' ? -comparison : comparison;
-        }
-
-        // If equal, continue to next sort option
-      }
-
-      return 0; // All sort fields are equal
-    });
+  private sortTasks(
+    tasks: OmniFocusTask[],
+    sortOptions?: { field: string; direction: 'asc' | 'desc' }[],
+  ): OmniFocusTask[] {
+    return pipelineSortTasks(tasks, sortOptions as import('./filter-types.js').SortOption[] | undefined);
   }
 }

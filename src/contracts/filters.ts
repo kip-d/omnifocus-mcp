@@ -5,13 +5,15 @@
  *
  * Used by:
  * - QueryCompiler (to validate and transform input)
- * - OmniJS script generator (to generate filter logic)
- * - Tool wrappers (to understand what filters were applied)
+ * - AST Builder (to generate filter AST)
+ * - Pipeline functions (to augment, sort, project)
  *
  * If you need a new filter:
  * 1. Add it here FIRST
- * 2. The generator will automatically include it in OmniJS scripts
- * 3. The compiler will automatically support it
+ * 2. Then update 3-4 layers — see docs/dev/FILTER_PIPELINE.md for the checklist
+ *    (Schema, QueryCompiler, AST Builder/DATE_FILTER_DEFS, KNOWN_FIELDS)
+ * 3. For date filters: add one line to DATE_FILTER_DEFS in builder.ts
+ *    The filter-coverage.test.ts safety net will catch missing entries.
  */
 
 // =============================================================================

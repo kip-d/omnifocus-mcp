@@ -10,6 +10,32 @@
 import type { TaskFilter, DateOperator, NormalizedTaskFilter } from '../filters.js';
 import type { FilterNode, ComparisonNode, AndNode, OrNode, ExistsNode, NotNode } from './types.js';
 
+// =============================================================================
+// DATE FILTER REGISTRY
+// =============================================================================
+
+/**
+ * Data-driven date filter definitions.
+ * Adding a new date filter (e.g. completionDate) requires only one new entry here.
+ *
+ * - field: the AST field path (e.g. 'task.dueDate')
+ * - after/before/operator: corresponding TaskFilter property names (keyof TaskFilter for compile-time safety)
+ * - skipWhen: optional TaskFilter boolean property that suppresses this handler
+ */
+interface DateFilterDef {
+  readonly field: string;
+  readonly after: keyof TaskFilter;
+  readonly before: keyof TaskFilter;
+  readonly operator: keyof TaskFilter;
+  readonly skipWhen?: keyof TaskFilter;
+}
+
+export const DATE_FILTER_DEFS: readonly DateFilterDef[] = [
+  { field: 'task.dueDate', after: 'dueAfter', before: 'dueBefore', operator: 'dueDateOperator', skipWhen: 'todayMode' },
+  { field: 'task.deferDate', after: 'deferAfter', before: 'deferBefore', operator: 'deferDateOperator' },
+  { field: 'task.plannedDate', after: 'plannedAfter', before: 'plannedBefore', operator: 'plannedDateOperator' },
+];
+
 /**
  * Build an AST from a TaskFilter
  *
@@ -90,40 +116,19 @@ export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode 
     conditions.push(or(comparison('task.name', operator, searchTerm), comparison('task.note', operator, searchTerm)));
   }
 
-  // --- Due date filters ---
-  // Skip when todayMode is active (consumed by OR node above)
-  if (!filter.todayMode) {
-    const dueDateConditions = buildDateConditions(
-      'task.dueDate',
-      filter.dueAfter,
-      filter.dueBefore,
-      filter.dueDateOperator,
+  // --- Date filters (data-driven from DATE_FILTER_DEFS) ---
+  for (const def of DATE_FILTER_DEFS) {
+    const filterAsRecord = filter as Record<string, unknown>;
+    if (def.skipWhen && filterAsRecord[def.skipWhen]) continue;
+    const dateConditions = buildDateConditions(
+      def.field,
+      filterAsRecord[def.after] as string | undefined,
+      filterAsRecord[def.before] as string | undefined,
+      filterAsRecord[def.operator] as DateOperator | undefined,
     );
-    if (dueDateConditions.length > 0) {
-      conditions.push(and(exists('task.dueDate', true), ...dueDateConditions));
+    if (dateConditions.length > 0) {
+      conditions.push(and(exists(def.field, true), ...dateConditions));
     }
-  }
-
-  // --- Defer date filters ---
-  const deferDateConditions = buildDateConditions(
-    'task.deferDate',
-    filter.deferAfter,
-    filter.deferBefore,
-    filter.deferDateOperator,
-  );
-  if (deferDateConditions.length > 0) {
-    conditions.push(and(exists('task.deferDate', true), ...deferDateConditions));
-  }
-
-  // --- Planned date filters ---
-  const plannedDateConditions = buildDateConditions(
-    'task.plannedDate',
-    filter.plannedAfter,
-    filter.plannedBefore,
-    filter.plannedDateOperator,
-  );
-  if (plannedDateConditions.length > 0) {
-    conditions.push(and(exists('task.plannedDate', true), ...plannedDateConditions));
   }
 
   // --- Project filter ---
