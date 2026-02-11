@@ -13,6 +13,7 @@ import {
   sortTasks,
   projectFields,
   scoreForSmartSuggest,
+  countTodayCategories,
 } from '../../../../src/tools/tasks/task-query-pipeline.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
@@ -316,6 +317,15 @@ describe('projectFields', () => {
     expect(result[0].flagged).toBe(true);
   });
 
+  it('always includes id even when not explicitly requested', () => {
+    const result = projectFields(tasks, ['name', 'flagged']);
+    expect(result[0].id).toBe('1');
+    expect(result[0].name).toBe('Task One');
+    expect(result[0].flagged).toBe(true);
+    // dueDate not requested, should be omitted
+    expect(result[0].dueDate).toBeUndefined();
+  });
+
   it('omits fields not in the task', () => {
     const result = projectFields(tasks, ['id', 'estimatedMinutes']);
     // estimatedMinutes is not in our test task, so it won't appear
@@ -382,5 +392,56 @@ describe('scoreForSmartSuggest', () => {
 
     const result = scoreForSmartSuggest(tasks, 10);
     expect(result[0].id).toBe('1'); // Available+flagged scores higher
+  });
+});
+
+// =============================================================================
+// countTodayCategories
+// =============================================================================
+
+describe('countTodayCategories', () => {
+  it('counts tasks by reason field', () => {
+    const tasks = [
+      { id: '1', name: 'T1', completed: false, flagged: false, blocked: false, reason: 'overdue' },
+      { id: '2', name: 'T2', completed: false, flagged: false, blocked: false, reason: 'overdue' },
+      { id: '3', name: 'T3', completed: false, flagged: false, blocked: false, reason: 'due_soon' },
+      { id: '4', name: 'T4', completed: false, flagged: true, blocked: false, reason: 'flagged' },
+    ] as unknown as OmniFocusTask[];
+
+    const result = countTodayCategories(tasks);
+    expect(result.overdueCount).toBe(2);
+    expect(result.dueSoonCount).toBe(1);
+    expect(result.flaggedCount).toBe(1);
+  });
+
+  it('returns zeros for empty array', () => {
+    const result = countTodayCategories([]);
+    expect(result.overdueCount).toBe(0);
+    expect(result.dueSoonCount).toBe(0);
+    expect(result.flaggedCount).toBe(0);
+  });
+
+  it('returns zeros when no tasks have reason field', () => {
+    const tasks = [
+      { id: '1', name: 'T1', completed: false, flagged: false, blocked: false },
+      { id: '2', name: 'T2', completed: false, flagged: false, blocked: false },
+    ] as OmniFocusTask[];
+
+    const result = countTodayCategories(tasks);
+    expect(result.overdueCount).toBe(0);
+    expect(result.dueSoonCount).toBe(0);
+    expect(result.flaggedCount).toBe(0);
+  });
+
+  it('ignores tasks with unknown reason values', () => {
+    const tasks = [
+      { id: '1', name: 'T1', completed: false, flagged: false, blocked: false, reason: 'overdue' },
+      { id: '2', name: 'T2', completed: false, flagged: false, blocked: false, reason: 'something_else' },
+    ] as unknown as OmniFocusTask[];
+
+    const result = countTodayCategories(tasks);
+    expect(result.overdueCount).toBe(1);
+    expect(result.dueSoonCount).toBe(0);
+    expect(result.flaggedCount).toBe(0);
   });
 });

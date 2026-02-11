@@ -240,9 +240,8 @@ export function projectFields(tasks: OmniFocusTask[], selectedFields?: string[])
   return tasks.map((task) => {
     const projectedTask: Partial<OmniFocusTask> = {};
 
-    if (selectedFields.includes('id') || !selectedFields.length) {
-      projectedTask.id = task.id;
-    }
+    // Always include id for task identity (even if not explicitly requested)
+    projectedTask.id = task.id;
 
     selectedFields.forEach((field) => {
       if (field in task) {
@@ -316,4 +315,35 @@ export function scoreForSmartSuggest(tasks: OmniFocusTask[], limit: number): Omn
   }
 
   return suggestedTasks as OmniFocusTask[];
+}
+
+// =============================================================================
+// TODAY MODE CATEGORY COUNTING
+// =============================================================================
+
+export interface TodayCategoryCounts {
+  overdueCount: number;
+  dueSoonCount: number;
+  flaggedCount: number;
+}
+
+/**
+ * Count today-mode tasks by their `reason` field.
+ *
+ * Tasks returned by the today-mode script include a `reason` field
+ * ('overdue' | 'due_soon' | 'flagged') indicating why they appear.
+ * This must run BEFORE field projection, since `reason` may not be
+ * in the user's requested fields.
+ */
+export function countTodayCategories(tasks: OmniFocusTask[]): TodayCategoryCounts {
+  let overdueCount = 0,
+    dueSoonCount = 0,
+    flaggedCount = 0;
+  for (const task of tasks) {
+    const reason = (task as unknown as Record<string, unknown>).reason;
+    if (reason === 'overdue') overdueCount++;
+    else if (reason === 'due_soon') dueSoonCount++;
+    else if (reason === 'flagged') flaggedCount++;
+  }
+  return { overdueCount, dueSoonCount, flaggedCount };
 }

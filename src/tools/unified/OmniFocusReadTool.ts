@@ -13,6 +13,7 @@ import {
   sortTasks,
   projectFields,
   scoreForSmartSuggest,
+  countTodayCategories,
   type TaskQueryMode,
 } from '../tasks/task-query-pipeline.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
@@ -261,19 +262,11 @@ PERFORMANCE:
 
     // Today mode: count categories BEFORE field projection (reason field may be projected away)
     if (mode === 'today') {
-      let overdueCount = 0,
-        dueSoonCount = 0,
-        flaggedCount = 0;
-      for (const task of tasks) {
-        const reason = (task as unknown as Record<string, unknown>).reason;
-        if (reason === 'overdue') overdueCount++;
-        else if (reason === 'due_soon') dueSoonCount++;
-        else if (reason === 'flagged') flaggedCount++;
-      }
+      const counts = countTodayCategories(tasks);
       metadata.due_soon_days = compiled.daysAhead || 3;
-      metadata.overdue_count = overdueCount;
-      metadata.due_soon_count = dueSoonCount;
-      metadata.flagged_count = flaggedCount;
+      metadata.overdue_count = counts.overdueCount;
+      metadata.due_soon_count = counts.dueSoonCount;
+      metadata.flagged_count = counts.flaggedCount;
     }
 
     // --- Project fields (after counting, so category counts aren't affected) ---
