@@ -307,13 +307,15 @@ export const FILTER_PROPERTY_NAMES = [
   'blocked',
   'available',
   'inInbox',
-  'dropped', // NEW: Filter by dropped status
-  'hasRepetitionRule', // NEW: Filter for recurring tasks
+  'dropped',
+  'hasRepetitionRule',
   'todayMode',
   'tagStatusValid',
   'dueSoonDays',
   'projectId',
-  'folder', // NEW: Filter projects by folder name
+  'project',
+  'search',
+  'folder',
   'limit',
   'offset',
   'mode',

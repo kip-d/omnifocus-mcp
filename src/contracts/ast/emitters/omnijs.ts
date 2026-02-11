@@ -59,22 +59,17 @@ function emitComparison(node: ComparisonNode): string {
     return emitProjectComparison(operator, value as string);
   }
 
-  // Special handling for 'dropped' synthetic field
-  // OmniFocus uses taskStatus enum, not a boolean 'dropped' property
+  // Synthetic status fields: OmniFocus uses taskStatus enum, not boolean properties
   if (field === 'task.dropped') {
-    return emitDroppedComparison(operator, value as boolean);
+    return emitStatusComparison(operator, value as boolean, 'Task.Status.Dropped');
   }
 
-  // Special handling for 'available' synthetic field
-  // OmniFocus uses taskStatus enum, not a boolean 'available' property
   if (field === 'task.available') {
-    return emitAvailableComparison(operator, value as boolean);
+    return emitStatusComparison(operator, value as boolean, 'Task.Status.Available');
   }
 
-  // Special handling for 'blocked' synthetic field
-  // OmniFocus uses taskStatus enum, not a boolean 'blocked' property
   if (field === 'task.blocked') {
-    return emitBlockedComparison(operator, value as boolean);
+    return emitStatusComparison(operator, value as boolean, 'Task.Status.Blocked');
   }
 
   // Special handling for 'tagStatusValid' synthetic field
@@ -134,118 +129,49 @@ function emitTagComparison(operator: ComparisonOperator, tags: string[]): string
 }
 
 function emitProjectComparison(operator: ComparisonOperator, projectValue: string): string {
-  // In OmniJS, project is accessed directly
   const accessor = 'task.containingProject';
 
   // Determine if value looks like an ID (alphanumeric with possible - or _, length > 10)
   // or a project name (anything else)
   const isLikelyId = /^[a-zA-Z0-9_-]+$/.test(projectValue) && projectValue.length > 10;
+  const prop = isLikelyId ? 'id.primaryKey' : 'name';
+  const val = emitValue(projectValue);
 
-  if (isLikelyId) {
-    // Compare by project ID
-    switch (operator) {
-      case '==':
-        return `(${accessor} && ${accessor}.id.primaryKey === ${emitValue(projectValue)})`;
-      case '!=':
-        return `(!${accessor} || ${accessor}.id.primaryKey !== ${emitValue(projectValue)})`;
-      default:
-        throw new Error(`Unsupported project operator: ${operator}`);
-    }
-  } else {
-    // Compare by project name
-    switch (operator) {
-      case '==':
-        return `(${accessor} && ${accessor}.name === ${emitValue(projectValue)})`;
-      case '!=':
-        return `(!${accessor} || ${accessor}.name !== ${emitValue(projectValue)})`;
-      default:
-        throw new Error(`Unsupported project operator: ${operator}`);
-    }
+  switch (operator) {
+    case '==':
+      return `(${accessor} && ${accessor}.${prop} === ${val})`;
+    case '!=':
+      return `(!${accessor} || ${accessor}.${prop} !== ${val})`;
+    default:
+      throw new Error(`Unsupported project operator: ${operator}`);
   }
 }
 
-function emitDroppedComparison(operator: ComparisonOperator, isDropped: boolean): string {
-  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold
-  // A dropped task has taskStatus === Task.Status.Dropped
-  switch (operator) {
-    case '==':
-      if (isDropped) {
-        return 'task.taskStatus === Task.Status.Dropped';
-      } else {
-        return 'task.taskStatus !== Task.Status.Dropped';
-      }
-    case '!=':
-      if (isDropped) {
-        return 'task.taskStatus !== Task.Status.Dropped';
-      } else {
-        return 'task.taskStatus === Task.Status.Dropped';
-      }
-    default:
-      throw new Error(`Unsupported dropped operator: ${operator}`);
-  }
-}
-
-function emitAvailableComparison(operator: ComparisonOperator, isAvailable: boolean): string {
-  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold
-  // An available task has taskStatus === Task.Status.Available
-  switch (operator) {
-    case '==':
-      if (isAvailable) {
-        return 'task.taskStatus === Task.Status.Available';
-      } else {
-        return 'task.taskStatus !== Task.Status.Available';
-      }
-    case '!=':
-      if (isAvailable) {
-        return 'task.taskStatus !== Task.Status.Available';
-      } else {
-        return 'task.taskStatus === Task.Status.Available';
-      }
-    default:
-      throw new Error(`Unsupported available operator: ${operator}`);
-  }
-}
-
-function emitBlockedComparison(operator: ComparisonOperator, isBlocked: boolean): string {
-  // OmniFocus uses taskStatus enum: Task.Status.Available, .Completed, .Dropped, .DueSoon, .Next, .OnHold, .Blocked
-  // A blocked task has taskStatus === Task.Status.Blocked
-  switch (operator) {
-    case '==':
-      if (isBlocked) {
-        return 'task.taskStatus === Task.Status.Blocked';
-      } else {
-        return 'task.taskStatus !== Task.Status.Blocked';
-      }
-    case '!=':
-      if (isBlocked) {
-        return 'task.taskStatus !== Task.Status.Blocked';
-      } else {
-        return 'task.taskStatus === Task.Status.Blocked';
-      }
-    default:
-      throw new Error(`Unsupported blocked operator: ${operator}`);
-  }
+/**
+ * Emit a taskStatus enum comparison for synthetic boolean fields (dropped, available, blocked).
+ *
+ * OmniFocus uses Task.Status enum values (Available, Completed, Dropped, Blocked, etc.)
+ * rather than boolean properties. The AST uses synthetic boolean fields that this function
+ * converts to the appropriate enum comparison.
+ */
+function emitStatusComparison(operator: ComparisonOperator, matches: boolean, statusEnum: string): string {
+  // XOR: '==' + true means ===, '==' + false means !==, '!=' inverts
+  const shouldEqual = (operator === '==') === matches;
+  return `task.taskStatus ${shouldEqual ? '===' : '!=='} ${statusEnum}`;
 }
 
 function emitTagStatusValidComparison(operator: ComparisonOperator, isValid: boolean): string {
   // OmniFocus perspective rule: task must have an active/on-hold tag, or have no tags at all.
   // This excludes tasks whose ONLY tags are dropped/inactive.
-  switch (operator) {
-    case '==':
-      if (isValid) {
-        return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
-      } else {
-        return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
-      }
-    case '!=':
-      if (isValid) {
-        return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
-      } else {
-        return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
-      }
-    default:
-      throw new Error(`Unsupported tagStatusValid operator: ${operator}`);
+  if (operator !== '==' && operator !== '!=') {
+    throw new Error(`Unsupported tagStatusValid operator: ${operator}`);
   }
+
+  const wantValid = (operator === '==') === isValid;
+  if (wantValid) {
+    return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
+  }
+  return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
 }
 
 function emitDateComparison(accessor: string, operator: string, dateStr: string): string {

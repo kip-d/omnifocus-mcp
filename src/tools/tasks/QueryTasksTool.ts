@@ -2,8 +2,7 @@ import { z } from 'zod';
 import { BaseTool } from '../base.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 import { buildTaskCountScript, DEFAULT_FIELDS } from '../../contracts/ast/script-builder.js';
-import { isScriptError } from '../../omnifocus/script-result-types.js';
-import { isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import {
   createTaskResponseV2,
   createErrorResponseV2,
@@ -1018,7 +1017,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       overdue_count: overdueCount,
       due_soon_count: dueSoonCount,
       flagged_count: flaggedCount,
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1057,7 +1056,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
         from_cache: true,
         mode: 'search',
         search_term: args.search,
-        sort_applied: args.sort ? true : false,
+        sort_applied: !!args.sort,
       });
     }
 
@@ -1069,8 +1068,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       offset: args.offset,
     });
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
@@ -1098,7 +1095,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       from_cache: false,
       mode: 'search',
       search_term: args.search,
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1137,8 +1134,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     });
     const result = await this.execJson(script);
 
-    // Enrich with date fields if requested
-
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -1162,7 +1157,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'available',
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1201,8 +1196,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
     });
     const result = await this.execJson(script);
 
-    // Enrich with date fields if requested
-
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(
         'tasks',
@@ -1226,7 +1219,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'blocked',
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1282,7 +1275,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       ...timer.toMetadata(),
       from_cache: false,
       mode: 'flagged',
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1305,8 +1298,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       mode: 'inbox',
     });
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       // Check for specific error types first
@@ -1338,7 +1329,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       mode: 'inbox',
       offset: args.offset || 0,
       filters_applied: filter,
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1358,8 +1349,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       offset: args.offset,
     });
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       // Check for specific error types first
@@ -1391,7 +1380,7 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       mode: 'all',
       offset: args.offset || 0,
       filters_applied: filter,
-      sort_applied: args.sort ? true : false,
+      sort_applied: !!args.sort,
     });
   }
 
@@ -1429,8 +1418,6 @@ NOTE: An experimental unified API (omnifocus_read) is available for testing buil
       offset: args.offset,
     });
     const result = await this.execJson(script);
-
-    // Enrich with date fields if requested
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

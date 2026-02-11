@@ -1672,10 +1672,6 @@ export async function buildBulkDeleteScript(target: MutationTarget, ids: string[
   const targetIds = ${JSON.stringify(ids)};
 
   try {
-    let deletedCount = 0;
-    const deleted = [];
-    const errors = [];
-
     // Delete via bridge for reliable removal
     const deleteScript = '(' +
       '() => {' +
@@ -1694,7 +1690,6 @@ export async function buildBulkDeleteScript(target: MutationTarget, ids: string[
         'return JSON.stringify(results);' +
       '}' +
     ')()';
-
 
     const result = JSON.parse(app.evaluateJavascript(deleteScript));
 
