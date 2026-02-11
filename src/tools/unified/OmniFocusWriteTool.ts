@@ -36,9 +36,10 @@ TAG OPERATIONS:
 - tags: [...] - Replace all tags
 - addTags: [...] - Add to existing
 - removeTags: [...] - Remove from existing
+- Nested tags use " : " path syntax: "Parent : Child : Leaf" (creates hierarchy, assigns leaf)
 
 TAG MANAGEMENT (tag_manage operation):
-- create: Create new tag (tagName required)
+- create: Create new tag (tagName required). Supports " : " path syntax for nested hierarchies.
 - rename: Rename tag (tagName + newName required)
 - delete: Delete tag (tagName required)
 - merge: Merge source into target (tagName + targetTag required)
@@ -47,16 +48,15 @@ TAG MANAGEMENT (tag_manage operation):
 - reparent: Move tag to different parent (tagName + parentTag required)
 
 DATE FORMATS:
-- Date only: "YYYY-MM-DD" (defaults: due=5pm, defer=8am)
+- Date only: "YYYY-MM-DD" (defaults: due=5pm, defer=8am, planned=8am)
 - Date+time: "YYYY-MM-DD HH:mm" (local time)
-- Clear date: null
+- Clear date: null or clearDueDate/clearDeferDate/clearPlannedDate: true
 
 MOVE TO INBOX: Set project: null
 
 SAFETY:
 - Delete is permanent - confirm with user first
-- Batch supports up to 100 operations
-- Tags handled automatically via bridge`;
+- Batch supports up to 100 operations`;
 
   schema = WriteSchema;
   meta = {

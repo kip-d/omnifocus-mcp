@@ -28,25 +28,38 @@ export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
 
 COMMON QUERIES:
 - Inbox: { query: { type: "tasks", filters: { project: null } } }
-- Overdue: { query: { type: "tasks", filters: { dueDate: { before: "now" }, status: "active" } } }
+- Overdue: { query: { type: "tasks", mode: "overdue" } }
+- Today perspective: { query: { type: "tasks", mode: "today" } }
+- Flagged: { query: { type: "tasks", mode: "flagged" } }
+- Upcoming (7 days): { query: { type: "tasks", mode: "upcoming", daysAhead: 7 } }
 - Smart suggestions: { query: { type: "tasks", mode: "smart_suggest", limit: 10 } }
+- Count only (fast): { query: { type: "tasks", filters: { flagged: true }, countOnly: true } }
 - Export tasks: { query: { type: "export", exportType: "tasks", format: "json" } }
+
+MODES (use instead of manual filters when possible):
+- today: Due soon (≤3 days) OR flagged, matching OmniFocus Today perspective
+- overdue: Tasks past their due date
+- flagged: Flagged tasks
+- upcoming: Tasks due in next N days (set daysAhead, default 14)
+- inbox, available, blocked, search, smart_suggest, all
 
 FILTER OPERATORS:
 - tags: { any: [...] } (has any), { all: [...] } (has all), { none: [...] } (has none)
-- dates: { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
+- dates (dueDate, deferDate, plannedDate, added): { before: "YYYY-MM-DD" }, { after: "..." }, { between: ["...", "..."] }
 - text: { contains: "..." }, { matches: "regex" }
+- boolean: flagged, blocked, available, inInbox
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
 
-EXPORT OPTIONS:
-- exportType: "tasks", "projects", or "all" (bulk)
-- format: "json", "csv", or "markdown"
-- outputDirectory: required for exportType="all"
+RESPONSE CONTROL:
+- fields: Select specific fields (e.g. ["id", "name", "dueDate", "tags"])
+- sort: [{ field: "dueDate", direction: "asc" }]
+- limit/offset: Pagination (default limit: 25, max: 500)
+- countOnly: true returns only count (33x faster for "how many" questions)
 
 PERFORMANCE:
-- Use fields parameter to select only needed data
-- Set reasonable limits (default: 25)
-- Smart suggest uses scoring: overdue +100, due today +80, flagged +50`;
+- Use countOnly for counting questions
+- Use fields to select only needed data
+- Use modes instead of raw filters when available`;
 
   schema = ReadSchema;
   meta = {
