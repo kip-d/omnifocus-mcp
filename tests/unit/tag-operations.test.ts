@@ -44,3 +44,21 @@ describe('Tag Operations Fix Verification', () => {
     expect(manageMatches!.length).toBeGreaterThan(0);
   });
 });
+
+describe('MANAGE_TAGS_SCRIPT - nested tag hierarchy syntax', () => {
+  it('should contain parseTagPath helper function', () => {
+    expect(MANAGE_TAGS_SCRIPT).toContain('function parseTagPath(');
+  });
+
+  it('should contain resolveOrCreateTagByPath helper function', () => {
+    expect(MANAGE_TAGS_SCRIPT).toContain('function resolveOrCreateTagByPath(');
+  });
+
+  it('should check for path syntax conflict with parentTagName', () => {
+    expect(MANAGE_TAGS_SCRIPT).toContain('Cannot use path syntax');
+  });
+
+  it('should handle path syntax in create action', () => {
+    expect(MANAGE_TAGS_SCRIPT).toContain('parseTagPath(tagName)');
+  });
+});

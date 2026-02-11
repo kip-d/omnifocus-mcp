@@ -35,9 +35,101 @@ export const MANAGE_TAGS_SCRIPT = `
         details: "doc.flattenedTags() returned null or undefined"
       });
     }
-    
+
+    // --- Tag path helpers ---
+    function parseTagPath(input) {
+      if (input.indexOf(' : ') === -1) return null;
+      var segments = input.split(' : ');
+      for (var i = 0; i < segments.length; i++) {
+        segments[i] = segments[i].trim();
+        if (segments[i].length === 0) {
+          throw new Error('Invalid tag path: empty segment in "' + input + '"');
+        }
+      }
+      return segments;
+    }
+
+    function resolveOrCreateTagByPath(segments, app, doc) {
+      var parent = null;
+      var currentTag = null;
+      var created = [];
+
+      for (var si = 0; si < segments.length; si++) {
+        var segmentName = segments[si];
+        currentTag = null;
+
+        if (parent) {
+          var children = parent.tags();
+          for (var ci = 0; ci < children.length; ci++) {
+            if (safeGet(function() { return children[ci].name(); }) === segmentName) {
+              currentTag = children[ci];
+              break;
+            }
+          }
+        } else {
+          var rootTags = doc.tags();
+          for (var ri = 0; ri < rootTags.length; ri++) {
+            if (safeGet(function() { return rootTags[ri].name(); }) === segmentName) {
+              currentTag = rootTags[ri];
+              break;
+            }
+          }
+        }
+
+        if (!currentTag) {
+          var targetCollection = parent ? safeGet(function() { return parent.tags; }) : safeGet(function() { return doc.tags; });
+          currentTag = app.make({
+            new: 'tag',
+            withProperties: { name: segmentName },
+            at: targetCollection
+          });
+          created.push(segmentName);
+        }
+
+        parent = currentTag;
+      }
+
+      return { leaf: currentTag, created: created };
+    }
+
     switch(action) {
       case 'create':
+        // Check for path syntax
+        var pathSegments = parseTagPath(tagName);
+
+        if (pathSegments) {
+          // Path syntax: "Work : Projects : Active"
+          // Conflict check: cannot use path syntax with parentTagName
+          if (parentTagName || parentTagId) {
+            return JSON.stringify({
+              error: true,
+              message: "Cannot use path syntax (' : ' separator) with parentTag parameter. Use either path syntax OR parentTag, not both."
+            });
+          }
+
+          try {
+            var pathResult = resolveOrCreateTagByPath(pathSegments, app, doc);
+            var leafTag = pathResult.leaf;
+            return JSON.stringify({
+              success: true,
+              action: 'created',
+              tagName: pathSegments[pathSegments.length - 1],
+              tagId: safeGet(function() { return leafTag.id(); }, 'unknown'),
+              path: tagName,
+              createdSegments: pathResult.created,
+              message: pathResult.created.length === 0
+                ? "Tag path '" + tagName + "' already exists"
+                : "Created " + pathResult.created.length + " tag(s) in path '" + tagName + "'"
+            });
+          } catch (pathError) {
+            return JSON.stringify({
+              error: true,
+              message: pathError.message || String(pathError)
+            });
+          }
+        }
+
+        // Non-path syntax: original create logic below
         // Check if tag already exists
         for (let i = 0; i < allTags.length; i++) {
           if (safeGet(() => allTags[i].name()) === tagName) {
