@@ -540,8 +540,8 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       try {
         const tagScript = \`
           (() => {
-            \${OMNIJS_PARSE_TAG_PATH}
-            \${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
+            ${OMNIJS_PARSE_TAG_PATH}
+            ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
 
             const task = Task.byIdentifier('\${taskId}');
             if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
@@ -822,8 +822,8 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try {
         const tagScript = \`
           (() => {
-            \${OMNIJS_PARSE_TAG_PATH}
-            \${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
+            ${OMNIJS_PARSE_TAG_PATH}
+            ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
 
             const proj = Project.byIdentifier('\${projectId}');
             if (!proj) return JSON.stringify({success: false, error: 'Project not found by ID: ' + '\${projectId}'});
