@@ -83,6 +83,14 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('urgent');
   });
 
+  it('includes resolveOrCreateTagByPath for tag assignment', async () => {
+    const result = await buildCreateTaskScript({
+      name: 'Task with Nested Tags',
+      tags: ['Work : Projects : Active'],
+    });
+    expect(result.script).toContain('resolveOrCreateTagByPath');
+  });
+
   it('includes project assignment', async () => {
     const result = await buildCreateTaskScript({
       name: 'Project Task',
@@ -299,6 +307,20 @@ describe('buildUpdateTaskScript', () => {
     });
 
     expect(result.script).toContain('.beginning');
+  });
+
+  it('includes resolveOrCreateTagByPath for tag update', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
+      tags: ['Errands : Downtown'],
+    });
+    expect(result.script).toContain('resolveOrCreateTagByPath');
+  });
+
+  it('includes resolveTagByPath for removeTags (no creation)', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
+      removeTags: ['Errands : Downtown'],
+    });
+    expect(result.script).toContain('resolveTagByPath');
   });
 });
 

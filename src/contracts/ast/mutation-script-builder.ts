@@ -488,7 +488,33 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       try {
         const tagScript = \`
           (() => {
-            // Use O(1) lookup - same reliable pattern as update script
+            function parseTagPath(input) {
+              if (input.indexOf(' : ') === -1) return null;
+              var segs = input.split(' : ');
+              for (var i = 0; i < segs.length; i++) {
+                segs[i] = segs[i].trim();
+                if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
+              }
+              return segs;
+            }
+
+            function resolveOrCreateTagByPath(segments) {
+              var parent = null;
+              var current = null;
+              for (var i = 0; i < segments.length; i++) {
+                current = null;
+                var children = parent ? parent.children : tags;
+                for (var j = 0; j < children.length; j++) {
+                  if (children[j].name === segments[i]) { current = children[j]; break; }
+                }
+                if (!current) {
+                  current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
+                }
+                parent = current;
+              }
+              return current;
+            }
+
             const task = Task.byIdentifier('\${taskId}');
             if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
 
@@ -496,12 +522,16 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
             const appliedTags = [];
 
             for (const tagName of tagNames) {
-              let tag = flattenedTags.find(t => t.name === tagName);
-              if (!tag) {
-                tag = new Tag(tagName);
+              var pathSegs = parseTagPath(tagName);
+              var tag;
+              if (pathSegs) {
+                tag = resolveOrCreateTagByPath(pathSegs);
+              } else {
+                tag = flattenedTags.find(t => t.name === tagName);
+                if (!tag) tag = new Tag(tagName);
               }
               task.addTag(tag);
-              appliedTags.push(tagName);
+              appliedTags.push(tag.name);
             }
 
             return JSON.stringify({success: true, tags: appliedTags});
@@ -764,7 +794,33 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try {
         const tagScript = \`
           (() => {
-            // Use O(1) lookup - same reliable pattern as update script
+            function parseTagPath(input) {
+              if (input.indexOf(' : ') === -1) return null;
+              var segs = input.split(' : ');
+              for (var i = 0; i < segs.length; i++) {
+                segs[i] = segs[i].trim();
+                if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
+              }
+              return segs;
+            }
+
+            function resolveOrCreateTagByPath(segments) {
+              var parent = null;
+              var current = null;
+              for (var i = 0; i < segments.length; i++) {
+                current = null;
+                var children = parent ? parent.children : tags;
+                for (var j = 0; j < children.length; j++) {
+                  if (children[j].name === segments[i]) { current = children[j]; break; }
+                }
+                if (!current) {
+                  current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
+                }
+                parent = current;
+              }
+              return current;
+            }
+
             const proj = Project.byIdentifier('\${projectId}');
             if (!proj) return JSON.stringify({success: false, error: 'Project not found by ID: ' + '\${projectId}'});
 
@@ -772,10 +828,16 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
             const appliedTags = [];
 
             for (const tagName of tagNames) {
-              let tag = flattenedTags.find(t => t.name === tagName);
-              if (!tag) tag = new Tag(tagName);
+              var pathSegs = parseTagPath(tagName);
+              var tag;
+              if (pathSegs) {
+                tag = resolveOrCreateTagByPath(pathSegs);
+              } else {
+                tag = flattenedTags.find(t => t.name === tagName);
+                if (!tag) tag = new Tag(tagName);
+              }
               proj.addTag(tag);
-              appliedTags.push(tagName);
+              appliedTags.push(tag.name);
             }
 
             return JSON.stringify({success: true, tags: appliedTags});
@@ -956,29 +1018,78 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           }
         }
 
+        function parseTagPath(input) {
+          if (input.indexOf(' : ') === -1) return null;
+          var segs = input.split(' : ');
+          for (var i = 0; i < segs.length; i++) {
+            segs[i] = segs[i].trim();
+            if (segs[i].length === 0) throw new Error('Invalid tag path: empty segment');
+          }
+          return segs;
+        }
+
+        function resolveOrCreateTagByPath(segments) {
+          var parent = null;
+          var current = null;
+          for (var i = 0; i < segments.length; i++) {
+            current = null;
+            var children = parent ? parent.children : tags;
+            for (var j = 0; j < children.length; j++) {
+              if (children[j].name === segments[i]) { current = children[j]; break; }
+            }
+            if (!current) {
+              current = parent ? new Tag(segments[i], parent) : new Tag(segments[i]);
+            }
+            parent = current;
+          }
+          return current;
+        }
+
+        function resolveTagByPath(segments) {
+          var parent = null;
+          var current = null;
+          for (var i = 0; i < segments.length; i++) {
+            current = null;
+            var children = parent ? parent.children : tags;
+            for (var j = 0; j < children.length; j++) {
+              if (children[j].name === segments[i]) { current = children[j]; break; }
+            }
+            if (!current) return null;
+            parent = current;
+          }
+          return current;
+        }
+
         // Handle tags
         if (changes.tags || changes.addTags || changes.removeTags) {
+          function resolveTag(tagName, create) {
+            var pathSegs = parseTagPath(tagName);
+            if (pathSegs) {
+              return create ? resolveOrCreateTagByPath(pathSegs) : resolveTagByPath(pathSegs);
+            }
+            var found = flattenedTags.find(t => t.name === tagName);
+            if (!found && create) found = new Tag(tagName);
+            return found;
+          }
+
           if (changes.tags) {
-            // Replace all tags
             task.clearTags();
             for (const tagName of changes.tags) {
-              let tag = flattenedTags.find(t => t.name === tagName);
-              if (!tag) tag = new Tag(tagName);
-              task.addTag(tag);
+              var tag = resolveTag(tagName, true);
+              if (tag) task.addTag(tag);
             }
           }
 
           if (changes.addTags) {
             for (const tagName of changes.addTags) {
-              let tag = flattenedTags.find(t => t.name === tagName);
-              if (!tag) tag = new Tag(tagName);
-              task.addTag(tag);
+              var tag = resolveTag(tagName, true);
+              if (tag) task.addTag(tag);
             }
           }
 
           if (changes.removeTags) {
             for (const tagName of changes.removeTags) {
-              const tag = flattenedTags.find(t => t.name === tagName);
+              var tag = resolveTag(tagName, false);
               if (tag) task.removeTag(tag);
             }
           }
