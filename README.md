@@ -1,63 +1,42 @@
 # OmniFocus MCP Server
 
-A Model Context Protocol (MCP) server that connects OmniFocus to Claude Desktop and other MCP clients.
+A Model Context Protocol (MCP) server that connects OmniFocus to Claude Desktop, Claude Code, and other MCP clients.
 
-> **Personal Project Notice**: A hobby project for my workflow automation. MIT licensed—use or adapt freely, but
+> **Personal Project Notice**: A hobby project for my workflow automation. MIT licensed -- use or adapt freely, but
 > provided as-is.
 
 ## Features
 
-- **Task Operations**: Create, update, complete, delete tasks with full property support
-- **Project Management**: Create and manage projects with folders, sequential/parallel modes
-- **GTD Analytics**: Analyze productivity, workflows, and bottlenecks
-- **Tag Management**: Manage tags with hierarchy and bulk operations
-- **Perspective Access**: Query any OmniFocus perspective programmatically
-- **Data Export**: Export data in JSON, CSV, or Markdown formats
-- **Performance**: Query 2000+ tasks in under 1 second
-- **Remote Access**: Optional HTTP transport for cross-platform access via Tailscale
-
-## 🧭 Navigation Guide
-
-**For End Users:**
-
-- 📘 **[Getting Started Guide](docs/user/GETTING_STARTED.md)** - Your first conversation with Claude + natural language
-  examples
-- 🔧 **[Troubleshooting](docs/user/TROUBLESHOOTING.md)** - Fix common issues
-- 📋 **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing workflows
-- 🤖 **[Smart Capture](docs/user/SMART_CAPTURE.md)** - Parse meeting notes into tasks
-
-**For Developers:**
-
-- 🗺️ **[Documentation Map](docs/DOCS_MAP.md)** - Complete index of all 85+ documentation files
-- 💻 **[Developer Guide](docs/dev/DEVELOPER_GUIDE.md)** - API examples, tool call formats, integration patterns
-- 🏗️ **[Architecture Documentation](docs/dev/ARCHITECTURE.md)** - Technical implementation details (START HERE)
-- 📖 **[API Reference](docs/api/README.md)** - Three versions optimized for different use cases
-- 🧪 **[Testing Framework](docs/operational/REAL_LLM_TESTING.md)** - Real LLM integration testing with Ollama
-- 📚 **[Patterns & Solutions](docs/dev/PATTERNS.md)** - Quick symptom lookup and common solutions
+- **Task Operations** -- Create, update, complete, delete tasks with full property support
+- **Project Management** -- Create and manage projects with folders, sequential/parallel modes
+- **Tag Management** -- Manage tags with hierarchy, nesting, merging, and bulk operations
+- **GTD Analytics** -- Analyze productivity, workflows, and bottlenecks
+- **Perspective Access** -- Query any OmniFocus perspective programmatically
+- **Data Export** -- Export in JSON, CSV, or Markdown
+- **Performance** -- Query 2000+ tasks in under 1 second
+- **Remote Access** -- Optional HTTP transport for cross-platform access via Tailscale
 
 ## Quick Start
 
 ### Prerequisites
 
-- OmniFocus 4.7+ on macOS (released August 2025)
+- macOS with OmniFocus 4.7+
 - Node.js 18+
 
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/omnifocus-mcp.git
+git clone https://github.com/kip-d/omnifocus-mcp.git
 cd omnifocus-mcp
 npm install
 npm run build
 ```
 
-### MCP Client Setup
+### Client Configuration
 
-#### Local (stdio) - Default
+#### Claude Desktop
 
-For local access:
-
-**Claude Desktop:** Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -70,31 +49,13 @@ For local access:
 }
 ```
 
-**Claude Code:** Add to your VS Code settings (`.vscode/settings.json` or User Settings):
+#### Claude Code
 
-```json
-{
-  "claudeCode.mcpServers": {
-    "omnifocus": {
-      "command": "node",
-      "args": ["/absolute/path/to/omnifocus-mcp/dist/index.js"]
-    }
-  }
-}
+```bash
+claude mcp add omnifocus -- node /absolute/path/to/omnifocus-mcp/dist/index.js
 ```
 
-**ChatGPT Desktop:** Local stdio MCP servers are not yet supported. ChatGPT Desktop currently only supports remote MCP
-servers. Configuration instructions will be added once local server support is available.
-
-**Other MCP Clients with Local Server Support:**
-
-- **Cursor**: Configure via Settings > MCP or create `.cursor/mcp.json`
-- **Windsurf**: Configure via MCP settings
-- **Cline** (VS Code extension):
-  `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
-- **Zed**: Configure via MCP settings
-
-All clients use the same basic configuration structure:
+Or add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -107,11 +68,14 @@ All clients use the same basic configuration structure:
 }
 ```
 
-Refer to your client's documentation for specific configuration format and file location.
+#### Other MCP Clients
 
-#### Remote (HTTP) - Cross-Platform Access
+Cursor, Windsurf, Cline, and Zed all support local stdio MCP servers. Use the same command and args structure; refer to
+each client's documentation for the configuration file location.
 
-For accessing OmniFocus from another machine (Windows, Linux, or another Mac):
+#### Remote (HTTP)
+
+For accessing OmniFocus from another machine:
 
 **1. Start the server in HTTP mode on your Mac:**
 
@@ -121,13 +85,13 @@ node dist/index.js --http --port 3000
 
 **2. Configure your remote client:**
 
-**Claude Code** (native HTTP support):
+Claude Code (native HTTP support):
 
 ```bash
 claude mcp add omnifocus --transport http http://your-mac-ip:3000/mcp
 ```
 
-**Claude Desktop** (requires mcp-remote bridge - Node.js needed on client):
+Claude Desktop (requires mcp-remote bridge):
 
 ```json
 {
@@ -140,102 +104,50 @@ claude mcp add omnifocus --transport http http://your-mac-ip:3000/mcp
 }
 ```
 
-See **[HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md)** for Tailscale setup, authentication, and troubleshooting.
-
-## Documentation
-
-**For End Users:**
-
-- [`docs/user/GETTING_STARTED.md`](docs/user/GETTING_STARTED.md) - Your first conversation and natural language examples
-- [`docs/user/TROUBLESHOOTING.md`](docs/user/TROUBLESHOOTING.md) - Common issues and solutions
-- [`docs/user/README.md`](docs/user/README.md) - Complete user documentation index
-
-**For Developers:**
-
-- [`docs/dev/DEVELOPER_GUIDE.md`](docs/dev/DEVELOPER_GUIDE.md) - Complete tool reference with JSON examples
-- [`docs/api/API-REFERENCE-V2.md`](docs/api/API-REFERENCE-V2.md) - Detailed API specification
-- [`docs/dev/README.md`](docs/dev/README.md) - Complete developer documentation index
-- [`docs/api/README.md`](docs/api/README.md) - Explanation of the three API reference versions
-
-## Built-in Prompts
-
-Nine pre-built prompts for common workflows:
-
-- **GTD Workflows**: Inbox processing, weekly review, methodology guide
-
-**📚 Prompt Documentation:**
-
-- **[Manual Templates](prompts/README.md)** - Copy/paste prompts for testing and workflows
-- **[Programmatic Prompts](src/prompts/README.md)** - Built-in MCP prompts (TypeScript-based)
-- **[Prompt Discovery CLI](docs/PROMPT_DISCOVERY.md)** - `npm run prompts:list` command for unified prompt discovery
-
-### Two Ways to Use Prompts
-
-| Approach                                          | Best For                              | Usage                                                |
-| ------------------------------------------------- | ------------------------------------- | ---------------------------------------------------- |
-| **Manual Templates** ([`/prompts/`](prompts/))    | Beginners, customization, offline use | Copy/paste entire prompt into your AI assistant      |
-| **MCP Prompts** ([`/src/prompts/`](src/prompts/)) | Advanced users, integrated workflows  | Ask your assistant to "use the [prompt_name] prompt" |
-
-- **Reference Guides**: Quick reference, troubleshooting, best practices
-
-**Accessing MCP Prompts:**
-
-- Claude Desktop: "+" button → "Add from omnifocus"
-- Claude Code: Access via natural language ("use the gtd_process_inbox prompt")
-- Other clients: See your client's documentation for MCP prompt access
-
-**📖 Comprehensive Documentation:**
-
-- **[User Prompts Guide](./prompts/README.md)** - Ready-to-use prompts for testing and daily workflows
-- **[Technical Prompts Reference](./src/prompts/README.md)** - Programmatic prompt architecture and development
-- **[Testing & Validation Prompts](./prompts/)** - Complete test suites and verification workflows
+See the [HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md) for Tailscale setup, authentication, and troubleshooting.
 
 ## Usage
 
-### For End Users: Just Talk Naturally
+### Natural Language
 
-Once set up, ask questions naturally:
+Once configured, talk to your assistant naturally:
 
 - "What do I need to do today?"
 - "Show me everything that's overdue"
 - "Add 'Call dentist' to my inbox"
-- "I just finished a meeting, here are my notes..." _(captures tasks automatically)_
+- "I just finished a meeting, here are my notes..."
 - "Help me plan my afternoon"
 
-**See the [Getting Started Guide](docs/user/GETTING_STARTED.md) for your first conversation and more examples.**
+See the [Getting Started Guide](docs/user/GETTING_STARTED.md) for more examples.
 
-### For Developers: Programmatic Access
+### Available Tools (v3.0.0 Unified API)
 
-If you're integrating this server into your own tools, see the [Developer Guide](docs/dev/DEVELOPER_GUIDE.md) for:
+Four tools provide complete OmniFocus automation:
 
-- JSON tool call formats
-- API parameter reference
-- Return value schemas
-- Testing patterns
-- Integration examples
-
-## Available Tools (v3.0.0 Unified API)
-
-Four unified tools provide complete OmniFocus automation:
-
-| Tool                    | Purpose     | Operations                                           |
-| ----------------------- | ----------- | ---------------------------------------------------- |
-| **`omnifocus_read`**    | Query data  | Tasks, projects, tags, perspectives, folders, export |
-| **`omnifocus_write`**   | Modify data | Create, update, complete, delete tasks and projects  |
-| **`omnifocus_analyze`** | Analytics   | Productivity stats, velocity, patterns, reviews      |
-| **`system`**            | Diagnostics | Version info, metrics, cache stats                   |
+| Tool                | Purpose     | Operations                                                 |
+| ------------------- | ----------- | ---------------------------------------------------------- |
+| `omnifocus_read`    | Query data  | Tasks, projects, tags, perspectives, folders, export       |
+| `omnifocus_write`   | Modify data | Create, update, complete, delete, batch, tag management    |
+| `omnifocus_analyze` | Analytics   | Productivity stats, velocity, patterns, workflows, reviews |
+| `system`            | Diagnostics | Version info, performance metrics, cache stats             |
 
 ### Query Examples
 
 ```javascript
-// Today's tasks
+// Today's tasks (due within 3 days OR flagged)
 { query: { type: "tasks", mode: "today" } }
 
 // Overdue items
 { query: { type: "tasks", mode: "overdue" } }
 
-// Count active tasks (fast)
+// Flagged tasks
+{ query: { type: "tasks", mode: "flagged" } }
+
+// Count active tasks (33x faster than full query)
 { query: { type: "tasks", filters: { status: "active" }, countOnly: true } }
+
+// Tasks by tag and due date
+{ query: { type: "tasks", filters: { tags: { any: ["work"] }, dueDate: { before: "2026-03-01" } } } }
 
 // Export to JSON
 { query: { type: "export", exportType: "tasks", format: "json" } }
@@ -245,13 +157,21 @@ Four unified tools provide complete OmniFocus automation:
 
 ```javascript
 // Create task
-{ mutation: { operation: "create", target: "task", data: { name: "Call dentist" } } }
+{ mutation: { operation: "create", target: "task",
+    data: { name: "Call dentist", dueDate: "2026-02-14" } } }
 
 // Complete task
-{ mutation: { operation: "complete", target: "task", id: "abc123" } }
+{ mutation: { operation: "complete", target: "task", id: "taskId" } }
 
-// Batch create with hierarchy
+// Create subtask
+{ mutation: { operation: "create", target: "task",
+    data: { name: "Subtask", parentTaskId: "parentId" } } }
+
+// Batch operations
 { mutation: { operation: "batch", target: "task", operations: [...] } }
+
+// Tag management (nested tags use " : " path syntax)
+{ mutation: { operation: "tag_manage", action: "create", tagName: "Work : Meetings" } }
 ```
 
 ### Analysis Examples
@@ -260,102 +180,93 @@ Four unified tools provide complete OmniFocus automation:
 // Productivity stats
 { analysis: { type: "productivity_stats", params: { groupBy: "week" } } }
 
-// Pattern analysis (review gaps, WIP limits, due date bunching)
-{ analysis: { type: "pattern_analysis", params: { patterns: ["review_gaps", "wip_limits"] } } }
+// Pattern analysis
+{ analysis: { type: "pattern_analysis", params: { insights: ["review_gaps", "wip_limits"] } } }
+
+// Parse meeting notes into tasks
+{ analysis: { type: "parse_meeting_notes", params: { text: "Meeting notes here..." } } }
 ```
 
-## Recurring Tasks
+### Recurring Tasks
 
-Supports complex recurrence patterns:
+Set `repetitionRule` when creating or updating tasks:
 
 ```javascript
-// Daily task
-{
-  "repeatRule": {
-    "unit": "day",
-    "steps": 1,
-    "method": "fixed"
-  }
-}
+// Daily (fixed schedule)
+{ mutation: { operation: "create", target: "task", data: {
+    name: "Daily standup",
+    repetitionRule: { frequency: "daily", interval: 1, method: "fixed" }
+} } }
 
-// Weekly on specific days
-{
-  "repeatRule": {
-    "unit": "week",
-    "steps": 1,
-    "weekdays": ["monday", "wednesday", "friday"]
-  }
-}
+// Weekly on Mon/Wed/Fri (1=Mon, 7=Sun)
+{ mutation: { operation: "create", target: "task", data: {
+    name: "Exercise",
+    repetitionRule: { frequency: "weekly", interval: 1, daysOfWeek: [1, 3, 5] }
+} } }
 
-// Monthly position (2nd Tuesday)
-{
-  "repeatRule": {
-    "unit": "month",
-    "steps": 1,
-    "weekPosition": "2",
-    "weekday": "tuesday"
-  }
-}
+// Monthly, repeat from completion date
+{ mutation: { operation: "create", target: "task", data: {
+    name: "Review finances",
+    repetitionRule: { frequency: "monthly", interval: 1, method: "defer-after-completion" }
+} } }
 ```
 
-## Limitations
+| Field        | Type                                                      | Description                    |
+| ------------ | --------------------------------------------------------- | ------------------------------ |
+| `frequency`  | `daily`, `weekly`, `monthly`, `yearly`                    | Recurrence period (required)   |
+| `interval`   | number                                                    | Every Nth period (default: 1)  |
+| `daysOfWeek` | number[] (1-7)                                            | Days for weekly recurrence     |
+| `method`     | `fixed`, `due-after-completion`, `defer-after-completion` | Schedule method                |
+| `endDate`    | `YYYY-MM-DD`                                              | Stop recurring after this date |
 
-- **Task Movement**: Moving tasks between projects may recreate task with new ID
-- **Parent Assignment**: Cannot move existing tasks into action groups after creation
-- **Sequential Blocking**: Inbox tasks don't show as blocked (requires project context)
+## Built-in Prompts
 
-See `/docs/user/TROUBLESHOOTING.md` for solutions.
+Five MCP prompts for GTD workflows:
+
+| Prompt                    | Purpose                                       |
+| ------------------------- | --------------------------------------------- |
+| `gtd_principles`          | GTD methodology guide                         |
+| `gtd_weekly_review`       | Guided weekly review with stale project check |
+| `gtd_process_inbox`       | Process inbox items in batches                |
+| `eisenhower_matrix_inbox` | Prioritize by urgency and importance          |
+| `quick_reference`         | Tool usage reference                          |
+
+Access in Claude Desktop via the "+" button, or in Claude Code by asking to "use the gtd_weekly_review prompt."
+
+See [Manual Templates](prompts/README.md) for copy/paste prompts and
+[Prompt Discovery](docs/operational/PROMPT_DISCOVERY.md) for `npm run prompts:list`.
+
+## Documentation
+
+| Audience   | Document                                        | Purpose                              |
+| ---------- | ----------------------------------------------- | ------------------------------------ |
+| Users      | [Getting Started](docs/user/GETTING_STARTED.md) | First conversation, natural language |
+| Users      | [Troubleshooting](docs/user/TROUBLESHOOTING.md) | Common issues and solutions          |
+| Users      | [Smart Capture](docs/user/SMART_CAPTURE.md)     | Parse meeting notes into tasks       |
+| Users      | [HTTP Transport](docs/user/HTTP-TRANSPORT.md)   | Remote access setup                  |
+| Developers | [Developer Guide](docs/dev/DEVELOPER_GUIDE.md)  | API examples, tool call formats      |
+| Developers | [Architecture](docs/dev/ARCHITECTURE.md)        | JXA + OmniJS Bridge internals        |
+| Developers | [API Reference](docs/api/README.md)             | API reference versions               |
+| Developers | [Patterns and Solutions](docs/dev/PATTERNS.md)  | Symptom lookup, common fixes         |
+| Developers | [Documentation Map](docs/DOCS_MAP.md)           | Index of 90+ documentation files     |
 
 ## Testing
 
-The project uses Vitest with separate unit and integration test suites:
+| Suite       | Command                    | Tests           | Time     |
+| ----------- | -------------------------- | --------------- | -------- |
+| Unit        | `npm run test:unit`        | 1313 (80 files) | ~2.5s    |
+| Integration | `npm run test:integration` | 73              | ~2 min   |
+| All         | `npm test`                 | Both suites     | ~2.5 min |
 
-### Unit Tests (Fast - ~15-20s)
+Integration tests require OmniFocus on macOS. Set `DISABLE_INTEGRATION_TESTS=true` to skip them.
 
-```bash
-npm run test:unit
-```
+## Limitations
 
-Fast tests with no external dependencies. Use for rapid development cycles.
+- **Task Movement** -- Moving tasks between projects may recreate the task with a new ID.
+- **Sequential Blocking** -- Inbox tasks do not appear as blocked (requires project context).
 
-### Integration Tests (Thorough - ~20-25s)
-
-```bash
-npm run test:integration
-```
-
-End-to-end tests requiring OmniFocus on macOS. Tests MCP protocol and data persistence.
-
-- **Protocol Tests**: MCP server initialization, tool discovery, error handling
-- **Data Lifecycle Tests**: Task/project CRUD operations, tag-based tracking, cleanup verification
-
-**Environment Variables:**
-
-- `DISABLE_INTEGRATION_TESTS=true` - Skip integration tests entirely
-
-### Complete Test Suite (~35-40s)
-
-```bash
-npm test
-```
-
-Runs both unit and integration tests.
-
-## Additional Resources
-
-### For Contributors & Advanced Users
-
-- **[`/scripts/`](scripts/)** - Utility scripts and testing tools
-- **[`/tests/`](tests/)** - Unit and integration test suites (1,098 tests)
-- **[Performance Benchmarks](docs/dev/BENCHMARK_RESULTS.md)** - Real-world performance data across hardware
-- **[Architecture Deep Dive](docs/dev/ARCHITECTURE.md)** - JXA + OmniJS Bridge implementation
-- **[Lessons Learned](docs/dev/LESSONS_LEARNED.md)** - Hard-won insights from development
-- **[Improvement Roadmap](docs/IMPROVEMENT_ROADMAP.md)** - Completed features and future direction
-
-### Archive
-
-- **[Historical Documentation](.archive/)** - Preserved development artifacts and deprecated features
+See [Troubleshooting](docs/user/TROUBLESHOOTING.md) for workarounds.
 
 ## License
 
-MIT License - see LICENSE file
+MIT License -- see LICENSE file.
