@@ -14,6 +14,7 @@ import {
   projectFields,
   scoreForSmartSuggest,
   countTodayCategories,
+  type TaskQueryMode,
 } from '../../../../src/tools/tasks/task-query-pipeline.js';
 import type { OmniFocusTask } from '../../../../src/omnifocus/types.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
@@ -161,6 +162,42 @@ describe('augmentFilterForMode', () => {
     expect(result.tags).toEqual(['urgent']);
     expect(result.flagged).toBe(true);
     expect(result.completed).toBe(false); // mode-added
+  });
+
+  describe('declarative MODE_DEFINITIONS coverage', () => {
+    const augmentingModes: TaskQueryMode[] = [
+      'overdue',
+      'today',
+      'upcoming',
+      'available',
+      'blocked',
+      'flagged',
+      'smart_suggest',
+    ];
+    const passthroughModes: TaskQueryMode[] = ['all', 'inbox', 'search'];
+
+    for (const mode of augmentingModes) {
+      it(`mode "${mode}" produces augmented filter`, () => {
+        const result = augmentFilterForMode(mode, {});
+        // Every augmenting mode should add at least one property
+        const addedKeys = Object.keys(result);
+        expect(addedKeys.length).toBeGreaterThan(0);
+      });
+    }
+
+    for (const mode of passthroughModes) {
+      it(`mode "${mode}" passes filter through unchanged`, () => {
+        const filter: TaskFilter = { flagged: true, tags: ['work'] };
+        const result = augmentFilterForMode(mode, filter);
+        expect(result).toEqual(filter);
+      });
+    }
+
+    it('handles unknown mode gracefully (no crash, filter unchanged)', () => {
+      const filter: TaskFilter = { flagged: true };
+      const result = augmentFilterForMode('nonexistent_mode' as TaskQueryMode, filter);
+      expect(result).toEqual(filter);
+    });
   });
 });
 

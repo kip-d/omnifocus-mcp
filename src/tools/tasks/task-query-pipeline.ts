@@ -32,74 +32,84 @@ interface ModeOptions {
 }
 
 /**
+ * Declarative mode definitions.
+ * Each mode maps to a factory that returns the filter properties to merge.
+ * Modes not listed here (all, inbox, search) require no augmentation.
+ */
+type ModeDefinition = (options: ModeOptions) => Partial<TaskFilter>;
+
+const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
+  overdue: () => ({
+    completed: false,
+    dueBefore: new Date().toISOString(),
+    dueDateOperator: '<' as const,
+  }),
+  today: (opts) => {
+    const dueSoonDays = opts.daysAhead || 3;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const dueSoonCutoff = new Date(todayStart);
+    dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
+    return {
+      todayMode: true,
+      dueBefore: dueSoonCutoff.toISOString(),
+      completed: false,
+      dropped: false,
+      tagStatusValid: true,
+      dueSoonDays,
+    };
+  },
+  upcoming: (opts) => {
+    const days = opts.daysAhead || 7;
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days);
+    return {
+      completed: false,
+      dueAfter: startDate.toISOString(),
+      dueBefore: endDate.toISOString(),
+    };
+  },
+  available: () => ({
+    completed: false,
+    available: true,
+  }),
+  blocked: () => ({
+    completed: false,
+    blocked: true,
+  }),
+  flagged: () => ({
+    flagged: true,
+  }),
+  smart_suggest: () => ({
+    completed: false,
+  }),
+};
+
+/**
  * Augment a TaskFilter with mode-specific constraints.
  *
- * Mirrors the filter augmentation that each QueryTasksTool handler applies
- * (e.g. overdue adds dueBefore: now with operator '<').
+ * Uses declarative MODE_DEFINITIONS: each mode is a data entry that returns
+ * the filter properties to merge. Modes not in the registry (all, inbox,
+ * search) pass through unchanged.
  */
 export function augmentFilterForMode(
   mode: TaskQueryMode | undefined,
   filter: TaskFilter,
   options: ModeOptions = {},
 ): TaskFilter {
-  const result = { ...filter };
+  if (!mode) return { ...filter };
 
-  switch (mode) {
-    case 'overdue': {
-      result.completed = false;
-      result.dueBefore = new Date().toISOString();
-      result.dueDateOperator = '<';
-      break;
-    }
-    case 'today': {
-      const dueSoonDays = options.daysAhead || 3;
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const dueSoonCutoff = new Date(todayStart);
-      dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
+  const definition = MODE_DEFINITIONS[mode];
+  if (!definition) return { ...filter };
 
-      result.todayMode = true;
-      result.dueBefore = dueSoonCutoff.toISOString();
-      result.completed = false;
-      result.dropped = false;
-      result.tagStatusValid = true;
-      result.dueSoonDays = dueSoonDays;
-      break;
-    }
-    case 'upcoming': {
-      const days = options.daysAhead || 7;
-      const startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + days);
+  const augmentation = definition(options);
+  const result = { ...filter, ...augmentation };
 
-      result.completed = false;
-      result.dueAfter = startDate.toISOString();
-      result.dueBefore = endDate.toISOString();
-      break;
-    }
-    case 'available': {
-      result.completed = false;
-      result.available = true;
-      break;
-    }
-    case 'blocked': {
-      result.completed = false;
-      result.blocked = true;
-      break;
-    }
-    case 'flagged': {
-      result.flagged = true;
-      if (result.completed === undefined) result.completed = false;
-      break;
-    }
-    case 'smart_suggest': {
-      result.completed = false;
-      break;
-    }
-    // 'all', 'inbox', 'search', undefined — no augmentation needed
-    default:
-      break;
+  // Special case: flagged mode defaults completed=false only when not explicitly set
+  if (mode === 'flagged' && filter.completed === undefined) {
+    result.completed = false;
   }
 
   return result;

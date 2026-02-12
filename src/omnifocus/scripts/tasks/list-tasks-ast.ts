@@ -17,8 +17,7 @@
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
  */
 
-import type { TaskFilter } from '../../../contracts/filters.js';
-import { normalizeFilter } from '../../../contracts/filters.js';
+import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
@@ -36,7 +35,7 @@ import {
  * @returns JXA script string ready for execution
  */
 export function buildListTasksScriptV4(params: {
-  filter: TaskFilter;
+  filter: TaskFilter | NormalizedTaskFilter;
   fields?: string[];
   limit?: number;
   offset?: number;
@@ -44,33 +43,32 @@ export function buildListTasksScriptV4(params: {
 }): string {
   const { filter, fields = [], limit = 50, offset = 0, mode = 'all' } = params;
 
-  // Normalize filter to ensure consistent property names
-  // This catches legacy properties like includeCompleted → completed
-  const normalizedFilter = normalizeFilter(filter);
-
   // Route to appropriate script builder based on mode
+  // Filter is expected to be already normalized by QueryCompiler.
+  // buildInboxScript and buildFilteredTasksScript also normalize internally
+  // as a safety net for direct callers.
   let generatedScript;
 
-  if (normalizedFilter.id) {
+  if (filter.id) {
     // ID lookup mode
-    generatedScript = buildTaskByIdScript(normalizedFilter.id, fields);
-  } else if (mode === 'inbox' || normalizedFilter.inInbox) {
+    generatedScript = buildTaskByIdScript(filter.id, fields);
+  } else if (mode === 'inbox' || filter.inInbox) {
     // Inbox mode - exclude completed items by default
-    const inboxFilter = { ...filter }; // Use raw filter, buildInboxScript normalizes internally
+    const inboxFilter = { ...filter };
     delete inboxFilter.inInbox; // Already handled by inbox collection
     generatedScript = buildInboxScript(inboxFilter, {
       limit,
       offset,
       fields,
-      includeCompleted: normalizedFilter.completed === true,
+      includeCompleted: filter.completed === true,
     });
   } else {
-    // General filtered query - use normalized filter
-    generatedScript = buildFilteredTasksScript(normalizedFilter, {
+    // General filtered query
+    generatedScript = buildFilteredTasksScript(filter, {
       limit,
       offset,
       fields,
-      includeCompleted: normalizedFilter.completed === true,
+      includeCompleted: filter.completed === true,
     });
   }
 

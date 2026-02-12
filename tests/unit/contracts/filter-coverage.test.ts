@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildAST, DATE_FILTER_DEFS } from '../../../src/contracts/ast/builder.js';
+import { buildAST, DATE_FILTER_DEFS, FILTER_DEFS, REGISTRY_KNOWN_FIELDS } from '../../../src/contracts/ast/builder.js';
 import { KNOWN_FIELDS } from '../../../src/contracts/ast/types.js';
 import type { TaskFilter } from '../../../src/contracts/filters.js';
 
@@ -140,5 +140,38 @@ describe('Filter Coverage Safety Net', () => {
         expect(serialized).toContain('<=');
       });
     }
+  });
+
+  describe('FILTER_DEFS (unified registry) ↔ KNOWN_FIELDS alignment', () => {
+    it('every REGISTRY_KNOWN_FIELDS entry appears in KNOWN_FIELDS', () => {
+      const knownFieldsSet = new Set(KNOWN_FIELDS);
+      for (const field of REGISTRY_KNOWN_FIELDS) {
+        expect(
+          knownFieldsSet.has(field as (typeof KNOWN_FIELDS)[number]),
+          `FILTER_DEFS references field "${field}" but it is not in KNOWN_FIELDS. ` +
+            'Add it to KNOWN_FIELDS in types.ts so the AST validator accepts it.',
+        ).toBe(true);
+      }
+    });
+
+    it('every builder-relevant KNOWN_FIELDS entry appears in REGISTRY_KNOWN_FIELDS', () => {
+      // Fields that only appear in KNOWN_FIELDS for validator/emitter use, not produced by builder
+      const validatorOnlyFields = new Set(['task.taskStatus', 'task.effectiveDueDate', 'task.effectiveDeferDate']);
+
+      const registryFieldsSet = new Set(REGISTRY_KNOWN_FIELDS);
+      for (const field of KNOWN_FIELDS) {
+        if (validatorOnlyFields.has(field)) continue;
+        expect(
+          registryFieldsSet.has(field),
+          `KNOWN_FIELDS has "${field}" but no FILTER_DEFS entry references it. ` +
+            'Either add a FILTER_DEFS entry or add the field to the validatorOnlyFields exclusion set.',
+        ).toBe(true);
+      }
+    });
+
+    it('FILTER_DEFS has at least as many entries as there are filter categories', () => {
+      // Sanity check: registry should have 15+ entries (14 non-date + 3 date)
+      expect(FILTER_DEFS.length).toBeGreaterThanOrEqual(15);
+    });
   });
 });

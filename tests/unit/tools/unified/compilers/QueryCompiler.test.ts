@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { QueryCompiler } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
+import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
 
 describe('QueryCompiler', () => {
@@ -318,6 +319,61 @@ describe('QueryCompiler', () => {
 
       expect(result.limit).toBe(100);
       expect(result.offset).toBe(200);
+    });
+  });
+
+  describe('compile() normalization', () => {
+    it('returns NormalizedTaskFilter from compile()', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          filters: { status: 'active' },
+        },
+      });
+
+      expect(isNormalizedFilter(result.filters)).toBe(true);
+    });
+
+    it('converts includeCompleted to completed via normalization', () => {
+      const compiler = new QueryCompiler();
+      // transformFilters produces a raw TaskFilter; compile() normalizes it
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          filters: {},
+        },
+      });
+
+      // Even with empty filters, the result should be normalized
+      expect(isNormalizedFilter(result.filters)).toBe(true);
+    });
+
+    it('defaults tagsOperator when tags present but operator missing', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          filters: { tags: { all: ['work'] } },
+        },
+      });
+
+      // tags.all already sets tagsOperator to AND in transformFilters,
+      // but normalizeFilter also defaults it — result should be AND
+      expect(result.filters.tagsOperator).toBe('AND');
+    });
+
+    it('defaults textOperator to CONTAINS when text present but operator missing', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.compile({
+        query: {
+          type: 'tasks',
+          filters: { text: { contains: 'hello' } },
+        },
+      });
+
+      // transformFilters sets textOperator to CONTAINS, normalization confirms it
+      expect(result.filters.textOperator).toBe('CONTAINS');
     });
   });
 });

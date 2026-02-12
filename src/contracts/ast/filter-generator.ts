@@ -43,6 +43,66 @@ export interface GenerateFilterCodeError {
 }
 
 // =============================================================================
+// PIPELINE
+// =============================================================================
+
+/**
+ * Fluent pipeline for AST filter code generation.
+ *
+ * Encapsulates the build -> validate -> emit steps with pluggable emitter target.
+ *
+ * Usage:
+ * ```typescript
+ * const code = FilterPipeline.from(filter).build().validate().emit('omnijs');
+ * ```
+ */
+export class FilterPipeline {
+  private readonly filter: TaskFilter | NormalizedTaskFilter;
+  private _ast?: FilterNode;
+  private _validation?: ValidationResult;
+
+  private constructor(filter: TaskFilter | NormalizedTaskFilter) {
+    this.filter = filter;
+  }
+
+  static from(filter: TaskFilter | NormalizedTaskFilter): FilterPipeline {
+    return new FilterPipeline(filter);
+  }
+
+  build(): FilterPipeline {
+    this._ast = buildAST(this.filter);
+    return this;
+  }
+
+  validate(): FilterPipeline {
+    if (!this._ast) this.build();
+    this._validation = validateFilterAST(this._ast!);
+    return this;
+  }
+
+  emit(target: EmitTarget = 'omnijs'): string {
+    if (!this._ast) this.build();
+    if (!this._validation) this.validate();
+
+    if (!this._validation!.valid) {
+      throw new Error(`Filter validation failed: ${this._validation!.errors.map((e) => e.message).join('; ')}`);
+    }
+
+    return target === 'jxa' ? emitJXA(this._ast!) : emitOmniJS(this._ast!);
+  }
+
+  get ast(): FilterNode {
+    if (!this._ast) this.build();
+    return this._ast!;
+  }
+
+  get validation(): ValidationResult {
+    if (!this._validation) this.validate();
+    return this._validation!;
+  }
+}
+
+// =============================================================================
 // MAIN API
 // =============================================================================
 
@@ -57,13 +117,7 @@ export interface GenerateFilterCodeError {
  * @returns Generated code string, or throws if validation fails
  */
 export function generateFilterCode(filter: TaskFilter | NormalizedTaskFilter, target: EmitTarget = 'omnijs'): string {
-  const result = generateFilterCodeSafe(filter, target);
-
-  if (!result.success) {
-    throw new Error(`Filter validation failed: ${(result as GenerateFilterCodeError).error}`);
-  }
-
-  return result.code;
+  return FilterPipeline.from(filter).emit(target);
 }
 
 /**
@@ -79,11 +133,8 @@ export function generateFilterCodeSafe(
   filter: TaskFilter | NormalizedTaskFilter,
   target: EmitTarget = 'omnijs',
 ): GenerateFilterCodeResult | GenerateFilterCodeError {
-  // Step 1: Build AST
-  const ast = buildAST(filter);
-
-  // Step 2: Validate
-  const validation = validateFilterAST(ast);
+  const pipeline = FilterPipeline.from(filter).build().validate();
+  const { ast, validation } = pipeline;
 
   if (!validation.valid) {
     return {
@@ -94,8 +145,7 @@ export function generateFilterCodeSafe(
     };
   }
 
-  // Step 3: Emit code
-  const code = target === 'jxa' ? emitJXA(ast) : emitOmniJS(ast);
+  const code = pipeline.emit(target);
 
   return {
     success: true,

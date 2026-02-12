@@ -6,6 +6,7 @@ import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 import { buildTaskCountScript, DEFAULT_FIELDS } from '../../contracts/ast/script-builder.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import { createTaskResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import type { TaskFilter } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
   getDefaultSort,
@@ -21,6 +22,47 @@ import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
 import { ExportTool } from '../export/ExportTool.js';
+
+// =============================================================================
+// TASK QUERY BUILDER
+// =============================================================================
+
+interface TaskQueryPlan {
+  script: string;
+  filter: TaskFilter;
+  mode: TaskQueryMode | undefined;
+  scriptFields: string[];
+  limit: number;
+}
+
+/**
+ * Build the full task query: resolve mode, augment filters, inject fields, build script.
+ */
+function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
+  const limit = compiled.limit || 25;
+  const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
+
+  const filter = augmentFilterForMode(mode, compiled.filters, {
+    daysAhead: compiled.daysAhead,
+  });
+
+  // Today mode needs extra fields for category counting
+  let scriptFields = compiled.fields || [];
+  if (mode === 'today') {
+    const baseFields = scriptFields.length > 0 ? scriptFields : DEFAULT_FIELDS;
+    scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
+  }
+
+  const script = buildListTasksScriptV4({
+    filter,
+    fields: scriptFields,
+    limit,
+    offset: compiled.offset,
+    mode: mode === 'inbox' ? 'inbox' : undefined,
+  });
+
+  return { script, filter, mode, scriptFields, limit };
+}
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
   name = 'omnifocus_read';
@@ -125,118 +167,20 @@ PERFORMANCE:
 
   private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
-    const limit = compiled.limit || 25;
-    const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
-
-    // Augment filters with mode-specific constraints (e.g. overdue → dueBefore: now)
-    const filter = augmentFilterForMode(mode, compiled.filters, {
-      daysAhead: compiled.daysAhead,
-    });
+    const { filter, mode, limit } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
-      const { script } = buildTaskCountScript(filter, { maxScan: 10000 });
-      const result = await this.execJson(script);
-
-      if (!isScriptSuccess(result)) {
-        return createErrorResponseV2(
-          'tasks',
-          'SCRIPT_ERROR',
-          'Failed to count tasks',
-          'Check if OmniFocus is running and filters are valid',
-          isScriptError(result) ? result.details : undefined,
-          timer.toMetadata(),
-        );
-      }
-
-      const data = result.data as {
-        count?: number;
-        warning?: string;
-        optimization?: string;
-        filter_description?: string;
-      };
-      return createTaskResponseV2('tasks', [], {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: mode || 'count_only',
-        count_only: true,
-        total_count: data.count ?? 0,
-        filters_applied: filter as unknown as Record<string, unknown>,
-        optimization: data.optimization || 'ast_omnijs_bridge',
-        filter_description: data.filter_description,
-        warning: data.warning,
-      });
+      return this.executeCountOnly(filter, mode, timer);
     }
 
     // --- ID lookup fast path ---
     if (filter.id) {
-      const script = buildListTasksScriptV4({
-        filter,
-        fields: compiled.fields || [],
-        limit: 1,
-      });
-      const result = await this.execJson(script);
-
-      if (!isScriptSuccess(result)) {
-        return createErrorResponseV2(
-          'tasks',
-          'SCRIPT_ERROR',
-          `Failed to find task with ID: ${filter.id}`,
-          'Verify the task ID is correct and the task exists',
-          isScriptError(result) ? result.details : undefined,
-          timer.toMetadata(),
-        );
-      }
-
-      const data = result.data as { tasks?: unknown[]; items?: unknown[] };
-      const tasks = parseTasks(data.tasks || data.items || []);
-
-      if (tasks.length === 0) {
-        return createErrorResponseV2(
-          'tasks',
-          'NOT_FOUND',
-          `Task not found with ID: ${filter.id}`,
-          'Verify the task ID is correct and the task exists',
-          undefined,
-          timer.toMetadata(),
-        );
-      }
-
-      if (tasks[0].id !== filter.id) {
-        return createErrorResponseV2(
-          'tasks',
-          'ID_MISMATCH',
-          `Task ID mismatch: requested ${filter.id}, received ${tasks[0].id}`,
-          'This indicates a potential issue with the OmniFocus script - please report this bug',
-          undefined,
-          timer.toMetadata(),
-        );
-      }
-
-      const projectedTasks = projectFields(tasks, compiled.fields);
-      return createTaskResponseV2('tasks', projectedTasks, {
-        ...timer.toMetadata(),
-        from_cache: false,
-        mode: 'id_lookup',
-        sort_applied: false,
-      });
+      return this.executeIdLookup(filter, compiled.fields, timer);
     }
 
-    // --- Today mode: extra fields for category counting ---
-    let scriptFields = compiled.fields || [];
-    if (mode === 'today') {
-      const baseFields = scriptFields.length > 0 ? scriptFields : DEFAULT_FIELDS;
-      scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
-    }
-
-    // --- Build and execute query ---
-    const script = buildListTasksScriptV4({
-      filter,
-      fields: scriptFields,
-      limit,
-      offset: compiled.offset,
-      mode: mode === 'inbox' ? 'inbox' : undefined,
-    });
+    // --- Build and execute main query ---
+    const { script } = buildTaskQuery(compiled);
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -253,18 +197,18 @@ PERFORMANCE:
     const data = result.data as { tasks?: unknown[]; items?: unknown[] };
     let tasks = parseTasks(data.tasks || data.items || []);
 
-    // --- Smart suggest: score and rank ---
+    // Smart suggest: score and rank
     if (mode === 'smart_suggest') {
       tasks = scoreForSmartSuggest(tasks, limit);
     }
 
-    // --- Sort (user-specified or mode default) ---
+    // Sort (user-specified or mode default)
     const sortOptions = compiled.sort || getDefaultSort(mode as TaskQueryMode);
     if (sortOptions) {
       tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);
     }
 
-    // --- Build metadata ---
+    // Build metadata
     const metadata: Partial<import('../../utils/response-format.js').StandardMetadataV2> = {
       ...timer.toMetadata(),
       from_cache: false,
@@ -273,7 +217,7 @@ PERFORMANCE:
       sort_applied: !!sortOptions,
     };
 
-    // Today mode: count categories BEFORE field projection (reason field may be projected away)
+    // Today mode: count categories BEFORE field projection
     if (mode === 'today') {
       const counts = countTodayCategories(tasks);
       metadata.due_soon_days = compiled.daysAhead || 3;
@@ -282,10 +226,105 @@ PERFORMANCE:
       metadata.flagged_count = counts.flaggedCount;
     }
 
-    // --- Project fields (after counting, so category counts aren't affected) ---
+    // Project fields (after counting)
     tasks = projectFields(tasks, compiled.fields);
 
     return createTaskResponseV2('tasks', tasks, metadata);
+  }
+
+  private async executeCountOnly(
+    filter: TaskFilter,
+    mode: TaskQueryMode | undefined,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const { script } = buildTaskCountScript(filter, { maxScan: 10000 });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        'Failed to count tasks',
+        'Check if OmniFocus is running and filters are valid',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as {
+      count?: number;
+      warning?: string;
+      optimization?: string;
+      filter_description?: string;
+    };
+    return createTaskResponseV2('tasks', [], {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: mode || 'count_only',
+      count_only: true,
+      total_count: data.count ?? 0,
+      filters_applied: filter as unknown as Record<string, unknown>,
+      optimization: data.optimization || 'ast_omnijs_bridge',
+      filter_description: data.filter_description,
+      warning: data.warning,
+    });
+  }
+
+  private async executeIdLookup(
+    filter: TaskFilter,
+    fields: string[] | undefined,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const script = buildListTasksScriptV4({
+      filter,
+      fields: fields || [],
+      limit: 1,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tasks',
+        'SCRIPT_ERROR',
+        `Failed to find task with ID: ${filter.id}`,
+        'Verify the task ID is correct and the task exists',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const tasks = parseTasks(data.tasks || data.items || []);
+
+    if (tasks.length === 0) {
+      return createErrorResponseV2(
+        'tasks',
+        'NOT_FOUND',
+        `Task not found with ID: ${filter.id}`,
+        'Verify the task ID is correct and the task exists',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    if (tasks[0].id !== filter.id) {
+      return createErrorResponseV2(
+        'tasks',
+        'ID_MISMATCH',
+        `Task ID mismatch: requested ${filter.id}, received ${tasks[0].id}`,
+        'This indicates a potential issue with the OmniFocus script - please report this bug',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const projectedTasks = projectFields(tasks, fields);
+    return createTaskResponseV2('tasks', projectedTasks, {
+      ...timer.toMetadata(),
+      from_cache: false,
+      mode: 'id_lookup',
+      sort_applied: false,
+    });
   }
 
   private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {

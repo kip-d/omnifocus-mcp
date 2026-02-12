@@ -1,5 +1,6 @@
 import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
-import type { TaskFilter } from '../../../contracts/filters.js';
+import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
+import { normalizeFilter } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -17,7 +18,7 @@ export interface CompiledQuery {
     | 'blocked'
     | 'flagged'
     | 'smart_suggest';
-  filters: TaskFilter; // Changed from QueryFilter to TaskFilter
+  filters: NormalizedTaskFilter; // Normalized during compilation
   fields?: string[];
   sort?: Array<{ field: string; direction: 'asc' | 'desc' }>;
   limit?: number;
@@ -43,8 +44,9 @@ export class QueryCompiler {
   compile(input: ReadInput): CompiledQuery {
     const { query } = input;
 
-    // Transform filters from API schema to internal contract
-    const filters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
+    // Transform filters from API schema to internal contract, then normalize
+    const rawFilters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
+    const filters = normalizeFilter(rawFilters);
 
     return {
       type: query.type,

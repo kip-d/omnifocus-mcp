@@ -54,6 +54,7 @@ export { emitOmniJS } from './emitters/omnijs.js';
 // Filter Code Generator (high-level API)
 export type { EmitTarget, GenerateFilterCodeResult, GenerateFilterCodeError } from './filter-generator.js';
 export {
+  FilterPipeline,
   generateFilterCode,
   generateFilterCodeSafe,
   generateFilterFunction,
