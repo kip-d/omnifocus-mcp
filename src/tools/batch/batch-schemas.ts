@@ -1,66 +1,31 @@
 /**
  * Zod schemas for batch operations
+ *
+ * Derived from the canonical CreateDataSchema in write-schema.ts
+ * to prevent field drift. All creation fields (dates, tags, status, etc.)
+ * are inherited automatically.
  */
 
 import { z } from 'zod';
 import { coerceBoolean } from '../schemas/coercion-helpers.js';
-import { RepeatRuleSchema } from '../schemas/repeat-schemas.js';
+import { BatchItemDataSchema } from '../unified/schemas/write-schema.js';
 
 /**
- * Base batch item schema
+ * Task batch item = unified schema + type discriminator.
+ * Inherits all fields from CreateDataSchema: project, dates, tags,
+ * estimatedMinutes, repetitionRule, status, etc.
  */
-const BaseBatchItemSchema = z.object({
-  tempId: z.string().min(1).describe('Temporary ID for referencing this item within the batch'),
-
-  parentTempId: z.string().optional().describe('Temporary ID of the parent (project for tasks, task for subtasks)'),
-
-  name: z.string().min(1).describe('Name of the item'),
-
-  note: z.string().optional().describe('Note/description'),
-
-  tags: z.array(z.string()).optional().describe('Tags to assign'),
-
-  flagged: coerceBoolean().optional().describe('Whether to flag the item'),
-});
-
-/**
- * Project-specific fields
- */
-const ProjectBatchItemSchema = BaseBatchItemSchema.extend({
-  type: z.literal('project'),
-
-  folder: z.string().optional().describe('Folder to place the project in (created if not exists)'),
-
-  status: z.enum(['active', 'on-hold', 'done', 'dropped']).optional().describe('Project status'),
-
-  sequential: coerceBoolean().optional().describe('Whether tasks must be completed in order'),
-
-  reviewInterval: z.union([z.number(), z.string()]).optional().describe('Review interval in days'),
-});
-
-/**
- * Task-specific fields
- */
-const TaskBatchItemSchema = BaseBatchItemSchema.extend({
+const TaskBatchItemSchema = BatchItemDataSchema.extend({
   type: z.literal('task'),
+  tempId: z.string().min(1), // Required for batch operations (optional in unified API)
+});
 
-  dueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format')
-    .optional()
-    .describe('Due date (YYYY-MM-DD or YYYY-MM-DD HH:mm)'),
-
-  deferDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/, 'Invalid date format')
-    .optional()
-    .describe('Defer date (YYYY-MM-DD or YYYY-MM-DD HH:mm)'),
-
-  estimatedMinutes: z.union([z.number(), z.string()]).optional().describe('Estimated duration in minutes'),
-
-  sequential: coerceBoolean().optional().describe('Whether subtasks must be completed in order'),
-
-  repetitionRule: RepeatRuleSchema.optional().describe('Repeat rule for recurring tasks'),
+/**
+ * Project batch item = unified schema + type discriminator.
+ */
+const ProjectBatchItemSchema = BatchItemDataSchema.extend({
+  type: z.literal('project'),
+  tempId: z.string().min(1), // Required for batch operations (optional in unified API)
 });
 
 /**

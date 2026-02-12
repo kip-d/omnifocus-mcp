@@ -14,23 +14,31 @@ const RepetitionRuleSchema = z.object({
   catchUpAutomatically: z.boolean().optional(),
 });
 
-// Create data schema
+// Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
+const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
+
+// Create data schema — single source of truth for task/project creation fields.
+// Both the unified write tool and batch-schemas derive from this.
 const CreateDataSchema = z.object({
   name: z.string().min(1),
   note: z.string().optional(),
   project: z.union([z.string(), z.null()]).optional(),
   parentTaskId: z.string().optional(), // Bug #17: Enable subtask creation
   tags: z.array(z.string()).optional(),
-  dueDate: z.string().optional(),
-  deferDate: z.string().optional(),
-  plannedDate: z.string().optional(),
-  flagged: z.boolean().optional(),
-  estimatedMinutes: z.number().optional(),
+  dueDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+  deferDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+  plannedDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+  flagged: coerceBoolean().optional(),
+  estimatedMinutes: z
+    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+    .pipe(z.number())
+    .optional(),
   repetitionRule: RepetitionRuleSchema.optional(),
 
   // Project-specific
   folder: z.string().optional(),
-  sequential: z.boolean().optional(),
+  sequential: coerceBoolean().optional(),
   status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
 });
 
@@ -58,13 +66,15 @@ const UpdateChangesSchema = z
   })
   .passthrough();
 
-// Enhanced batch item schema with hierarchical relationships
-const BatchItemDataSchema = CreateDataSchema.extend({
+// Enhanced batch item schema with hierarchical relationships.
+// Exported so batch-schemas.ts can derive from it (single source of truth).
+export const BatchItemDataSchema = CreateDataSchema.extend({
   tempId: z.string().min(1).optional(),
   parentTempId: z.string().optional(),
-  estimatedMinutes: z.number().optional(),
-  sequential: z.boolean().optional(),
-  reviewInterval: z.number().optional(),
+  reviewInterval: z
+    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+    .pipe(z.number())
+    .optional(),
 });
 
 // Batch operation schema - discriminated union

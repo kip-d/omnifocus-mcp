@@ -242,10 +242,10 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       name: item.name,
       note: item.note || '',
       flagged: item.flagged || false,
-      status: ((item as { status?: string }).status as ProjectCreateData['status']) || 'active',
-      sequential: (item as { sequential?: boolean }).sequential || false,
+      status: (item.status as ProjectCreateData['status']) || 'active',
+      sequential: item.sequential || false,
       tags: item.tags || [],
-      folder: (item as { folder?: string }).folder,
+      folder: item.folder,
     };
 
     // Use AST mutation builder
@@ -319,15 +319,16 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       }
     }
 
-    // Handle task-specific fields
-    const taskItem = item as {
-      dueDate?: string;
-      deferDate?: string;
-      estimatedMinutes?: number | string;
-      sequential?: boolean;
-    };
+    // Fall back to direct project assignment when parentTempId wasn't used
+    if (!projectId && !parentTaskId) {
+      if (item.project) {
+        projectId = item.project;
+      }
+    }
 
     // Build TaskCreateData for AST builder
+    // All fields are available directly on `item` — schema-level coercion
+    // ensures estimatedMinutes is already a number, dates are validated, etc.
     const taskData: TaskCreateData = {
       name: item.name,
       note: item.note || '',
@@ -335,14 +336,10 @@ export class BatchCreateTool extends BaseTool<typeof BatchCreateSchema> {
       project: projectId || undefined,
       parentTaskId: parentTaskId || undefined,
       tags: item.tags || [],
-      dueDate: taskItem.dueDate ? localToUTC(taskItem.dueDate, 'due') : undefined,
-      deferDate: taskItem.deferDate ? localToUTC(taskItem.deferDate, 'defer') : undefined,
-      estimatedMinutes:
-        taskItem.estimatedMinutes !== undefined
-          ? typeof taskItem.estimatedMinutes === 'string'
-            ? parseInt(taskItem.estimatedMinutes, 10)
-            : taskItem.estimatedMinutes
-          : undefined,
+      dueDate: item.dueDate ? localToUTC(item.dueDate, 'due') : undefined,
+      deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
+      plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
+      estimatedMinutes: item.estimatedMinutes,
     };
 
     // Use AST mutation builder
