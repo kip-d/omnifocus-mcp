@@ -23,7 +23,7 @@ import type { FilterNode, ComparisonNode, AndNode, OrNode, ExistsNode, NotNode }
  * - fields: AST field names this def touches (used to derive KNOWN_FIELDS)
  * - build: returns a FilterNode or null (null = filter not active, skip)
  */
-interface FilterDef {
+export interface FilterDef {
   readonly fields: readonly string[];
   readonly build: (filter: TaskFilter | NormalizedTaskFilter) => FilterNode | null;
 }

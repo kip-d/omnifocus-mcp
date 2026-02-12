@@ -41,7 +41,8 @@ export {
 } from './types.js';
 
 // Builder
-export { buildAST } from './builder.js';
+export type { FilterDef } from './builder.js';
+export { buildAST, FILTER_DEFS, REGISTRY_KNOWN_FIELDS, DATE_FILTER_DEFS } from './builder.js';
 
 // Validator
 export type { ValidationResult, ValidationError, ValidationWarning } from './validator.js';

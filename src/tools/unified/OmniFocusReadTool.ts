@@ -167,7 +167,7 @@ PERFORMANCE:
 
   private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
-    const { filter, mode, limit } = buildTaskQuery(compiled);
+    const { script, filter, mode, limit } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
@@ -179,8 +179,7 @@ PERFORMANCE:
       return this.executeIdLookup(filter, compiled.fields, timer);
     }
 
-    // --- Build and execute main query ---
-    const { script } = buildTaskQuery(compiled);
+    // --- Execute main query ---
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
