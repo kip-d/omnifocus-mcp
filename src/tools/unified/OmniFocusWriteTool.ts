@@ -181,32 +181,131 @@ SAFETY:
   }
 
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
-    // Convert builder batch format to existing batch tool format
-    // Auto-generate tempIds for items that don't have them
-    let autoTempIdCounter = 0;
-    const batchArgs: Record<string, unknown> = {
-      items: compiled.operations
-        .filter((op) => op.operation === 'create')
-        .map((op) => {
-          const item = {
-            type: op.target,
-            ...op.data,
+    // Partition operations by type
+    const createOps = compiled.operations.filter((op) => op.operation === 'create');
+    const updateOps = compiled.operations.filter((op) => op.operation === 'update');
+    const completeOps = compiled.operations.filter((op) => op.operation === 'complete');
+    const deleteOps = compiled.operations.filter((op) => op.operation === 'delete');
+
+    const results: {
+      created: unknown[];
+      updated: unknown[];
+      completed: unknown[];
+      deleted: unknown[];
+      errors: unknown[];
+    } = { created: [], updated: [], completed: [], deleted: [], errors: [] };
+
+    let tempIdMapping: Record<string, string> = {};
+    let hadError = false;
+
+    // Phase 1: Creates (via BatchCreateTool for hierarchy support)
+    if (createOps.length > 0 && !hadError) {
+      try {
+        let autoTempIdCounter = 0;
+        const batchArgs: Record<string, unknown> = {
+          items: createOps.map((op) => {
+            const item = { type: op.target, ...op.data };
+            if (!item.tempId) {
+              item.tempId = `auto_temp_${++autoTempIdCounter}`;
+            }
+            return item;
+          }),
+          createSequentially: compiled.createSequentially ?? true,
+          atomicOperation: compiled.atomicOperation ?? false,
+          returnMapping: compiled.returnMapping ?? true,
+          stopOnError: compiled.stopOnError ?? true,
+        };
+
+        const createResult = (await this.batchTool.execute(batchArgs)) as any;
+        results.created.push(createResult);
+
+        // Extract tempId mapping for subsequent operations
+        if (createResult?.metadata?.tempIdMapping) {
+          tempIdMapping = createResult.metadata.tempIdMapping;
+        }
+      } catch (err) {
+        results.errors.push({ phase: 'create', error: String(err) });
+        if (compiled.stopOnError) hadError = true;
+      }
+    }
+
+    // Phase 2-4: Updates, completes, deletes — route through existing single-item handlers
+    const phases: Array<{
+      name: string;
+      ops: typeof updateOps;
+      resultKey: 'updated' | 'completed' | 'deleted';
+    }> = [
+      { name: 'update', ops: updateOps, resultKey: 'updated' },
+      { name: 'complete', ops: completeOps, resultKey: 'completed' },
+      { name: 'delete', ops: deleteOps, resultKey: 'deleted' },
+    ];
+
+    for (const phase of phases) {
+      if (hadError || phase.ops.length === 0) continue;
+
+      for (const op of phase.ops) {
+        try {
+          // Resolve tempId references if the id matches a tempId from creates
+          const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
+
+          // Build args for routing through existing single-item handlers
+          const routeArgs: Record<string, unknown> = {
+            operation: op.operation,
           };
 
-          // Ensure tempId exists (required by BatchCreateTool for dependency graph)
-          if (!item.tempId) {
-            item.tempId = `auto_temp_${++autoTempIdCounter}`;
+          if (op.target === 'task') {
+            routeArgs.taskId = resolvedId;
+          } else {
+            routeArgs.projectId = resolvedId;
           }
 
-          return item;
-        }),
-      createSequentially: compiled.createSequentially ?? true,
-      atomicOperation: compiled.atomicOperation ?? false,
-      returnMapping: compiled.returnMapping ?? true,
-      stopOnError: compiled.stopOnError ?? true,
-    };
+          // Add changes for update operations
+          if (op.changes) {
+            Object.assign(routeArgs, op.changes);
+          }
 
-    return this.batchTool.execute(batchArgs);
+          // Add completionDate for complete operations
+          if (op.completionDate) {
+            routeArgs.completionDate = op.completionDate;
+          }
+
+          let result: unknown;
+          if (op.target === 'project') {
+            result = await this.projectsTool.execute(routeArgs);
+          } else {
+            result = await this.manageTaskTool.execute(routeArgs);
+          }
+          results[phase.resultKey].push(result);
+        } catch (err) {
+          results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
+          if (compiled.stopOnError) {
+            hadError = true;
+            break;
+          }
+        }
+      }
+    }
+
+    return {
+      success: results.errors.length === 0,
+      data: {
+        operation: 'batch',
+        summary: {
+          created: results.created.length > 0 ? createOps.length : 0,
+          updated: results.updated.length,
+          completed: results.completed.length,
+          deleted: results.deleted.length,
+          errors: results.errors.length,
+        },
+        results,
+        ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
+      },
+      metadata: {
+        operation: 'batch',
+        timestamp: new Date().toISOString(),
+        ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
+      },
+    };
   }
 
   private async routeToTagsTool(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Import the WriteSchema to test BatchOperationSchema indirectly
 // (BatchOperationSchema is not exported, but is validated through WriteSchema)
@@ -144,5 +144,81 @@ describe('BatchOperationSchema — all operation types', () => {
 
     const result = WriteSchema.safeParse(input);
     expect(result.success).toBe(true);
+  });
+});
+
+import { OmniFocusWriteTool } from '../../../../src/tools/unified/OmniFocusWriteTool.js';
+
+class StubCache {
+  invalidate(): void {}
+  invalidateProject(): void {}
+  invalidateTag(): void {}
+  invalidateTaskQueries(): void {}
+}
+
+describe('routeToBatch — partition and delegate', () => {
+  it('should handle batch with only updates (original bug)', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    // Mock the internal ManageTaskTool.execute
+    const manageTaskSpy = vi.spyOn((tool as any).manageTaskTool, 'execute').mockResolvedValue({
+      success: true,
+      data: { task: { id: 'task-1', name: 'Updated', updated: true } },
+    });
+
+    const result = await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'update', target: 'task', id: 'task-1', changes: { flagged: true } },
+          { operation: 'update', target: 'task', id: 'task-2', changes: { name: 'Renamed' } },
+        ],
+      },
+    });
+
+    expect(manageTaskSpy).toHaveBeenCalledTimes(2);
+    expect(result).toHaveProperty('success', true);
+
+    manageTaskSpy.mockRestore();
+  });
+
+  it('should execute operations in correct order: creates, updates, completes, deletes', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+    const callOrder: string[] = [];
+
+    // Mock BatchCreateTool
+    vi.spyOn((tool as any).batchTool, 'execute').mockImplementation(async () => {
+      callOrder.push('create');
+      return {
+        success: true,
+        data: { results: [{ tempId: 'temp1', realId: 'real-1', success: true }] },
+        metadata: { tempIdMapping: { temp1: 'real-1' } },
+      };
+    });
+
+    // Mock ManageTaskTool
+    vi.spyOn((tool as any).manageTaskTool, 'execute').mockImplementation(async (args: any) => {
+      callOrder.push(args.operation);
+      return { success: true, data: { task: { id: args.taskId, updated: true } } };
+    });
+
+    await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'delete', target: 'task', id: 'task-del' },
+          { operation: 'update', target: 'task', id: 'task-upd', changes: { name: 'X' } },
+          { operation: 'create', target: 'task', data: { name: 'New' } },
+          { operation: 'complete', target: 'task', id: 'task-cmp' },
+        ],
+      },
+    });
+
+    // Regardless of input order, execution order should be: create, update, complete, delete
+    expect(callOrder).toEqual(['create', 'update', 'complete', 'delete']);
   });
 });
