@@ -53,16 +53,19 @@ const UpdateChangesSchema = z
     dueDate: z.union([z.string(), z.null()]).optional(),
     deferDate: z.union([z.string(), z.null()]).optional(),
     plannedDate: z.union([z.string(), z.null()]).optional(),
-    clearDueDate: z.boolean().optional(),
-    clearDeferDate: z.boolean().optional(),
-    clearPlannedDate: z.boolean().optional(),
-    flagged: z.boolean().optional(),
+    clearDueDate: coerceBoolean().optional(),
+    clearDeferDate: coerceBoolean().optional(),
+    clearPlannedDate: coerceBoolean().optional(),
+    flagged: coerceBoolean().optional(),
     status: z.enum(['completed', 'dropped']).optional(),
     project: z.union([z.string(), z.null()]).optional(),
     parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
-    estimatedMinutes: z.number().optional(),
-    clearEstimatedMinutes: z.boolean().optional(), // Bug #18: Clear estimated time
-    clearRepeatRule: z.boolean().optional(), // Bug #19: Clear repetition rule
+    estimatedMinutes: z
+      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+      .pipe(z.number())
+      .optional(),
+    clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
+    clearRepeatRule: coerceBoolean().optional(), // Bug #19: Clear repetition rule
   })
   .passthrough();
 
