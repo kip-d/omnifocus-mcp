@@ -222,3 +222,31 @@ describe('routeToBatch — partition and delegate', () => {
     expect(callOrder).toEqual(['create', 'update', 'complete', 'delete']);
   });
 });
+
+describe('previewBatch — dry run', () => {
+  it('should preview all four operation types', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    const result = (await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'create', target: 'task', data: { name: 'New task' } },
+          { operation: 'update', target: 'task', id: 'task-1', changes: { name: 'Updated' } },
+          { operation: 'complete', target: 'task', id: 'task-2' },
+          { operation: 'delete', target: 'task', id: 'task-3' },
+        ],
+        dryRun: true,
+      },
+    })) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.data.wouldAffect.count).toBe(4);
+    expect(result.data.wouldAffect.creates).toBe(1);
+    expect(result.data.wouldAffect.updates).toBe(1);
+    expect(result.data.wouldAffect.completes).toBe(1);
+    expect(result.data.wouldAffect.deletes).toBe(1);
+  });
+});

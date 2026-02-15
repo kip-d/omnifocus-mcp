@@ -356,12 +356,14 @@ SAFETY:
   private previewBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): unknown {
     const timer = new OperationTimerV2();
 
-    // Extract create operations for preview
+    // Partition operations
     const createOps = compiled.operations.filter((op) => op.operation === 'create');
     const updateOps = compiled.operations.filter((op) => op.operation === 'update');
+    const completeOps = compiled.operations.filter((op) => op.operation === 'complete');
+    const deleteOps = compiled.operations.filter((op) => op.operation === 'delete');
 
-    // Build preview items
-    const previewItems = createOps.map((op, index) => ({
+    // Build preview items for each type
+    const createPreviewItems = createOps.map((op, index) => ({
       tempId: op.data?.tempId || `auto_temp_${index + 1}`,
       type: compiled.target,
       name: op.data?.name || 'Unnamed',
@@ -376,7 +378,6 @@ SAFETY:
       },
     }));
 
-    // Add update operations to preview
     const updatePreviewItems = updateOps.map((op) => ({
       id: op.id,
       type: compiled.target,
@@ -385,19 +386,32 @@ SAFETY:
       details: op.changes,
     }));
 
+    const completePreviewItems = completeOps.map((op) => ({
+      id: op.id,
+      type: compiled.target,
+      action: 'complete' as const,
+      details: { completionDate: op.completionDate },
+    }));
+
+    const deletePreviewItems = deleteOps.map((op) => ({
+      id: op.id,
+      type: compiled.target,
+      action: 'delete' as const,
+    }));
+
     // Validation checks
     const warnings: string[] = [];
     const errors: string[] = [];
 
     // Check for duplicate tempIds
-    const tempIds = previewItems.map((item) => item.tempId);
+    const tempIds = createPreviewItems.map((item) => item.tempId);
     const duplicates = tempIds.filter((id, idx) => tempIds.indexOf(id) !== idx);
     if (duplicates.length > 0) {
       errors.push(`Duplicate tempIds found: ${duplicates.join(', ')}`);
     }
 
     // Check for orphan parentTempIds
-    const parentRefs = previewItems
+    const parentRefs = createPreviewItems
       .filter((item) => item.details.parentTempId)
       .map((item) => item.details.parentTempId);
     const orphanRefs = parentRefs.filter((ref) => !tempIds.includes(ref as string));
@@ -406,8 +420,14 @@ SAFETY:
     }
 
     // Warning for large batches
-    if (createOps.length > 50) {
-      warnings.push(`Large batch (${createOps.length} items) may take 30+ seconds to execute`);
+    const totalOps = createOps.length + updateOps.length + completeOps.length + deleteOps.length;
+    if (totalOps > 50) {
+      warnings.push(`Large batch (${totalOps} operations) may take 30+ seconds to execute`);
+    }
+
+    // Warning for deletes
+    if (deleteOps.length > 0) {
+      warnings.push(`${deleteOps.length} item(s) will be permanently deleted`);
     }
 
     return createSuccessResponseV2(
@@ -416,10 +436,12 @@ SAFETY:
         dryRun: true,
         operation: 'batch',
         wouldAffect: {
-          count: createOps.length + updateOps.length,
-          creates: previewItems.length,
+          count: totalOps,
+          creates: createPreviewItems.length,
           updates: updatePreviewItems.length,
-          items: [...previewItems, ...updatePreviewItems],
+          completes: completePreviewItems.length,
+          deletes: deletePreviewItems.length,
+          items: [...createPreviewItems, ...updatePreviewItems, ...completePreviewItems, ...deletePreviewItems],
         },
         validation: {
           passed: errors.length === 0,
@@ -430,7 +452,7 @@ SAFETY:
       undefined,
       {
         ...timer.toMetadata(),
-        message: `DRY RUN: No changes made. ${createOps.length} items would be created, ${updateOps.length} updated.`,
+        message: `DRY RUN: No changes made. ${createOps.length} create, ${updateOps.length} update, ${completeOps.length} complete, ${deleteOps.length} delete.`,
       },
     );
   }
