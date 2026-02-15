@@ -26,11 +26,67 @@ interface RawOmniFocusData {
   tasks?: unknown[];
   tags?: unknown[];
   perspectives?: unknown[];
+  folders?: unknown[];
+  items?: unknown[];
   summary?: unknown;
   metadata?: unknown;
   count?: number;
+  ok?: boolean;
+  updated?: number;
+  success?: boolean;
   error?: unknown;
   message?: string;
+  context?: unknown;
+  details?: unknown;
+}
+
+/**
+ * Legacy error format from older OmniFocus scripts.
+ * Some scripts return { error: true, message: "..." } instead of ScriptResult.
+ */
+interface LegacyScriptError {
+  error?: boolean | string;
+  success?: boolean;
+  message?: string;
+  details?: unknown;
+}
+
+/**
+ * Type guard: checks if an unknown value is a legacy script error object.
+ * Matches objects with error flags (true/'true') or explicit success: false.
+ */
+export function isLegacyScriptError(value: unknown): value is LegacyScriptError {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  return obj.error === true || obj.error === 'true' || obj.success === false;
+}
+
+/**
+ * Safely extract error message from a legacy error object.
+ */
+export function getLegacyErrorMessage(error: LegacyScriptError): string {
+  return typeof error.message === 'string' ? error.message : 'Script execution failed';
+}
+
+/**
+ * Type guard: checks if an unknown value looks like a successful raw OmniFocus response
+ * containing data arrays or success indicators.
+ */
+export function isRawSuccessResponse(value: unknown): value is RawOmniFocusData {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  return (
+    Array.isArray(obj.folders) ||
+    Array.isArray(obj.items) ||
+    Array.isArray(obj.tasks) ||
+    Array.isArray(obj.projects) ||
+    obj.ok === true ||
+    typeof obj.updated === 'number'
+  );
 }
 
 /**
@@ -665,16 +721,12 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         if (res && typeof res === 'object' && 'success' in res) {
           const scriptResult = res as ScriptResult<T>;
 
-          if (scriptResult.success === true) {
-            const data = scriptResult.data as unknown;
-            if (data && typeof data === 'object') {
-              const maybeError = data as { error?: unknown; success?: unknown; message?: unknown };
-              const errorValue = maybeError.error;
-              if (errorValue === true || errorValue === 'true' || maybeError.success === false) {
-                const message = typeof maybeError.message === 'string' ? maybeError.message : 'Script execution failed';
-                return createScriptError(message, 'Legacy script error', data);
-              }
-            }
+          if (scriptResult.success === true && isLegacyScriptError(scriptResult.data)) {
+            return createScriptError(
+              getLegacyErrorMessage(scriptResult.data),
+              'Legacy script error',
+              scriptResult.data,
+            );
           }
 
           return scriptResult;
@@ -686,30 +738,9 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const parsed = JSON.parse(res);
 
-            if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-              const errorValue = (parsed as { error?: unknown }).error;
-              if (errorValue === true || errorValue === 'true') {
-                const message =
-                  typeof (parsed as { message?: unknown }).message === 'string'
-                    ? (parsed as { message: string }).message
-                    : 'Script execution failed';
-                return createScriptError(message, 'Legacy script error', parsed);
-              }
-            }
-
-            if (
-              parsed &&
-              typeof parsed === 'object' &&
-              'success' in parsed &&
-              (parsed as { success?: unknown }).success === false
-            ) {
-              const message =
-                typeof (parsed as { message?: unknown }).message === 'string'
-                  ? (parsed as { message: string }).message
-                  : 'Script execution failed';
-              const parsedRecord = parsed as Record<string, unknown>;
-              const details: unknown = parsedRecord.details !== undefined ? parsedRecord.details : parsed;
-              return createScriptError(message, 'Legacy script error', details);
+            if (isLegacyScriptError(parsed)) {
+              const details = parsed.details !== undefined ? parsed.details : parsed;
+              return createScriptError(getLegacyErrorMessage(parsed), 'Legacy script error', details);
             }
 
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
@@ -720,32 +751,17 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         }
 
         // Handle object responses that indicate success patterns
+        if (isRawSuccessResponse(res)) {
+          return createScriptSuccess<T>(res as T);
+        }
+
+        // Check for explicit error indication in object responses
         if (res && typeof res === 'object') {
-          const obj = res as RawOmniFocusData & {
-            folders?: unknown[];
-            items?: unknown[];
-            ok?: boolean;
-            updated?: number;
-            success?: boolean;
-            context?: unknown;
-            details?: unknown;
-          };
-          // Check for common success indicators
-          if (
-            Array.isArray(obj.folders) ||
-            Array.isArray(obj.items) ||
-            obj.ok === true ||
-            typeof obj.updated === 'number' ||
-            Array.isArray(obj.tasks) ||
-            Array.isArray(obj.projects)
-          ) {
-            return createScriptSuccess<T>(obj as T);
-          }
-          // Check for explicit error indication
+          const obj = res as RawOmniFocusData;
           if (obj.success === false || obj.error) {
             return createScriptError(
               (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
-              obj.context as string | undefined,
+              typeof obj.context === 'string' ? obj.context : undefined,
               obj.details,
             );
           }
