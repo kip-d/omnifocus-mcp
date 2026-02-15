@@ -93,6 +93,17 @@ const BatchOperationSchema = z.discriminatedUnion('operation', [
     id: z.string(),
     changes: UpdateChangesSchema,
   }),
+  z.object({
+    operation: z.literal('complete'),
+    target: z.enum(['task', 'project']),
+    id: z.string(),
+    completionDate: z.string().regex(DATE_REGEX, DATE_FORMAT_MSG).optional(),
+  }),
+  z.object({
+    operation: z.literal('delete'),
+    target: z.enum(['task', 'project']),
+    id: z.string(),
+  }),
 ]);
 
 // Tag management action enum

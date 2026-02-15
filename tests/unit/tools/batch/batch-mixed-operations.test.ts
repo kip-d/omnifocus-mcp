@@ -87,3 +87,62 @@ describe('UpdateChangesSchema MCP bridge coercion', () => {
     }
   });
 });
+
+describe('BatchOperationSchema — all operation types', () => {
+  it('should accept complete operations in a batch', () => {
+    const input = {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [{ operation: 'complete', target: 'task', id: 'task-123' }],
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept complete with optional completionDate', () => {
+    const input = {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [{ operation: 'complete', target: 'task', id: 'task-123', completionDate: '2026-02-15' }],
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept delete operations in a batch', () => {
+    const input = {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [{ operation: 'delete', target: 'task', id: 'task-456' }],
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept mixed create+update+complete+delete in a single batch', () => {
+    const input = {
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          { operation: 'create', target: 'task', data: { name: 'New task' } },
+          { operation: 'update', target: 'task', id: 'task-1', changes: { flagged: true } },
+          { operation: 'complete', target: 'task', id: 'task-2' },
+          { operation: 'delete', target: 'task', id: 'task-3' },
+        ],
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+});
