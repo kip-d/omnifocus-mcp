@@ -27,10 +27,14 @@ OPERATIONS:
 - tag_manage: Manage tag hierarchy (create, rename, delete, merge, nest, unnest, reparent)
 
 BATCH OPERATIONS:
-- tempId: Optional for each item (auto-generated if not provided)
+- operations: Array of create, update, complete, and delete operations
+- Execution order: creates first, then updates, completes, deletes last
+- tempId: Optional for creates (auto-generated if not provided)
 - parentTempId: Reference parent by tempId for hierarchies
+- Updates/completes can reference tempIds from creates in the same batch
 - createSequentially: true (respects dependencies)
 - returnMapping: true (returns tempId → realId map)
+- stopOnError: true (halt on first failure)
 
 TAG OPERATIONS:
 - tags: [...] - Replace all tags
