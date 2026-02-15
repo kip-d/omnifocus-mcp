@@ -194,8 +194,8 @@ describe('routeToBatch — partition and delegate', () => {
       callOrder.push('create');
       return {
         success: true,
-        data: { results: [{ tempId: 'temp1', realId: 'real-1', success: true }] },
-        metadata: { tempIdMapping: { temp1: 'real-1' } },
+        data: { results: [{ tempId: 'temp1', realId: 'real-1', success: true }], mapping: { temp1: 'real-1' } },
+        metadata: { operation: 'batch_create' },
       };
     });
 

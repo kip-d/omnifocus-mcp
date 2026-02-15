@@ -221,11 +221,19 @@ SAFETY:
         };
 
         const createResult = (await this.batchTool.execute(batchArgs)) as any;
-        results.created.push(createResult);
 
-        // Extract tempId mapping for subsequent operations
-        if (createResult?.metadata?.tempIdMapping) {
-          tempIdMapping = createResult.metadata.tempIdMapping;
+        // Check if BatchCreateTool returned a validation error (e.g., circular deps, unknown parentTempId)
+        if (createResult?.success === false) {
+          results.errors.push(createResult);
+          if (compiled.stopOnError) hadError = true;
+        } else {
+          results.created.push(createResult);
+
+          // Extract tempId mapping for subsequent operations
+          // BatchCreateTool stores mapping in data.mapping (via TempIdResolver)
+          if (createResult?.data?.mapping) {
+            tempIdMapping = createResult.data.mapping;
+          }
         }
       } catch (err) {
         results.errors.push({ phase: 'create', error: String(err) });
@@ -295,7 +303,7 @@ SAFETY:
       data: {
         operation: 'batch',
         summary: {
-          created: results.created.length > 0 ? createOps.length : 0,
+          created: results.created.reduce((sum: number, r: any) => sum + (r?.data?.created ?? 0), 0),
           updated: results.updated.length,
           completed: results.completed.length,
           deleted: results.deleted.length,

@@ -15,11 +15,59 @@ import { MCPTestClient } from './helpers/mcp-test-client.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
 
 // Only run on macOS with OmniFocus
-const RUN_INTEGRATION_TESTS =
-  process.env.DISABLE_INTEGRATION_TESTS !== 'true' &&
-  process.platform === 'darwin';
+const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
 
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
+
+/**
+ * Response shape from routeToBatch():
+ *
+ * Success:
+ *   { success: true, data: { operation, summary, results: { created: [BatchCreateTool response], ... }, tempIdMapping }, metadata }
+ *
+ * Error (validation failure in creates):
+ *   { success: false, data: { operation, summary, results: { ..., errors: [BatchCreateTool error response] } }, metadata }
+ *
+ * The BatchCreateTool response nested inside results.created[0] has its own shape:
+ *   { success: true, data: { success, created, failed, totalItems, results: [{ tempId, realId, success, type }], mapping }, metadata }
+ */
+
+// Helper type for the new batch response format
+interface BatchResponse {
+  success: boolean;
+  data: {
+    operation: string;
+    summary: { created: number; updated: number; completed: number; deleted: number; errors: number };
+    results: {
+      created: Array<{
+        success: boolean;
+        data: {
+          success: boolean;
+          created: number;
+          failed: number;
+          totalItems: number;
+          results: Array<{ tempId: string; realId: string; success: boolean; type: string }>;
+          mapping: Record<string, string>;
+        };
+        metadata: Record<string, unknown>;
+      }>;
+      updated: unknown[];
+      completed: unknown[];
+      deleted: unknown[];
+      errors: Array<{
+        success: boolean;
+        error?: { code: string; message: string; suggestion?: string; details?: unknown };
+        [key: string]: unknown;
+      }>;
+    };
+    tempIdMapping?: Record<string, string>;
+  };
+  metadata: {
+    operation: string;
+    timestamp: string;
+    tempIdMapping?: Record<string, string>;
+  };
+}
 
 d('Batch Operations Integration (Unified API)', () => {
   let client: MCPTestClient;
@@ -38,7 +86,7 @@ d('Batch Operations Integration (Unified API)', () => {
   });
 
   it('should create a simple project in sandbox', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'project',
@@ -59,21 +107,19 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
     expect(response).toHaveProperty('success', true);
-    expect(response).toHaveProperty('data');
-    const result = (
-      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
-    ).data;
+    expect(response.data.summary.created).toBe(1);
 
-    expect(result.success).toBe(true);
-    expect(result.created).toBe(1);
-    expect(result.results[0].realId).toBeTruthy();
+    // BatchCreateTool result is nested inside results.created[0]
+    const createResult = response.data.results.created[0];
+    expect(createResult.success).toBe(true);
+    expect(createResult.data.results[0].realId).toBeTruthy();
   }, 30000);
 
   it('should create project with task in sandbox', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'task',
@@ -104,18 +150,16 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
     expect(response).toHaveProperty('success', true);
-    const result = (
-      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
-    ).data;
-    expect(result.created).toBe(2);
-    expect(result.results).toHaveLength(2);
+    expect(response.data.summary.created).toBe(2);
+    // The inner BatchCreateTool response has the individual item results
+    expect(response.data.results.created[0].data.results).toHaveLength(2);
   }, 30000);
 
   it('should create nested tasks (task with subtask) in sandbox', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'task',
@@ -153,13 +197,10 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
     expect(response).toHaveProperty('success', true);
-    const result = (
-      response as { data: { success: boolean; created: number; results: Array<{ realId: string; type: string }> } }
-    ).data;
-    expect(result.created).toBe(3);
+    expect(response.data.summary.created).toBe(3);
   }, 60000); // Nested task operations may take longer due to validation
 
   it('should allow duplicate project names (OmniFocus behavior)', async () => {
@@ -191,7 +232,7 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(result1).toHaveProperty('success', true);
 
     // OmniFocus allows duplicate project names (projects are identified by ID, not name)
-    const result2 = await client.callTool('omnifocus_write', {
+    const result2 = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'project',
@@ -211,16 +252,15 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
     // Duplicate project names are allowed in OmniFocus
-    const data2 = (result2 as { data: { success: boolean; created: number } }).data;
-    expect(data2.success).toBe(true);
-    expect(data2.created).toBe(1);
+    expect(result2).toHaveProperty('success', true);
+    expect(result2.data.summary.created).toBe(1);
   }, 30000);
 
   it('should return tempId to realId mapping', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'project',
@@ -240,16 +280,16 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
-    expect(response).toHaveProperty('data.mapping');
-    const result = (response as { data: { mapping: Record<string, string>; results: Array<{ realId: string }> } }).data;
-    expect(result.mapping).toHaveProperty('proj6');
-    expect(result.mapping.proj6).toBeTruthy();
+    // tempIdMapping is at the top level of data (merged from BatchCreateTool)
+    expect(response.data).toHaveProperty('tempIdMapping');
+    expect(response.data.tempIdMapping).toHaveProperty('proj6');
+    expect(response.data.tempIdMapping!.proj6).toBeTruthy();
   }, 30000);
 
   it('should stop on error when configured', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'task',
@@ -287,17 +327,20 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
-    // Should return error for missing parent
+    // routeToBatch detects BatchCreateTool's validation error and propagates it
     expect(response).toHaveProperty('success', false);
-    const errorResponse = response as { error?: { code: string; message: string; details?: unknown } };
-    expect(errorResponse.error?.code).toBe('VALIDATION_ERROR');
-    expect(errorResponse.error?.message).toContain('nonexistent');
+    expect(response.data.summary.errors).toBeGreaterThan(0);
+
+    // The validation error from BatchCreateTool is in results.errors
+    const errorResult = response.data.results.errors[0];
+    expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
+    expect(errorResult.error?.message).toContain('nonexistent');
   }, 30000);
 
   it('should validate circular dependencies', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'task',
@@ -326,17 +369,20 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
-    // Should return error for circular dependency
+    // routeToBatch detects BatchCreateTool's validation error and propagates it
     expect(response).toHaveProperty('success', false);
-    const errorResponse = response as { error?: { code: string; message: string } };
-    expect(errorResponse.error?.code).toBe('VALIDATION_ERROR');
-    expect(errorResponse.error?.message).toContain('Circular');
+    expect(response.data.summary.errors).toBeGreaterThan(0);
+
+    // The circular dependency error from BatchCreateTool is in results.errors
+    const errorResult = response.data.results.errors[0];
+    expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
+    expect(errorResult.error?.message).toContain('Circular');
   }, 30000);
 
   it('should handle tasks with dates and metadata in sandbox', async () => {
-    const response = await client.callTool('omnifocus_write', {
+    const response = (await client.callTool('omnifocus_write', {
       mutation: {
         operation: 'batch',
         target: 'task',
@@ -371,10 +417,9 @@ d('Batch Operations Integration (Unified API)', () => {
         returnMapping: true,
         stopOnError: true,
       },
-    });
+    })) as BatchResponse;
 
     expect(response).toHaveProperty('success', true);
-    const result = (response as { data: { created: number; results: Array<{ realId: string; type: string }> } }).data;
-    expect(result.created).toBe(2);
+    expect(response.data.summary.created).toBe(2);
   }, 30000);
 });
