@@ -59,11 +59,12 @@ interface UpdateChanges {
 }
 
 interface BatchOperation {
-  operation: 'create' | 'update';
+  operation: 'create' | 'update' | 'complete' | 'delete';
   target: 'task' | 'project';
   data?: CreateData;
   id?: string;
   changes?: UpdateChanges;
+  completionDate?: string;
 }
 
 // Discriminated union for compiled mutations
