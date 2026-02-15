@@ -13,6 +13,15 @@ import { TaskId, ProjectId } from '../../utils/branded-types.js';
 const convertToTaskId = (id: string): TaskId => id as TaskId;
 const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
+/** Response shape from BatchCreateTool.execute() — success or validation error */
+interface BatchCreateResponse {
+  success: boolean;
+  data: {
+    created?: number;
+    mapping?: Record<string, string>;
+  };
+}
+
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
   name = 'omnifocus_write';
   description = `Create, update, complete, or delete OmniFocus tasks and projects.
@@ -220,7 +229,7 @@ SAFETY:
           stopOnError: compiled.stopOnError ?? true,
         };
 
-        const createResult = (await this.batchTool.execute(batchArgs)) as any;
+        const createResult = (await this.batchTool.execute(batchArgs)) as BatchCreateResponse;
 
         // Check if BatchCreateTool returned a validation error (e.g., circular deps, unknown parentTempId)
         if (createResult?.success === false) {
@@ -303,7 +312,10 @@ SAFETY:
       data: {
         operation: 'batch',
         summary: {
-          created: results.created.reduce((sum: number, r: any) => sum + (r?.data?.created ?? 0), 0),
+          created: results.created.reduce(
+            (sum: number, r: unknown) => sum + ((r as BatchCreateResponse)?.data?.created ?? 0),
+            0,
+          ),
           updated: results.updated.length,
           completed: results.completed.length,
           deleted: results.deleted.length,
