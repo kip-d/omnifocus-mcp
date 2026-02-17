@@ -4,69 +4,85 @@ import { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 const QUICK_REFERENCE = `
 # OmniFocus MCP Quick Reference
 
-## Essential Tools by Speed
+## Unified API (v3.0.0)
 
-### Instant (<100ms) - Cached
-- \`tasks({ mode: 'all', limit: 1, details: false })\` - Quick count
-- Previously called tools (cache hits)
+Four tools: \`omnifocus_read\`, \`omnifocus_write\`, \`omnifocus_analyze\`, \`system\`
 
-### Fast (100-300ms)
-- \`tags({ operation: 'list', namesOnly: true })\` - ~130ms
-- \`tags({ operation: 'list', fastMode: true })\` - ~270ms
-- \`tags({ operation: 'active' })\` - Tags with tasks only
-- \`tasks({ mode: 'today', details: false })\` - ~500ms
+### Reading Data
+\`\`\`javascript
+// Today's tasks
+omnifocus_read({ query: { type: "tasks", mode: "today", limit: 20 } })
 
-### Normal (300ms-1s)
-- \`tasks({ mode: 'all', details: false })\` - ~700ms
-- \`projects({ operation: 'list', includeStats: false })\` - ~800ms
-- \`tasks({ mode: 'overdue' })\` - Optimized queries
-- \`tasks({ mode: 'upcoming' })\` - Next N days
+// Inbox items
+omnifocus_read({ query: { type: "tasks", filters: { project: null }, limit: 10 } })
 
-### Slower (1s+)
-- \`tasks({ mode: 'all', details: true })\` - Full analysis
-- \`projects({ operation: 'stats' })\` - With metrics
-- \`tags({ operation: 'list', includeUsageStats: true })\` - ~3s
-- Analytics tools - Complex calculations
+// Count only (33x faster for "how many" questions)
+omnifocus_read({ query: { type: "tasks", filters: { flagged: true }, countOnly: true } })
 
-## Must-Know Limitations
+// Overdue
+omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 50 } })
 
-1. **Tags on Creation**: ✅ NOW SUPPORTED (v2.0.0+)
-   \`\`\`javascript
-   // Single step works!
-   const task = await manage_task({ 
-     operation: 'create',
-     name: "Task", 
-     tags: ["work", "urgent"]
-   });
-   \`\`\`
+// Available tasks by context
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@office"] } } } })
 
-2. **Period Values**: Exact strings only
-   - ✅ "today", "week", "month", "quarter", "year"  
-   - ❌ "last_week", "this_week", "current_week"
+// Projects
+omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })
 
-3. **Date Format**: Local time
-   - "2024-01-15" or "2024-01-15 14:30"
+// Tags
+omnifocus_read({ query: { type: "tags" } })
 
-4. **Project IDs**: Use strings from projects tool
-   - Not numeric IDs from Claude Desktop
+// Search
+omnifocus_read({ query: { type: "tasks", mode: "search", filters: { text: { contains: "budget" } } } })
+\`\`\`
 
-## Performance Cheat Sheet
+### Writing Data
+\`\`\`javascript
+// Create task
+omnifocus_write({ mutation: { operation: "create", target: "task", data: {
+  name: "Call client", dueDate: "YYYY-MM-DD", tags: ["@phone"]
+} } })
 
-| Operation | Fast Way | Slow Way |
-|-----------|----------|----------|
-| Today's tasks | \`tasks({ mode: 'today' })\` | \`tasks({ mode: 'all' })\` + filter |
-| Tag dropdown | \`tags({ operation: 'list', namesOnly: true })\` | \`tags({ operation: 'list' })\` |
-| Active tags | \`tags({ operation: 'active' })\` | \`tags({ operation: 'list' })\` + filter |
-| Overdue | \`tasks({ mode: 'overdue' })\` | \`tasks({ mode: 'all' })\` + dates |
-| Task count | \`tasks({ mode: 'all', details: false, limit: 1 })\` | \`tasks({ mode: 'all' })\` + length |
-| Quick list | \`tasks({ details: false })\` | \`tasks({ details: true })\` |
+// Complete task
+omnifocus_write({ mutation: { operation: "complete", target: "task", id: "..." } })
+
+// Update task
+omnifocus_write({ mutation: { operation: "update", target: "task", id: "...", changes: {
+  addTags: ["@urgent"], dueDate: "YYYY-MM-DD"
+} } })
+
+// Batch create project with tasks
+omnifocus_write({ mutation: { operation: "batch", target: "task", operations: [
+  { operation: "create", target: "project", data: { name: "Project", tempId: "p1" } },
+  { operation: "create", target: "task", data: { name: "First step", parentTempId: "p1" } },
+] } })
+\`\`\`
+
+### Analysis
+\`\`\`javascript
+omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } })
+omnifocus_analyze({ analysis: { type: "overdue_analysis" } })
+omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
+\`\`\`
+
+## Performance Tips
+
+| Goal | Fast Way | Slow Way |
+|------|----------|----------|
+| Count tasks | \`countOnly: true\` | Fetch all + count |
+| Today's tasks | \`mode: "today"\` | \`mode: "all"\` + filter |
+| Overdue | \`mode: "overdue"\` | \`mode: "all"\` + date compare |
+| Name search | \`fastSearch: true\` | Full search (names + notes) |
+
+## Date Format
+- \`"YYYY-MM-DD"\` or \`"YYYY-MM-DD HH:mm"\` (local time)
+- Never ISO-8601 with Z suffix
+- Due defaults to 5:00 PM, defer defaults to 8:00 AM
 
 ## Cache Durations
-- Tasks: 30 seconds
+- Tasks: 5 minutes
 - Projects: 5 minutes
-- Tags: 5 minutes  
+- Tags: 10 minutes
 - Analytics: 1 hour
-- Active tags: 1 minute
 
 ## Available Prompts (5 GTD-focused)
 1. \`gtd_principles\` - Core GTD methodology guide
@@ -75,22 +91,17 @@ const QUICK_REFERENCE = `
 4. \`gtd_weekly_review\` - Complete weekly review workflow
 5. \`quick_reference\` - This essential reference guide
 
-## Emergency Commands
+## System Commands
 \`\`\`javascript
 // Test connection
-await system({ operation: 'diagnostics' });
+system({ operation: "diagnostics" })
 
 // Check version
-await system({ operation: 'version' });
+system({ operation: "version" })
 
-// Minimal test
-await tasks({ mode: 'all', limit: 1, details: false });
-
-// Force fresh data (bypass cache)
-await tasks({ mode: 'all', limit: Math.floor(Math.random() * 100) });
+// Cache stats
+system({ operation: "cache", cacheAction: "stats" })
 \`\`\`
-
-Remember: Specialized tools > General tools with filters!
 `;
 
 export class QuickReferencePrompt extends BasePrompt {

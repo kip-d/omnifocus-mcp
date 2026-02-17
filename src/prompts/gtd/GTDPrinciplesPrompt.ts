@@ -12,12 +12,11 @@ Based on David Allen's Getting Things Done methodology and OmniFocus's implement
 Everything goes into the inbox first. Don't organize while capturing.
 \`\`\`javascript
 // Quick capture to inbox
-await manage_task({ 
-  operation: 'create',
+omnifocus_write({ mutation: { operation: "create", target: "task", data: {
   name: "Call Bob about project proposal",
   note: "He mentioned concerns in meeting"
-  // No project assignment yet - that's processing
-});
+  // No project assignment = goes to inbox
+}}})
 \`\`\`
 
 ### 2. Process (Clarify)
@@ -25,15 +24,11 @@ For each inbox item, ask:
 - Is it actionable?
 - What's the next action?
 - Will it take less than 2 minutes?
+- Am I the right person? (If not, delegate)
 
 \`\`\`javascript
 // Get inbox items
-const inbox = await tasks({ 
-  mode: 'all',
-  project: null, // Inbox items
-  completed: false,
-  limit: 10
-});
+omnifocus_read({ query: { type: "tasks", filters: { project: null }, limit: 10 } })
 \`\`\`
 
 ### 3. Organize
@@ -45,40 +40,31 @@ Assign to appropriate:
 
 \`\`\`javascript
 // Organize from inbox
-await manage_task({
-  operation: 'update',
-  taskId: inboxTask.id,
-  projectId: "abc123",
-  tags: ["@office", "high-energy"],
-  deferDate: "2024-01-20"  // Not available until
-});
+omnifocus_write({ mutation: { operation: "update", target: "task", id: "...", changes: {
+  project: "Project Name",
+  addTags: ["@office", "@high-energy"],
+  deferDate: "2026-02-20"  // Not available until then
+}}})
 \`\`\`
 
 ### 4. Review
 Weekly review is critical:
 \`\`\`javascript
-// Find stale projects (no changes in 30 days)
-const projects = await projects({ 
-  operation: 'list',
-  status: ["active"],
-  includeStats: true 
-});
+// Find stale projects
+omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })
 
-const stale = projects.items.filter(p => 
-  daysSince(p.modifiedDate) > 30
-);
+// Check which need review
+omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
 \`\`\`
 
 ### 5. Do (Engage)
-Work from contexts and energy levels:
+Choose based on four criteria: context, time available, energy, priority.
 \`\`\`javascript
 // What can I do at the office right now?
-const officeTasks = await tasks({
-  mode: 'available',
-  tags: ["@office"],
-  completed: false,
-  sortBy: "dueDate"
-});
+omnifocus_read({ query: { type: "tasks", mode: "available",
+  filters: { tags: { any: ["@office"] } },
+  sort: [{ field: "dueDate", direction: "asc" }], limit: 20
+} })
 \`\`\`
 
 ## Key GTD Concepts in OmniFocus
@@ -91,14 +77,13 @@ const officeTasks = await tasks({
 ### The 2-Minute Rule
 If it takes less than 2 minutes, do it now:
 \`\`\`javascript
-// During inbox processing
-if (estimatedMinutes <= 2) {
-  // Just do it!
-  await manage_task({ operation: 'complete', taskId: task.id });
-} else {
-  // Organize it properly
-  await manage_task({ operation: 'update', /* ... */ });
-}
+// Complete a quick task during inbox processing
+omnifocus_write({ mutation: { operation: "complete", target: "task", id: "..." } })
+
+// Organize longer tasks properly
+omnifocus_write({ mutation: { operation: "update", target: "task", id: "...", changes: {
+  project: "...", addTags: ["@computer"]
+}}})
 \`\`\`
 
 ### Natural Planning Model
@@ -132,63 +117,54 @@ For new projects:
 
 ### Capture Without Thinking
 \`\`\`javascript
-// Brain dump - just capture
-const thoughts = [
-  "Website redesign",
-  "Mom's birthday gift",
-  "Fix leaky faucet",
-  "Learn Spanish"
-];
-
-for (const thought of thoughts) {
-  await manage_task({ operation: 'create', name: thought });
-}
+// Brain dump - batch capture to inbox
+omnifocus_write({ mutation: { operation: "batch", target: "task", operations: [
+  { operation: "create", target: "task", data: { name: "Website redesign" } },
+  { operation: "create", target: "task", data: { name: "Mom's birthday gift" } },
+  { operation: "create", target: "task", data: { name: "Fix leaky faucet" } },
+  { operation: "create", target: "task", data: { name: "Learn Spanish" } },
+]}})
 // Process and organize later!
 \`\`\`
 
 ### Use Defer Dates Liberally
 Hide future tasks to reduce overwhelm:
 \`\`\`javascript
-await manage_task({
-  operation: 'update',
-  taskId: task.id,
-  deferDate: "2024-02-01",  // Hide until February
-  tags: ["someday-maybe"]
-});
+omnifocus_write({ mutation: { operation: "update", target: "task", id: "...", changes: {
+  deferDate: "2026-03-01",  // Hide until March
+  addTags: ["@someday"]
+}}})
 \`\`\`
 
 ### Contexts for Energy and Location
 \`\`\`javascript
 // High-energy morning work
-const brainWork = await tasks({
-  mode: 'available',
-  tags: ["high-energy", "@computer"]
-});
+omnifocus_read({ query: { type: "tasks", mode: "available",
+  filters: { tags: { any: ["@high-energy", "@computer"] } }, limit: 10
+} })
 
 // Low-energy evening tasks
-const easyStuff = await tasks({
-  mode: 'available',
-  tags: ["low-energy", "@home"]
-});
+omnifocus_read({ query: { type: "tasks", mode: "available",
+  filters: { tags: { any: ["@low-energy", "@home"] } }, limit: 10
+} })
 \`\`\`
 
 ### Review Triggers
 Find projects that need attention:
 \`\`\`javascript
-// Projects with no available next actions
-const stuck = await analyze_productivity({
-  groupBy: "project"
-}).then(stats => 
-  stats.projects.filter(p => p.availableTaskCount === 0)
-);
+// Projects due for review
+omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
+
+// Overdue analysis for bottlenecks
+omnifocus_analyze({ analysis: { type: "overdue_analysis" } })
 \`\`\`
 
 ## Common GTD Contexts
 - @computer, @office, @home, @phone
 - @errands, @anywhere
 - @waiting-for (delegated tasks)
-- high-energy, low-energy
-- quick-wins (< 15 minutes)
+- @high-energy, @low-energy
+- @15min, @30min (quick wins by time)
 
 Remember: The system is only as good as your weekly review!
 `;
