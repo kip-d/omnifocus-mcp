@@ -93,6 +93,13 @@ describe('augmentFilterForMode', () => {
       expected.setDate(expected.getDate() + 5);
       expect(dueBefore.getTime()).toBe(expected.getTime());
     });
+
+    it('sets dueBefore to a valid date string', () => {
+      const result = augmentFilterForMode('today', {});
+      expect(result.dueBefore).toBeDefined();
+      const dueBefore = new Date(result.dueBefore!);
+      expect(dueBefore.toString()).not.toBe('Invalid Date');
+    });
   });
 
   describe('upcoming mode', () => {
@@ -229,6 +236,26 @@ describe('getDefaultSort', () => {
   it('returns undefined for flagged mode', () => {
     expect(getDefaultSort('flagged')).toBeUndefined();
   });
+
+  it('returns undefined for available mode', () => {
+    expect(getDefaultSort('available')).toBeUndefined();
+  });
+
+  it('returns undefined for blocked mode', () => {
+    expect(getDefaultSort('blocked')).toBeUndefined();
+  });
+
+  it('returns undefined for smart_suggest mode', () => {
+    expect(getDefaultSort('smart_suggest')).toBeUndefined();
+  });
+
+  it('returns undefined for inbox mode', () => {
+    expect(getDefaultSort('inbox')).toBeUndefined();
+  });
+
+  it('returns undefined for search mode', () => {
+    expect(getDefaultSort('search')).toBeUndefined();
+  });
 });
 
 // =============================================================================
@@ -274,6 +301,48 @@ describe('parseTasks', () => {
     const result = parseTasks(raw);
     expect(result[0].dueDate).toBeUndefined();
     expect(result[0].deferDate).toBeUndefined();
+  });
+
+  it('converts deferDate strings to Date objects', () => {
+    const raw = [
+      {
+        id: '1',
+        name: 'Test',
+        deferDate: '2025-06-15T08:00:00.000Z',
+        completed: false,
+        flagged: false,
+        blocked: false,
+      },
+    ];
+    const result = parseTasks(raw);
+    expect(result[0].deferDate).toBeInstanceOf(Date);
+  });
+
+  it('converts completionDate strings to Date objects', () => {
+    const raw = [
+      {
+        id: '1',
+        name: 'Test',
+        completionDate: '2025-06-10T12:00:00.000Z',
+        completed: true,
+        flagged: false,
+        blocked: false,
+      },
+    ];
+    const result = parseTasks(raw);
+    expect(result[0].completionDate).toBeInstanceOf(Date);
+  });
+
+  it('converts modified strings to Date objects', () => {
+    const raw = [
+      { id: '1', name: 'Test', modified: '2025-06-01T10:30:00.000Z', completed: false, flagged: false, blocked: false },
+    ];
+    const result = parseTasks(raw);
+    expect(result[0].modified).toBeInstanceOf(Date);
+  });
+
+  it('returns empty array for non-array input', () => {
+    expect(parseTasks('not-an-array' as unknown as unknown[])).toEqual([]);
   });
 });
 

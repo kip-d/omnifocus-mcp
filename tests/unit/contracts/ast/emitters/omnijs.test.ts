@@ -155,6 +155,98 @@ describe('emitOmniJS', () => {
     });
   });
 
+  describe('available status comparisons', () => {
+    it('emits Task.Status.Available check for available: true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.available',
+        operator: '==',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Available');
+    });
+
+    it('emits not available check for available: false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.available',
+        operator: '==',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Available');
+    });
+
+    it('emits not available for available != true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.available',
+        operator: '!=',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Available');
+    });
+
+    it('emits available for available != false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.available',
+        operator: '!=',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Available');
+    });
+  });
+
+  describe('blocked status comparisons', () => {
+    it('emits Task.Status.Blocked check for blocked: true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.blocked',
+        operator: '==',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Blocked');
+    });
+
+    it('emits not blocked check for blocked: false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.blocked',
+        operator: '==',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Blocked');
+    });
+
+    it('emits not blocked for blocked != true', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.blocked',
+        operator: '!=',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus !== Task.Status.Blocked');
+    });
+
+    it('emits blocked for blocked != false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.blocked',
+        operator: '!=',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.taskStatus === Task.Status.Blocked');
+    });
+  });
+
   describe('repetition rule comparisons', () => {
     it('emits repetitionRule exists check for hasRepetitionRule: true', () => {
       const ast: FilterNode = {
@@ -266,6 +358,185 @@ describe('emitOmniJS', () => {
     });
   });
 
+  describe('additional date comparison operators', () => {
+    it('emits strict less than for dates', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dueDate',
+        operator: '<',
+        value: '2025-12-31',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.dueDate < new Date("2025-12-31")');
+    });
+
+    it('emits strict greater than for dates', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.dueDate',
+        operator: '>',
+        value: '2025-01-01',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.dueDate > new Date("2025-01-01")');
+    });
+
+    it('emits greater than or equal for dates', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.deferDate',
+        operator: '>=',
+        value: '2025-06-01',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.deferDate >= new Date("2025-06-01")');
+    });
+  });
+
+  describe('note field comparisons', () => {
+    it('emits case-insensitive includes for note field', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.note',
+        operator: 'includes',
+        value: 'important',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.note.toLowerCase().includes("important".toLowerCase())');
+    });
+
+    it('emits regex match for note field', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.note',
+        operator: 'matches',
+        value: '\\d+-note',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('/\\d+-note/i.test(task.note)');
+    });
+  });
+
+  describe('project comparisons with names', () => {
+    it('emits name-based project check for short project strings', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'Work',
+      };
+      const code = emitOmniJS(ast);
+      // Short strings are treated as names, not IDs
+      expect(code).toContain('task.containingProject');
+      expect(code).toContain('.name');
+      expect(code).toContain('Work');
+    });
+
+    it('emits ID-based project check for long alphanumeric strings', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'abcdef123456789',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('id.primaryKey');
+      expect(code).toContain('abcdef123456789');
+    });
+
+    it('emits project != comparison', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '!=',
+        value: 'Personal',
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('!');
+      expect(code).toContain('Personal');
+    });
+  });
+
+  describe('NOT around tag comparisons', () => {
+    it('emits negated tag some check (NOT_IN pattern)', () => {
+      const ast: FilterNode = {
+        type: 'not',
+        child: {
+          type: 'comparison',
+          field: 'taskTags',
+          operator: 'some',
+          value: ['waiting', 'someday'],
+        },
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('!');
+      expect(code).toContain('taskTags.some');
+      expect(code).toContain('waiting');
+      expect(code).toContain('someday');
+    });
+  });
+
+  describe('tagStatusValid != false', () => {
+    it('emits valid tag status check for tagStatusValid != false', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.tagStatusValid',
+        operator: '!=',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      // != false should be same as == true
+      expect(code).toContain('task.tags.length === 0');
+      expect(code).toContain('Tag.Status.Active');
+    });
+  });
+
+  describe('inInbox comparisons', () => {
+    it('emits inInbox true check', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.inInbox',
+        operator: '==',
+        value: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.inInbox === true');
+    });
+
+    it('emits inInbox false check', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.inInbox',
+        operator: '==',
+        value: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.inInbox === false');
+    });
+  });
+
+  describe('exists for various date fields', () => {
+    it('emits deferDate exists check', () => {
+      const ast: FilterNode = {
+        type: 'exists',
+        field: 'task.deferDate',
+        exists: true,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.deferDate !== null');
+    });
+
+    it('emits plannedDate not exists check', () => {
+      const ast: FilterNode = {
+        type: 'exists',
+        field: 'task.plannedDate',
+        exists: false,
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toBe('task.plannedDate === null');
+    });
+  });
+
   describe('logical nodes', () => {
     it('emits AND with && operator', () => {
       const ast: FilterNode = {
@@ -304,6 +575,34 @@ describe('emitOmniJS', () => {
       };
       const code = emitOmniJS(ast);
       expect(code).toBe('!(task.completed === true)');
+    });
+
+    it('handles nested logical nodes', () => {
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          { type: 'comparison', field: 'task.completed', operator: '==', value: false },
+          {
+            type: 'or',
+            children: [
+              { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+              {
+                type: 'and',
+                children: [
+                  { type: 'exists', field: 'task.dueDate', exists: true },
+                  { type: 'comparison', field: 'task.dueDate', operator: '<=', value: '2025-12-31' },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const code = emitOmniJS(ast);
+      expect(code).toContain('&&');
+      expect(code).toContain('||');
+      expect(code).toContain('task.completed === false');
+      expect(code).toContain('task.flagged === true');
+      expect(code).toContain('task.dueDate !== null');
     });
 
     it('returns true for empty AND', () => {

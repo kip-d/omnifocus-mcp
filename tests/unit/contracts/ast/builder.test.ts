@@ -613,6 +613,131 @@ describe('buildAST', () => {
     });
   });
 
+  describe('boolean flag false values', () => {
+    it('transforms flagged: false', () => {
+      const filter: TaskFilter = { flagged: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.flagged',
+        operator: '==',
+        value: false,
+      });
+    });
+
+    it('transforms blocked: false', () => {
+      const filter: TaskFilter = { blocked: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.blocked',
+        operator: '==',
+        value: false,
+      });
+    });
+
+    it('transforms available: false', () => {
+      const filter: TaskFilter = { available: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.available',
+        operator: '==',
+        value: false,
+      });
+    });
+
+    it('transforms inInbox: false', () => {
+      const filter: TaskFilter = { inInbox: false };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.inInbox',
+        operator: '==',
+        value: false,
+      });
+    });
+  });
+
+  describe('project filter with name', () => {
+    it('transforms project string to containingProject comparison', () => {
+      const filter: TaskFilter = { project: 'Work Projects' };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'Work Projects',
+      });
+    });
+
+    it('does not add project condition when project is null', () => {
+      const filter: TaskFilter = { project: null };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({ type: 'literal', value: true });
+    });
+
+    it('prefers projectId over project when both are set', () => {
+      const filter: TaskFilter = { projectId: 'abc123', project: 'Work' };
+      const ast = buildAST(filter);
+
+      // projectId comes before project in builder logic, but both produce containingProject
+      // With both set, the builder uses projectId ?? project (projectId wins)
+      expect(ast.type).toBe('comparison');
+      if (ast.type === 'comparison') {
+        expect(ast.field).toBe('task.containingProject');
+        expect(ast.value).toBe('abc123');
+      }
+    });
+  });
+
+  describe('date filter data-driven registry', () => {
+    it('skips due date handler when todayMode is active', () => {
+      const filter: TaskFilter = {
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        dueAfter: '2026-01-01',
+        completed: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // dueAfter should NOT generate a standalone date condition because
+      // todayMode skipWhen suppresses the entire due date handler
+      const standaloneDateAnds = ast.children.filter(
+        (c) => c.type === 'and' && c.children.some((gc) => gc.type === 'exists' && gc.field === 'task.dueDate'),
+      );
+      expect(standaloneDateAnds).toHaveLength(0);
+    });
+
+    it('does not skip defer date handler when todayMode is active', () => {
+      const filter: TaskFilter = {
+        todayMode: true,
+        dueBefore: '2026-02-12T00:00:00.000Z',
+        deferBefore: '2026-03-01',
+        completed: false,
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('and');
+      if (ast.type !== 'and') return;
+
+      // Defer date should still be present even in todayMode
+      const deferDateNode = ast.children.find(
+        (c) => c.type === 'and' && c.children.some((gc) => gc.type === 'exists' && gc.field === 'task.deferDate'),
+      );
+      expect(deferDateNode).toBeDefined();
+    });
+  });
+
   describe('tagStatusValid filter', () => {
     it('transforms tagStatusValid: true to comparison node', () => {
       const filter: TaskFilter = { tagStatusValid: true };
