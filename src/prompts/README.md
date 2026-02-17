@@ -11,6 +11,13 @@ These prompts are available through the MCP protocol and can be called programma
 - **[Improvement Roadmap](../../docs/IMPROVEMENT_ROADMAP.md)** - Future enhancements including prompt discovery CLI
 - **[Real LLM Testing](../../docs/REAL_LLM_TESTING.md)** - How to test prompts with actual AI models
 
+## API Note
+
+> **Stale API syntax:** The prompt code examples reference the old multi-tool API (`tasks()`, `manage_task()`,
+> `projects()`, `analyze_productivity()`). The current unified API uses `omnifocus_read`, `omnifocus_write`, and
+> `omnifocus_analyze`. The prompts still function correctly as conversational guides — Claude Desktop interprets the
+> intent and uses the correct tools regardless of the example syntax shown.
+
 ## Architecture
 
 ### Prompt Structure

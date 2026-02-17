@@ -75,20 +75,20 @@ The MCP tools reject natural language. Calculate dates based on today's date.
 
 ### Conversion Table
 
-| User Says                | Convert To            | Notes                |
-| ------------------------ | --------------------- | -------------------- |
-| "today"                  | Current date          | `2026-01-16`         |
-| "tomorrow"               | Today + 1             | `2026-01-17`         |
-| "yesterday"              | Today - 1             | `2026-01-15`         |
-| "Monday" / "next Monday" | Next occurrence       | Calculate from today |
-| "this Friday"            | Current week's Friday |                      |
-| "next week"              | Today + 7 days        |                      |
-| "in 3 days"              | Today + 3             |                      |
-| "end of week"            | Current Friday        |                      |
-| "end of month"           | Last day of month     |                      |
-| "by Friday"              | Due date = Friday     | Use as `dueDate`     |
-| "after Monday"           | Defer date = Monday   | Use as `deferDate`   |
-| "starting Tuesday"       | Defer date = Tuesday  | Use as `deferDate`   |
+| User Says                | Convert To            | Notes                      |
+| ------------------------ | --------------------- | -------------------------- |
+| "today"                  | Current date          | Calculate from system date |
+| "tomorrow"               | Today + 1             |                            |
+| "yesterday"              | Today - 1             |                            |
+| "Monday" / "next Monday" | Next occurrence       | Calculate from today       |
+| "this Friday"            | Current week's Friday |                            |
+| "next week"              | Today + 7 days        |                            |
+| "in 3 days"              | Today + 3             |                            |
+| "end of week"            | Current Friday        |                            |
+| "end of month"           | Last day of month     |                            |
+| "by Friday"              | Due date = Friday     | Use as `dueDate`           |
+| "after Monday"           | Defer date = Monday   | Use as `deferDate`         |
+| "starting Tuesday"       | Defer date = Tuesday  | Use as `deferDate`         |
 
 ### Time Defaults (When Only Date Given)
 
@@ -100,14 +100,13 @@ The MCP tools reject natural language. Calculate dates based on today's date.
 
 ```
 User: "Create task to call Sarah, due tomorrow"
-Today: 2026-01-16
-Tomorrow: 2026-01-17
+Today is Wednesday → tomorrow = Thursday
 
 Tool call: omnifocus_write({
   mutation: {
     operation: "create",
     target: "task",
-    data: { name: "Call Sarah", dueDate: "2026-01-17" }
+    data: { name: "Call Sarah", dueDate: "{tomorrow as YYYY-MM-DD}" }
   }
 })
 ```
@@ -148,9 +147,9 @@ Tool call: omnifocus_write({
 
 **5. ENGAGE** - Do the work
 
-- Work from context, not random lists
-- Match energy to task
-- Trust your system
+- Choose based on four criteria (in order): context, time available, energy, priority
+- Work from context lists, not project lists
+- Trust your system — if you did the review, the right task will surface
 
 ### Defer Date vs Due Date
 
@@ -173,6 +172,62 @@ Tool call: omnifocus_write({
 
 **Priority**: `@urgent`, `@important`, `@someday`
 
+### Someday/Maybe Management
+
+Someday/Maybe captures things you might want to do but aren't committed to now.
+
+**Where to put items:**
+
+- Tag with `@someday` and place in a "Someday / Maybe" single-action project (or use on-hold status)
+- Use a defer date far in the future to keep them out of daily views
+
+**Review cadence:**
+
+- Review the full list during weekly review (Step 7 below)
+- Ask: "Has anything changed? Am I ready to commit to this?"
+- Activate by moving to a real project and defining a next action
+- Delete items that no longer spark interest
+
+### Waiting-For Tracking
+
+When you delegate or are waiting on someone else:
+
+1. **Create or update** the task with tag `@waiting-for`
+2. **Add a note**: who you're waiting on, what you asked, when you asked
+3. **Set a defer date** for follow-up (typically 3-7 days out)
+4. **Review** all `@waiting-for` items during weekly review — follow up on anything stale
+
+```
+User: "I emailed John about the budget, waiting on his reply"
+→ Create task: "Follow up with John re: budget"
+  tags: ["@waiting-for"], deferDate: "{3 days from now}"
+  note: "Emailed John on {today}, waiting for budget approval"
+```
+
+### Reference Material
+
+Not everything captured is actionable. Non-actionable reference material belongs in **Obsidian**, not OmniFocus.
+
+| Belongs in OmniFocus           | Belongs in Obsidian                           |
+| ------------------------------ | --------------------------------------------- |
+| Actions, projects, commitments | Meeting notes, research, articles             |
+| Waiting-for items              | Project support material                      |
+| Someday/maybe (actionable)     | Idea-stage someday/maybe (not yet actionable) |
+
+Cross-link using `obsidian://open?file=Path%2FTo%2FNote` in OmniFocus task notes.
+
+### Natural Planning Model
+
+For new projects, apply GTD's five planning steps:
+
+1. **Purpose & principles** — Why does this matter? What are the boundaries?
+2. **Outcome visioning** — What does "done" look like? Be specific.
+3. **Brainstorming** — What are all the things that need to happen? Don't filter.
+4. **Organizing** — Group and sequence the brainstorm into a logical order.
+5. **Next actions** — What's the very next physical action for each component?
+
+Use this when creating projects with `omnifocus_write` batch operations: create the project, then add tasks in sequence.
+
 ---
 
 ## Workflow: Process Inbox
@@ -184,14 +239,18 @@ When user says "process my inbox" or "help me with inbox":
 
 2. For each item, guide through GTD clarify:
    a. "Is this actionable?"
-      - NO → Offer to delete or defer to someday
+      - NO → Delete, file as reference (Obsidian), or tag @someday
       - YES → Continue
 
    b. "Will it take less than 2 minutes?"
       - YES → "Do it now, then I'll mark it complete"
       - NO → Continue
 
-   c. "Is it one action or multiple steps?"
+   c. "Am I the right person to do this?"
+      - NO → Delegate: tag @waiting-for, note who/when, set follow-up defer date
+      - YES → Continue
+
+   d. "Is it one action or multiple steps?"
       - One action → Assign to project, add context tags
       - Multiple → Create project with next actions
 
@@ -206,15 +265,15 @@ When user says "process my inbox" or "help me with inbox":
 
 When user asks for "weekly review":
 
-### Step 1: Empty Inbox
+### Step 1: Get Clear — Empty Inbox
 
 ```
 omnifocus_read({ query: { type: "tasks", filters: { project: null }, countOnly: true } })
 ```
 
-If count > 0, process inbox first.
+If count > 0, process inbox first (use the inbox processing workflow above).
 
-### Step 2: Review Completed (Celebrate!)
+### Step 2: Get Clear — Review Completed (Celebrate!)
 
 ```
 omnifocus_read({
@@ -222,51 +281,88 @@ omnifocus_read({
     type: "tasks",
     filters: {
       completed: true,
-      completionDate: { after: "YYYY-MM-DD" }  // 7 days ago
+      completionDate: { after: "{7 days ago}" }
     },
     limit: 50
   }
 })
 ```
 
-### Step 3: Check Overdue
+Acknowledge progress. This builds trust in the system.
+
+### Step 3: Get Current — Check Overdue
 
 ```
 omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 50 } })
 ```
 
-For each: reschedule or drop.
+For each: reschedule, delegate, or drop. Don't leave overdue items — they erode system trust.
 
-### Step 4: Review Projects
+### Step 4: Get Current — Review Active Projects
 
 ```
 omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })
 ```
 
-Check each has at least one available next action.
+Check each has at least one available next action. Projects without next actions are stuck.
 
-### Step 5: Upcoming Week
-
-```
-omnifocus_read({
-  query: {
-    type: "tasks",
-    mode: "upcoming",
-    daysAhead: 7
-  }
-})
-```
-
-### Step 6: Productivity Check
+### Step 5: Get Current — Review On-Hold Projects
 
 ```
-omnifocus_analyze({
-  analysis: {
-    type: "productivity_stats",
-    params: { groupBy: "week" }
-  }
-})
+omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })
 ```
+
+For each: Should it be reactivated? Dropped? Still waiting on something?
+
+### Step 6: Get Current — Review Waiting-For Items
+
+```
+omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@waiting-for"] } }, limit: 50 } })
+```
+
+Follow up on anything stale. Remove the tag and complete if resolved.
+
+### Step 7: Get Current — Someday/Maybe Review
+
+```
+omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@someday"] } }, limit: 50 } })
+```
+
+Ask: "Am I ready to commit to any of these?" Activate or delete items that no longer resonate.
+
+### Step 8: Get Current — Calendar & Upcoming Week
+
+```
+omnifocus_read({ query: { type: "tasks", mode: "upcoming", daysAhead: 7 } })
+```
+
+Check for overcommitment. Spread bunched deadlines. Ensure due dates reflect real commitments.
+
+### Step 9: Get Current — Ensure Next Actions
+
+```
+omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
+```
+
+Every active project must have at least one clear next action. Define one for any that don't.
+
+### Step 10: Get Creative
+
+Ask the user:
+
+- "Any new projects or ideas to capture?"
+- "Any stuck project that needs brainstorming?"
+- "Anything to activate from someday/maybe?"
+
+This is the creative payoff of having a clear system — space to think about what's next.
+
+### Step 11: Productivity Check
+
+```
+omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } })
+```
+
+Compare to last week. Celebrate improvements, identify patterns.
 
 ---
 
@@ -286,6 +382,54 @@ When user asks "what should I focus on today" or "help me plan my day":
 ```
 
 Summarize: "You have X tasks due today, Y overdue. Here are top priorities..."
+
+---
+
+## Workflow: Engage (Choosing What to Do)
+
+When the user asks "what should I work on?" or needs help picking a task, apply GTD's four criteria in order:
+
+### 1. Context — What can you do right now?
+
+```
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@computer"] } }, limit: 20 } })
+```
+
+### 2. Time Available — How much time before your next commitment?
+
+```
+// Short window: quick wins
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: {
+  AND: [{ tags: { any: ["@computer"] } }, { estimatedMinutes: { lessThan: 15 } }]
+}, limit: 10 } })
+
+// Long window: deep work
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: {
+  tags: { any: ["@deep-work"] }
+}, limit: 10 } })
+```
+
+### 3. Energy — What matches your current energy level?
+
+```
+// Morning high-energy: tackle hard items
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@high-energy"] } }, limit: 10 } })
+
+// Afternoon slump: routine tasks
+omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@low-energy"] } }, limit: 10 } })
+```
+
+### 4. Priority — Of the remaining options, what matters most?
+
+```
+// Flagged = highest priority
+omnifocus_read({ query: { type: "tasks", mode: "flagged", limit: 10 } })
+
+// Overdue = needs attention
+omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 10 } })
+```
+
+Guide the user through these filters progressively until they have a clear short list.
 
 ---
 
@@ -324,6 +468,31 @@ Single task when:
 - No dependencies
 - Can be done in one sitting
 
+### Enriching Tasks
+
+**Estimated minutes** — enables time-based filtering ("show me quick wins") and capacity planning:
+
+```javascript
+{ mutation: { operation: "create", target: "task", data: {
+  name: "Review pull request", estimatedMinutes: "15", tags: ["@computer"]
+} } }
+```
+
+**Planned date** — when you intend to work on it (separate from due date):
+
+```javascript
+{ mutation: { operation: "update", target: "task", id: "...", changes: {
+  plannedDate: "{next Tuesday}"
+} } }
+```
+
+| Field              | Purpose                         | Example                 |
+| ------------------ | ------------------------------- | ----------------------- |
+| `estimatedMinutes` | How long the task takes         | `"15"`, `"60"`, `"120"` |
+| `plannedDate`      | When you intend to do it        | `"{tomorrow}"`          |
+| `deferDate`        | When the task becomes visible   | `"{next Monday}"`       |
+| `dueDate`          | Hard deadline (only real ones!) | `"{end of month}"`      |
+
 ### Batch Creation
 
 When user mentions multiple related items, use batch operation:
@@ -341,6 +510,10 @@ omnifocus_write({
   },
 });
 ```
+
+**Known limitation:** When batch-creating tasks with a `project` field (assigning to an existing project by name), the
+project field may not be applied. Use `parentTempId` to reference a project created in the same batch, or create tasks
+individually when assigning to existing projects.
 
 ### Tag Operations
 
@@ -386,7 +559,7 @@ When users want recurring tasks, set `repetitionRule` on create or update:
 ```javascript
 { mutation: { operation: "create", target: "task", data: {
   name: "Weekly review",
-  dueDate: "2026-02-14",
+  dueDate: "{next Friday}",
   repetitionRule: {
     frequency: "weekly",       // minutely, hourly, daily, weekly, monthly, yearly
     interval: "1",             // every N frequency units
@@ -431,7 +604,7 @@ Combine filters with `AND`, `OR`, `NOT` for complex queries:
 { query: { type: "tasks", filters: {
   OR: [
     { flagged: true },
-    { dueDate: { between: ["2026-02-10", "2026-02-14"] } }
+    { dueDate: { between: ["{Monday}", "{Friday}"] } }
   ]
 } } }
 
@@ -450,7 +623,7 @@ Planned dates are distinct from due/defer — they represent when you **intend**
 
 ```javascript
 // What did I plan for today?
-{ query: { type: "tasks", filters: { plannedDate: { between: ["2026-02-11", "2026-02-11"] } } } }
+{ query: { type: "tasks", filters: { plannedDate: { between: ["{today}", "{today}"] } } } }
 ```
 
 ### Search Mode
@@ -571,110 +744,23 @@ Ask when user request is ambiguous:
 
 ---
 
-## Quick Reference: Common Tool Patterns
+## Quick Reference: Patterns Not Covered Above
 
-### Count tasks (fast)
-
-```javascript
-{ query: { type: "tasks", filters: {...}, countOnly: true } }
-```
-
-### Create task
+These patterns supplement the intent mapping table and workflow sections.
 
 ```javascript
-{ mutation: { operation: "create", target: "task", data: { name: "...", dueDate: "YYYY-MM-DD" } } }
-```
-
-### Move to inbox
-
-```javascript
+// Move task to inbox
 { mutation: { operation: "update", target: "task", id: "...", changes: { project: null } } }
-```
 
-### Add tags (preserve existing)
-
-```javascript
-{ mutation: { operation: "update", target: "task", id: "...", changes: { addTags: ["@urgent"] } } }
-```
-
-### Complete task
-
-```javascript
-{ mutation: { operation: "complete", target: "task", id: "..." } }
-```
-
-### Remove tags (preserve others)
-
-```javascript
-{ mutation: { operation: "update", target: "task", id: "...", changes: { removeTags: ["@waiting-for"] } } }
-```
-
-### Clear a date
-
-```javascript
+// Clear a date or field
 { mutation: { operation: "update", target: "task", id: "...", changes: { clearDueDate: true } } }
 // Also: clearDeferDate, clearPlannedDate, clearEstimatedMinutes, clearRepeatRule
-```
 
-### Complete with backdate
+// Complete with backdated date
+{ mutation: { operation: "complete", target: "task", id: "...", completionDate: "{past date}" } }
 
-```javascript
-{ mutation: { operation: "complete", target: "task", id: "...", completionDate: "2026-02-10" } }
-```
-
-### Bulk delete
-
-```javascript
+// Bulk delete (confirm with user first!)
 { mutation: { operation: "bulk_delete", target: "task", ids: ["id1", "id2", "id3"] } }
-```
-
-### Search tasks
-
-```javascript
-{ query: { type: "tasks", mode: "search", filters: { text: { contains: "keyword" } } } }
-```
-
-### Manage tags
-
-```javascript
-// Create nested tag
-{ mutation: { operation: "tag_manage", action: "create", tagName: "Work : Projects : Active" } }
-
-// Merge duplicate
-{ mutation: { operation: "tag_manage", action: "merge", tagName: "@office", targetTag: "@work" } }
-
-// Reorganize
-{ mutation: { operation: "tag_manage", action: "reparent", tagName: "Quarterly", parentTag: "Finance" } }
-```
-
-### Export tasks
-
-```javascript
-{ query: { type: "export", exportType: "tasks", format: "markdown" } }
-```
-
-### Sort results
-
-```javascript
-{ query: { type: "tasks", mode: "available", sort: [{ field: "dueDate", direction: "asc" }], limit: 20 } }
-```
-
-### Parse meeting notes
-
-```javascript
-{ analysis: { type: "parse_meeting_notes", params: { text: "..." } } }
-```
-
-### Analyze velocity
-
-```javascript
-{ analysis: { type: "task_velocity", params: { groupBy: "week" }, scope: { dateRange: { start: "2026-01-01", end: "2026-02-11" } } } }
-```
-
-### Project reviews
-
-```javascript
-{ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } }
 ```
 
 ---
