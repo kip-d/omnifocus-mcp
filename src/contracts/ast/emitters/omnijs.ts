@@ -8,6 +8,7 @@
  */
 
 import type { FilterNode, ComparisonNode, ExistsNode, ComparisonOperator } from '../types.js';
+import { SYNTHETIC_FIELD_MAP } from '../types.js';
 
 /**
  * Emit OmniJS JavaScript code from a FilterAST
@@ -59,23 +60,10 @@ function emitComparison(node: ComparisonNode): string {
     return emitProjectComparison(operator, value as string);
   }
 
-  // Synthetic status fields: OmniFocus uses taskStatus enum, not boolean properties
-  if (field === 'task.dropped') {
-    return emitStatusComparison(operator, value as boolean, 'Task.Status.Dropped');
-  }
-
-  if (field === 'task.available') {
-    return emitStatusComparison(operator, value as boolean, 'Task.Status.Available');
-  }
-
-  if (field === 'task.blocked') {
-    return emitStatusComparison(operator, value as boolean, 'Task.Status.Blocked');
-  }
-
-  // Special handling for 'tagStatusValid' synthetic field
-  // Matches OmniFocus perspective: "Has a tag that is active or on hold" OR "Untagged"
-  if (field === 'task.tagStatusValid') {
-    return emitTagStatusValidComparison(operator, value as boolean);
+  // Synthetic fields: consult registry for special emission logic
+  const syntheticDef = SYNTHETIC_FIELD_MAP.get(field);
+  if (syntheticDef?.omnijs) {
+    return syntheticDef.omnijs(operator, value);
   }
 
   // Get the field accessor (OmniJS uses direct property access)
@@ -145,33 +133,6 @@ function emitProjectComparison(operator: ComparisonOperator, projectValue: strin
     default:
       throw new Error(`Unsupported project operator: ${operator}`);
   }
-}
-
-/**
- * Emit a taskStatus enum comparison for synthetic boolean fields (dropped, available, blocked).
- *
- * OmniFocus uses Task.Status enum values (Available, Completed, Dropped, Blocked, etc.)
- * rather than boolean properties. The AST uses synthetic boolean fields that this function
- * converts to the appropriate enum comparison.
- */
-function emitStatusComparison(operator: ComparisonOperator, matches: boolean, statusEnum: string): string {
-  // XOR: '==' + true means ===, '==' + false means !==, '!=' inverts
-  const shouldEqual = (operator === '==') === matches;
-  return `task.taskStatus ${shouldEqual ? '===' : '!=='} ${statusEnum}`;
-}
-
-function emitTagStatusValidComparison(operator: ComparisonOperator, isValid: boolean): string {
-  // OmniFocus perspective rule: task must have an active/on-hold tag, or have no tags at all.
-  // This excludes tasks whose ONLY tags are dropped/inactive.
-  if (operator !== '==' && operator !== '!=') {
-    throw new Error(`Unsupported tagStatusValid operator: ${operator}`);
-  }
-
-  const wantValid = (operator === '==') === isValid;
-  if (wantValid) {
-    return '(task.tags.length === 0 || task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
-  }
-  return '(task.tags.length > 0 && !task.tags.some(t => t.status === Tag.Status.Active || t.status === Tag.Status.OnHold))';
 }
 
 function emitDateComparison(accessor: string, operator: string, dateStr: string): string {

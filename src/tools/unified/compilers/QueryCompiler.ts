@@ -160,28 +160,33 @@ export class QueryCompiler {
       }
     };
 
-    // Due date transformation
-    transformDateFilter(
-      input.dueDate as { before?: string; after?: string; between?: [string, string] },
-      'dueBefore',
-      'dueAfter',
-      'dueDateOperator',
-    );
+    // Date transformations — loop over all date field definitions
+    const dateFieldDefs: Array<{
+      inputKey: string;
+      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore';
+      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter';
+      operatorKey?: 'dueDateOperator' | 'plannedDateOperator';
+    }> = [
+      { inputKey: 'dueDate', beforeKey: 'dueBefore', afterKey: 'dueAfter', operatorKey: 'dueDateOperator' },
+      { inputKey: 'deferDate', beforeKey: 'deferBefore', afterKey: 'deferAfter' },
+      {
+        inputKey: 'plannedDate',
+        beforeKey: 'plannedBefore',
+        afterKey: 'plannedAfter',
+        operatorKey: 'plannedDateOperator',
+      },
+    ];
 
-    // Defer date transformation
-    transformDateFilter(
-      input.deferDate as { before?: string; after?: string; between?: [string, string] },
-      'deferBefore',
-      'deferAfter',
-    );
-
-    // Planned date transformation
-    transformDateFilter(
-      input.plannedDate as { before?: string; after?: string; between?: [string, string] },
-      'plannedBefore',
-      'plannedAfter',
-      'plannedDateOperator',
-    );
+    for (const def of dateFieldDefs) {
+      transformDateFilter(
+        (input as Record<string, unknown>)[def.inputKey] as
+          | { before?: string; after?: string; between?: [string, string] }
+          | undefined,
+        def.beforeKey,
+        def.afterKey,
+        def.operatorKey,
+      );
+    }
 
     // Text transformation
     if (input.text) {

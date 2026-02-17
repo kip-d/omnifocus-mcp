@@ -8,6 +8,7 @@
  */
 
 import type { FilterNode, ComparisonNode, ExistsNode, ComparisonOperator } from '../types.js';
+import { SYNTHETIC_FIELD_MAP } from '../types.js';
 
 /**
  * Emit JXA JavaScript code from a FilterAST
@@ -57,6 +58,12 @@ function emitComparison(node: ComparisonNode): string {
   // Special handling for project ID
   if (field === 'task.containingProject') {
     return emitProjectComparison(operator, value as string);
+  }
+
+  // Synthetic fields: consult registry for special emission logic
+  const syntheticDef = SYNTHETIC_FIELD_MAP.get(field);
+  if (syntheticDef?.jxa) {
+    return syntheticDef.jxa(operator, value);
   }
 
   // Get the field accessor

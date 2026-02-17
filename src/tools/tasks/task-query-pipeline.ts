@@ -33,58 +33,78 @@ interface ModeOptions {
 
 /**
  * Declarative mode definitions.
- * Each mode maps to a factory that returns the filter properties to merge.
+ * Each mode maps to a filter factory and optional default sort.
  * Modes not listed here (all, inbox, search) require no augmentation.
  */
-type ModeDefinition = (options: ModeOptions) => Partial<TaskFilter>;
+interface ModeDefinition {
+  augment: (options: ModeOptions) => Partial<TaskFilter>;
+  defaultSort?: SortOption[];
+}
 
 const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
-  overdue: () => ({
-    completed: false,
-    dueBefore: new Date().toISOString(),
-    dueDateOperator: '<' as const,
-  }),
-  today: (opts) => {
-    const dueSoonDays = opts.daysAhead || 3;
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const dueSoonCutoff = new Date(todayStart);
-    dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
-    return {
-      todayMode: true,
-      dueBefore: dueSoonCutoff.toISOString(),
+  overdue: {
+    augment: () => ({
       completed: false,
-      dropped: false,
-      tagStatusValid: true,
-      dueSoonDays,
-    };
+      dueBefore: new Date().toISOString(),
+      dueDateOperator: '<' as const,
+    }),
+    defaultSort: [{ field: 'dueDate', direction: 'asc' }],
   },
-  upcoming: (opts) => {
-    const days = opts.daysAhead || 7;
-    const startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + days);
-    return {
+  today: {
+    augment: (opts) => {
+      const dueSoonDays = opts.daysAhead || 3;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const dueSoonCutoff = new Date(todayStart);
+      dueSoonCutoff.setDate(dueSoonCutoff.getDate() + dueSoonDays);
+      return {
+        todayMode: true,
+        dueBefore: dueSoonCutoff.toISOString(),
+        completed: false,
+        dropped: false,
+        tagStatusValid: true,
+        dueSoonDays,
+      };
+    },
+    defaultSort: [{ field: 'modified', direction: 'desc' }],
+  },
+  upcoming: {
+    augment: (opts) => {
+      const days = opts.daysAhead || 7;
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + days);
+      return {
+        completed: false,
+        dueAfter: startDate.toISOString(),
+        dueBefore: endDate.toISOString(),
+      };
+    },
+    defaultSort: [{ field: 'dueDate', direction: 'asc' }],
+  },
+  available: {
+    augment: () => ({
       completed: false,
-      dueAfter: startDate.toISOString(),
-      dueBefore: endDate.toISOString(),
-    };
+      available: true,
+    }),
   },
-  available: () => ({
-    completed: false,
-    available: true,
-  }),
-  blocked: () => ({
-    completed: false,
-    blocked: true,
-  }),
-  flagged: () => ({
-    flagged: true,
-  }),
-  smart_suggest: () => ({
-    completed: false,
-  }),
+  blocked: {
+    augment: () => ({
+      completed: false,
+      blocked: true,
+    }),
+  },
+  flagged: {
+    augment: () => ({
+      flagged: true,
+    }),
+  },
+  smart_suggest: {
+    augment: () => ({
+      completed: false,
+    }),
+  },
 };
 
 /**
@@ -104,7 +124,7 @@ export function augmentFilterForMode(
   const definition = MODE_DEFINITIONS[mode];
   if (!definition) return { ...filter };
 
-  const augmentation = definition(options);
+  const augmentation = definition.augment(options);
   const result = { ...filter, ...augmentation };
 
   // Special case: flagged mode defaults completed=false only when not explicitly set
@@ -120,15 +140,8 @@ export function augmentFilterForMode(
  * Returns undefined if the mode has no default sort.
  */
 export function getDefaultSort(mode: TaskQueryMode | undefined): SortOption[] | undefined {
-  switch (mode) {
-    case 'overdue':
-    case 'upcoming':
-      return [{ field: 'dueDate', direction: 'asc' }];
-    case 'today':
-      return [{ field: 'modified', direction: 'desc' }];
-    default:
-      return undefined;
-  }
+  if (!mode) return undefined;
+  return MODE_DEFINITIONS[mode]?.defaultSort;
 }
 
 // =============================================================================
