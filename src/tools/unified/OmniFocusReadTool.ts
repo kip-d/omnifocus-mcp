@@ -236,7 +236,14 @@ PERFORMANCE:
     mode: TaskQueryMode | undefined,
     timer: OperationTimerV2,
   ): Promise<unknown> {
-    const { script } = buildTaskCountScript(filter, { maxScan: 10000 });
+    // Ensure inbox mode sets the inInbox filter (mode: "inbox" is not in
+    // MODE_DEFINITIONS, so augmentFilterForMode passes through unchanged)
+    const countFilter = { ...filter };
+    if (mode === 'inbox' && !countFilter.inInbox) {
+      countFilter.inInbox = true;
+    }
+
+    const { script } = buildTaskCountScript(countFilter, { maxScan: 10000 });
     const result = await this.execJson(script);
 
     if (!isScriptSuccess(result)) {
@@ -256,17 +263,26 @@ PERFORMANCE:
       optimization?: string;
       filter_description?: string;
     };
-    return createTaskResponseV2('tasks', [], {
+    const count = data.count ?? 0;
+    const response = createTaskResponseV2('tasks', [], {
       ...timer.toMetadata(),
       from_cache: false,
       mode: mode || 'count_only',
       count_only: true,
-      total_count: data.count ?? 0,
-      filters_applied: filter as unknown as Record<string, unknown>,
+      total_count: count,
+      filters_applied: countFilter as unknown as Record<string, unknown>,
       optimization: data.optimization || 'ast_omnijs_bridge',
       filter_description: data.filter_description,
       warning: data.warning,
     });
+
+    // Override summary total_count with actual count from JXA
+    // (generateTaskSummary receives [] for countOnly, producing total_count: 0)
+    if (response.summary && 'total_count' in response.summary) {
+      (response.summary as { total_count: number }).total_count = count;
+    }
+
+    return response;
   }
 
   private async executeIdLookup(

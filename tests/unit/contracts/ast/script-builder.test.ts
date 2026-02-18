@@ -4,6 +4,7 @@ import {
   buildInboxScript,
   buildTaskByIdScript,
   buildRecurringTasksScript,
+  buildTaskCountScript,
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
@@ -395,6 +396,62 @@ describe('buildRecurringTasksScript', () => {
       expect(result.script).toContain("case 'frequency':");
       expect(result.script).toContain("case 'project':");
       expect(result.script).toContain("case 'name':");
+    });
+  });
+});
+
+describe('buildTaskCountScript', () => {
+  describe('inbox counting', () => {
+    it('uses doc.inboxTasks() when inInbox is true', () => {
+      const result = buildTaskCountScript({ inInbox: true });
+      expect(result.script).toContain('doc.inboxTasks()');
+      expect(result.script).not.toContain('doc.flattenedTasks()');
+    });
+
+    it('strips inInbox from filter code (already handled by collection)', () => {
+      const result = buildTaskCountScript({ inInbox: true });
+      // Should NOT generate task.inInbox() check — the collection is pre-filtered
+      expect(result.script).not.toContain('task.inInbox()');
+    });
+
+    it('defaults to excluding completed tasks for inbox counts', () => {
+      const result = buildTaskCountScript({ inInbox: true });
+      // Should add completed: false when not explicitly set
+      expect(result.script).toContain('task.completed()');
+      expect(result.script).toContain('=== false');
+    });
+
+    it('respects explicit completed: true for inbox counts', () => {
+      const result = buildTaskCountScript({ inInbox: true, completed: true });
+      expect(result.script).toContain('doc.inboxTasks()');
+      expect(result.script).toContain('task.completed() === true');
+    });
+
+    it('does not treat project: null as inbox (that is QueryCompiler concern)', () => {
+      // project: null → inInbox: true conversion happens in QueryCompiler,
+      // not in normalizeFilter or buildTaskCountScript
+      const result = buildTaskCountScript({ project: null } as TaskFilter);
+      expect(result.script).toContain('doc.flattenedTasks()');
+    });
+  });
+
+  describe('non-inbox counting', () => {
+    it('uses doc.flattenedTasks() for general queries', () => {
+      const result = buildTaskCountScript({ flagged: true });
+      expect(result.script).toContain('doc.flattenedTasks()');
+      expect(result.script).not.toContain('doc.inboxTasks()');
+    });
+
+    it('generates filter code for non-inbox filters', () => {
+      const result = buildTaskCountScript({ flagged: true, completed: false });
+      expect(result.script).toContain('task.flagged() === true');
+      expect(result.script).toContain('task.completed() === false');
+    });
+
+    it('generates empty filter as true for no filters', () => {
+      const result = buildTaskCountScript({});
+      expect(result.script).toContain('doc.flattenedTasks()');
+      expect(result.isEmptyFilter).toBe(true);
     });
   });
 });

@@ -1402,14 +1402,26 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   // Normalize filter to ensure consistent property names
   const normalizedFilter = normalizeFilter(filter);
 
-  // Build AST and generate JXA filter code (NOT OmniJS!)
-  const ast = buildAST(normalizedFilter);
-  const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(normalizedFilter, 'jxa'); // Use JXA emitter
-  const filterDescription = describeFilterForScript(normalizedFilter);
-
   // Determine if we're counting inbox tasks
   const checkInbox = normalizedFilter.inInbox === true;
+
+  // Strip inInbox from filter code when using pre-filtered inbox collection
+  // (same pattern as list-tasks-ast.ts:58 — already handled by collection selection)
+  // Also default to excluding completed tasks for inbox, matching the regular path
+  const filterForCode = checkInbox
+    ? (() => {
+        const f = { ...normalizedFilter };
+        delete f.inInbox;
+        if (f.completed === undefined) f.completed = false;
+        return f;
+      })()
+    : normalizedFilter;
+
+  // Build AST and generate JXA filter code (NOT OmniJS!)
+  const ast = buildAST(filterForCode);
+  const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
+  const filterCode = generateFilterCode(filterForCode, 'jxa'); // Use JXA emitter
+  const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
   // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed
