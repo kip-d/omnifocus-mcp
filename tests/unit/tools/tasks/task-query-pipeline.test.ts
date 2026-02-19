@@ -54,9 +54,10 @@ describe('augmentFilterForMode', () => {
   });
 
   describe('overdue mode', () => {
-    it('sets completed=false, dueBefore to now, and operator "<"', () => {
+    it('sets completed=false, dropped=false, dueBefore to now, and operator "<"', () => {
       const result = augmentFilterForMode('overdue', {});
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
       expect(result.dueBefore).toBeDefined();
       expect(result.dueDateOperator).toBe('<');
       // dueBefore should be close to now (within 2 seconds)
@@ -103,9 +104,10 @@ describe('augmentFilterForMode', () => {
   });
 
   describe('upcoming mode', () => {
-    it('sets completed=false with dueAfter and dueBefore range', () => {
+    it('sets completed=false, dropped=false with dueAfter and dueBefore range', () => {
       const result = augmentFilterForMode('upcoming', {});
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
       expect(result.dueAfter).toBeDefined();
       expect(result.dueBefore).toBeDefined();
     });
@@ -128,26 +130,29 @@ describe('augmentFilterForMode', () => {
   });
 
   describe('available mode', () => {
-    it('sets completed=false and available=true', () => {
+    it('sets completed=false, dropped=false and available=true', () => {
       const result = augmentFilterForMode('available', {});
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
       expect(result.available).toBe(true);
     });
   });
 
   describe('blocked mode', () => {
-    it('sets completed=false and blocked=true', () => {
+    it('sets completed=false, dropped=false and blocked=true', () => {
       const result = augmentFilterForMode('blocked', {});
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
       expect(result.blocked).toBe(true);
     });
   });
 
   describe('flagged mode', () => {
-    it('sets flagged=true and defaults completed=false', () => {
+    it('sets flagged=true and defaults completed=false, dropped=false', () => {
       const result = augmentFilterForMode('flagged', {});
       expect(result.flagged).toBe(true);
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
     });
 
     it('preserves explicit completed value', () => {
@@ -155,12 +160,19 @@ describe('augmentFilterForMode', () => {
       expect(result.flagged).toBe(true);
       expect(result.completed).toBe(true);
     });
+
+    it('preserves explicit dropped value', () => {
+      const result = augmentFilterForMode('flagged', { dropped: true });
+      expect(result.flagged).toBe(true);
+      expect(result.dropped).toBe(true);
+    });
   });
 
   describe('smart_suggest mode', () => {
-    it('sets completed=false', () => {
+    it('sets completed=false, dropped=false', () => {
       const result = augmentFilterForMode('smart_suggest', {});
       expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
     });
   });
 

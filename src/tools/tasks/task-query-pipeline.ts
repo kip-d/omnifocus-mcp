@@ -45,6 +45,7 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
   overdue: {
     augment: () => ({
       completed: false,
+      dropped: false,
       dueBefore: new Date().toISOString(),
       dueDateOperator: '<' as const,
     }),
@@ -77,6 +78,7 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
       endDate.setDate(endDate.getDate() + days);
       return {
         completed: false,
+        dropped: false,
         dueAfter: startDate.toISOString(),
         dueBefore: endDate.toISOString(),
       };
@@ -86,12 +88,14 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
   available: {
     augment: () => ({
       completed: false,
+      dropped: false,
       available: true,
     }),
   },
   blocked: {
     augment: () => ({
       completed: false,
+      dropped: false,
       blocked: true,
     }),
   },
@@ -103,6 +107,7 @@ const MODE_DEFINITIONS: Partial<Record<TaskQueryMode, ModeDefinition>> = {
   smart_suggest: {
     augment: () => ({
       completed: false,
+      dropped: false,
     }),
   },
 };
@@ -127,9 +132,12 @@ export function augmentFilterForMode(
   const augmentation = definition.augment(options);
   const result = { ...filter, ...augmentation };
 
-  // Special case: flagged mode defaults completed=false only when not explicitly set
+  // Special case: flagged mode defaults completed=false and dropped=false only when not explicitly set
   if (mode === 'flagged' && filter.completed === undefined) {
     result.completed = false;
+  }
+  if (mode === 'flagged' && filter.dropped === undefined) {
+    result.dropped = false;
   }
 
   return result;
