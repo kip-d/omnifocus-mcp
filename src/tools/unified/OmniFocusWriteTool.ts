@@ -6,8 +6,11 @@ import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
 import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
-import { createSuccessResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TaskId, ProjectId } from '../../utils/branded-types.js';
+import { buildUpdateProjectScript } from '../../contracts/ast/mutation-script-builder.js';
+import type { ProjectUpdateData } from '../../contracts/mutations.js';
+import { isScriptError } from '../../omnifocus/script-result-types.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -170,12 +173,17 @@ SAFETY:
   private async routeToProjectsTool(
     compiled: Exclude<CompiledMutation, { operation: 'batch' | 'bulk_delete' }>,
   ): Promise<unknown> {
-    // Map compiled mutation to ProjectsTool parameters
+    // Direct routing for project updates — bypasses ProjectsTool to avoid field stripping
+    if (compiled.operation === 'update' && 'projectId' in compiled && compiled.projectId) {
+      return this.handleProjectUpdateDirect(compiled.projectId, compiled.changes as ProjectUpdateData);
+    }
+
+    // Map compiled mutation to ProjectsTool parameters (create, complete, delete)
     const projectArgs: Record<string, unknown> = {
       operation: compiled.operation,
     };
 
-    // Add projectId for update/complete/delete operations with branded type safety
+    // Add projectId for complete/delete operations with branded type safety
     if ('projectId' in compiled && compiled.projectId) {
       projectArgs.projectId = convertToProjectId(compiled.projectId);
     }
@@ -185,12 +193,43 @@ SAFETY:
       Object.assign(projectArgs, compiled.data);
     }
 
-    // Add changes for update - spread all fields
-    if ('changes' in compiled && compiled.changes) {
-      Object.assign(projectArgs, compiled.changes);
+    return this.projectsTool.execute(projectArgs);
+  }
+
+  /**
+   * Handle project updates directly via buildUpdateProjectScript, bypassing ProjectsTool.
+   * This ensures all ProjectUpdateData fields are passed through without stripping.
+   */
+  private async handleProjectUpdateDirect(projectId: string, changes: ProjectUpdateData): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    const script = (await buildUpdateProjectScript(projectId, changes)).script;
+    const result = await this.execJson(script);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'UPDATE_FAILED',
+        result.error || 'Failed to update project',
+        'Check the project ID and try again',
+        result.details,
+        timer.toMetadata(),
+      );
     }
 
-    return this.projectsTool.execute(projectArgs);
+    // Smart cache invalidation
+    this.cache.invalidateProject(projectId);
+
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        operation: 'update',
+        target: 'project',
+        ...(result.data as Record<string, unknown>),
+      },
+      undefined,
+      timer.toMetadata(),
+    );
   }
 
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {

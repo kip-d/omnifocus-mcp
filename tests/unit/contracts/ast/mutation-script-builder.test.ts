@@ -371,6 +371,86 @@ describe('buildUpdateProjectScript', () => {
     expect(result.script).toContain('moveSections');
     expect(result.script).toContain('Development');
   });
+
+  it('handles tags replacement (clearTags + addTag)', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      tags: ['work', 'urgent'],
+    });
+
+    expect(result.script).toContain('clearTags');
+    expect(result.script).toContain('addTag');
+    expect(result.script).toContain('work');
+    expect(result.script).toContain('urgent');
+  });
+
+  it('handles addTags', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      addTags: ['new-tag'],
+    });
+
+    expect(result.script).toContain('addTag');
+    expect(result.script).toContain('new-tag');
+  });
+
+  it('handles removeTags', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      removeTags: ['old-tag'],
+    });
+
+    expect(result.script).toContain('removeTag');
+    expect(result.script).toContain('old-tag');
+  });
+
+  it('handles reviewInterval', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      reviewInterval: 14,
+    });
+
+    expect(result.script).toContain('reviewInterval');
+    expect(result.script).toContain('14');
+  });
+
+  it('handles deferDate', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      deferDate: '2026-03-01',
+    });
+
+    expect(result.script).toContain('deferDate');
+    expect(result.script).toContain('2026-03-01');
+  });
+
+  it('handles plannedDate', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      plannedDate: '2026-04-01',
+    });
+
+    expect(result.script).toContain('plannedDate');
+    expect(result.script).toContain('2026-04-01');
+  });
+
+  it('handles clearDeferDate', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      clearDeferDate: true,
+    });
+
+    expect(result.script).toContain('clearDeferDate');
+  });
+
+  it('handles clearPlannedDate', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      clearPlannedDate: true,
+    });
+
+    expect(result.script).toContain('clearPlannedDate');
+  });
+
+  it('handles sequential', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      sequential: true,
+    });
+
+    expect(result.script).toContain('sequential');
+  });
 });
 
 describe('buildCompleteScript', () => {

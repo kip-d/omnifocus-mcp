@@ -1257,6 +1257,11 @@ export async function buildUpdateProjectScript(
     if (changes.flagged !== undefined) project.flagged = changes.flagged;
     if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
+    // Handle review interval (convert days to seconds for OmniFocus)
+    if (changes.reviewInterval !== undefined) {
+      project.reviewInterval = changes.reviewInterval * 24 * 60 * 60;
+    }
+
     // Handle dates
     if (changes.dueDate !== undefined) {
       project.dueDate = changes.dueDate ? new Date(changes.dueDate) : null;
@@ -1341,6 +1346,62 @@ export async function buildUpdateProjectScript(
           error: true,
           message: 'Failed to move project via bridge: ' + String(e)
         });
+      }
+    }
+
+    // Handle tags via OmniJS bridge (reliable O(1) lookup, same pattern as project creation)
+    if (changes.tags || changes.addTags || changes.removeTags) {
+      try {
+        const tagScript = \`
+          (() => {
+            ${OMNIJS_PARSE_TAG_PATH}
+            ${OMNIJS_RESOLVE_OR_CREATE_TAG_PATH}
+            ${OMNIJS_RESOLVE_TAG_PATH}
+
+            const proj = Project.byIdentifier('\${projectId}');
+            if (!proj) return JSON.stringify({success: false, error: 'Project not found'});
+
+            function resolveTag(tagName, create) {
+              var pathSegs = parseTagPath(tagName);
+              if (pathSegs) {
+                return create ? resolveOrCreateTagByPath(pathSegs) : resolveTagByPath(pathSegs);
+              }
+              var found = flattenedTags.find(t => t.name === tagName);
+              if (!found && create) found = new Tag(tagName, null);
+              return found;
+            }
+
+            if (\${JSON.stringify(!!changes.tags)}) {
+              proj.clearTags();
+              const tagNames = \${JSON.stringify(changes.tags || [])};
+              for (const tagName of tagNames) {
+                var tag = resolveTag(tagName, true);
+                if (tag) proj.addTag(tag);
+              }
+            }
+
+            if (\${JSON.stringify(!!changes.addTags)}) {
+              const addTagNames = \${JSON.stringify(changes.addTags || [])};
+              for (const tagName of addTagNames) {
+                var tag = resolveTag(tagName, true);
+                if (tag) proj.addTag(tag);
+              }
+            }
+
+            if (\${JSON.stringify(!!changes.removeTags)}) {
+              const removeTagNames = \${JSON.stringify(changes.removeTags || [])};
+              for (const tagName of removeTagNames) {
+                var tag = resolveTag(tagName, false);
+                if (tag) proj.removeTag(tag);
+              }
+            }
+
+            return JSON.stringify({success: true});
+          })()
+        \`;
+        app.evaluateJavascript(tagScript);
+      } catch (e) {
+        // Tag errors don't fail the update - tags can be managed separately
       }
     }
 

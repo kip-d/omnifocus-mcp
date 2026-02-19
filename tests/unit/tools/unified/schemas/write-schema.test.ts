@@ -89,4 +89,61 @@ describe('WriteSchema', () => {
     const result = WriteSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  it('accepts sequential in project update changes', () => {
+    const input = {
+      mutation: {
+        operation: 'update',
+        target: 'project',
+        id: 'project-123',
+        changes: {
+          sequential: true,
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const changes = (result.data.mutation as { changes: Record<string, unknown> }).changes;
+      expect(changes.sequential).toBe(true);
+    }
+  });
+
+  it('accepts reviewInterval in project update changes', () => {
+    const input = {
+      mutation: {
+        operation: 'update',
+        target: 'project',
+        id: 'project-123',
+        changes: {
+          reviewInterval: 14,
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const changes = (result.data.mutation as { changes: Record<string, unknown> }).changes;
+      expect(changes.reviewInterval).toBe(14);
+    }
+  });
+
+  it('rejects unknown fields after passthrough removal', () => {
+    const input = {
+      mutation: {
+        operation: 'update',
+        target: 'project',
+        id: 'project-123',
+        changes: {
+          name: 'Valid',
+          bogusField: 'should fail',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
 });

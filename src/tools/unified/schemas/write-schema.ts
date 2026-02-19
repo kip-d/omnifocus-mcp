@@ -57,7 +57,7 @@ const UpdateChangesSchema = z
     clearDeferDate: coerceBoolean().optional(),
     clearPlannedDate: coerceBoolean().optional(),
     flagged: coerceBoolean().optional(),
-    status: z.enum(['completed', 'dropped']).optional(),
+    status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
     project: z.union([z.string(), z.null()]).optional(),
     folder: z.union([z.string(), z.null()]).optional(),
     parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
@@ -67,8 +67,14 @@ const UpdateChangesSchema = z
       .optional(),
     clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
     clearRepeatRule: coerceBoolean().optional(), // Bug #19: Clear repetition rule
+    // Project-specific update fields
+    sequential: coerceBoolean().optional(),
+    reviewInterval: z
+      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+      .pipe(z.number())
+      .optional(),
   })
-  .passthrough();
+  .strict();
 
 // Enhanced batch item schema with hierarchical relationships.
 // Exported so batch-schemas.ts can derive from it (single source of truth).
