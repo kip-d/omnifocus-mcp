@@ -330,7 +330,9 @@ SAFETY:
           }
 
           let result: unknown;
-          if (op.target === 'project') {
+          if (op.target === 'project' && op.operation === 'update') {
+            result = await this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
+          } else if (op.target === 'project') {
             result = await this.projectsTool.execute(routeArgs);
           } else {
             result = await this.manageTaskTool.execute(routeArgs);
