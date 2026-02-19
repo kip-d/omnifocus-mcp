@@ -59,6 +59,7 @@ const UpdateChangesSchema = z
     flagged: coerceBoolean().optional(),
     status: z.enum(['completed', 'dropped']).optional(),
     project: z.union([z.string(), z.null()]).optional(),
+    folder: z.union([z.string(), z.null()]).optional(),
     parentTaskId: z.union([z.string(), z.null()]).optional(), // Bug OMN-5: Update parent task relationship
     estimatedMinutes: z
       .union([z.number(), z.string().transform((v) => parseInt(v, 10))])

@@ -353,6 +353,24 @@ describe('buildUpdateProjectScript', () => {
     expect(result.script).toContain('folder');
     expect(result.script).toContain('New Folder');
   });
+
+  it('handles folder change to null (move to root)', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      folder: null,
+    });
+
+    expect(result.script).toContain('moveSections');
+    expect(result.script).toContain('library.beginning');
+  });
+
+  it('generates moveSections call for folder change', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      folder: 'Development',
+    });
+
+    expect(result.script).toContain('moveSections');
+    expect(result.script).toContain('Development');
+  });
 });
 
 describe('buildCompleteScript', () => {

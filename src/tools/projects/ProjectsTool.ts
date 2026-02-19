@@ -45,7 +45,7 @@ const ProjectsToolSchemaV2 = z.object({
     .enum(['active', 'on-hold', 'done', 'dropped', 'all'])
     .optional()
     .describe('Filter by project status (for list operation)'),
-  folder: z.string().optional().describe('Filter by folder name'),
+  folder: z.union([z.string(), z.null()]).optional().describe('Filter by folder name, or null to move to root'),
   search: z.string().optional().describe('Search by project name or note content'),
   needsReview: z
     .union([z.boolean(), z.string().transform((val) => val === 'true' || val === '1')])
@@ -461,6 +461,7 @@ export class ProjectsTool extends BaseTool<
           }
         | number;
       status?: string;
+      folder?: string | null;
     } = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.note !== undefined) updates.note = args.note;
@@ -494,6 +495,11 @@ export class ProjectsTool extends BaseTool<
         dropped: 'dropped',
       };
       updates.status = statusMap[args.status];
+    }
+
+    // Handle folder move (folder field comes from unified write tool's changes spread)
+    if (args.folder !== undefined) {
+      updates.folder = args.folder;
     }
 
     // Use AST-powered mutation builder (Phase 2 consolidation)

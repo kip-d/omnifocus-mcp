@@ -168,7 +168,7 @@ process.stdin.on('end', async () => {
 ```bash
 # Build & Test
 npm run build                    # Required before running
-npm run test:unit                # ~2 seconds, 1363 tests
+npm run test:unit                # ~2 seconds, 1367 tests
 npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing

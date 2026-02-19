@@ -54,6 +54,7 @@ interface UpdateChanges {
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean; // Bug #18: Clear estimated time
   clearRepeatRule?: boolean; // Bug #19: Clear repetition rule
+  folder?: string | null; // Move project to folder (null = root)
   // Allow passthrough of additional fields
   [key: string]: unknown;
 }
