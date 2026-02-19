@@ -38,9 +38,9 @@ describe('Tag Type Conversion Issues', () => {
     expect(LIST_TAGS_SCRIPT).toContain('flattenedTags.forEach');
     expect(LIST_TAGS_SCRIPT).toContain('task.tags');
 
-    // Check for tag manipulation
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.addTags');
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTags');
+    // Merge uses OmniJS bridge with singular methods (JXA plural methods silently fail)
+    expect(MANAGE_TAGS_SCRIPT).toContain('task.addTag(');
+    expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTag(');
   });
 
   it('should identify complex object serialization', () => {
@@ -57,7 +57,7 @@ describe('Tag Type Conversion Issues', () => {
       const manageMatches = MANAGE_TAGS_SCRIPT.match(pattern);
 
       if (listMatches || manageMatches) {
-        console.log(`\\nFound complex serialization patterns:`);
+        console.log('\\nFound complex serialization patterns:');
         if (listMatches) console.log(`  LIST_TAGS: ${listMatches.length} instances`);
         if (manageMatches) console.log(`  MANAGE_TAGS: ${manageMatches.length} instances`);
       }

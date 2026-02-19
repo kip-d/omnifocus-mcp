@@ -333,44 +333,60 @@ export const MANAGE_TAGS_SCRIPT = `
           });
         }
         
-        // Move all tasks from source to target
+        // Move all tasks from source to target using OmniJS bridge
+        // JXA tag mutations (addTags/removeTags) silently fail — must use OmniJS bridge
+        const mergeScript = \`
+          (() => {
+            const srcName = \${JSON.stringify(tagName)};
+            const tgtName = \${JSON.stringify(targetTag)};
+
+            var srcTag = null;
+            var tgtTag = null;
+            flattenedTags.forEach(t => {
+              if (t.name === srcName) srcTag = t;
+              if (t.name === tgtName) tgtTag = t;
+            });
+
+            if (!srcTag || !tgtTag) {
+              return JSON.stringify({ error: true, message: "Tag not found in OmniJS context" });
+            }
+
+            var count = 0;
+            flattenedTasks.forEach(task => {
+              var hasSrc = false;
+              var hasTgt = false;
+              task.tags.forEach(t => {
+                if (t === srcTag) hasSrc = true;
+                if (t === tgtTag) hasTgt = true;
+              });
+              if (hasSrc) {
+                task.removeTag(srcTag);
+                if (!hasTgt) task.addTag(tgtTag);
+                count++;
+              }
+            });
+
+            return JSON.stringify({ success: true, count: count });
+          })()
+        \`;
+
         let mergedCount = 0;
-        const mergeTasks = doc.flattenedTasks();
-        if (!mergeTasks) {
+        try {
+          const mergeResult = JSON.parse(app.evaluateJavascript(mergeScript));
+          if (mergeResult.error) {
+            return JSON.stringify({
+              error: true,
+              message: "Merge retagging failed: " + mergeResult.message
+            });
+          }
+          mergedCount = mergeResult.count;
+        } catch (bridgeError) {
           return JSON.stringify({
             error: true,
-            message: "Failed to retrieve tasks from OmniFocus"
+            message: "Failed to execute merge retagging: " + bridgeError.toString()
           });
         }
-        
-        for (let i = 0; i < mergeTasks.length; i++) {
-          const task = mergeTasks[i];
-          try {
-            const taskTags = safeGetTags(task);
-            const sourceTagName = safeGet(() => sourceTag.name());
-            const targetTagName = safeGet(() => targetTagObj.name());
-            
-            const hasSourceTag = taskTags.includes(sourceTagName);
-            const hasTargetTag = taskTags.includes(targetTagName);
-            
-            if (hasSourceTag) {
-              try {
-                // Remove source tag
-                task.removeTags([sourceTag]);
-                
-                // Add target tag if not already present
-                if (!hasTargetTag) {
-                  task.addTags([targetTagObj]);
-                }
-                
-                mergedCount++;
-              } catch (tagError) {
-                // Continue if tag operations fail on individual task
-              }
-            }
-          } catch (e) {}
-        }
-        
+
         // Delete the source tag using JXA app.delete method
         try {
           app.delete(sourceTag);

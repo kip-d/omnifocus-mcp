@@ -12,23 +12,19 @@ describe('Tag Operations Fix Verification', () => {
     expect(script).toContain('tag.id.primaryKey');
   });
 
-  it('should use plural methods for tag manipulation', () => {
-    // Verify we're using the correct plural methods
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTags([sourceTag])');
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.addTags([targetTagObj])');
+  it('should use OmniJS bridge for merge tag retagging', () => {
+    // Merge must use evaluateJavascript (OmniJS bridge) — JXA tag mutations silently fail
+    expect(MANAGE_TAGS_SCRIPT).toContain('app.evaluateJavascript(mergeScript)');
 
-    // Should not contain singular methods
-    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.removeTag(');
-    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.addTag(');
+    // Should use singular OmniJS methods inside the bridge
+    expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTag(srcTag)');
+    expect(MANAGE_TAGS_SCRIPT).toContain('task.addTag(tgtTag)');
   });
 
-  it('should properly handle array conversions', () => {
-    // Check that we're passing arrays to add/remove methods
-    const addTagsPattern = /task\.addTags\(\[[^\]]+\]\)/;
-    const removeTagsPattern = /task\.removeTags\(\[[^\]]+\]\)/;
-
-    expect(MANAGE_TAGS_SCRIPT).toMatch(addTagsPattern);
-    expect(MANAGE_TAGS_SCRIPT).toMatch(removeTagsPattern);
+  it('should not use JXA plural tag methods for merge', () => {
+    // JXA plural methods (addTags/removeTags) silently fail — must not be used
+    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.removeTags(');
+    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.addTags(');
   });
 
   it('should return JSON stringified results', () => {
