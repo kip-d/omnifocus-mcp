@@ -256,7 +256,10 @@ When user says "process my inbox" or "help me with inbox":
 
 3. Execute: omnifocus_write to move, update, or create project
 
-4. Repeat until inbox empty
+4. After processing a batch, offer time estimates for tasks that lack them
+   (see "Suggesting Time Estimates" under Task Creation Best Practices)
+
+5. Repeat until inbox empty
 ```
 
 ---
@@ -492,6 +495,73 @@ Single task when:
 | `plannedDate`      | When you intend to do it        | `"{tomorrow}"`          |
 | `deferDate`        | When the task becomes visible   | `"{next Monday}"`       |
 | `dueDate`          | Hard deadline (only real ones!) | `"{end of month}"`      |
+
+### Suggesting Time Estimates
+
+After creating tasks or a project, **proactively offer time estimates** as a batch. Don't ask during capture (that slows
+it down). Instead, create the tasks first, then present estimates for confirmation.
+
+**The pattern:**
+
+1. Create the tasks/project normally
+2. Review what was just created
+3. Present a summary with suggested estimates based on task verbs and context
+4. Let the user confirm, adjust, or skip
+
+**Example interaction:**
+
+> "I've created the project **Phone System Migration** with 5 tasks. Based on the task types, here are my time
+> estimates:
+>
+> | Task                                    | Estimate       |
+> | --------------------------------------- | -------------- |
+> | Call 123.net to confirm cutover date    | 15 min         |
+> | Document current extension assignments  | 30 min         |
+> | Update staff directory with new numbers | 60 min         |
+> | Test each phone line after migration    | 30 min         |
+> | Send staff notification email           | 15 min         |
+> | **Project total**                       | **~2.5 hours** |
+>
+> Want me to add these estimates, or would you like to adjust any?"
+
+**Verb-based heuristics** (starting points, not gospel):
+
+| Task verb/type        | Default estimate | Rationale                  |
+| --------------------- | ---------------- | -------------------------- |
+| Call, email, text     | 15 min           | Communication is bounded   |
+| Review, read          | 15-30 min        | Depends on material length |
+| Write, draft          | 30-60 min        | Creative work takes longer |
+| Research, investigate | 30-60 min        | Open-ended, cap it         |
+| Order, purchase       | 5 min            | Transactional              |
+| Schedule, book        | 5-15 min         | Quick coordination         |
+| Build, implement      | 60-120 min       | Substantial work           |
+| Update, fix           | 15-30 min        | Incremental change         |
+| Meet, discuss         | 30 min           | Default meeting length     |
+
+**Rules:**
+
+- **Always present as a batch** — one confirmation for all estimates, not one per task
+- **Include the project total** — this is the real value (capacity planning)
+- **User can skip** — "No thanks" is fine, don't insist
+- **Don't retroactively estimate old tasks** — only offer for tasks just created in this interaction
+- **Use round numbers** — 5, 15, 30, 60, 120. False precision (e.g., "23 min") is worse than rounding
+
+**Applying estimates after confirmation:**
+
+```javascript
+// Batch update with estimates
+omnifocus_write({
+  mutation: {
+    operation: 'batch',
+    target: 'task',
+    operations: [
+      { operation: 'update', target: 'task', id: 'task1id', changes: { estimatedMinutes: '15' } },
+      { operation: 'update', target: 'task', id: 'task2id', changes: { estimatedMinutes: '30' } },
+      { operation: 'update', target: 'task', id: 'task3id', changes: { estimatedMinutes: '60' } },
+    ],
+  },
+});
+```
 
 ### Batch Creation
 
