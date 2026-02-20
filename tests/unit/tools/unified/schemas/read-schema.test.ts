@@ -233,5 +233,16 @@ describe('ReadSchema', () => {
       const result = ReadSchema.safeParse(input);
       expect(result.success).toBe(true);
     });
+
+    it('should coerce stringified query with discriminated union', () => {
+      const input = {
+        query: '{"type":"projects","fields":["id","name","status"]}',
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.query.type).toBe('projects');
+      }
+    });
   });
 });
