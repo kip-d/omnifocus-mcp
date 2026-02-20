@@ -122,4 +122,116 @@ describe('ReadSchema', () => {
     const result = ReadSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  describe('type-discriminated fields', () => {
+    it('should accept project fields on project queries', () => {
+      const input = {
+        query: {
+          type: 'projects',
+          fields: ['id', 'name', 'status', 'folder', 'folderPath'],
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.query.fields).toEqual(['id', 'name', 'status', 'folder', 'folderPath']);
+      }
+    });
+
+    it('should reject task fields on project queries', () => {
+      const input = {
+        query: {
+          type: 'projects',
+          fields: ['id', 'name', 'blocked', 'parentTaskId'],
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject project fields on task queries', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          fields: ['id', 'name', 'status', 'folder'],
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject task-only params on project queries', () => {
+      const input = {
+        query: {
+          type: 'projects',
+          countOnly: true,
+          mode: 'flagged',
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept shared params on both task and project queries', () => {
+      const taskInput = {
+        query: { type: 'tasks', limit: 10, offset: 5 },
+      };
+      const projectInput = {
+        query: { type: 'projects', limit: 10, offset: 5 },
+      };
+      expect(ReadSchema.safeParse(taskInput).success).toBe(true);
+      expect(ReadSchema.safeParse(projectInput).success).toBe(true);
+    });
+
+    it('should accept export params only on export queries', () => {
+      const exportInput = {
+        query: {
+          type: 'export',
+          exportType: 'tasks',
+          format: 'json',
+        },
+      };
+      const taskInput = {
+        query: {
+          type: 'tasks',
+          exportType: 'tasks',
+        },
+      };
+      expect(ReadSchema.safeParse(exportInput).success).toBe(true);
+      expect(ReadSchema.safeParse(taskInput).success).toBe(false);
+    });
+
+    it('should accept all 15 project fields from script-builder', () => {
+      const allProjectFields = [
+        'id',
+        'name',
+        'status',
+        'flagged',
+        'note',
+        'dueDate',
+        'deferDate',
+        'completedDate',
+        'folder',
+        'folderPath',
+        'folderId',
+        'sequential',
+        'lastReviewDate',
+        'nextReviewDate',
+        'defaultSingletonActionHolder',
+      ];
+      const input = {
+        query: { type: 'projects', fields: allProjectFields },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept includeStats on project queries', () => {
+      const input = {
+        query: { type: 'projects', includeStats: true },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
 });

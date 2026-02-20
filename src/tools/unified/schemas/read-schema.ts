@@ -98,7 +98,11 @@ const FilterSchema: FilterType = z.lazy(() =>
     .passthrough(),
 );
 
-// Field selection enum for type safety
+// =============================================================================
+// FIELD SELECTION ENUMS (type-discriminated)
+// =============================================================================
+
+// Task field enum — matches fields in buildListTasksScriptV4
 const TaskFieldEnum = z.enum([
   'id',
   'name',
@@ -122,6 +126,25 @@ const TaskFieldEnum = z.enum([
   'parentTaskId',
   'parentTaskName',
   'inInbox',
+]);
+
+// Project field enum — matches fields in buildProjectFieldProjections (script-builder.ts:778-824)
+const ProjectFieldEnum = z.enum([
+  'id',
+  'name',
+  'status',
+  'flagged',
+  'note',
+  'dueDate',
+  'deferDate',
+  'completedDate',
+  'folder',
+  'folderPath',
+  'folderId',
+  'sequential',
+  'lastReviewDate',
+  'nextReviewDate',
+  'defaultSingletonActionHolder',
 ]);
 
 // Sort field enum for type safety
@@ -169,47 +192,99 @@ const ExportFieldEnum = z.enum([
   'modifiedDate',
 ]);
 
-// Query schema definition
-const QuerySchema = z.object({
-  type: z.enum(['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export']),
+// =============================================================================
+// SHARED BASE + PER-TYPE QUERY SCHEMAS
+// =============================================================================
+
+// Shared parameters for all query types
+const BaseQuerySchema = z.object({
   // Handle MCP Bridge Type Coercion: LLMs may stringify nested objects
   filters: coerceObject(FilterSchema).optional(),
-  fields: z.array(TaskFieldEnum).optional(),
   sort: z.array(SortSchema).optional(),
   // Handle MCP Bridge Type Coercion: Claude Desktop converts numbers to strings
   limit: coerceNumber().min(1).max(500).optional(),
   offset: coerceNumber().min(0).optional(),
-
-  // Mode parameter with all 10 modes from QueryTasksTool
-  mode: z
-    .enum([
-      'all', // List all tasks (with optional filters)
-      'inbox', // Tasks in inbox (not assigned to any project)
-      'search', // Text search in task names
-      'overdue', // Tasks past their due date
-      'today', // Today perspective: Due soon (≤3 days) OR flagged
-      'upcoming', // Tasks due in next N days
-      'available', // Tasks ready to work on
-      'blocked', // Tasks waiting on others
-      'flagged', // High priority tasks
-      'smart_suggest', // AI-powered suggestions
-    ])
-    .optional(),
-
-  // Response control parameters
-  details: z.boolean().optional(), // Include full task details vs minimal
-  fastSearch: z.boolean().optional(), // Search only names, not notes (performance)
-  daysAhead: coerceNumber().min(1).max(30).optional(), // For upcoming mode: days to look ahead
-  countOnly: z.boolean().optional(), // Return only count, not full task data (33x faster)
-
-  // Export parameters (when type='export')
-  exportType: ExportTypeEnum.optional().describe('What to export: tasks, projects, or all'),
-  format: ExportFormatEnum.optional().describe('Export format: json, csv, or markdown'),
-  exportFields: z.array(ExportFieldEnum).optional().describe('Fields to include in export'),
-  outputDirectory: z.string().optional().describe('Directory for bulk export (required when exportType=all)'),
-  includeStats: z.boolean().optional().describe('Include statistics in project export'),
-  includeCompleted: z.boolean().optional().describe('Include completed tasks in export'),
 });
+
+// Task queries: fields use TaskFieldEnum, have mode/countOnly/daysAhead/fastSearch/details
+const TaskQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('tasks'),
+    fields: z.array(TaskFieldEnum).optional(),
+    mode: z
+      .enum([
+        'all',
+        'inbox',
+        'search',
+        'overdue',
+        'today',
+        'upcoming',
+        'available',
+        'blocked',
+        'flagged',
+        'smart_suggest',
+      ])
+      .optional(),
+    details: z.boolean().optional(),
+    fastSearch: z.boolean().optional(),
+    daysAhead: coerceNumber().min(1).max(30).optional(),
+    countOnly: z.boolean().optional(),
+  }),
+).strict();
+
+// Project queries: fields use ProjectFieldEnum, have details/includeStats
+const ProjectQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('projects'),
+    fields: z.array(ProjectFieldEnum).optional(),
+    details: z.boolean().optional(),
+    includeStats: z.boolean().optional(),
+  }),
+).strict();
+
+// Tag queries: base only
+const TagQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('tags'),
+  }),
+).strict();
+
+// Perspective queries: base only
+const PerspectiveQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('perspectives'),
+  }),
+).strict();
+
+// Folder queries: base only
+const FolderQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('folders'),
+  }),
+).strict();
+
+// Export queries: export-specific params
+const ExportQuerySchema = BaseQuerySchema.merge(
+  z.object({
+    type: z.literal('export'),
+    exportType: ExportTypeEnum.optional().describe('What to export: tasks, projects, or all'),
+    format: ExportFormatEnum.optional().describe('Export format: json, csv, or markdown'),
+    exportFields: z.array(ExportFieldEnum).optional().describe('Fields to include in export'),
+    outputDirectory: z.string().optional().describe('Directory for bulk export (required when exportType=all)'),
+    includeStats: z.boolean().optional().describe('Include statistics in project export'),
+    includeCompleted: z.boolean().optional().describe('Include completed tasks in export'),
+  }),
+).strict();
+
+// Discriminated union on query.type
+const QuerySchema = z.discriminatedUnion('type', [
+  TaskQuerySchema,
+  ProjectQuerySchema,
+  TagQuerySchema,
+  PerspectiveQuerySchema,
+  FolderQuerySchema,
+  ExportQuerySchema,
+]);
 
 // Main read schema
 // Note: coerceObject handles JSON string->object conversion from MCP bridge
