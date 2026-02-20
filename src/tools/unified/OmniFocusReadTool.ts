@@ -23,6 +23,31 @@ import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
 import { ExportTool } from '../export/ExportTool.js';
 
+/**
+ * Post-hoc field projection for project query results.
+ * Strips project objects to only the requested fields.
+ * Always includes 'id' for identity (matching task projectFields behavior).
+ */
+export function projectFieldsOnResult(
+  result: { projects: Record<string, unknown>[] } & Record<string, unknown>,
+  fields: string[] | undefined,
+): { projects: Record<string, unknown>[] } & Record<string, unknown> {
+  if (!fields || fields.length === 0) return result;
+  if (!result.projects || !Array.isArray(result.projects)) return result;
+
+  const projected = result.projects.map((project) => {
+    const out: Record<string, unknown> = { id: project.id };
+    for (const field of fields) {
+      if (field in project) {
+        out[field] = project[field];
+      }
+    }
+    return out;
+  });
+
+  return { ...result, projects: projected };
+}
+
 // =============================================================================
 // TASK QUERY BUILDER
 // =============================================================================
@@ -93,10 +118,11 @@ FILTER OPERATORS:
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
 
 RESPONSE CONTROL:
-- fields: Select specific fields (e.g. ["id", "name", "dueDate", "tags"])
+- fields (tasks): id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
+- fields (projects): id, name, status, flagged, note, dueDate, deferDate, completedDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, defaultSingletonActionHolder
 - sort: [{ field: "dueDate", direction: "asc" }]
 - limit/offset: Pagination (default limit: 25, max: 500)
-- countOnly: true returns only count (33x faster for "how many" questions)
+- countOnly: true returns only count (33x faster for "how many" questions) — tasks only
 
 PERFORMANCE:
 - Use countOnly for counting questions
@@ -361,7 +387,20 @@ PERFORMANCE:
     // Pass search filter for project name search (from name filter)
     if (compiled.filters.search) projectsArgs.search = compiled.filters.search;
 
-    return this.projectsTool.execute(projectsArgs);
+    // Pass includeStats if specified
+    if (compiled.includeStats) projectsArgs.includeStats = compiled.includeStats;
+
+    const result = await this.projectsTool.execute(projectsArgs);
+
+    // Post-hoc field projection: strip to requested fields only
+    if (compiled.fields && compiled.fields.length > 0 && result && typeof result === 'object') {
+      return projectFieldsOnResult(
+        result as unknown as { projects: Record<string, unknown>[] } & Record<string, unknown>,
+        compiled.fields,
+      );
+    }
+
+    return result;
   }
 
   private async routeToTagsTool(_compiled: CompiledQuery): Promise<unknown> {
