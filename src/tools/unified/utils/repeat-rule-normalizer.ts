@@ -1,7 +1,7 @@
 /**
  * Repeat rule normalization utilities
  *
- * Extracted from ManageTaskTool to be reusable across tools.
+ * Repeat rule normalization shared across tools.
  *
  * Functions:
  * - normalizeRepeatMethod: Normalizes method strings to canonical values
@@ -16,7 +16,7 @@ const logger = createLogger('repeat-rule-normalizer');
 
 /**
  * Legacy RepeatRule type (from script-response-types.ts)
- * Defined locally to avoid coupling — matches the shape used by ManageTaskTool.
+ * Defined locally to avoid coupling — matches the shape used by OmniFocusWriteTool.
  */
 export interface RepeatRule {
   method: string;

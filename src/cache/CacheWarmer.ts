@@ -8,7 +8,7 @@
 import { CacheManager } from './CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 import { TagsTool } from '../tools/tags/TagsTool.js';
-import { QueryTasksTool } from '../tools/tasks/QueryTasksTool.js';
+import { OmniFocusReadTool } from '../tools/unified/OmniFocusReadTool.js';
 import { PerspectivesTool } from '../tools/perspectives/PerspectivesTool.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
 import { WARM_PROJECTS_CACHE_SCRIPT } from '../omnifocus/scripts/cache/warm-projects-cache.js';
@@ -327,11 +327,13 @@ export class CacheWarmer {
     try {
       logger.debug('Warming flagged tasks cache...');
 
-      const tasksTool = new QueryTasksTool(this.cache);
+      const readTool = new OmniFocusReadTool(this.cache);
 
-      // Flagged tasks with default parameters (must match actual usage - completed defaults to undefined)
+      // Flagged tasks via unified read tool (replaces legacy QueryTasksTool)
       await this.warmSingleOperation('tasks', 'tasks_flagged_25_undefined', async () => {
-        const result = await tasksTool.execute({ mode: 'flagged', limit: 25 });
+        const result = (await readTool.execute({
+          query: { type: 'tasks', mode: 'flagged', limit: 25 },
+        })) as { success?: boolean; data?: unknown };
         return result.success ? result.data : null;
       });
 

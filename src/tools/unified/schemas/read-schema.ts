@@ -160,7 +160,7 @@ const SortFieldEnum = z.enum([
   'completionDate',
 ]);
 
-// Sort options (matches backend QueryTasksTool schema which uses 'direction')
+// Sort options (uses 'direction' for sort order)
 const SortSchema = z.object({
   field: SortFieldEnum,
   direction: z.enum(['asc', 'desc']),

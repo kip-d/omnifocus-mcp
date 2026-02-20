@@ -1,8 +1,8 @@
 /**
  * Task update sanitization utilities
  *
- * Extracted from ManageTaskTool.sanitizeUpdates() to be reusable across
- * OmniFocusWriteTool and any future consumers.
+ * Task update sanitization shared by OmniFocusWriteTool and any future consumers.
+ * Originally extracted from the legacy ManageTaskTool.sanitizeUpdates().
  *
  * Handles:
  * - String coercion for booleans (MCP bridge sends "true"/"false")

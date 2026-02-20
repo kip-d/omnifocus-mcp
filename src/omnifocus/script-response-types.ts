@@ -162,7 +162,7 @@ export interface ReviewListData {
   count?: number;
 }
 
-// Task creation/update structures for ManageTaskTool
+// Task creation/update structures for OmniFocusWriteTool
 export interface TaskCreationArgs {
   name: string;
   note?: string;
