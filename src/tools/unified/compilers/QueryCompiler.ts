@@ -50,24 +50,25 @@ export class QueryCompiler {
 
     return {
       type: query.type,
-      mode: query.mode || 'all', // Default to 'all' mode if not specified
+      // Task-specific — default mode to 'all' for task queries only
+      mode: query.type === 'tasks' ? ('mode' in query && query.mode ? query.mode : 'all') : undefined,
       filters,
-      fields: query.fields,
-      sort: query.sort,
-      limit: query.limit,
-      offset: query.offset,
-      // Response control parameters
-      details: query.details,
-      fastSearch: query.fastSearch,
-      daysAhead: query.daysAhead,
-      countOnly: query.countOnly,
-      // Export parameters (passthrough when type='export')
-      exportType: query.exportType,
-      format: query.format,
-      exportFields: query.exportFields,
-      outputDirectory: query.outputDirectory,
-      includeStats: query.includeStats,
-      includeCompleted: query.includeCompleted,
+      fields: 'fields' in query ? query.fields : undefined,
+      sort: 'sort' in query ? query.sort : undefined,
+      limit: 'limit' in query ? query.limit : undefined,
+      offset: 'offset' in query ? query.offset : undefined,
+      // Task-specific response control
+      details: 'details' in query ? query.details : undefined,
+      fastSearch: 'fastSearch' in query ? query.fastSearch : undefined,
+      daysAhead: 'daysAhead' in query ? query.daysAhead : undefined,
+      countOnly: 'countOnly' in query ? query.countOnly : undefined,
+      // Export-specific
+      exportType: 'exportType' in query ? query.exportType : undefined,
+      format: 'format' in query ? query.format : undefined,
+      exportFields: 'exportFields' in query ? query.exportFields : undefined,
+      outputDirectory: 'outputDirectory' in query ? query.outputDirectory : undefined,
+      includeStats: 'includeStats' in query ? query.includeStats : undefined,
+      includeCompleted: 'includeCompleted' in query ? query.includeCompleted : undefined,
     };
   }
 

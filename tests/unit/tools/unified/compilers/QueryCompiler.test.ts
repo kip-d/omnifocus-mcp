@@ -322,6 +322,48 @@ describe('QueryCompiler', () => {
     });
   });
 
+  describe('compile() with discriminated union types', () => {
+    it('should compile task query with mode and countOnly', () => {
+      const input: ReadInput = {
+        query: { type: 'tasks', mode: 'flagged', countOnly: true },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.type).toBe('tasks');
+      expect(compiled.mode).toBe('flagged');
+      expect(compiled.countOnly).toBe(true);
+    });
+
+    it('should compile project query without task-specific fields', () => {
+      const input: ReadInput = {
+        query: { type: 'projects', fields: ['id', 'name', 'status'] },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.type).toBe('projects');
+      expect(compiled.fields).toEqual(['id', 'name', 'status']);
+      expect(compiled.mode).toBeUndefined();
+      expect(compiled.countOnly).toBeUndefined();
+    });
+
+    it('should compile export query with export params', () => {
+      const input: ReadInput = {
+        query: { type: 'export', exportType: 'tasks', format: 'json' },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.type).toBe('export');
+      expect(compiled.exportType).toBe('tasks');
+      expect(compiled.format).toBe('json');
+    });
+
+    it('should compile tag query with only shared params', () => {
+      const input: ReadInput = {
+        query: { type: 'tags' },
+      };
+      const compiled = compiler.compile(input);
+      expect(compiled.type).toBe('tags');
+      expect(compiled.mode).toBeUndefined();
+    });
+  });
+
   describe('compile() normalization', () => {
     it('returns NormalizedTaskFilter from compile()', () => {
       const compiler = new QueryCompiler();
