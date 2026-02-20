@@ -27,15 +27,23 @@ import { ExportTool } from '../export/ExportTool.js';
  * Post-hoc field projection for project query results.
  * Strips project objects to only the requested fields.
  * Always includes 'id' for identity (matching task projectFields behavior).
+ *
+ * Handles the StandardResponseV2 envelope: projects live at result.data.projects,
+ * and preview at result.data.preview.
  */
 export function projectFieldsOnResult(
-  result: { projects: Record<string, unknown>[] } & Record<string, unknown>,
+  result: Record<string, unknown>,
   fields: string[] | undefined,
-): { projects: Record<string, unknown>[] } & Record<string, unknown> {
+): Record<string, unknown> {
   if (!fields || fields.length === 0) return result;
-  if (!result.projects || !Array.isArray(result.projects)) return result;
 
-  const projected = result.projects.map((project) => {
+  const data = result.data as Record<string, unknown> | undefined;
+  if (!data) return result;
+
+  const projects = data.projects as Record<string, unknown>[] | undefined;
+  if (!projects || !Array.isArray(projects)) return result;
+
+  const projectOne = (project: Record<string, unknown>) => {
     const out: Record<string, unknown> = { id: project.id };
     for (const field of fields) {
       if (field in project) {
@@ -43,9 +51,15 @@ export function projectFieldsOnResult(
       }
     }
     return out;
-  });
+  };
 
-  return { ...result, projects: projected };
+  const projected = projects.map(projectOne);
+
+  // Also project the preview array if present
+  const preview = data.preview as Record<string, unknown>[] | undefined;
+  const projectedPreview = preview && Array.isArray(preview) ? preview.map(projectOne) : preview;
+
+  return { ...result, data: { ...data, projects: projected, preview: projectedPreview } };
 }
 
 // =============================================================================
@@ -394,10 +408,7 @@ PERFORMANCE:
 
     // Post-hoc field projection: strip to requested fields only
     if (compiled.fields && compiled.fields.length > 0 && result && typeof result === 'object') {
-      return projectFieldsOnResult(
-        result as unknown as { projects: Record<string, unknown>[] } & Record<string, unknown>,
-        compiled.fields,
-      );
+      return projectFieldsOnResult(result as unknown as Record<string, unknown>, compiled.fields);
     }
 
     return result;
