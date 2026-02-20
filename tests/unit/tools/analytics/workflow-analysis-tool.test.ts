@@ -78,6 +78,14 @@ describe('WorkflowAnalysisTool', () => {
     expect(source).toMatch(/const inInbox = task\.inInbox/);
   });
 
+  it('inbox count should only include incomplete tasks', async () => {
+    const fs = await import('fs');
+    const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
+    // Completed inbox tasks (2-minute rule) should not inflate inboxPercentage
+    expect(source).toMatch(/if \(inInbox && !completed\) totalInboxTasks/);
+    expect(source).not.toMatch(/if \(inInbox\) totalInboxTasks/);
+  });
+
   it('extractKeyFindings falls back to default message', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');

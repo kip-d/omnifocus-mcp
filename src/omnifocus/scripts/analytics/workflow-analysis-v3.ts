@@ -221,7 +221,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 });
               }
 
-              if (inInbox) totalInboxTasks++;
+              if (inInbox && !completed) totalInboxTasks++;
 
               totalEstimatedTime += estimatedMinutes;
 
