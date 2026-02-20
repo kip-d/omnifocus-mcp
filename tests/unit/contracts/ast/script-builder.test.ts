@@ -258,6 +258,20 @@ describe('buildTaskByIdScript', () => {
   });
 });
 
+describe('inInbox field projection', () => {
+  it('should use task.inInbox for inInbox field projection (not containingProject)', () => {
+    const result = buildFilteredTasksScript(
+      {},
+      {
+        fields: ['id', 'name', 'inInbox'],
+      },
+    );
+    // Must use native task.inInbox, NOT !task.containingProject
+    expect(result.script).toContain('inInbox: task.inInbox');
+    expect(result.script).not.toContain('inInbox: !task.containingProject');
+  });
+});
+
 describe('field projections for today mode', () => {
   it('generates reason field IIFE with default 3-day dueSoonDays', () => {
     const result = buildFilteredTasksScript({}, { fields: ['id', 'name', 'reason'] });

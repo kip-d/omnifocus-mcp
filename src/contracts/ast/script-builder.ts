@@ -99,7 +99,7 @@ function generateFieldProjection(fields: string[], context?: { dueSoonDays?: num
         projections.push('flagged: task.flagged || false');
         break;
       case 'inInbox':
-        projections.push('inInbox: !task.containingProject');
+        projections.push('inInbox: task.inInbox');
         break;
       case 'blocked':
         projections.push('blocked: task.taskStatus === Task.Status.Blocked');
