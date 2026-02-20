@@ -69,6 +69,15 @@ describe('WorkflowAnalysisTool', () => {
     expect(Array.isArray(res.summary.key_findings)).toBe(true);
   });
 
+  it('workflow analysis script should use task.inInbox for inbox detection', async () => {
+    const fs = await import('fs');
+    const source = fs.readFileSync('src/omnifocus/scripts/analytics/workflow-analysis-v3.ts', 'utf-8');
+    // Should NOT use the manual containingProject check for inbox
+    expect(source).not.toMatch(/const inInbox = task\.containingProject === null/);
+    // Should use the native OmniFocus property
+    expect(source).toMatch(/const inInbox = task\.inInbox/);
+  });
+
   it('extractKeyFindings falls back to default message', async () => {
     mockCache.get.mockReturnValue(null);
     mockOmni.buildScript.mockReturnValue('script');

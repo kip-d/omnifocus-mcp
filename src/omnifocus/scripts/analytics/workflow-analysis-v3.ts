@@ -173,7 +173,7 @@ export const WORKFLOW_ANALYSIS_V3 = `
                 Math.floor((nowTime - createdOrModified.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
               const estimatedMinutes = task.estimatedMinutes || 0;
-              const inInbox = task.containingProject === null;
+              const inInbox = task.inInbox;
 
               // Update counters - focus on workflow health
               if (overdueDays > 0) {
