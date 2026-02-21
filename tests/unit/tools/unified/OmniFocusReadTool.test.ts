@@ -2,7 +2,7 @@
  * Unit tests for OmniFocusReadTool routing logic.
  *
  * Tests task ID lookup, project query routing (inline AST execution),
- * and error handling in routeToTasksTool / routeToProjectsTool.
+ * export routing (inlined from ExportTool), and error handling.
  * Uses execJson spy to control script results without OmniAutomation dependency.
  */
 
@@ -13,6 +13,12 @@ import type { ScriptResult } from '../../../../src/omnifocus/script-result-types
 
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
+
+// Mock fs for bulk export tests
+vi.mock('fs', () => ({
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
 
 describe('OmniFocusReadTool', () => {
   let tool: OmniFocusReadTool;
@@ -248,6 +254,196 @@ describe('OmniFocusReadTool', () => {
       expect(proj.nextReviewDate).toBeInstanceOf(Date);
       // Null dates remain undefined
       expect(proj.completionDate).toBeUndefined();
+    });
+  });
+
+  // ─── Export (inlined from ExportTool) ─────────────────────────────
+
+  describe('export routing', () => {
+    describe('task export', () => {
+      it('returns exported tasks with AST-generated script', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [{ id: 't1', name: 'Test Task' }], count: 1 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks', format: 'json' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('json');
+        expect(result.data.exportType).toBe('tasks');
+        expect(result.data.count).toBe(1);
+        // Verify execJson was called with a generated script string
+        expect(execJsonSpy).toHaveBeenCalledTimes(1);
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        expect(typeof scriptArg).toBe('string');
+      });
+
+      it('passes filters through to export script', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'csv', data: 'id,name\nt1,Task1', count: 1 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: {
+            type: 'export',
+            exportType: 'tasks',
+            format: 'csv',
+            filters: { flagged: true },
+          },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('csv');
+        // The generated script should embed the flagged filter
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        expect(scriptArg).toContain('flagged');
+      });
+
+      it('returns error when task export script fails', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: false,
+          error: 'Export failed',
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks' },
+        })) as any;
+
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('TASK_EXPORT_FAILED');
+      });
+    });
+
+    describe('project export', () => {
+      it('returns exported projects via buildScript + execJson', async () => {
+        // Mock buildScript on the omniAutomation instance
+        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-project-export-script');
+
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [{ id: 'p1', name: 'Project 1' }], count: 1 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'projects', format: 'json', includeStats: true },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('json');
+        expect(result.data.exportType).toBe('projects');
+        expect(result.data.count).toBe(1);
+        expect(result.data.includeStats).toBe(true);
+        expect((tool as any).omniAutomation.buildScript).toHaveBeenCalledWith(expect.any(String), {
+          format: 'json',
+          includeStats: true,
+        });
+      });
+
+      it('returns error when project export script fails', async () => {
+        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-script');
+
+        execJsonSpy.mockResolvedValueOnce({
+          success: false,
+          error: 'Projects export failed',
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'projects' },
+        })) as any;
+
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('SCRIPT_ERROR');
+      });
+    });
+
+    describe('bulk export', () => {
+      it('requires outputDirectory for bulk export', async () => {
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'all' },
+        })) as any;
+
+        expect(result.success).toBe(false);
+        expect(result.error.code).toBe('MISSING_PARAMETER');
+        expect(result.error.message).toContain('outputDirectory is required');
+      });
+
+      it('exports tasks, projects, and tags to directory', async () => {
+        (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-project-export-script');
+
+        // First call: task export, second call: project export
+        execJsonSpy
+          .mockResolvedValueOnce({
+            success: true,
+            data: { format: 'json', data: [{ id: 't1' }], count: 1 },
+          } satisfies ScriptResult)
+          .mockResolvedValueOnce({
+            success: true,
+            data: { format: 'json', data: [{ id: 'p1' }], count: 1 },
+          } satisfies ScriptResult);
+
+        // Mock TagsTool.execute (accessed via this.tagsTool)
+        const mockTagsTool = (tool as any).tagsTool;
+        vi.spyOn(mockTagsTool, 'execute').mockResolvedValueOnce({
+          success: true,
+          data: { items: [{ id: 'tag1', name: 'Work' }] },
+          metadata: { total_count: 1 },
+        });
+
+        const result = (await tool.execute({
+          query: {
+            type: 'export',
+            exportType: 'all',
+            format: 'json',
+            outputDirectory: '/tmp/export-test',
+            includeCompleted: true,
+            includeStats: true,
+          },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.exports).toBeDefined();
+        expect(result.data.exports.tasks).toBeDefined();
+        expect(result.data.exports.tasks.exported).toBe(true);
+        expect(result.data.exports.projects).toBeDefined();
+        expect(result.data.exports.projects.exported).toBe(true);
+        expect(result.data.exports.tags).toBeDefined();
+        expect(result.data.exports.tags.exported).toBe(true);
+        expect(result.data.summary.totalExported).toBeGreaterThan(0);
+      });
+    });
+
+    describe('defaults', () => {
+      it('defaults to task export when exportType is not specified', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [], count: 0 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.exportType).toBe('tasks');
+      });
+
+      it('defaults to json format when format is not specified', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [], count: 0 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.format).toBe('json');
+      });
     });
   });
 });

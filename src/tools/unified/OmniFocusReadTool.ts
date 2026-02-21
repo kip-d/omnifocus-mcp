@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
@@ -6,15 +7,20 @@ import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 import {
   buildTaskCountScript,
   buildFilteredProjectsScript,
+  buildExportTasksScript,
   DEFAULT_FIELDS,
+  type ExportFilter,
 } from '../../contracts/ast/script-builder.js';
+import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
 import {
   createTaskResponseV2,
   createListResponseV2,
   createErrorResponseV2,
+  createSuccessResponseV2,
   OperationTimerV2,
 } from '../../utils/response-format.js';
+import type { ExportDataV2 } from '../response-types-v2.js';
 import type { TaskFilter, ProjectFilter } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
@@ -29,7 +35,6 @@ import {
 import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
-import { ExportTool } from '../export/ExportTool.js';
 
 /**
  * Post-hoc field projection for project query results.
@@ -173,7 +178,6 @@ PERFORMANCE:
   private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
   private foldersTool: FoldersTool;
-  private exportTool: ExportTool;
 
   constructor(cache: CacheManager) {
     super(cache);
@@ -183,7 +187,6 @@ PERFORMANCE:
     this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
     this.foldersTool = new FoldersTool(cache);
-    this.exportTool = new ExportTool(cache);
   }
 
   async executeValidated(args: ReadInput): Promise<unknown> {
@@ -495,44 +498,269 @@ PERFORMANCE:
     return this.foldersTool.execute({ operation: 'list' });
   }
 
+  // =============================================================================
+  // EXPORT (inlined from ExportTool)
+  // =============================================================================
+
   private async routeToExportTool(compiled: CompiledQuery): Promise<unknown> {
-    // Map compiled query to ExportTool parameters
-    const exportArgs: Record<string, unknown> = {
-      type: compiled.exportType || 'tasks', // Default to tasks export
-      format: compiled.format || 'json',
+    const exportType = compiled.exportType || 'tasks';
+    const format = (compiled.format || 'json') as 'json' | 'csv' | 'markdown';
+    const timer = new OperationTimerV2();
+
+    try {
+      switch (exportType) {
+        case 'tasks':
+          return await this.handleTaskExport(compiled, format, timer);
+        case 'projects':
+          return await this.handleProjectExport(format, compiled.includeStats ?? false, timer);
+        case 'all':
+          return await this.handleBulkExport(compiled, format, timer);
+        default:
+          return createErrorResponseV2(
+            'export',
+            'INVALID_TYPE',
+            `Invalid export type: ${String(exportType)}`,
+            undefined,
+            { type: exportType },
+            timer.toMetadata(),
+          );
+      }
+    } catch (error) {
+      return this.handleErrorV2<ExportDataV2>(error);
+    }
+  }
+
+  private async handleTaskExport(
+    compiled: CompiledQuery,
+    format: 'json' | 'csv' | 'markdown',
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    // Build ExportFilter from compiled query filters
+    const exportFilter: ExportFilter = {
+      available: compiled.filters.available,
+      completed: compiled.filters.completed,
+      flagged: compiled.filters.flagged,
+      project: undefined, // export filter uses project name, not in compiled.filters
+      projectId: compiled.filters.projectId,
+      tags: compiled.filters.tags,
+      tagsOperator: compiled.filters.tagsOperator as ExportFilter['tagsOperator'],
+      search: compiled.filters.search,
+    };
+    const limit = compiled.limit || 1000;
+
+    const { script } = buildExportTasksScript(exportFilter, {
+      limit,
+      fields: compiled.exportFields,
+      format,
+    });
+
+    const result = await this.execJson(script);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'export',
+        'TASK_EXPORT_FAILED',
+        result.error || 'Failed to export tasks',
+        undefined,
+        { format, filter: exportFilter },
+        timer.toMetadata(),
+      );
+    }
+
+    if (isScriptSuccess(result)) {
+      const data = result.data as { format: string; data: unknown; count: number };
+      return createSuccessResponseV2(
+        'export',
+        {
+          format: data.format as 'json' | 'csv' | 'markdown',
+          exportType: 'tasks' as const,
+          data: data.data as string | object,
+          count: data.count,
+        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'tasks' },
+      );
+    }
+
+    return createErrorResponseV2(
+      'export',
+      'UNEXPECTED_RESULT',
+      'Unexpected script result format',
+      undefined,
+      { result },
+      timer.toMetadata(),
+    );
+  }
+
+  private async handleProjectExport(
+    format: 'json' | 'csv' | 'markdown',
+    includeStats: boolean,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const script = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
+      format,
+      includeStats,
+    });
+    const result = await this.execJson(script);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'export',
+        'SCRIPT_ERROR',
+        result.error || 'Script error during project export',
+        'Check error details',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (isScriptSuccess(result)) {
+      const data = result.data as { format: string; data: unknown; count: number };
+      return createSuccessResponseV2(
+        'export',
+        {
+          format: data.format as 'json' | 'csv' | 'markdown',
+          exportType: 'projects' as const,
+          data: data.data as string | object,
+          count: data.count,
+          includeStats,
+        },
+        undefined,
+        { ...timer.toMetadata(), operation: 'projects' },
+      );
+    }
+
+    return createErrorResponseV2(
+      'export',
+      'UNEXPECTED_RESULT',
+      'Unexpected script result format',
+      undefined,
+      { result },
+      timer.toMetadata(),
+    );
+  }
+
+  private async handleBulkExport(
+    compiled: CompiledQuery,
+    format: 'json' | 'csv' | 'markdown',
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const outputDirectory = compiled.outputDirectory;
+    if (!outputDirectory) {
+      return createErrorResponseV2(
+        'export',
+        'MISSING_PARAMETER',
+        'outputDirectory is required for type="all"',
+        undefined,
+        { type: 'all' },
+        timer.toMetadata(),
+      );
+    }
+
+    const includeCompleted = compiled.includeCompleted ?? true;
+    const includeProjectStats = compiled.includeStats ?? true;
+
+    // Ensure directory exists
+    try {
+      const fsSync = await import('fs');
+      fsSync.mkdirSync(outputDirectory, { recursive: true });
+    } catch (mkdirError) {
+      return createErrorResponseV2(
+        'export',
+        'MKDIR_FAILED',
+        `Failed to create directory: ${String(mkdirError)}`,
+        undefined,
+        { outputDirectory, error: String(mkdirError) },
+        timer.toMetadata(),
+      );
+    }
+
+    const exports: Record<
+      string,
+      {
+        format: string;
+        task_count?: number;
+        project_count?: number;
+        tag_count?: number;
+        exported: boolean;
+      }
+    > = {};
+    let totalExported = 0;
+
+    // Export tasks using AST-powered script
+    const taskExportFilter: ExportFilter = includeCompleted ? {} : { completed: false };
+    const { script: taskScript } = buildExportTasksScript(taskExportFilter, {
+      format,
+      limit: 5000,
+    });
+    const taskResult = await this.execJson(taskScript);
+
+    if (isScriptSuccess(taskResult)) {
+      const taskData = taskResult.data as { data?: unknown; count?: number };
+      const taskFile = path.join(outputDirectory, `tasks.${format}`);
+      const taskCount = taskData.count || 0;
+
+      const payload = taskData.data;
+      const toWrite = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+      const fsSync = await import('fs');
+      fsSync.writeFileSync(taskFile, toWrite, 'utf-8');
+
+      exports.tasks = { format, task_count: taskCount, exported: true };
+      totalExported += taskCount;
+    }
+
+    // Export projects
+    const projectScript = this.omniAutomation.buildScript(EXPORT_PROJECTS_SCRIPT, {
+      format,
+      includeStats: includeProjectStats,
+    });
+    const projectResult = await this.execJson(projectScript);
+
+    if (isScriptSuccess(projectResult)) {
+      const projData = projectResult.data as { data?: unknown; count?: number };
+      const projectFile = path.join(outputDirectory, `projects.${format}`);
+      const projectCount = projData.count || 0;
+
+      const ppayload = projData.data;
+      const pwrite = typeof ppayload === 'string' ? ppayload : JSON.stringify(ppayload, null, 2);
+      const fsSync = await import('fs');
+      fsSync.writeFileSync(projectFile, pwrite, 'utf-8');
+
+      exports.projects = { format, project_count: projectCount, exported: true };
+      totalExported += projectCount;
+    }
+
+    // Export tags (JSON only)
+    const tagResult = (await this.tagsTool.execute({ includeEmpty: true })) as {
+      success?: boolean;
+      data?: { items?: unknown[]; tags?: unknown[] };
+      metadata?: { total_count?: number };
     };
 
-    // Map filters to export filter format
-    if (compiled.filters && Object.keys(compiled.filters).length > 0) {
-      const filter: Record<string, unknown> = {};
-      if (compiled.filters.search) filter.search = compiled.filters.search;
-      if (compiled.filters.projectId) filter.projectId = compiled.filters.projectId;
-      if (compiled.filters.tags) filter.tags = compiled.filters.tags;
-      if (compiled.filters.flagged !== undefined) filter.flagged = compiled.filters.flagged;
-      if (compiled.filters.completed !== undefined) filter.completed = compiled.filters.completed;
-      if (compiled.filters.available !== undefined) filter.available = compiled.filters.available;
-      if (compiled.limit) filter.limit = compiled.limit;
-      exportArgs.filter = filter;
+    if (tagResult && tagResult.success && tagResult.data) {
+      const tagFile = path.join(outputDirectory, 'tags.json');
+      const tagItems = tagResult.data.items || tagResult.data.tags || [];
+      const tagCount = tagResult.metadata?.total_count || (tagItems as unknown[]).length;
+
+      const fsSync = await import('fs');
+      fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');
+
+      exports.tags = { format: 'json', tag_count: tagCount, exported: true };
+      totalExported += tagCount;
     }
 
-    // Pass export-specific fields
-    if (compiled.exportFields) {
-      exportArgs.fields = compiled.exportFields;
-    }
-
-    // Project export options
-    if (compiled.includeStats !== undefined) {
-      exportArgs.includeStats = compiled.includeStats;
-    }
-
-    // Bulk export options
-    if (compiled.outputDirectory) {
-      exportArgs.outputDirectory = compiled.outputDirectory;
-    }
-    if (compiled.includeCompleted !== undefined) {
-      exportArgs.includeCompleted = compiled.includeCompleted;
-    }
-
-    return this.exportTool.execute(exportArgs);
+    return createSuccessResponseV2(
+      'export',
+      {
+        format,
+        exportType: 'bulk' as const,
+        data: exports,
+        count: totalExported,
+        exports,
+        summary: { totalExported, export_date: new Date().toISOString() },
+      },
+      undefined,
+      { ...timer.toMetadata(), operation: 'all' },
+    );
   }
 }
