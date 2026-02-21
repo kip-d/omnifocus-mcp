@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BatchItemSchema, BatchCreateSchema } from '../../../../src/tools/batch/batch-schemas.js';
+import { BatchItemSchema, BatchCreateSchema } from '../../../../src/tools/unified/schemas/batch-schemas.js';
 
 describe('BatchItemSchema', () => {
   describe('task items — field preservation', () => {

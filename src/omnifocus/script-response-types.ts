@@ -148,7 +148,7 @@ export interface WorkflowAnalysisData {
   };
 }
 
-// Review data for ManageReviewsTool
+// Review data for OmniFocusAnalyzeTool manage_reviews
 export interface ReviewProjectData {
   id: string;
   name: string;
@@ -162,7 +162,7 @@ export interface ReviewListData {
   count?: number;
 }
 
-// Task creation/update structures for ManageTaskTool
+// Task creation/update structures for OmniFocusWriteTool
 export interface TaskCreationArgs {
   name: string;
   note?: string;

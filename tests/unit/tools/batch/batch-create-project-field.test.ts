@@ -1,12 +1,15 @@
 /**
- * Unit test for BatchCreateTool using project field on task items.
+ * Unit test for batch create using project field on task items.
  *
  * Regression test: batch create with project field should pass the
  * project through to the script builder, not silently drop it.
+ *
+ * Previously tested via BatchCreateTool; now tests the same logic
+ * inlined in OmniFocusWriteTool.
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { BatchCreateTool } from '../../../../src/tools/batch/BatchCreateTool.js';
+import { OmniFocusWriteTool } from '../../../../src/tools/unified/OmniFocusWriteTool.js';
 import * as scriptBuilder from '../../../../src/contracts/ast/mutation-script-builder.js';
 
 class StubCache {
@@ -14,12 +17,14 @@ class StubCache {
   invalidateProject(): void {}
   invalidateTag(): void {}
   invalidateTaskQueries(): void {}
+  invalidateForTaskChange(): void {}
+  clear(): void {}
 }
 
-describe('BatchCreateTool project field', () => {
+describe('Batch create project field', () => {
   it('should pass project field to buildCreateTaskScript when provided', async () => {
     const cache = new StubCache();
-    const tool = new BatchCreateTool(cache as any);
+    const tool = new OmniFocusWriteTool(cache as any);
 
     // Spy on buildCreateTaskScript to capture the TaskCreateData
     const spy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
@@ -36,18 +41,21 @@ describe('BatchCreateTool project field', () => {
     });
 
     await tool.execute({
-      items: [
-        {
-          type: 'task' as const,
-          tempId: 'task1',
-          name: 'Test task',
-          project: 'My Existing Project',
-        },
-      ],
-      createSequentially: true,
-      atomicOperation: false,
-      returnMapping: true,
-      stopOnError: true,
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task1',
+              name: 'Test task',
+              project: 'My Existing Project',
+            },
+          },
+        ],
+      },
     });
 
     // Verify buildCreateTaskScript was called with project in TaskCreateData
@@ -60,9 +68,9 @@ describe('BatchCreateTool project field', () => {
 
   it('should prefer parentTempId over project field when both present', async () => {
     const cache = new StubCache();
-    const tool = new BatchCreateTool(cache as any);
+    const tool = new OmniFocusWriteTool(cache as any);
 
-    const spy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+    const taskSpy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
       script: 'mock script',
       operation: 'create',
       target: 'task',
@@ -88,31 +96,37 @@ describe('BatchCreateTool project field', () => {
       });
 
     await tool.execute({
-      items: [
-        {
-          type: 'project' as const,
-          tempId: 'proj1',
-          name: 'Batch Project',
-        },
-        {
-          type: 'task' as const,
-          tempId: 'task1',
-          name: 'Child task',
-          parentTempId: 'proj1',
-          project: 'Some Other Project',
-        },
-      ],
-      createSequentially: true,
-      atomicOperation: false,
-      returnMapping: true,
-      stopOnError: true,
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'project',
+            data: {
+              tempId: 'proj1',
+              name: 'Batch Project',
+            },
+          },
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'task1',
+              name: 'Child task',
+              parentTempId: 'proj1',
+              project: 'Some Other Project',
+            },
+          },
+        ],
+      },
     });
 
     // parentTempId resolved to project ID should take precedence
-    expect(spy).toHaveBeenCalledOnce();
-    const taskCreateData = spy.mock.calls[0][0];
+    expect(taskSpy).toHaveBeenCalledOnce();
+    const taskCreateData = taskSpy.mock.calls[0][0];
     expect(taskCreateData).toHaveProperty('project', 'real-project-id');
 
-    spy.mockRestore();
+    taskSpy.mockRestore();
   });
 });

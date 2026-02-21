@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { buildListTasksScriptV4 } from '../../src/omnifocus/scripts/tasks.js';
 import { buildUpdateTaskScript } from '../../src/contracts/ast/mutation-script-builder.js';
 import { buildFilteredProjectsScript } from '../../src/contracts/ast/script-builder.js';
@@ -66,7 +66,7 @@ describe('Performance Optimization Tests', () => {
       expect(generatedScript.script).toContain('Task.byIdentifier');
     });
 
-    // Note: Project update is now handled through ManageTaskTool with target:'project'
+    // Note: Project update is handled through OmniFocusWriteTool with target:'project'
     // The old UPDATE_PROJECT_SCRIPT was removed as it was never connected to any tool
   });
 });

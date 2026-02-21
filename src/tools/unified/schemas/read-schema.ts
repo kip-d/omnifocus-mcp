@@ -160,7 +160,7 @@ const SortFieldEnum = z.enum([
   'completionDate',
 ]);
 
-// Sort options (matches backend QueryTasksTool schema which uses 'direction')
+// Sort options (uses 'direction' for sort order)
 const SortSchema = z.object({
   field: SortFieldEnum,
   direction: z.enum(['asc', 'desc']),
@@ -172,7 +172,7 @@ const ExportFormatEnum = z.enum(['json', 'csv', 'markdown']);
 // Export type enum (what to export)
 const ExportTypeEnum = z.enum(['tasks', 'projects', 'all']);
 
-// Export field selection (matches ExportTool schema)
+// Export field selection (used by inline export in OmniFocusReadTool)
 const ExportFieldEnum = z.enum([
   'id',
   'name',

@@ -1,10 +1,10 @@
 /**
- * Task Query Pipeline - Reusable functions extracted from QueryTasksTool
+ * Task Query Pipeline - Reusable functions for task query processing
  *
  * These functions form the composable pipeline for task queries:
  *   filter → build script → execute → parse → sort → project fields
  *
- * Used by both QueryTasksTool (legacy path) and OmniFocusReadTool (direct path).
+ * Used by OmniFocusReadTool (unified read path).
  */
 
 import type { OmniFocusTask } from '../../omnifocus/types.js';

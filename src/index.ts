@@ -89,7 +89,7 @@ export async function runServer() {
       projects: true,
       tags: true,
       tasks: true,
-      perspectives: true, // Fast operation (~340ms), high value for enhanced PerspectivesTool
+      perspectives: true, // Fast operation (~340ms), high value for perspective listing
     },
     taskWarmingOptions: {
       today: true,
@@ -143,7 +143,8 @@ async function runStdioServer(cacheManager: CacheManager) {
     {
       name: 'omnifocus-mcp-cached',
       version: versionInfo.version,
-      description: 'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
+      description:
+        'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
       websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
     },
     {
