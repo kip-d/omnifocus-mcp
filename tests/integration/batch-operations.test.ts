@@ -23,12 +23,12 @@ const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
  * Response shape from routeToBatch():
  *
  * Success:
- *   { success: true, data: { operation, summary, results: { created: [BatchCreateTool response], ... }, tempIdMapping }, metadata }
+ *   { success: true, data: { operation, summary, results: { created: [OmniFocusWriteTool batch handler response], ... }, tempIdMapping }, metadata }
  *
  * Error (validation failure in creates):
- *   { success: false, data: { operation, summary, results: { ..., errors: [BatchCreateTool error response] } }, metadata }
+ *   { success: false, data: { operation, summary, results: { ..., errors: [OmniFocusWriteTool batch handler error response] } }, metadata }
  *
- * The BatchCreateTool response nested inside results.created[0] has its own shape:
+ * The OmniFocusWriteTool batch handler response nested inside results.created[0] has its own shape:
  *   { success: true, data: { success, created, failed, totalItems, results: [{ tempId, realId, success, type }], mapping }, metadata }
  */
 
@@ -112,7 +112,7 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(response).toHaveProperty('success', true);
     expect(response.data.summary.created).toBe(1);
 
-    // BatchCreateTool result is nested inside results.created[0]
+    // OmniFocusWriteTool batch handler result is nested inside results.created[0]
     const createResult = response.data.results.created[0];
     expect(createResult.success).toBe(true);
     expect(createResult.data.results[0].realId).toBeTruthy();
@@ -154,7 +154,7 @@ d('Batch Operations Integration (Unified API)', () => {
 
     expect(response).toHaveProperty('success', true);
     expect(response.data.summary.created).toBe(2);
-    // The inner BatchCreateTool response has the individual item results
+    // The inner OmniFocusWriteTool batch handler response has the individual item results
     expect(response.data.results.created[0].data.results).toHaveLength(2);
   }, 30000);
 
@@ -282,7 +282,7 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // tempIdMapping is at the top level of data (merged from BatchCreateTool)
+    // tempIdMapping is at the top level of data (merged from OmniFocusWriteTool batch handler)
     expect(response.data).toHaveProperty('tempIdMapping');
     expect(response.data.tempIdMapping).toHaveProperty('proj6');
     expect(response.data.tempIdMapping!.proj6).toBeTruthy();
@@ -329,11 +329,11 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // routeToBatch detects BatchCreateTool's validation error and propagates it
+    // routeToBatch detects OmniFocusWriteTool batch handler's validation error and propagates it
     expect(response).toHaveProperty('success', false);
     expect(response.data.summary.errors).toBeGreaterThan(0);
 
-    // The validation error from BatchCreateTool is in results.errors
+    // The validation error from OmniFocusWriteTool batch handler is in results.errors
     const errorResult = response.data.results.errors[0];
     expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
     expect(errorResult.error?.message).toContain('nonexistent');
@@ -371,11 +371,11 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // routeToBatch detects BatchCreateTool's validation error and propagates it
+    // routeToBatch detects OmniFocusWriteTool batch handler's validation error and propagates it
     expect(response).toHaveProperty('success', false);
     expect(response.data.summary.errors).toBeGreaterThan(0);
 
-    // The circular dependency error from BatchCreateTool is in results.errors
+    // The circular dependency error from OmniFocusWriteTool batch handler is in results.errors
     const errorResult = response.data.results.errors[0];
     expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
     expect(errorResult.error?.message).toContain('Circular');
