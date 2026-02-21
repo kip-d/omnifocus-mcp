@@ -33,7 +33,8 @@ import {
   countTodayCategories,
   type TaskQueryMode,
 } from '../tasks/task-query-pipeline.js';
-import { TagsTool } from '../tags/TagsTool.js';
+import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
+import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 
 /**
@@ -175,7 +176,6 @@ PERFORMANCE:
   };
 
   private compiler: QueryCompiler;
-  private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
 
   constructor(cache: CacheManager) {
@@ -183,7 +183,6 @@ PERFORMANCE:
     this.compiler = new QueryCompiler();
 
     // Instantiate existing tools for routing (non-task types)
-    this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
   }
 
@@ -485,7 +484,54 @@ PERFORMANCE:
   }
 
   private async routeToTagsTool(_compiled: CompiledQuery): Promise<unknown> {
-    return this.tagsTool.execute({ operation: 'list' });
+    const timer = new OperationTimerV2();
+
+    // Check cache
+    const cacheKey = 'list:name:true:false:false:true:false';
+    const cached = this.cache.get<{
+      tags?: unknown[];
+      items?: unknown[];
+      count?: number;
+    }>('tags', cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Build and execute AST-powered tag list script (basic mode, defaults)
+    const tagOptions: TagQueryOptions = {
+      mode: 'basic' as TagQueryMode,
+      includeEmpty: true,
+      sortBy: 'name' as TagSortBy,
+    };
+    const generatedScript = buildTagsScript(tagOptions);
+    const result = await this.execJson(generatedScript.script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tags',
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || 'Failed to list tags',
+        'Check OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Unwrap AST envelope: {ok: true, v: "ast", items: [...], summary: {...}}
+    const envelope = result.data as { ok?: boolean; v?: string; items?: unknown[]; summary?: { total?: number } };
+    const items = envelope.items || [];
+    const total = envelope.summary?.total ?? items.length;
+
+    const response = createListResponseV2('tags', items, 'tags', {
+      ...timer.toMetadata(),
+      total,
+      operation: 'list',
+      mode: 'ast_unified',
+    });
+
+    // Cache the result
+    this.cache.set('tags', cacheKey, response);
+    return response;
   }
 
   private async routeToPerspectivesTool(_compiled: CompiledQuery): Promise<unknown> {
@@ -766,17 +812,19 @@ PERFORMANCE:
       totalExported += projectCount;
     }
 
-    // Export tags (JSON only)
-    const tagResult = (await this.tagsTool.execute({ includeEmpty: true })) as {
-      success?: boolean;
-      data?: { items?: unknown[]; tags?: unknown[] };
-      metadata?: { total_count?: number };
-    };
+    // Export tags (JSON only) via AST builder
+    const tagGeneratedScript = buildTagsScript({
+      mode: 'basic' as TagQueryMode,
+      includeEmpty: true,
+      sortBy: 'name' as TagSortBy,
+    });
+    const tagResult = await this.execJson(tagGeneratedScript.script);
 
-    if (tagResult && tagResult.success && tagResult.data) {
+    if (isScriptSuccess(tagResult)) {
+      const tagEnvelope = tagResult.data as { items?: unknown[]; summary?: { total?: number } };
+      const tagItems = tagEnvelope.items || [];
+      const tagCount = tagEnvelope.summary?.total ?? tagItems.length;
       const tagFile = path.join(outputDirectory, 'tags.json');
-      const tagItems = tagResult.data.items || tagResult.data.tags || [];
-      const tagCount = tagResult.metadata?.total_count || (tagItems as unknown[]).length;
 
       const fsSync = await import('fs');
       fsSync.writeFileSync(tagFile, JSON.stringify(tagItems, null, 2), 'utf-8');

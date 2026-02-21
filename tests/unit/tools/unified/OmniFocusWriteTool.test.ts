@@ -565,6 +565,171 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  // ─── TAG MANAGEMENT (inlined from TagsTool) ────────────────────────
+
+  describe('tag management', () => {
+    it('executes tag rename via MANAGE_TAGS_SCRIPT and invalidates cache', async () => {
+      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
+
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          ok: true,
+          v: '1',
+          data: { success: true, action: 'rename', tagName: 'OldTag', newName: 'NewTag' },
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'rename',
+          tagName: 'OldTag',
+          newName: 'NewTag',
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.action).toBe('rename');
+      expect(result.data.tagName).toBe('OldTag');
+      expect(result.data.newName).toBe('NewTag');
+      // Both old and new names should be invalidated
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('OldTag');
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('NewTag');
+    });
+
+    it('executes tag merge and invalidates both tag caches', async () => {
+      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
+
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          ok: true,
+          v: '1',
+          data: { success: true, action: 'merge', message: 'Merged SourceTag into TargetTag' },
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'merge',
+          tagName: 'SourceTag',
+          targetTag: 'TargetTag',
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.action).toBe('merge');
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('SourceTag');
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('TargetTag');
+    });
+
+    it('maps unnest action to unparent', async () => {
+      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
+
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          ok: true,
+          v: '1',
+          data: { success: true, action: 'unparent' },
+        },
+      });
+
+      await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'unnest',
+          tagName: 'ChildTag',
+        },
+      });
+
+      // Verify buildScript was called with 'unparent' (not 'unnest')
+      expect((tool as any).omniAutomation.buildScript).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ action: 'unparent' }),
+      );
+    });
+
+    it('returns error when newName is missing for rename', async () => {
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'rename',
+          tagName: 'SomeTag',
+          // newName intentionally missing
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('MISSING_PARAMETER');
+      expect(result.error.message).toContain('newName is required');
+    });
+
+    it('returns error when targetTag is missing for merge', async () => {
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'merge',
+          tagName: 'SomeTag',
+          // targetTag intentionally missing
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('MISSING_PARAMETER');
+      expect(result.error.message).toContain('targetTag is required');
+    });
+
+    it('handles script errors for tag management', async () => {
+      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
+
+      execJsonSpy.mockResolvedValue({
+        success: false,
+        error: 'Tag not found',
+        details: 'Tag "NonExistent" could not be located',
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'delete',
+          tagName: 'NonExistent',
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('creates a tag successfully', async () => {
+      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
+
+      execJsonSpy.mockResolvedValue({
+        success: true,
+        data: {
+          ok: true,
+          v: '1',
+          data: { success: true, action: 'create', tagName: 'NewTag' },
+        },
+      });
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'tag_manage',
+          action: 'create',
+          tagName: 'NewTag',
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.action).toBe('create');
+      expect(result.data.tagName).toBe('NewTag');
+      expect(mockCache.invalidateTag).toHaveBeenCalledWith('NewTag');
+    });
+  });
+
   // ─── ERROR CASES ────────────────────────────────────────────────────
 
   describe('error cases', () => {

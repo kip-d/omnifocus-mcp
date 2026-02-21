@@ -7,12 +7,13 @@
 
 import { CacheManager } from './CacheManager.js';
 import { createLogger } from '../utils/logger.js';
-import { TagsTool } from '../tools/tags/TagsTool.js';
 import { OmniFocusReadTool } from '../tools/unified/OmniFocusReadTool.js';
 import { PerspectivesTool } from '../tools/perspectives/PerspectivesTool.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
 import { WARM_PROJECTS_CACHE_SCRIPT } from '../omnifocus/scripts/cache/warm-projects-cache.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
+import { buildTagsScript } from '../contracts/ast/tag-script-builder.js';
+import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../contracts/tag-options.js';
 
 const logger = createLogger('cache-warmer');
 
@@ -276,7 +277,7 @@ export class CacheWarmer {
   }
 
   /**
-   * Warm tags cache with active tags
+   * Warm tags cache with active tags using AST builder directly
    */
   private async warmTags(): Promise<WarmingResult> {
     const operation = 'tags';
@@ -285,25 +286,28 @@ export class CacheWarmer {
     try {
       logger.debug('Warming tags cache...');
 
-      const tagsTool = new TagsTool(this.cache);
+      // Use AST builder directly (no TagsTool dependency)
+      const tagOptions: TagQueryOptions = {
+        mode: 'full' as TagQueryMode,
+        includeEmpty: true,
+        sortBy: 'name' as TagSortBy,
+        includeUsageStats: false,
+      };
+      const generatedScript = buildTagsScript(tagOptions);
 
-      // Only warm the main tags list (full mode with OmniJS bridge)
-      // Note: fastMode=false uses OmniJS bridge (10x faster), fastMode=true uses slow JXA
-      // Skip active tags warming - uses slow JXA, will be cached on first request
       await this.warmSingleOperation('tags', 'list:name:true:false:false:false:false', async () => {
-        const result = await tagsTool.execute({
-          operation: 'list',
-          sortBy: 'name',
-          includeEmpty: true,
-          includeUsageStats: false, // Skip expensive task counting during cache warming
-          includeTaskCounts: false,
-          fastMode: false, // Full mode uses OmniJS bridge (fastMode=true is ironically slower)
-          namesOnly: false,
-        });
-        if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
-          return result.success ? result.data : null;
+        const omni = new OmniAutomation();
+        const result = await omni.execute<{
+          ok: boolean;
+          items?: unknown[];
+          summary?: { total?: number };
+        }>(generatedScript.script);
+
+        if (!result.ok) {
+          throw new Error('Tag cache warming failed');
         }
-        return null;
+
+        return result.items || [];
       });
 
       const duration = Date.now() - startTime;

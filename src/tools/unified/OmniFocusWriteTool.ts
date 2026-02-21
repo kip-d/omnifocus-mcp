@@ -5,7 +5,7 @@ import { MutationCompiler, type CompiledMutation } from './compilers/MutationCom
 import { TempIdResolver } from './utils/tempid-resolver.js';
 import { DependencyGraph, DependencyGraphError } from './utils/dependency-graph.js';
 import type { BatchItem } from './schemas/batch-schemas.js';
-import { TagsTool } from '../tags/TagsTool.js';
+import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TaskId } from '../../utils/branded-types.js';
 import {
@@ -112,18 +112,16 @@ SAFETY:
   };
 
   private compiler: MutationCompiler;
-  private tagsTool: TagsTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new MutationCompiler();
-    this.tagsTool = new TagsTool(cache);
   }
 
   async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
-    // Route tag_manage operations to TagsTool
+    // Route tag_manage operations to inline tag management handler
     if (compiled.operation === 'tag_manage') {
       return this.routeToTagsTool(compiled);
     }
@@ -1511,28 +1509,113 @@ SAFETY:
   }
 
   private async routeToTagsTool(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
-    // Map unified API action to TagsTool action
-    // 'unnest' in unified API maps to 'unparent' in TagsTool
-    const tagsAction = compiled.action === 'unnest' ? 'unparent' : compiled.action;
+    const timer = new OperationTimerV2();
 
-    const tagsArgs: Record<string, unknown> = {
-      operation: 'manage',
-      action: tagsAction,
-      tagName: compiled.tagName,
-    };
+    // Map unified API action to script action
+    // 'unnest' in unified API maps to 'unparent' in manage script
+    const action = compiled.action === 'unnest' ? 'unparent' : compiled.action;
+    const tagName = compiled.tagName;
+    const newName = compiled.newName;
+    const targetTag = compiled.targetTag;
+    const parentTagName = compiled.parentTag;
 
-    // Add optional parameters based on action
-    if (compiled.newName) {
-      tagsArgs.newName = compiled.newName;
-    }
-    if (compiled.targetTag) {
-      tagsArgs.targetTag = compiled.targetTag;
-    }
-    if (compiled.parentTag) {
-      tagsArgs.parentTagName = compiled.parentTag;
+    // Validate required parameters
+    if (!action) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'action is required for manage operation',
+        undefined,
+        { operation: 'manage' },
+        timer.toMetadata(),
+      );
     }
 
-    return this.tagsTool.execute(tagsArgs);
+    if (!tagName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'tagName is required for manage operation',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    // Validate action-specific requirements
+    if (action === 'rename' && !newName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'newName is required for rename action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    if (action === 'merge' && !targetTag) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'targetTag is required for merge action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    // Execute manage tags script
+    const script = this.omniAutomation.buildScript(MANAGE_TAGS_SCRIPT, {
+      action,
+      tagName,
+      newName,
+      targetTag,
+      parentTagName,
+      parentTagId: undefined,
+      mutuallyExclusive: undefined,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tags',
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || 'Tag management failed',
+        'Verify tag names and hierarchy constraints',
+        isScriptError(result) ? { operation: 'manage', action, tagName, details: result.details } : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Unwrap double-wrapped data structure
+    const envelope = result.data as unknown;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && (envelope as { data?: unknown }).data
+        ? (envelope as { data: unknown }).data
+        : envelope;
+
+    // Smart cache invalidation for tag changes
+    this.cache.invalidateTag(tagName);
+    if (action === 'rename' && newName) {
+      this.cache.invalidateTag(newName);
+    }
+    if (action === 'merge' && targetTag) {
+      this.cache.invalidateTag(targetTag);
+    }
+
+    return createSuccessResponseV2(
+      'tags',
+      {
+        action,
+        tagName,
+        ...(newName && { newName }),
+        ...(targetTag && { targetTag }),
+        result: parsedResult as { success: boolean; message?: string; data?: unknown },
+      },
+      undefined,
+      { ...timer.toMetadata(), operation: 'manage', action },
+    );
   }
 
   // ─── Preview methods (unchanged) ───────────────────────────────────

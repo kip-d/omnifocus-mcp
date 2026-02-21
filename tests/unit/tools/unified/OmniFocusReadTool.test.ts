@@ -257,6 +257,103 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── Tag listing (inlined from TagsTool) ─────────────────────────
+
+  describe('tag listing', () => {
+    it('returns tags from direct AST execution', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          ok: true,
+          v: 'ast',
+          items: [
+            { id: 'tag1', name: 'Work' },
+            { id: 'tag2', name: 'Personal' },
+          ],
+          summary: { total: 2 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tags' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tags).toHaveLength(2);
+      expect(result.data.tags[0].id).toBe('tag1');
+      expect(result.data.tags[1].id).toBe('tag2');
+    });
+
+    it('handles script errors for tag queries', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'OmniFocus not running',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tags' },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('caches tag results and returns from cache on hit', async () => {
+      const cachedResponse = {
+        success: true,
+        data: { tags: [{ id: 'cached-tag', name: 'Cached' }] },
+      };
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValue(cachedResponse);
+
+      const result = (await tool.execute({
+        query: { type: 'tags' },
+      })) as any;
+
+      // Cached response returned as-is
+      expect(result.success).toBe(true);
+      expect(result.data.tags).toEqual(cachedResponse.data.tags);
+      // execJson should not be called when cache hits
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('stores results in cache after fresh query', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          ok: true,
+          v: 'ast',
+          items: [{ id: 'tag1', name: 'Fresh Tag' }],
+          summary: { total: 1 },
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tags' },
+      });
+
+      expect(mockCache.set).toHaveBeenCalledWith('tags', expect.any(String), expect.any(Object));
+    });
+
+    it('handles empty tag list', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          ok: true,
+          v: 'ast',
+          items: [],
+          summary: { total: 0 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tags' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.tags).toHaveLength(0);
+    });
+  });
+
   // ─── Export (inlined from ExportTool) ─────────────────────────────
 
   describe('export routing', () => {
@@ -374,7 +471,7 @@ describe('OmniFocusReadTool', () => {
       it('exports tasks, projects, and tags to directory', async () => {
         (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-project-export-script');
 
-        // First call: task export, second call: project export
+        // First call: task export, second call: project export, third call: tag export (AST)
         execJsonSpy
           .mockResolvedValueOnce({
             success: true,
@@ -383,15 +480,16 @@ describe('OmniFocusReadTool', () => {
           .mockResolvedValueOnce({
             success: true,
             data: { format: 'json', data: [{ id: 'p1' }], count: 1 },
+          } satisfies ScriptResult)
+          .mockResolvedValueOnce({
+            success: true,
+            data: {
+              ok: true,
+              v: 'ast',
+              items: [{ id: 'tag1', name: 'Work' }],
+              summary: { total: 1 },
+            },
           } satisfies ScriptResult);
-
-        // Mock TagsTool.execute (accessed via this.tagsTool)
-        const mockTagsTool = (tool as any).tagsTool;
-        vi.spyOn(mockTagsTool, 'execute').mockResolvedValueOnce({
-          success: true,
-          data: { items: [{ id: 'tag1', name: 'Work' }] },
-          metadata: { total_count: 1 },
-        });
 
         const result = (await tool.execute({
           query: {
