@@ -1150,7 +1150,7 @@ SAFETY:
           operation: 'update',
           target: 'task',
           taskId: resolvedId,
-          changes: (op.changes || {}) as any,
+          changes: (op.changes || {}) as Record<string, unknown>,
         };
       case 'complete':
         return {

@@ -2174,9 +2174,7 @@ SCOPE FILTERING:
   // Parse Meeting Notes
   // =========================================================================
 
-  private async executeParseMeetingNotes(
-    compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>,
-  ): Promise<unknown> {
+  private executeParseMeetingNotes(compiled: Extract<CompiledAnalysis, { type: 'parse_meeting_notes' }>): unknown {
     const timer = new OperationTimerV2();
 
     try {
