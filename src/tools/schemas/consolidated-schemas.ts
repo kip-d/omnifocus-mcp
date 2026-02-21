@@ -15,9 +15,9 @@ export const ReviewIntervalSchema = z
   })
   .describe('Review interval configuration');
 
-// ManageReviewsTool schema - single object with all parameters (MCP-compatible)
+// Review management schema - single object with all parameters (MCP-compatible)
 // Note: discriminatedUnion at top-level breaks MCP SDK JSON Schema serialization
-// Runtime validation in ManageReviewsTool.executeValidated() checks required params per operation
+// Runtime validation in OmniFocusAnalyzeTool checks required params per operation
 export const ManageReviewsSchema = z.object({
   operation: z
     .enum(['list_for_review', 'mark_reviewed', 'set_schedule', 'clear_schedule'])

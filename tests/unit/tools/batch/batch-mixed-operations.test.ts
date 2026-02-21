@@ -154,6 +154,8 @@ class StubCache {
   invalidateProject(): void {}
   invalidateTag(): void {}
   invalidateTaskQueries(): void {}
+  invalidateForTaskChange(): void {}
+  clear(): void {}
 }
 
 describe('routeToBatch — partition and delegate', () => {
@@ -161,10 +163,10 @@ describe('routeToBatch — partition and delegate', () => {
     const cache = new StubCache();
     const tool = new OmniFocusWriteTool(cache as any);
 
-    // Mock the internal ManageTaskTool.execute
-    const manageTaskSpy = vi.spyOn((tool as any).manageTaskTool, 'execute').mockResolvedValue({
+    // Mock the inline handleTaskUpdate via execJson (used by buildUpdateTaskScript path)
+    const execJsonSpy = vi.spyOn(tool as any, 'execJson').mockResolvedValue({
       success: true,
-      data: { task: { id: 'task-1', name: 'Updated', updated: true } },
+      data: { ok: true, v: '3', data: { task: { id: 'task-1', name: 'Updated' } } },
     });
 
     const result = await tool.execute({
@@ -178,10 +180,10 @@ describe('routeToBatch — partition and delegate', () => {
       },
     });
 
-    expect(manageTaskSpy).toHaveBeenCalledTimes(2);
+    expect(execJsonSpy).toHaveBeenCalledTimes(2);
     expect(result).toHaveProperty('success', true);
 
-    manageTaskSpy.mockRestore();
+    execJsonSpy.mockRestore();
   });
 
   it('should execute operations in correct order: creates, updates, completes, deletes', async () => {
@@ -189,20 +191,23 @@ describe('routeToBatch — partition and delegate', () => {
     const tool = new OmniFocusWriteTool(cache as any);
     const callOrder: string[] = [];
 
-    // Mock BatchCreateTool
-    vi.spyOn((tool as any).batchTool, 'execute').mockImplementation(async () => {
+    // Mock inline executeBatchCreates
+    vi.spyOn(tool as any, 'executeBatchCreates').mockImplementation(async () => {
       callOrder.push('create');
       return {
         success: true,
-        data: { results: [{ tempId: 'temp1', realId: 'real-1', success: true }], mapping: { temp1: 'real-1' } },
-        metadata: { operation: 'batch_create' },
+        created: 1,
+        failed: 0,
+        totalItems: 1,
+        results: [{ tempId: 'temp1', realId: 'real-1', success: true, type: 'task' }],
+        mapping: { temp1: 'real-1' },
       };
     });
 
-    // Mock ManageTaskTool
-    vi.spyOn((tool as any).manageTaskTool, 'execute').mockImplementation(async (args: any) => {
-      callOrder.push(args.operation);
-      return { success: true, data: { task: { id: args.taskId, updated: true } } };
+    // Mock inline task handlers via dispatchTaskOperation
+    vi.spyOn(tool as any, 'dispatchTaskOperation').mockImplementation(async (compiled: any) => {
+      callOrder.push(compiled.operation);
+      return { success: true, data: { task: { id: compiled.taskId, updated: true } } };
     });
 
     await tool.execute({

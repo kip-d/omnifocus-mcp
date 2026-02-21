@@ -2,27 +2,46 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
 import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
-import { ManageTaskTool } from '../tasks/ManageTaskTool.js';
-import { ProjectsTool } from '../projects/ProjectsTool.js';
-import { BatchCreateTool } from '../batch/BatchCreateTool.js';
-import { TagsTool } from '../tags/TagsTool.js';
+import { TempIdResolver } from './utils/tempid-resolver.js';
+import { DependencyGraph, DependencyGraphError } from './utils/dependency-graph.js';
+import type { BatchItem } from './schemas/batch-schemas.js';
+import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
-import { TaskId, ProjectId } from '../../utils/branded-types.js';
-import { buildUpdateProjectScript } from '../../contracts/ast/mutation-script-builder.js';
-import type { ProjectUpdateData } from '../../contracts/mutations.js';
-import { isScriptError } from '../../omnifocus/script-result-types.js';
+import { TaskId } from '../../utils/branded-types.js';
+import {
+  buildUpdateProjectScript,
+  buildCreateProjectScript,
+  buildCompleteScript,
+  buildDeleteScript,
+  buildCreateTaskScript,
+  buildUpdateTaskScript,
+  markProjectAsValidated,
+  markTaskAsValidated,
+} from '../../contracts/ast/mutation-script-builder.js';
+import type {
+  ProjectUpdateData,
+  ProjectCreateData,
+  RepetitionRule,
+  TaskCreateData,
+} from '../../contracts/mutations.js';
+import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
+import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
+import type { TaskOperationDataV2 } from '../response-types-v2.js';
+import { COMPLETE_TASK_SCRIPT, DELETE_TASK_SCRIPT, BULK_DELETE_TASKS_SCRIPT } from '../../omnifocus/scripts/tasks.js';
+import { localToUTC } from '../../utils/timezone.js';
+import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
+import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
+import type { TaskOperationResult } from '../../omnifocus/script-response-types.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
-const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
-/** Response shape from BatchCreateTool.execute() — success or validation error */
-interface BatchCreateResponse {
+interface BatchItemCreationResult {
+  tempId: string;
+  realId: string | null;
   success: boolean;
-  data: {
-    created?: number;
-    mapping?: Record<string, string>;
-  };
+  error?: string;
+  type: 'project' | 'task';
 }
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
@@ -93,26 +112,18 @@ SAFETY:
   };
 
   private compiler: MutationCompiler;
-  private manageTaskTool: ManageTaskTool;
-  private projectsTool: ProjectsTool;
-  private batchTool: BatchCreateTool;
-  private tagsTool: TagsTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new MutationCompiler();
-    this.manageTaskTool = new ManageTaskTool(cache);
-    this.projectsTool = new ProjectsTool(cache);
-    this.batchTool = new BatchCreateTool(cache);
-    this.tagsTool = new TagsTool(cache);
   }
 
   async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
-    // Route tag_manage operations to TagsTool
+    // Tag management operations
     if (compiled.operation === 'tag_manage') {
-      return this.routeToTagsTool(compiled);
+      return this.handleTagManage(compiled);
     }
 
     // Handle dry-run for batch operations
@@ -130,74 +141,861 @@ SAFETY:
       return this.routeToBatch(compiled);
     }
 
-    // Route bulk_delete based on target
+    // Route bulk_delete — direct execution for tasks, delegate for projects
     if (compiled.operation === 'bulk_delete') {
-      return this.routeToBulkDelete(compiled);
+      return this.handleBulkDelete(compiled);
     }
 
     // Route based on target: task vs project
     if (compiled.target === 'project') {
-      return this.routeToProjectsTool(compiled);
+      return this.handleProjectOperation(compiled);
     }
 
-    // Default: route tasks to manage_task
-    return this.routeToManageTask(compiled);
+    // Route task operations to inline handlers
+    let taskResult: unknown;
+    try {
+      switch (compiled.operation) {
+        case 'create':
+          taskResult = await this.handleTaskCreate(compiled);
+          break;
+        case 'update':
+          taskResult = await this.handleTaskUpdate(compiled);
+          break;
+        case 'complete':
+          taskResult = await this.handleTaskComplete(compiled);
+          break;
+        case 'delete':
+          taskResult = await this.handleTaskDelete(compiled);
+          break;
+        default:
+          return createErrorResponseV2(
+            'omnifocus_write',
+            'INVALID_OPERATION',
+            `Invalid task operation: ${String((compiled as { operation: string }).operation)}`,
+            undefined,
+            { operation: (compiled as { operation: string }).operation },
+            new OperationTimerV2().toMetadata(),
+          );
+      }
+
+      const isSuccess = taskResult && typeof taskResult === 'object' && (taskResult as { success?: boolean }).success;
+      return this.formatForCLI(taskResult, compiled.operation, isSuccess ? 'success' : 'error');
+    } catch (error) {
+      const errorResult = this.handleErrorV2<TaskOperationDataV2>(error);
+      return this.formatForCLI(errorResult, compiled.operation, 'error');
+    }
   }
 
-  private async routeToManageTask(compiled: Exclude<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
-    const manageArgs: Record<string, unknown> = {
-      operation: compiled.operation,
+  // ─── Task Create ────────────────────────────────────────────────────
+
+  private async handleTaskCreate(compiled: Extract<CompiledMutation, { operation: 'create' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const data = compiled.data;
+
+    // Build creation args, filtering out null/undefined values
+    const createArgs: Partial<TaskCreationArgs> = { name: data.name };
+    if (data.note) createArgs.note = data.note;
+    if (data.project !== undefined && data.project !== null) {
+      createArgs.projectId = data.project;
+    }
+    if (data.parentTaskId) createArgs.parentTaskId = data.parentTaskId;
+    if (data.dueDate) createArgs.dueDate = data.dueDate;
+    if (data.deferDate) createArgs.deferDate = data.deferDate;
+    if (data.plannedDate) createArgs.plannedDate = data.plannedDate;
+    if (data.flagged !== undefined) createArgs.flagged = data.flagged;
+    if (data.estimatedMinutes !== undefined) createArgs.estimatedMinutes = data.estimatedMinutes;
+    if (data.tags) createArgs.tags = data.tags;
+    if (data.sequential !== undefined) createArgs.sequential = data.sequential;
+
+    // Handle repetition rules - prefer unified API format (repetitionRule) over legacy format
+    let repetitionRuleForCreate: RepetitionRule | undefined;
+    if (data.repetitionRule && typeof data.repetitionRule === 'object') {
+      // Unified API format - use directly
+      repetitionRuleForCreate = data.repetitionRule as RepetitionRule;
+      this.logger.debug('Using unified API repetitionRule for creation', {
+        repetitionRule: repetitionRuleForCreate,
+      });
+    }
+
+    // Convert local dates to UTC for OmniFocus with error handling
+    let convertedTaskData;
+    try {
+      convertedTaskData = {
+        ...createArgs,
+        dueDate: createArgs.dueDate ? localToUTC(createArgs.dueDate, 'due') : undefined,
+        deferDate: createArgs.deferDate ? localToUTC(createArgs.deferDate, 'defer') : undefined,
+        plannedDate: createArgs.plannedDate ? localToUTC(createArgs.plannedDate, 'planned') : undefined,
+        // Map projectId to project for mutation contract compatibility
+        project: createArgs.projectId,
+      };
+      // Remove projectId since mutation contract uses 'project'
+      delete convertedTaskData.projectId;
+    } catch (dateError) {
+      const fieldName =
+        dateError instanceof Error && dateError.message.includes('defer')
+          ? 'deferDate'
+          : dateError instanceof Error && dateError.message.includes('planned')
+            ? 'plannedDate'
+            : 'dueDate';
+      const providedValue =
+        fieldName === 'deferDate'
+          ? createArgs.deferDate
+          : fieldName === 'plannedDate'
+            ? createArgs.plannedDate
+            : createArgs.dueDate;
+      const errorDetails = invalidDateError(fieldName, providedValue || '');
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'INVALID_DATE_FORMAT',
+        errorDetails.message,
+        formatErrorWithRecovery(errorDetails),
+        {
+          recovery: errorDetails.recovery,
+          providedValue,
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    this.logger.debug('Converted task data for script execution', { convertedTaskData });
+
+    // Use AST-powered mutation builder
+    const script = (await buildCreateTaskScript(convertedTaskData as TaskCreateData)).script;
+    let createResult: unknown;
+
+    try {
+      const scriptResult = await this.execJson(script);
+      this.logger.debug('execJson returned result', { scriptResult });
+
+      if (isScriptError(scriptResult)) {
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'SCRIPT_ERROR',
+          scriptResult.error || 'Script execution failed',
+          undefined,
+          scriptResult.details,
+          timer.toMetadata(),
+        );
+      }
+      createResult = (scriptResult as ScriptExecutionResult).data;
+    } catch (e) {
+      this.logger.error('Script execution threw error', { error: e });
+      return this.handleErrorV2<TaskOperationDataV2>(e);
+    }
+
+    this.logger.debug('Processing script result', { createResult });
+
+    if (
+      createResult &&
+      typeof createResult === 'object' &&
+      'error' in createResult &&
+      (createResult as { error: unknown }).error
+    ) {
+      // Enhanced error response with recovery suggestions
+      const errorMessage = (createResult as { message?: string }).message || 'Failed to create task';
+      const recovery = [];
+
+      if (errorMessage.toLowerCase().includes('project')) {
+        recovery.push('Use list_projects to find valid project IDs');
+        recovery.push('Ensure the project exists and is not completed');
+      } else if (errorMessage.toLowerCase().includes('parent')) {
+        recovery.push('Use list_tasks to find valid parent task IDs');
+        recovery.push('Ensure the parent task exists and can have subtasks');
+      } else {
+        recovery.push('Check that all required parameters are provided');
+        recovery.push('Verify OmniFocus is running and not showing dialogs');
+      }
+
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'SCRIPT_ERROR',
+        errorMessage,
+        'Verify the inputs and OmniFocus state',
+        { rawResult: createResult as unknown, recovery },
+        timer.toMetadata(),
+      );
+    }
+
+    // Parse the JSON result since the script may return a JSON string
+    let parsedCreateResult: unknown;
+    try {
+      parsedCreateResult = typeof createResult === 'string' ? JSON.parse(createResult) : createResult;
+    } catch (parseError) {
+      this.logger.error(`Failed to parse create task result: ${String(createResult)}`);
+      const errorDetails = parsingError('task creation', String(createResult), 'valid JSON');
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'INTERNAL_ERROR',
+        errorDetails.message,
+        'Ensure script returns valid JSON',
+        {
+          received: createResult,
+          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+          recovery: errorDetails.recovery,
+        },
+        timer.toMetadata(),
+      );
+    }
+
+    // Handle v3 envelope format - unwrap if present
+    // Scripts return: {ok: true, v: "3", data: {...}}
+    // execJson wraps it: {success: true, data: {ok: true, v: "3", data: {...}}}
+    // After extracting .data we have: {ok: true, v: "3", data: {...}}
+    // We need to unwrap to: {...}
+    if (parsedCreateResult && typeof parsedCreateResult === 'object') {
+      const envelope = parsedCreateResult as { ok?: boolean; v?: string; data?: unknown };
+      if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
+        this.logger.debug('Unwrapping v3 envelope', { envelope });
+        parsedCreateResult = envelope.data;
+      }
+    }
+
+    // Check if parsedResult is valid
+    if (
+      !parsedCreateResult ||
+      typeof parsedCreateResult !== 'object' ||
+      (!(parsedCreateResult as Record<string, unknown>).taskId && !(parsedCreateResult as Record<string, unknown>).id)
+    ) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'INTERNAL_ERROR',
+        'Invalid response from create task script',
+        'Have the script return an object with id/taskId',
+        { received: parsedCreateResult as unknown },
+        timer.toMetadata(),
+      );
+    }
+
+    const createdTaskId =
+      (parsedCreateResult as { taskId?: string; id?: string }).taskId ||
+      (parsedCreateResult as { id?: string }).id ||
+      null;
+    this.logger.debug('Post-create task ID', { createdTaskId });
+
+    if (repetitionRuleForCreate && createdTaskId) {
+      try {
+        this.logger.debug('Applying repeat rule via update', { repetitionRule: repetitionRuleForCreate });
+        // Use AST-powered mutation builder - repetitionRuleForCreate is already in contract format
+        const repeatOnlyScript = (
+          await buildUpdateTaskScript(createdTaskId, { repetitionRule: repetitionRuleForCreate })
+        ).script;
+        const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+        this.logger.debug('Repeat rule update result', { repeatUpdateResult });
+        if (isScriptError(repeatUpdateResult)) {
+          this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
+        } else {
+          this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
+        }
+      } catch (repeatError) {
+        this.logger.warn('Exception applying repeat rule post-creation', repeatError);
+      }
+    }
+
+    // Smart cache invalidation after successful task creation
+    this.cache.invalidateForTaskChange({
+      operation: 'create',
+      projectId: createArgs.projectId,
+      tags: Array.isArray(createArgs.tags) ? createArgs.tags : undefined,
+      affectsToday: createArgs.dueDate ? this.isDueSoon(createArgs.dueDate) : false,
+      affectsOverdue: false, // New tasks can't be overdue
+    });
+
+    this.logger.debug('Returning success response', { parsedCreateResult });
+
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        task: parsedCreateResult,
+        id: createdTaskId, // Expose id at top level for convenience
+        name: (parsedCreateResult as Record<string, unknown>).name, // Expose name at top level
+        operation: 'create' as const,
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        created_id: createdTaskId,
+        project_id: createArgs.projectId || null,
+        input_params: {
+          name: createArgs.name,
+          has_project: !!createArgs.projectId,
+          has_due_date: !!createArgs.dueDate,
+          has_planned_date: !!createArgs.plannedDate,
+          has_tags: !!(createArgs.tags && createArgs.tags.length > 0),
+          has_repeat_rule: !!repetitionRuleForCreate,
+        },
+      },
+    );
+  }
+
+  // ─── Task Update ────────────────────────────────────────────────────
+
+  private async handleTaskUpdate(compiled: Extract<CompiledMutation, { operation: 'update' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const taskId = compiled.taskId!;
+
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const minimalResponse = compiled.minimalResponse ?? false;
+
+    // Sanitize and validate updates using shared utility
+    const safeUpdates = sanitizeTaskUpdates(compiled.changes as Record<string, unknown>);
+
+    // If no valid updates, return early
+    if (Object.keys(safeUpdates).length === 0) {
+      return createSuccessResponseV2(
+        'omnifocus_write',
+        { task: { id: taskId, name: '', updated: false as const, changes: {} } },
+        undefined,
+        { ...timer.toMetadata(), input_params: { taskId }, message: 'No valid updates provided' },
+      );
+    }
+
+    this.logger.debug('Sending to update script:', {
+      taskId,
+      safeUpdates,
+      safeUpdatesKeys: Object.keys(safeUpdates),
+    });
+
+    // Use AST-powered mutation builder
+    const updateScript = (await buildUpdateTaskScript(taskId, safeUpdates)).script;
+    const updateResult = await this.execJson(updateScript);
+    if (isScriptError(updateResult)) {
+      this.logger.error(`Update task script error: ${updateResult.error}`);
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'SCRIPT_ERROR',
+        updateResult.error || 'Script execution failed',
+        'Verify task exists and params are valid',
+        updateResult.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (isScriptSuccess(updateResult)) {
+      const rawData = updateResult.data as { success?: unknown; error?: unknown; message?: unknown } | undefined;
+      if (rawData && typeof rawData === 'object') {
+        const errorValue = rawData.error;
+        const subSuccess = rawData.success;
+        if (errorValue || subSuccess === false) {
+          const errorMessage =
+            typeof rawData.message === 'string'
+              ? rawData.message
+              : typeof errorValue === 'string'
+                ? errorValue
+                : 'Script execution failed';
+          return createErrorResponseV2(
+            'omnifocus_write',
+            'SCRIPT_ERROR',
+            errorMessage,
+            'Verify task exists and params are valid',
+            rawData,
+            timer.toMetadata(),
+          );
+        }
+      }
+    }
+    let parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
+
+    // Handle v3 envelope format - unwrap if present
+    if (parsedUpdateResult && typeof parsedUpdateResult === 'object') {
+      const envelope = parsedUpdateResult as { ok?: boolean; v?: string; data?: unknown };
+      if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
+        this.logger.debug('Unwrapping v3 envelope for update', { envelope });
+        parsedUpdateResult = envelope.data;
+      }
+    }
+
+    // Smart cache invalidation after successful update
+    // Collect all affected tags (tags, addTags, removeTags)
+    const affectedTags: string[] = [];
+    if (isStringArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
+    if (isStringArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
+    if (isStringArray(safeUpdates.removeTags)) affectedTags.push(...safeUpdates.removeTags);
+
+    this.cache.invalidateForTaskChange({
+      operation: 'update',
+      projectId: typeof safeUpdates.project === 'string' ? safeUpdates.project : undefined,
+      tags: affectedTags.length > 0 ? affectedTags : undefined,
+      affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueSoon(safeUpdates.dueDate) : false,
+      affectsOverdue: false, // Updates don't automatically make things overdue
+    });
+
+    this.logger.info(`Updated task: ${taskId}`);
+
+    // Handle response levels for context optimization
+    if (minimalResponse) {
+      return {
+        success: true,
+        id: taskId,
+        operation: 'update_task',
+        task_id: taskId, // Keep for backwards compatibility
+        fields_updated: Object.keys(safeUpdates),
+      };
+    }
+
+    // Transform new schema-validated result to expected format
+    const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task ||
+      parsedUpdateResult || { id: taskId, name: 'Unknown' };
+    const transformedResult = {
+      id: (taskData as { id?: string }).id || taskId,
+      name: (taskData as { name?: string }).name || 'Unknown',
+      updated: true,
+      changes: Object.keys(safeUpdates).reduce(
+        (acc, key) => {
+          acc[key] = safeUpdates[key];
+          return acc;
+        },
+        {} as Record<string, unknown>,
+      ),
     };
 
-    // Add ID for update/complete/delete with branded type safety
-    if ('taskId' in compiled && compiled.taskId) {
-      manageArgs.taskId = convertToTaskId(compiled.taskId);
-    }
-
-    // Note: projectId not used by ManageTaskTool (it uses 'project' parameter instead)
-
-    // Add data for create - spread all fields
-    if ('data' in compiled && compiled.data) {
-      // Spread data fields directly (name, tags, project, dueDate, etc.)
-      Object.assign(manageArgs, compiled.data);
-    }
-
-    // Add changes for update - spread all fields
-    if ('changes' in compiled && compiled.changes) {
-      Object.assign(manageArgs, compiled.changes);
-    }
-
-    return this.manageTaskTool.execute(manageArgs);
+    return createSuccessResponseV2('omnifocus_write', { task: transformedResult }, undefined, {
+      ...timer.toMetadata(),
+      updated_id: taskId,
+      input_params: {
+        taskId,
+        fields_updated: Object.keys(safeUpdates),
+        has_date_changes: !!(
+          safeUpdates.dueDate ||
+          safeUpdates.deferDate ||
+          safeUpdates.clearDueDate ||
+          safeUpdates.clearDeferDate
+        ),
+        has_project_change: safeUpdates.project !== undefined,
+      },
+    });
   }
 
-  private async routeToProjectsTool(
+  // ─── Task Complete ──────────────────────────────────────────────────
+
+  private async handleTaskComplete(compiled: Extract<CompiledMutation, { operation: 'complete' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const taskId = compiled.taskId!;
+
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Convert completionDate if provided
+    const processedArgs = {
+      taskId,
+      completionDate: compiled.completionDate ? localToUTC(compiled.completionDate, 'completion') : undefined,
+    };
+
+    try {
+      const completeScript = this.omniAutomation.buildScript(
+        COMPLETE_TASK_SCRIPT,
+        processedArgs as unknown as Record<string, unknown>,
+      );
+      const res = await this.execJson(completeScript);
+      const completeResult =
+        res && typeof res === 'object' && 'success' in res
+          ? (res as TaskOperationResult)
+          : { success: true, data: res };
+
+      if (typeof completeResult === 'object' && 'success' in completeResult && !completeResult.success) {
+        const error = (completeResult as { error?: string }).error;
+        if (error && typeof error === 'string' && this.isJxaAccessDenied(error)) {
+          this.logger.info('JXA access denied for task completion');
+          return this.jxaAccessDeniedError(timer);
+        }
+        const errorMsg = error || 'Unknown error';
+        const details = (completeResult as { details?: unknown }).details;
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'SCRIPT_ERROR',
+          errorMsg,
+          'Verify task ID and OmniFocus state',
+          details,
+          timer.toMetadata(),
+        );
+      }
+
+      this.logger.info(`Completed task via JXA: ${taskId}`);
+
+      const parsedCompleteResult = (completeResult as { data?: unknown }).data;
+
+      this.cache.invalidateForTaskChange({
+        operation: 'complete',
+        affectsToday: true,
+        affectsOverdue: true,
+      });
+
+      return createSuccessResponseV2('omnifocus_write', { task: parsedCompleteResult }, undefined, {
+        ...timer.toMetadata(),
+        completed_id: taskId,
+        method: 'jxa',
+        input_params: { taskId },
+      });
+    } catch (jxaError: unknown) {
+      const errorMessage = jxaError instanceof Error ? jxaError.message : String(jxaError);
+      if (this.isJxaAccessDenied(errorMessage)) {
+        this.logger.info('JXA failed for task completion');
+        return this.jxaAccessDeniedError(timer);
+      }
+      return this.handleErrorV2<TaskOperationDataV2>(jxaError);
+    }
+  }
+
+  // ─── Task Delete ────────────────────────────────────────────────────
+
+  private async handleTaskDelete(compiled: Extract<CompiledMutation, { operation: 'delete' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const taskId = compiled.taskId!;
+
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    try {
+      const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, {
+        taskId,
+      } as unknown as Record<string, unknown>);
+      const res = await this.execJson(deleteScript);
+      const deleteResult =
+        res && typeof res === 'object' && 'success' in res
+          ? (res as TaskOperationResult)
+          : { success: true, data: res };
+
+      if (typeof deleteResult === 'object' && 'success' in deleteResult && !deleteResult.success) {
+        const error = (deleteResult as { error?: string }).error;
+        if (error && typeof error === 'string' && this.isJxaAccessDenied(error)) {
+          this.logger.info('JXA failed for task deletion');
+          return this.jxaAccessDeniedError(timer);
+        }
+        const errorMsg = error || 'Unknown error';
+        const details = (deleteResult as { details?: unknown }).details;
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'SCRIPT_ERROR',
+          errorMsg,
+          'Verify task ID and permissions',
+          details,
+          timer.toMetadata(),
+        );
+      }
+
+      const parsedDeleteResult = (deleteResult as { data?: unknown }).data;
+
+      // Conservative cache invalidation — we don't know which project/tags were affected
+      this.cache.invalidateForTaskChange({
+        operation: 'delete',
+        affectsToday: true,
+        affectsOverdue: true,
+      });
+      this.cache.invalidate('projects');
+      this.cache.invalidate('tags');
+
+      this.logger.info(`Deleted task via JXA: ${taskId}`);
+      return createSuccessResponseV2('omnifocus_write', { task: parsedDeleteResult }, undefined, {
+        ...timer.toMetadata(),
+        deleted_id: taskId,
+        method: 'jxa',
+        input_params: { taskId },
+      });
+    } catch (jxaError: unknown) {
+      const errorMessage = jxaError instanceof Error ? jxaError.message : String(jxaError);
+      if (this.isJxaAccessDenied(errorMessage)) {
+        this.logger.info('JXA failed for task deletion');
+        return this.jxaAccessDeniedError(timer);
+      }
+      return this.handleErrorV2<TaskOperationDataV2>(jxaError);
+    }
+  }
+
+  // ─── Bulk Delete ────────────────────────────────────────────────────
+
+  private async handleBulkDelete(compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    if (compiled.target === 'project') {
+      // Project bulk delete — iterate through individual delete operations
+      const deleteResults: Array<{ projectId: string; status: string }> = [];
+      const deleteErrors: unknown[] = [];
+
+      for (const id of compiled.ids) {
+        try {
+          const deleteResult = await this.handleProjectDelete(id);
+          const success =
+            deleteResult && typeof deleteResult === 'object' && (deleteResult as { success?: boolean }).success;
+          if (success) {
+            deleteResults.push({ projectId: id, status: 'deleted' });
+          } else {
+            deleteErrors.push({ projectId: id, error: 'Delete failed' });
+          }
+        } catch (err) {
+          deleteErrors.push({ projectId: id, error: String(err) });
+        }
+      }
+
+      return createSuccessResponseV2(
+        'omnifocus_write',
+        {
+          operation: 'bulk_delete',
+          successCount: deleteResults.length,
+          errorCount: deleteErrors.length,
+          results: deleteResults,
+          errors: deleteErrors.length > 0 ? deleteErrors : undefined,
+        },
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Task bulk delete — direct execution
+    const taskIds = compiled.ids.map((id) => convertToTaskId(id));
+    const results: Array<{ taskId: string; status: string }> = [];
+    const errors: unknown[] = [];
+
+    try {
+      const script = this.omniAutomation.buildScript(BULK_DELETE_TASKS_SCRIPT, {
+        taskIds: taskIds.map((id) => id as string),
+      });
+      const result = await this.execJson(script);
+
+      if (isScriptError(result)) {
+        errors.push({ error: result.error || 'Bulk delete failed' });
+      } else if (result.data && typeof result.data === 'object') {
+        const bulkResult = result.data as {
+          deleted?: Array<{ id: string; name: string }>;
+          errors?: Array<{ taskId: string; error: string }>;
+        };
+
+        if (Array.isArray(bulkResult.deleted)) {
+          for (const item of bulkResult.deleted) {
+            results.push({ taskId: item.id, status: 'deleted' });
+          }
+        }
+
+        if (Array.isArray(bulkResult.errors)) {
+          errors.push(...bulkResult.errors);
+        }
+      }
+
+      // Invalidate task cache after bulk operation
+      this.cache.clear('tasks');
+    } catch (error) {
+      errors.push({ error: String(error) });
+    }
+
+    const responseData = {
+      operation: 'bulk_delete',
+      successCount: results.length,
+      errorCount: errors.length,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+
+    return createSuccessResponseV2('omnifocus_write', responseData, undefined, timer.toMetadata());
+  }
+
+  // ─── Project operations (inline) ────────────────────────────────────
+
+  private async handleProjectOperation(
     compiled: Exclude<CompiledMutation, { operation: 'batch' | 'bulk_delete' }>,
   ): Promise<unknown> {
-    // Direct routing for project updates — bypasses ProjectsTool to avoid field stripping
-    if (compiled.operation === 'update' && 'projectId' in compiled && compiled.projectId) {
-      return this.handleProjectUpdateDirect(compiled.projectId, compiled.changes as ProjectUpdateData);
+    // Route by operation type
+    switch (compiled.operation) {
+      case 'update':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectUpdateDirect(compiled.projectId, compiled.changes as ProjectUpdateData);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for update',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      case 'create':
+        return this.handleProjectCreate(compiled as Extract<CompiledMutation, { operation: 'create' }>);
+      case 'complete':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectComplete(compiled.projectId);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for complete',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      case 'delete':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectDelete(compiled.projectId);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for delete',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      default:
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'INVALID_OPERATION',
+          `Invalid project operation: ${String((compiled as { operation: string }).operation)}`,
+          undefined,
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
     }
-
-    // Map compiled mutation to ProjectsTool parameters (create, complete, delete)
-    const projectArgs: Record<string, unknown> = {
-      operation: compiled.operation,
-    };
-
-    // Add projectId for complete/delete operations with branded type safety
-    if ('projectId' in compiled && compiled.projectId) {
-      projectArgs.projectId = convertToProjectId(compiled.projectId);
-    }
-
-    // Add data for create - spread all fields (name, tags, dueDate, etc.)
-    if ('data' in compiled && compiled.data) {
-      Object.assign(projectArgs, compiled.data);
-    }
-
-    return this.projectsTool.execute(projectArgs);
   }
 
   /**
-   * Handle project updates directly via buildUpdateProjectScript, bypassing ProjectsTool.
+   * Create a new project via buildCreateProjectScript (AST mutation builder).
+   */
+  private async handleProjectCreate(compiled: Extract<CompiledMutation, { operation: 'create' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const data = compiled.data;
+
+    if (!data.name) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'Project name is required',
+        'Add a name parameter with the project name',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const projectData: ProjectCreateData = {
+      name: data.name,
+      note: data.note,
+      dueDate: data.dueDate,
+      flagged: data.flagged,
+      tags: data.tags,
+      sequential: data.sequential ?? false,
+      folder: data.folder,
+      status: data.status,
+      reviewInterval: data.reviewInterval,
+    };
+
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to create project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'CREATE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        'Check the project name and try again',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Invalidate cache
+    this.cache.invalidate('projects');
+
+    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'create' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'create',
+    });
+  }
+
+  /**
+   * Complete a project via buildCompleteScript (AST mutation builder).
+   */
+  private async handleProjectComplete(projectId: string): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    const generatedScript = await buildCompleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to complete project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'COMPLETE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        "Check the project ID and ensure it's not already completed",
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Smart cache invalidation
+    this.cache.invalidateProject(projectId);
+    this.cache.invalidate('analytics');
+
+    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'complete' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'complete',
+    });
+  }
+
+  /**
+   * Delete a project via buildDeleteScript (AST mutation builder).
+   */
+  private async handleProjectDelete(projectId: string): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    const generatedScript = await buildDeleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to delete project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'DELETE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        'Check the project ID and permissions',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Smart cache invalidation
+    this.cache.invalidateProject(projectId);
+    this.cache.invalidate('analytics');
+
+    return createSuccessResponseV2('omnifocus_write', { project: { deleted: true }, operation: 'delete' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'delete',
+    });
+  }
+
+  /**
+   * Handle project updates directly via buildUpdateProjectScript.
    * This ensures all ProjectUpdateData fields are passed through without stripping.
    */
   private async handleProjectUpdateDirect(projectId: string, changes: ProjectUpdateData): Promise<unknown> {
@@ -232,6 +1030,8 @@ SAFETY:
     );
   }
 
+  // ─── Batch routing ─────────────────────────────────────────────────
+
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     // Partition operations by type
     const createOps = compiled.operations.filter((op) => op.operation === 'create');
@@ -248,48 +1048,62 @@ SAFETY:
     } = { created: [], updated: [], completed: [], deleted: [], errors: [] };
 
     let tempIdMapping: Record<string, string> = {};
+    let createdCount = 0;
     let hadError = false;
 
-    // Phase 1: Creates (via BatchCreateTool for hierarchy support)
+    // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
       try {
         let autoTempIdCounter = 0;
-        const batchArgs: Record<string, unknown> = {
-          items: createOps.map((op) => {
-            const item = { type: op.target, ...op.data };
-            if (!item.tempId) {
-              item.tempId = `auto_temp_${++autoTempIdCounter}`;
-            }
-            return item;
-          }),
+        const items: BatchItem[] = createOps.map((op) => {
+          const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
+          if (!item.tempId) {
+            item.tempId = `auto_temp_${++autoTempIdCounter}`;
+          }
+          return item;
+        });
+
+        const createResult = await this.executeBatchCreates(items, {
           createSequentially: compiled.createSequentially ?? true,
           atomicOperation: compiled.atomicOperation ?? false,
           returnMapping: compiled.returnMapping ?? true,
           stopOnError: compiled.stopOnError ?? true,
-        };
+        });
 
-        const createResult = (await this.batchTool.execute(batchArgs)) as BatchCreateResponse;
-
-        // Check if BatchCreateTool returned a validation error (e.g., circular deps, unknown parentTempId)
-        if (createResult?.success === false) {
+        if (createResult.success === false && createResult.rolledBack) {
+          // Atomic operation failed and was rolled back
           results.errors.push(createResult);
           if (compiled.stopOnError) hadError = true;
+        } else if (createResult.failed > 0 && compiled.stopOnError) {
+          results.errors.push(createResult);
+          hadError = true;
         } else {
           results.created.push(createResult);
+        }
 
-          // Extract tempId mapping for subsequent operations
-          // BatchCreateTool stores mapping in data.mapping (via TempIdResolver)
-          if (createResult?.data?.mapping) {
-            tempIdMapping = createResult.data.mapping;
-          }
+        // Extract tempId mapping for subsequent operations
+        createdCount = createResult.created;
+        if (createResult.mapping) {
+          tempIdMapping = createResult.mapping;
         }
       } catch (err) {
-        results.errors.push({ phase: 'create', error: String(err) });
+        if (err instanceof DependencyGraphError) {
+          results.errors.push({
+            phase: 'create',
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: err.message,
+            },
+            details: err.details,
+          });
+        } else {
+          results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
+        }
         if (compiled.stopOnError) hadError = true;
       }
     }
 
-    // Phase 2-4: Updates, completes, deletes — route through existing single-item handlers
+    // Phase 2-4: Updates, completes, deletes — route through inline handlers
     const phases: Array<{
       name: string;
       ops: typeof updateOps;
@@ -308,34 +1122,24 @@ SAFETY:
           // Resolve tempId references if the id matches a tempId from creates
           const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
 
-          // Build args for routing through existing single-item handlers
-          const routeArgs: Record<string, unknown> = {
-            operation: op.operation,
-          };
-
-          if (op.target === 'task') {
-            routeArgs.taskId = resolvedId;
-          } else {
-            routeArgs.projectId = resolvedId;
-          }
-
-          // Add changes for update operations
-          if (op.changes) {
-            Object.assign(routeArgs, op.changes);
-          }
-
-          // Add completionDate for complete operations
-          if (op.completionDate) {
-            routeArgs.completionDate = op.completionDate;
-          }
-
           let result: unknown;
           if (op.target === 'project' && op.operation === 'update') {
             result = await this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
           } else if (op.target === 'project') {
-            result = await this.projectsTool.execute(routeArgs);
+            // Route project operations through inline handlers
+            if (op.operation === 'complete') {
+              result = await this.handleProjectComplete(resolvedId!);
+            } else if (op.operation === 'delete') {
+              result = await this.handleProjectDelete(resolvedId!);
+            } else {
+              // Fallback: should not reach here for valid batch operations
+              throw new Error(`Unsupported batch project operation: ${op.operation}`);
+            }
           } else {
-            result = await this.manageTaskTool.execute(routeArgs);
+            // Task operations — use inline handlers via the main dispatch
+            // Build a compiled mutation and dispatch it
+            const taskCompiled = this.buildTaskCompiledForBatch(op, resolvedId);
+            result = await this.dispatchTaskOperation(taskCompiled);
           }
           results[phase.resultKey].push(result);
         } catch (err) {
@@ -353,10 +1157,7 @@ SAFETY:
       data: {
         operation: 'batch',
         summary: {
-          created: results.created.reduce(
-            (sum: number, r: unknown) => sum + ((r as BatchCreateResponse)?.data?.created ?? 0),
-            0,
-          ),
+          created: createdCount,
           updated: results.updated.length,
           completed: results.completed.length,
           deleted: results.deleted.length,
@@ -373,46 +1174,488 @@ SAFETY:
     };
   }
 
-  private async routeToTagsTool(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
-    // Map unified API action to TagsTool action
-    // 'unnest' in unified API maps to 'unparent' in TagsTool
-    const tagsAction = compiled.action === 'unnest' ? 'unparent' : compiled.action;
-
-    const tagsArgs: Record<string, unknown> = {
-      operation: 'manage',
-      action: tagsAction,
-      tagName: compiled.tagName,
-    };
-
-    // Add optional parameters based on action
-    if (compiled.newName) {
-      tagsArgs.newName = compiled.newName;
+  /**
+   * Build a CompiledMutation-compatible object from a batch operation for inline dispatch.
+   */
+  private buildTaskCompiledForBatch(
+    op: { operation: string; id?: string; changes?: unknown; completionDate?: string },
+    resolvedId?: string,
+  ): CompiledMutation {
+    switch (op.operation) {
+      case 'update':
+        return {
+          operation: 'update',
+          target: 'task',
+          taskId: resolvedId,
+          changes: (op.changes || {}) as Record<string, unknown>,
+        };
+      case 'complete':
+        return {
+          operation: 'complete',
+          target: 'task',
+          taskId: resolvedId,
+          completionDate: op.completionDate,
+        };
+      case 'delete':
+        return {
+          operation: 'delete',
+          target: 'task',
+          taskId: resolvedId,
+        };
+      default:
+        throw new Error(`Unexpected batch task operation: ${op.operation}`);
     }
-    if (compiled.targetTag) {
-      tagsArgs.targetTag = compiled.targetTag;
-    }
-    if (compiled.parentTag) {
-      tagsArgs.parentTagName = compiled.parentTag;
-    }
-
-    return this.tagsTool.execute(tagsArgs);
   }
 
-  private async routeToBulkDelete(compiled: Extract<CompiledMutation, { operation: 'bulk_delete' }>): Promise<unknown> {
-    // Route to ManageTaskTool's existing bulk_delete functionality
-    const manageArgs: Record<string, unknown> = {
-      operation: 'bulk_delete',
-    };
+  /**
+   * Dispatch a task operation to the correct inline handler.
+   */
+  private async dispatchTaskOperation(compiled: CompiledMutation): Promise<unknown> {
+    switch (compiled.operation) {
+      case 'update':
+        return this.handleTaskUpdate(compiled as Extract<CompiledMutation, { operation: 'update' }>);
+      case 'complete':
+        return this.handleTaskComplete(compiled as Extract<CompiledMutation, { operation: 'complete' }>);
+      case 'delete':
+        return this.handleTaskDelete(compiled as Extract<CompiledMutation, { operation: 'delete' }>);
+      default:
+        throw new Error(`Unexpected task operation for dispatch: ${(compiled as { operation: string }).operation}`);
+    }
+  }
 
-    // Map to taskIds or projectIds based on target with branded type safety
-    if (compiled.target === 'task') {
-      manageArgs.taskIds = compiled.ids.map((id) => convertToTaskId(id));
-    } else {
-      manageArgs.projectIds = compiled.ids.map((id) => convertToProjectId(id));
+  // ─── Batch create (inlined from BatchCreateTool) ────────────────────
+
+  /**
+   * Execute batch creates with dependency ordering, tempId resolution,
+   * atomic rollback, and smart cache invalidation.
+   */
+  private async executeBatchCreates(
+    items: BatchItem[],
+    options: {
+      createSequentially: boolean;
+      atomicOperation: boolean;
+      returnMapping: boolean;
+      stopOnError: boolean;
+    },
+  ): Promise<{
+    success: boolean;
+    created: number;
+    failed: number;
+    totalItems: number;
+    results: BatchItemCreationResult[];
+    mapping?: Record<string, string>;
+    rolledBack?: boolean;
+  }> {
+    const resolver = new TempIdResolver();
+    const batchResults: BatchItemCreationResult[] = [];
+
+    // Step 1: Validate and build dependency graph
+    const graph = new DependencyGraph(items as BatchItem[]);
+    const stats = graph.getStats();
+
+    this.logger.info('Batch create initiated', {
+      itemCount: stats.totalItems,
+      projects: stats.projects,
+      tasks: stats.tasks,
+      maxDepth: stats.maxDepth,
+      atomic: options.atomicOperation,
+    });
+
+    // Step 2: Register all temporary IDs
+    for (const item of items) {
+      resolver.register(item.tempId, item.type);
     }
 
-    return this.manageTaskTool.execute(manageArgs);
+    // Step 3: Get creation order (respects dependencies)
+    const orderedItems = options.createSequentially ? graph.getCreationOrder() : items;
+
+    // Step 4: Create items in order
+    for (let i = 0; i < orderedItems.length; i++) {
+      const item = orderedItems[i];
+      try {
+        const result = await this.createBatchItem(item, resolver);
+        batchResults.push(result);
+
+        if (result.success && result.realId) {
+          resolver.resolve(item.tempId, result.realId);
+        } else {
+          resolver.markFailed(item.tempId, result.error || 'Creation failed');
+
+          if (options.stopOnError) {
+            break;
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        resolver.markFailed(item.tempId, errorMsg);
+        batchResults.push({
+          tempId: item.tempId,
+          realId: null,
+          success: false,
+          error: errorMsg,
+          type: item.type,
+        });
+
+        if (options.stopOnError) {
+          break;
+        }
+      }
+    }
+
+    // Step 5: Handle atomic operation rollback if needed
+    const failedCount = resolver.getFailedCount();
+    if (options.atomicOperation && failedCount > 0) {
+      await this.rollbackBatchCreations(resolver);
+      return {
+        success: false,
+        created: 0,
+        failed: failedCount,
+        totalItems: items.length,
+        results: batchResults,
+        rolledBack: true,
+      };
+    }
+
+    // Step 6: Smart cache invalidation after successful batch creations
+    const createdCount = resolver.getCreatedCount();
+    if (createdCount > 0) {
+      this.cache.invalidate('projects');
+
+      const projectIds = new Set<string>();
+      const tags = new Set<string>();
+
+      for (const item of items) {
+        if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
+          const realId = resolver.getRealId(item.tempId);
+          if (realId) projectIds.add(realId);
+        }
+        if (item.tags) {
+          item.tags.forEach((tag: string) => tags.add(tag));
+        }
+      }
+
+      projectIds.forEach((id) => this.cache.invalidateProject(id));
+      tags.forEach((tag) => this.cache.invalidateTag(tag));
+      this.cache.invalidateTaskQueries(['today', 'inbox']);
+      this.cache.invalidate('analytics');
+    }
+
+    // Step 7: Build response
+    const response: {
+      success: boolean;
+      created: number;
+      failed: number;
+      totalItems: number;
+      results: BatchItemCreationResult[];
+      mapping?: Record<string, string>;
+    } = {
+      success: createdCount > 0,
+      created: createdCount,
+      failed: failedCount,
+      totalItems: items.length,
+      results: batchResults,
+    };
+
+    if (options.returnMapping) {
+      response.mapping = resolver.getMappings();
+    }
+
+    return response;
   }
+
+  /**
+   * Create a single batch item (project or task).
+   */
+  private async createBatchItem(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    this.logger.debug(`Creating ${item.type}: ${item.name}`, { tempId: item.tempId });
+
+    try {
+      if (item.type === 'project') {
+        return await this.createBatchProject(item, resolver);
+      } else {
+        return await this.createBatchTask(item, resolver);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: errorMsg,
+        type: item.type,
+      };
+    }
+  }
+
+  /**
+   * Create a project within a batch operation.
+   */
+  private async createBatchProject(item: BatchItem, _resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    const projectData: ProjectCreateData = {
+      name: item.name,
+      note: item.note || '',
+      flagged: item.flagged || false,
+      status: (item.status as ProjectCreateData['status']) || 'active',
+      sequential: item.sequential || false,
+      tags: item.tags || [],
+      folder: item.folder,
+    };
+
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: result.error,
+        type: 'project',
+      };
+    }
+
+    if (isScriptSuccess(result) && result.data) {
+      const data = result.data as { projectId?: string; project?: { id: string } };
+      const realId = data.projectId || data.project?.id;
+
+      if (realId) {
+        markProjectAsValidated(realId);
+
+        return {
+          tempId: item.tempId,
+          realId,
+          success: true,
+          type: 'project',
+        };
+      }
+    }
+
+    return {
+      tempId: item.tempId,
+      realId: null,
+      success: false,
+      error: 'No project ID returned from script',
+      type: 'project',
+    };
+  }
+
+  /**
+   * Create a task within a batch operation.
+   */
+  private async createBatchTask(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    // Resolve parent reference if present
+    let projectId: string | null = null;
+    let parentTaskId: string | null = null;
+
+    if (item.parentTempId) {
+      const parentRealId = resolver.getRealId(item.parentTempId);
+      if (!parentRealId) {
+        return {
+          tempId: item.tempId,
+          realId: null,
+          success: false,
+          error: `Parent not yet created: ${item.parentTempId}`,
+          type: 'task',
+        };
+      }
+
+      // Determine if parent is a project or task
+      const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
+      if (parentMapping?.type === 'project') {
+        projectId = parentRealId;
+      } else {
+        parentTaskId = parentRealId;
+      }
+    }
+
+    // Fall back to direct project assignment when parentTempId wasn't used
+    if (!projectId && !parentTaskId) {
+      if (item.project) {
+        projectId = item.project;
+      }
+    }
+
+    const taskData: TaskCreateData = {
+      name: item.name,
+      note: item.note || '',
+      flagged: item.flagged || false,
+      project: projectId || undefined,
+      parentTaskId: parentTaskId || undefined,
+      tags: item.tags || [],
+      dueDate: item.dueDate ? localToUTC(item.dueDate, 'due') : undefined,
+      deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
+      plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
+      estimatedMinutes: item.estimatedMinutes,
+    };
+
+    const generatedScript = await buildCreateTaskScript(taskData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: result.error,
+        type: 'task',
+      };
+    }
+
+    if (isScriptSuccess(result) && result.data) {
+      const data = result.data as { taskId?: string };
+      const realId = data.taskId;
+
+      if (realId) {
+        markTaskAsValidated(realId);
+
+        return {
+          tempId: item.tempId,
+          realId,
+          success: true,
+          type: 'task',
+        };
+      }
+    }
+
+    return {
+      tempId: item.tempId,
+      realId: null,
+      success: false,
+      error: 'No task ID returned from script',
+      type: 'task',
+    };
+  }
+
+  /**
+   * Rollback all created items in reverse order (children first, parents last).
+   */
+  private async rollbackBatchCreations(resolver: TempIdResolver): Promise<void> {
+    const createdItems = resolver.getCreatedIds();
+    this.logger.warn(`Rolling back ${createdItems.length} created items`);
+
+    for (let i = createdItems.length - 1; i >= 0; i--) {
+      const item = createdItems[i];
+      try {
+        const generatedScript = await buildDeleteScript(item.type, item.realId);
+        await this.execJson(generatedScript.script);
+        this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
+      } catch (error) {
+        this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);
+      }
+    }
+  }
+
+  private async handleTagManage(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    // Map unified API action to script action
+    // 'unnest' in unified API maps to 'unparent' in manage script
+    const action = compiled.action === 'unnest' ? 'unparent' : compiled.action;
+    const tagName = compiled.tagName;
+    const newName = compiled.newName;
+    const targetTag = compiled.targetTag;
+    const parentTagName = compiled.parentTag;
+
+    // Validate required parameters
+    if (!action) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'action is required for manage operation',
+        undefined,
+        { operation: 'manage' },
+        timer.toMetadata(),
+      );
+    }
+
+    if (!tagName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'tagName is required for manage operation',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    // Validate action-specific requirements
+    if (action === 'rename' && !newName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'newName is required for rename action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    if (action === 'merge' && !targetTag) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'targetTag is required for merge action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+
+    // Execute manage tags script
+    const script = this.omniAutomation.buildScript(MANAGE_TAGS_SCRIPT, {
+      action,
+      tagName,
+      newName,
+      targetTag,
+      parentTagName,
+      parentTagId: undefined,
+      mutuallyExclusive: undefined,
+    });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'tags',
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || 'Tag management failed',
+        'Verify tag names and hierarchy constraints',
+        isScriptError(result) ? { operation: 'manage', action, tagName, details: result.details } : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Unwrap double-wrapped data structure
+    const envelope = result.data as unknown;
+    const parsedResult =
+      envelope && typeof envelope === 'object' && 'data' in envelope && (envelope as { data?: unknown }).data
+        ? (envelope as { data: unknown }).data
+        : envelope;
+
+    // Smart cache invalidation for tag changes
+    this.cache.invalidateTag(tagName);
+    if (action === 'rename' && newName) {
+      this.cache.invalidateTag(newName);
+    }
+    if (action === 'merge' && targetTag) {
+      this.cache.invalidateTag(targetTag);
+    }
+
+    return createSuccessResponseV2(
+      'tags',
+      {
+        action,
+        tagName,
+        ...(newName && { newName }),
+        ...(targetTag && { targetTag }),
+        result: parsedResult as { success: boolean; message?: string; data?: unknown },
+      },
+      undefined,
+      { ...timer.toMetadata(), operation: 'manage', action },
+    );
+  }
+
+  // ─── Preview methods (unchanged) ───────────────────────────────────
 
   /**
    * Preview batch operation without executing
@@ -568,4 +1811,79 @@ SAFETY:
       },
     );
   }
+
+  // ─── Helpers ────────────────────────────────────────────────────────
+
+  /** Check if an error message indicates JXA access was denied. */
+  private isJxaAccessDenied(message: string): boolean {
+    const lower = message.toLowerCase();
+    return lower.includes('parameter is missing') || lower.includes('access not allowed');
+  }
+
+  /** Build a standard access-denied error response. */
+  private jxaAccessDeniedError(timer: OperationTimerV2): unknown {
+    return createErrorResponseV2(
+      'omnifocus_write',
+      'SCRIPT_ERROR',
+      'Access denied and URL scheme not implemented',
+      'Grant OmniFocus automation access',
+      {},
+      timer.toMetadata(),
+    );
+  }
+
+  /**
+   * Check if a date is due soon (within next 3 days, matching OmniFocus "today" perspective).
+   */
+  private isDueSoon(dueDateStr: string): boolean {
+    try {
+      const dueDate = new Date(dueDateStr);
+      const now = new Date();
+      const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      return dueDate <= threeDaysFromNow;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Format response for CLI testing when MCP_CLI_TESTING environment variable is set.
+   * This makes responses easier to parse in bash scripts.
+   */
+  private formatForCLI<T>(result: T, operation: string, type: 'success' | 'error'): T {
+    // Only modify output if in CLI testing mode
+    if (!process.env.MCP_CLI_TESTING) {
+      return result;
+    }
+
+    // Add CLI-friendly debug output to stderr (won't interfere with JSON)
+    if (type === 'success') {
+      console.error(`[CLI_DEBUG] omnifocus_write ${operation} operation: SUCCESS`);
+
+      const resultData = result as { data?: { task?: { taskId?: string; id?: string; name?: string } } };
+      if (resultData?.data?.task?.taskId || resultData?.data?.task?.id) {
+        const taskId = resultData.data.task.taskId || resultData.data.task.id;
+        console.error(`[CLI_DEBUG] Task ID: ${taskId}`);
+      }
+
+      if (resultData?.data?.task?.name) {
+        console.error(`[CLI_DEBUG] Task name: ${resultData.data.task.name}`);
+      }
+
+      console.error(
+        `[CLI_DEBUG] Operation completed in ${(result as { metadata?: { query_time_ms?: number } })?.metadata?.query_time_ms || 'unknown'}ms`,
+      );
+    } else {
+      console.error(`[CLI_DEBUG] omnifocus_write ${operation} operation: ERROR`);
+      console.error(
+        `[CLI_DEBUG] Error: ${(result as { error?: { message?: string } })?.error?.message || 'Unknown error'}`,
+      );
+    }
+
+    return result;
+  }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }

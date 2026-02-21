@@ -7,8 +7,8 @@
  */
 
 import { z } from 'zod';
-import { coerceBoolean } from '../schemas/coercion-helpers.js';
-import { BatchItemDataSchema } from '../unified/schemas/write-schema.js';
+import { coerceBoolean } from '../../schemas/coercion-helpers.js';
+import { BatchItemDataSchema } from './write-schema.js';
 
 /**
  * Task batch item = unified schema + type discriminator.

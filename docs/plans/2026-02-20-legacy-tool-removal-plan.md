@@ -821,6 +821,18 @@ Final cleanup after all legacy tools are removed.
 - Modify: `CLAUDE.md` (update architecture notes)
 - Modify: `package.json` (bump to 4.0.0 — this IS a breaking internal change)
 
+**Step 0: Remove dead `repeatRule` code**
+
+The legacy `repeatRule` format (with `unit`, `steps`, `method`) is no longer reachable through the unified WriteSchema,
+which only exposes `repetitionRule`. Clean up:
+
+- Delete `convertToRepetitionRule()` from `src/tools/unified/utils/repeat-rule-normalizer.ts` (dead export, zero
+  callers)
+- Remove the `repeatRule` branch from `sanitizeTaskUpdates()` in `src/tools/unified/utils/task-sanitizer.ts`
+- Remove `normalizeRepeatRuleInput()` if no longer called after the above cleanup
+- Update tests accordingly
+- Downgrade `logger.info` to `logger.debug` in `task-sanitizer.ts` for per-field processing messages
+
 **Step 1: Verify no remaining references to deleted files**
 
 ```bash
