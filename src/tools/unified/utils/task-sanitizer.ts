@@ -15,7 +15,6 @@
 
 import { localToUTC } from '../../../utils/timezone.js';
 import { createLogger } from '../../../utils/logger.js';
-import { normalizeRepeatRuleInput } from './repeat-rule-normalizer.js';
 
 const logger = createLogger('task-sanitizer');
 
@@ -23,7 +22,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   const sanitized: Record<string, unknown> = {};
 
   // Only log keys, not values (privacy-safe)
-  logger.info('Sanitizing updates with keys:', Object.keys(updates));
+  logger.debug('Sanitizing updates with keys:', Object.keys(updates));
 
   // Handle string fields
   if (typeof updates.name === 'string') {
@@ -43,10 +42,10 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
 
   // Handle date fields with separate clear flags
   if (updates.clearDueDate) {
-    logger.info('Clearing dueDate (clearDueDate flag set)');
+    logger.debug('Clearing dueDate (clearDueDate flag set)');
     sanitized.dueDate = null; // Clear the date
   } else if (updates.dueDate !== undefined) {
-    logger.info('Processing dueDate:', {
+    logger.debug('Processing dueDate:', {
       value: updates.dueDate,
       type: typeof updates.dueDate,
     });
@@ -55,7 +54,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
       try {
         // Convert local time to UTC for OmniFocus
         const utcDate = localToUTC(updates.dueDate, 'due');
-        logger.info('Date converted to UTC:', {
+        logger.debug('Date converted to UTC:', {
           original: updates.dueDate,
           converted: utcDate,
         });
@@ -72,10 +71,10 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   }
 
   if (updates.clearDeferDate) {
-    logger.info('Clearing deferDate (clearDeferDate flag set)');
+    logger.debug('Clearing deferDate (clearDeferDate flag set)');
     sanitized.deferDate = null; // Clear the date
   } else if (updates.deferDate !== undefined) {
-    logger.info('Processing deferDate:', {
+    logger.debug('Processing deferDate:', {
       value: updates.deferDate,
       type: typeof updates.deferDate,
     });
@@ -84,7 +83,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
       try {
         // Convert local time to UTC for OmniFocus
         const utcDate = localToUTC(updates.deferDate, 'defer');
-        logger.info('DeferDate converted to UTC:', {
+        logger.debug('DeferDate converted to UTC:', {
           original: updates.deferDate,
           converted: utcDate,
         });
@@ -102,10 +101,10 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
 
   // Handle plannedDate (OmniFocus 4.7+ feature)
   if (updates.clearPlannedDate) {
-    logger.info('Clearing plannedDate (clearPlannedDate flag set)');
+    logger.debug('Clearing plannedDate (clearPlannedDate flag set)');
     sanitized.plannedDate = null; // Clear the date
   } else if (updates.plannedDate !== undefined) {
-    logger.info('Processing plannedDate:', {
+    logger.debug('Processing plannedDate:', {
       value: updates.plannedDate,
       type: typeof updates.plannedDate,
     });
@@ -114,7 +113,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
       try {
         // Convert local time to UTC for OmniFocus
         const utcDate = localToUTC(updates.plannedDate, 'planned');
-        logger.info('PlannedDate converted to UTC:', {
+        logger.debug('PlannedDate converted to UTC:', {
           original: updates.plannedDate,
           converted: utcDate,
         });
@@ -135,7 +134,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
 
   // Handle completion date (for complete operation)
   if (updates.completionDate !== undefined && updates.completionDate !== null) {
-    logger.info('Processing completionDate:', {
+    logger.debug('Processing completionDate:', {
       value: updates.completionDate,
       type: typeof updates.completionDate,
     });
@@ -144,7 +143,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
       try {
         // Convert local time to UTC for OmniFocus
         const utcDate = localToUTC(updates.completionDate, 'completion');
-        logger.info('CompletionDate converted to UTC:', {
+        logger.debug('CompletionDate converted to UTC:', {
           original: updates.completionDate,
           converted: utcDate,
         });
@@ -162,7 +161,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
 
   // Handle numeric fields with separate clear flag
   if (updates.clearEstimatedMinutes) {
-    logger.info('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
+    logger.debug('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
     sanitized.estimatedMinutes = null; // Clear the estimate
   } else if (updates.estimatedMinutes !== undefined) {
     // Handle MCP bridge string coercion
@@ -211,15 +210,6 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   } else if (typeof updates.sequential === 'string') {
     // Handle MCP bridge string coercion
     sanitized.sequential = updates.sequential === 'true';
-  }
-
-  // Handle repeat rule (legacy format)
-  if (updates.repeatRule !== undefined) {
-    const normalizedRepeat = normalizeRepeatRuleInput(updates.repeatRule);
-    if (normalizedRepeat) {
-      sanitized.repeatRule = normalizedRepeat;
-      logger.debug('Sanitized repeatRule:', normalizedRepeat);
-    }
   }
 
   // Handle repetitionRule (unified API format - OmniFocus 4.7+)

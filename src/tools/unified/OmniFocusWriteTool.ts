@@ -121,9 +121,9 @@ SAFETY:
   async executeValidated(args: WriteInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
-    // Route tag_manage operations to inline tag management handler
+    // Tag management operations
     if (compiled.operation === 'tag_manage') {
-      return this.routeToTagsTool(compiled);
+      return this.handleTagManage(compiled);
     }
 
     // Handle dry-run for batch operations
@@ -148,7 +148,7 @@ SAFETY:
 
     // Route based on target: task vs project
     if (compiled.target === 'project') {
-      return this.routeToProjectsTool(compiled);
+      return this.handleProjectOperation(compiled);
     }
 
     // Route task operations to inline handlers
@@ -780,7 +780,7 @@ SAFETY:
 
   // ─── Project operations (inline) ────────────────────────────────────
 
-  private async routeToProjectsTool(
+  private async handleProjectOperation(
     compiled: Exclude<CompiledMutation, { operation: 'batch' | 'bulk_delete' }>,
   ): Promise<unknown> {
     // Route by operation type
@@ -1508,7 +1508,7 @@ SAFETY:
     }
   }
 
-  private async routeToTagsTool(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
+  private async handleTagManage(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     // Map unified API action to script action

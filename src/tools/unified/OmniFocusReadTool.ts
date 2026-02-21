@@ -185,20 +185,20 @@ PERFORMANCE:
   async executeValidated(args: ReadInput): Promise<unknown> {
     const compiled = this.compiler.compile(args);
 
-    // Route to appropriate existing tool based on type
+    // Dispatch to handler based on query type
     switch (compiled.type) {
       case 'tasks':
-        return this.routeToTasksTool(compiled);
+        return this.handleTaskQuery(compiled);
       case 'projects':
-        return this.routeToProjectsTool(compiled);
+        return this.handleProjectQuery(compiled);
       case 'tags':
-        return this.routeToTagsTool(compiled);
+        return this.handleTagQuery(compiled);
       case 'perspectives':
-        return this.routeToPerspectivesTool(compiled);
+        return this.handlePerspectiveQuery(compiled);
       case 'folders':
-        return this.routeToFoldersTool(compiled);
+        return this.handleFolderQuery(compiled);
       case 'export':
-        return this.routeToExportTool(compiled);
+        return this.handleExport(compiled);
       default: {
         // Exhaustiveness check
         const _exhaustive: never = compiled.type;
@@ -207,7 +207,7 @@ PERFORMANCE:
     }
   }
 
-  private async routeToTasksTool(compiled: CompiledQuery): Promise<unknown> {
+  private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
     const { script, filter, mode, limit } = buildTaskQuery(compiled);
 
@@ -384,7 +384,7 @@ PERFORMANCE:
     });
   }
 
-  private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {
+  private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
     const includeStats = compiled.includeStats ?? false;
@@ -479,7 +479,7 @@ PERFORMANCE:
     });
   }
 
-  private async routeToTagsTool(_compiled: CompiledQuery): Promise<unknown> {
+  private async handleTagQuery(_compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     // Check cache
@@ -530,7 +530,7 @@ PERFORMANCE:
     return response;
   }
 
-  private async routeToPerspectivesTool(_compiled: CompiledQuery): Promise<unknown> {
+  private async handlePerspectiveQuery(_compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     try {
@@ -581,7 +581,7 @@ PERFORMANCE:
     }
   }
 
-  private async routeToFoldersTool(_compiled: CompiledQuery): Promise<unknown> {
+  private async handleFolderQuery(_compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
 
     // Check cache first
@@ -627,7 +627,7 @@ PERFORMANCE:
   // EXPORT (inlined from ExportTool)
   // =============================================================================
 
-  private async routeToExportTool(compiled: CompiledQuery): Promise<unknown> {
+  private async handleExport(compiled: CompiledQuery): Promise<unknown> {
     const exportType = compiled.exportType || 'tasks';
     const format = (compiled.format || 'json') as 'json' | 'csv' | 'markdown';
     const timer = new OperationTimerV2();

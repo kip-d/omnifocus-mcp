@@ -148,7 +148,7 @@ export interface WorkflowAnalysisData {
   };
 }
 
-// Review data for ManageReviewsTool
+// Review data for OmniFocusAnalyzeTool manage_reviews
 export interface ReviewProjectData {
   id: string;
   name: string;
