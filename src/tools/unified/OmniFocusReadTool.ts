@@ -35,7 +35,7 @@ import {
 } from '../tasks/task-query-pipeline.js';
 import { buildTagsScript } from '../../contracts/ast/tag-script-builder.js';
 import type { TagQueryOptions, TagQueryMode, TagSortBy } from '../../contracts/tag-options.js';
-import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
+import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/list-perspectives.js';
 
 /**
  * Post-hoc field projection for project query results.
@@ -176,14 +176,10 @@ PERFORMANCE:
   };
 
   private compiler: QueryCompiler;
-  private perspectivesTool: PerspectivesTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new QueryCompiler();
-
-    // Instantiate existing tools for routing (non-task types)
-    this.perspectivesTool = new PerspectivesTool(cache);
   }
 
   async executeValidated(args: ReadInput): Promise<unknown> {
@@ -535,7 +531,54 @@ PERFORMANCE:
   }
 
   private async routeToPerspectivesTool(_compiled: CompiledQuery): Promise<unknown> {
-    return this.perspectivesTool.execute({ operation: 'list' });
+    const timer = new OperationTimerV2();
+
+    try {
+      const script = this.omniAutomation.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
+      const result = await this.execJson(script);
+
+      if (!isScriptSuccess(result)) {
+        return createErrorResponseV2(
+          'perspectives',
+          'SCRIPT_ERROR',
+          (isScriptError(result) ? result.error : null) || 'Failed to list perspectives',
+          'Check if OmniFocus is running',
+          isScriptError(result) ? result.details : undefined,
+          timer.toMetadata(),
+        );
+      }
+
+      // Parse the result - handle both perspectives and items properties
+      const parsedResult = result.data as {
+        perspectives?: Array<Record<string, unknown>>;
+        items?: Array<Record<string, unknown>>;
+        metadata?: Record<string, unknown>;
+      };
+
+      const perspectives = parsedResult.perspectives || parsedResult.items || [];
+
+      // Sort perspectives by name
+      perspectives.sort((a, b) => {
+        const nameA = (a.name as string) || '';
+        const nameB = (b.name as string) || '';
+        return nameA.localeCompare(nameB);
+      });
+
+      return createSuccessResponseV2('perspectives', { perspectives }, undefined, {
+        ...timer.toMetadata(),
+        ...parsedResult.metadata,
+        operation: 'list',
+      });
+    } catch (error) {
+      return createErrorResponseV2(
+        'perspectives',
+        'UNKNOWN_ERROR',
+        error instanceof Error ? error.message : 'Unknown error',
+        undefined,
+        { operation: 'list' },
+        timer.toMetadata(),
+      );
+    }
   }
 
   private async routeToFoldersTool(_compiled: CompiledQuery): Promise<unknown> {

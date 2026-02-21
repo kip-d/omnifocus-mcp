@@ -544,4 +544,102 @@ describe('OmniFocusReadTool', () => {
       });
     });
   });
+
+  // ─── Perspectives listing (inlined from PerspectivesTool) ──────────
+
+  describe('perspectives listing', () => {
+    it('returns perspectives sorted by name', async () => {
+      // Mock buildScript on the omniAutomation instance
+      (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            { name: 'Projects', isBuiltIn: true },
+            { name: 'Custom View', isBuiltIn: false },
+            { name: 'Inbox', isBuiltIn: true },
+          ],
+          metadata: { count: 3 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'perspectives' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.perspectives).toHaveLength(3);
+      // Verify sorted by name
+      const names = result.data.perspectives.map((p: any) => p.name);
+      expect(names).toEqual(['Custom View', 'Inbox', 'Projects']);
+    });
+
+    it('handles perspectives property in script response', async () => {
+      (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          perspectives: [
+            { name: 'Flagged', isBuiltIn: true },
+            { name: 'Review', isBuiltIn: true },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'perspectives' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.perspectives).toHaveLength(2);
+    });
+
+    it('returns empty array when no perspectives found', async () => {
+      (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {},
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'perspectives' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.perspectives).toHaveLength(0);
+    });
+
+    it('handles script errors for perspective queries', async () => {
+      (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'OmniFocus not running',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'perspectives' },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('handles thrown errors gracefully', async () => {
+      (tool as any).omniAutomation.buildScript = vi.fn().mockReturnValue('mock-perspectives-script');
+
+      execJsonSpy.mockRejectedValueOnce(new Error('Connection timeout'));
+
+      const result = (await tool.execute({
+        query: { type: 'perspectives' },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('UNKNOWN_ERROR');
+      expect(result.error.message).toBe('Connection timeout');
+    });
+  });
 });

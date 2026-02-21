@@ -8,7 +8,7 @@
 import { CacheManager } from './CacheManager.js';
 import { createLogger } from '../utils/logger.js';
 import { OmniFocusReadTool } from '../tools/unified/OmniFocusReadTool.js';
-import { PerspectivesTool } from '../tools/perspectives/PerspectivesTool.js';
+import { LIST_PERSPECTIVES_SCRIPT } from '../omnifocus/scripts/perspectives/list-perspectives.js';
 import { WARM_TASK_CACHES_SCRIPT } from '../omnifocus/scripts/cache/warm-task-caches.js';
 import { WARM_PROJECTS_CACHE_SCRIPT } from '../omnifocus/scripts/cache/warm-projects-cache.js';
 import { OmniAutomation } from '../omnifocus/OmniAutomation.js';
@@ -55,7 +55,7 @@ export class CacheWarmer {
         projects: true,
         tags: true,
         tasks: true,
-        perspectives: true, // Fast operation (~340ms), valuable with enhanced PerspectivesTool
+        perspectives: true, // Fast operation (~340ms), valuable for perspective listing
         ...strategy.categories,
       },
       taskWarmingOptions: {
@@ -362,15 +362,16 @@ export class CacheWarmer {
     try {
       logger.debug('Warming perspectives cache...');
 
-      const perspectivesTool = new PerspectivesTool(this.cache);
-
-      // List all perspectives (store under tasks category since they query tasks)
       await this.warmSingleOperation('tasks', 'perspectives_list', async () => {
-        const result = await perspectivesTool.execute({ operation: 'list' });
-        if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
-          return result.success ? result.data : null;
-        }
-        return null;
+        const omni = new OmniAutomation();
+        const script = omni.buildScript(LIST_PERSPECTIVES_SCRIPT, {});
+        const result = await omni.execute<{
+          items?: unknown[];
+          perspectives?: unknown[];
+          summary?: { total?: number };
+        }>(script);
+
+        return result.items || result.perspectives || [];
       });
 
       const duration = Date.now() - startTime;
