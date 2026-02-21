@@ -191,13 +191,16 @@ describe('routeToBatch — partition and delegate', () => {
     const tool = new OmniFocusWriteTool(cache as any);
     const callOrder: string[] = [];
 
-    // Mock BatchCreateTool
-    vi.spyOn((tool as any).batchTool, 'execute').mockImplementation(async () => {
+    // Mock inline executeBatchCreates
+    vi.spyOn(tool as any, 'executeBatchCreates').mockImplementation(async () => {
       callOrder.push('create');
       return {
         success: true,
-        data: { results: [{ tempId: 'temp1', realId: 'real-1', success: true }], mapping: { temp1: 'real-1' } },
-        metadata: { operation: 'batch_create' },
+        created: 1,
+        failed: 0,
+        totalItems: 1,
+        results: [{ tempId: 'temp1', realId: 'real-1', success: true, type: 'task' }],
+        mapping: { temp1: 'real-1' },
       };
     });
 

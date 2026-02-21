@@ -2,7 +2,9 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
 import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
-import { BatchCreateTool } from '../batch/BatchCreateTool.js';
+import { TempIdResolver } from './utils/tempid-resolver.js';
+import { DependencyGraph, DependencyGraphError } from './utils/dependency-graph.js';
+import type { BatchItem } from './schemas/batch-schemas.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TaskId } from '../../utils/branded-types.js';
@@ -13,6 +15,8 @@ import {
   buildDeleteScript,
   buildCreateTaskScript,
   buildUpdateTaskScript,
+  markProjectAsValidated,
+  markTaskAsValidated,
 } from '../../contracts/ast/mutation-script-builder.js';
 import type {
   ProjectUpdateData,
@@ -32,13 +36,12 @@ import type { TaskOperationResult } from '../../omnifocus/script-response-types.
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
 
-/** Response shape from BatchCreateTool.execute() — success or validation error */
-interface BatchCreateResponse {
+interface BatchItemCreationResult {
+  tempId: string;
+  realId: string | null;
   success: boolean;
-  data: {
-    created?: number;
-    mapping?: Record<string, string>;
-  };
+  error?: string;
+  type: 'project' | 'task';
 }
 
 export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
@@ -109,13 +112,11 @@ SAFETY:
   };
 
   private compiler: MutationCompiler;
-  private batchTool: BatchCreateTool;
   private tagsTool: TagsTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new MutationCompiler();
-    this.batchTool = new BatchCreateTool(cache);
     this.tagsTool = new TagsTool(cache);
   }
 
@@ -997,7 +998,7 @@ SAFETY:
     );
   }
 
-  // ─── Batch routing (unchanged, but updated to use inline handlers) ─
+  // ─── Batch routing ─────────────────────────────────────────────────
 
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
     // Partition operations by type
@@ -1015,43 +1016,54 @@ SAFETY:
     } = { created: [], updated: [], completed: [], deleted: [], errors: [] };
 
     let tempIdMapping: Record<string, string> = {};
+    let createdCount = 0;
     let hadError = false;
 
-    // Phase 1: Creates (via BatchCreateTool for hierarchy support)
+    // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
       try {
         let autoTempIdCounter = 0;
-        const batchArgs: Record<string, unknown> = {
-          items: createOps.map((op) => {
-            const item = { type: op.target, ...op.data };
-            if (!item.tempId) {
-              item.tempId = `auto_temp_${++autoTempIdCounter}`;
-            }
-            return item;
-          }),
+        const items: BatchItem[] = createOps.map((op) => {
+          const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
+          if (!item.tempId) {
+            item.tempId = `auto_temp_${++autoTempIdCounter}`;
+          }
+          return item;
+        });
+
+        const createResult = await this.executeBatchCreates(items, {
           createSequentially: compiled.createSequentially ?? true,
           atomicOperation: compiled.atomicOperation ?? false,
           returnMapping: compiled.returnMapping ?? true,
           stopOnError: compiled.stopOnError ?? true,
-        };
+        });
 
-        const createResult = (await this.batchTool.execute(batchArgs)) as BatchCreateResponse;
-
-        // Check if BatchCreateTool returned a validation error (e.g., circular deps, unknown parentTempId)
-        if (createResult?.success === false) {
+        if (createResult.success === false && createResult.rolledBack) {
+          // Atomic operation failed and was rolled back
           results.errors.push(createResult);
           if (compiled.stopOnError) hadError = true;
+        } else if (createResult.failed > 0 && compiled.stopOnError) {
+          results.errors.push(createResult);
+          hadError = true;
         } else {
           results.created.push(createResult);
+        }
 
-          // Extract tempId mapping for subsequent operations
-          // BatchCreateTool stores mapping in data.mapping (via TempIdResolver)
-          if (createResult?.data?.mapping) {
-            tempIdMapping = createResult.data.mapping;
-          }
+        // Extract tempId mapping for subsequent operations
+        createdCount = createResult.created;
+        if (createResult.mapping) {
+          tempIdMapping = createResult.mapping;
         }
       } catch (err) {
-        results.errors.push({ phase: 'create', error: String(err) });
+        if (err instanceof DependencyGraphError) {
+          results.errors.push({
+            phase: 'create',
+            error: err.message,
+            details: err.details,
+          });
+        } else {
+          results.errors.push({ phase: 'create', error: String(err) });
+        }
         if (compiled.stopOnError) hadError = true;
       }
     }
@@ -1110,10 +1122,7 @@ SAFETY:
       data: {
         operation: 'batch',
         summary: {
-          created: results.created.reduce(
-            (sum: number, r: unknown) => sum + ((r as BatchCreateResponse)?.data?.created ?? 0),
-            0,
-          ),
+          created: createdCount,
           updated: results.updated.length,
           completed: results.completed.length,
           deleted: results.deleted.length,
@@ -1176,6 +1185,328 @@ SAFETY:
         return this.handleTaskDelete(compiled as Extract<CompiledMutation, { operation: 'delete' }>);
       default:
         throw new Error(`Unexpected task operation for dispatch: ${(compiled as { operation: string }).operation}`);
+    }
+  }
+
+  // ─── Batch create (inlined from BatchCreateTool) ────────────────────
+
+  /**
+   * Execute batch creates with dependency ordering, tempId resolution,
+   * atomic rollback, and smart cache invalidation.
+   */
+  private async executeBatchCreates(
+    items: BatchItem[],
+    options: {
+      createSequentially: boolean;
+      atomicOperation: boolean;
+      returnMapping: boolean;
+      stopOnError: boolean;
+    },
+  ): Promise<{
+    success: boolean;
+    created: number;
+    failed: number;
+    totalItems: number;
+    results: BatchItemCreationResult[];
+    mapping?: Record<string, string>;
+    rolledBack?: boolean;
+  }> {
+    const resolver = new TempIdResolver();
+    const batchResults: BatchItemCreationResult[] = [];
+
+    // Step 1: Validate and build dependency graph
+    const graph = new DependencyGraph(items as BatchItem[]);
+    const stats = graph.getStats();
+
+    this.logger.info('Batch create initiated', {
+      itemCount: stats.totalItems,
+      projects: stats.projects,
+      tasks: stats.tasks,
+      maxDepth: stats.maxDepth,
+      atomic: options.atomicOperation,
+    });
+
+    // Step 2: Register all temporary IDs
+    for (const item of items) {
+      resolver.register(item.tempId, item.type);
+    }
+
+    // Step 3: Get creation order (respects dependencies)
+    const orderedItems = options.createSequentially ? graph.getCreationOrder() : items;
+
+    // Step 4: Create items in order
+    for (let i = 0; i < orderedItems.length; i++) {
+      const item = orderedItems[i];
+      try {
+        const result = await this.createBatchItem(item, resolver);
+        batchResults.push(result);
+
+        if (result.success && result.realId) {
+          resolver.resolve(item.tempId, result.realId);
+        } else {
+          resolver.markFailed(item.tempId, result.error || 'Creation failed');
+
+          if (options.stopOnError) {
+            break;
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        resolver.markFailed(item.tempId, errorMsg);
+        batchResults.push({
+          tempId: item.tempId,
+          realId: null,
+          success: false,
+          error: errorMsg,
+          type: item.type,
+        });
+
+        if (options.stopOnError) {
+          break;
+        }
+      }
+    }
+
+    // Step 5: Handle atomic operation rollback if needed
+    const failedCount = resolver.getFailedCount();
+    if (options.atomicOperation && failedCount > 0) {
+      await this.rollbackBatchCreations(resolver);
+      return {
+        success: false,
+        created: 0,
+        failed: failedCount,
+        totalItems: items.length,
+        results: batchResults,
+        rolledBack: true,
+      };
+    }
+
+    // Step 6: Smart cache invalidation after successful batch creations
+    const createdCount = resolver.getCreatedCount();
+    if (createdCount > 0) {
+      this.cache.invalidate('projects');
+
+      const projectIds = new Set<string>();
+      const tags = new Set<string>();
+
+      for (const item of items) {
+        if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
+          const realId = resolver.getRealId(item.tempId);
+          if (realId) projectIds.add(realId);
+        }
+        if (item.tags) {
+          item.tags.forEach((tag: string) => tags.add(tag));
+        }
+      }
+
+      projectIds.forEach((id) => this.cache.invalidateProject(id));
+      tags.forEach((tag) => this.cache.invalidateTag(tag));
+      this.cache.invalidateTaskQueries(['today', 'inbox']);
+      this.cache.invalidate('analytics');
+    }
+
+    // Step 7: Build response
+    const response: {
+      success: boolean;
+      created: number;
+      failed: number;
+      totalItems: number;
+      results: BatchItemCreationResult[];
+      mapping?: Record<string, string>;
+    } = {
+      success: createdCount > 0,
+      created: createdCount,
+      failed: failedCount,
+      totalItems: items.length,
+      results: batchResults,
+    };
+
+    if (options.returnMapping) {
+      response.mapping = resolver.getMappings();
+    }
+
+    return response;
+  }
+
+  /**
+   * Create a single batch item (project or task).
+   */
+  private async createBatchItem(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    this.logger.debug(`Creating ${item.type}: ${item.name}`, { tempId: item.tempId });
+
+    try {
+      if (item.type === 'project') {
+        return await this.createBatchProject(item, resolver);
+      } else {
+        return await this.createBatchTask(item, resolver);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: errorMsg,
+        type: item.type,
+      };
+    }
+  }
+
+  /**
+   * Create a project within a batch operation.
+   */
+  private async createBatchProject(item: BatchItem, _resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    const projectData: ProjectCreateData = {
+      name: item.name,
+      note: item.note || '',
+      flagged: item.flagged || false,
+      status: (item.status as ProjectCreateData['status']) || 'active',
+      sequential: item.sequential || false,
+      tags: item.tags || [],
+      folder: item.folder,
+    };
+
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: result.error,
+        type: 'project',
+      };
+    }
+
+    if (isScriptSuccess(result) && result.data) {
+      const data = result.data as { projectId?: string; project?: { id: string } };
+      const realId = data.projectId || data.project?.id;
+
+      if (realId) {
+        markProjectAsValidated(realId);
+
+        return {
+          tempId: item.tempId,
+          realId,
+          success: true,
+          type: 'project',
+        };
+      }
+    }
+
+    return {
+      tempId: item.tempId,
+      realId: null,
+      success: false,
+      error: 'No project ID returned from script',
+      type: 'project',
+    };
+  }
+
+  /**
+   * Create a task within a batch operation.
+   */
+  private async createBatchTask(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    // Resolve parent reference if present
+    let projectId: string | null = null;
+    let parentTaskId: string | null = null;
+
+    if (item.parentTempId) {
+      const parentRealId = resolver.getRealId(item.parentTempId);
+      if (!parentRealId) {
+        return {
+          tempId: item.tempId,
+          realId: null,
+          success: false,
+          error: `Parent not yet created: ${item.parentTempId}`,
+          type: 'task',
+        };
+      }
+
+      // Determine if parent is a project or task
+      const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
+      if (parentMapping?.type === 'project') {
+        projectId = parentRealId;
+      } else {
+        parentTaskId = parentRealId;
+      }
+    }
+
+    // Fall back to direct project assignment when parentTempId wasn't used
+    if (!projectId && !parentTaskId) {
+      if (item.project) {
+        projectId = item.project;
+      }
+    }
+
+    const taskData: TaskCreateData = {
+      name: item.name,
+      note: item.note || '',
+      flagged: item.flagged || false,
+      project: projectId || undefined,
+      parentTaskId: parentTaskId || undefined,
+      tags: item.tags || [],
+      dueDate: item.dueDate ? localToUTC(item.dueDate, 'due') : undefined,
+      deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
+      plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
+      estimatedMinutes: item.estimatedMinutes,
+    };
+
+    const generatedScript = await buildCreateTaskScript(taskData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: result.error,
+        type: 'task',
+      };
+    }
+
+    if (isScriptSuccess(result) && result.data) {
+      const data = result.data as { taskId?: string };
+      const realId = data.taskId;
+
+      if (realId) {
+        markTaskAsValidated(realId);
+
+        return {
+          tempId: item.tempId,
+          realId,
+          success: true,
+          type: 'task',
+        };
+      }
+    }
+
+    return {
+      tempId: item.tempId,
+      realId: null,
+      success: false,
+      error: 'No task ID returned from script',
+      type: 'task',
+    };
+  }
+
+  /**
+   * Rollback all created items in reverse order (children first, parents last).
+   */
+  private async rollbackBatchCreations(resolver: TempIdResolver): Promise<void> {
+    const createdItems = resolver.getCreatedIds();
+    this.logger.warn(`Rolling back ${createdItems.length} created items`);
+
+    for (let i = createdItems.length - 1; i >= 0; i--) {
+      const item = createdItems[i];
+      try {
+        const generatedScript = await buildDeleteScript(item.type, item.realId);
+        await this.execJson(generatedScript.script);
+        this.logger.debug(`Rolled back ${item.type}: ${item.realId}`);
+      } catch (error) {
+        this.logger.error(`Failed to rollback ${item.type} ${item.realId}:`, error);
+      }
     }
   }
 
