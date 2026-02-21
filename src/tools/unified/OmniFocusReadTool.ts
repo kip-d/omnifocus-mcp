@@ -7,6 +7,7 @@ import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
 import {
   buildTaskCountScript,
   buildFilteredProjectsScript,
+  buildFilteredFoldersScript,
   buildExportTasksScript,
   DEFAULT_FIELDS,
   type ExportFilter,
@@ -34,7 +35,6 @@ import {
 } from '../tasks/task-query-pipeline.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
-import { FoldersTool } from '../folders/FoldersTool.js';
 
 /**
  * Post-hoc field projection for project query results.
@@ -177,7 +177,6 @@ PERFORMANCE:
   private compiler: QueryCompiler;
   private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
-  private foldersTool: FoldersTool;
 
   constructor(cache: CacheManager) {
     super(cache);
@@ -186,7 +185,6 @@ PERFORMANCE:
     // Instantiate existing tools for routing (non-task types)
     this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
-    this.foldersTool = new FoldersTool(cache);
   }
 
   async executeValidated(args: ReadInput): Promise<unknown> {
@@ -495,7 +493,45 @@ PERFORMANCE:
   }
 
   private async routeToFoldersTool(_compiled: CompiledQuery): Promise<unknown> {
-    return this.foldersTool.execute({ operation: 'list' });
+    const timer = new OperationTimerV2();
+
+    // Check cache first
+    const cacheKey = 'folders_list_basic';
+    const cached = this.cache.get<{ folders: unknown[] }>('folders', cacheKey);
+    if (cached) {
+      return createSuccessResponseV2('folders', { folders: cached.folders }, undefined, {
+        ...timer.toMetadata(),
+        operation: 'list',
+        from_cache: true,
+      });
+    }
+
+    // Build and execute AST-generated folder list script
+    const { script } = buildFilteredFoldersScript({ limit: 100 });
+    const result = await this.execJson(script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'folders',
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || 'Failed to query folders',
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const resultData = result.data as { folders?: unknown[]; items?: unknown[] };
+    const folders = resultData.folders || resultData.items || [];
+
+    // Cache for 5 minutes (folders change infrequently)
+    this.cache.set('folders', cacheKey, { folders });
+
+    return createSuccessResponseV2('folders', { folders }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'list',
+      total_folders: folders.length,
+    });
   }
 
   // =============================================================================
