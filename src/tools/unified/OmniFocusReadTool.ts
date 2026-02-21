@@ -395,6 +395,9 @@ PERFORMANCE:
     // Map status filter (QueryCompiler puts status info into filters.completed)
     // The read schema doesn't have a direct status field for projects —
     // status filtering comes through the compiled filters
+    if (compiled.filters.projectStatus) {
+      projectFilter.status = compiled.filters.projectStatus;
+    }
     if (compiled.filters.folder) {
       projectFilter.folderName = compiled.filters.folder;
     }

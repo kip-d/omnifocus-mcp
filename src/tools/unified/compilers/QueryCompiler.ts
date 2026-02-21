@@ -1,5 +1,5 @@
 import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
-import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
+import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
 import { normalizeFilter } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
@@ -121,6 +121,20 @@ export class QueryCompiler {
       result.completed = false;
     }
     // 'dropped' and 'on_hold' don't map to completion status
+
+    // Preserve raw status for project queries (ProjectFilter uses ProjectStatus[])
+    if (input.status) {
+      const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {
+        active: 'active',
+        on_hold: 'onHold',
+        completed: 'done',
+        dropped: 'dropped',
+      };
+      const mapped = STATUS_TO_PROJECT[input.status];
+      if (mapped) {
+        result.projectStatus = [mapped];
+      }
+    }
 
     // Tag transformation
     if (input.tags) {

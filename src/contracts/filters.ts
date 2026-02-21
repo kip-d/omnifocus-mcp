@@ -138,6 +138,9 @@ export interface TaskFilter {
   // --- Search (for name/note search) ---
   search?: string; // Search term for name/note content
 
+  // --- Project Status (preserved for project queries) ---
+  projectStatus?: ProjectStatus[];
+
   // --- Folder (for project filtering) ---
   folder?: string; // Filter projects by folder name
 
@@ -315,6 +318,7 @@ export const FILTER_PROPERTY_NAMES = [
   'projectId',
   'project',
   'search',
+  'projectStatus',
   'folder',
   'limit',
   'offset',

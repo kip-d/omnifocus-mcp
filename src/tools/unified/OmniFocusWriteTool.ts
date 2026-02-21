@@ -432,6 +432,18 @@ SAFETY:
   private async handleTaskUpdate(compiled: Extract<CompiledMutation, { operation: 'update' }>): Promise<unknown> {
     const timer = new OperationTimerV2();
     const taskId = compiled.taskId!;
+
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
     const minimalResponse = compiled.minimalResponse ?? false;
 
     // Sanitize and validate updates using shared utility
@@ -569,6 +581,17 @@ SAFETY:
     const timer = new OperationTimerV2();
     const taskId = compiled.taskId!;
 
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
     // Convert completionDate if provided
     const processedArgs = {
       taskId,
@@ -635,6 +658,17 @@ SAFETY:
   private async handleTaskDelete(compiled: Extract<CompiledMutation, { operation: 'delete' }>): Promise<unknown> {
     const timer = new OperationTimerV2();
     const taskId = compiled.taskId!;
+
+    if (!taskId) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'taskId is required',
+        'Provide a valid task ID',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
 
     try {
       const deleteScript = this.omniAutomation.buildScript(DELETE_TASK_SCRIPT, {
@@ -1056,11 +1090,14 @@ SAFETY:
         if (err instanceof DependencyGraphError) {
           results.errors.push({
             phase: 'create',
-            error: err.message,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: err.message,
+            },
             details: err.details,
           });
         } else {
-          results.errors.push({ phase: 'create', error: String(err) });
+          results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
         }
         if (compiled.stopOnError) hadError = true;
       }
