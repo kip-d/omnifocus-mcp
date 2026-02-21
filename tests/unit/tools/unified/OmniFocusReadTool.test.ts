@@ -1,7 +1,8 @@
 /**
- * Unit tests for OmniFocusReadTool task routing logic.
+ * Unit tests for OmniFocusReadTool routing logic.
  *
- * Tests the ID lookup fast path and error handling in routeToTasksTool.
+ * Tests task ID lookup, project query routing (inline AST execution),
+ * and error handling in routeToTasksTool / routeToProjectsTool.
  * Uses execJson spy to control script results without OmniAutomation dependency.
  */
 
@@ -16,11 +17,12 @@ vi.mock('../../../../src/omnifocus/OmniAutomation');
 describe('OmniFocusReadTool', () => {
   let tool: OmniFocusReadTool;
   let execJsonSpy: ReturnType<typeof vi.fn>;
+  let mockCache: CacheManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    const mockCache = {
+    mockCache = {
       get: vi.fn().mockReturnValue(null),
       set: vi.fn(),
       invalidate: vi.fn(),
@@ -101,6 +103,151 @@ describe('OmniFocusReadTool', () => {
       expect(result.success).toBe(false);
       expect(result.error.code).toBe('SCRIPT_ERROR');
       expect(result.error.message).toContain('any-id');
+    });
+  });
+
+  // ─── Project query (inline AST execution) ─────────────────────────
+
+  describe('project query routing', () => {
+    it('returns projects from direct AST execution', async () => {
+      const mockProjects = [
+        { id: 'p1', name: 'Project 1', status: 'active' },
+        { id: 'p2', name: 'Project 2', status: 'on-hold' },
+      ];
+
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: mockProjects, metadata: { total_available: 2 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.projects).toHaveLength(2);
+      expect(result.data.projects[0].id).toBe('p1');
+      expect(result.data.projects[1].id).toBe('p2');
+    });
+
+    it('applies field projection to project results', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p1', name: 'Test Project', status: 'active', note: 'some note', flagged: false }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', fields: ['name', 'status'] },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      expect(proj.id).toBe('p1'); // id always included
+      expect(proj.name).toBe('Test Project');
+      expect(proj.status).toBe('active');
+      // Fields not requested should be stripped
+      expect(proj.note).toBeUndefined();
+      expect(proj.flagged).toBeUndefined();
+    });
+
+    it('handles script errors for project queries', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: false,
+        error: 'OmniFocus not running',
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error.code).toBe('SCRIPT_ERROR');
+    });
+
+    it('passes limit to AST builder', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_available: 0 } },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'projects', limit: 10 },
+      });
+
+      // Verify execJson was called (script contains the limit)
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptArg).toContain('10'); // limit embedded in script
+    });
+
+    it('caches project results and returns from cache on hit', async () => {
+      const cachedData = {
+        projects: [{ id: 'cached-1', name: 'Cached Project' }],
+      };
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValue(cachedData);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.projects).toEqual(cachedData.projects);
+      expect(result.metadata.from_cache).toBe(true);
+      // execJson should not be called when cache hits
+      expect(execJsonSpy).not.toHaveBeenCalled();
+    });
+
+    it('stores results in cache after fresh query', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p1', name: 'Fresh', status: 'active' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'projects' },
+      });
+
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'projects',
+        expect.any(String),
+        expect.objectContaining({ projects: expect.any(Array) }),
+      );
+    });
+
+    it('parses date strings into Date objects', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            {
+              id: 'p1',
+              name: 'Dated Project',
+              dueDate: '2025-12-31T17:00:00.000Z',
+              completionDate: null,
+              nextReviewDate: '2025-06-15T00:00:00.000Z',
+            },
+          ],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      // Dates should be parsed into Date objects
+      expect(proj.dueDate).toBeInstanceOf(Date);
+      expect(proj.nextReviewDate).toBeInstanceOf(Date);
+      // Null dates remain undefined
+      expect(proj.completionDate).toBeUndefined();
     });
   });
 });

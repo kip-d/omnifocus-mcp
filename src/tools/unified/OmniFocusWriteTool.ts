@@ -2,17 +2,24 @@ import { BaseTool } from '../base.js';
 import { CacheManager } from '../../cache/CacheManager.js';
 import { WriteSchema, type WriteInput } from './schemas/write-schema.js';
 import { MutationCompiler, type CompiledMutation } from './compilers/MutationCompiler.js';
-import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { BatchCreateTool } from '../batch/BatchCreateTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
-import { TaskId, ProjectId } from '../../utils/branded-types.js';
+import { TaskId } from '../../utils/branded-types.js';
 import {
   buildUpdateProjectScript,
+  buildCreateProjectScript,
+  buildCompleteScript,
+  buildDeleteScript,
   buildCreateTaskScript,
   buildUpdateTaskScript,
 } from '../../contracts/ast/mutation-script-builder.js';
-import type { ProjectUpdateData, RepetitionRule, TaskCreateData } from '../../contracts/mutations.js';
+import type {
+  ProjectUpdateData,
+  ProjectCreateData,
+  RepetitionRule,
+  TaskCreateData,
+} from '../../contracts/mutations.js';
 import { isScriptError, isScriptSuccess } from '../../omnifocus/script-result-types.js';
 import type { ScriptExecutionResult, TaskCreationArgs } from '../../omnifocus/script-response-types.js';
 import type { TaskOperationDataV2 } from '../response-types-v2.js';
@@ -24,7 +31,6 @@ import type { TaskOperationResult } from '../../omnifocus/script-response-types.
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
-const convertToProjectId = (id: string): ProjectId => id as ProjectId;
 
 /** Response shape from BatchCreateTool.execute() — success or validation error */
 interface BatchCreateResponse {
@@ -103,14 +109,12 @@ SAFETY:
   };
 
   private compiler: MutationCompiler;
-  private projectsTool: ProjectsTool;
   private batchTool: BatchCreateTool;
   private tagsTool: TagsTool;
 
   constructor(cache: CacheManager) {
     super(cache);
     this.compiler = new MutationCompiler();
-    this.projectsTool = new ProjectsTool(cache);
     this.batchTool = new BatchCreateTool(cache);
     this.tagsTool = new TagsTool(cache);
   }
@@ -695,12 +699,37 @@ SAFETY:
     const timer = new OperationTimerV2();
 
     if (compiled.target === 'project') {
-      // Project bulk delete still routes through ProjectsTool
-      const projectArgs: Record<string, unknown> = {
-        operation: 'bulk_delete',
-        projectIds: compiled.ids.map((id) => convertToProjectId(id)),
-      };
-      return this.projectsTool.execute(projectArgs);
+      // Project bulk delete — iterate through individual delete operations
+      const deleteResults: Array<{ projectId: string; status: string }> = [];
+      const deleteErrors: unknown[] = [];
+
+      for (const id of compiled.ids) {
+        try {
+          const deleteResult = await this.handleProjectDelete(id);
+          const success =
+            deleteResult && typeof deleteResult === 'object' && (deleteResult as { success?: boolean }).success;
+          if (success) {
+            deleteResults.push({ projectId: id, status: 'deleted' });
+          } else {
+            deleteErrors.push({ projectId: id, error: 'Delete failed' });
+          }
+        } catch (err) {
+          deleteErrors.push({ projectId: id, error: String(err) });
+        }
+      }
+
+      return createSuccessResponseV2(
+        'omnifocus_write',
+        {
+          operation: 'bulk_delete',
+          successCount: deleteResults.length,
+          errorCount: deleteErrors.length,
+          results: deleteResults,
+          errors: deleteErrors.length > 0 ? deleteErrors : undefined,
+        },
+        undefined,
+        timer.toMetadata(),
+      );
     }
 
     // Task bulk delete — direct execution
@@ -750,36 +779,190 @@ SAFETY:
     return createSuccessResponseV2('omnifocus_write', responseData, undefined, timer.toMetadata());
   }
 
-  // ─── Project routing (unchanged) ───────────────────────────────────
+  // ─── Project operations (inline) ────────────────────────────────────
 
   private async routeToProjectsTool(
     compiled: Exclude<CompiledMutation, { operation: 'batch' | 'bulk_delete' }>,
   ): Promise<unknown> {
-    // Direct routing for project updates — bypasses ProjectsTool to avoid field stripping
-    if (compiled.operation === 'update' && 'projectId' in compiled && compiled.projectId) {
-      return this.handleProjectUpdateDirect(compiled.projectId, compiled.changes as ProjectUpdateData);
+    // Route by operation type
+    switch (compiled.operation) {
+      case 'update':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectUpdateDirect(compiled.projectId, compiled.changes as ProjectUpdateData);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for update',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      case 'create':
+        return this.handleProjectCreate(compiled as Extract<CompiledMutation, { operation: 'create' }>);
+      case 'complete':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectComplete(compiled.projectId);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for complete',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      case 'delete':
+        if ('projectId' in compiled && compiled.projectId) {
+          return this.handleProjectDelete(compiled.projectId);
+        }
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'MISSING_PARAMETER',
+          'Project ID is required for delete',
+          'Use omnifocus_read to find the project ID first',
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
+      default:
+        return createErrorResponseV2(
+          'omnifocus_write',
+          'INVALID_OPERATION',
+          `Invalid project operation: ${String((compiled as { operation: string }).operation)}`,
+          undefined,
+          undefined,
+          new OperationTimerV2().toMetadata(),
+        );
     }
-
-    // Map compiled mutation to ProjectsTool parameters (create, complete, delete)
-    const projectArgs: Record<string, unknown> = {
-      operation: compiled.operation,
-    };
-
-    // Add projectId for complete/delete operations with branded type safety
-    if ('projectId' in compiled && compiled.projectId) {
-      projectArgs.projectId = convertToProjectId(compiled.projectId);
-    }
-
-    // Add data for create - spread all fields (name, tags, dueDate, etc.)
-    if ('data' in compiled && compiled.data) {
-      Object.assign(projectArgs, compiled.data);
-    }
-
-    return this.projectsTool.execute(projectArgs);
   }
 
   /**
-   * Handle project updates directly via buildUpdateProjectScript, bypassing ProjectsTool.
+   * Create a new project via buildCreateProjectScript (AST mutation builder).
+   */
+  private async handleProjectCreate(compiled: Extract<CompiledMutation, { operation: 'create' }>): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const data = compiled.data;
+
+    if (!data.name) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'Project name is required',
+        'Add a name parameter with the project name',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const projectData: ProjectCreateData = {
+      name: data.name,
+      note: data.note,
+      dueDate: data.dueDate,
+      flagged: data.flagged,
+      tags: data.tags,
+      sequential: data.sequential ?? false,
+      folder: data.folder,
+      status: data.status,
+      reviewInterval: data.reviewInterval,
+    };
+
+    const generatedScript = buildCreateProjectScript(projectData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to create project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'CREATE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        'Check the project name and try again',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Invalidate cache
+    this.cache.invalidate('projects');
+
+    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'create' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'create',
+    });
+  }
+
+  /**
+   * Complete a project via buildCompleteScript (AST mutation builder).
+   */
+  private async handleProjectComplete(projectId: string): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    const generatedScript = await buildCompleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to complete project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'COMPLETE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        "Check the project ID and ensure it's not already completed",
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Smart cache invalidation
+    this.cache.invalidateProject(projectId);
+    this.cache.invalidate('analytics');
+
+    return createSuccessResponseV2('omnifocus_write', { project: result.data, operation: 'complete' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'complete',
+    });
+  }
+
+  /**
+   * Delete a project via buildDeleteScript (AST mutation builder).
+   */
+  private async handleProjectDelete(projectId: string): Promise<unknown> {
+    const timer = new OperationTimerV2();
+
+    const generatedScript = await buildDeleteScript('project', projectId);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to delete project';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'DELETE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        'Check the project ID and permissions',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Smart cache invalidation
+    this.cache.invalidateProject(projectId);
+    this.cache.invalidate('analytics');
+
+    return createSuccessResponseV2('omnifocus_write', { project: { deleted: true }, operation: 'delete' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'delete',
+    });
+  }
+
+  /**
+   * Handle project updates directly via buildUpdateProjectScript.
    * This ensures all ProjectUpdateData fields are passed through without stripping.
    */
   private async handleProjectUpdateDirect(projectId: string, changes: ProjectUpdateData): Promise<unknown> {
@@ -873,7 +1056,7 @@ SAFETY:
       }
     }
 
-    // Phase 2-4: Updates, completes, deletes — route through inline handlers or ProjectsTool
+    // Phase 2-4: Updates, completes, deletes — route through inline handlers
     const phases: Array<{
       name: string;
       ops: typeof updateOps;
@@ -896,13 +1079,15 @@ SAFETY:
           if (op.target === 'project' && op.operation === 'update') {
             result = await this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
           } else if (op.target === 'project') {
-            const routeArgs: Record<string, unknown> = {
-              operation: op.operation,
-              projectId: resolvedId,
-            };
-            if (op.changes) Object.assign(routeArgs, op.changes);
-            if (op.completionDate) routeArgs.completionDate = op.completionDate;
-            result = await this.projectsTool.execute(routeArgs);
+            // Route project operations through inline handlers
+            if (op.operation === 'complete') {
+              result = await this.handleProjectComplete(resolvedId!);
+            } else if (op.operation === 'delete') {
+              result = await this.handleProjectDelete(resolvedId!);
+            } else {
+              // Fallback: should not reach here for valid batch operations
+              throw new Error(`Unsupported batch project operation: ${op.operation}`);
+            }
           } else {
             // Task operations — use inline handlers via the main dispatch
             // Build a compiled mutation and dispatch it

@@ -3,10 +3,19 @@ import { CacheManager } from '../../cache/CacheManager.js';
 import { ReadSchema, type ReadInput } from './schemas/read-schema.js';
 import { QueryCompiler, type CompiledQuery } from './compilers/QueryCompiler.js';
 import { buildListTasksScriptV4 } from '../../omnifocus/scripts/tasks.js';
-import { buildTaskCountScript, DEFAULT_FIELDS } from '../../contracts/ast/script-builder.js';
+import {
+  buildTaskCountScript,
+  buildFilteredProjectsScript,
+  DEFAULT_FIELDS,
+} from '../../contracts/ast/script-builder.js';
 import { isScriptSuccess, isScriptError } from '../../omnifocus/script-result-types.js';
-import { createTaskResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
-import type { TaskFilter } from '../../contracts/filters.js';
+import {
+  createTaskResponseV2,
+  createListResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+} from '../../utils/response-format.js';
+import type { TaskFilter, ProjectFilter } from '../../contracts/filters.js';
 import {
   augmentFilterForMode,
   getDefaultSort,
@@ -17,7 +26,6 @@ import {
   countTodayCategories,
   type TaskQueryMode,
 } from '../tasks/task-query-pipeline.js';
-import { ProjectsTool } from '../projects/ProjectsTool.js';
 import { TagsTool } from '../tags/TagsTool.js';
 import { PerspectivesTool } from '../perspectives/PerspectivesTool.js';
 import { FoldersTool } from '../folders/FoldersTool.js';
@@ -162,7 +170,6 @@ PERFORMANCE:
   };
 
   private compiler: QueryCompiler;
-  private projectsTool: ProjectsTool;
   private tagsTool: TagsTool;
   private perspectivesTool: PerspectivesTool;
   private foldersTool: FoldersTool;
@@ -173,7 +180,6 @@ PERFORMANCE:
     this.compiler = new QueryCompiler();
 
     // Instantiate existing tools for routing (non-task types)
-    this.projectsTool = new ProjectsTool(cache);
     this.tagsTool = new TagsTool(cache);
     this.perspectivesTool = new PerspectivesTool(cache);
     this.foldersTool = new FoldersTool(cache);
@@ -383,35 +389,98 @@ PERFORMANCE:
   }
 
   private async routeToProjectsTool(compiled: CompiledQuery): Promise<unknown> {
-    const projectsArgs: Record<string, unknown> = {
-      operation: 'list',
-      includeCompleted: compiled.filters.completed === true,
-      response_format: 'json', // Optimized for LLM token efficiency
-    };
+    const timer = new OperationTimerV2();
+    const limit = compiled.limit || 25;
+    const includeStats = compiled.includeStats ?? false;
 
-    // Pass limit if specified (defaults to 50 in ProjectsTool)
-    if (compiled.limit) projectsArgs.limit = compiled.limit;
+    // Build ProjectFilter from compiled query
+    const projectFilter: ProjectFilter = {};
 
-    // Tags are already transformed to string[] by QueryCompiler
-    if (compiled.filters.tags) projectsArgs.tags = compiled.filters.tags;
-
-    // Pass folder filter for project filtering
-    if (compiled.filters.folder) projectsArgs.folder = compiled.filters.folder;
-
-    // Pass search filter for project name search (from name filter)
-    if (compiled.filters.search) projectsArgs.search = compiled.filters.search;
-
-    // Pass includeStats if specified
-    if (compiled.includeStats) projectsArgs.includeStats = compiled.includeStats;
-
-    const result = await this.projectsTool.execute(projectsArgs);
-
-    // Post-hoc field projection: strip to requested fields only
-    if (compiled.fields && compiled.fields.length > 0 && result && typeof result === 'object') {
-      return projectFieldsOnResult(result as unknown as Record<string, unknown>, compiled.fields);
+    // Map status filter (QueryCompiler puts status info into filters.completed)
+    // The read schema doesn't have a direct status field for projects —
+    // status filtering comes through the compiled filters
+    if (compiled.filters.folder) {
+      projectFilter.folderName = compiled.filters.folder;
+    }
+    if (compiled.filters.search) {
+      projectFilter.text = compiled.filters.search;
     }
 
-    return result;
+    // Build cache key
+    const cacheParams = { ...projectFilter, limit, includeStats };
+    const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
+
+    // Check cache
+    const cached = this.cache.get<{ projects: unknown[] }>('projects', cacheKey);
+    if (cached) {
+      const cacheResult = createListResponseV2('projects', cached.projects, 'projects', {
+        ...timer.toMetadata(),
+        from_cache: true,
+        operation: 'list',
+      }) as unknown as Record<string, unknown>;
+
+      // Post-hoc field projection
+      if (compiled.fields && compiled.fields.length > 0) {
+        return projectFieldsOnResult(cacheResult, compiled.fields);
+      }
+      return cacheResult;
+    }
+
+    // Execute query using AST-powered script builder
+    const generatedScript = buildFilteredProjectsScript(projectFilter, {
+      limit,
+      includeStats,
+      performanceMode: includeStats ? 'normal' : 'lite',
+    });
+
+    const result = await this.execJson(generatedScript.script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'projects',
+        'SCRIPT_ERROR',
+        (isScriptError(result) ? result.error : null) || 'Failed to query projects',
+        'Check if OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    // Parse dates and cache
+    const resultData = result.data as { projects?: unknown[]; items?: unknown[] };
+    const projects = this.parseProjects(resultData.projects || resultData.items || result.data);
+    this.cache.set('projects', cacheKey, { projects });
+
+    const listResult = createListResponseV2('projects', projects, 'projects', {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'list',
+    }) as unknown as Record<string, unknown>;
+
+    // Post-hoc field projection: strip to requested fields only
+    if (compiled.fields && compiled.fields.length > 0) {
+      return projectFieldsOnResult(listResult, compiled.fields);
+    }
+
+    return listResult;
+  }
+
+  /**
+   * Parse raw project data, converting date strings to Date objects.
+   */
+  private parseProjects(projects: unknown): unknown[] {
+    if (!Array.isArray(projects)) return [];
+
+    return projects.map((project: unknown) => {
+      const projectRecord = project as Record<string, unknown>;
+      return {
+        ...projectRecord,
+        dueDate: projectRecord.dueDate ? new Date(projectRecord.dueDate as string) : undefined,
+        completionDate: projectRecord.completionDate ? new Date(projectRecord.completionDate as string) : undefined,
+        nextReviewDate: projectRecord.nextReviewDate ? new Date(projectRecord.nextReviewDate as string) : undefined,
+        lastReviewDate: projectRecord.lastReviewDate ? new Date(projectRecord.lastReviewDate as string) : undefined,
+      };
+    });
   }
 
   private async routeToTagsTool(_compiled: CompiledQuery): Promise<unknown> {

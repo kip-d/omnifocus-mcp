@@ -440,6 +440,131 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  // ─── PROJECT OPERATIONS (inline, no ProjectsTool) ──────────────────
+
+  describe('project create', () => {
+    it('creates a project via buildCreateProjectScript and invalidates cache', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ id: 'proj-new', name: 'New Project', status: 'active' }));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'New Project' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.project).toBeDefined();
+      expect(result.data.operation).toBe('create');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('projects');
+    });
+
+    it('returns error when project name is missing', async () => {
+      // The write schema requires 'name' in data for create operations,
+      // so Zod validation throws before reaching the inline handler
+      await expect(
+        tool.execute({
+          mutation: {
+            operation: 'create',
+            target: 'project',
+            data: {} as any,
+          },
+        }),
+      ).rejects.toThrow('Invalid parameters');
+    });
+
+    it('passes tags and folder through to create script', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ id: 'proj-t', name: 'Tagged', tags: ['work'] }));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'Tagged', tags: ['work'], folder: 'Work' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(execJsonSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('project complete', () => {
+    it('completes a project via buildCompleteScript and invalidates cache', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({ success: true, projectId: 'proj-done', name: 'Done', completed: true }),
+      );
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'complete',
+          target: 'project',
+          id: 'proj-done',
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.project).toBeDefined();
+      expect(result.data.operation).toBe('complete');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-done');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+    });
+
+    it('returns error when script fails', async () => {
+      execJsonSpy.mockResolvedValue(createScriptError('Project not found', 'complete'));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'complete',
+          target: 'project',
+          id: 'proj-missing',
+        },
+      })) as any;
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('project delete', () => {
+    it('deletes a project via buildDeleteScript and invalidates cache', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ success: true, projectId: 'proj-del', deleted: true }));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'delete',
+          target: 'project',
+          id: 'proj-del',
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.project).toBeDefined();
+      expect(result.data.project.deleted).toBe(true);
+      expect(result.data.operation).toBe('delete');
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-del');
+      expect(mockCache.invalidate).toHaveBeenCalledWith('analytics');
+    });
+  });
+
+  describe('project update (direct)', () => {
+    it('updates a project via handleProjectUpdateDirect (bypass path)', async () => {
+      execJsonSpy.mockResolvedValue(createScriptSuccess({ project: { id: 'proj-upd', name: 'Updated' } }));
+
+      const result = (await tool.execute({
+        mutation: {
+          operation: 'update',
+          target: 'project',
+          id: 'proj-upd',
+          changes: { name: 'Updated' },
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(mockCache.invalidateProject).toHaveBeenCalledWith('proj-upd');
+    });
+  });
+
   // ─── ERROR CASES ────────────────────────────────────────────────────
 
   describe('error cases', () => {
