@@ -5,6 +5,7 @@ import { CacheManager } from '../../../src/cache/CacheManager';
 import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
+import { OmniFocusReadTool } from '../../../src/tools/unified/OmniFocusReadTool.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -573,6 +574,262 @@ describe('BaseTool', () => {
 
       expect(jsonSchema.properties.field.description).toBe('This is a field description');
       expect(jsonSchema.properties.optionalField.description).toBe('This is optional');
+    });
+  });
+
+  describe('ZodLazy schema handling', () => {
+    it('should resolve z.lazy() fields as object schemas, not strings', () => {
+      const InnerSchema = z.lazy(() =>
+        z.object({
+          name: z.string(),
+          value: z.number().optional(),
+        }),
+      );
+
+      class LazyTool extends BaseTool {
+        name = 'lazy-tool';
+        description = 'Test z.lazy() handling';
+        schema = z.object({
+          filters: InnerSchema,
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const lazyTool = new LazyTool(mockCache);
+      const jsonSchema = lazyTool.inputSchema;
+
+      // Should resolve to the object schema, not fall through to { type: 'string' }
+      expect(jsonSchema.properties.filters).toMatchObject({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          value: { type: 'number' },
+        },
+        required: ['name'],
+      });
+    });
+
+    it('should handle recursive schemas (AND/OR/NOT) without stack overflow', () => {
+      // Simulates FilterSchema's recursive AND/OR/NOT pattern
+      type RecursiveFilter = {
+        name?: string;
+        AND?: RecursiveFilter[];
+        OR?: RecursiveFilter[];
+        NOT?: RecursiveFilter;
+      };
+
+      const RecursiveFilterSchema: z.ZodType<RecursiveFilter> = z.lazy(() =>
+        z.object({
+          name: z.string().optional(),
+          AND: z.array(RecursiveFilterSchema).optional(),
+          OR: z.array(RecursiveFilterSchema).optional(),
+          NOT: RecursiveFilterSchema.optional(),
+        }),
+      );
+
+      class RecursiveTool extends BaseTool {
+        name = 'recursive-tool';
+        description = 'Test recursive z.lazy() handling';
+        schema = z.object({
+          filter: RecursiveFilterSchema,
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const recursiveTool = new RecursiveTool(mockCache);
+
+      // Should not throw (no infinite recursion)
+      const jsonSchema = recursiveTool.inputSchema;
+
+      // Top level should be an object with name, AND, OR, NOT
+      expect(jsonSchema.properties.filter).toMatchObject({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      });
+
+      // AND should be an array
+      expect(jsonSchema.properties.filter.properties.AND).toMatchObject({
+        type: 'array',
+      });
+
+      // OR should be an array
+      expect(jsonSchema.properties.filter.properties.OR).toMatchObject({
+        type: 'array',
+      });
+
+      // NOT should resolve to an object (recursion still within depth limit)
+      expect(jsonSchema.properties.filter.properties.NOT.type).toBe('object');
+    });
+
+    it('should cap recursion at depth 5 and return generic object schema', () => {
+      // Create a deeply recursive schema that references itself
+      type DeepRecursive = { child?: DeepRecursive };
+      const DeepSchema: z.ZodType<DeepRecursive> = z.lazy(() =>
+        z.object({
+          child: DeepSchema.optional(),
+        }),
+      );
+
+      class DeepTool extends BaseTool {
+        name = 'deep-tool';
+        description = 'Test recursion depth limit';
+        schema = z.object({
+          root: DeepSchema,
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const deepTool = new DeepTool(mockCache);
+      const jsonSchema = deepTool.inputSchema;
+
+      // Should not throw
+      expect(jsonSchema.properties.root).toBeDefined();
+      expect(jsonSchema.properties.root.type).toBe('object');
+
+      // Walk down the chain to verify it terminates
+      let current = jsonSchema.properties.root;
+      let depth = 0;
+      while (current?.properties?.child?.type === 'object' && current?.properties?.child?.properties?.child) {
+        current = current.properties.child;
+        depth++;
+        // Safety: prevent infinite loop in test itself
+        if (depth > 10) break;
+      }
+
+      // Should have stopped before going infinitely deep
+      expect(depth).toBeLessThanOrEqual(5);
+    });
+
+    it('should reset depth counter between separate schema conversions', () => {
+      type RecursiveItem = { sub?: RecursiveItem };
+      const ItemSchema: z.ZodType<RecursiveItem> = z.lazy(() =>
+        z.object({
+          sub: ItemSchema.optional(),
+        }),
+      );
+
+      class ResetTool extends BaseTool {
+        name = 'reset-tool';
+        description = 'Test depth counter reset';
+        schema = z.object({
+          item: ItemSchema,
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const tool = new ResetTool(mockCache);
+
+      // Call inputSchema twice - both should succeed identically
+      const schema1 = tool.inputSchema;
+      const schema2 = tool.inputSchema;
+
+      expect(schema1).toEqual(schema2);
+      expect(schema1.properties.item.type).toBe('object');
+    });
+
+    it('should handle optional z.lazy() fields correctly in isOptionalField', () => {
+      const LazyInner = z.lazy(() => z.object({ x: z.string() }));
+
+      class OptionalLazyTool extends BaseTool {
+        name = 'optional-lazy-tool';
+        description = 'Test optional z.lazy()';
+        schema = z.object({
+          required_lazy: LazyInner,
+          optional_lazy: LazyInner.optional(),
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const tool = new OptionalLazyTool(mockCache);
+      const jsonSchema = tool.inputSchema;
+
+      // required_lazy should be in required array
+      expect(jsonSchema.required).toContain('required_lazy');
+      // optional_lazy should NOT be in required array
+      expect(jsonSchema.required).not.toContain('optional_lazy');
+    });
+
+    it('should resolve OmniFocusReadTool filters as object with properties (real schema)', () => {
+      // This test exercises the REAL wrapping chain that caused the original bug:
+      // coerceObject(FilterSchema).optional() → ZodOptional<ZodEffects<ZodLazy<ZodObject>>>
+      // Without the z.lazy() fix, filters would fall through to { type: 'string' }.
+      const readTool = new OmniFocusReadTool(mockCache);
+      const jsonSchema = readTool.inputSchema;
+
+      // The top-level schema should have a 'query' property
+      expect(jsonSchema.properties).toBeDefined();
+      expect(jsonSchema.properties.query).toBeDefined();
+
+      // query is a discriminatedUnion → has oneOf with multiple variants
+      const querySchema = jsonSchema.properties.query as Record<string, unknown>;
+      const oneOf = querySchema.oneOf as Record<string, unknown>[];
+      expect(oneOf).toBeDefined();
+      expect(oneOf.length).toBeGreaterThan(0);
+
+      // Find the tasks variant (has type: "tasks" literal)
+      const tasksVariant = oneOf.find((variant) => {
+        const props = variant.properties as Record<string, Record<string, unknown>>;
+        return props?.type?.const === 'tasks';
+      }) as Record<string, unknown>;
+      expect(tasksVariant).toBeDefined();
+
+      // The filters property should be an OBJECT with properties, NOT { type: 'string' }
+      const filtersSchema = (tasksVariant.properties as Record<string, Record<string, unknown>>).filters;
+      expect(filtersSchema).toBeDefined();
+      expect(filtersSchema.type).toBe('object');
+      expect(filtersSchema.properties).toBeDefined();
+
+      // Verify specific filter fields are present (proves full resolution through the chain)
+      const filterProps = filtersSchema.properties as Record<string, Record<string, unknown>>;
+      expect(filterProps.flagged).toMatchObject({ type: 'boolean' });
+      expect(filterProps.project).toBeDefined();
+      expect(filterProps.tags).toMatchObject({ type: 'object' });
+      expect(filterProps.dueDate).toBeDefined();
+
+      // Verify recursive fields (AND/OR/NOT) resolved as arrays/objects, not strings
+      expect(filterProps.AND).toMatchObject({ type: 'array' });
+      expect(filterProps.OR).toMatchObject({ type: 'array' });
+      expect(filterProps.NOT).toMatchObject({ type: 'object' });
+    });
+
+    it('should preserve description on z.lazy() schemas', () => {
+      const DescribedLazy = z.lazy(() => z.object({ val: z.string() })).describe('A lazy field');
+
+      class DescribedLazyTool extends BaseTool {
+        name = 'described-lazy-tool';
+        description = 'Test description on z.lazy()';
+        schema = z.object({
+          data: DescribedLazy,
+        });
+
+        protected async executeValidated(args: any): Promise<any> {
+          return { data: args };
+        }
+      }
+
+      const tool = new DescribedLazyTool(mockCache);
+      const jsonSchema = tool.inputSchema;
+
+      // The resolved schema should be an object (not a string fallback)
+      expect(jsonSchema.properties.data.type).toBe('object');
+      expect(jsonSchema.properties.data.properties.val).toMatchObject({ type: 'string' });
     });
   });
 

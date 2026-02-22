@@ -102,6 +102,9 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   // Circuit breaker for OmniFocus connectivity
   private circuitBreaker: CircuitBreaker;
 
+  // Recursion guard for z.lazy() schema resolution (prevents infinite loops on AND/OR/NOT self-references)
+  private _schemaConversionDepth = 0;
+
   constructor(
     cache: CacheManager,
     private correlationId?: string,
@@ -212,6 +215,14 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   }
 
   /**
+   * Resolve a ZodLazy schema to its underlying type.
+   * Centralizes the cast to avoid repetition across isOptionalField and zodTypeToJsonSchema.
+   */
+  private resolveZodLazy(schema: z.ZodLazy<z.ZodTypeAny>): z.ZodTypeAny {
+    return (schema._def as { getter: () => z.ZodTypeAny }).getter();
+  }
+
+  /**
    * Check if a Zod field is optional (unwrapping effects/transformations)
    */
   private isOptionalField(schema: z.ZodTypeAny): boolean {
@@ -223,6 +234,12 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     // Unwrap ZodEffects (from .transform(), .refine(), etc.)
     if (schema instanceof z.ZodEffects) {
       return this.isOptionalField(schema._def.schema as z.ZodTypeAny);
+    }
+
+    // Unwrap ZodLazy (from z.lazy() for recursive schemas)
+    if (schema instanceof z.ZodLazy) {
+      if (this._schemaConversionDepth >= 5) return false;
+      return this.isOptionalField(this.resolveZodLazy(schema));
     }
 
     // Unwrap ZodNullable
@@ -342,6 +359,19 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         required: required.length > 0 ? required : undefined,
         description: schema.description,
       };
+    }
+
+    // Handle z.lazy() schemas (used for recursive types like FilterSchema's AND/OR/NOT)
+    if (schema instanceof z.ZodLazy) {
+      if (this._schemaConversionDepth >= 5) {
+        return { type: 'object', description: schema.description || '(recursive)' };
+      }
+      this._schemaConversionDepth++;
+      try {
+        return this.zodTypeToJsonSchema(this.resolveZodLazy(schema));
+      } finally {
+        this._schemaConversionDepth--;
+      }
     }
 
     // Default fallback
