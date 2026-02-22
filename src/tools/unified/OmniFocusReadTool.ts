@@ -86,6 +86,7 @@ interface TaskQueryPlan {
   mode: TaskQueryMode | undefined;
   scriptFields: string[];
   limit: number;
+  sortedInScript: boolean;
 }
 
 /**
@@ -106,15 +107,23 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
     scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
   }
 
+  // Only pass user-specified sort to the script builder (not mode default sorts).
+  // Mode default sorts operate on small, already-filtered sets and stay as post-hoc.
+  const userSort = compiled.sort;
+
   const script = buildListTasksScriptV4({
     filter,
     fields: scriptFields,
     limit,
     offset: compiled.offset,
     mode: mode === 'inbox' ? 'inbox' : undefined,
+    sort: userSort,
   });
 
-  return { script, filter, mode, scriptFields, limit };
+  // Inbox path doesn't pass sort to buildInboxScript, so sort is never applied in-script.
+  // Mark sortedInScript false so the post-hoc sort handles it instead.
+  const isInboxPath = mode === 'inbox';
+  return { script, filter, mode, scriptFields, limit, sortedInScript: !isInboxPath && !!userSort };
 }
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
@@ -209,7 +218,7 @@ PERFORMANCE:
 
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
-    const { script, filter, mode, limit } = buildTaskQuery(compiled);
+    const { script, filter, mode, limit, sortedInScript } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
@@ -235,16 +244,24 @@ PERFORMANCE:
       );
     }
 
-    const data = result.data as { tasks?: unknown[]; items?: unknown[] };
+    const data = result.data as {
+      tasks?: unknown[];
+      items?: unknown[];
+      metadata?: { total_matched?: number; sorted_in_script?: boolean };
+    };
     let tasks = parseTasks(data.tasks || data.items || []);
+    const totalMatched = data.metadata?.total_matched;
 
     // Smart suggest: score and rank
     if (mode === 'smart_suggest') {
       tasks = scoreForSmartSuggest(tasks, limit);
     }
 
-    // Sort (user-specified or mode default)
-    const sortOptions = compiled.sort || getDefaultSort(mode as TaskQueryMode);
+    // Sort: skip post-hoc sort when sort was already applied in-script.
+    // User-specified sorts are embedded in OmniJS (sort-before-limit fix).
+    // Mode default sorts (e.g., overdue -> dueDate asc) stay as post-hoc
+    // since they operate on small, already-filtered result sets.
+    const sortOptions = sortedInScript ? undefined : compiled.sort || getDefaultSort(mode as TaskQueryMode);
     if (sortOptions) {
       tasks = sortTasks(tasks, sortOptions as import('../tasks/filter-types.js').SortOption[]);
     }
@@ -255,7 +272,8 @@ PERFORMANCE:
       from_cache: false,
       mode: mode || 'all',
       offset: compiled.offset || 0,
-      sort_applied: !!sortOptions,
+      sort_applied: sortedInScript || !!sortOptions,
+      ...(totalMatched !== undefined ? { total_matched: totalMatched } : {}),
     };
 
     // Today mode: count categories BEFORE field projection

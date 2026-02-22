@@ -469,3 +469,209 @@ describe('buildTaskCountScript', () => {
     });
   });
 });
+
+describe('buildFilteredTasksScript sort-before-limit', () => {
+  describe('sort comparator generation', () => {
+    it('includes sort comparator when sort options provided', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('allResults.sort(');
+      expect(result.script).toContain('sorted_in_script: true');
+    });
+
+    it('generates multi-level sort comparator', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [
+            { field: 'dueDate', direction: 'asc' },
+            { field: 'name', direction: 'desc' },
+          ],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('allResults.sort(');
+      // Should reference both fields
+      expect(result.script).toContain('a.dueDate');
+      expect(result.script).toContain('a.name');
+    });
+
+    it('handles desc direction with negative multiplier', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'name', direction: 'desc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('* -1');
+    });
+
+    it('handles asc direction with positive multiplier', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'name', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('* 1');
+    });
+
+    it('generates localeCompare for string fields', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'name', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('localeCompare');
+    });
+
+    it('generates date comparison for date fields', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      // Date fields use lexicographic comparison on ISO strings
+      expect(result.script).toContain('a.dueDate');
+      expect(result.script).toContain('b.dueDate');
+    });
+
+    it('generates boolean comparison for boolean fields', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'flagged', direction: 'desc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('a.flagged');
+      expect(result.script).toContain('b.flagged');
+    });
+
+    it('generates numeric comparison for numeric fields', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'estimatedMinutes', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('a.estimatedMinutes');
+      expect(result.script).toContain('b.estimatedMinutes');
+    });
+  });
+
+  describe('sort applied before limit', () => {
+    it('collects all results before sorting when sort specified', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      // Should use allResults pattern (collect all, then sort, then slice)
+      expect(result.script).toContain('allResults.push(');
+      expect(result.script).toContain('allResults.sort(');
+      expect(result.script).toContain('allResults.slice(');
+      // Should NOT have the early limit check during iteration
+      expect(result.script).not.toContain('if (count >= limit) return');
+    });
+
+    it('uses early limit when no sort specified', () => {
+      const result = buildFilteredTasksScript({}, { limit: 10 });
+
+      // Should use the fast path with early limit
+      expect(result.script).toContain('if (count >= limit) return');
+      // Should NOT have allResults pattern
+      expect(result.script).not.toContain('allResults');
+    });
+  });
+
+  describe('response includes total_matched', () => {
+    it('includes total_matched count when sort specified', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      expect(result.script).toContain('total_matched: allResults.length');
+    });
+
+    it('does not include total_matched when no sort specified', () => {
+      const result = buildFilteredTasksScript({}, { limit: 10 });
+
+      expect(result.script).not.toContain('total_matched');
+    });
+  });
+
+  describe('offset with sort', () => {
+    it('applies offset via slice when sort specified', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+          offset: 20,
+        },
+      );
+
+      // Should slice from offset to offset+limit
+      expect(result.script).toContain('allResults.slice(20, 20 + 10)');
+      expect(result.script).toContain('offset_applied: 20');
+    });
+
+    it('slices from 0 when no offset with sort', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'name', direction: 'asc' }],
+          limit: 5,
+        },
+      );
+
+      expect(result.script).toContain('allResults.slice(0, 0 + 5)');
+    });
+  });
+
+  describe('null safety in sort comparator', () => {
+    it('pushes nulls to end in date sort', () => {
+      const result = buildFilteredTasksScript(
+        {},
+        {
+          sort: [{ field: 'dueDate', direction: 'asc' }],
+          limit: 10,
+        },
+      );
+
+      // Null checks should be present
+      expect(result.script).toContain('av == null');
+      expect(result.script).toContain('bv == null');
+      expect(result.script).toContain('return 1'); // null -> end
+      expect(result.script).toContain('return -1'); // non-null -> before null
+    });
+  });
+});
