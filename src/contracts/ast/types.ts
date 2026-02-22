@@ -208,6 +208,7 @@ export const KNOWN_FIELDS = [
   'task.dueDate',
   'task.deferDate',
   'task.plannedDate',
+  'task.completionDate',
   'task.effectiveDueDate',
   'task.effectiveDeferDate',
 

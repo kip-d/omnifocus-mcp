@@ -20,9 +20,9 @@ import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
 describe('FILTER_DEFS unified registry', () => {
   describe('registry structure', () => {
-    it('has expected number of entries (16+)', () => {
-      // 13 non-date entries + 3 date entries = 16
-      expect(FILTER_DEFS.length).toBeGreaterThanOrEqual(16);
+    it('has expected number of entries (17+)', () => {
+      // 13 non-date entries + 4 date entries = 17
+      expect(FILTER_DEFS.length).toBeGreaterThanOrEqual(17);
     });
 
     it('every entry has a non-empty fields array', () => {
@@ -66,6 +66,7 @@ describe('FILTER_DEFS unified registry', () => {
       { name: 'dueAfter', filter: { dueAfter: '2025-01-01' } },
       { name: 'deferBefore', filter: { deferBefore: '2025-12-31' } },
       { name: 'plannedAfter', filter: { plannedAfter: '2025-06-01' } },
+      { name: 'completionBefore', filter: { completionBefore: '2025-12-31' } },
     ];
 
     for (const { name, filter } of filterCases) {
@@ -145,8 +146,8 @@ describe('FILTER_DEFS unified registry', () => {
   });
 
   describe('DATE_FILTER_DEFS backward compatibility', () => {
-    it('DATE_FILTER_DEFS is still exported and has 3 entries', () => {
-      expect(DATE_FILTER_DEFS).toHaveLength(3);
+    it('DATE_FILTER_DEFS is still exported and has 4 entries', () => {
+      expect(DATE_FILTER_DEFS).toHaveLength(4);
     });
 
     it('DATE_FILTER_DEFS fields are subset of REGISTRY_KNOWN_FIELDS', () => {

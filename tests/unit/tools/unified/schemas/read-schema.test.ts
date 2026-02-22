@@ -123,6 +123,112 @@ describe('ReadSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  describe('strict filter validation (Bug 1: silent filter failure)', () => {
+    it('should reject unknown filter fields with ZodError', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { bogusField: true },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        // Verify it's a Zod unrecognized_keys error from .strict()
+        const unrecognizedKeyErrors = result.error.issues.filter(
+          (issue) => issue.code === 'unrecognized_keys',
+        );
+        expect(unrecognizedKeyErrors.length).toBeGreaterThan(0);
+        expect(unrecognizedKeyErrors[0].keys).toContain('bogusField');
+      }
+    });
+
+    it('should reject multiple unknown filter fields', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { bogusField: true, anotherBadField: 'value' },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject misspelled filter fields like complted', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { complted: true },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should still accept all known filter fields', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            status: 'active',
+            tags: { any: ['work'] },
+            dueDate: { before: '2025-12-31' },
+            deferDate: { after: '2025-01-01' },
+            plannedDate: { between: ['2025-01-01', '2025-12-31'] },
+            completionDate: { before: '2025-06-30' },
+            added: { after: '2024-01-01' },
+            flagged: true,
+            blocked: false,
+            available: true,
+            inInbox: false,
+            text: { contains: 'search' },
+            name: { contains: 'project' },
+            project: 'abc123',
+            folder: 'Work',
+            id: 'task-xyz',
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('completionDate filter (Bug 3)', () => {
+    it('should accept completionDate.before', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { completionDate: { before: '2025-12-31' } },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept completionDate.after', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { completionDate: { after: '2025-01-01' } },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept completionDate.between', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { completionDate: { between: ['2025-01-01', '2025-12-31'] } },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('type-discriminated fields', () => {
     it('should accept project fields on project queries', () => {
       const input = {

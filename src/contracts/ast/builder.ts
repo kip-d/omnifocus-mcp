@@ -48,6 +48,7 @@ export const DATE_FILTER_DEFS: readonly DateFilterDef[] = [
   { field: 'task.dueDate', after: 'dueAfter', before: 'dueBefore', operator: 'dueDateOperator', skipWhen: 'todayMode' },
   { field: 'task.deferDate', after: 'deferAfter', before: 'deferBefore', operator: 'deferDateOperator' },
   { field: 'task.plannedDate', after: 'plannedAfter', before: 'plannedBefore', operator: 'plannedDateOperator' },
+  { field: 'task.completionDate', after: 'completionAfter', before: 'completionBefore', operator: 'completionDateOperator' },
 ];
 
 /**
