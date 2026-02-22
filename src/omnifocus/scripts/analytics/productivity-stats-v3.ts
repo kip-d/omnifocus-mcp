@@ -74,6 +74,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
           let totalCompleted = 0;
           let totalAvailable = 0;
           let completedInPeriod = 0;
+          let overdueCount = 0;
 
           // OmniJS: Iterate through all tasks for overall statistics
           flattenedTasks.forEach(task => {
@@ -104,9 +105,27 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                 if (!blocked && !isDeferred) {
                   totalAvailable++;
                 }
+
+                // Check if overdue (has due date in the past)
+                const dueDate = task.dueDate;
+                if (dueDate && dueDate.getTime() < nowTime) {
+                  overdueCount++;
+                }
               }
             } catch (e) {
               // Skip tasks that cause errors
+            }
+          });
+
+          // Count active projects (always, regardless of includeProjectStats)
+          let activeProjectCount = 0;
+          flattenedProjects.forEach(project => {
+            try {
+              if (project.status === Project.Status.Active) {
+                activeProjectCount++;
+              }
+            } catch (e) {
+              // Skip projects that cause errors
             }
           });
 
@@ -145,6 +164,7 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
                       total: totalTasks,
                       completed: completedTasks,
                       available: availableTasks,
+                      // Intentionally a percentage (0-100) string, unlike overview.completionRate which is a 0-1 ratio
                       completionRate: totalTasks > 0 ? (completedTasks / totalTasks * 100).toFixed(1) : '0.0',
                       status: String(projectStatus).toLowerCase().replace(' status', '').trim(),
                       hadRecentActivity: hadActivity
@@ -187,6 +207,8 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             totalCompleted: totalCompleted,
             totalAvailable: totalAvailable,
             completedInPeriod: completedInPeriod,
+            overdueCount: overdueCount,
+            activeProjectCount: activeProjectCount,
             projectStats: projectStats,
             tagStats: tagStats
           });
@@ -202,15 +224,10 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
       const tagStats = counts.tagStats || {};
 
       let totalProjects = Object.keys(projectStats).length;
-      let activeProjects = 0;
-
-      for (const projectName in projectStats) {
-        const stats = projectStats[projectName];
-        if (stats.status === 'active') activeProjects++;
-      }
+      let activeProjects = counts.activeProjectCount || 0;
 
       const completionRate = counts.totalTasks > 0 ?
-        (counts.totalCompleted / counts.totalTasks * 100).toFixed(1) : '0.0';
+        (counts.totalCompleted / counts.totalTasks).toFixed(4) : '0.0000';
 
       const daysInPeriod = Math.ceil((nowTime - periodStartTime) / (1000 * 60 * 60 * 24));
       const dailyAverage = (counts.completedInPeriod / daysInPeriod).toFixed(1);
@@ -232,9 +249,9 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
         insights.push("No active projects found");
       }
 
-      if (parseFloat(completionRate) > 80) {
-        insights.push("Excellent completion rate: " + completionRate + "%");
-      } else if (parseFloat(completionRate) < 30) {
+      if (parseFloat(completionRate) > 0.80) {
+        insights.push("Excellent completion rate: " + (parseFloat(completionRate) * 100).toFixed(1) + "%");
+      } else if (parseFloat(completionRate) < 0.30) {
         insights.push("Low completion rate - many tasks remain incomplete");
       }
 
@@ -254,7 +271,8 @@ export const PRODUCTIVITY_STATS_SCRIPT_V3 = `
             availableTasks: counts.totalAvailable,
             completionRate: parseFloat(completionRate),
             dailyAverage: parseFloat(dailyAverage),
-            daysInPeriod: daysInPeriod
+            daysInPeriod: daysInPeriod,
+            overdueCount: counts.overdueCount || 0
           },
           projectStats: projectStats,
           tagStats: tagStats,

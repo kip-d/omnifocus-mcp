@@ -537,7 +537,7 @@ SCOPE FILTERING:
       }
     }
 
-    if (data.healthScore) {
+    if (typeof data.healthScore === 'number') {
       const score = Math.round(data.healthScore);
       let assessment = 'Needs attention';
       if (score >= 80) assessment = 'Excellent';
@@ -554,7 +554,19 @@ SCOPE FILTERING:
     }
 
     if (data.insights && Array.isArray(data.insights.recommendations) && data.insights.recommendations.length > 0) {
-      findings.push(data.insights.recommendations[0]);
+      // Cross-check: filter out recommendations that contradict the data
+      const score = data.healthScore ?? 0;
+      const filteredRecs = data.insights.recommendations.filter((rec) => {
+        const recLower = rec.toLowerCase();
+        // Don't say "excellent" if health score is low
+        if (recLower.includes('excellent') && score < 60) return false;
+        // Don't say "low" or "needs attention" if health score is high
+        if ((recLower.includes('low completion') || recLower.includes('needs attention')) && score >= 60) return false;
+        return true;
+      });
+      if (filteredRecs.length > 0) {
+        findings.push(filteredRecs[0]);
+      }
     }
 
     return findings.length > 0 ? findings : ['No productivity data available for this period'];
