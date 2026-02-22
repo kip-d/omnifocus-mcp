@@ -121,6 +121,132 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(mockCache.set).toHaveBeenCalled();
       expect(mockCache.set.mock.calls[0][0]).toBe('analytics');
     });
+
+    it('calculates healthScore correctly from decimal completionRate', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 100,
+          completedTasks: 15,
+          completionRate: 0.151,
+          activeProjects: 5,
+          overdueCount: 3,
+        },
+        insights: ['Low completion rate - many tasks remain incomplete'],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      // completionRate 0.151 * 100 = 15.1, rounded = 15
+      expect(res.data.healthScore).toBe(15);
+      // Should NOT be 100 (the old bug where 15.1 * 100 = 1510 clamped to 100)
+      expect(res.data.healthScore).not.toBe(100);
+    });
+
+    it('includes overdueCount in response when script returns it', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 100,
+          completedTasks: 80,
+          completionRate: 0.8,
+          activeProjects: 5,
+          overdueCount: 5,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.stats.overview.overdueCount).toBe(5);
+    });
+
+    it('includes activeProjects from script activeProjectCount', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 200,
+          completedTasks: 100,
+          completionRate: 0.5,
+          activeProjects: 12,
+          overdueCount: 0,
+        },
+        insights: [],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.stats.overview.activeProjects).toBe(12);
+    });
+
+    it('does not produce contradictory recommendations', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 100,
+          completedTasks: 15,
+          completionRate: 0.15,
+          activeProjects: 3,
+          overdueCount: 10,
+        },
+        // Script says "Excellent" but completionRate is only 15% — contradictory
+        insights: ['Excellent completion rate: 85.0%'],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      // healthScore = 0.15 * 100 = 15
+      expect(res.data.healthScore).toBe(15);
+      // The "Excellent" recommendation should be filtered out since healthScore < 60
+      const keyFindings: string[] = res.summary.key_findings;
+      const hasExcellentWithLowScore = keyFindings.some(
+        (f: string) => f.toLowerCase().includes('excellent') && !f.includes('Health Score'),
+      );
+      expect(hasExcellentWithLowScore).toBe(false);
+    });
+
+    it('healthScore is 0 when no tasks exist', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        summary: {
+          totalTasks: 0,
+          completedTasks: 0,
+          completionRate: 0,
+          activeProjects: 0,
+          overdueCount: 0,
+        },
+        insights: ['No tasks completed in this period'],
+      });
+
+      const res: any = await tool.execute({
+        analysis: { type: 'productivity_stats' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.data.healthScore).toBe(0);
+      // Verify the health score finding is included even when score is 0
+      const keyFindings: string[] = res.summary.key_findings;
+      expect(keyFindings).toEqual(
+        expect.arrayContaining([expect.stringContaining('GTD Health Score: 0/100')]),
+      );
+    });
   });
 
   // ==========================================================================
