@@ -27,6 +27,25 @@ import { buildAST } from './builder.js';
 // TYPES
 // =============================================================================
 
+/**
+ * Fields valid for sorting, matching the Zod SortFieldEnum in read-schema.ts.
+ */
+export type SortableField =
+  | 'dueDate'
+  | 'deferDate'
+  | 'plannedDate'
+  | 'name'
+  | 'flagged'
+  | 'estimatedMinutes'
+  | 'added'
+  | 'modified'
+  | 'completionDate';
+
+export interface SortSpec {
+  field: SortableField;
+  direction: 'asc' | 'desc';
+}
+
 export interface ScriptOptions {
   /** Maximum tasks to return */
   limit?: number;
@@ -36,6 +55,8 @@ export interface ScriptOptions {
   fields?: string[];
   /** Whether to include completed tasks (for modes that don't specify) */
   includeCompleted?: boolean;
+  /** Sort specifications to apply in-script before limit/offset (user-specified sorts only) */
+  sort?: SortSpec[];
 }
 
 export interface GeneratedScript {
@@ -202,7 +223,7 @@ function generateFieldProjection(fields: string[], context?: { dueSoonDays?: num
  * - Property name mismatches are caught at compile time
  */
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort } = options;
 
   // Build the AST to check if empty
   const ast = buildAST(filter);
@@ -229,13 +250,63 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
         ? ''
         : 'if (task.completed) return;';
 
-  // Only include offset logic when offset > 0
-  const useOffset = offset > 0;
-  const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
-  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
-  const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
+  // When sort is specified, we collect ALL matching tasks, sort in-script, then slice.
+  // This ensures sort+limit returns correctly ordered results instead of arbitrary-then-sorted.
+  const hasSort = sort && sort.length > 0;
 
-  const script = `
+  let script: string;
+
+  if (hasSort) {
+    // Sort-before-limit path: collect all -> sort -> slice(offset, offset+limit)
+    const sortComparator = generateSortComparator(sort);
+
+    script = `
+(() => {
+  const allResults = [];
+
+  // AST-generated filter predicate
+  // Filter: ${filterDescription}
+  function matchesFilter(task) {
+    const taskTags = task.tags ? task.tags.map(t => t.name) : [];
+    return ${filterCode};
+  }
+
+  flattenedTasks.forEach(task => {
+    ${completionCheck}
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    allResults.push({
+      ${fieldProjection}
+    });
+  });
+
+  // Sort all matched results in-script before applying limit
+  allResults.sort(${sortComparator});
+
+  // Slice for pagination
+  const sliced = allResults.slice(${offset}, ${offset} + ${limit});
+
+  return JSON.stringify({
+    tasks: sliced,
+    count: sliced.length,
+    total_matched: allResults.length,
+    ${offset > 0 ? `offset_applied: ${offset},` : ''}
+    sorted_in_script: true,
+    mode: 'ast_filtered',
+    filter_description: ${JSON.stringify(filterDescription)}
+  });
+})()
+`;
+  } else {
+    // Original fast path: no sort, limit during iteration
+    const useOffset = offset > 0;
+    const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
+    const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
+    const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
+
+    script = `
 (() => {
   const results = [];
   let count = 0;
@@ -273,12 +344,77 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   });
 })()
 `;
+  }
 
   return {
     script: script.trim(),
     filterDescription,
     isEmptyFilter,
   };
+}
+
+/**
+ * Generate an OmniJS sort comparator function from sort specifications.
+ *
+ * Handles multiple sort levels, null-safety (nulls pushed to end),
+ * and string/date/number/boolean field types.
+ *
+ * Modeled on the sort logic in buildRecurringTasksScript (lines 624-650).
+ */
+function generateSortComparator(sort: SortSpec[]): string {
+  const comparisons = sort.map((s) => {
+    const dir = s.direction === 'desc' ? -1 : 1;
+    // Date fields need Date comparison; others use string/number comparison
+    // Field classifications match SortableField union (Zod SortFieldEnum in read-schema.ts).
+    // Computed fields (effectivePlannedDate, daysOverdue, available, inInbox) are excluded
+    // since they aren't exposed for user-specified sorting.
+    const isDateField = ['dueDate', 'deferDate', 'plannedDate', 'completionDate', 'added', 'modified'].includes(s.field);
+    const isBoolField = ['flagged'].includes(s.field);
+    const isNumField = ['estimatedMinutes'].includes(s.field);
+
+    if (isDateField) {
+      // Date fields are ISO strings in the projected results; compare as strings (lexicographic ISO works)
+      return `
+      (() => {
+        const av = a.${s.field}, bv = b.${s.field};
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (av < bv ? -1 : av > bv ? 1 : 0) * ${dir};
+      })()`;
+    } else if (isBoolField) {
+      return `
+      (() => {
+        const av = a.${s.field} ? 1 : 0, bv = b.${s.field} ? 1 : 0;
+        return (av - bv) * ${dir};
+      })()`;
+    } else if (isNumField) {
+      return `
+      (() => {
+        const av = a.${s.field}, bv = b.${s.field};
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (av - bv) * ${dir};
+      })()`;
+    } else {
+      // String comparison (name, project, etc.)
+      return `
+      (() => {
+        const av = a.${s.field}, bv = b.${s.field};
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return (String(av).localeCompare(String(bv))) * ${dir};
+      })()`;
+    }
+  });
+
+  return `(a, b) => {
+    let c;
+    ${comparisons.map((comp) => `c = ${comp};\n    if (c !== 0) return c;`).join('\n    ')}
+    return 0;
+  }`;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
 import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
+import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
@@ -20,7 +21,7 @@ export interface CompiledQuery {
     | 'smart_suggest';
   filters: NormalizedTaskFilter; // Normalized during compilation
   fields?: string[];
-  sort?: Array<{ field: string; direction: 'asc' | 'desc' }>;
+  sort?: Array<{ field: SortableField; direction: 'asc' | 'desc' }>;
   limit?: number;
   offset?: number;
   // Response control parameters

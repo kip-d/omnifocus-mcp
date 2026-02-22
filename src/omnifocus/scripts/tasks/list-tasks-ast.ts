@@ -18,6 +18,7 @@
  */
 
 import type { TaskFilter, NormalizedTaskFilter } from '../../../contracts/filters.js';
+import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import {
   buildFilteredTasksScript,
   buildInboxScript,
@@ -40,8 +41,9 @@ export function buildListTasksScriptV4(params: {
   limit?: number;
   offset?: number;
   mode?: string;
+  sort?: Array<{ field: SortableField; direction: 'asc' | 'desc' }>;
 }): string {
-  const { filter, fields = [], limit = 50, offset = 0, mode = 'all' } = params;
+  const { filter, fields = [], limit = 50, offset = 0, mode = 'all', sort } = params;
 
   // Route to appropriate script builder based on mode
   // Filter is expected to be already normalized by QueryCompiler.
@@ -69,6 +71,7 @@ export function buildListTasksScriptV4(params: {
       offset,
       fields,
       includeCompleted: filter.completed === true,
+      sort,
     });
   }
 
@@ -88,6 +91,8 @@ export function buildListTasksScriptV4(params: {
       tasks: result.tasks,
       metadata: {
         total_count: result.count,
+        total_matched: result.total_matched,
+        sorted_in_script: result.sorted_in_script || false,
         limit_applied: ${limit},
         offset: ${offset},
         offset_applied: result.offset_applied,

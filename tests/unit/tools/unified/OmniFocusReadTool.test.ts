@@ -545,6 +545,38 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── Inbox + Sort (sortedInScript fix) ──────────────────────────
+
+  describe('inbox mode with user-specified sort', () => {
+    it('applies sort post-hoc for inbox queries (sort not lost)', async () => {
+      // Inbox tasks returned unsorted from script
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [
+            { id: 't2', name: 'Banana', dueDate: '2026-03-01T17:00:00.000Z' },
+            { id: 't1', name: 'Apple', dueDate: '2026-02-15T17:00:00.000Z' },
+            { id: 't3', name: 'Cherry', dueDate: null },
+          ],
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: {
+          type: 'tasks',
+          filters: { project: null },
+          sort: [{ field: 'name', direction: 'asc' }],
+        },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      // Tasks should be sorted by name ascending (post-hoc sort applied)
+      const names = result.data.tasks.map((t: any) => t.name);
+      expect(names).toEqual(['Apple', 'Banana', 'Cherry']);
+      expect(result.metadata.sort_applied).toBe(true);
+    });
+  });
+
   // ─── Perspectives listing (inlined from PerspectivesTool) ──────────
 
   describe('perspectives listing', () => {
