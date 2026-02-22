@@ -35,7 +35,7 @@ User wants GTD guidance → Provide advice (no tool call needed)
 
 | User Says                    | Intent            | Tool Call                                                                               |
 | ---------------------------- | ----------------- | --------------------------------------------------------------------------------------- |
-| "What's in my inbox?"        | List unprocessed  | `omnifocus_read` filters: `{ project: null }`                                           |
+| "What's in my inbox?"        | List unprocessed  | `omnifocus_read` mode: `"inbox"` (or filters: `{ project: null }`)                      |
 | "What's on my plate today?"  | Today's work      | `omnifocus_read` mode: `"today"`                                                        |
 | "What am I overdue on?"      | Past due          | `omnifocus_read` mode: `"overdue"`                                                      |
 | "What should I work on?"     | Smart suggestions | `omnifocus_read` mode: `"smart_suggest"`                                                |
@@ -64,6 +64,12 @@ User wants GTD guidance → Provide advice (no tool call needed)
 | "Show recurring tasks"       | Repeat patterns   | `omnifocus_analyze` type: `"recurring_tasks"`                                           |
 | "What needs review?"         | Project reviews   | `omnifocus_analyze` type: `"manage_reviews"`                                            |
 | "Parse my meeting notes"     | Extract actions   | `omnifocus_analyze` type: `"parse_meeting_notes"`                                       |
+| "Show my perspectives"       | List views        | `omnifocus_read` type: `"perspectives"`                                                 |
+| "Show my folders"            | List folders      | `omnifocus_read` type: `"folders"`                                                      |
+| "Create subtask under X"     | Subtask           | `omnifocus_write` with `parentTaskId`                                                   |
+| "Preview this batch"         | Dry run           | `omnifocus_write` with `dryRun: "true"`                                                 |
+| "What did I complete?"       | Completed tasks   | `omnifocus_read` filters: `{ status: "completed" }` + `completionDate`                  |
+| "How many inbox items?"      | Inbox count       | `omnifocus_read` mode: `"inbox"`, `countOnly: true`                                     |
 
 ---
 
@@ -235,7 +241,8 @@ Use this when creating projects with `omnifocus_write` batch operations: create 
 When user says "process my inbox" or "help me with inbox":
 
 ```
-1. Fetch inbox items: omnifocus_read({ query: { type: "tasks", filters: { project: null }, limit: 10 } })
+1. Fetch inbox items: omnifocus_read({ query: { type: "tasks", mode: "inbox", limit: 10 } })
+   (Alternative: filters: { project: null } — both work; mode: "inbox" uses the inInbox property which is more accurate)
 
 2. For each item, guide through GTD clarify:
    a. "Is this actionable?"
@@ -260,6 +267,8 @@ When user says "process my inbox" or "help me with inbox":
    (see "Suggesting Time Estimates" under Task Creation Best Practices)
 
 5. Repeat until inbox empty
+
+Alternative: Use the `eisenhower_matrix_inbox` MCP prompt for priority-quadrant-based inbox processing.
 ```
 
 ---
@@ -271,7 +280,7 @@ When user asks for "weekly review":
 ### Step 1: Get Clear — Empty Inbox
 
 ```
-omnifocus_read({ query: { type: "tasks", filters: { project: null }, countOnly: true } })
+omnifocus_read({ query: { type: "tasks", mode: "inbox", countOnly: true } })
 ```
 
 If count > 0, process inbox first (use the inbox processing workflow above).
@@ -283,7 +292,7 @@ omnifocus_read({
   query: {
     type: "tasks",
     filters: {
-      completed: true,
+      status: "completed",
       completionDate: { after: "{7 days ago}" }
     },
     limit: 50
@@ -585,6 +594,51 @@ omnifocus_write({
 project field may not be applied. Use `parentTempId` to reference a project created in the same batch, or create tasks
 individually when assigning to existing projects.
 
+### Batch Mixed Operations
+
+Batch supports create + update + complete + delete in a single call:
+
+```javascript
+omnifocus_write({
+  mutation: {
+    operation: 'batch',
+    target: 'task',
+    operations: [
+      { operation: 'create', target: 'task', data: { name: 'New task', tempId: 'new1' } },
+      { operation: 'update', target: 'task', id: 'existingId', changes: { flagged: true } },
+      { operation: 'complete', target: 'task', id: 'doneId' },
+      { operation: 'delete', target: 'task', id: 'removeId' },
+    ],
+    dryRun: 'true', // Preview without executing
+    stopOnError: 'true', // Halt on first failure
+    createSequentially: 'true', // Respect dependencies between creates
+  },
+});
+```
+
+Remove `dryRun` to execute for real. Use `atomicOperation: 'true'` for all-or-nothing execution.
+
+### Subtasks
+
+Use `parentTaskId` to create or move tasks as subtasks:
+
+```javascript
+// Create a subtask under an existing task
+{ mutation: { operation: "create", target: "task", data: {
+  name: "Subtask name", parentTaskId: "parentId"
+} } }
+
+// Move an existing task under a different parent
+{ mutation: { operation: "update", target: "task", id: "...", changes: {
+  parentTaskId: "newParentId"
+} } }
+
+// Move subtask to project root (remove from parent)
+{ mutation: { operation: "update", target: "task", id: "...", changes: {
+  parentTaskId: null
+} } }
+```
+
 ### Tag Operations
 
 **Nested hierarchy syntax** — create tag paths in any mutation:
@@ -648,6 +702,12 @@ When users want recurring tasks, set `repetitionRule` on create or update:
 
 To **remove** a repeat rule: `{ changes: { clearRepeatRule: true } }`
 
+**Project review interval** — set the review cycle for a project:
+
+```javascript
+{ mutation: { operation: "update", target: "project", id: "...", changes: { reviewInterval: "7" } } }
+```
+
 ---
 
 ## Advanced Queries
@@ -664,6 +724,12 @@ To **remove** a repeat rule: `{ changes: { clearRepeatRule: true } }`
 
 **Sortable fields:** `dueDate`, `deferDate`, `plannedDate`, `name`, `flagged`, `estimatedMinutes`, `added`, `modified`,
 `completionDate`
+
+**Sort-before-limit:** When both `sort` and `limit` are specified, the server collects all matching tasks, sorts them,
+then applies the limit. This guarantees correct top-N results (e.g., "10 most overdue" works as expected).
+
+**Pagination metadata:** When sort + limit are used, the response metadata includes `total_matched` — the number of
+tasks that matched before the limit was applied. Use this to know if there are more results to page through.
 
 ### Logical Operators
 
@@ -724,15 +790,49 @@ Bulk export for backup or reporting:
 
 **Formats:** `json`, `csv`, `markdown` | **Types:** `tasks`, `projects`, `all`
 
+### Project Queries
+
+Project queries support their own `fields` parameter for field projection:
+
+```javascript
+// Get active projects with specific fields
+{ query: { type: "projects", filters: { status: "active" },
+  fields: ["id", "name", "status", "folder", "nextReviewDate"] } }
+```
+
+**Project fields:** `id`, `name`, `status`, `flagged`, `note`, `dueDate`, `deferDate`, `completedDate`, `folder`,
+`folderPath`, `folderId`, `sequential`, `lastReviewDate`, `nextReviewDate`, `defaultSingletonActionHolder`
+
+### Perspectives and Folders
+
+```javascript
+// List all perspectives
+omnifocus_read({ query: { type: 'perspectives' } });
+
+// List all folders
+omnifocus_read({ query: { type: 'folders' } });
+```
+
+### Filter Reference
+
+| Filter    | Type       | Purpose                                                                      |
+| --------- | ---------- | ---------------------------------------------------------------------------- |
+| `id`      | string     | Exact task ID lookup                                                         |
+| `inInbox` | boolean    | Explicitly filter inbox tasks                                                |
+| `name`    | TextFilter | Filter by task/project name (separate from `text` which also searches notes) |
+
 ---
 
 ## Interpreting Results
 
 ### Productivity Stats
 
+**Note:** `completionRate` is returned as a decimal (e.g., 0.75 = 75%). Health score varies 0-100 based on overdue
+count, inbox size, and completion rate.
+
 | Metric          | Healthy Range | Concern                   |
 | --------------- | ------------- | ------------------------- |
-| Completion rate | 70-90%        | < 50% backlog growing     |
+| Completion rate | 0.70-0.90     | < 0.50 backlog growing    |
 | Inbox count     | 0-10          | > 20 needs processing     |
 | Overdue count   | 0-5           | > 10 system trust eroding |
 | Available tasks | 10-30         | > 50 overwhelming         |
@@ -798,7 +898,6 @@ Ask when user request is ambiguous:
 - Create compound tasks (break them up)
 - Complete or delete tasks without confirmation
 - Over-engineer simple captures
-- Use `task.addTags()` or `task.tags =` directly — use `addTags`/`removeTags` in updates
 - Guess project/folder names — verify with `omnifocus_read` first
 
 **Do:**
@@ -831,6 +930,25 @@ These patterns supplement the intent mapping table and workflow sections.
 
 // Bulk delete (confirm with user first!)
 { mutation: { operation: "bulk_delete", target: "task", ids: ["id1", "id2", "id3"] } }
+
+// Reduce response size on mutations
+{ mutation: { operation: "create", target: "task", data: { name: "Quick task" }, minimalResponse: true } }
+// Also works on update and complete operations
+```
+
+---
+
+## System Diagnostics
+
+```javascript
+// Test OmniFocus connection
+system({ operation: 'diagnostics' });
+
+// Server version info
+system({ operation: 'version' });
+
+// Cache statistics
+system({ operation: 'cache', cacheAction: 'stats' });
 ```
 
 ---
