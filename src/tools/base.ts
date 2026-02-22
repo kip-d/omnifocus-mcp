@@ -215,8 +215,16 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   }
 
   /**
+   * Type guard for ZodLazy schemas.
+   * instanceof z.ZodLazy narrows to ZodLazy<any> because TypeScript can't infer
+   * the generic from a runtime check. This predicate provides the correct narrowing.
+   */
+  private isZodLazy(schema: z.ZodTypeAny): schema is z.ZodLazy<z.ZodTypeAny> {
+    return schema instanceof z.ZodLazy;
+  }
+
+  /**
    * Resolve a ZodLazy schema to its underlying type.
-   * Centralizes the cast to avoid repetition across isOptionalField and zodTypeToJsonSchema.
    */
   private resolveZodLazy(schema: z.ZodLazy<z.ZodTypeAny>): z.ZodTypeAny {
     return (schema._def as { getter: () => z.ZodTypeAny }).getter();
@@ -237,7 +245,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     }
 
     // Unwrap ZodLazy (from z.lazy() for recursive schemas)
-    if (schema instanceof z.ZodLazy) {
+    if (this.isZodLazy(schema)) {
       if (this._schemaConversionDepth >= 5) return false;
       return this.isOptionalField(this.resolveZodLazy(schema));
     }
@@ -362,7 +370,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
     }
 
     // Handle z.lazy() schemas (used for recursive types like FilterSchema's AND/OR/NOT)
-    if (schema instanceof z.ZodLazy) {
+    if (this.isZodLazy(schema)) {
       if (this._schemaConversionDepth >= 5) {
         return { type: 'object', description: schema.description || '(recursive)' };
       }
