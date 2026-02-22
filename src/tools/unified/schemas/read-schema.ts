@@ -39,6 +39,7 @@ export interface FilterValue {
   dueDate?: z.infer<typeof DateFilterSchema>;
   deferDate?: z.infer<typeof DateFilterSchema>;
   plannedDate?: z.infer<typeof DateFilterSchema>;
+  completionDate?: z.infer<typeof DateFilterSchema>;
   added?: z.infer<typeof DateFilterSchema>; // Creation date
   flagged?: boolean;
   blocked?: boolean;
@@ -58,8 +59,6 @@ export interface FilterValue {
   OR?: FilterValue[];
   NOT?: FilterValue;
 
-  // Allow passthrough of unknown fields
-  [key: string]: unknown;
 }
 
 // Zod schema type wrapping FilterValue
@@ -76,6 +75,7 @@ const FilterSchema: FilterType = z.lazy(() =>
       dueDate: DateFilterSchema.optional(),
       deferDate: DateFilterSchema.optional(),
       plannedDate: DateFilterSchema.optional(),
+      completionDate: DateFilterSchema.optional(),
       added: DateFilterSchema.optional(), // Creation date
       flagged: z.boolean().optional(),
       blocked: z.boolean().optional(),
@@ -95,7 +95,7 @@ const FilterSchema: FilterType = z.lazy(() =>
       OR: z.array(FilterSchema).optional(),
       NOT: FilterSchema.optional(),
     })
-    .passthrough(),
+    .strict(),
 );
 
 // =============================================================================

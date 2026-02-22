@@ -1,6 +1,6 @@
 import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
 import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
-import { normalizeFilter } from '../../../contracts/filters.js';
+import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
@@ -154,9 +154,9 @@ export class QueryCompiler {
     // Date transformation helper
     const transformDateFilter = (
       dateFilter: { before?: string; after?: string; between?: [string, string] } | undefined,
-      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore',
-      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter',
-      operatorKey?: 'dueDateOperator' | 'plannedDateOperator',
+      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore',
+      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter' | 'completionAfter',
+      operatorKey?: 'dueDateOperator' | 'plannedDateOperator' | 'completionDateOperator',
     ) => {
       if (!dateFilter) return;
 
@@ -178,9 +178,9 @@ export class QueryCompiler {
     // Date transformations — loop over all date field definitions
     const dateFieldDefs: Array<{
       inputKey: string;
-      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore';
-      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter';
-      operatorKey?: 'dueDateOperator' | 'plannedDateOperator';
+      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore';
+      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter' | 'completionAfter';
+      operatorKey?: 'dueDateOperator' | 'plannedDateOperator' | 'completionDateOperator';
     }> = [
       { inputKey: 'dueDate', beforeKey: 'dueBefore', afterKey: 'dueAfter', operatorKey: 'dueDateOperator' },
       { inputKey: 'deferDate', beforeKey: 'deferBefore', afterKey: 'deferAfter' },
@@ -189,6 +189,12 @@ export class QueryCompiler {
         beforeKey: 'plannedBefore',
         afterKey: 'plannedAfter',
         operatorKey: 'plannedDateOperator',
+      },
+      {
+        inputKey: 'completionDate',
+        beforeKey: 'completionBefore',
+        afterKey: 'completionAfter',
+        operatorKey: 'completionDateOperator',
       },
     ];
 
@@ -254,6 +260,15 @@ export class QueryCompiler {
     // Folder passthrough (for project filtering)
     if (input.folder) {
       result.folder = input.folder;
+    }
+
+    // Safety net: warn on unknown properties that survived schema validation
+    const unknownProps = validateFilterProperties(result as Record<string, unknown>);
+    if (unknownProps.length > 0) {
+      console.warn(
+        `[QueryCompiler] Unknown filter properties detected: ${unknownProps.join(', ')}. ` +
+          'These will be ignored. Check for typos or missing pipeline support.',
+      );
     }
 
     return result;

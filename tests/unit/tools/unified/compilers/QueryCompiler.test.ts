@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { QueryCompiler } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
@@ -416,6 +416,61 @@ describe('QueryCompiler', () => {
 
       // transformFilters sets textOperator to CONTAINS, normalization confirms it
       expect(result.filters.textOperator).toBe('CONTAINS');
+    });
+  });
+
+  describe('unknown property validation safety net (Bug 1)', () => {
+    it('does not warn on known filter properties', () => {
+      const compiler = new QueryCompiler();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      compiler.transformFilters({ flagged: true, status: 'active' });
+
+      // Should not have any warning about unknown properties
+      const unknownPropWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('Unknown filter properties'),
+      );
+      expect(unknownPropWarnings).toHaveLength(0);
+
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn for completionDate filter properties', () => {
+      const compiler = new QueryCompiler();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      compiler.transformFilters({ completionDate: { before: '2025-12-31' } });
+
+      const unknownPropWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('Unknown filter properties'),
+      );
+      expect(unknownPropWarnings).toHaveLength(0);
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('completionDate transformation (Bug 3)', () => {
+    it('transforms completionDate.before to completionBefore', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.transformFilters({ completionDate: { before: '2025-12-31' } });
+      expect(result.completionBefore).toBe('2025-12-31');
+    });
+
+    it('transforms completionDate.after to completionAfter', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.transformFilters({ completionDate: { after: '2025-01-01' } });
+      expect(result.completionAfter).toBe('2025-01-01');
+    });
+
+    it('transforms completionDate.between to completionAfter + completionBefore + BETWEEN operator', () => {
+      const compiler = new QueryCompiler();
+      const result = compiler.transformFilters({
+        completionDate: { between: ['2025-01-01', '2025-06-30'] },
+      });
+      expect(result.completionAfter).toBe('2025-01-01');
+      expect(result.completionBefore).toBe('2025-06-30');
+      expect(result.completionDateOperator).toBe('BETWEEN');
     });
   });
 });

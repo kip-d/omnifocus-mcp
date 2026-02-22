@@ -44,6 +44,9 @@ describe('Filter Coverage Safety Net', () => {
         plannedAfter: 'x',
         plannedBefore: 'x',
         plannedDateOperator: 'BETWEEN',
+        completionAfter: 'x',
+        completionBefore: 'x',
+        completionDateOperator: 'BETWEEN',
       };
       const filterKeys = Object.keys(sampleFilter);
 
@@ -71,6 +74,8 @@ describe('Filter Coverage Safety Net', () => {
         deferBefore: 'x',
         plannedAfter: 'x',
         plannedBefore: 'x',
+        completionAfter: 'x',
+        completionBefore: 'x',
       };
       const filterKeys = Object.keys(sampleFilter);
 

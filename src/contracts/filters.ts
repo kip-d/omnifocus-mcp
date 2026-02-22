@@ -91,6 +91,10 @@ export interface TaskFilter {
   plannedBefore?: string;
   plannedDateOperator?: DateOperator; // How to compare planned dates
 
+  completionAfter?: string;
+  completionBefore?: string;
+  completionDateOperator?: DateOperator; // How to compare completion dates
+
   // --- Boolean Flags ---
   flagged?: boolean;
   blocked?: boolean;
@@ -306,6 +310,9 @@ export const FILTER_PROPERTY_NAMES = [
   'plannedAfter',
   'plannedBefore',
   'plannedDateOperator',
+  'completionAfter',
+  'completionBefore',
+  'completionDateOperator',
   'flagged',
   'blocked',
   'available',

@@ -80,6 +80,25 @@ describe('QueryCompiler.transformFilters', () => {
     });
   });
 
+  describe('completion date transformations', () => {
+    it('transforms completionDate.before to completionBefore', () => {
+      const result = compiler.transformFilters({ completionDate: { before: '2025-12-31' } });
+      expect(result.completionBefore).toBe('2025-12-31');
+    });
+
+    it('transforms completionDate.after to completionAfter', () => {
+      const result = compiler.transformFilters({ completionDate: { after: '2025-01-01' } });
+      expect(result.completionAfter).toBe('2025-01-01');
+    });
+
+    it('transforms completionDate.between to completionAfter + completionBefore + BETWEEN operator', () => {
+      const result = compiler.transformFilters({ completionDate: { between: ['2025-01-01', '2025-06-30'] } });
+      expect(result.completionAfter).toBe('2025-01-01');
+      expect(result.completionBefore).toBe('2025-06-30');
+      expect(result.completionDateOperator).toBe('BETWEEN');
+    });
+  });
+
   describe('status transformations', () => {
     it('transforms status: completed to completed: true', () => {
       const result = compiler.transformFilters({ status: 'completed' });
@@ -254,6 +273,12 @@ describe('emitter parity', () => {
     },
     { name: 'defer date before', filter: { deferBefore: '2025-06-30' } },
     { name: 'planned date after', filter: { plannedAfter: '2025-03-01' } },
+    { name: 'completion date before', filter: { completionBefore: '2025-12-31' } },
+    { name: 'completion date after', filter: { completionAfter: '2025-01-01' } },
+    {
+      name: 'completion date BETWEEN',
+      filter: { completionAfter: '2025-01-01', completionBefore: '2025-12-31', completionDateOperator: 'BETWEEN' },
+    },
     { name: 'project ID', filter: { projectId: 'abc123' } },
     { name: 'task ID', filter: { id: 'task-xyz' } },
     { name: 'inInbox', filter: { inInbox: true } },
