@@ -891,6 +891,8 @@ SAFETY:
       name: data.name,
       note: data.note,
       dueDate: data.dueDate,
+      deferDate: data.deferDate,
+      plannedDate: data.plannedDate,
       flagged: data.flagged,
       tags: data.tags,
       sequential: data.sequential ?? false,

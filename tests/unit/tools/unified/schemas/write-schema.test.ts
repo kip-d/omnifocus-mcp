@@ -251,4 +251,256 @@ describe('WriteSchema', () => {
     const result = WriteSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  // ─── Fix 1: daysOfWeek must be DayOfWeek[] objects, not number[] ────
+
+  it('accepts daysOfWeek as DayOfWeek objects (MO, WE, FR)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'MWF task',
+          repetitionRule: {
+            frequency: 'weekly',
+            daysOfWeek: [{ day: 'MO' }, { day: 'WE' }, { day: 'FR' }],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { daysOfWeek: unknown[] } } }).data;
+      expect(data.repetitionRule.daysOfWeek).toEqual([{ day: 'MO' }, { day: 'WE' }, { day: 'FR' }]);
+    }
+  });
+
+  it('accepts daysOfWeek with position for monthly rules (last Friday)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Last Friday task',
+          repetitionRule: {
+            frequency: 'monthly',
+            daysOfWeek: [{ day: 'FR', position: -1 }],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { daysOfWeek: unknown[] } } }).data;
+      expect(data.repetitionRule.daysOfWeek).toEqual([{ day: 'FR', position: -1 }]);
+    }
+  });
+
+  it('rejects old number[] format for daysOfWeek', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Bad format',
+          repetitionRule: {
+            frequency: 'weekly',
+            daysOfWeek: [1, 3, 5],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  // ─── Fix 2: Missing RepetitionRuleSchema fields ─────────────────────
+
+  it('accepts daysOfMonth for monthly rules (1st and 15th)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Bimonthly task',
+          repetitionRule: {
+            frequency: 'monthly',
+            daysOfMonth: [1, 15],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { daysOfMonth: number[] } } }).data;
+      expect(data.repetitionRule.daysOfMonth).toEqual([1, 15]);
+    }
+  });
+
+  it('accepts negative daysOfMonth (last day of month)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Last day task',
+          repetitionRule: {
+            frequency: 'monthly',
+            daysOfMonth: [-1],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts count with string coercion (MCP bridge)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Limited recurrence',
+          repetitionRule: {
+            frequency: 'weekly',
+            count: '10',
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { count: number } } }).data;
+      expect(data.repetitionRule.count).toBe(10);
+    }
+  });
+
+  it('accepts count as number', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Limited recurrence',
+          repetitionRule: {
+            frequency: 'daily',
+            count: 5,
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { count: number } } }).data;
+      expect(data.repetitionRule.count).toBe(5);
+    }
+  });
+
+  it('accepts weekStart enum', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'Monday start',
+          repetitionRule: {
+            frequency: 'weekly',
+            weekStart: 'MO',
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { weekStart: string } } }).data;
+      expect(data.repetitionRule.weekStart).toBe('MO');
+    }
+  });
+
+  it('accepts setPositions for BYSETPOS filtering', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'First and last',
+          repetitionRule: {
+            frequency: 'monthly',
+            daysOfWeek: [{ day: 'MO' }],
+            setPositions: [1, -1],
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { setPositions: number[] } } }).data;
+      expect(data.repetitionRule.setPositions).toEqual([1, -1]);
+    }
+  });
+
+  // ─── Fix 4: catchUpAutomatically MCP bridge coercion ────────────────
+
+  it('coerces string catchUpAutomatically to boolean', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'No catch-up',
+          repetitionRule: {
+            frequency: 'daily',
+            catchUpAutomatically: 'false',
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { catchUpAutomatically: boolean } } }).data;
+      expect(data.repetitionRule.catchUpAutomatically).toBe(false);
+    }
+  });
+
+  it('accepts boolean catchUpAutomatically directly', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'task',
+        data: {
+          name: 'With catch-up',
+          repetitionRule: {
+            frequency: 'daily',
+            catchUpAutomatically: true,
+          },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { repetitionRule: { catchUpAutomatically: boolean } } }).data;
+      expect(data.repetitionRule.catchUpAutomatically).toBe(true);
+    }
+  });
 });

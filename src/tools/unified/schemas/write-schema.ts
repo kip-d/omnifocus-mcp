@@ -1,7 +1,20 @@
 import { z } from 'zod';
 import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
+import type { RepetitionRule } from '../../../contracts/mutations.js';
 
-// Repetition rule schema
+// ── Schema ↔ contract sync guards ────────────────────────────────────
+// Two complementary compile-time checks prevent schema/contract drift:
+//   1. `satisfies z.ZodType<T>` on the schema — catches type mismatches and missing required fields
+//   2. `SameKeys<A, B>` after the schema — catches missing optional fields (which `satisfies` allows)
+// Together they guarantee the schema output is structurally identical to the contract.
+
+/** Compile-time key-set equality. Resolves to `true` if A and B have identical keys, `never` otherwise. */
+type SameKeys<A, B> =
+  Exclude<keyof A, keyof B> extends never ? (Exclude<keyof B, keyof A> extends never ? true : never) : never;
+
+// Repetition rule schema — derived from RepetitionRule contract via `satisfies`.
+// Constrains output type only (input is `unknown` to allow MCP bridge string coercion).
+// If the contract changes a field type, `satisfies` errors here.
 const RepetitionRuleSchema = z.object({
   frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
   interval: z
@@ -9,14 +22,36 @@ const RepetitionRuleSchema = z.object({
     .pipe(z.number().min(1))
     .optional()
     .default(1),
-  daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
+  // Fix 1: daysOfWeek must be DayOfWeek[] (object with day + optional position), not number[]
+  daysOfWeek: z
+    .array(
+      z.object({
+        day: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']),
+        position: z.number().optional(),
+      }),
+    )
+    .optional(),
+  // Fix 2: 4 missing fields that contract + script builder already support
+  daysOfMonth: z.array(z.number().min(-31).max(31)).optional(),
+  count: z
+    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+    .pipe(z.number().min(1))
+    .optional(),
+  weekStart: z.enum(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']).optional(),
+  setPositions: z.array(z.number().min(-366).max(366)).optional(),
   endDate: z.string().optional(),
-  // New fields for OmniFocus 4.7+ repetition method control
+  // OmniFocus 4.7+ repetition method control
   method: z.enum(['fixed', 'due-after-completion', 'defer-after-completion', 'none']).optional(),
   scheduleType: z.enum(['regularly', 'from-completion', 'none']).optional(),
   anchorDateKey: z.enum(['due-date', 'defer-date', 'planned-date']).optional(),
-  catchUpAutomatically: z.boolean().optional(),
-});
+  // Fix 4: coerceBoolean for MCP bridge compatibility (Claude Desktop sends strings)
+  catchUpAutomatically: coerceBoolean().optional(),
+}) satisfies z.ZodType<RepetitionRule, z.ZodTypeDef, unknown>;
+
+// Key-set sync: catches missing optional fields (which `satisfies` alone allows through).
+// If RepetitionRule gains or loses a field, `never = true` fails to compile.
+const _repetitionRuleKeysSync: SameKeys<z.output<typeof RepetitionRuleSchema>, RepetitionRule> = true;
+void _repetitionRuleKeysSync;
 
 // Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
@@ -61,6 +96,8 @@ const UpdateChangesSchema = z
     clearDeferDate: coerceBoolean().optional(),
     clearPlannedDate: coerceBoolean().optional(),
     flagged: coerceBoolean().optional(),
+    // Note: tasks only support 'completed'/'dropped'; projects support all 4.
+    // Task-specific narrowing happens in sanitizer + script builder.
     status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
     project: z.union([z.string(), z.null()]).optional(),
     folder: z.union([z.string(), z.null()]).optional(),

@@ -120,13 +120,13 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('parent-123');
   });
 
-  it('includes repetition rule', async () => {
+  it('includes repetition rule with DayOfWeek objects', async () => {
     const result = await buildCreateTaskScript({
       name: 'Recurring Task',
       repetitionRule: {
         frequency: 'weekly',
         interval: 1,
-        daysOfWeek: [1, 3, 5],
+        daysOfWeek: [{ day: 'MO' }, { day: 'WE' }, { day: 'FR' }],
       },
     });
 
@@ -215,6 +215,27 @@ describe('buildCreateProjectScript', () => {
 
     expect(result.script).toContain('reviewInterval');
     expect(result.script).toContain('7');
+  });
+
+  // Fix 3B: plannedDate was missing from buildProjectDataObject
+  it('includes plannedDate in project creation script', () => {
+    const result = buildCreateProjectScript({
+      name: 'Project with Planned Date',
+      plannedDate: '2026-04-01',
+    });
+
+    expect(result.script).toContain('plannedDate');
+    expect(result.script).toContain('2026-04-01');
+  });
+
+  it('includes deferDate in project creation script', () => {
+    const result = buildCreateProjectScript({
+      name: 'Project with Defer Date',
+      deferDate: '2026-03-01 08:00',
+    });
+
+    expect(result.script).toContain('deferDate');
+    expect(result.script).toContain('2026-03-01');
   });
 });
 

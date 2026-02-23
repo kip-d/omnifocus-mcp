@@ -1788,6 +1788,23 @@ export async function buildBulkDeleteScript(target: MutationTarget, ids: string[
  * Build task data object for script embedding
  */
 function buildTaskDataObject(data: TaskCreateData): Record<string, unknown> {
+  // Exhaustiveness guard: compile error if TaskCreateData gains a field not listed here.
+  // Add the new key below AND a corresponding `if (data.X)` line above the return.
+  const _allKeys: Record<keyof TaskCreateData, true> = {
+    name: true,
+    note: true,
+    project: true,
+    parentTaskId: true,
+    tags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    flagged: true,
+    estimatedMinutes: true,
+    repetitionRule: true,
+  };
+  void _allKeys;
+
   const obj: Record<string, unknown> = {
     name: data.name,
   };
@@ -1810,6 +1827,23 @@ function buildTaskDataObject(data: TaskCreateData): Record<string, unknown> {
  * Build project data object for script embedding
  */
 function buildProjectDataObject(data: ProjectCreateData): Record<string, unknown> {
+  // Exhaustiveness guard: compile error if ProjectCreateData gains a field not listed here.
+  // Add the new key below AND a corresponding `if (data.X)` line above the return.
+  const _allKeys: Record<keyof ProjectCreateData, true> = {
+    name: true,
+    note: true,
+    folder: true,
+    tags: true,
+    dueDate: true,
+    deferDate: true,
+    plannedDate: true,
+    flagged: true,
+    sequential: true,
+    status: true,
+    reviewInterval: true,
+  };
+  void _allKeys;
+
   const obj: Record<string, unknown> = {
     name: data.name,
   };
@@ -1819,6 +1853,7 @@ function buildProjectDataObject(data: ProjectCreateData): Record<string, unknown
   if (data.tags !== undefined) obj.tags = data.tags;
   if (data.dueDate !== undefined) obj.dueDate = data.dueDate;
   if (data.deferDate !== undefined) obj.deferDate = data.deferDate;
+  if (data.plannedDate !== undefined) obj.plannedDate = data.plannedDate;
   if (data.flagged !== undefined) obj.flagged = data.flagged;
   if (data.sequential !== undefined) obj.sequential = data.sequential;
   if (data.status !== undefined) obj.status = data.status;
