@@ -130,7 +130,7 @@ describe('buildCreateTaskScript', () => {
       },
     });
 
-    expect(result.script).toContain('repeatRule');
+    expect(result.script).toContain('repetitionRule');
     expect(result.script).toContain('weekly');
   });
 
@@ -342,6 +342,14 @@ describe('buildUpdateTaskScript', () => {
       removeTags: ['Errands : Downtown'],
     });
     expect(result.script).toContain('resolveTagByPath');
+  });
+
+  it('clears repetition rule when repetitionRule is null', async () => {
+    const result = await buildUpdateTaskScript('task-123', {
+      repetitionRule: null,
+    });
+    expect(result.script).toContain('repetitionRule === null');
+    expect(result.script).toContain('task.repetitionRule = null');
   });
 });
 

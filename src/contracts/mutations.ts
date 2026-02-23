@@ -194,8 +194,7 @@ export interface TaskUpdateData {
   flagged?: boolean;
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean;
-  repetitionRule?: RepetitionRule; // Set/update repetition rule
-  clearRepeatRule?: boolean;
+  repetitionRule?: RepetitionRule | null; // Set/update (object) or clear (null)
   status?: 'completed' | 'dropped';
 }
 

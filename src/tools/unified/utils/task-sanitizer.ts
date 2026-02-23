@@ -213,15 +213,13 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   }
 
   // Handle repetitionRule (unified API format - OmniFocus 4.7+)
-  // This is the preferred format used by omnifocus_write
-  if (updates.repetitionRule !== undefined && typeof updates.repetitionRule === 'object') {
+  // Object = set/update rule, null = clear rule (matches dueDate: null pattern)
+  if (updates.repetitionRule === null) {
+    sanitized.repetitionRule = null;
+    logger.debug('Clearing repetitionRule (null)');
+  } else if (updates.repetitionRule !== undefined && typeof updates.repetitionRule === 'object') {
     sanitized.repetitionRule = updates.repetitionRule;
     logger.debug('Passing through repetitionRule:', updates.repetitionRule);
-  }
-
-  // Handle clear repeat rule flag
-  if (updates.clearRepeatRule === true) {
-    sanitized.clearRepeatRule = true;
   }
 
   // Handle status field (completed/dropped)

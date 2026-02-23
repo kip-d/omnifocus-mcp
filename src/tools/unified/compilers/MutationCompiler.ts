@@ -1,17 +1,5 @@
 import type { WriteInput } from '../schemas/write-schema.js';
-
-// Type definitions for mutation data structures
-interface RepetitionRule {
-  frequency: 'minutely' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-  interval?: number;
-  daysOfWeek?: number[];
-  endDate?: string;
-  // OmniFocus 4.7+ repetition method control
-  method?: 'fixed' | 'due-after-completion' | 'defer-after-completion' | 'none';
-  scheduleType?: 'regularly' | 'from-completion' | 'none';
-  anchorDateKey?: 'due-date' | 'defer-date' | 'planned-date';
-  catchUpAutomatically?: boolean;
-}
+import type { RepetitionRule } from '../../../contracts/mutations.js';
 
 interface CreateData {
   name: string;
@@ -53,7 +41,7 @@ interface UpdateChanges {
   parentTaskId?: string | null; // Bug OMN-5: Update parent task relationship
   estimatedMinutes?: number;
   clearEstimatedMinutes?: boolean; // Bug #18: Clear estimated time
-  clearRepeatRule?: boolean; // Bug #19: Clear repetition rule
+  repetitionRule?: RepetitionRule | null; // Set (object) or clear (null)
   folder?: string | null; // Move project to folder (null = root)
   // Project-specific update fields
   sequential?: boolean;

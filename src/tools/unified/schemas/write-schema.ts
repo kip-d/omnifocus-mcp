@@ -79,6 +79,10 @@ const CreateDataSchema = z.object({
   folder: z.string().optional(),
   sequential: coerceBoolean().optional(),
   status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
+  reviewInterval: z
+    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+    .pipe(z.number())
+    .optional(),
 });
 
 // Update changes schema
@@ -107,8 +111,7 @@ const UpdateChangesSchema = z
       .pipe(z.number())
       .optional(),
     clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
-    clearRepeatRule: coerceBoolean().optional(), // Bug #19: Clear repetition rule
-    repetitionRule: RepetitionRuleSchema.optional(), // Bug: Was missing from update schema
+    repetitionRule: z.union([RepetitionRuleSchema, z.null()]).optional(), // Set (object) or clear (null)
     // Project-specific update fields
     sequential: coerceBoolean().optional(),
     reviewInterval: z
@@ -123,10 +126,6 @@ const UpdateChangesSchema = z
 export const BatchItemDataSchema = CreateDataSchema.extend({
   tempId: z.string().min(1).optional(),
   parentTempId: z.string().optional(),
-  reviewInterval: z
-    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-    .pipe(z.number())
-    .optional(),
 });
 
 // Batch operation schema - discriminated union

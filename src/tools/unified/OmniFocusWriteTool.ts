@@ -890,9 +890,9 @@ SAFETY:
     const projectData: ProjectCreateData = {
       name: data.name,
       note: data.note,
-      dueDate: data.dueDate,
-      deferDate: data.deferDate,
-      plannedDate: data.plannedDate,
+      dueDate: data.dueDate ? localToUTC(data.dueDate, 'due') : undefined,
+      deferDate: data.deferDate ? localToUTC(data.deferDate, 'defer') : undefined,
+      plannedDate: data.plannedDate ? localToUTC(data.plannedDate, 'planned') : undefined,
       flagged: data.flagged,
       tags: data.tags,
       sequential: data.sequential ?? false,
@@ -1003,7 +1003,14 @@ SAFETY:
   private async handleProjectUpdateDirect(projectId: string, changes: ProjectUpdateData): Promise<unknown> {
     const timer = new OperationTimerV2();
 
-    const script = (await buildUpdateProjectScript(projectId, changes)).script;
+    // Convert date strings to UTC (same as task path); preserve null (= clear date)
+    const convertedChanges = { ...changes };
+    if (typeof changes.dueDate === 'string') convertedChanges.dueDate = localToUTC(changes.dueDate, 'due');
+    if (typeof changes.deferDate === 'string') convertedChanges.deferDate = localToUTC(changes.deferDate, 'defer');
+    if (typeof changes.plannedDate === 'string')
+      convertedChanges.plannedDate = localToUTC(changes.plannedDate, 'planned');
+
+    const script = (await buildUpdateProjectScript(projectId, convertedChanges)).script;
     const result = await this.execJson(script);
 
     if (isScriptError(result)) {
@@ -1401,6 +1408,10 @@ SAFETY:
       sequential: item.sequential || false,
       tags: item.tags || [],
       folder: item.folder,
+      dueDate: item.dueDate ? localToUTC(item.dueDate, 'due') : undefined,
+      deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
+      plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
+      reviewInterval: item.reviewInterval,
     };
 
     const generatedScript = buildCreateProjectScript(projectData);
@@ -1477,6 +1488,9 @@ SAFETY:
       }
     }
 
+    // Capture repetitionRule before building task data (applied post-create, same as handleTaskCreate)
+    const repetitionRuleForBatch = item.repetitionRule as RepetitionRule | undefined;
+
     const taskData: TaskCreateData = {
       name: item.name,
       note: item.note || '',
@@ -1488,6 +1502,7 @@ SAFETY:
       deferDate: item.deferDate ? localToUTC(item.deferDate, 'defer') : undefined,
       plannedDate: item.plannedDate ? localToUTC(item.plannedDate, 'planned') : undefined,
       estimatedMinutes: item.estimatedMinutes,
+      // repetitionRule applied post-create below (same pattern as handleTaskCreate)
     };
 
     const generatedScript = await buildCreateTaskScript(taskData);
@@ -1508,6 +1523,17 @@ SAFETY:
       const realId = data.taskId;
 
       if (realId) {
+        // Apply repetition rule post-create (same pattern as handleTaskCreate)
+        if (repetitionRuleForBatch) {
+          try {
+            const repeatScript = (await buildUpdateTaskScript(realId, { repetitionRule: repetitionRuleForBatch }))
+              .script;
+            await this.execJson(repeatScript);
+          } catch {
+            this.logger.warn('Failed to apply repeat rule in batch task creation', { taskId: realId });
+          }
+        }
+
         markTaskAsValidated(realId);
 
         return {

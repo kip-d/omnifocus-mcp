@@ -575,7 +575,7 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
     }
 
     // Apply repeat rule if provided
-    if (taskData.repeatRule) {
+    if (taskData.repetitionRule) {
       try {
         const ruleScript = \`
           (() => {
@@ -583,7 +583,7 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
             const task = Task.byIdentifier('\${taskId}');
             if (!task) return JSON.stringify({success: false, error: 'Task not found by ID: ' + '\${taskId}'});
 
-            const rule = \${JSON.stringify(taskData.repeatRule)};
+            const rule = \${JSON.stringify(taskData.repetitionRule)};
 
             // Map frequency to ICS RRULE FREQ value
             const freqMap = {
@@ -1061,8 +1061,11 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
           }
         }
 
-        // Handle repetition rule
-        if (changes.repetitionRule) {
+        // Handle clearing repetition rule (repetitionRule: null)
+        if (changes.repetitionRule === null) {
+          task.repetitionRule = null;
+        } else if (changes.repetitionRule) {
+          // Handle setting/updating repetition rule
           const rule = changes.repetitionRule;
 
           // Map frequency to ICS RRULE FREQ value
@@ -1818,7 +1821,7 @@ function buildTaskDataObject(data: TaskCreateData): Record<string, unknown> {
   if (data.plannedDate !== undefined) obj.plannedDate = data.plannedDate;
   if (data.flagged !== undefined) obj.flagged = data.flagged;
   if (data.estimatedMinutes !== undefined) obj.estimatedMinutes = data.estimatedMinutes;
-  if (data.repetitionRule !== undefined) obj.repeatRule = data.repetitionRule;
+  if (data.repetitionRule !== undefined) obj.repetitionRule = data.repetitionRule;
 
   return obj;
 }

@@ -196,7 +196,6 @@ export interface TaskUpdateArgs {
   clearDeferDate?: boolean;
   clearPlannedDate?: boolean;
   clearEstimatedMinutes?: boolean;
-  clearRepeatRule?: boolean;
 }
 
 export interface RepeatRule {

@@ -503,4 +503,68 @@ describe('WriteSchema', () => {
       expect(data.repetitionRule.catchUpAutomatically).toBe(true);
     }
   });
+
+  // ─── Round 2: repetitionRule: null clears the rule ──────────────────
+
+  it('accepts repetitionRule: null in update to clear the rule', () => {
+    const input = {
+      mutation: {
+        operation: 'update',
+        target: 'task',
+        id: 'task-123',
+        changes: {
+          repetitionRule: null,
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const changes = (result.data.mutation as { changes: { repetitionRule: null } }).changes;
+      expect(changes.repetitionRule).toBeNull();
+    }
+  });
+
+  // ─── Round 2: reviewInterval in direct create ───────────────────────
+
+  it('accepts reviewInterval in direct project create', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'project',
+        data: {
+          name: 'Review project',
+          reviewInterval: 14,
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { reviewInterval: number } }).data;
+      expect(data.reviewInterval).toBe(14);
+    }
+  });
+
+  it('coerces string reviewInterval to number in project create (MCP bridge)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'project',
+        data: {
+          name: 'Review project',
+          reviewInterval: '7',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { reviewInterval: number } }).data;
+      expect(data.reviewInterval).toBe(7);
+    }
+  });
 });

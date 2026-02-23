@@ -182,13 +182,8 @@ describe('sanitizeTaskUpdates', () => {
     expect(sanitizeTaskUpdates({ repetitionRule: 'weekly' })).toEqual({});
   });
 
-  it('passes through clearRepeatRule flag', () => {
-    expect(sanitizeTaskUpdates({ clearRepeatRule: true })).toEqual({ clearRepeatRule: true });
-  });
-
-  it('does not set clearRepeatRule when false', () => {
-    const result = sanitizeTaskUpdates({ clearRepeatRule: false });
-    expect(result.clearRepeatRule).toBeUndefined();
+  it('passes through repetitionRule: null to clear rule', () => {
+    expect(sanitizeTaskUpdates({ repetitionRule: null })).toEqual({ repetitionRule: null });
   });
 
   // --- Status ---

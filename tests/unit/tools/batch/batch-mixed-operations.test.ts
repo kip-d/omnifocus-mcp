@@ -44,7 +44,6 @@ describe('UpdateChangesSchema MCP bridge coercion', () => {
               clearDeferDate: 'false',
               clearPlannedDate: 'true',
               clearEstimatedMinutes: 'true',
-              clearRepeatRule: 'false',
             },
           },
         ],
@@ -59,7 +58,6 @@ describe('UpdateChangesSchema MCP bridge coercion', () => {
       expect(changes.clearDeferDate).toBe(false);
       expect(changes.clearPlannedDate).toBe(true);
       expect(changes.clearEstimatedMinutes).toBe(true);
-      expect(changes.clearRepeatRule).toBe(false);
     }
   });
 
