@@ -4,7 +4,11 @@ import { coerceBoolean, coerceObject } from '../../schemas/coercion-helpers.js';
 // Repetition rule schema
 const RepetitionRuleSchema = z.object({
   frequency: z.enum(['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly']),
-  interval: z.number().min(1).optional().default(1),
+  interval: z
+    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
+    .pipe(z.number().min(1))
+    .optional()
+    .default(1),
   daysOfWeek: z.array(z.number().min(1).max(7)).optional(),
   endDate: z.string().optional(),
   // New fields for OmniFocus 4.7+ repetition method control
@@ -67,6 +71,7 @@ const UpdateChangesSchema = z
       .optional(),
     clearEstimatedMinutes: coerceBoolean().optional(), // Bug #18: Clear estimated time
     clearRepeatRule: coerceBoolean().optional(), // Bug #19: Clear repetition rule
+    repetitionRule: RepetitionRuleSchema.optional(), // Bug: Was missing from update schema
     // Project-specific update fields
     sequential: coerceBoolean().optional(),
     reviewInterval: z
