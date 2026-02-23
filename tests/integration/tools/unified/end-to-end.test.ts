@@ -735,7 +735,7 @@ describe('Unified Tools End-to-End Integration', () => {
                   repetitionRule: {
                     frequency: 'weekly',
                     interval: 1,
-                    daysOfWeek: [1], // Monday
+                    daysOfWeek: [{ day: 'MO' }], // Monday
                   },
                   tags: ['__test-e2e', '__test-weekly-repeat'],
                 },
