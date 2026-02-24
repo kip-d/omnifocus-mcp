@@ -511,9 +511,6 @@ export function createListResponseV2<T>(
     summary = generateProjectSummary(items as unknown[]);
   }
 
-  // Create preview (first 5 items for quick processing)
-  const preview = items.slice(0, 5);
-
   // Use entity-specific key, fallback to 'items' for 'other'
   const dataKey = itemType === 'other' ? 'items' : itemType;
 
@@ -522,7 +519,6 @@ export function createListResponseV2<T>(
     summary,
     data: {
       [dataKey]: items,
-      preview,
     },
     metadata: {
       operation,
@@ -592,7 +588,7 @@ export function createTaskResponseV2<T>(
   operation: string,
   tasks: T[],
   metadata: Partial<StandardMetadataV2> = {},
-): StandardResponseV2<{ tasks: T[]; preview?: T[] }> {
+): StandardResponseV2<{ tasks: T[] }> {
   const summary = generateTaskSummary(tasks as unknown[]);
 
   // Apply truncation
@@ -603,7 +599,6 @@ export function createTaskResponseV2<T>(
     summary,
     data: {
       tasks: truncatedTasks,
-      preview: tasks.slice(0, 5),
     },
     metadata: {
       operation,

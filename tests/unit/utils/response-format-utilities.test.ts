@@ -209,7 +209,7 @@ describe('Response Format Utilities', () => {
 
       expect(response.success).toBe(true);
       expect(response.data.items).toEqual(items);
-      expect(response.data.preview).toEqual(items);
+      expect(response.data.preview).toBeUndefined();
       expect(response.metadata.total_count).toBe(2);
       expect(response.metadata.returned_count).toBe(2);
     });
@@ -220,7 +220,7 @@ describe('Response Format Utilities', () => {
       const response = createListResponseV2('empty-list', [], 'other', timer.toMetadata());
 
       expect(response.data.items).toEqual([]);
-      expect(response.data.preview).toEqual([]);
+      expect(response.data.preview).toBeUndefined();
       expect(response.metadata.total_count).toBe(0);
     });
 
@@ -231,7 +231,7 @@ describe('Response Format Utilities', () => {
       const response = createListResponseV2('large-list', largeList, 'other', timer.toMetadata());
 
       expect(response.data.items).toHaveLength(1000);
-      expect(response.data.preview).toHaveLength(5); // Only first 5 in preview
+      expect(response.data.preview).toBeUndefined();
       expect(response.metadata.total_count).toBe(1000);
     });
 
@@ -261,7 +261,7 @@ describe('Response Format Utilities', () => {
 
       expect(response.success).toBe(true);
       expect(response.data.tasks).toEqual(tasks);
-      expect(response.data.preview).toEqual(tasks); // Only 2 tasks, so both in preview
+      expect(response.data.preview).toBeUndefined();
       expect(response.summary).toBeDefined();
       expect((response.summary as any).total_count).toBe(2);
       expect((response.summary as any).returned_count).toBe(2);

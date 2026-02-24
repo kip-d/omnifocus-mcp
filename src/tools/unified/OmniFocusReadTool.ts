@@ -42,8 +42,7 @@ import { LIST_PERSPECTIVES_SCRIPT } from '../../omnifocus/scripts/perspectives/l
  * Strips project objects to only the requested fields.
  * Always includes 'id' for identity (matching task projectFields behavior).
  *
- * Handles the StandardResponseV2 envelope: projects live at result.data.projects,
- * and preview at result.data.preview.
+ * Handles the StandardResponseV2 envelope: projects live at result.data.projects.
  */
 export function projectFieldsOnResult(
   result: Record<string, unknown>,
@@ -69,11 +68,7 @@ export function projectFieldsOnResult(
 
   const projected = projects.map(projectOne);
 
-  // Also project the preview array if present
-  const preview = data.preview as Record<string, unknown>[] | undefined;
-  const projectedPreview = preview && Array.isArray(preview) ? preview.map(projectOne) : preview;
-
-  return { ...result, data: { ...data, projects: projected, preview: projectedPreview } };
+  return { ...result, data: { ...data, projects: projected } };
 }
 
 // =============================================================================

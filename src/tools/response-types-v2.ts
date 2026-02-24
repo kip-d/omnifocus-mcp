@@ -28,7 +28,6 @@ export interface TaskV2 {
 
 export interface TasksDataV2 {
   tasks: TaskV2[];
-  preview?: TaskV2[];
 }
 
 export type TasksResponseV2 = StandardResponseV2<TasksDataV2>;
@@ -57,7 +56,6 @@ export interface ProjectV2 {
 
 export interface ProjectsDataV2 {
   projects: ProjectV2[];
-  preview?: ProjectV2[];
 }
 
 export interface ProjectOperationDataV2 {
@@ -144,7 +142,6 @@ export interface TagV2 {
 
 export interface TagsDataV2 {
   tags: TagV2[] | string[]; // Entity-specific key for consistency
-  preview?: TagV2[] | string[];
 }
 
 export interface TagOperationDataV2 {

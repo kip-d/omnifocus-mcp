@@ -16,20 +16,10 @@ describe('projectFieldsOnResult', () => {
     };
 
     // Matches StandardResponseV2 envelope from ProjectsTool
-    const result = projectFieldsOnResult({ data: { projects: [fullProject], preview: [fullProject] }, metadata: {} }, [
-      'id',
-      'name',
-      'status',
-    ]);
+    const result = projectFieldsOnResult({ data: { projects: [fullProject] }, metadata: {} }, ['id', 'name', 'status']);
 
-    const data = result.data as { projects: Record<string, unknown>[]; preview: Record<string, unknown>[] };
+    const data = result.data as { projects: Record<string, unknown>[] };
     expect(data.projects[0]).toEqual({
-      id: 'abc123',
-      name: 'Test Project',
-      status: 'active',
-    });
-    // Preview should also be projected
-    expect(data.preview[0]).toEqual({
       id: 'abc123',
       name: 'Test Project',
       status: 'active',
@@ -40,10 +30,7 @@ describe('projectFieldsOnResult', () => {
     const { projectFieldsOnResult } = await import('../../../../src/tools/unified/OmniFocusReadTool.js');
 
     const fullProject = { id: 'abc', name: 'Test', status: 'active' };
-    const result = projectFieldsOnResult(
-      { data: { projects: [fullProject], preview: [fullProject] }, metadata: {} },
-      undefined,
-    );
+    const result = projectFieldsOnResult({ data: { projects: [fullProject] }, metadata: {} }, undefined);
     const data = result.data as { projects: Record<string, unknown>[] };
     expect(data.projects[0]).toEqual(fullProject);
   });

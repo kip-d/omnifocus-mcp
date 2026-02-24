@@ -181,11 +181,6 @@ async function testV2TasksTool() {
         logSuccess('Has insights for immediate value');
       }
 
-      if (result.data?.preview) {
-        log(`👀 Preview: ${result.data.preview.length} items`, colors.blue);
-        logSuccess('Has preview for fast response');
-      }
-
       if (result.error?.suggestion) {
         log(`💡 Error suggestion: ${result.error.suggestion}`, colors.yellow);
       }
@@ -230,10 +225,6 @@ async function testV2ProjectsTool() {
         log(`📊 Summary:`, colors.blue);
         console.log(result.summary);
         logSuccess('Has project summary');
-      }
-
-      if (result.data?.preview) {
-        logSuccess('Has preview data');
       }
     } catch (error) {
       logError(`Failed: ${error.message}`);
