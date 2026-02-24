@@ -730,6 +730,46 @@ describe('OmniFocusWriteTool task operations', () => {
     });
   });
 
+  // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
+
+  describe('inputSchema (MCP advertisement)', () => {
+    it('should use a hand-crafted minimal schema, not the expanded Zod oneOf', () => {
+      const schema = tool.inputSchema;
+
+      // Should be a flat discriminated structure, not oneOf with duplicated branches
+      const mutation = (schema as any).properties?.mutation;
+      expect(mutation).toBeDefined();
+
+      // The discriminator field should be present
+      expect(mutation.properties?.operation).toBeDefined();
+
+      // Should NOT have oneOf (which duplicates repetitionRule across branches)
+      expect(mutation.oneOf).toBeUndefined();
+    });
+
+    it('should advertise all 7 operation types', () => {
+      const schema = tool.inputSchema as any;
+      const opEnum = schema.properties.mutation.properties.operation.enum;
+      expect(opEnum).toEqual(
+        expect.arrayContaining(['create', 'update', 'complete', 'delete', 'batch', 'bulk_delete', 'tag_manage']),
+      );
+    });
+
+    it('should include key fields for create/update without deeply nesting repetitionRule', () => {
+      const schema = tool.inputSchema as any;
+      const mutationProps = schema.properties.mutation.properties;
+
+      // data and changes should be loose objects
+      expect(mutationProps.data).toEqual({ type: 'object' });
+      expect(mutationProps.changes).toEqual({ type: 'object' });
+    });
+
+    it('should be under 4KB minified', () => {
+      const size = JSON.stringify(tool.inputSchema).length;
+      expect(size).toBeLessThan(4000);
+    });
+  });
+
   // ─── ERROR CASES ────────────────────────────────────────────────────
 
   describe('error cases', () => {

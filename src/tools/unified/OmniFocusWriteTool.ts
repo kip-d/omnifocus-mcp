@@ -94,6 +94,83 @@ SAFETY:
 - Batch supports up to 100 operations`;
 
   schema = WriteSchema;
+
+  /**
+   * Hand-crafted minimal JSON Schema for MCP tool advertisement.
+   *
+   * The auto-generated schema is ~9.3KB due to discriminatedUnion expanding
+   * 7 operation branches (each with full repetitionRule, data/changes objects).
+   * repetitionRule alone appears 3× (create data, update changes, batch create).
+   *
+   * This flat schema advertises all operations and fields without branch
+   * duplication. Server-side Zod validation (WriteSchema) still enforces
+   * the full discriminated union with strict field types.
+   */
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        mutation: {
+          type: 'object',
+          properties: {
+            // Discriminator
+            operation: {
+              type: 'string',
+              enum: ['create', 'update', 'complete', 'delete', 'batch', 'bulk_delete', 'tag_manage'],
+            },
+            target: { type: 'string', enum: ['task', 'project'] },
+
+            // create/update shared
+            data: { type: 'object' },
+            changes: { type: 'object' },
+            id: { type: 'string' },
+            minimalResponse: { type: 'boolean' },
+
+            // complete
+            completionDate: { type: 'string' },
+
+            // batch
+            operations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  operation: { type: 'string', enum: ['create', 'update', 'complete', 'delete'] },
+                  target: { type: 'string', enum: ['task', 'project'] },
+                  data: { type: 'object' },
+                  changes: { type: 'object' },
+                  id: { type: 'string' },
+                  completionDate: { type: 'string' },
+                },
+                required: ['operation', 'target'],
+              },
+            },
+            createSequentially: { type: 'string' },
+            returnMapping: { type: 'string' },
+            stopOnError: { type: 'string' },
+            atomicOperation: { type: 'string' },
+            dryRun: { type: 'string' },
+
+            // bulk_delete
+            ids: { type: 'array', items: { type: 'string' } },
+
+            // tag_manage
+            action: {
+              type: 'string',
+              enum: ['create', 'rename', 'delete', 'merge', 'nest', 'unnest', 'reparent'],
+            },
+            tagName: { type: 'string', description: 'The tag name to operate on' },
+            newName: { type: 'string', description: 'New name for rename action' },
+            targetTag: { type: 'string', description: 'Target tag for merge action' },
+            parentTag: { type: 'string', description: 'Parent tag name for nest/reparent actions' },
+          },
+          required: ['operation'],
+        },
+      },
+      required: ['mutation'],
+    };
+  }
+
   meta = {
     category: 'Task Management' as const,
     stability: 'stable' as const,

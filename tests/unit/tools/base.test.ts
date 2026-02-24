@@ -6,6 +6,9 @@ import { OmniAutomation } from '../../../src/omnifocus/OmniAutomation';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
 import { OmniFocusReadTool } from '../../../src/tools/unified/OmniFocusReadTool.js';
+import { OmniFocusWriteTool } from '../../../src/tools/unified/OmniFocusWriteTool.js';
+import { OmniFocusAnalyzeTool } from '../../../src/tools/unified/OmniFocusAnalyzeTool.js';
+import { SystemTool } from '../../../src/tools/system/SystemTool.js';
 import * as fs from 'fs';
 import * as os from 'os';
 
@@ -974,6 +977,55 @@ describe('BaseTool', () => {
 
       // Context should be included in the error details (even if empty)
       expect('context' in (result.error?.details || {})).toBe(true);
+    });
+  });
+
+  describe('Schema size regression guard', () => {
+    // Prevents a repeat of the 3.2 MB schema explosion (Feb 2026).
+    // Root cause: z.lazy() recursive AND/OR/NOT expanded 5 levels deep × 6 discriminatedUnion
+    // branches produced ~834K tokens in the MCP tools/list response, breaking Claude Code.
+    //
+    // These limits are generous (10× current sizes). If a test fails here, a schema
+    // change has likely introduced recursive expansion or branch duplication.
+    const MAX_PER_TOOL_CHARS = 100_000; // 100KB per tool (current largest: write ~10KB)
+    const MAX_TOTAL_CHARS = 200_000; // 200KB total (current total: ~54KB)
+
+    const allTools = () => [
+      new OmniFocusReadTool(mockCache),
+      new OmniFocusWriteTool(mockCache),
+      new OmniFocusAnalyzeTool(mockCache),
+      new SystemTool(mockCache),
+    ];
+
+    it('no single tool schema should exceed 100KB', () => {
+      for (const tool of allTools()) {
+        const schemaJson = JSON.stringify(tool.inputSchema);
+        expect(
+          schemaJson.length,
+          `${tool.name} inputSchema is ${schemaJson.length} chars (limit: ${MAX_PER_TOOL_CHARS}). ` +
+            'Likely cause: recursive z.lazy() or discriminatedUnion expansion. ' +
+            'Consider a hand-crafted inputSchema override (see OmniFocusReadTool).',
+        ).toBeLessThan(MAX_PER_TOOL_CHARS);
+      }
+    });
+
+    it('total schema size across all tools should not exceed 200KB', () => {
+      let totalSize = 0;
+      const sizes: Record<string, number> = {};
+
+      for (const tool of allTools()) {
+        const size = JSON.stringify(tool.inputSchema).length;
+        sizes[tool.name] = size;
+        totalSize += size;
+      }
+
+      expect(
+        totalSize,
+        `Total schema size is ${totalSize} chars (limit: ${MAX_TOTAL_CHARS}). ` +
+          `Breakdown: ${Object.entries(sizes)
+            .map(([name, size]) => `${name}=${size}`)
+            .join(', ')}`,
+      ).toBeLessThan(MAX_TOTAL_CHARS);
     });
   });
 });

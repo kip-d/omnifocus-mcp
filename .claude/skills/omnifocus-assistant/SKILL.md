@@ -8,18 +8,6 @@ description: Use when user asks about tasks, projects, OmniFocus, GTD, productiv
 > **Brain + Hands Architecture**: This skill provides the "brain" (methodology, intent interpretation, guidance). The
 > OmniFocus MCP server provides the "hands" (tool execution). Use both together.
 
-## When to Use This Skill
-
-Use when the user:
-
-- Asks about tasks, projects, or OmniFocus
-- Mentions GTD, productivity, or task management
-- Wants to capture, organize, or review work
-- Asks "what should I do" or "what's on my plate"
-- Mentions meetings, deadlines, or commitments
-
----
-
 ## Intent Recognition
 
 ### Step 1: Information or Action?
@@ -102,60 +90,19 @@ The MCP tools reject natural language. Calculate dates based on today's date.
 - **Defer dates**: 8:00 AM (start of day)
 - **Completion dates**: 12:00 PM (noon)
 
-### Example
-
-```
-User: "Create task to call Sarah, due tomorrow"
-Today is Wednesday → tomorrow = Thursday
-
-Tool call: omnifocus_write({
-  mutation: {
-    operation: "create",
-    target: "task",
-    data: { name: "Call Sarah", dueDate: "{tomorrow as YYYY-MM-DD}" }
-  }
-})
-```
-
 ---
 
 ## GTD Methodology Guide
 
 ### The Five Stages
 
-**1. CAPTURE** - Get it out of your head
-
-- Everything goes to inbox first
-- Don't organize while capturing
-- Focus on emptying your mind
-
-**2. CLARIFY** - What is it?
-
-- Is it actionable?
-  - NO → Delete, reference, or someday/maybe
-  - YES → Continue
-- What's the next physical action?
-- Will it take < 2 minutes? Do it now.
-
-**3. ORGANIZE** - Put it where it belongs
-
-- **Project**: Multi-step outcome
-- **Context tags**: Where/when/how (@computer, @phone, @office)
-- **Defer date**: When it becomes available
-- **Due date**: Hard deadline only
-
-**4. REVIEW** - Keep it current
-
-- Weekly review is essential
-- Check all projects for next actions
-- Process inbox to zero
-- Review someday/maybe list
-
-**5. ENGAGE** - Do the work
-
-- Choose based on four criteria (in order): context, time available, energy, priority
-- Work from context lists, not project lists
-- Trust your system — if you did the review, the right task will surface
+| Stage        | GTD Purpose                        | OmniFocus Action                |
+| ------------ | ---------------------------------- | ------------------------------- |
+| **Capture**  | Empty your head                    | Add to inbox, no organizing     |
+| **Clarify**  | Actionable? < 2 min? Who?          | Process inbox workflow          |
+| **Organize** | Project, context, dates            | Assign project, tags, defer/due |
+| **Review**   | Keep system current                | Weekly review workflow          |
+| **Engage**   | Context → time → energy → priority | Context tag filters             |
 
 ### Defer Date vs Due Date
 
@@ -180,28 +127,12 @@ Tool call: omnifocus_write({
 
 ### Someday/Maybe Management
 
-Someday/Maybe captures things you might want to do but aren't committed to now.
-
-**Where to put items:**
-
-- Tag with `@someday` and place in a "Someday / Maybe" single-action project (or use on-hold status)
-- Use a defer date far in the future to keep them out of daily views
-
-**Review cadence:**
-
-- Review the full list during weekly review (Step 7 below)
-- Ask: "Has anything changed? Am I ready to commit to this?"
-- Activate by moving to a real project and defining a next action
-- Delete items that no longer spark interest
+Tag with `@someday`, place in an on-hold project, defer far in the future. Review during weekly review — activate or
+drop items that no longer resonate.
 
 ### Waiting-For Tracking
 
-When you delegate or are waiting on someone else:
-
-1. **Create or update** the task with tag `@waiting-for`
-2. **Add a note**: who you're waiting on, what you asked, when you asked
-3. **Set a defer date** for follow-up (typically 3-7 days out)
-4. **Review** all `@waiting-for` items during weekly review — follow up on anything stale
+Tag `@waiting-for`, note who/what/when, defer 3–7 days for follow-up. Review during weekly review.
 
 ```
 User: "I emailed John about the budget, waiting on his reply"
@@ -222,18 +153,6 @@ Not everything captured is actionable. Non-actionable reference material belongs
 
 Cross-link using `obsidian://open?file=Path%2FTo%2FNote` in OmniFocus task notes.
 
-### Natural Planning Model
-
-For new projects, apply GTD's five planning steps:
-
-1. **Purpose & principles** — Why does this matter? What are the boundaries?
-2. **Outcome visioning** — What does "done" look like? Be specific.
-3. **Brainstorming** — What are all the things that need to happen? Don't filter.
-4. **Organizing** — Group and sequence the brainstorm into a logical order.
-5. **Next actions** — What's the very next physical action for each component?
-
-Use this when creating projects with `omnifocus_write` batch operations: create the project, then add tasks in sequence.
-
 ---
 
 ## Workflow: Process Inbox
@@ -241,140 +160,52 @@ Use this when creating projects with `omnifocus_write` batch operations: create 
 When user says "process my inbox" or "help me with inbox":
 
 ```
-1. Fetch inbox items: omnifocus_read({ query: { type: "tasks", mode: "inbox", limit: 10 } })
-   (Alternative: filters: { project: null } — both work; mode: "inbox" uses the inInbox property which is more accurate)
-
-2. For each item, guide through GTD clarify:
-   a. "Is this actionable?"
-      - NO → Delete, file as reference (Obsidian), or tag @someday
-      - YES → Continue
-
-   b. "Will it take less than 2 minutes?"
-      - YES → "Do it now, then I'll mark it complete"
-      - NO → Continue
-
-   c. "Am I the right person to do this?"
-      - NO → Delegate: tag @waiting-for, note who/when, set follow-up defer date
-      - YES → Continue
-
-   d. "Is it one action or multiple steps?"
-      - One action → Assign to project, add context tags
-      - Multiple → Create project with next actions
-
-3. Execute: omnifocus_write to move, update, or create project
-
-4. After processing a batch, offer time estimates for tasks that lack them
-   (see "Suggesting Time Estimates" under Task Creation Best Practices)
-
+1. Fetch: omnifocus_read({ query: { type: "tasks", mode: "inbox", limit: 10 } })
+2. Clarify each: actionable? → < 2 min (do now) → delegate (@waiting-for) → one action or project?
+3. Execute: omnifocus_write to move, update, or complete/create
+4. Offer time estimates after batch (see Suggesting Time Estimates below)
 5. Repeat until inbox empty
-
-Alternative: Use the `eisenhower_matrix_inbox` MCP prompt for priority-quadrant-based inbox processing.
 ```
+
+Alternative: `eisenhower_matrix_inbox` MCP prompt for Eisenhower matrix approach.
 
 ---
 
 ## Workflow: Weekly Review
 
-When user asks for "weekly review":
+Execute in sequence — each step: run the MCP call, act on results:
 
-### Step 1: Get Clear — Empty Inbox
+**1. Empty inbox** — Process before anything else
+`omnifocus_read({ query: { type: "tasks", mode: "inbox", countOnly: true } })`
 
-```
-omnifocus_read({ query: { type: "tasks", mode: "inbox", countOnly: true } })
-```
+**2. Review completed** — Acknowledge progress
+`omnifocus_read({ query: { type: "tasks", filters: { status: "completed", completionDate: { after: "{7 days ago}" } }, limit: 50 } })`
 
-If count > 0, process inbox first (use the inbox processing workflow above).
+**3. Overdue** — Reschedule, delegate, or drop every item
+`omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 50 } })`
 
-### Step 2: Get Clear — Review Completed (Celebrate!)
+**4. Active projects** — Each needs at least one next action
+`omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })`
 
-```
-omnifocus_read({
-  query: {
-    type: "tasks",
-    filters: {
-      status: "completed",
-      completionDate: { after: "{7 days ago}" }
-    },
-    limit: 50
-  }
-})
-```
+**5. On-hold projects** — Reactivate, drop, or keep waiting?
+`omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })`
 
-Acknowledge progress. This builds trust in the system.
+**6. Waiting-for** — Follow up on anything stale
+`omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@waiting-for"] } }, limit: 50 } })`
 
-### Step 3: Get Current — Check Overdue
+**7. Someday/maybe** — Activate or delete what no longer resonates
+`omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@someday"] } }, limit: 50 } })`
 
-```
-omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 50 } })
-```
+**8. Upcoming week** — Check overcommitment, spread bunched deadlines
+`omnifocus_read({ query: { type: "tasks", mode: "upcoming", daysAhead: 7 } })`
 
-For each: reschedule, delegate, or drop. Don't leave overdue items — they erode system trust.
+**9. Ensure next actions** — Every active project needs one
+`omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })`
 
-### Step 4: Get Current — Review Active Projects
+**10. Get creative** — New projects? Stuck items? Someday/maybe to activate? Ask the user.
 
-```
-omnifocus_read({ query: { type: "projects", filters: { status: "active" } } })
-```
-
-Check each has at least one available next action. Projects without next actions are stuck.
-
-### Step 5: Get Current — Review On-Hold Projects
-
-```
-omnifocus_read({ query: { type: "projects", filters: { status: "on_hold" } } })
-```
-
-For each: Should it be reactivated? Dropped? Still waiting on something?
-
-### Step 6: Get Current — Review Waiting-For Items
-
-```
-omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@waiting-for"] } }, limit: 50 } })
-```
-
-Follow up on anything stale. Remove the tag and complete if resolved.
-
-### Step 7: Get Current — Someday/Maybe Review
-
-```
-omnifocus_read({ query: { type: "tasks", filters: { tags: { any: ["@someday"] } }, limit: 50 } })
-```
-
-Ask: "Am I ready to commit to any of these?" Activate or delete items that no longer resonate.
-
-### Step 8: Get Current — Calendar & Upcoming Week
-
-```
-omnifocus_read({ query: { type: "tasks", mode: "upcoming", daysAhead: 7 } })
-```
-
-Check for overcommitment. Spread bunched deadlines. Ensure due dates reflect real commitments.
-
-### Step 9: Get Current — Ensure Next Actions
-
-```
-omnifocus_analyze({ analysis: { type: "manage_reviews", params: { operation: "list_for_review" } } })
-```
-
-Every active project must have at least one clear next action. Define one for any that don't.
-
-### Step 10: Get Creative
-
-Ask the user:
-
-- "Any new projects or ideas to capture?"
-- "Any stuck project that needs brainstorming?"
-- "Anything to activate from someday/maybe?"
-
-This is the creative payoff of having a clear system — space to think about what's next.
-
-### Step 11: Productivity Check
-
-```
-omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } })
-```
-
-Compare to last week. Celebrate improvements, identify patterns.
+**11. Productivity check**
+`omnifocus_analyze({ analysis: { type: "productivity_stats", params: { groupBy: "week" } } })`
 
 ---
 
@@ -399,49 +230,20 @@ Summarize: "You have X tasks due today, Y overdue. Here are top priorities..."
 
 ## Workflow: Engage (Choosing What to Do)
 
-When the user asks "what should I work on?" or needs help picking a task, apply GTD's four criteria in order:
+Apply GTD's four criteria in order — each narrows the list:
 
-### 1. Context — What can you do right now?
+**1. Context** — What's available where you are now? `filters: { tags: { any: ["@computer"] } }` (or @phone, @office,
+etc.)
 
-```
-omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@computer"] } }, limit: 20 } })
-```
+**2. Time** — Short window (quick wins) vs long (deep work): `filters: { estimatedMinutes: { lessThan: 15 } }` or
+`filters: { tags: { any: ["@deep-work"] } }`
 
-### 2. Time Available — How much time before your next commitment?
+**3. Energy** — Match task type to current energy: `filters: { tags: { any: ["@high-energy"] } }` or `["@low-energy"]`
 
-```
-// Short window: quick wins
-omnifocus_read({ query: { type: "tasks", mode: "available", filters: {
-  AND: [{ tags: { any: ["@computer"] } }, { estimatedMinutes: { lessThan: 15 } }]
-}, limit: 10 } })
+**4. Priority** — Of what remains, flagged first, then overdue:
+`omnifocus_read({ query: { type: "tasks", mode: "flagged", limit: 10 } })`
 
-// Long window: deep work
-omnifocus_read({ query: { type: "tasks", mode: "available", filters: {
-  tags: { any: ["@deep-work"] }
-}, limit: 10 } })
-```
-
-### 3. Energy — What matches your current energy level?
-
-```
-// Morning high-energy: tackle hard items
-omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@high-energy"] } }, limit: 10 } })
-
-// Afternoon slump: routine tasks
-omnifocus_read({ query: { type: "tasks", mode: "available", filters: { tags: { any: ["@low-energy"] } }, limit: 10 } })
-```
-
-### 4. Priority — Of the remaining options, what matters most?
-
-```
-// Flagged = highest priority
-omnifocus_read({ query: { type: "tasks", mode: "flagged", limit: 10 } })
-
-// Overdue = needs attention
-omnifocus_read({ query: { type: "tasks", mode: "overdue", limit: 10 } })
-```
-
-Guide the user through these filters progressively until they have a clear short list.
+Guide the user progressively through these until they have a short list.
 
 ---
 
@@ -510,28 +312,8 @@ Single task when:
 After creating tasks or a project, **proactively offer time estimates** as a batch. Don't ask during capture (that slows
 it down). Instead, create the tasks first, then present estimates for confirmation.
 
-**The pattern:**
-
-1. Create the tasks/project normally
-2. Review what was just created
-3. Present a summary with suggested estimates based on task verbs and context
-4. Let the user confirm, adjust, or skip
-
-**Example interaction:**
-
-> "I've created the project **Phone System Migration** with 5 tasks. Based on the task types, here are my time
-> estimates:
->
-> | Task                                    | Estimate       |
-> | --------------------------------------- | -------------- |
-> | Call 123.net to confirm cutover date    | 15 min         |
-> | Document current extension assignments  | 30 min         |
-> | Update staff directory with new numbers | 60 min         |
-> | Test each phone line after migration    | 30 min         |
-> | Send staff notification email           | 15 min         |
-> | **Project total**                       | **~2.5 hours** |
->
-> Want me to add these estimates, or would you like to adjust any?"
+**The pattern:** Create tasks first, then present a batch estimate table (task + suggested minutes + project total) for
+confirmation.
 
 **Verb-based heuristics** (starting points, not gospel):
 
