@@ -515,10 +515,18 @@ tasks that matched before the limit was applied. Use this to know if there are m
 
 ### Logical Operators
 
-Combine filters with `AND`, `OR`, `NOT` for complex queries:
+Combine filters with `AND`, `OR`, `NOT` — one level only (no nesting operators inside operators):
 
 ```javascript
-// Flagged OR due this week
+// AND: merge multiple conditions
+{ query: { type: "tasks", filters: {
+  AND: [
+    { available: true },
+    { tags: { none: ["@waiting-for"] } }
+  ]
+} } }
+
+// OR: first matching condition used (OR support is limited)
 { query: { type: "tasks", filters: {
   OR: [
     { flagged: true },
@@ -526,14 +534,12 @@ Combine filters with `AND`, `OR`, `NOT` for complex queries:
   ]
 } } }
 
-// Available but NOT tagged @waiting-for
-{ query: { type: "tasks", filters: {
-  AND: [
-    { available: true },
-    { NOT: { tags: { any: ["@waiting-for"] } } }
-  ]
-} } }
+// NOT: status negation only (other fields use tag/date operators directly)
+{ query: { type: "tasks", filters: { NOT: { status: "completed" } } } }
 ```
+
+**Limitations:** NOT only handles status negation (`completed` → show active, `active` → show completed). For tag
+exclusion, use `tags: { none: [...] }` directly. Items inside AND/OR/NOT cannot contain nested logical operators.
 
 ### Planned Date
 
