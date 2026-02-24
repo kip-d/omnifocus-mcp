@@ -563,11 +563,21 @@ describe('buildDeleteScript', () => {
     expect(result.target).toBe('project');
   });
 
-  it('calls delete method', async () => {
-    const result = await buildDeleteScript('task', 'task-123');
+  it('uses deleteObject() — the correct OmniJS API for deletion', async () => {
+    const taskResult = await buildDeleteScript('task', 'task-123');
+    const projectResult = await buildDeleteScript('project', 'proj-123');
 
-    // Should use OmniFocus delete/remove API
-    expect(result.script).toMatch(/delete|remove/);
+    // OmniJS uses deleteObject(item) — not item.remove() (which doesn't exist)
+    expect(taskResult.script).toContain('deleteObject(item)');
+    expect(projectResult.script).toContain('deleteObject(item)');
+  });
+
+  it('does NOT use item.remove() — that method does not exist in OmniJS', async () => {
+    const taskResult = await buildDeleteScript('task', 'task-123');
+    const projectResult = await buildDeleteScript('project', 'proj-123');
+
+    expect(taskResult.script).not.toContain('item.remove()');
+    expect(projectResult.script).not.toContain('item.remove()');
   });
 });
 
@@ -667,6 +677,22 @@ describe('buildBulkDeleteScript', () => {
     const result = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
 
     expect(result.script).toContain('deletedCount');
+  });
+
+  it('uses deleteObject() — the correct OmniJS API for deletion', async () => {
+    const taskResult = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
+    const projectResult = await buildBulkDeleteScript('project', ['id-1', 'id-2']);
+
+    expect(taskResult.script).toContain('deleteObject(item)');
+    expect(projectResult.script).toContain('deleteObject(item)');
+  });
+
+  it('does NOT use item.remove() — that method does not exist in OmniJS', async () => {
+    const taskResult = await buildBulkDeleteScript('task', ['id-1', 'id-2']);
+    const projectResult = await buildBulkDeleteScript('project', ['id-1', 'id-2']);
+
+    expect(taskResult.script).not.toContain('item.remove()');
+    expect(projectResult.script).not.toContain('item.remove()');
   });
 });
 

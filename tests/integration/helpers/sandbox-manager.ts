@@ -35,6 +35,7 @@ export const TEST_INBOX_PREFIX = '__TEST__';
 export interface CleanupReport {
   inboxTasksDeleted: number;
   orphanedTasksDeleted: number;
+  orphanedProjectsDeleted: number;
   projectsDeleted: number;
   foldersDeleted: number;
   tagsDeleted: number;
@@ -273,6 +274,68 @@ const ORPHAN_TASK_PATTERNS = [
   'Velocity Test Task',
   'Consistency Test',
 ];
+
+/**
+ * Common test project name patterns that indicate orphaned test data.
+ * These projects should only exist inside __MCP_TEST_SANDBOX__ folder.
+ * If found outside the sandbox, they are orphans from interrupted test runs.
+ */
+const ORPHAN_PROJECT_PATTERNS = ['TestBatch_', 'Test Duplicate Project', 'Test Project', '__TEST__'];
+
+/**
+ * Delete orphaned test projects that escaped the sandbox folder.
+ * Uses OmniJS deleteObject() — the correct API for project deletion.
+ *
+ * Only deletes projects matching ORPHAN_PROJECT_PATTERNS that are
+ * NOT inside the sandbox folder (those are handled by deleteSandboxProjects).
+ */
+async function deleteOrphanedProjects(): Promise<{ deleted: number; errors: string[] }> {
+  const patternsJson = JSON.stringify(ORPHAN_PROJECT_PATTERNS);
+  const script = `
+    const result = app.evaluateJavascript(\`
+      (() => {
+        let deleted = 0;
+        const errors = [];
+        const patterns = ${patternsJson};
+        const sandboxName = '${SANDBOX_FOLDER_NAME}';
+
+        // Collect orphaned projects (match patterns, NOT in sandbox)
+        const toDelete = [];
+        for (const project of flattenedProjects) {
+          try {
+            const name = project.name;
+            if (!name) continue;
+
+            // Skip projects in sandbox (handled by deleteSandboxProjects)
+            const folder = project.parentFolder;
+            if (folder && folder.name === sandboxName) continue;
+
+            for (const pattern of patterns) {
+              if (name.startsWith(pattern)) {
+                toDelete.push(project);
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Delete collected projects
+        for (const project of toDelete) {
+          try {
+            deleteObject(project);
+            deleted++;
+          } catch (e) {
+            errors.push('Orphan project: ' + e.message);
+          }
+        }
+
+        return JSON.stringify({ deleted, errors });
+      })()
+    \`);
+    return result;
+  `;
+  return executeJXA<{ deleted: number; errors: string[] }>(script);
+}
 
 /**
  * Delete all tasks with __TEST__ name prefix ANYWHERE in OmniFocus
@@ -524,13 +587,15 @@ async function deleteTestTags(): Promise<{ deleted: number; errors: string[] }> 
  * 3. Delete sub-folders (bottom-up)
  * 4. Delete sandbox folder itself
  * 5. Delete orphaned __TEST__ tasks anywhere (catches tasks that escaped sandbox)
- * 6. Delete __test- tags (must be after tasks so tags aren't referenced)
+ * 6. Delete orphaned test projects (catches projects that escaped sandbox)
+ * 7. Delete __test- tags (must be after tasks/projects so tags aren't referenced)
  */
 export async function fullCleanup(): Promise<CleanupReport> {
   const startTime = Date.now();
   const report: CleanupReport = {
     inboxTasksDeleted: 0,
     orphanedTasksDeleted: 0,
+    orphanedProjectsDeleted: 0,
     projectsDeleted: 0,
     foldersDeleted: 0,
     tagsDeleted: 0,
@@ -587,7 +652,17 @@ export async function fullCleanup(): Promise<CleanupReport> {
     report.errors.push(`Orphaned tasks: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // Step 6: Delete test tags (must be after all task deletions)
+  // Step 6: Delete orphaned test projects that escaped the sandbox folder
+  // Safety net for interrupted test runs or folder assignment failures
+  try {
+    const orphanedProjectsResult = await deleteOrphanedProjects();
+    report.orphanedProjectsDeleted = orphanedProjectsResult.deleted;
+    report.errors.push(...orphanedProjectsResult.errors);
+  } catch (error) {
+    report.errors.push(`Orphaned projects: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  // Step 7: Delete test tags (must be after all task/project deletions)
   try {
     const tagsResult = await deleteTestTags();
     report.tagsDeleted = tagsResult.deleted;

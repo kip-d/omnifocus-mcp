@@ -1537,7 +1537,7 @@ export async function buildDeleteScript(target: MutationTarget, id: string): Pro
         'const item = ${flattenedCollection}.find(i => i.id.primaryKey === "' + targetId + '");' +
         'if (!item) return JSON.stringify({success: false, error: "Not found"});' +
         'const name = item.name;' +
-        'item.remove();' +
+        'deleteObject(item);' +
         'return JSON.stringify({' +
           'success: true,' +
           '${idField}: "' + targetId + '",' +
@@ -1745,7 +1745,7 @@ export async function buildBulkDeleteScript(target: MutationTarget, ids: string[
           'const item = ${flattenedCollection}.find(i => i.id.primaryKey === id);' +
           'if (item) {' +
             'const name = item.name;' +
-            'item.remove();' +
+            'deleteObject(item);' +
             'results.deleted.push({ id: id, name: name });' +
           '} else {' +
             'results.errors.push({ id: id, error: "Not found" });' +
