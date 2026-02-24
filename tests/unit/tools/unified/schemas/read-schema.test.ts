@@ -135,9 +135,7 @@ describe('ReadSchema', () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         // Verify it's a Zod unrecognized_keys error from .strict()
-        const unrecognizedKeyErrors = result.error.issues.filter(
-          (issue) => issue.code === 'unrecognized_keys',
-        );
+        const unrecognizedKeyErrors = result.error.issues.filter((issue) => issue.code === 'unrecognized_keys');
         expect(unrecognizedKeyErrors.length).toBeGreaterThan(0);
         expect(unrecognizedKeyErrors[0].keys).toContain('bogusField');
       }
@@ -226,6 +224,103 @@ describe('ReadSchema', () => {
       };
       const result = ReadSchema.safeParse(input);
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('flat logical operators (no recursive nesting)', () => {
+    it('should accept AND with flat filter conditions', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            AND: [{ status: 'active' }, { flagged: true }],
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept OR with flat filter conditions', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            OR: [{ status: 'active' }, { flagged: true }],
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept NOT with a flat filter condition', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            NOT: { status: 'completed' },
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject nested AND inside AND (no recursive logical operators)', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            AND: [
+              { AND: [{ status: 'active' }] }, // nested AND should fail
+            ],
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject OR inside AND (no recursive logical operators)', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            AND: [
+              { OR: [{ status: 'active' }, { flagged: true }] }, // nested OR should fail
+            ],
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject nested NOT inside NOT', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            NOT: { NOT: { status: 'active' } }, // nested NOT should fail
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject AND inside NOT', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: {
+            NOT: { AND: [{ status: 'active' }] }, // nested AND inside NOT should fail
+          },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(false);
     });
   });
 

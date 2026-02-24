@@ -171,9 +171,9 @@ PERFORMANCE:
   /**
    * Hand-crafted minimal JSON Schema for MCP tool advertisement.
    *
-   * Overrides the base class zodToJsonSchema() which expands z.lazy() recursive
-   * types (AND/OR/NOT filters) inline to 5 levels × 6 discriminatedUnion branches,
-   * producing a 3.2 MB / ~834K token schema. This minimal version is ~1KB.
+   * The auto-generated schema from zodToJsonSchema() is ~22 KB due to
+   * discriminatedUnion duplicating filters across 6 query type branches.
+   * This minimal version is ~1 KB (~5K tokens saved per interaction turn).
    *
    * Server-side validation still uses the full Zod ReadSchema — this only controls
    * what the MCP tools/list response advertises to LLM clients.

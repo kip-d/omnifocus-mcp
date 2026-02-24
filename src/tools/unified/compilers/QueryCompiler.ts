@@ -1,10 +1,12 @@
-import type { ReadInput, FilterValue } from '../schemas/read-schema.js';
+import type { ReadInput, FilterValue, FlatFilterValue } from '../schemas/read-schema.js';
 import type { TaskFilter, NormalizedTaskFilter, ProjectStatus } from '../../../contracts/filters.js';
 import type { SortableField } from '../../../contracts/ast/script-builder.js';
 import { normalizeFilter, validateFilterProperties } from '../../../contracts/filters.js';
 
 // Re-export FilterValue as QueryFilter for backwards compatibility
 export type QueryFilter = FilterValue;
+// Items inside AND/OR/NOT are flat (no nested logical operators)
+export type FlatQueryFilter = FlatFilterValue;
 
 export interface CompiledQuery {
   type: 'tasks' | 'projects' | 'tags' | 'perspectives' | 'folders' | 'export';
@@ -80,11 +82,11 @@ export class QueryCompiler {
   transformFilters(input: QueryFilter): TaskFilter {
     const result: TaskFilter = {};
 
-    // Handle logical operators
+    // Handle logical operators (items are FlatFilterValue — no nested AND/OR/NOT)
     if (input.AND && Array.isArray(input.AND)) {
-      // Merge all conditions
+      // Merge all conditions via Object.assign (flat merge, not recursive)
       for (const condition of input.AND) {
-        const transformed = this.transformFilters(condition as QueryFilter);
+        const transformed = this.transformFilters(condition as FlatQueryFilter);
         Object.assign(result, transformed);
       }
       return result;
@@ -97,14 +99,14 @@ export class QueryCompiler {
           'If you need OR logic, please open an issue with your use case.',
       );
       if (input.OR.length > 0) {
-        return this.transformFilters(input.OR[0] as QueryFilter);
+        return this.transformFilters(input.OR[0] as FlatQueryFilter);
       }
       return result;
     }
 
     if (input.NOT) {
       // Handle simple NOT cases
-      const notFilter = input.NOT as QueryFilter;
+      const notFilter = input.NOT as FlatQueryFilter;
       if (notFilter.status === 'completed') {
         result.completed = false;
       } else if (notFilter.status === 'active') {

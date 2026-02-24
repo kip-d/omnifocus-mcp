@@ -29,74 +29,57 @@ const NumberFilterSchema = z.union([
   z.object({ between: z.tuple([z.number(), z.number()]) }).strict(),
 ]);
 
-// Define the filter value type first (for recursive reference)
-export interface FilterValue {
-  // Task filters
-  id?: string; // Exact task ID lookup
-  status?: 'active' | 'completed' | 'dropped' | 'on_hold';
-  tags?: z.infer<typeof TagFilterSchema>;
-  project?: string | null;
-  dueDate?: z.infer<typeof DateFilterSchema>;
-  deferDate?: z.infer<typeof DateFilterSchema>;
-  plannedDate?: z.infer<typeof DateFilterSchema>;
-  completionDate?: z.infer<typeof DateFilterSchema>;
-  added?: z.infer<typeof DateFilterSchema>; // Creation date
-  flagged?: boolean;
-  blocked?: boolean;
-  available?: boolean;
-  inInbox?: boolean; // Explicit inbox filter
-  text?: z.infer<typeof TextFilterSchema>;
-  estimatedMinutes?: z.infer<typeof NumberFilterSchema>; // Task duration
+// =============================================================================
+// FILTER SCHEMAS (flat — no recursive nesting)
+// =============================================================================
+// QueryCompiler.transformFilters() only handles one level of AND/OR/NOT:
+//   AND: merges via Object.assign (no true nesting)
+//   OR: uses first condition only (logs warning)
+//   NOT: two hardcoded status cases
+// The schema matches this capability. No z.lazy() needed.
 
-  // Project/Task name filter
-  name?: z.infer<typeof TextFilterSchema>;
+// Shared filter field shape (used by both FlatFilterSchema and FilterSchema)
+const filterFields = {
+  id: z.string().optional(), // Exact task ID lookup
+  status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
+  tags: TagFilterSchema.optional(),
+  project: z.union([z.string(), z.null()]).optional(),
+  dueDate: DateFilterSchema.optional(),
+  deferDate: DateFilterSchema.optional(),
+  plannedDate: DateFilterSchema.optional(),
+  completionDate: DateFilterSchema.optional(),
+  added: DateFilterSchema.optional(), // Creation date
+  flagged: z.boolean().optional(),
+  blocked: z.boolean().optional(),
+  available: z.boolean().optional(),
+  inInbox: z.boolean().optional(), // Explicit inbox filter
+  text: TextFilterSchema.optional(),
+  estimatedMinutes: NumberFilterSchema.optional(), // Task duration
+  name: TextFilterSchema.optional(), // Project/Task name filter
+  folder: z.string().optional(), // Project filters
+};
 
-  // Project filters
-  folder?: string;
+// Flat filter: base fields only, no logical operators.
+// Used inside AND/OR/NOT arrays to prevent nesting.
+const FlatFilterSchema = z.object(filterFields).strict();
 
-  // Logical operators (recursive)
-  AND?: FilterValue[];
-  OR?: FilterValue[];
-  NOT?: FilterValue;
+// Full filter: base fields + one level of AND/OR/NOT (referencing FlatFilterSchema).
+const FilterSchema = z
+  .object({
+    ...filterFields,
+    AND: z.array(FlatFilterSchema).optional(),
+    OR: z.array(FlatFilterSchema).optional(),
+    NOT: FlatFilterSchema.optional(),
+  })
+  .strict();
 
+// TypeScript types matching the schemas
+export type FlatFilterValue = z.infer<typeof FlatFilterSchema>;
+export interface FilterValue extends FlatFilterValue {
+  AND?: FlatFilterValue[];
+  OR?: FlatFilterValue[];
+  NOT?: FlatFilterValue;
 }
-
-// Zod schema type wrapping FilterValue
-type FilterType = z.ZodType<FilterValue>;
-
-const FilterSchema: FilterType = z.lazy(() =>
-  z
-    .object({
-      // Task filters
-      id: z.string().optional(), // Exact task ID lookup
-      status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
-      tags: TagFilterSchema.optional(),
-      project: z.union([z.string(), z.null()]).optional(),
-      dueDate: DateFilterSchema.optional(),
-      deferDate: DateFilterSchema.optional(),
-      plannedDate: DateFilterSchema.optional(),
-      completionDate: DateFilterSchema.optional(),
-      added: DateFilterSchema.optional(), // Creation date
-      flagged: z.boolean().optional(),
-      blocked: z.boolean().optional(),
-      available: z.boolean().optional(),
-      inInbox: z.boolean().optional(), // Explicit inbox filter
-      text: TextFilterSchema.optional(),
-      estimatedMinutes: NumberFilterSchema.optional(), // Task duration
-
-      // Project/Task name filter
-      name: TextFilterSchema.optional(),
-
-      // Project filters
-      folder: z.string().optional(),
-
-      // Logical operators
-      AND: z.array(FilterSchema).optional(),
-      OR: z.array(FilterSchema).optional(),
-      NOT: FilterSchema.optional(),
-    })
-    .strict(),
-);
 
 // =============================================================================
 // FIELD SELECTION ENUMS (type-discriminated)
