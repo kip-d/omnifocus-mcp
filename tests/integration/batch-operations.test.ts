@@ -20,49 +20,42 @@ const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' &
 const d = RUN_INTEGRATION_TESTS ? describe : describe.skip;
 
 /**
- * Response shape from routeToBatch():
+ * Response shape from routeToBatch() (flat format):
  *
  * Success:
- *   { success: true, data: { operation, summary, results: { created: [executeBatchCreates result], ... }, tempIdMapping }, metadata }
+ *   { success: true, data: { operation, summary, results: FlatBatchResult[], tempIdMapping? }, metadata }
  *
- * Error (validation failure in creates):
- *   { success: false, data: { operation, summary, results: { ..., errors: [{ phase, error: { code, message }, details? }] } }, metadata }
+ * Each result item:
+ *   { operation: 'create'|'update'|'complete'|'delete', success, id, name?, tempId?, type?, changes?, error? }
  *
- * The executeBatchCreates result pushed into results.created[0]:
- *   { success, created, failed, totalItems, results: [{ tempId, realId, success, type }], mapping }
+ * Error items (from catch blocks) are also in results[] with success: false.
  */
 
-// Helper type for the new batch response format
+// Helper type for flat batch result items
+interface FlatBatchResult {
+  operation: string;
+  success: boolean;
+  id: string | null;
+  name?: string;
+  tempId?: string;
+  type?: string;
+  changes?: string[];
+  error?: string;
+}
+
+// Helper type for the batch response format
 interface BatchResponse {
   success: boolean;
   data: {
     operation: string;
     summary: { created: number; updated: number; completed: number; deleted: number; errors: number };
-    results: {
-      created: Array<{
-        success: boolean;
-        created: number;
-        failed: number;
-        totalItems: number;
-        results: Array<{ tempId: string; realId: string; success: boolean; type: string }>;
-        mapping?: Record<string, string>;
-      }>;
-      updated: unknown[];
-      completed: unknown[];
-      deleted: unknown[];
-      errors: Array<{
-        phase?: string;
-        error?: { code: string; message: string };
-        details?: unknown;
-        [key: string]: unknown;
-      }>;
-    };
+    results: FlatBatchResult[];
     tempIdMapping?: Record<string, string>;
   };
   metadata: {
     operation: string;
     timestamp: string;
-    tempIdMapping?: Record<string, string>;
+    query_time_ms?: number;
   };
 }
 
@@ -109,10 +102,11 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(response).toHaveProperty('success', true);
     expect(response.data.summary.created).toBe(1);
 
-    // executeBatchCreates result is pushed directly into results.created[0]
-    const createResult = response.data.results.created[0];
+    // Flat results: first item is the created project
+    const createResult = response.data.results[0];
     expect(createResult.success).toBe(true);
-    expect(createResult.results[0].realId).toBeTruthy();
+    expect(createResult.operation).toBe('create');
+    expect(createResult.id).toBeTruthy();
   }, 30000);
 
   it('should create project with task in sandbox', async () => {
@@ -151,8 +145,8 @@ d('Batch Operations Integration (Unified API)', () => {
 
     expect(response).toHaveProperty('success', true);
     expect(response.data.summary.created).toBe(2);
-    // The executeBatchCreates response has the individual item results
-    expect(response.data.results.created[0].results).toHaveLength(2);
+    // Flat results: 2 create items
+    expect(response.data.results.filter((r) => r.operation === 'create')).toHaveLength(2);
   }, 30000);
 
   it('should create nested tasks (task with subtask) in sandbox', async () => {
@@ -279,7 +273,7 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // tempIdMapping is at the top level of data (merged from OmniFocusWriteTool batch handler)
+    // tempIdMapping is at the top level of data (single copy, not duplicated in metadata)
     expect(response.data).toHaveProperty('tempIdMapping');
     expect(response.data.tempIdMapping).toHaveProperty('proj6');
     expect(response.data.tempIdMapping!.proj6).toBeTruthy();
@@ -326,14 +320,14 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // routeToBatch detects OmniFocusWriteTool batch handler's validation error and propagates it
+    // routeToBatch detects validation error and propagates it
     expect(response).toHaveProperty('success', false);
     expect(response.data.summary.errors).toBeGreaterThan(0);
 
-    // The validation error from OmniFocusWriteTool batch handler is in results.errors
-    const errorResult = response.data.results.errors[0];
-    expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
-    expect(errorResult.error?.message).toContain('nonexistent');
+    // Error items are in the flat results array with success: false
+    const errorResults = response.data.results.filter((r) => r.success === false);
+    expect(errorResults.length).toBeGreaterThan(0);
+    expect(errorResults[0].error).toContain('nonexistent');
   }, 30000);
 
   it('should validate circular dependencies', async () => {
@@ -368,14 +362,14 @@ d('Batch Operations Integration (Unified API)', () => {
       },
     })) as BatchResponse;
 
-    // routeToBatch detects OmniFocusWriteTool batch handler's validation error and propagates it
+    // routeToBatch detects validation error and propagates it
     expect(response).toHaveProperty('success', false);
     expect(response.data.summary.errors).toBeGreaterThan(0);
 
-    // The circular dependency error from OmniFocusWriteTool batch handler is in results.errors
-    const errorResult = response.data.results.errors[0];
-    expect(errorResult.error?.code).toBe('VALIDATION_ERROR');
-    expect(errorResult.error?.message).toContain('Circular');
+    // Error items are in the flat results array with success: false
+    const errorResults = response.data.results.filter((r) => r.success === false);
+    expect(errorResults.length).toBeGreaterThan(0);
+    expect(errorResults[0].error).toContain('Circular');
   }, 30000);
 
   it('should handle tasks with dates and metadata in sandbox', async () => {

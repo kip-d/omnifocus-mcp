@@ -199,7 +199,7 @@ const MutationSchema = z.discriminatedUnion('operation', [
   // Batch operation with options
   z.object({
     operation: z.literal('batch'),
-    target: z.enum(['task', 'project']),
+    target: z.enum(['task', 'project']).optional(),
     operations: z.array(BatchOperationSchema),
     createSequentially: coerceBoolean().optional().default(true),
     atomicOperation: coerceBoolean().optional().default(false),

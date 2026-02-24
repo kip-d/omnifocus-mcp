@@ -32,6 +32,7 @@ import { localToUTC } from '../../utils/timezone.js';
 import { parsingError, formatErrorWithRecovery, invalidDateError } from '../../utils/error-messages.js';
 import { sanitizeTaskUpdates } from './utils/task-sanitizer.js';
 import type { TaskOperationResult } from '../../omnifocus/script-response-types.js';
+import { flattenBatchResults } from './batch-response-flatten.js';
 
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
@@ -1119,6 +1120,8 @@ SAFETY:
   // ─── Batch routing ─────────────────────────────────────────────────
 
   private async routeToBatch(compiled: Extract<CompiledMutation, { operation: 'batch' }>): Promise<unknown> {
+    const batchTimer = new OperationTimerV2();
+
     // Partition operations by type
     const createOps = compiled.operations.filter((op) => op.operation === 'create');
     const updateOps = compiled.operations.filter((op) => op.operation === 'update');
@@ -1249,13 +1252,13 @@ SAFETY:
           deleted: results.deleted.length,
           errors: results.errors.length,
         },
-        results,
+        results: flattenBatchResults(results),
         ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
       },
       metadata: {
         operation: 'batch',
         timestamp: new Date().toISOString(),
-        ...(Object.keys(tempIdMapping).length > 0 ? { tempIdMapping } : {}),
+        ...batchTimer.toMetadata(),
       },
     };
   }
@@ -1778,7 +1781,7 @@ SAFETY:
     // Build preview items for each type
     const createPreviewItems = createOps.map((op, index) => ({
       tempId: op.data?.tempId || `auto_temp_${index + 1}`,
-      type: compiled.target,
+      type: op.target,
       name: op.data?.name || 'Unnamed',
       action: 'create' as const,
       details: {
@@ -1793,7 +1796,7 @@ SAFETY:
 
     const updatePreviewItems = updateOps.map((op) => ({
       id: op.id,
-      type: compiled.target,
+      type: op.target,
       name: op.changes?.name || `[Update to ${op.id}]`,
       action: 'update' as const,
       details: op.changes,
@@ -1801,14 +1804,14 @@ SAFETY:
 
     const completePreviewItems = completeOps.map((op) => ({
       id: op.id,
-      type: compiled.target,
+      type: op.target,
       action: 'complete' as const,
       details: { completionDate: op.completionDate },
     }));
 
     const deletePreviewItems = deleteOps.map((op) => ({
       id: op.id,
-      type: compiled.target,
+      type: op.target,
       action: 'delete' as const,
     }));
 

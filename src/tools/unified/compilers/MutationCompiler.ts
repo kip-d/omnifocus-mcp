@@ -89,7 +89,7 @@ export type CompiledMutation =
     }
   | {
       operation: 'batch';
-      target: 'task' | 'project';
+      target?: 'task' | 'project';
       operations: BatchOperation[];
       createSequentially?: boolean;
       atomicOperation?: boolean;
