@@ -167,6 +167,74 @@ PERFORMANCE:
 - Use modes instead of raw filters when available`;
 
   schema = ReadSchema;
+
+  /**
+   * Hand-crafted minimal JSON Schema for MCP tool advertisement.
+   *
+   * Overrides the base class zodToJsonSchema() which expands z.lazy() recursive
+   * types (AND/OR/NOT filters) inline to 5 levels × 6 discriminatedUnion branches,
+   * producing a 3.2 MB / ~834K token schema. This minimal version is ~1KB.
+   *
+   * Server-side validation still uses the full Zod ReadSchema — this only controls
+   * what the MCP tools/list response advertises to LLM clients.
+   */
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export'],
+            },
+            mode: {
+              type: 'string',
+              enum: [
+                'all',
+                'inbox',
+                'search',
+                'overdue',
+                'today',
+                'upcoming',
+                'available',
+                'blocked',
+                'flagged',
+                'smart_suggest',
+              ],
+            },
+            filters: { type: 'object' },
+            sort: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  field: { type: 'string' },
+                  direction: { type: 'string', enum: ['asc', 'desc'] },
+                },
+              },
+            },
+            fields: { type: 'array', items: { type: 'string' } },
+            limit: { type: 'number' },
+            offset: { type: 'number' },
+            countOnly: { type: 'boolean' },
+            fastSearch: { type: 'boolean' },
+            daysAhead: { type: 'number' },
+            details: { type: 'boolean' },
+            includeStats: { type: 'boolean' },
+            exportType: { type: 'string', enum: ['tasks', 'projects', 'all'] },
+            format: { type: 'string', enum: ['json', 'csv', 'markdown'] },
+            exportFields: { type: 'array', items: { type: 'string' } },
+            outputDirectory: { type: 'string' },
+            includeCompleted: { type: 'boolean' },
+          },
+          required: ['type'],
+        },
+      },
+      required: ['query'],
+    };
+  }
   meta = {
     category: 'Utility' as const,
     stability: 'stable' as const,

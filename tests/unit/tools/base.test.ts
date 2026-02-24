@@ -7,7 +7,6 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ScriptErrorType } from '../../../src/utils/error-taxonomy.js';
 import { OmniFocusReadTool } from '../../../src/tools/unified/OmniFocusReadTool.js';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
 
 // Mock dependencies
@@ -55,11 +54,12 @@ class ErrorTestTool extends BaseTool<z.ZodObject<any>> {
         throw new Error('Script execution timed out after 60 seconds');
       case 'not-running':
         throw new Error('OmniFocus is not running');
-      case 'omni-automation':
+      case 'omni-automation': {
         const error = new Error('Script failed');
         error.name = 'OmniAutomationError';
         (error as any).details = { script: 'test script', stderr: 'test stderr' };
         throw error;
+      }
       case 'generic':
       default:
         throw new Error('Generic error for testing');
@@ -297,7 +297,7 @@ describe('BaseTool', () => {
 
       try {
         await testTool.execute(args);
-      } catch (error) {
+      } catch {
         // Expected to throw
       }
 
@@ -766,10 +766,10 @@ describe('BaseTool', () => {
       expect(jsonSchema.required).not.toContain('optional_lazy');
     });
 
-    it('should resolve OmniFocusReadTool filters as object with properties (real schema)', () => {
-      // This test exercises the REAL wrapping chain that caused the original bug:
-      // coerceObject(FilterSchema).optional() → ZodOptional<ZodEffects<ZodLazy<ZodObject>>>
-      // Without the z.lazy() fix, filters would fall through to { type: 'string' }.
+    it('should use minimal hand-crafted inputSchema for OmniFocusReadTool (not expanded Zod)', () => {
+      // OmniFocusReadTool overrides inputSchema with a hand-crafted minimal JSON Schema
+      // to avoid the 3.2 MB / ~834K token explosion from z.lazy() recursive expansion.
+      // Server-side validation still uses the full Zod ReadSchema.
       const readTool = new OmniFocusReadTool(mockCache);
       const jsonSchema = readTool.inputSchema;
 
@@ -777,36 +777,28 @@ describe('BaseTool', () => {
       expect(jsonSchema.properties).toBeDefined();
       expect(jsonSchema.properties.query).toBeDefined();
 
-      // query is a discriminatedUnion → has oneOf with multiple variants
+      // query should be a flat object (NOT a oneOf with 6 branches)
       const querySchema = jsonSchema.properties.query as Record<string, unknown>;
-      const oneOf = querySchema.oneOf as Record<string, unknown>[];
-      expect(oneOf).toBeDefined();
-      expect(oneOf.length).toBeGreaterThan(0);
+      expect(querySchema.type).toBe('object');
+      expect(querySchema.oneOf).toBeUndefined(); // No more discriminated union explosion
 
-      // Find the tasks variant (has type: "tasks" literal)
-      const tasksVariant = oneOf.find((variant) => {
-        const props = variant.properties as Record<string, Record<string, unknown>>;
-        return props?.type?.const === 'tasks';
-      }) as Record<string, unknown>;
-      expect(tasksVariant).toBeDefined();
+      // query.type should be an enum with all 6 query types
+      const queryProps = querySchema.properties as Record<string, Record<string, unknown>>;
+      expect(queryProps.type.enum).toEqual(['tasks', 'projects', 'tags', 'perspectives', 'folders', 'export']);
 
-      // The filters property should be an OBJECT with properties, NOT { type: 'string' }
-      const filtersSchema = (tasksVariant.properties as Record<string, Record<string, unknown>>).filters;
-      expect(filtersSchema).toBeDefined();
-      expect(filtersSchema.type).toBe('object');
-      expect(filtersSchema.properties).toBeDefined();
+      // filters should be a loose { type: "object" } — no recursive AND/OR/NOT expansion
+      expect(queryProps.filters).toEqual({ type: 'object' });
 
-      // Verify specific filter fields are present (proves full resolution through the chain)
-      const filterProps = filtersSchema.properties as Record<string, Record<string, unknown>>;
-      expect(filterProps.flagged).toMatchObject({ type: 'boolean' });
-      expect(filterProps.project).toBeDefined();
-      expect(filterProps.tags).toMatchObject({ type: 'object' });
-      expect(filterProps.dueDate).toBeDefined();
+      // Key query parameters should be present
+      expect(queryProps.mode).toBeDefined();
+      expect(queryProps.limit).toEqual({ type: 'number' });
+      expect(queryProps.countOnly).toEqual({ type: 'boolean' });
+      expect(queryProps.fields).toBeDefined();
+      expect(queryProps.sort).toBeDefined();
 
-      // Verify recursive fields (AND/OR/NOT) resolved as arrays/objects, not strings
-      expect(filterProps.AND).toMatchObject({ type: 'array' });
-      expect(filterProps.OR).toMatchObject({ type: 'array' });
-      expect(filterProps.NOT).toMatchObject({ type: 'object' });
+      // Schema should be small — under 3KB pretty-printed (was 3.2 MB before)
+      const schemaSize = JSON.stringify(jsonSchema, null, 2).length;
+      expect(schemaSize).toBeLessThan(3000);
     });
 
     it('should preserve description on z.lazy() schemas', () => {
