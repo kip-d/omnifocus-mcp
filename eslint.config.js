@@ -104,11 +104,13 @@ export default [
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      '.claude/worktrees/**',
       // Generated or vendor TypeScript definitions and API shims
       'src/omnifocus/api/**',
       '*.js', // Since this is a TypeScript project
       '*.mjs',
       '*.cjs',
+      'vitest.config.ts', // Not in any tsconfig project
       'tests/**/*.js', // Except test files that are specifically JS
     ],
   },

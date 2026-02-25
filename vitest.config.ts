@@ -25,6 +25,7 @@ export default defineConfig({
     // OmniFocus tests MUST run sequentially to prevent resource contention
     // Multiple concurrent osascript processes cause timeouts and failures
     ...(useSafeMode ? { pool: 'forks' as const, poolOptions: { forks: { singleFork: true } } } : {}),
+    exclude: ['.claude/worktrees/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
