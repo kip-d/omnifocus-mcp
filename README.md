@@ -68,6 +68,15 @@ Or add to `~/.claude/settings.json`:
 }
 ```
 
+**Optional: Install the GTD skill** for enhanced intent recognition, date conversion, and workflow guidance:
+
+```bash
+ln -s /absolute/path/to/omnifocus-mcp/docs/skills/omnifocus-assistant ~/.claude/skills/omnifocus-assistant
+```
+
+The MCP server works without the skill, but the skill teaches Claude _when_ to use each tool and how to apply GTD
+methodology. See [Claude Desktop Setup](docs/claude-desktop-setup.md) for the Claude Desktop equivalent.
+
 #### Other MCP Clients
 
 Cursor, Windsurf, Cline, and Zed all support local stdio MCP servers. Use the same command and args structure; refer to

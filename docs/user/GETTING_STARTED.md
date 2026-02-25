@@ -58,6 +58,18 @@ Restart Claude Desktop completely.
 
 See [Configuration Details](../claude-desktop-config.md).
 
+### Step 2b: Install the GTD Skill (Claude Code Only, Optional)
+
+The server works on its own, but a companion skill teaches Claude GTD methodology, intent recognition, and date
+conversion—turning it from a tool operator into a task management assistant.
+
+```bash
+ln -s /absolute/path/to/omnifocus-mcp/docs/skills/omnifocus-assistant ~/.claude/skills/omnifocus-assistant
+```
+
+**Claude Desktop users:** See [Claude Desktop Setup](../claude-desktop-setup.md) to paste equivalent instructions into
+Custom Instructions.
+
 ### Step 3: Grant Permissions
 
 On first use, macOS requests permission to control OmniFocus. Click "OK".
