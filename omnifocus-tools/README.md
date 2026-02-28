@@ -5,8 +5,9 @@ CLI-first OmniFocus GTD assistant with MCP server wrapper.
 ## Quick Start
 
 ```bash
+cd omnifocus-tools
 npm install && npm run build
-node packages/cli/dist/index.js tasks --limit 5
+npx omnifocus tasks --limit 5
 ```
 
 ## Packages
