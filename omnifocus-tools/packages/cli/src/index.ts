@@ -5,6 +5,7 @@ import { registerTaskCommand } from './commands/task.js';
 import { registerProjectsCommand } from './commands/projects.js';
 import { registerTagsCommand } from './commands/tags.js';
 import { registerFoldersCommand } from './commands/folders.js';
+import { registerShortcutCommands } from './commands/shortcuts.js';
 
 const program = new Command();
 
@@ -29,6 +30,9 @@ registerTaskCommand(program);
 registerProjectsCommand(program);
 registerTagsCommand(program);
 registerFoldersCommand(program);
+
+// Register GTD shortcut commands
+registerShortcutCommands(program);
 
 program.parse();
 
