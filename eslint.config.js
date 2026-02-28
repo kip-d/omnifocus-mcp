@@ -105,6 +105,7 @@ export default [
       'node_modules/**',
       'coverage/**',
       '.claude/worktrees/**',
+      'omnifocus-tools/**',
       // Generated or vendor TypeScript definitions and API shims
       'src/omnifocus/api/**',
       '*.js', // Since this is a TypeScript project
