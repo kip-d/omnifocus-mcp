@@ -511,6 +511,8 @@ describe('Safety: escaping and injection prevention', () => {
       ScriptBuilder.listTasks(),
       ScriptBuilder.getTask('id'),
       ScriptBuilder.createTask({ name: 'test' }),
+      ScriptBuilder.createTask({ name: 'test', tags: ['a'] }), // HYBRID path
+      ScriptBuilder.updateTask('id', { tags: ['a'] }), // bridge path
       ScriptBuilder.completeTask('id'),
       ScriptBuilder.listProjects(),
       ScriptBuilder.listTags(),
@@ -520,6 +522,44 @@ describe('Safety: escaping and injection prevention', () => {
       const matches = s.source.match(/const PARAMS = /g);
       expect(matches).toHaveLength(1);
     }
+  });
+
+  it('HYBRID bridge sub-scripts inject data via BP object, not string concatenation', () => {
+    const script = ScriptBuilder.createTask({
+      name: 'test',
+      tags: ['urgent', 'home'],
+      plannedDate: '2026-03-01 08:00',
+    });
+    // Bridge sub-scripts should use BP.taskId, not raw string concat of taskId
+    expect(script.source).toContain('BP.taskId');
+    expect(script.source).toContain('BP.tags');
+    expect(script.source).toContain('BP.plannedDate');
+    // Must NOT have the old pattern: Task.byIdentifier(" + taskId + ")
+    expect(script.source).not.toMatch(/Task\.byIdentifier\(\s*["'].*?\+/);
+    expect(script.source).not.toMatch(/\+\s*taskId\s*\+/);
+  });
+
+  it('update bridge sub-scripts inject data via BP object, not string concatenation', () => {
+    const script = ScriptBuilder.updateTask('abc123', {
+      tags: ['new-tag'],
+      addTags: ['extra'],
+      removeTags: ['old'],
+      plannedDate: '2026-03-01 08:00',
+      repetitionRule: 'FREQ=DAILY',
+    });
+    // Bridge sub-scripts should use BP.taskId, not raw string concat
+    expect(script.source).toContain('BP.taskId');
+    expect(script.source).toContain('BP.tags');
+    expect(script.source).toContain('BP.addTags');
+    expect(script.source).toContain('BP.removeTags');
+    expect(script.source).toContain('BP.plannedDate');
+    expect(script.source).toContain('BP.repetitionRule');
+    // Must NOT have the old pattern of string-concatenated values
+    expect(script.source).not.toMatch(/\+\s*taskId\s*\+/);
+    expect(script.source).not.toMatch(/\+\s*dateVal\s*\+/);
+    expect(script.source).not.toMatch(/\+\s*tagList\s*\+/);
+    expect(script.source).not.toMatch(/\+\s*addList\s*\+/);
+    expect(script.source).not.toMatch(/\+\s*removeList\s*\+/);
   });
 
   it('handles unicode in task names safely', () => {

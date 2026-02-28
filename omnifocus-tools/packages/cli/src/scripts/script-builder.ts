@@ -48,7 +48,7 @@ function wrapJxa(params: ScriptParams, body: string): string {
  * The body can assume `PARAMS` is in scope and should return a JSON string.
  */
 function wrapBridge(params: ScriptParams, body: string): string {
-  const innerScript = ['(() => {', `  const PARAMS = ${JSON.stringify(params)};`, body, '})()'].join('\\n');
+  const innerScript = ['(() => {', `  const PARAMS = ${JSON.stringify(params)};`, body, '})()'].join('\n');
 
   return [
     '(() => {',
@@ -293,6 +293,7 @@ const CREATE_TASK_SIMPLE_BODY = `
 
 /**
  * JXA body: create a task, then bridge for tags/plannedDate (HYBRID).
+ * Bridge sub-scripts receive data via a BP (bridgeParams) object -- no string concatenation.
  */
 const CREATE_TASK_HYBRID_BODY = `
   var props = { name: PARAMS.name };
@@ -318,23 +319,25 @@ const CREATE_TASK_HYBRID_BODY = `
 
   var taskId = task.id();
 
-  // Bridge for complex properties
+  // Bridge for complex properties -- data injected via BP object
   if (PARAMS.plannedDate) {
+    var bp1 = { taskId: taskId, plannedDate: PARAMS.plannedDate };
     var bridgePlanned = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
-      'if (t) { t.plannedDate = new Date("' + PARAMS.plannedDate + '"); }' +
+      'var BP = ' + JSON.stringify(bp1) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
+      'if (t) { t.plannedDate = new Date(BP.plannedDate); }' +
       'return JSON.stringify({success: true});' +
     '})()';
     app.evaluateJavascript(bridgePlanned);
   }
 
   if (PARAMS.tags && PARAMS.tags.length > 0) {
-    var tagList = JSON.stringify(PARAMS.tags);
+    var bp2 = { taskId: taskId, tags: PARAMS.tags };
     var bridgeTags = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
+      'var BP = ' + JSON.stringify(bp2) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
       'if (t) {' +
-        'var tagNames = ' + tagList + ';' +
-        'tagNames.forEach(function(n) {' +
+        'BP.tags.forEach(function(n) {' +
           'var tag = flattenedTags.byName(n);' +
           'if (!tag) { tag = new Tag(n); }' +
           't.addTag(tag);' +
@@ -384,6 +387,7 @@ const UPDATE_TASK_SIMPLE_BODY = `
 
 /**
  * JXA body: update task with bridge for complex properties (tags, plannedDate, repetition).
+ * Bridge sub-scripts receive data via a BP (bridgeParams) object -- no string concatenation.
  */
 const UPDATE_TASK_BRIDGE_BODY = `
   var allTasks = doc.flattenedTasks();
@@ -409,25 +413,26 @@ const UPDATE_TASK_BRIDGE_BODY = `
 
   var taskId = found.id();
 
-  // Bridge for complex properties
+  // Bridge for complex properties -- data injected via BP object
   if (PARAMS.changes.plannedDate !== undefined) {
-    var dateVal = PARAMS.changes.plannedDate;
+    var bp1 = { taskId: taskId, plannedDate: PARAMS.changes.plannedDate };
     var bridgePlanned = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
-      'if (t) { t.plannedDate = ' + (dateVal ? 'new Date("' + dateVal + '")' : 'null') + '; }' +
+      'var BP = ' + JSON.stringify(bp1) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
+      'if (t) { t.plannedDate = BP.plannedDate ? new Date(BP.plannedDate) : null; }' +
       'return JSON.stringify({success: true});' +
     '})()';
     app.evaluateJavascript(bridgePlanned);
   }
 
   if (PARAMS.changes.tags !== undefined) {
-    var tagList = JSON.stringify(PARAMS.changes.tags);
+    var bp2 = { taskId: taskId, tags: PARAMS.changes.tags };
     var bridgeTags = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
+      'var BP = ' + JSON.stringify(bp2) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
       'if (t) {' +
         't.clearTags();' +
-        'var tagNames = ' + tagList + ';' +
-        'tagNames.forEach(function(n) {' +
+        'BP.tags.forEach(function(n) {' +
           'var tag = flattenedTags.byName(n);' +
           'if (!tag) { tag = new Tag(n); }' +
           't.addTag(tag);' +
@@ -439,12 +444,12 @@ const UPDATE_TASK_BRIDGE_BODY = `
   }
 
   if (PARAMS.changes.addTags && PARAMS.changes.addTags.length > 0) {
-    var addList = JSON.stringify(PARAMS.changes.addTags);
+    var bp3 = { taskId: taskId, addTags: PARAMS.changes.addTags };
     var bridgeAdd = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
+      'var BP = ' + JSON.stringify(bp3) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
       'if (t) {' +
-        'var tagNames = ' + addList + ';' +
-        'tagNames.forEach(function(n) {' +
+        'BP.addTags.forEach(function(n) {' +
           'var tag = flattenedTags.byName(n);' +
           'if (!tag) { tag = new Tag(n); }' +
           't.addTag(tag);' +
@@ -456,12 +461,12 @@ const UPDATE_TASK_BRIDGE_BODY = `
   }
 
   if (PARAMS.changes.removeTags && PARAMS.changes.removeTags.length > 0) {
-    var removeList = JSON.stringify(PARAMS.changes.removeTags);
+    var bp4 = { taskId: taskId, removeTags: PARAMS.changes.removeTags };
     var bridgeRemove = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
+      'var BP = ' + JSON.stringify(bp4) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
       'if (t) {' +
-        'var tagNames = ' + removeList + ';' +
-        'tagNames.forEach(function(n) {' +
+        'BP.removeTags.forEach(function(n) {' +
           'var tag = flattenedTags.byName(n);' +
           'if (tag) { t.removeTag(tag); }' +
         '});' +
@@ -472,10 +477,11 @@ const UPDATE_TASK_BRIDGE_BODY = `
   }
 
   if (PARAMS.changes.repetitionRule !== undefined) {
-    var ruleVal = PARAMS.changes.repetitionRule;
+    var bp5 = { taskId: taskId, repetitionRule: PARAMS.changes.repetitionRule };
     var bridgeRule = '(() => {' +
-      'var t = Task.byIdentifier("' + taskId + '");' +
-      'if (t) { t.repetitionRule = ' + (ruleVal ? JSON.stringify(ruleVal) : 'null') + '; }' +
+      'var BP = ' + JSON.stringify(bp5) + ';' +
+      'var t = Task.byIdentifier(BP.taskId);' +
+      'if (t) { t.repetitionRule = BP.repetitionRule; }' +
       'return JSON.stringify({success: true});' +
     '})()';
     app.evaluateJavascript(bridgeRule);
