@@ -9,7 +9,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "typecheck": "tsc --build"
+    "typecheck": "npm run build --workspaces"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
