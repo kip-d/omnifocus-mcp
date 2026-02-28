@@ -330,12 +330,27 @@ describe('formatOutput: edge cases', () => {
     expect(result).toContain('score:3.14');
   });
 
-  it('handles nested objects by converting to string', () => {
+  it('serializes nested objects as JSON', () => {
     const data = [{ name: 'Test', meta: { key: 'value' } }];
     const result = formatOutput(data, 'text');
     expect(result).toContain('name:Test');
-    // Nested object toString is [object Object]
-    expect(result).toContain('meta:');
+    expect(result).toContain('meta:{"key":"value"}');
+    expect(result).not.toContain('[object Object]');
+  });
+
+  it('serializes nested objects in markdown cells', () => {
+    const data = [{ name: 'Test', meta: { a: 1 } }];
+    const result = formatOutput(data, 'markdown');
+    expect(result).toContain('{"a":1}');
+    expect(result).not.toContain('[object Object]');
+  });
+
+  it('serializes nested objects in csv cells', () => {
+    const data = [{ name: 'Test', meta: { a: 1 } }];
+    const result = formatOutput(data, 'csv');
+    // CSV escapes quotes: {"a":1} becomes "{""a"":1}"
+    expect(result).toContain('{""a"":1}');
+    expect(result).not.toContain('[object Object]');
   });
 
   it('text omits empty arrays from output', () => {

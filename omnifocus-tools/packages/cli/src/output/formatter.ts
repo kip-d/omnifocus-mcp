@@ -67,6 +67,7 @@ function selectFields(keys: string[], fields?: string[]): string[] {
 function formatTextValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (Array.isArray(value)) return value.join(',');
+  if (isRecord(value)) return JSON.stringify(value);
   return String(value);
 }
 
@@ -83,6 +84,7 @@ function cellValue(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (Array.isArray(value)) return value.join(', ');
+  if (isRecord(value)) return JSON.stringify(value);
   return String(value);
 }
 
