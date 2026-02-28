@@ -5,9 +5,10 @@
  * 1. ALL external data enters via `const PARAMS = <json>;` -- one line, no other interpolation.
  * 2. No template placeholders (no `{{}}` style).
  * 3. Never use whose()/where() -- they cause 25+ second timeouts.
- * 4. JXA uses method calls: task.name(), task.id()
- * 5. OmniJS uses property access: task.name, task.id.primaryKey
- * 6. Bridge required for: tag assignment, plannedDate, repetitionRule, task movement.
+ * 4. OmniJS uses property access: task.name, task.id.primaryKey
+ * 5. Bridge required for: tag assignment, plannedDate, repetitionRule, task movement.
+ * 6. All read/write scripts use OmniJS bridge for performance (in-process property access).
+ *    Only createTask remains JXA_DIRECT/HYBRID since app.Task() is a JXA constructor.
  */
 
 import type {
@@ -60,49 +61,49 @@ function wrapBridge(params: ScriptParams, body: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Script body constants
+// Script body constants -- OmniJS bridge (in-process property access)
 // ---------------------------------------------------------------------------
 
 /**
- * JXA body: list tasks with filtering.
- * Iterates flattenedTasks() with a for loop, applies filters from PARAMS,
+ * OmniJS bridge body: list tasks with filtering.
+ * Iterates flattenedTasks with a for loop, applies filters from PARAMS,
  * collects results up to PARAMS.limit. Never uses whose()/where().
+ * OmniJS syntax: property access (t.name, t.id.primaryKey), NOT method calls.
  */
 const LIST_TASKS_BODY = `
-  var allTasks = doc.flattenedTasks();
+  var tasks = flattenedTasks;
   var results = [];
   var total = 0;
   var offset = PARAMS.offset || 0;
   var limit = PARAMS.limit || 50;
   var skipped = 0;
-
-  // Default: exclude completed tasks unless explicitly included
   var includeCompleted = PARAMS.completed === true;
   var countTotal = PARAMS.countTotal === true;
 
-  for (var i = 0; i < allTasks.length; i++) {
-    var t = allTasks[i];
+  for (var i = 0; i < tasks.length; i++) {
+    var t = tasks[i];
 
     // Filter: completed (excluded by default)
-    if (!includeCompleted && t.completed()) continue;
-    if (PARAMS.completed === true && !t.completed()) continue;
+    var isCompleted = (t.taskStatus === Task.Status.Completed || t.taskStatus === Task.Status.Dropped);
+    if (!includeCompleted && isCompleted) continue;
+    if (PARAMS.completed === true && !isCompleted) continue;
 
     // Filter: flagged
-    if (PARAMS.flagged === true && !t.flagged()) continue;
-    if (PARAMS.flagged === false && t.flagged()) continue;
+    if (PARAMS.flagged === true && !t.flagged) continue;
+    if (PARAMS.flagged === false && t.flagged) continue;
 
     // Filter: inbox (project === null means inbox only)
     if (PARAMS.project === null) {
-      if (t.containingProject()) continue;
+      if (t.containingProject) continue;
     } else if (PARAMS.project !== undefined) {
-      var proj = t.containingProject();
-      if (!proj || proj.name() !== PARAMS.project) continue;
+      var proj = t.containingProject;
+      if (!proj || proj.name !== PARAMS.project) continue;
     }
 
     // Filter: tags
     if (PARAMS.tag !== undefined) {
-      var taskTags = t.tags();
-      var tagNames = taskTags ? taskTags.map(function(tg) { return tg.name(); }) : [];
+      var taskTags = t.tags;
+      var tagNames = taskTags.map(function(tg) { return tg.name; });
       var filterTags = Array.isArray(PARAMS.tag) ? PARAMS.tag : [PARAMS.tag];
       var tagMode = PARAMS.tagMode || 'any';
 
@@ -130,15 +131,15 @@ const LIST_TASKS_BODY = `
     // Filter: search (case-insensitive substring match on name and note)
     if (PARAMS.search) {
       var searchLower = PARAMS.search.toLowerCase();
-      var nameStr = t.name() || '';
-      var noteStr = t.note() || '';
+      var nameStr = t.name || '';
+      var noteStr = t.note || '';
       if (nameStr.toLowerCase().indexOf(searchLower) === -1 &&
           noteStr.toLowerCase().indexOf(searchLower) === -1) continue;
     }
 
     // Filter: date ranges
     if (PARAMS.dueBefore || PARAMS.dueAfter) {
-      var due = t.dueDate();
+      var due = t.dueDate;
       if (!due) { if (PARAMS.dueBefore || PARAMS.dueAfter) continue; }
       else {
         if (PARAMS.dueBefore && due > new Date(PARAMS.dueBefore)) continue;
@@ -147,26 +148,30 @@ const LIST_TASKS_BODY = `
     }
 
     if (PARAMS.deferBefore || PARAMS.deferAfter) {
-      var defer = t.deferDate();
+      var defer = t.deferDate;
       if (!defer) continue;
       if (PARAMS.deferBefore && defer > new Date(PARAMS.deferBefore)) continue;
       if (PARAMS.deferAfter && defer < new Date(PARAMS.deferAfter)) continue;
     }
 
     if (PARAMS.plannedBefore || PARAMS.plannedAfter) {
-      var planned = t.plannedDate();
+      var planned = t.plannedDate;
       if (!planned) continue;
       if (PARAMS.plannedBefore && planned > new Date(PARAMS.plannedBefore)) continue;
       if (PARAMS.plannedAfter && planned < new Date(PARAMS.plannedAfter)) continue;
     }
 
     // Filter: available / blocked
-    if (PARAMS.available === true && t.blocked()) continue;
-    if (PARAMS.blocked === true && !t.blocked()) continue;
+    if (PARAMS.available === true) {
+      if (t.taskStatus !== Task.Status.Available) continue;
+    }
+    if (PARAMS.blocked === true) {
+      if (t.taskStatus !== Task.Status.Blocked) continue;
+    }
 
     // Filter: since (modification date)
     if (PARAMS.since) {
-      var modified = t.modificationDate();
+      var modified = t.modificationDate;
       if (!modified || modified < new Date(PARAMS.since)) continue;
     }
 
@@ -180,41 +185,40 @@ const LIST_TASKS_BODY = `
 
     // Build result object
     var taskObj = {};
-    taskObj.id = t.id();
-    taskObj.name = t.name();
+    taskObj.id = t.id.primaryKey;
+    taskObj.name = t.name;
 
     var fields = PARAMS.fields;
-    if (!fields || fields.indexOf('completed') !== -1) taskObj.completed = t.completed() || false;
-    if (!fields || fields.indexOf('flagged') !== -1) taskObj.flagged = t.flagged() || false;
+    if (!fields || fields.indexOf('completed') !== -1) taskObj.completed = isCompleted;
+    if (!fields || fields.indexOf('flagged') !== -1) taskObj.flagged = t.flagged || false;
 
     if (!fields || fields.indexOf('dueDate') !== -1) {
-      var dd = t.dueDate();
+      var dd = t.dueDate;
       taskObj.dueDate = dd ? dd.toISOString() : null;
     }
     if (!fields || fields.indexOf('deferDate') !== -1) {
-      var dfd = t.deferDate();
+      var dfd = t.deferDate;
       taskObj.deferDate = dfd ? dfd.toISOString() : null;
     }
     if (!fields || fields.indexOf('plannedDate') !== -1) {
-      var pd = t.plannedDate();
+      var pd = t.plannedDate;
       taskObj.plannedDate = pd ? pd.toISOString() : null;
     }
-    if (!fields || fields.indexOf('note') !== -1) taskObj.note = t.note() || '';
+    if (!fields || fields.indexOf('note') !== -1) taskObj.note = t.note || '';
     if (!fields || fields.indexOf('tags') !== -1) {
-      var tgs = t.tags();
-      taskObj.tags = tgs ? tgs.map(function(tg) { return tg.name(); }) : [];
+      taskObj.tags = t.tags.map(function(tg) { return tg.name; });
     }
     if (!fields || fields.indexOf('project') !== -1) {
-      var p = t.containingProject();
-      taskObj.project = p ? p.name() : null;
-      taskObj.projectId = p ? p.id() : null;
+      var p = t.containingProject;
+      taskObj.project = p ? p.name : null;
+      taskObj.projectId = p ? p.id.primaryKey : null;
     }
     if (!fields || fields.indexOf('estimatedMinutes') !== -1) {
-      var est = t.estimatedMinutes();
-      taskObj.estimatedMinutes = est || null;
+      taskObj.estimatedMinutes = t.estimatedMinutes || null;
     }
     if (!fields || fields.indexOf('repetitionRule') !== -1) {
-      taskObj.repetitionRule = t.repetitionRule() || null;
+      var rr = t.repetitionRule;
+      taskObj.repetitionRule = rr ? rr.toString() : null;
     }
 
     results.push(taskObj);
@@ -224,51 +228,49 @@ const LIST_TASKS_BODY = `
 `;
 
 /**
- * JXA body: get a single task by ID.
+ * OmniJS bridge body: get a single task by ID.
+ * Uses Task.byIdentifier() for O(1) lookup.
  */
 const GET_TASK_BODY = `
-  var allTasks = doc.flattenedTasks();
-  for (var i = 0; i < allTasks.length; i++) {
-    var t = allTasks[i];
-    if (t.id() !== PARAMS.id) continue;
+  var t = Task.byIdentifier(PARAMS.id);
+  if (!t) return JSON.stringify({ task: null, error: "Task not found" });
 
-    var taskObj = {};
-    taskObj.id = t.id();
-    taskObj.name = t.name();
-    taskObj.completed = t.completed() || false;
-    taskObj.flagged = t.flagged() || false;
+  var taskObj = {};
+  taskObj.id = t.id.primaryKey;
+  taskObj.name = t.name;
+  taskObj.completed = (t.taskStatus === Task.Status.Completed || t.taskStatus === Task.Status.Dropped);
+  taskObj.flagged = t.flagged || false;
 
-    var dd = t.dueDate();
-    taskObj.dueDate = dd ? dd.toISOString() : null;
-    var dfd = t.deferDate();
-    taskObj.deferDate = dfd ? dfd.toISOString() : null;
-    var pd = t.plannedDate();
-    taskObj.plannedDate = pd ? pd.toISOString() : null;
+  var dd = t.dueDate;
+  taskObj.dueDate = dd ? dd.toISOString() : null;
+  var dfd = t.deferDate;
+  taskObj.deferDate = dfd ? dfd.toISOString() : null;
+  var pd = t.plannedDate;
+  taskObj.plannedDate = pd ? pd.toISOString() : null;
 
-    taskObj.note = t.note() || '';
+  taskObj.note = t.note || '';
 
-    var tgs = t.tags();
-    taskObj.tags = tgs ? tgs.map(function(tg) { return tg.name(); }) : [];
+  taskObj.tags = t.tags.map(function(tg) { return tg.name; });
 
-    var p = t.containingProject();
-    taskObj.project = p ? p.name() : null;
-    taskObj.projectId = p ? p.id() : null;
+  var p = t.containingProject;
+  taskObj.project = p ? p.name : null;
+  taskObj.projectId = p ? p.id.primaryKey : null;
 
-    taskObj.estimatedMinutes = t.estimatedMinutes() || null;
-    taskObj.repetitionRule = t.repetitionRule() || null;
+  taskObj.estimatedMinutes = t.estimatedMinutes || null;
+  var rr = t.repetitionRule;
+  taskObj.repetitionRule = rr ? rr.toString() : null;
 
-    var parent = t.parentTask();
-    taskObj.parentTaskId = parent ? parent.id() : null;
+  var parent = t.parent;
+  taskObj.parentTaskId = parent ? parent.id.primaryKey : null;
 
-    taskObj.blocked = t.blocked() || false;
+  taskObj.blocked = (t.taskStatus === Task.Status.Blocked);
 
-    return JSON.stringify({ task: taskObj });
-  }
-  return JSON.stringify({ task: null, error: "Task not found" });
+  return JSON.stringify({ task: taskObj });
 `;
 
 /**
  * JXA body: create a task (simple properties only).
+ * Remains JXA because app.Task() is a JXA constructor.
  */
 const CREATE_TASK_SIMPLE_BODY = `
   var props = { name: PARAMS.name };
@@ -301,6 +303,7 @@ const CREATE_TASK_SIMPLE_BODY = `
 /**
  * JXA body: create a task, then bridge for tags/plannedDate (HYBRID).
  * Bridge sub-scripts receive data via a BP (bridgeParams) object -- no string concatenation.
+ * Remains JXA+HYBRID because app.Task() is a JXA constructor.
  */
 const CREATE_TASK_HYBRID_BODY = `
   var props = { name: PARAMS.name };
@@ -362,231 +365,166 @@ const CREATE_TASK_HYBRID_BODY = `
 `;
 
 /**
- * JXA body: update simple task properties (name, note, flagged, dueDate, deferDate).
+ * OmniJS bridge body: update simple task properties.
+ * Uses Task.byIdentifier() for O(1) lookup.
  */
 const UPDATE_TASK_SIMPLE_BODY = `
-  var allTasks = doc.flattenedTasks();
-  var found = null;
-  for (var i = 0; i < allTasks.length; i++) {
-    if (allTasks[i].id() === PARAMS.id) { found = allTasks[i]; break; }
-  }
-  if (!found) return JSON.stringify({ error: "Task not found" });
+  var t = Task.byIdentifier(PARAMS.id);
+  if (!t) return JSON.stringify({ error: "Task not found" });
 
-  if (PARAMS.changes.name !== undefined) found.name = PARAMS.changes.name;
-  if (PARAMS.changes.note !== undefined) found.note = PARAMS.changes.note;
-  if (PARAMS.changes.flagged !== undefined) found.flagged = PARAMS.changes.flagged;
+  if (PARAMS.changes.name !== undefined) t.name = PARAMS.changes.name;
+  if (PARAMS.changes.note !== undefined) t.note = PARAMS.changes.note;
+  if (PARAMS.changes.flagged !== undefined) t.flagged = PARAMS.changes.flagged;
   if (PARAMS.changes.dueDate !== undefined) {
-    found.dueDate = PARAMS.changes.dueDate ? new Date(PARAMS.changes.dueDate) : null;
+    t.dueDate = PARAMS.changes.dueDate ? new Date(PARAMS.changes.dueDate) : null;
   }
   if (PARAMS.changes.deferDate !== undefined) {
-    found.deferDate = PARAMS.changes.deferDate ? new Date(PARAMS.changes.deferDate) : null;
+    t.deferDate = PARAMS.changes.deferDate ? new Date(PARAMS.changes.deferDate) : null;
   }
   if (PARAMS.changes.estimatedMinutes !== undefined) {
-    found.estimatedMinutes = PARAMS.changes.estimatedMinutes;
+    t.estimatedMinutes = PARAMS.changes.estimatedMinutes;
   }
 
   return JSON.stringify({
-    id: found.id(),
-    name: found.name(),
+    id: t.id.primaryKey,
+    name: t.name,
     updated: true
   });
 `;
 
 /**
- * JXA body: update task with bridge for complex properties (tags, plannedDate, repetition).
- * Bridge sub-scripts receive data via a BP (bridgeParams) object -- no string concatenation.
+ * OmniJS bridge body: update task with complex properties (tags, plannedDate, repetition).
+ * All operations run in-process -- no sub-bridge calls needed.
  */
 const UPDATE_TASK_BRIDGE_BODY = `
-  var allTasks = doc.flattenedTasks();
-  var found = null;
-  for (var i = 0; i < allTasks.length; i++) {
-    if (allTasks[i].id() === PARAMS.id) { found = allTasks[i]; break; }
-  }
-  if (!found) return JSON.stringify({ error: "Task not found" });
+  var t = Task.byIdentifier(PARAMS.id);
+  if (!t) return JSON.stringify({ error: "Task not found" });
 
-  // Simple properties in JXA
-  if (PARAMS.changes.name !== undefined) found.name = PARAMS.changes.name;
-  if (PARAMS.changes.note !== undefined) found.note = PARAMS.changes.note;
-  if (PARAMS.changes.flagged !== undefined) found.flagged = PARAMS.changes.flagged;
+  // Simple properties
+  if (PARAMS.changes.name !== undefined) t.name = PARAMS.changes.name;
+  if (PARAMS.changes.note !== undefined) t.note = PARAMS.changes.note;
+  if (PARAMS.changes.flagged !== undefined) t.flagged = PARAMS.changes.flagged;
   if (PARAMS.changes.dueDate !== undefined) {
-    found.dueDate = PARAMS.changes.dueDate ? new Date(PARAMS.changes.dueDate) : null;
+    t.dueDate = PARAMS.changes.dueDate ? new Date(PARAMS.changes.dueDate) : null;
   }
   if (PARAMS.changes.deferDate !== undefined) {
-    found.deferDate = PARAMS.changes.deferDate ? new Date(PARAMS.changes.deferDate) : null;
+    t.deferDate = PARAMS.changes.deferDate ? new Date(PARAMS.changes.deferDate) : null;
   }
   if (PARAMS.changes.estimatedMinutes !== undefined) {
-    found.estimatedMinutes = PARAMS.changes.estimatedMinutes;
+    t.estimatedMinutes = PARAMS.changes.estimatedMinutes;
   }
 
-  var taskId = found.id();
-
-  // Bridge for complex properties -- data injected via BP object
+  // Complex properties (already in OmniJS, no sub-bridge needed)
   if (PARAMS.changes.plannedDate !== undefined) {
-    var bp1 = { taskId: taskId, plannedDate: PARAMS.changes.plannedDate };
-    var bridgePlanned = '(() => {' +
-      'var BP = ' + JSON.stringify(bp1) + ';' +
-      'var t = Task.byIdentifier(BP.taskId);' +
-      'if (t) { t.plannedDate = BP.plannedDate ? new Date(BP.plannedDate) : null; }' +
-      'return JSON.stringify({success: true});' +
-    '})()';
-    app.evaluateJavascript(bridgePlanned);
+    t.plannedDate = PARAMS.changes.plannedDate ? new Date(PARAMS.changes.plannedDate) : null;
   }
 
   if (PARAMS.changes.tags !== undefined) {
-    var bp2 = { taskId: taskId, tags: PARAMS.changes.tags };
-    var bridgeTags = '(() => {' +
-      'var BP = ' + JSON.stringify(bp2) + ';' +
-      'var t = Task.byIdentifier(BP.taskId);' +
-      'if (t) {' +
-        't.clearTags();' +
-        'BP.tags.forEach(function(n) {' +
-          'var tag = flattenedTags.byName(n);' +
-          'if (!tag) { tag = new Tag(n); }' +
-          't.addTag(tag);' +
-        '});' +
-      '}' +
-      'return JSON.stringify({success: true});' +
-    '})()';
-    app.evaluateJavascript(bridgeTags);
+    t.clearTags();
+    PARAMS.changes.tags.forEach(function(n) {
+      var tag = flattenedTags.byName(n);
+      if (!tag) { tag = new Tag(n); }
+      t.addTag(tag);
+    });
   }
 
   if (PARAMS.changes.addTags && PARAMS.changes.addTags.length > 0) {
-    var bp3 = { taskId: taskId, addTags: PARAMS.changes.addTags };
-    var bridgeAdd = '(() => {' +
-      'var BP = ' + JSON.stringify(bp3) + ';' +
-      'var t = Task.byIdentifier(BP.taskId);' +
-      'if (t) {' +
-        'BP.addTags.forEach(function(n) {' +
-          'var tag = flattenedTags.byName(n);' +
-          'if (!tag) { tag = new Tag(n); }' +
-          't.addTag(tag);' +
-        '});' +
-      '}' +
-      'return JSON.stringify({success: true});' +
-    '})()';
-    app.evaluateJavascript(bridgeAdd);
+    PARAMS.changes.addTags.forEach(function(n) {
+      var tag = flattenedTags.byName(n);
+      if (!tag) { tag = new Tag(n); }
+      t.addTag(tag);
+    });
   }
 
   if (PARAMS.changes.removeTags && PARAMS.changes.removeTags.length > 0) {
-    var bp4 = { taskId: taskId, removeTags: PARAMS.changes.removeTags };
-    var bridgeRemove = '(() => {' +
-      'var BP = ' + JSON.stringify(bp4) + ';' +
-      'var t = Task.byIdentifier(BP.taskId);' +
-      'if (t) {' +
-        'BP.removeTags.forEach(function(n) {' +
-          'var tag = flattenedTags.byName(n);' +
-          'if (tag) { t.removeTag(tag); }' +
-        '});' +
-      '}' +
-      'return JSON.stringify({success: true});' +
-    '})()';
-    app.evaluateJavascript(bridgeRemove);
+    PARAMS.changes.removeTags.forEach(function(n) {
+      var tag = flattenedTags.byName(n);
+      if (tag) { t.removeTag(tag); }
+    });
   }
 
   if (PARAMS.changes.repetitionRule !== undefined) {
-    var bp5 = { taskId: taskId, repetitionRule: PARAMS.changes.repetitionRule };
-    var bridgeRule = '(() => {' +
-      'var BP = ' + JSON.stringify(bp5) + ';' +
-      'var t = Task.byIdentifier(BP.taskId);' +
-      'if (t) { t.repetitionRule = BP.repetitionRule; }' +
-      'return JSON.stringify({success: true});' +
-    '})()';
-    app.evaluateJavascript(bridgeRule);
+    t.repetitionRule = PARAMS.changes.repetitionRule;
   }
 
   return JSON.stringify({
-    id: taskId,
-    name: found.name(),
+    id: t.id.primaryKey,
+    name: t.name,
     updated: true
   });
 `;
 
 /**
- * JXA body: mark a task as completed.
- * Uses hybrid pattern: JXA to verify task exists, then OmniJS bridge
- * to set completed (JXA's completed property is read-only: -10003).
+ * OmniJS bridge body: mark a task as completed.
+ * Uses Task.byIdentifier() for O(1) lookup + in-process markComplete().
  */
 const COMPLETE_TASK_BODY = `
-  var allTasks = doc.flattenedTasks();
-  var found = false;
-  for (var i = 0; i < allTasks.length; i++) {
-    if (allTasks[i].id() === PARAMS.id) {
-      found = true;
-      break;
-    }
-  }
-  if (!found) return JSON.stringify({ error: "Task not found" });
-
-  var bp = { taskId: PARAMS.id };
-  var bridgeComplete = '(() => {' +
-    'var BP = ' + JSON.stringify(bp) + ';' +
-    'var t = Task.byIdentifier(BP.taskId);' +
-    'if (t) { t.markComplete(); }' +
-    'return JSON.stringify({success: true});' +
-  '})()';
-  app.evaluateJavascript(bridgeComplete);
-
+  var t = Task.byIdentifier(PARAMS.id);
+  if (!t) return JSON.stringify({ error: "Task not found" });
+  t.markComplete();
   return JSON.stringify({ id: PARAMS.id, completed: true });
 `;
 
 /**
- * JXA body: delete a task.
+ * OmniJS bridge body: delete a task.
+ * Uses Task.byIdentifier() for O(1) lookup + deleteObject().
  */
 const DELETE_TASK_BODY = `
-  var allTasks = doc.flattenedTasks();
-  for (var i = 0; i < allTasks.length; i++) {
-    if (allTasks[i].id() === PARAMS.id) {
-      app.delete(allTasks[i]);
-      return JSON.stringify({ id: PARAMS.id, deleted: true });
-    }
-  }
-  return JSON.stringify({ error: "Task not found" });
+  var t = Task.byIdentifier(PARAMS.id);
+  if (!t) return JSON.stringify({ error: "Task not found" });
+  deleteObject(t);
+  return JSON.stringify({ id: PARAMS.id, deleted: true });
 `;
 
 /**
- * JXA body: list projects with optional filtering.
+ * OmniJS bridge body: list projects with optional filtering.
  */
 const LIST_PROJECTS_BODY = `
-  var allProjects = doc.flattenedProjects();
+  var projects = flattenedProjects;
   var results = [];
   var limit = PARAMS.limit || 100;
 
-  for (var i = 0; i < allProjects.length; i++) {
+  for (var i = 0; i < projects.length; i++) {
     if (results.length >= limit) break;
-    var p = allProjects[i];
+    var p = projects[i];
 
     if (PARAMS.status && PARAMS.status !== 'all') {
-      var st = p.status();
-      if (PARAMS.status === 'active' && st !== 'active status') continue;
-      if (PARAMS.status === 'done' && st !== 'done status') continue;
-      if (PARAMS.status === 'dropped' && st !== 'dropped status') continue;
+      var st = p.status;
+      if (PARAMS.status === 'active' && st !== Project.Status.Active) continue;
+      if (PARAMS.status === 'done' && st !== Project.Status.Done) continue;
+      if (PARAMS.status === 'dropped' && st !== Project.Status.Dropped) continue;
     }
 
     if (PARAMS.folder) {
-      var f = p.folder();
-      if (!f || f.name() !== PARAMS.folder) continue;
+      var f = p.parentFolder;
+      if (!f || f.name !== PARAMS.folder) continue;
     }
 
-    if (PARAMS.flagged === true && !p.flagged()) continue;
+    if (PARAMS.flagged === true && !p.flagged) continue;
 
     var projObj = {};
-    projObj.id = p.id();
-    projObj.name = p.name();
+    projObj.id = p.id.primaryKey;
+    projObj.name = p.name;
 
     var fields = PARAMS.fields;
-    if (!fields || fields.indexOf('status') !== -1) projObj.status = p.status() || null;
-    if (!fields || fields.indexOf('flagged') !== -1) projObj.flagged = p.flagged() || false;
-    if (!fields || fields.indexOf('note') !== -1) projObj.note = p.note() || '';
+    if (!fields || fields.indexOf('status') !== -1) {
+      var s = p.status;
+      projObj.status = s === Project.Status.Active ? 'active' :
+                       s === Project.Status.Done ? 'done' :
+                       s === Project.Status.Dropped ? 'dropped' : String(s);
+    }
+    if (!fields || fields.indexOf('flagged') !== -1) projObj.flagged = p.flagged || false;
+    if (!fields || fields.indexOf('note') !== -1) projObj.note = p.note || '';
     if (!fields || fields.indexOf('folder') !== -1) {
-      var fl = p.folder();
-      projObj.folder = fl ? fl.name() : null;
+      var fl = p.parentFolder;
+      projObj.folder = fl ? fl.name : null;
     }
     if (!fields || fields.indexOf('dueDate') !== -1) {
-      var dd = p.dueDate();
+      var dd = p.dueDate;
       projObj.dueDate = dd ? dd.toISOString() : null;
     }
     if (!fields || fields.indexOf('deferDate') !== -1) {
-      var dfd = p.deferDate();
+      var dfd = p.deferDate;
       projObj.deferDate = dfd ? dfd.toISOString() : null;
     }
 
@@ -597,18 +535,18 @@ const LIST_PROJECTS_BODY = `
 `;
 
 /**
- * JXA body: list all tags.
+ * OmniJS bridge body: list all tags.
  */
 const LIST_TAGS_BODY = `
-  var allTags = doc.flattenedTags();
+  var tags = flattenedTags;
   var results = [];
 
-  for (var i = 0; i < allTags.length; i++) {
-    var tg = allTags[i];
+  for (var i = 0; i < tags.length; i++) {
+    var tg = tags[i];
     results.push({
-      id: tg.id(),
-      name: tg.name(),
-      available: tg.availableTaskCount() || 0
+      id: tg.id.primaryKey,
+      name: tg.name,
+      available: tg.availableTasks.length
     });
   }
 
@@ -616,30 +554,28 @@ const LIST_TAGS_BODY = `
 `;
 
 /**
- * JXA body: list all folders with hierarchy.
+ * OmniJS bridge body: list all folders with hierarchy.
  */
 const LIST_FOLDERS_BODY = `
   var results = [];
 
   function processFolder(folder, parentPath) {
-    var name = folder.name();
+    var name = folder.name;
     var path = parentPath ? parentPath + '/' + name : name;
     results.push({
-      id: folder.id(),
+      id: folder.id.primaryKey,
       name: name,
       path: path
     });
 
-    var children = folder.folders();
-    for (var j = 0; j < children.length; j++) {
-      processFolder(children[j], path);
-    }
+    folder.folders.forEach(function(child) {
+      processFolder(child, path);
+    });
   }
 
-  var topFolders = doc.folders();
-  for (var i = 0; i < topFolders.length; i++) {
-    processFolder(topFolders[i], '');
-  }
+  folders.forEach(function(f) {
+    processFolder(f, '');
+  });
 
   return JSON.stringify({ folders: results, total: results.length });
 `;
@@ -698,7 +634,8 @@ const PRODUCTIVITY_STATS_BODY = `
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true if updates require the OmniJS bridge (tags, plannedDate, repetitionRule).
+ * Returns true if updates require complex property handling (tags, plannedDate, repetitionRule).
+ * Both simple and bridge paths now use OmniJS bridge, but with different script bodies.
  */
 function needsBridge(changes: TaskUpdateChanges): boolean {
   return (
@@ -718,23 +655,23 @@ function needsHybrid(data: TaskCreateData): boolean {
 }
 
 export class ScriptBuilder {
-  /** List tasks with filtering -- JXA_DIRECT */
+  /** List tasks with filtering -- OMNIJS_BRIDGE (in-process property access) */
   static listTasks(filter: TaskFilter = {}): GeneratedScript {
     const params: ScriptParams = { ...filter };
     // Default: exclude completed unless explicitly requested
     if (params.completed === undefined) params.completed = false;
     return {
-      source: wrapJxa(params, LIST_TASKS_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge(params, LIST_TASKS_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: 'List tasks with filtering',
     };
   }
 
-  /** Get a single task by ID -- JXA_DIRECT */
+  /** Get a single task by ID -- OMNIJS_BRIDGE (O(1) lookup via Task.byIdentifier) */
   static getTask(id: string): GeneratedScript {
     return {
-      source: wrapJxa({ id }, GET_TASK_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge({ id }, GET_TASK_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: `Get task ${id}`,
     };
   }
@@ -749,57 +686,57 @@ export class ScriptBuilder {
     };
   }
 
-  /** Update a task -- JXA_DIRECT for simple, OMNIJS_BRIDGE for tags/plannedDate/repetition */
+  /** Update a task -- OMNIJS_BRIDGE (simple or complex properties, all in-process) */
   static updateTask(id: string, changes: TaskUpdateChanges): GeneratedScript {
     const bridge = needsBridge(changes);
     return {
-      source: wrapJxa({ id, changes }, bridge ? UPDATE_TASK_BRIDGE_BODY : UPDATE_TASK_SIMPLE_BODY),
-      strategy: (bridge ? 'omnijs_bridge' : 'jxa_direct') as ExecStrategy,
+      source: wrapBridge({ id, changes }, bridge ? UPDATE_TASK_BRIDGE_BODY : UPDATE_TASK_SIMPLE_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: `Update task ${id}`,
     };
   }
 
-  /** Complete a task -- HYBRID (JXA to verify, OmniJS bridge to mark complete) */
+  /** Complete a task -- OMNIJS_BRIDGE (O(1) lookup + in-process markComplete) */
   static completeTask(id: string): GeneratedScript {
     return {
-      source: wrapJxa({ id }, COMPLETE_TASK_BODY),
-      strategy: 'hybrid' as ExecStrategy,
+      source: wrapBridge({ id }, COMPLETE_TASK_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: `Complete task ${id}`,
     };
   }
 
-  /** Delete a task -- JXA_DIRECT */
+  /** Delete a task -- OMNIJS_BRIDGE (O(1) lookup + deleteObject) */
   static deleteTask(id: string): GeneratedScript {
     return {
-      source: wrapJxa({ id }, DELETE_TASK_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge({ id }, DELETE_TASK_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: `Delete task ${id}`,
     };
   }
 
-  /** List projects with optional filtering -- JXA_DIRECT */
+  /** List projects with optional filtering -- OMNIJS_BRIDGE */
   static listProjects(filter: ProjectFilter = {}): GeneratedScript {
     return {
-      source: wrapJxa({ ...filter }, LIST_PROJECTS_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge({ ...filter }, LIST_PROJECTS_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: 'List projects',
     };
   }
 
-  /** List all tags -- JXA_DIRECT */
+  /** List all tags -- OMNIJS_BRIDGE */
   static listTags(): GeneratedScript {
     return {
-      source: wrapJxa({}, LIST_TAGS_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge({}, LIST_TAGS_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: 'List tags',
     };
   }
 
-  /** List all folders with hierarchy -- JXA_DIRECT */
+  /** List all folders with hierarchy -- OMNIJS_BRIDGE */
   static listFolders(): GeneratedScript {
     return {
-      source: wrapJxa({}, LIST_FOLDERS_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      source: wrapBridge({}, LIST_FOLDERS_BODY),
+      strategy: 'omnijs_bridge' as ExecStrategy,
       description: 'List folders',
     };
   }

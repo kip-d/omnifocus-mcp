@@ -26,14 +26,27 @@ function assertUsesForLoops(source: string): void {
   expect(source).toMatch(/for\s*\(\s*var\s+\w+/);
 }
 
+/**
+ * Assert that the PARAMS JSON contains a key-value pair.
+ * Works for both JXA-wrapped (direct) and bridge-wrapped (escaped quotes) scripts.
+ * For bridge scripts, PARAMS are inside JSON.stringify'd string, so quotes are escaped.
+ */
+function assertParamContains(source: string, jsonFragment: string): void {
+  // Try direct match first (JXA wrap)
+  if (source.includes(jsonFragment)) return;
+  // Try escaped match (bridge wrap -- quotes become \")
+  const escaped = jsonFragment.replace(/"/g, '\\"');
+  expect(source).toContain(escaped);
+}
+
 // ---------------------------------------------------------------------------
 // listTasks
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.listTasks', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.listTasks();
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
   it('contains PARAMS injection', () => {
@@ -53,18 +66,18 @@ describe('ScriptBuilder.listTasks', () => {
 
   it('includes limit in PARAMS', () => {
     const script = ScriptBuilder.listTasks({ limit: 25 });
-    expect(script.source).toContain('"limit":25');
+    assertParamContains(script.source, '"limit":25');
   });
 
   it('defaults completed to false', () => {
     const script = ScriptBuilder.listTasks();
-    expect(script.source).toContain('"completed":false');
+    assertParamContains(script.source, '"completed":false');
   });
 
   it('handles null project as inbox filter', () => {
     const script = ScriptBuilder.listTasks({ project: null });
     // null project should appear in PARAMS as null
-    expect(script.source).toContain('"project":null');
+    assertParamContains(script.source, '"project":null');
     // Script body checks PARAMS.project === null for inbox
     expect(script.source).toContain('PARAMS.project === null');
   });
@@ -76,10 +89,10 @@ describe('ScriptBuilder.listTasks', () => {
       search: 'meeting',
       dueBefore: '2026-03-01',
     });
-    expect(script.source).toContain('"flagged":true');
-    expect(script.source).toContain('"tag":"urgent"');
-    expect(script.source).toContain('"search":"meeting"');
-    expect(script.source).toContain('"dueBefore":"2026-03-01"');
+    assertParamContains(script.source, '"flagged":true');
+    assertParamContains(script.source, '"tag":"urgent"');
+    assertParamContains(script.source, '"search":"meeting"');
+    assertParamContains(script.source, '"dueBefore":"2026-03-01"');
   });
 
   it('supports array tags', () => {
@@ -87,31 +100,38 @@ describe('ScriptBuilder.listTasks', () => {
       tag: ['urgent', 'home'],
       tagMode: 'any',
     });
-    expect(script.source).toContain('"tag":["urgent","home"]');
-    expect(script.source).toContain('"tagMode":"any"');
+    assertParamContains(script.source, '"tag":["urgent","home"]');
+    assertParamContains(script.source, '"tagMode":"any"');
   });
 
   it('supports offset for pagination', () => {
     const script = ScriptBuilder.listTasks({ offset: 10, limit: 5 });
-    expect(script.source).toContain('"offset":10');
-    expect(script.source).toContain('"limit":5');
+    assertParamContains(script.source, '"offset":10');
+    assertParamContains(script.source, '"limit":5');
   });
 
-  it('uses JXA method calls (parentheses) for property reads', () => {
+  it('uses OmniJS property access (no parentheses) for property reads', () => {
     const script = ScriptBuilder.listTasks();
-    // JXA pattern: t.name(), t.id(), t.completed(), t.flagged()
-    expect(script.source).toContain('t.id()');
-    expect(script.source).toContain('t.name()');
-    expect(script.source).toContain('t.completed()');
-    expect(script.source).toContain('t.flagged()');
-    expect(script.source).toContain('t.dueDate()');
+    // OmniJS pattern: t.id.primaryKey, t.name, t.flagged, t.dueDate (property access)
+    expect(script.source).toContain('t.id.primaryKey');
+    expect(script.source).toContain('t.name');
+    expect(script.source).toContain('t.flagged');
+    expect(script.source).toContain('t.dueDate');
+    // Should NOT use JXA method calls
+    expect(script.source).not.toContain('t.id()');
+    expect(script.source).not.toContain('t.name()');
+    expect(script.source).not.toContain('t.completed()');
+    expect(script.source).not.toContain('t.flagged()');
+    expect(script.source).not.toContain('t.dueDate()');
   });
 
-  it('wraps in JXA IIFE with app and doc', () => {
+  it('wraps in OmniJS bridge with evaluateJavascript', () => {
     const script = ScriptBuilder.listTasks();
     expect(script.source).toContain('(() => {');
     expect(script.source).toContain('Application("OmniFocus")');
-    expect(script.source).toContain('app.defaultDocument()');
+    expect(script.source).toContain('evaluateJavascript');
+    // Should NOT use app.defaultDocument() (that's JXA-only)
+    expect(script.source).not.toContain('app.defaultDocument()');
   });
 
   it('returns JSON.stringify result', () => {
@@ -125,20 +145,20 @@ describe('ScriptBuilder.listTasks', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.getTask', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.getTask('abc123');
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
   it('contains PARAMS with task ID', () => {
     const script = ScriptBuilder.getTask('abc123');
     assertHasParams(script.source);
-    expect(script.source).toContain('"id":"abc123"');
+    assertParamContains(script.source, '"id":"abc123"');
   });
 
-  it('finds task by PARAMS.id', () => {
+  it('uses Task.byIdentifier for O(1) lookup', () => {
     const script = ScriptBuilder.getTask('abc123');
-    expect(script.source).toContain('PARAMS.id');
+    expect(script.source).toContain('Task.byIdentifier(PARAMS.id)');
   });
 
   it('returns full task object with all properties', () => {
@@ -214,7 +234,7 @@ describe('ScriptBuilder.createTask', () => {
 
   it('includes task name in PARAMS', () => {
     const script = ScriptBuilder.createTask({ name: 'My task' });
-    expect(script.source).toContain('"name":"My task"');
+    assertParamContains(script.source, '"name":"My task"');
   });
 });
 
@@ -223,12 +243,12 @@ describe('ScriptBuilder.createTask', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.updateTask', () => {
-  it('generates JXA_DIRECT for simple changes', () => {
+  it('generates OMNIJS_BRIDGE for simple changes', () => {
     const script = ScriptBuilder.updateTask('abc123', {
       name: 'Updated name',
       flagged: true,
     });
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
   it('generates OMNIJS_BRIDGE for tag changes', () => {
@@ -266,14 +286,12 @@ describe('ScriptBuilder.updateTask', () => {
     expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
-  it('bridge script uses evaluateJavascript', () => {
-    const script = ScriptBuilder.updateTask('abc123', { tags: ['test'] });
-    expect(script.source).toContain('evaluateJavascript');
-  });
+  it('all update scripts use evaluateJavascript (OmniJS bridge)', () => {
+    const scriptBridge = ScriptBuilder.updateTask('abc123', { tags: ['test'] });
+    expect(scriptBridge.source).toContain('evaluateJavascript');
 
-  it('simple update does not use evaluateJavascript', () => {
-    const script = ScriptBuilder.updateTask('abc123', { name: 'New name' });
-    expect(script.source).not.toContain('evaluateJavascript');
+    const scriptSimple = ScriptBuilder.updateTask('abc123', { name: 'New name' });
+    expect(scriptSimple.source).toContain('evaluateJavascript');
   });
 
   it('bridge uses clearTags before setting tags', () => {
@@ -286,6 +304,14 @@ describe('ScriptBuilder.updateTask', () => {
     expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
     expect(script.source).toContain('evaluateJavascript');
   });
+
+  it('uses Task.byIdentifier for O(1) lookup', () => {
+    const scriptSimple = ScriptBuilder.updateTask('abc123', { name: 'test' });
+    expect(scriptSimple.source).toContain('Task.byIdentifier(PARAMS.id)');
+
+    const scriptBridge = ScriptBuilder.updateTask('abc123', { tags: ['test'] });
+    expect(scriptBridge.source).toContain('Task.byIdentifier(PARAMS.id)');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -293,21 +319,26 @@ describe('ScriptBuilder.updateTask', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.completeTask', () => {
-  it('generates HYBRID strategy (JXA verify + OmniJS bridge)', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.completeTask('abc123');
-    expect(script.strategy).toBe(ExecStrategy.HYBRID);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
   it('contains PARAMS with task ID', () => {
     const script = ScriptBuilder.completeTask('abc123');
     assertHasParams(script.source);
-    expect(script.source).toContain('"id":"abc123"');
+    assertParamContains(script.source, '"id":"abc123"');
   });
 
   it('uses OmniJS bridge to mark task complete', () => {
     const script = ScriptBuilder.completeTask('abc123');
     expect(script.source).toContain('evaluateJavascript');
     expect(script.source).toContain('markComplete');
+  });
+
+  it('uses Task.byIdentifier for O(1) lookup', () => {
+    const script = ScriptBuilder.completeTask('abc123');
+    expect(script.source).toContain('Task.byIdentifier(PARAMS.id)');
   });
 });
 
@@ -316,20 +347,25 @@ describe('ScriptBuilder.completeTask', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.deleteTask', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.deleteTask('abc123');
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
   it('contains PARAMS with task ID', () => {
     const script = ScriptBuilder.deleteTask('abc123');
     assertHasParams(script.source);
-    expect(script.source).toContain('"id":"abc123"');
+    assertParamContains(script.source, '"id":"abc123"');
   });
 
-  it('calls app.delete', () => {
+  it('uses deleteObject in OmniJS bridge', () => {
     const script = ScriptBuilder.deleteTask('abc123');
-    expect(script.source).toContain('app.delete');
+    expect(script.source).toContain('deleteObject');
+  });
+
+  it('uses Task.byIdentifier for O(1) lookup', () => {
+    const script = ScriptBuilder.deleteTask('abc123');
+    expect(script.source).toContain('Task.byIdentifier(PARAMS.id)');
   });
 });
 
@@ -338,24 +374,33 @@ describe('ScriptBuilder.deleteTask', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.listProjects', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.listProjects();
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
-  it('uses flattenedProjects()', () => {
+  it('uses flattenedProjects (OmniJS property access)', () => {
     const script = ScriptBuilder.listProjects();
-    expect(script.source).toContain('flattenedProjects()');
+    expect(script.source).toContain('flattenedProjects');
+    // Should NOT use JXA method call pattern
+    expect(script.source).not.toContain('flattenedProjects()');
   });
 
   it('supports status filter', () => {
     const script = ScriptBuilder.listProjects({ status: 'active' });
-    expect(script.source).toContain('"status":"active"');
+    assertParamContains(script.source, '"status":"active"');
   });
 
   it('supports folder filter', () => {
     const script = ScriptBuilder.listProjects({ folder: 'Work' });
-    expect(script.source).toContain('"folder":"Work"');
+    assertParamContains(script.source, '"folder":"Work"');
+  });
+
+  it('uses Project.Status enum for status comparison', () => {
+    const script = ScriptBuilder.listProjects();
+    expect(script.source).toContain('Project.Status.Active');
+    expect(script.source).toContain('Project.Status.Done');
+    expect(script.source).toContain('Project.Status.Dropped');
   });
 });
 
@@ -364,20 +409,25 @@ describe('ScriptBuilder.listProjects', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.listTags', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.listTags();
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
-  it('uses flattenedTags()', () => {
+  it('uses flattenedTags (OmniJS property access)', () => {
     const script = ScriptBuilder.listTags();
-    expect(script.source).toContain('flattenedTags()');
+    expect(script.source).toContain('flattenedTags');
+    // Should NOT use JXA method call pattern
+    expect(script.source).not.toContain('flattenedTags()');
   });
 
-  it('returns tag objects with id, name, available count', () => {
+  it('returns tag objects with id, name, available count using OmniJS syntax', () => {
     const script = ScriptBuilder.listTags();
-    expect(script.source).toContain('tg.id()');
-    expect(script.source).toContain('tg.name()');
+    expect(script.source).toContain('tg.id.primaryKey');
+    expect(script.source).toContain('tg.name');
+    // Should NOT use JXA method calls
+    expect(script.source).not.toContain('tg.id()');
+    expect(script.source).not.toContain('tg.name()');
   });
 });
 
@@ -386,20 +436,23 @@ describe('ScriptBuilder.listTags', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.listFolders', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates OMNIJS_BRIDGE strategy', () => {
     const script = ScriptBuilder.listFolders();
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.OMNIJS_BRIDGE);
   });
 
-  it('builds folder hierarchy with paths', () => {
+  it('builds folder hierarchy with paths using OmniJS syntax', () => {
     const script = ScriptBuilder.listFolders();
     expect(script.source).toContain('processFolder');
-    expect(script.source).toContain('folder.folders()');
+    // OmniJS uses forEach with property access, not JXA folder.folders()
+    expect(script.source).toContain('folder.folders.forEach');
   });
 
-  it('does not use folder.parent() (known JXA failure)', () => {
+  it('does not use JXA method calls for folder properties', () => {
     const script = ScriptBuilder.listFolders();
-    expect(script.source).not.toContain('folder.parent()');
+    // Should NOT use JXA method calls
+    expect(script.source).not.toContain('folder.name()');
+    expect(script.source).not.toContain('folder.id()');
     expect(script.source).not.toContain('.parent()');
   });
 });
@@ -540,7 +593,7 @@ describe('Safety: escaping and injection prevention', () => {
     expect(script.source).not.toMatch(/\+\s*taskId\s*\+/);
   });
 
-  it('update bridge sub-scripts inject data via BP object, not string concatenation', () => {
+  it('update bridge uses OmniJS in-process operations (no sub-bridge BP pattern)', () => {
     const script = ScriptBuilder.updateTask('abc123', {
       tags: ['new-tag'],
       addTags: ['extra'],
@@ -548,14 +601,14 @@ describe('Safety: escaping and injection prevention', () => {
       plannedDate: '2026-03-01 08:00',
       repetitionRule: 'FREQ=DAILY',
     });
-    // Bridge sub-scripts should use BP.taskId, not raw string concat
-    expect(script.source).toContain('BP.taskId');
-    expect(script.source).toContain('BP.tags');
-    expect(script.source).toContain('BP.addTags');
-    expect(script.source).toContain('BP.removeTags');
-    expect(script.source).toContain('BP.plannedDate');
-    expect(script.source).toContain('BP.repetitionRule');
-    // Must NOT have the old pattern of string-concatenated values
+    // Now all operations happen in-process within the OmniJS bridge
+    // Should use PARAMS.changes directly, not BP sub-objects
+    expect(script.source).toContain('PARAMS.changes.tags');
+    expect(script.source).toContain('PARAMS.changes.addTags');
+    expect(script.source).toContain('PARAMS.changes.removeTags');
+    expect(script.source).toContain('PARAMS.changes.plannedDate');
+    expect(script.source).toContain('PARAMS.changes.repetitionRule');
+    // Must NOT have the old sub-bridge string-concat pattern
     expect(script.source).not.toMatch(/\+\s*taskId\s*\+/);
     expect(script.source).not.toMatch(/\+\s*dateVal\s*\+/);
     expect(script.source).not.toMatch(/\+\s*tagList\s*\+/);
@@ -576,7 +629,7 @@ describe('Safety: escaping and injection prevention', () => {
   it('handles empty string values', () => {
     const script = ScriptBuilder.createTask({ name: '', note: '' });
     assertHasParams(script.source);
-    expect(script.source).toContain('"name":""');
+    assertParamContains(script.source, '"name":""');
   });
 });
 
