@@ -52,6 +52,7 @@ export function registerTasksCommand(program: Command): void {
       if (opts.blocked) filter.blocked = true;
       if (opts.search) filter.search = opts.search;
       if (opts.completed) filter.completed = true;
+      if (opts.count) filter.countTotal = true;
 
       // Date filters -- parse natural language
       if (opts.dueBefore) filter.dueBefore = parseDate(opts.dueBefore) ?? opts.dueBefore;

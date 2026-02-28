@@ -76,11 +76,15 @@ const LIST_TASKS_BODY = `
   var limit = PARAMS.limit || 50;
   var skipped = 0;
 
+  // Default: exclude completed tasks unless explicitly included
+  var includeCompleted = PARAMS.completed === true;
+  var countTotal = PARAMS.countTotal === true;
+
   for (var i = 0; i < allTasks.length; i++) {
     var t = allTasks[i];
 
-    // Filter: completed
-    if (PARAMS.completed === false && t.completed()) continue;
+    // Filter: completed (excluded by default)
+    if (!includeCompleted && t.completed()) continue;
     if (PARAMS.completed === true && !t.completed()) continue;
 
     // Filter: flagged
@@ -169,7 +173,10 @@ const LIST_TASKS_BODY = `
     // Passed all filters
     total++;
     if (skipped < offset) { skipped++; continue; }
-    if (results.length >= limit) continue;
+    if (results.length >= limit) {
+      if (!countTotal) break;
+      continue;
+    }
 
     // Build result object
     var taskObj = {};

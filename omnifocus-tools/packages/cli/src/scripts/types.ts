@@ -33,6 +33,7 @@ export interface TaskFilter {
   offset?: number;
   sort?: { field: string; direction: 'asc' | 'desc' };
   fields?: string[];
+  countTotal?: boolean;
 }
 
 export interface TaskCreateData {
