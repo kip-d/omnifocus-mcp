@@ -10,6 +10,8 @@ import { registerAddCommand } from './commands/add.js';
 import { registerCompleteCommand } from './commands/complete.js';
 import { registerUpdateCommand } from './commands/update.js';
 import { registerDeleteCommand } from './commands/delete.js';
+import { registerStatsCommand } from './commands/stats.js';
+import { registerSystemCommands } from './commands/system.js';
 
 const program = new Command();
 
@@ -43,6 +45,12 @@ registerAddCommand(program);
 registerCompleteCommand(program);
 registerUpdateCommand(program);
 registerDeleteCommand(program);
+
+// Register analytics commands
+registerStatsCommand(program);
+
+// Register system commands
+registerSystemCommands(program);
 
 program.parse();
 
