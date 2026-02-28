@@ -496,16 +496,30 @@ const UPDATE_TASK_BRIDGE_BODY = `
 
 /**
  * JXA body: mark a task as completed.
+ * Uses hybrid pattern: JXA to verify task exists, then OmniJS bridge
+ * to set completed (JXA's completed property is read-only: -10003).
  */
 const COMPLETE_TASK_BODY = `
   var allTasks = doc.flattenedTasks();
+  var found = false;
   for (var i = 0; i < allTasks.length; i++) {
     if (allTasks[i].id() === PARAMS.id) {
-      allTasks[i].completed = true;
-      return JSON.stringify({ id: PARAMS.id, completed: true });
+      found = true;
+      break;
     }
   }
-  return JSON.stringify({ error: "Task not found" });
+  if (!found) return JSON.stringify({ error: "Task not found" });
+
+  var bp = { taskId: PARAMS.id };
+  var bridgeComplete = '(() => {' +
+    'var BP = ' + JSON.stringify(bp) + ';' +
+    'var t = Task.byIdentifier(BP.taskId);' +
+    'if (t) { t.markComplete(); }' +
+    'return JSON.stringify({success: true});' +
+  '})()';
+  app.evaluateJavascript(bridgeComplete);
+
+  return JSON.stringify({ id: PARAMS.id, completed: true });
 `;
 
 /**
@@ -738,11 +752,11 @@ export class ScriptBuilder {
     };
   }
 
-  /** Complete a task -- JXA_DIRECT */
+  /** Complete a task -- HYBRID (JXA to verify, OmniJS bridge to mark complete) */
   static completeTask(id: string): GeneratedScript {
     return {
       source: wrapJxa({ id }, COMPLETE_TASK_BODY),
-      strategy: 'jxa_direct' as ExecStrategy,
+      strategy: 'hybrid' as ExecStrategy,
       description: `Complete task ${id}`,
     };
   }

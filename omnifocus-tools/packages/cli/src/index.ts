@@ -6,6 +6,10 @@ import { registerProjectsCommand } from './commands/projects.js';
 import { registerTagsCommand } from './commands/tags.js';
 import { registerFoldersCommand } from './commands/folders.js';
 import { registerShortcutCommands } from './commands/shortcuts.js';
+import { registerAddCommand } from './commands/add.js';
+import { registerCompleteCommand } from './commands/complete.js';
+import { registerUpdateCommand } from './commands/update.js';
+import { registerDeleteCommand } from './commands/delete.js';
 
 const program = new Command();
 
@@ -33,6 +37,12 @@ registerFoldersCommand(program);
 
 // Register GTD shortcut commands
 registerShortcutCommands(program);
+
+// Register write commands
+registerAddCommand(program);
+registerCompleteCommand(program);
+registerUpdateCommand(program);
+registerDeleteCommand(program);
 
 program.parse();
 

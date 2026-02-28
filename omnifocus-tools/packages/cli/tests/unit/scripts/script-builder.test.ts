@@ -293,9 +293,9 @@ describe('ScriptBuilder.updateTask', () => {
 // ---------------------------------------------------------------------------
 
 describe('ScriptBuilder.completeTask', () => {
-  it('generates JXA_DIRECT strategy', () => {
+  it('generates HYBRID strategy (JXA verify + OmniJS bridge)', () => {
     const script = ScriptBuilder.completeTask('abc123');
-    expect(script.strategy).toBe(ExecStrategy.JXA_DIRECT);
+    expect(script.strategy).toBe(ExecStrategy.HYBRID);
   });
 
   it('contains PARAMS with task ID', () => {
@@ -304,9 +304,10 @@ describe('ScriptBuilder.completeTask', () => {
     expect(script.source).toContain('"id":"abc123"');
   });
 
-  it('sets completed to true', () => {
+  it('uses OmniJS bridge to mark task complete', () => {
     const script = ScriptBuilder.completeTask('abc123');
-    expect(script.source).toContain('completed = true');
+    expect(script.source).toContain('evaluateJavascript');
+    expect(script.source).toContain('markComplete');
   });
 });
 
