@@ -177,14 +177,45 @@ export const MANAGE_TAGS_SCRIPT = `
             });
           }
           
+          // Bridge: JXA .id() loop → index → OmniJS primaryKey (OMN-27)
+          // JXA .id() returns a transient ID for freshly created objects
+          const refreshedTags = doc.flattenedTags();
+          let newTagIdx = -1;
+          let parentTagIdx = -1;
+          for (let bi = refreshedTags.length - 1; bi >= 0; bi--) {
+            try {
+              const tid = refreshedTags[bi].id();
+              if (tid === newTag.id()) newTagIdx = bi;
+              if (parentTag && tid === parentTag.id()) parentTagIdx = bi;
+            } catch(e) {}
+          }
+
+          let realTagId = 'unknown';
+          let realParentId = null;
+
+          if (newTagIdx >= 0) {
+            try {
+              const idScript = '(' +
+                '() => {' +
+                  'var r = { tagId: flattenedTags[' + newTagIdx + '].id.primaryKey };' +
+                  (parentTagIdx >= 0 ? 'r.parentId = flattenedTags[' + parentTagIdx + '].id.primaryKey;' : '') +
+                  'return JSON.stringify(r);' +
+                '}' +
+              ')()';
+              const idResult = JSON.parse(app.evaluateJavascript(idScript));
+              realTagId = idResult.tagId || 'unknown';
+              if (idResult.parentId) realParentId = idResult.parentId;
+            } catch(e) {}
+          }
+
           return JSON.stringify({
             success: true,
             action: 'created',
             tagName: tagName,
-            tagId: safeGet(() => newTag.id(), 'unknown'),
+            tagId: realTagId,
             parentTagName: parentTag ? safeGet(() => parentTag.name()) : null,
-            parentTagId: parentTag ? safeGet(() => parentTag.id()) : null,
-            message: parentTag ? 
+            parentTagId: realParentId,
+            message: parentTag ?
               "Tag '" + tagName + "' created under '" + safeGet(() => parentTag.name()) + "'" :
               "Tag '" + tagName + "' created successfully"
           });
@@ -630,38 +661,32 @@ export const MANAGE_TAGS_SCRIPT = `
         // Set mutual exclusivity constraint on tag's children (OmniFocus 4.7+)
         // MUST use OmniJS bridge - direct JXA property assignment fails
         let tagToUpdate = null;
-        let tagId = null;
+        let tagToUpdateIndex = -1;
 
-        // Find the tag
+        // Find the tag and capture index for OmniJS bridge (OMN-27)
         for (let i = 0; i < allTags.length; i++) {
           if (safeGet(() => allTags[i].name()) === tagName) {
             tagToUpdate = allTags[i];
-            tagId = safeGet(() => allTags[i].id());
+            tagToUpdateIndex = i;
             break;
           }
         }
 
-        if (!tagToUpdate) {
+        if (!tagToUpdate || tagToUpdateIndex < 0) {
           return JSON.stringify({
             error: true,
             message: "Tag '" + tagName + "' not found"
           });
         }
 
-        if (!tagId) {
-          return JSON.stringify({
-            error: true,
-            message: "Failed to get tag ID for '" + tagName + "'"
-          });
-        }
-
         // Set mutual exclusivity property using OmniJS bridge
+        // Use index-based lookup instead of Tag.byIdentifier (OMN-27)
         try {
           const bridgeScript = \`
             (() => {
-              const tag = Tag.byIdentifier(\${JSON.stringify(tagId)});
+              const tag = flattenedTags[\${tagToUpdateIndex}];
               if (!tag) {
-                return JSON.stringify({ error: true, message: "Tag not found by ID" });
+                return JSON.stringify({ error: true, message: "Tag not found at index" });
               }
               tag.childrenAreMutuallyExclusive = \${mutuallyExclusive === true};
               return JSON.stringify({ success: true, value: tag.childrenAreMutuallyExclusive });

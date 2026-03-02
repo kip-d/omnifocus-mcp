@@ -49,7 +49,6 @@ export interface ScriptResult<T = unknown> {
 export interface SafeAccessors {
   safeGet<T>(getter: SafeGetter<T>, defaultValue?: T): T;
   safeGetDate(getter: SafeGetter<Date>): string | null;
-  safeGetProject(task: Task): { name: string; id: string } | null;
   safeGetTags(task: Task): string[];
   safeIsCompleted(obj: Task | Project): boolean;
   safeIsFlagged(obj: Task | Project): boolean;

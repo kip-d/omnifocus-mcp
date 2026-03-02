@@ -30,21 +30,6 @@ export const SAFE_UTILITIES = `
     }
   }
   
-  function safeGetProject(task) {
-    try {
-      const project = task.containingProject();
-      if (project) {
-        return {
-          name: safeGet(() => project.name()),
-          id: safeGet(() => project.id())
-        };
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-  
   function safeGetTags(task) {
     try {
       const tags = task.tags();

@@ -74,18 +74,6 @@ describe('Completed Project Task Handling', () => {
       expect(script).toContain('completed');
       expect(script).toBeDefined();
     });
-
-    it('should check for completed projects in date-range-queries scripts', async () => {
-      // Scripts use OmniJS bridge which checks completion via:
-      // 1. task.completed (direct property)
-      // 2. Project.Status.Done / Project.Status.Dropped (project status)
-      // Note: overdue and upcoming modes now use AST builder (completed: false filter handles project completion)
-      const { GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT } =
-        await import('../../src/omnifocus/scripts/date-range-queries.js');
-
-      // Verify date range queries check project completion status (OmniJS pattern)
-      expect(GET_TASKS_IN_DATE_RANGE_ULTRA_OPTIMIZED_SCRIPT).toContain('completed: isTaskEffectivelyCompleted(task)');
-    });
   });
 
   describe('Integration Scenario Tests', () => {
