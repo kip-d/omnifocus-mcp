@@ -147,6 +147,19 @@ d('Batch Operations Integration (Unified API)', () => {
     expect(response.data.summary.created).toBe(2);
     // Flat results: 2 create items
     expect(response.data.results.filter((r) => r.operation === 'create')).toHaveLength(2);
+
+    // OMN-28: Verify the task actually ended up inside the project (not in inbox)
+    const taskId = response.data.tempIdMapping?.['task1'];
+    expect(taskId).toBeTruthy();
+
+    const readResult = (await client.callTool('omnifocus_read', {
+      query: { type: 'tasks', filters: { id: taskId }, details: true },
+    })) as { data?: { tasks?: Array<{ project: string | null; inInbox: boolean }> } };
+
+    const task = readResult.data?.tasks?.[0];
+    expect(task).toBeDefined();
+    expect(task!.inInbox).toBe(false);
+    expect(task!.project).toContain('TestBatch_ProjectWithTasks');
   }, 30000);
 
   it('should create nested tasks (task with subtask) in sandbox', async () => {

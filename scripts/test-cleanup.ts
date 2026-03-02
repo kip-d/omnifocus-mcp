@@ -22,7 +22,7 @@ async function main(): Promise<void> {
   console.log('  - Tasks with __TEST__ name prefix (inbox tasks)');
   console.log('  - Projects inside __MCP_TEST_SANDBOX__ folder');
   console.log('  - The __MCP_TEST_SANDBOX__ folder itself');
-  console.log('  - Orphaned __TEST__ tasks anywhere (e.g., in Miscellaneous)');
+  console.log('  - Orphaned test tasks anywhere (e.g., TestBatch_, Test Task, etc.)');
   console.log('  - Tags starting with __test-');
   console.log('');
   console.log('Starting cleanup...');

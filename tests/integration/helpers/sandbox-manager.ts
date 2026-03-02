@@ -227,6 +227,7 @@ async function deleteTestInboxTasks(): Promise<{ deleted: number; errors: string
  */
 const ORPHAN_TASK_PATTERNS = [
   // Common test task naming patterns (prefix match)
+  'TestBatch_',
   'Test Task',
   'Test update',
   'Test delete',

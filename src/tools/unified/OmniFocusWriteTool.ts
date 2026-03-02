@@ -1554,6 +1554,14 @@ SAFETY:
 
       // Determine if parent is a project or task
       const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
+      this.logger.info('Batch parentTempId resolution', {
+        tempId: item.tempId,
+        parentTempId: item.parentTempId,
+        parentRealId,
+        parentType: parentMapping?.type,
+        willSetProjectId: parentMapping?.type === 'project',
+        willSetParentTaskId: parentMapping?.type !== 'project',
+      });
       if (parentMapping?.type === 'project') {
         projectId = parentRealId;
       } else {
@@ -1567,6 +1575,13 @@ SAFETY:
         projectId = item.project;
       }
     }
+
+    this.logger.info('Batch task create resolved IDs', {
+      tempId: item.tempId,
+      projectId,
+      parentTaskId,
+      taskName: item.name,
+    });
 
     // Capture repetitionRule before building task data (applied post-create, same as handleTaskCreate)
     const repetitionRuleForBatch = item.repetitionRule as RepetitionRule | undefined;

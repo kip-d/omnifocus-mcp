@@ -542,10 +542,11 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       const findProjectScript = \`
         (() => {
           var target = \${JSON.stringify(taskData.projectId)};
-          var proj = Project.byIdentifier(target);
-          if (!proj) proj = flattenedProjects.find(function(p) { return p.name === target; });
-          if (!proj) return JSON.stringify({ found: false });
-          return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj) });
+          var byId = Project.byIdentifier(target);
+          var byName = !byId ? flattenedProjects.find(function(p) { return p.name === target; }) : null;
+          var proj = byId || byName;
+          if (!proj) return JSON.stringify({ found: false, target: target, method: 'none', totalProjects: flattenedProjects.length });
+          return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj), method: byId ? 'byIdentifier' : 'byName' });
         })()
       \`;
       const findProjectResult = JSON.parse(app.evaluateJavascript(findProjectScript));
@@ -581,18 +582,29 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
 
     const jxaId = task.id();
 
-    // Bridge to get OmniJS id.primaryKey for the response (JXA .id() returns a different format)
+    // Bridge to get OmniJS id.primaryKey for the response.
+    // JXA .id() returns a transient internal ID that byIdentifier() cannot resolve
+    // for freshly created objects (OMN-28). Use JXA .id() matching to find the exact
+    // object's index in flattenedTasks(), then read primaryKey from OmniJS at that index.
+    // This handles duplicate task names correctly since JXA IDs are unique per object.
     let taskId = jxaId;
     try {
-      const idScript = \`
-        (() => {
-          var t = Task.byIdentifier('\${jxaId}');
-          if (t) return JSON.stringify({ pk: t.id.primaryKey });
-          return JSON.stringify({ pk: null });
-        })()
-      \`;
-      const idResult = JSON.parse(app.evaluateJavascript(idScript));
-      if (idResult.pk) taskId = idResult.pk;
+      const allTasks = doc.flattenedTasks();
+      let taskIndex = -1;
+      for (let i = allTasks.length - 1; i >= 0; i--) {
+        try { if (allTasks[i].id() === jxaId) { taskIndex = i; break; } } catch (e) {}
+      }
+      if (taskIndex >= 0) {
+        const idScript = \`
+          (() => {
+            var t = flattenedTasks[\${taskIndex}];
+            if (t) return JSON.stringify({ pk: t.id.primaryKey });
+            return JSON.stringify({ pk: null });
+          })()
+        \`;
+        const idResult = JSON.parse(app.evaluateJavascript(idScript));
+        if (idResult.pk) taskId = idResult.pk;
+      }
     } catch (e) {}
 
     // Set tags via bridge
@@ -875,18 +887,29 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
 
     const jxaProjectId = project.id();
 
-    // Bridge to get OmniJS id.primaryKey for the response (JXA .id() returns a different format)
+    // Bridge to get OmniJS id.primaryKey for the response.
+    // JXA .id() returns a transient internal ID that byIdentifier() cannot resolve
+    // for freshly created objects (OMN-28). Use JXA .id() matching to find the exact
+    // object's index in flattenedProjects(), then read primaryKey from OmniJS at that index.
+    // This handles duplicate project names correctly since JXA IDs are unique per object.
     let projectId = jxaProjectId;
     try {
-      const idScript = \`
-        (() => {
-          var p = Project.byIdentifier('\${jxaProjectId}');
-          if (p) return JSON.stringify({ pk: p.id.primaryKey });
-          return JSON.stringify({ pk: null });
-        })()
-      \`;
-      const idResult = JSON.parse(app.evaluateJavascript(idScript));
-      if (idResult.pk) projectId = idResult.pk;
+      const allProjects = doc.flattenedProjects();
+      let projectIndex = -1;
+      for (let i = 0; i < allProjects.length; i++) {
+        try { if (allProjects[i].id() === jxaProjectId) { projectIndex = i; break; } } catch (e) {}
+      }
+      if (projectIndex >= 0) {
+        const idScript = \`
+          (() => {
+            var p = flattenedProjects[\${projectIndex}];
+            if (p) return JSON.stringify({ pk: p.id.primaryKey });
+            return JSON.stringify({ pk: null });
+          })()
+        \`;
+        const idResult = JSON.parse(app.evaluateJavascript(idScript));
+        if (idResult.pk) projectId = idResult.pk;
+      }
     } catch (e) {}
 
     // Set status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
