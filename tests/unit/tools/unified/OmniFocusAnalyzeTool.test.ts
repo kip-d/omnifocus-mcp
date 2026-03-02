@@ -243,9 +243,7 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(res.data.healthScore).toBe(0);
       // Verify the health score finding is included even when score is 0
       const keyFindings: string[] = res.summary.key_findings;
-      expect(keyFindings).toEqual(
-        expect.arrayContaining([expect.stringContaining('GTD Health Score: 0/100')]),
-      );
+      expect(keyFindings).toEqual(expect.arrayContaining([expect.stringContaining('GTD Health Score: 0/100')]));
     });
   });
 
@@ -650,6 +648,55 @@ describe('OmniFocusAnalyzeTool', () => {
 
       // Should return error or empty results (not throw)
       expect(res).toBeDefined();
+    });
+  });
+
+  // ─── ADVERTISED SCHEMA ──────────────────────────────────────────────
+
+  describe('inputSchema (MCP advertisement)', () => {
+    it('should use a hand-crafted minimal schema, not the expanded Zod oneOf', () => {
+      const schema = tool.inputSchema;
+
+      // Should be a flat object with analysis property, not oneOf with duplicated branches
+      const analysis = (schema as any).properties?.analysis;
+      expect(analysis).toBeDefined();
+
+      // Should have type enum and loose scope/params objects
+      expect(analysis.properties.type).toBeDefined();
+      expect(analysis.properties.scope).toEqual({ type: 'object' });
+      expect(analysis.properties.params).toEqual({ type: 'object' });
+
+      // Should NOT have oneOf (which duplicates scope across 8 branches)
+      expect(analysis.oneOf).toBeUndefined();
+    });
+
+    it('should advertise all 8 analysis types', () => {
+      const schema = tool.inputSchema as any;
+      const typeEnum = schema.properties.analysis.properties.type.enum;
+      expect(typeEnum).toEqual(
+        expect.arrayContaining([
+          'productivity_stats',
+          'task_velocity',
+          'overdue_analysis',
+          'pattern_analysis',
+          'workflow_analysis',
+          'recurring_tasks',
+          'parse_meeting_notes',
+          'manage_reviews',
+        ]),
+      );
+      expect(typeEnum).toHaveLength(8);
+    });
+
+    it('should require analysis.type', () => {
+      const schema = tool.inputSchema as any;
+      expect(schema.required).toContain('analysis');
+      expect(schema.properties.analysis.required).toContain('type');
+    });
+
+    it('should be under 1KB minified', () => {
+      const size = JSON.stringify(tool.inputSchema).length;
+      expect(size).toBeLessThan(1000);
     });
   });
 });

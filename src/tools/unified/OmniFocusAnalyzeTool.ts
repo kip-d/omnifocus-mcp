@@ -274,6 +274,45 @@ SCOPE FILTERING:
 - Use tags/projects to focus analysis`;
 
   schema = AnalyzeSchema;
+
+  /**
+   * Hand-crafted minimal JSON Schema for MCP tool advertisement.
+   *
+   * The auto-generated schema is ~4 KB due to discriminatedUnion duplicating
+   * the scope object across 8 analysis type branches.
+   *
+   * Server-side validation still uses the full Zod AnalyzeSchema.
+   */
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        analysis: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: [
+                'productivity_stats',
+                'task_velocity',
+                'overdue_analysis',
+                'pattern_analysis',
+                'workflow_analysis',
+                'recurring_tasks',
+                'parse_meeting_notes',
+                'manage_reviews',
+              ],
+            },
+            scope: { type: 'object' },
+            params: { type: 'object' },
+          },
+          required: ['type'],
+        },
+      },
+      required: ['analysis'],
+    };
+  }
+
   meta = {
     category: 'Analytics' as const,
     stability: 'stable' as const,
