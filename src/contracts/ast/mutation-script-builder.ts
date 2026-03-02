@@ -582,30 +582,42 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
 
     const jxaId = task.id();
 
-    // Bridge to get OmniJS id.primaryKey for the response.
-    // JXA .id() returns a transient internal ID that byIdentifier() cannot resolve
-    // for freshly created objects (OMN-28). Use JXA .id() matching to find the exact
-    // object's index in flattenedTasks(), then read primaryKey from OmniJS at that index.
-    // This handles duplicate task names correctly since JXA IDs are unique per object.
+    // Bridge: unique note marker to find exact task in OmniJS (OMN-29)
+    // JXA and OmniJS flattenedTasks have different array ordering, so index-based
+    // bridging (OMN-28) maps to the wrong task. Instead, temporarily prepend a
+    // unique nonce to the task note, find it in OmniJS by that nonce, read the
+    // real primaryKey, and restore the original note.
     let taskId = jxaId;
+    const bridgeNonce = '__BRIDGE_' + Date.now() + '_' + Math.floor(Math.random() * 1e8) + '__';
     try {
-      const allTasks = doc.flattenedTasks();
-      let taskIndex = -1;
-      for (let i = allTasks.length - 1; i >= 0; i--) {
-        try { if (allTasks[i].id() === jxaId) { taskIndex = i; break; } } catch (e) {}
-      }
-      if (taskIndex >= 0) {
-        const idScript = \`
-          (() => {
-            var t = flattenedTasks[\${taskIndex}];
-            if (t) return JSON.stringify({ pk: t.id.primaryKey });
-            return JSON.stringify({ pk: null });
-          })()
-        \`;
-        const idResult = JSON.parse(app.evaluateJavascript(idScript));
-        if (idResult.pk) taskId = idResult.pk;
-      }
+      const origNote = task.note() || '';
+      task.note = bridgeNonce + origNote;
+      const idScript = \`
+        (() => {
+          var marker = '\${bridgeNonce}';
+          var tasks = flattenedTasks;
+          for (var i = tasks.length - 1; i >= 0; i--) {
+            try {
+              if (tasks[i].note && tasks[i].note.startsWith(marker)) {
+                var pk = tasks[i].id.primaryKey;
+                tasks[i].note = tasks[i].note.substring(marker.length);
+                return JSON.stringify({ pk: pk });
+              }
+            } catch(e) {}
+          }
+          return JSON.stringify({ pk: null });
+        })()
+      \`;
+      const idResult = JSON.parse(app.evaluateJavascript(idScript));
+      if (idResult.pk) taskId = idResult.pk;
     } catch (e) {}
+    // Safety: clean up marker if OmniJS bridge failed
+    try {
+      const curNote = task.note() || '';
+      if (curNote.startsWith(bridgeNonce)) {
+        task.note = curNote.substring(bridgeNonce.length);
+      }
+    } catch(e) {}
 
     // Set tags via bridge
     let appliedTags = [];
@@ -1780,19 +1792,38 @@ export function buildBatchScript(
             tempIdMapping[op.tempId] = jxaId;
           }
 
-          // Bridge to get OmniJS id.primaryKey for the response
+          // Bridge: unique note marker to find exact task in OmniJS (OMN-29)
           let responseId = jxaId;
+          const batchNonce = '__BRIDGE_' + Date.now() + '_' + Math.floor(Math.random() * 1e8) + '__';
           try {
+            const origNote = task.note() || '';
+            task.note = batchNonce + origNote;
             const pkScript = '(' +
               '() => {' +
-                'var t = Task.byIdentifier(' + JSON.stringify(jxaId) + ');' +
-                'if (t) return JSON.stringify({ pk: t.id.primaryKey });' +
+                'var marker = ' + JSON.stringify(batchNonce) + ';' +
+                'var tasks = flattenedTasks;' +
+                'for (var i = tasks.length - 1; i >= 0; i--) {' +
+                  'try {' +
+                    'if (tasks[i].note && tasks[i].note.startsWith(marker)) {' +
+                      'var pk = tasks[i].id.primaryKey;' +
+                      'tasks[i].note = tasks[i].note.substring(marker.length);' +
+                      'return JSON.stringify({ pk: pk });' +
+                    '}' +
+                  '} catch(e) {}' +
+                '}' +
                 'return JSON.stringify({ pk: null });' +
               '}' +
             ')()';
             const pkResult = JSON.parse(app.evaluateJavascript(pkScript));
             if (pkResult.pk) responseId = pkResult.pk;
           } catch (e) {}
+          // Safety: clean up marker if OmniJS bridge failed
+          try {
+            const curNote = task.note() || '';
+            if (curNote.startsWith(batchNonce)) {
+              task.note = curNote.substring(batchNonce.length);
+            }
+          } catch(e) {}
 
           results.push({
             success: true,
