@@ -130,7 +130,7 @@ export function augmentFilterForMode(
   if (!definition) return { ...filter };
 
   const augmentation = definition.augment(options);
-  const result = { ...filter, ...augmentation };
+  const result = { ...augmentation, ...filter };
 
   // Special case: flagged mode defaults completed=false and dropped=false only when not explicitly set
   if (mode === 'flagged' && filter.completed === undefined) {

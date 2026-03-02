@@ -433,6 +433,49 @@ function resolveOrCreateTagByPath(segments) {
   return current;
 }`;
 
+// =============================================================================
+// OMNIJS FOLDER PATH HELPERS (interpolated into evaluateJavascript blocks)
+// =============================================================================
+
+/** OmniJS: parse ` : ` or `/` separated folder path into segments, or null for plain names */
+const OMNIJS_PARSE_FOLDER_PATH = `
+function parseFolderPath(input) {
+  if (input.indexOf(' : ') !== -1) {
+    var segs = input.split(' : ');
+    for (var i = 0; i < segs.length; i++) {
+      segs[i] = segs[i].trim();
+      if (segs[i].length === 0) return null;
+    }
+    return segs;
+  }
+  if (input.indexOf('/') !== -1) {
+    var segs = input.split('/');
+    for (var i = 0; i < segs.length; i++) {
+      segs[i] = segs[i].trim();
+      if (segs[i].length === 0) return null;
+    }
+    return segs;
+  }
+  return null;
+}`;
+
+/** OmniJS: walk folder hierarchy by segments (read-only, no creation) */
+const OMNIJS_RESOLVE_FOLDER_PATH = `
+function resolveFolderPath(segments) {
+  var parent = null;
+  var current = null;
+  for (var i = 0; i < segments.length; i++) {
+    current = null;
+    var children = parent ? parent.children : folders;
+    for (var j = 0; j < children.length; j++) {
+      if (children[j].name === segments[i]) { current = children[j]; break; }
+    }
+    if (!current) return null;
+    parent = current;
+  }
+  return current;
+}`;
+
 /** OmniJS: walk tag tree returning null if any segment missing (read-only) */
 const OMNIJS_RESOLVE_TAG_PATH = `
 function resolveTagByPath(segments) {
@@ -475,14 +518,17 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
     let parentTask = null;
 
     if (taskData.parentTaskId) {
-      const allTasks = doc.flattenedTasks();
-      for (let i = 0; i < allTasks.length; i++) {
-        try {
-          if (allTasks[i].id() === taskData.parentTaskId) {
-            parentTask = allTasks[i];
-            break;
-          }
-        } catch (e) {}
+      // Use OmniJS bridge for O(1) parent task lookup (JXA .id() differs from id.primaryKey)
+      const findParentScript = \`
+        (() => {
+          var task = Task.byIdentifier(\${JSON.stringify(taskData.parentTaskId)});
+          if (!task) return JSON.stringify({ found: false });
+          return JSON.stringify({ found: true, index: flattenedTasks.indexOf(task) });
+        })()
+      \`;
+      const findParentResult = JSON.parse(app.evaluateJavascript(findParentScript));
+      if (findParentResult.found && findParentResult.index >= 0) {
+        parentTask = doc.flattenedTasks()[findParentResult.index];
       }
       if (!parentTask) {
         return JSON.stringify({
@@ -492,18 +538,19 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       }
       targetContainer = parentTask.tasks;
     } else if (taskData.projectId) {
-      const projects = doc.flattenedProjects();
-      let targetProject = null;
-      for (let i = 0; i < projects.length; i++) {
-        try {
-          if (projects[i].id() === taskData.projectId || projects[i].name() === taskData.projectId) {
-            targetProject = projects[i];
-            break;
-          }
-        } catch (e) {}
-      }
-      if (targetProject) {
-        targetContainer = targetProject.tasks;
+      // Use OmniJS bridge for O(1) project lookup (JXA .id() differs from id.primaryKey)
+      const findProjectScript = \`
+        (() => {
+          var target = \${JSON.stringify(taskData.projectId)};
+          var proj = Project.byIdentifier(target);
+          if (!proj) proj = flattenedProjects.find(function(p) { return p.name === target; });
+          if (!proj) return JSON.stringify({ found: false });
+          return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj) });
+        })()
+      \`;
+      const findProjectResult = JSON.parse(app.evaluateJavascript(findProjectScript));
+      if (findProjectResult.found && findProjectResult.index >= 0) {
+        targetContainer = doc.flattenedProjects()[findProjectResult.index].tasks;
       }
     }
 
@@ -532,7 +579,21 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
       task.estimatedMinutes = taskData.estimatedMinutes;
     }
 
-    const taskId = task.id();
+    const jxaId = task.id();
+
+    // Bridge to get OmniJS id.primaryKey for the response (JXA .id() returns a different format)
+    let taskId = jxaId;
+    try {
+      const idScript = \`
+        (() => {
+          var t = Task.byIdentifier('\${jxaId}');
+          if (t) return JSON.stringify({ pk: t.id.primaryKey });
+          return JSON.stringify({ pk: null });
+        })()
+      \`;
+      const idResult = JSON.parse(app.evaluateJavascript(idScript));
+      if (idResult.pk) taskId = idResult.pk;
+    } catch (e) {}
 
     // Set tags via bridge
     let appliedTags = [];
@@ -744,17 +805,40 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
   const projectData = ${JSON.stringify(projectData)};
 
   try {
-    // Find folder if specified
+    // Find folder if specified — use OmniJS bridge for id.primaryKey + path syntax
     let targetFolder = null;
     if (projectData.folder) {
-      const folders = doc.flattenedFolders();
-      for (let i = 0; i < folders.length; i++) {
-        try {
-          if (folders[i].name() === projectData.folder || folders[i].id() === projectData.folder) {
-            targetFolder = folders[i];
-            break;
+      const findFolderScript = \`
+        (() => {
+          ${OMNIJS_PARSE_FOLDER_PATH}
+          ${OMNIJS_RESOLVE_FOLDER_PATH}
+
+          var target = \${JSON.stringify(projectData.folder)};
+
+          // 1. Try parsing as a path (" : " or "/")
+          var pathSegs = parseFolderPath(target);
+          if (pathSegs) {
+            var found = resolveFolderPath(pathSegs);
+            if (found) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(found) });
           }
-        } catch (e) {}
+
+          // 2. Try by identifier (id.primaryKey)
+          var folder = Folder.byIdentifier(target);
+          if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
+
+          // 3. Fall back to leaf name match
+          for (var i = 0; i < flattenedFolders.length; i++) {
+            if (flattenedFolders[i].name === target) {
+              return JSON.stringify({ found: true, index: i });
+            }
+          }
+
+          return JSON.stringify({ found: false });
+        })()
+      \`;
+      const findFolderResult = JSON.parse(app.evaluateJavascript(findFolderScript));
+      if (findFolderResult.found && findFolderResult.index >= 0) {
+        targetFolder = doc.flattenedFolders()[findFolderResult.index];
       }
     }
 
@@ -789,7 +873,21 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try { project.reviewInterval = projectData.reviewInterval * 24 * 60 * 60; } catch (e) {}
     }
 
-    const projectId = project.id();
+    const jxaProjectId = project.id();
+
+    // Bridge to get OmniJS id.primaryKey for the response (JXA .id() returns a different format)
+    let projectId = jxaProjectId;
+    try {
+      const idScript = \`
+        (() => {
+          var p = Project.byIdentifier('\${jxaProjectId}');
+          if (p) return JSON.stringify({ pk: p.id.primaryKey });
+          return JSON.stringify({ pk: null });
+        })()
+      \`;
+      const idResult = JSON.parse(app.evaluateJavascript(idScript));
+      if (idResult.pk) projectId = idResult.pk;
+    } catch (e) {}
 
     // Set status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
     if (projectData.status && projectData.status !== 'active') {
@@ -1230,56 +1328,67 @@ export async function buildUpdateProjectScript(
   const script = `
 (() => {
   const app = Application('OmniFocus');
-  const doc = app.defaultDocument();
   const projectId = ${JSON.stringify(projectId)};
   const changes = ${JSON.stringify(changesData)};
 
   try {
-    // Find project
-    const projects = doc.flattenedProjects();
-    let project = null;
-    for (let i = 0; i < projects.length; i++) {
-      try {
-        if (projects[i].id() === projectId) {
-          project = projects[i];
-          break;
+    // Use OmniJS bridge for O(1) project lookup and all property changes
+    const updateScript = \`
+      (() => {
+        const projectId = '\${projectId}';
+        const changes = \${JSON.stringify(changes)};
+
+        // O(1) lookup using Project.byIdentifier
+        let project = Project.byIdentifier(projectId);
+        if (!project) {
+          // Fallback to name matching
+          project = flattenedProjects.find(p => p.name === projectId);
         }
-      } catch (e) {}
-    }
+        if (!project) {
+          return JSON.stringify({
+            error: true,
+            message: "Project not found: " + projectId
+          });
+        }
 
-    if (!project) {
-      return JSON.stringify({
-        error: true,
-        message: "Project not found: " + projectId
-      });
-    }
+        // Apply simple property changes
+        if (changes.name !== undefined) project.name = changes.name;
+        if (changes.note !== undefined) project.note = changes.note;
+        if (changes.flagged !== undefined) project.flagged = changes.flagged;
+        if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
-    // Apply changes
-    if (changes.name !== undefined) project.name = changes.name;
-    if (changes.note !== undefined) project.note = changes.note;
-    if (changes.flagged !== undefined) project.flagged = changes.flagged;
-    if (changes.sequential !== undefined) project.sequential = changes.sequential;
+        // Handle review interval (convert days to seconds for OmniFocus)
+        if (changes.reviewInterval !== undefined) {
+          project.reviewInterval = changes.reviewInterval * 24 * 60 * 60;
+        }
 
-    // Handle review interval (convert days to seconds for OmniFocus)
-    if (changes.reviewInterval !== undefined) {
-      project.reviewInterval = changes.reviewInterval * 24 * 60 * 60;
-    }
+        // Handle dates
+        if (changes.dueDate !== undefined) {
+          project.dueDate = changes.dueDate ? new Date(changes.dueDate) : null;
+        }
+        if (changes.clearDueDate) project.dueDate = null;
 
-    // Handle dates
-    if (changes.dueDate !== undefined) {
-      project.dueDate = changes.dueDate ? new Date(changes.dueDate) : null;
-    }
-    if (changes.clearDueDate) project.dueDate = null;
+        if (changes.deferDate !== undefined) {
+          project.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
+        }
+        if (changes.clearDeferDate) project.deferDate = null;
 
-    if (changes.deferDate !== undefined) {
-      project.deferDate = changes.deferDate ? new Date(changes.deferDate) : null;
-    }
-    if (changes.clearDeferDate) project.deferDate = null;
+        if (changes.plannedDate !== undefined) {
+          project.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
+        }
+        if (changes.clearPlannedDate) project.plannedDate = null;
 
-    if (changes.plannedDate !== undefined) {
-      project.plannedDate = changes.plannedDate ? new Date(changes.plannedDate) : null;
-    }
-    if (changes.clearPlannedDate) project.plannedDate = null;
+        return JSON.stringify({
+          success: true,
+          projectId: project.id.primaryKey,
+          name: project.name,
+          flagged: project.flagged
+        });
+      })()
+    \`;
+
+    const updateResult = JSON.parse(app.evaluateJavascript(updateScript));
+    if (updateResult.error) return JSON.stringify(updateResult);
 
     // Handle status via OmniJS bridge (Project.Status is OmniJS-only, not available in JXA)
     if (changes.status) {
@@ -1409,9 +1518,9 @@ export async function buildUpdateProjectScript(
     }
 
     return JSON.stringify({
-      projectId: projectId,
-      name: project.name(),
-      flagged: project.flagged(),
+      projectId: updateResult.projectId,
+      name: updateResult.name,
+      flagged: updateResult.flagged,
       status: changes.status || 'active',
       updated: true
     });
@@ -1607,7 +1716,7 @@ export function buildBatchScript(
           // Handle create
           let targetContainer = doc.inboxTasks;
 
-          // Check for parent by tempId
+          // Check for parent by tempId (JXA .id() is consistent within same script for tempId refs)
           if (op.parentTempId && tempIdMapping[op.parentTempId]) {
             const parentId = tempIdMapping[op.parentTempId];
             const allTasks = doc.flattenedTasks();
@@ -1618,14 +1727,19 @@ export function buildBatchScript(
               }
             }
           } else if (op.data.projectId) {
-            const projects = doc.flattenedProjects();
-            for (let j = 0; j < projects.length; j++) {
-              try {
-                if (projects[j].id() === op.data.projectId || projects[j].name() === op.data.projectId) {
-                  targetContainer = projects[j].tasks;
-                  break;
-                }
-              } catch (e) {}
+            // Use OmniJS bridge for O(1) project lookup (JXA .id() differs from id.primaryKey)
+            const findProjectScript = '(' +
+              '() => {' +
+                'var target = ' + JSON.stringify(op.data.projectId) + ';' +
+                'var proj = Project.byIdentifier(target);' +
+                'if (!proj) proj = flattenedProjects.find(function(p) { return p.name === target; });' +
+                'if (!proj) return JSON.stringify({ found: false });' +
+                'return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj) });' +
+              '}' +
+            ')()';
+            const findResult = JSON.parse(app.evaluateJavascript(findProjectScript));
+            if (findResult.found && findResult.index >= 0) {
+              targetContainer = doc.flattenedProjects()[findResult.index].tasks;
             }
           }
 
@@ -1636,32 +1750,50 @@ export function buildBatchScript(
           });
 
           targetContainer.push(task);
-          const taskId = task.id();
+          const jxaId = task.id();
 
-          // Store tempId mapping
+          // Store JXA ID for tempId mapping (needed for parent lookups within same script)
           if (op.tempId) {
-            tempIdMapping[op.tempId] = taskId;
+            tempIdMapping[op.tempId] = jxaId;
           }
+
+          // Bridge to get OmniJS id.primaryKey for the response
+          let responseId = jxaId;
+          try {
+            const pkScript = '(' +
+              '() => {' +
+                'var t = Task.byIdentifier(' + JSON.stringify(jxaId) + ');' +
+                'if (t) return JSON.stringify({ pk: t.id.primaryKey });' +
+                'return JSON.stringify({ pk: null });' +
+              '}' +
+            ')()';
+            const pkResult = JSON.parse(app.evaluateJavascript(pkScript));
+            if (pkResult.pk) responseId = pkResult.pk;
+          } catch (e) {}
 
           results.push({
             success: true,
             operation: 'create',
             tempId: op.tempId || null,
-            taskId: taskId,
+            taskId: responseId,
             name: task.name()
           });
 
         } else if (op.operation === 'update') {
-          // Handle update
-          const allTasks = doc.flattenedTasks();
+          // Handle update — use OmniJS bridge for O(1) task lookup (JXA .id() differs from id.primaryKey)
+          const findTaskScript = '(' +
+            '() => {' +
+              'var target = ' + JSON.stringify(op.id) + ';' +
+              'var task = Task.byIdentifier(target);' +
+              'if (!task) task = flattenedTasks.find(function(t) { return t.name === target; });' +
+              'if (!task) return JSON.stringify({ found: false });' +
+              'return JSON.stringify({ found: true, index: flattenedTasks.indexOf(task) });' +
+            '}' +
+          ')()';
+          const findTaskResult = JSON.parse(app.evaluateJavascript(findTaskScript));
           let task = null;
-          for (let j = 0; j < allTasks.length; j++) {
-            try {
-              if (allTasks[j].id() === op.id) {
-                task = allTasks[j];
-                break;
-              }
-            } catch (e) {}
+          if (findTaskResult.found && findTaskResult.index >= 0) {
+            task = doc.flattenedTasks()[findTaskResult.index];
           }
 
           if (!task) {

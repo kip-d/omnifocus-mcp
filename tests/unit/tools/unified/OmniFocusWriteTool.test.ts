@@ -764,6 +764,16 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(mutationProps.changes).toEqual({ type: 'object' });
     });
 
+    it('should advertise batch control flags as boolean, not string', () => {
+      const schema = tool.inputSchema as any;
+      const mutationProps = schema.properties.mutation.properties;
+
+      const booleanFlags = ['createSequentially', 'returnMapping', 'stopOnError', 'atomicOperation', 'dryRun'];
+      for (const flag of booleanFlags) {
+        expect(mutationProps[flag]).toEqual({ type: 'boolean' });
+      }
+    });
+
     it('should be under 4KB minified', () => {
       const size = JSON.stringify(tool.inputSchema).length;
       expect(size).toBeLessThan(4000);

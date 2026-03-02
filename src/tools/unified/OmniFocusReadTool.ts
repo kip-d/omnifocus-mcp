@@ -9,7 +9,9 @@ import {
   buildFilteredProjectsScript,
   buildFilteredFoldersScript,
   buildExportTasksScript,
-  DEFAULT_FIELDS,
+  NOTE_TRUNCATE_LENGTH,
+  resolveEffectiveTaskFields,
+  resolveEffectiveProjectFields,
   type ExportFilter,
 } from '../../contracts/ast/script-builder.js';
 import { EXPORT_PROJECTS_SCRIPT } from '../../omnifocus/scripts/export/export-projects.js';
@@ -85,9 +87,21 @@ interface TaskQueryPlan {
 }
 
 /**
+ * Determine the fields_mode for metadata reporting.
+ */
+function resolveFieldsMode(
+  userFields: string[] | undefined,
+  details: boolean | undefined,
+): 'minimal' | 'detailed' | 'explicit' {
+  if (userFields && userFields.length > 0) return 'explicit';
+  if (details) return 'detailed';
+  return 'minimal';
+}
+
+/**
  * Build the full task query: resolve mode, augment filters, inject fields, build script.
  */
-function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
+function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan & { fieldsMode: 'minimal' | 'detailed' | 'explicit' } {
   const limit = compiled.limit || 25;
   const mode = (compiled.filters.inInbox ? 'inbox' : compiled.mode) as TaskQueryMode | undefined;
 
@@ -95,12 +109,21 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
     daysAhead: compiled.daysAhead,
   });
 
+  const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
+  const fieldsMode = resolveFieldsMode(userExplicitFields, compiled.details);
+
+  // Resolve effective fields: explicit > details=true > MINIMAL_FIELDS
+  let scriptFields = resolveEffectiveTaskFields(userExplicitFields, compiled.details);
+
   // Today mode needs extra fields for category counting
-  let scriptFields = compiled.fields || [];
   if (mode === 'today') {
-    const baseFields = scriptFields.length > 0 ? scriptFields : DEFAULT_FIELDS;
-    scriptFields = [...new Set([...baseFields, 'reason', 'daysOverdue', 'modified'])];
+    scriptFields = [...new Set([...scriptFields, 'reason', 'daysOverdue', 'modified'])];
   }
+
+  // Note truncation: apply when not in detail mode
+  // Truncate when using minimal fields OR when user explicitly requests note without details=true
+  const shouldTruncateNotes = !compiled.details;
+  const noteTruncateLength = shouldTruncateNotes ? NOTE_TRUNCATE_LENGTH : undefined;
 
   // Only pass user-specified sort to the script builder (not mode default sorts).
   // Mode default sorts operate on small, already-filtered sets and stay as post-hoc.
@@ -113,12 +136,13 @@ function buildTaskQuery(compiled: CompiledQuery): TaskQueryPlan {
     offset: compiled.offset,
     mode: mode === 'inbox' ? 'inbox' : undefined,
     sort: userSort,
+    noteTruncateLength,
   });
 
   // Inbox path doesn't pass sort to buildInboxScript, so sort is never applied in-script.
   // Mark sortedInScript false so the post-hoc sort handles it instead.
   const isInboxPath = mode === 'inbox';
-  return { script, filter, mode, scriptFields, limit, sortedInScript: !isInboxPath && !!userSort };
+  return { script, filter, mode, scriptFields, limit, sortedInScript: !isInboxPath && !!userSort, fieldsMode };
 }
 
 export class OmniFocusReadTool extends BaseTool<typeof ReadSchema, unknown> {
@@ -150,6 +174,10 @@ FILTER OPERATORS:
 - logic: { OR: [...] }, { AND: [...] }, { NOT: {...} }
 
 RESPONSE CONTROL:
+- Default returns minimal fields (id, name, flagged, completed, dueDate, deferDate, tags, project, available)
+- details: true returns all fields with full notes
+- fields: [...] returns exactly those fields (note truncated to 200 chars unless details: true)
+- ID lookup always returns all fields with full notes
 - fields (tasks): id, name, completed, flagged, blocked, available, estimatedMinutes, dueDate, deferDate, plannedDate, completionDate, added, modified, dropDate, note, projectId, project, tags, repetitionRule, parentTaskId, parentTaskName, inInbox
 - fields (projects): id, name, status, flagged, note, dueDate, deferDate, completedDate, folder, folderPath, folderId, sequential, lastReviewDate, nextReviewDate, defaultSingletonActionHolder
 - sort: [{ field: "dueDate", direction: "asc" }]
@@ -159,7 +187,8 @@ RESPONSE CONTROL:
 PERFORMANCE:
 - Use countOnly for counting questions
 - Use fields to select only needed data
-- Use modes instead of raw filters when available`;
+- Use modes instead of raw filters when available
+- Default queries are token-efficient (9 fields, no notes)`;
 
   schema = ReadSchema;
 
@@ -281,14 +310,14 @@ PERFORMANCE:
 
   private async handleTaskQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
-    const { script, filter, mode, limit, sortedInScript } = buildTaskQuery(compiled);
+    const { script, filter, mode, limit, sortedInScript, fieldsMode } = buildTaskQuery(compiled);
 
     // --- Count-only fast path ---
     if (compiled.countOnly) {
       return this.executeCountOnly(filter, mode, timer);
     }
 
-    // --- ID lookup fast path ---
+    // --- ID lookup fast path (always full detail) ---
     if (filter.id) {
       return this.executeIdLookup(filter, compiled.fields, timer);
     }
@@ -336,6 +365,7 @@ PERFORMANCE:
       mode: mode || 'all',
       offset: compiled.offset || 0,
       sort_applied: sortedInScript || !!sortOptions,
+      fields_mode: fieldsMode,
       ...(totalMatched !== undefined ? { total_matched: totalMatched } : {}),
     };
 
@@ -413,9 +443,11 @@ PERFORMANCE:
     fields: string[] | undefined,
     timer: OperationTimerV2,
   ): Promise<unknown> {
+    // ID lookup is a detail view — always use full fields, no truncation
+    const idFields = resolveEffectiveTaskFields(fields, true);
     const script = buildListTasksScriptV4({
       filter,
-      fields: fields || [],
+      fields: idFields,
       limit: 1,
     });
     const result = await this.execJson(script);
@@ -470,6 +502,10 @@ PERFORMANCE:
     const limit = compiled.limit || 25;
     const includeStats = compiled.includeStats ?? false;
 
+    // Resolve effective project fields
+    const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
+    const effectiveFields = resolveEffectiveProjectFields(userExplicitFields, compiled.details);
+
     // Build ProjectFilter from compiled query
     const projectFilter: ProjectFilter = {};
 
@@ -499,11 +535,8 @@ PERFORMANCE:
         operation: 'list',
       }) as unknown as Record<string, unknown>;
 
-      // Post-hoc field projection
-      if (compiled.fields && compiled.fields.length > 0) {
-        return projectFieldsOnResult(cacheResult, compiled.fields);
-      }
-      return cacheResult;
+      // Post-hoc field projection (always applied for thin-by-default)
+      return projectFieldsOnResult(cacheResult, effectiveFields);
     }
 
     // Execute query using AST-powered script builder
@@ -537,12 +570,8 @@ PERFORMANCE:
       operation: 'list',
     }) as unknown as Record<string, unknown>;
 
-    // Post-hoc field projection: strip to requested fields only
-    if (compiled.fields && compiled.fields.length > 0) {
-      return projectFieldsOnResult(listResult, compiled.fields);
-    }
-
-    return listResult;
+    // Post-hoc field projection (always applied for thin-by-default)
+    return projectFieldsOnResult(listResult, effectiveFields);
   }
 
   /**

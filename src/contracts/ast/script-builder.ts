@@ -57,6 +57,8 @@ export interface ScriptOptions {
   includeCompleted?: boolean;
   /** Sort specifications to apply in-script before limit/offset (user-specified sorts only) */
   sort?: SortSpec[];
+  /** When set and > 0, truncate note content to this many characters */
+  noteTruncateLength?: number;
 }
 
 export interface GeneratedScript {
@@ -73,35 +75,91 @@ export interface GeneratedScript {
 // =============================================================================
 
 /**
- * Default fields to include in task response
+ * Thin-default fields returned when no explicit fields or details flag is set.
+ * Optimized for low token usage — covers the most common query needs.
  */
-export const DEFAULT_FIELDS = [
+export const MINIMAL_FIELDS = [
   'id',
   'name',
-  'completed',
   'flagged',
-  'inInbox',
-  'blocked',
-  'available',
+  'completed',
   'dueDate',
   'deferDate',
+  'tags',
+  'project',
+  'available',
+];
+
+/**
+ * Heavier fields gated behind details=true or explicit field selection.
+ */
+export const DETAIL_FIELDS = [
+  'note',
+  'estimatedMinutes',
   'plannedDate',
   'effectivePlannedDate',
-  'tags',
-  'note',
-  'project',
-  'projectId',
-  'estimatedMinutes',
   'parentTaskId',
   'parentTaskName',
+  'blocked',
+  'inInbox',
+  'projectId',
 ];
+
+/**
+ * Full field set — union of MINIMAL + DETAIL. Preserves backward compatibility.
+ */
+export const DEFAULT_FIELDS = [...MINIMAL_FIELDS, ...DETAIL_FIELDS];
+
+/**
+ * Maximum characters for truncated note content in thin-default responses.
+ */
+export const NOTE_TRUNCATE_LENGTH = 200;
+
+/**
+ * Thin-default fields for project queries.
+ */
+export const MINIMAL_PROJECT_FIELDS = ['id', 'name', 'status', 'flagged', 'dueDate', 'deferDate', 'folder'];
+
+/**
+ * Heavier project fields gated behind details=true.
+ */
+export const DETAIL_PROJECT_FIELDS = ['note', 'folderPath', 'sequential', 'lastReviewDate', 'nextReviewDate'];
+
+/**
+ * Resolve effective task fields based on user input and details flag.
+ *
+ * Priority: explicit fields > details=true (DEFAULT_FIELDS) > MINIMAL_FIELDS
+ */
+export function resolveEffectiveTaskFields(userFields: string[] | undefined, details: boolean | undefined): string[] {
+  if (userFields && userFields.length > 0) return userFields;
+  if (details) return DEFAULT_FIELDS;
+  return MINIMAL_FIELDS;
+}
+
+/**
+ * Resolve effective project fields based on user input and details flag.
+ *
+ * Priority: explicit fields > details=true (full) > MINIMAL_PROJECT_FIELDS
+ */
+export function resolveEffectiveProjectFields(
+  userFields: string[] | undefined,
+  details: boolean | undefined,
+): string[] {
+  if (userFields && userFields.length > 0) return userFields;
+  if (details) return [...MINIMAL_PROJECT_FIELDS, ...DETAIL_PROJECT_FIELDS];
+  return MINIMAL_PROJECT_FIELDS;
+}
 
 /**
  * Generate the field projection code for a task object
  */
-function generateFieldProjection(fields: string[], context?: { dueSoonDays?: number }): string {
+function generateFieldProjection(
+  fields: string[],
+  context?: { dueSoonDays?: number; noteTruncateLength?: number },
+): string {
   const fieldList = fields.length > 0 ? fields : DEFAULT_FIELDS;
   const dueSoonDays = context?.dueSoonDays ?? 3;
+  const noteTruncateLength = context?.noteTruncateLength;
 
   const projections: string[] = [];
 
@@ -149,7 +207,13 @@ function generateFieldProjection(fields: string[], context?: { dueSoonDays?: num
         projections.push('tags: task.tags ? task.tags.map(t => t.name) : []');
         break;
       case 'note':
-        projections.push('note: task.note || ""');
+        if (noteTruncateLength && noteTruncateLength > 0) {
+          projections.push(
+            `note: (() => { const n = task.note || ""; return n.length > ${noteTruncateLength} ? n.substring(0, ${noteTruncateLength}) + "..." : n; })()`,
+          );
+        } else {
+          projections.push('note: task.note || ""');
+        }
         break;
       case 'project':
         projections.push('project: task.containingProject ? task.containingProject.name : null');
@@ -223,7 +287,7 @@ function generateFieldProjection(fields: string[], context?: { dueSoonDays?: num
  * - Property name mismatches are caught at compile time
  */
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
 
   // Build the AST to check if empty
   const ast = buildAST(filter);
@@ -238,6 +302,7 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Generate field projection (thread dueSoonDays from filter for reason field)
   const fieldProjection = generateFieldProjection(fields, {
     dueSoonDays: (filter as TaskFilter).dueSoonDays,
+    noteTruncateLength,
   });
 
   // Determine completion filter behavior
@@ -426,14 +491,14 @@ function generateSortComparator(sort: SortSpec[]): string {
  * after merging with the inbox filter (inInbox: true).
  */
 export function buildInboxScript(additionalFilter: TaskFilter = {}, options: ScriptOptions = {}): GeneratedScript {
-  const { limit = 50, offset = 0, fields = [], includeCompleted = false } = options;
+  const { limit = 50, offset = 0, fields = [], includeCompleted = false, noteTruncateLength } = options;
 
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
 
   const filterCode = generateFilterCode(filter, 'omnijs');
   const filterDescription = describeFilterForScript(filter);
-  const fieldProjection = generateFieldProjection(fields);
+  const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
 
   // Determine completion filter - exclude completed by default for inbox
   const completionCheck =
@@ -885,6 +950,8 @@ export interface ProjectScriptOptions {
   includeStats?: boolean;
   /** Performance mode: 'normal' includes task counts, 'lite' skips them */
   performanceMode?: 'normal' | 'lite';
+  /** When set and > 0, truncate note content to this many characters */
+  noteTruncateLength?: number;
 }
 
 /**
@@ -908,8 +975,9 @@ const DEFAULT_PROJECT_FIELDS = [
 /**
  * Generate the field projection code for a project object
  */
-function generateProjectFieldProjection(fields: string[]): string {
+function generateProjectFieldProjection(fields: string[], context?: { noteTruncateLength?: number }): string {
   const fieldList = fields.length > 0 ? fields : DEFAULT_PROJECT_FIELDS;
+  const noteTruncateLength = context?.noteTruncateLength;
   const projections: string[] = [];
 
   for (const field of fieldList) {
@@ -927,7 +995,13 @@ function generateProjectFieldProjection(fields: string[]): string {
         projections.push('flagged: project.flagged || false');
         break;
       case 'note':
-        projections.push('note: project.note || ""');
+        if (noteTruncateLength && noteTruncateLength > 0) {
+          projections.push(
+            `note: (() => { const n = project.note || ""; return n.length > ${noteTruncateLength} ? n.substring(0, ${noteTruncateLength}) + "..." : n; })()`,
+          );
+        } else {
+          projections.push('note: project.note || ""');
+        }
         break;
       case 'dueDate':
         projections.push('dueDate: project.dueDate ? project.dueDate.toISOString() : null');
@@ -976,7 +1050,7 @@ export function buildFilteredProjectsScript(
   filter: ProjectFilter,
   options: ProjectScriptOptions = {},
 ): GeneratedScript {
-  const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal' } = options;
+  const { limit = 50, fields = [], includeStats = false, performanceMode = 'normal', noteTruncateLength } = options;
 
   // Generate the filter predicate code
   const filterCode = generateProjectFilterCode(filter);
@@ -984,7 +1058,7 @@ export function buildFilteredProjectsScript(
   const filterDescription = describeProjectFilter(filter);
 
   // Generate field projection
-  const fieldProjection = generateProjectFieldProjection(fields);
+  const fieldProjection = generateProjectFieldProjection(fields, { noteTruncateLength });
 
   // Include task counts only in normal mode
   const includeTaskCounts = performanceMode !== 'lite';

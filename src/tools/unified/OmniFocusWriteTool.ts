@@ -146,11 +146,11 @@ SAFETY:
                 required: ['operation', 'target'],
               },
             },
-            createSequentially: { type: 'string' },
-            returnMapping: { type: 'string' },
-            stopOnError: { type: 'string' },
-            atomicOperation: { type: 'string' },
-            dryRun: { type: 'string' },
+            createSequentially: { type: 'boolean' },
+            returnMapping: { type: 'boolean' },
+            stopOnError: { type: 'boolean' },
+            atomicOperation: { type: 'boolean' },
+            dryRun: { type: 'boolean' },
 
             // bulk_delete
             ids: { type: 'array', items: { type: 'string' } },

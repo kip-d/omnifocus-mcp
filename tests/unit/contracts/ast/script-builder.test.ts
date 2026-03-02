@@ -5,6 +5,15 @@ import {
   buildTaskByIdScript,
   buildRecurringTasksScript,
   buildTaskCountScript,
+  buildFilteredProjectsScript,
+  MINIMAL_FIELDS,
+  DETAIL_FIELDS,
+  DEFAULT_FIELDS,
+  MINIMAL_PROJECT_FIELDS,
+  DETAIL_PROJECT_FIELDS,
+  NOTE_TRUNCATE_LENGTH,
+  resolveEffectiveTaskFields,
+  resolveEffectiveProjectFields,
 } from '../../../../src/contracts/ast/script-builder.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
@@ -467,6 +476,18 @@ describe('buildTaskCountScript', () => {
       expect(result.script).toContain('doc.flattenedTasks()');
       expect(result.isEmptyFilter).toBe(true);
     });
+
+    it('generates project name comparison for name-like project filter', () => {
+      const result = buildTaskCountScript({ project: 'My Project' });
+      expect(result.script).toContain('.name()');
+      expect(result.script).toContain('My Project');
+    });
+
+    it('generates project ID comparison for ID-like project filter', () => {
+      const result = buildTaskCountScript({ project: 'n60OG59wsSg' });
+      expect(result.script).toContain('.id().primaryKey()');
+      expect(result.script).toContain('n60OG59wsSg');
+    });
   });
 });
 
@@ -673,5 +694,213 @@ describe('buildFilteredTasksScript sort-before-limit', () => {
       expect(result.script).toContain('return 1'); // null -> end
       expect(result.script).toContain('return -1'); // non-null -> before null
     });
+  });
+});
+
+// =============================================================================
+// FIELD SET CONSTANTS AND RESOLUTION
+// =============================================================================
+
+describe('field set constants', () => {
+  it('MINIMAL_FIELDS contains exactly the 9 thin-default fields', () => {
+    expect(MINIMAL_FIELDS).toEqual([
+      'id',
+      'name',
+      'flagged',
+      'completed',
+      'dueDate',
+      'deferDate',
+      'tags',
+      'project',
+      'available',
+    ]);
+  });
+
+  it('DETAIL_FIELDS contains the heavier fields gated behind details=true', () => {
+    expect(DETAIL_FIELDS).toContain('note');
+    expect(DETAIL_FIELDS).toContain('estimatedMinutes');
+    expect(DETAIL_FIELDS).toContain('plannedDate');
+    expect(DETAIL_FIELDS).toContain('effectivePlannedDate');
+    expect(DETAIL_FIELDS).toContain('parentTaskId');
+    expect(DETAIL_FIELDS).toContain('parentTaskName');
+    expect(DETAIL_FIELDS).toContain('blocked');
+    expect(DETAIL_FIELDS).toContain('inInbox');
+    expect(DETAIL_FIELDS).toContain('projectId');
+  });
+
+  it('DEFAULT_FIELDS is the union of MINIMAL_FIELDS and DETAIL_FIELDS', () => {
+    const combined = [...MINIMAL_FIELDS, ...DETAIL_FIELDS];
+    expect(DEFAULT_FIELDS).toEqual(combined);
+  });
+
+  it('MINIMAL_FIELDS and DETAIL_FIELDS do not overlap', () => {
+    const overlap = MINIMAL_FIELDS.filter((f) => DETAIL_FIELDS.includes(f));
+    expect(overlap).toEqual([]);
+  });
+
+  it('NOTE_TRUNCATE_LENGTH is 200', () => {
+    expect(NOTE_TRUNCATE_LENGTH).toBe(200);
+  });
+
+  it('MINIMAL_PROJECT_FIELDS contains the 7 thin-default project fields', () => {
+    expect(MINIMAL_PROJECT_FIELDS).toEqual(['id', 'name', 'status', 'flagged', 'dueDate', 'deferDate', 'folder']);
+  });
+
+  it('DETAIL_PROJECT_FIELDS contains the heavier project fields', () => {
+    expect(DETAIL_PROJECT_FIELDS).toContain('note');
+    expect(DETAIL_PROJECT_FIELDS).toContain('folderPath');
+    expect(DETAIL_PROJECT_FIELDS).toContain('sequential');
+    expect(DETAIL_PROJECT_FIELDS).toContain('lastReviewDate');
+    expect(DETAIL_PROJECT_FIELDS).toContain('nextReviewDate');
+  });
+});
+
+describe('resolveEffectiveTaskFields', () => {
+  it('returns explicit user fields when provided', () => {
+    const result = resolveEffectiveTaskFields(['id', 'name', 'note'], false);
+    expect(result).toEqual(['id', 'name', 'note']);
+  });
+
+  it('treats empty array as no fields specified (returns MINIMAL_FIELDS)', () => {
+    const result = resolveEffectiveTaskFields([], false);
+    expect(result).toEqual(MINIMAL_FIELDS);
+  });
+
+  it('returns DEFAULT_FIELDS when details=true and no explicit fields', () => {
+    const result = resolveEffectiveTaskFields([], true);
+    expect(result).toEqual(DEFAULT_FIELDS);
+  });
+
+  it('returns DEFAULT_FIELDS when details=true and undefined fields', () => {
+    const result = resolveEffectiveTaskFields(undefined, true);
+    expect(result).toEqual(DEFAULT_FIELDS);
+  });
+
+  it('returns MINIMAL_FIELDS when details=false and no explicit fields', () => {
+    const result = resolveEffectiveTaskFields(undefined, false);
+    expect(result).toEqual(MINIMAL_FIELDS);
+  });
+
+  it('explicit fields take priority over details=true', () => {
+    const result = resolveEffectiveTaskFields(['id', 'name'], true);
+    expect(result).toEqual(['id', 'name']);
+  });
+});
+
+describe('resolveEffectiveProjectFields', () => {
+  it('returns explicit user fields when provided', () => {
+    const result = resolveEffectiveProjectFields(['id', 'name', 'note'], false);
+    expect(result).toEqual(['id', 'name', 'note']);
+  });
+
+  it('treats empty array as no fields specified (returns MINIMAL_PROJECT_FIELDS)', () => {
+    const result = resolveEffectiveProjectFields([], false);
+    expect(result).toEqual(MINIMAL_PROJECT_FIELDS);
+  });
+
+  it('returns full project fields when details=true', () => {
+    const result = resolveEffectiveProjectFields(undefined, true);
+    expect(result).toEqual([...MINIMAL_PROJECT_FIELDS, ...DETAIL_PROJECT_FIELDS]);
+  });
+
+  it('returns MINIMAL_PROJECT_FIELDS when details=false', () => {
+    const result = resolveEffectiveProjectFields(undefined, false);
+    expect(result).toEqual(MINIMAL_PROJECT_FIELDS);
+  });
+
+  it('explicit fields take priority over details=true', () => {
+    const result = resolveEffectiveProjectFields(['id', 'status'], true);
+    expect(result).toEqual(['id', 'status']);
+  });
+});
+
+// =============================================================================
+// NOTE TRUNCATION IN FIELD PROJECTION
+// =============================================================================
+
+describe('note truncation in generateFieldProjection', () => {
+  it('emits truncated note projection when noteTruncateLength is set', () => {
+    const result = buildFilteredTasksScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 200,
+      },
+    );
+
+    // Should contain the truncation IIFE, not the simple `note: task.note || ""`
+    expect(result.script).toContain('substring(0, 200)');
+    expect(result.script).toContain('...');
+    expect(result.script).not.toMatch(/note: task\.note \|\| ""/);
+  });
+
+  it('emits full note when noteTruncateLength is not set', () => {
+    const result = buildFilteredTasksScript(
+      {},
+      {
+        fields: ['id', 'note'],
+      },
+    );
+
+    expect(result.script).toContain('note: task.note || ""');
+    expect(result.script).not.toContain('substring');
+  });
+
+  it('emits full note when noteTruncateLength is 0', () => {
+    const result = buildFilteredTasksScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 0,
+      },
+    );
+
+    expect(result.script).toContain('note: task.note || ""');
+  });
+
+  it('truncation applies in inbox script', () => {
+    const result = buildInboxScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 200,
+      },
+    );
+
+    expect(result.script).toContain('substring(0, 200)');
+  });
+
+  it('does not affect buildTaskByIdScript (always full note)', () => {
+    const result = buildTaskByIdScript('abc123', ['id', 'note']);
+
+    // ID lookup is a detail view — always full note
+    expect(result.script).toContain('note: task.note || ""');
+    expect(result.script).not.toContain('substring');
+  });
+});
+
+describe('note truncation in project field projection', () => {
+  it('emits truncated project note when noteTruncateLength is set', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      {
+        fields: ['id', 'note'],
+        noteTruncateLength: 200,
+      },
+    );
+
+    expect(result.script).toContain('substring(0, 200)');
+    expect(result.script).not.toMatch(/note: project\.note \|\| ""/);
+  });
+
+  it('emits full project note when noteTruncateLength is not set', () => {
+    const result = buildFilteredProjectsScript(
+      {},
+      {
+        fields: ['id', 'note'],
+      },
+    );
+
+    expect(result.script).toContain('note: project.note || ""');
   });
 });

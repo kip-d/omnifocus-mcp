@@ -34,6 +34,7 @@ describe('Filter Results Validation', () => {
           filters: {
             text: { contains: searchTerm },
           },
+          details: true,
           limit: 100,
         },
       });

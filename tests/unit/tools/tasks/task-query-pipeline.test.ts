@@ -183,6 +183,48 @@ describe('augmentFilterForMode', () => {
     expect(result.completed).toBe(false); // mode-added
   });
 
+  describe('user filters take precedence over mode augmentation', () => {
+    it('user completed=true wins over overdue mode completed=false', () => {
+      const result = augmentFilterForMode('overdue', { completed: true });
+      expect(result.completed).toBe(true);
+      // Mode should still add its other properties
+      expect(result.dueBefore).toBeDefined();
+      expect(result.dueDateOperator).toBe('<');
+    });
+
+    it('user completed=true wins over today mode completed=false', () => {
+      const result = augmentFilterForMode('today', { completed: true });
+      expect(result.completed).toBe(true);
+      expect(result.todayMode).toBe(true);
+    });
+
+    it('user available=false wins over available mode available=true', () => {
+      const result = augmentFilterForMode('available', { available: false });
+      expect(result.available).toBe(false);
+    });
+
+    it('user blocked=false wins over blocked mode blocked=true', () => {
+      const result = augmentFilterForMode('blocked', { blocked: false });
+      expect(result.blocked).toBe(false);
+    });
+
+    it('user flagged=false wins over flagged mode flagged=true', () => {
+      const result = augmentFilterForMode('flagged', { flagged: false });
+      expect(result.flagged).toBe(false);
+    });
+
+    it('non-conflicting user filters merge with mode augmentation', () => {
+      const result = augmentFilterForMode('overdue', { tags: ['urgent'], flagged: true });
+      // User properties
+      expect(result.tags).toEqual(['urgent']);
+      expect(result.flagged).toBe(true);
+      // Mode properties (no conflict)
+      expect(result.completed).toBe(false);
+      expect(result.dropped).toBe(false);
+      expect(result.dueBefore).toBeDefined();
+    });
+  });
+
   describe('declarative MODE_DEFINITIONS coverage', () => {
     const augmentingModes: TaskQueryMode[] = [
       'overdue',

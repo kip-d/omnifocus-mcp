@@ -42,8 +42,9 @@ export function buildListTasksScriptV4(params: {
   offset?: number;
   mode?: string;
   sort?: Array<{ field: SortableField; direction: 'asc' | 'desc' }>;
+  noteTruncateLength?: number;
 }): string {
-  const { filter, fields = [], limit = 50, offset = 0, mode = 'all', sort } = params;
+  const { filter, fields = [], limit = 50, offset = 0, mode = 'all', sort, noteTruncateLength } = params;
 
   // Route to appropriate script builder based on mode
   // Filter is expected to be already normalized by QueryCompiler.
@@ -63,6 +64,7 @@ export function buildListTasksScriptV4(params: {
       offset,
       fields,
       includeCompleted: filter.completed === true,
+      noteTruncateLength,
     });
   } else {
     // General filtered query
@@ -72,6 +74,7 @@ export function buildListTasksScriptV4(params: {
       fields,
       includeCompleted: filter.completed === true,
       sort,
+      noteTruncateLength,
     });
   }
 

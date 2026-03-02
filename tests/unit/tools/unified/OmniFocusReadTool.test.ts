@@ -244,7 +244,7 @@ describe('OmniFocusReadTool', () => {
       } satisfies ScriptResult);
 
       const result = (await tool.execute({
-        query: { type: 'projects' },
+        query: { type: 'projects', details: true },
       })) as any;
 
       expect(result.success).toBe(true);
@@ -254,6 +254,80 @@ describe('OmniFocusReadTool', () => {
       expect(proj.nextReviewDate).toBeInstanceOf(Date);
       // Null dates remain undefined
       expect(proj.completionDate).toBeUndefined();
+    });
+  });
+
+  // ─── Thin-by-default project field resolution ──────────────────
+
+  describe('thin-by-default project field resolution', () => {
+    it('uses MINIMAL_PROJECT_FIELDS when no fields or details specified', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            {
+              id: 'p1',
+              name: 'Proj',
+              status: 'active',
+              flagged: false,
+              note: 'big note here',
+              folderPath: 'Work/Projects',
+              sequential: true,
+              lastReviewDate: '2026-01-01T00:00:00.000Z',
+              nextReviewDate: '2026-03-01T00:00:00.000Z',
+            },
+          ],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      expect(proj.id).toBeDefined();
+      expect(proj.name).toBeDefined();
+      // Detail fields should be stripped by post-hoc projection
+      expect(proj.folderPath).toBeUndefined();
+      expect(proj.sequential).toBeUndefined();
+      expect(proj.lastReviewDate).toBeUndefined();
+      expect(proj.nextReviewDate).toBeUndefined();
+      expect(proj.note).toBeUndefined();
+    });
+
+    it('includes all fields when details=true', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [
+            {
+              id: 'p1',
+              name: 'Proj',
+              status: 'active',
+              note: 'a note',
+              folderPath: 'some/path',
+              sequential: true,
+              lastReviewDate: '2026-01-01T00:00:00.000Z',
+              nextReviewDate: '2026-03-01T00:00:00.000Z',
+            },
+          ],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', details: true },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      const proj = result.data.projects[0];
+      // All fields should be present
+      expect(proj.id).toBeDefined();
+      expect(proj.name).toBeDefined();
+      expect(proj.folderPath).toBe('some/path');
+      expect(proj.sequential).toBe(true);
     });
   });
 
@@ -542,6 +616,153 @@ describe('OmniFocusReadTool', () => {
         expect(result.success).toBe(true);
         expect(result.data.format).toBe('json');
       });
+    });
+  });
+
+  // ─── Thin-by-default field resolution ─────────────────────────
+
+  describe('thin-by-default field resolution', () => {
+    it('generates script with MINIMAL_FIELDS when no fields or details specified', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test' }] },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks' },
+      });
+
+      // Script should use minimal fields — should NOT contain 'note' projection
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptArg).toContain('task.name');
+      expect(scriptArg).toContain('task.flagged');
+      expect(scriptArg).not.toContain('estimatedMinutes');
+      expect(scriptArg).not.toContain('parentTaskId');
+    });
+
+    it('generates script with DEFAULT_FIELDS when details=true', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test', note: 'full note', estimatedMinutes: 30 }] },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', details: true },
+      });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      // Should have detail fields
+      expect(scriptArg).toContain('estimatedMinutes');
+      expect(scriptArg).toContain('parentTaskId');
+      // Note should be full (no substring truncation)
+      expect(scriptArg).not.toContain('substring');
+    });
+
+    it('uses exact user fields when explicitly provided', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test', note: 'some note' }] },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', fields: ['id', 'name', 'note'] },
+      });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptArg).toContain('task.name');
+      // Note should be present but truncated (user didn't set details=true)
+      expect(scriptArg).toContain('substring');
+    });
+
+    it('does not truncate note when details=true with explicit fields', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', note: 'full' }] },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', fields: ['id', 'note'], details: true },
+      });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptArg).not.toContain('substring');
+    });
+
+    it('uses DEFAULT_FIELDS for ID lookup (detail view)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 'task-abc', name: 'Test', completed: false }] },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', filters: { id: 'task-abc' } },
+      });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      // ID lookup should have full fields
+      expect(scriptArg).toContain('estimatedMinutes');
+      // And no truncation
+      expect(scriptArg).not.toContain('substring');
+    });
+
+    it('includes fields_mode in metadata', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks' },
+      })) as any;
+
+      expect(result.metadata.fields_mode).toBe('minimal');
+    });
+
+    it('reports fields_mode as detailed when details=true', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', details: true },
+      })) as any;
+
+      expect(result.metadata.fields_mode).toBe('detailed');
+    });
+
+    it('reports fields_mode as explicit when fields are provided', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { tasks: [{ id: 't1', name: 'Test' }] },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'tasks', fields: ['id', 'name'] },
+      })) as any;
+
+      expect(result.metadata.fields_mode).toBe('explicit');
+    });
+
+    it('merges today mode extra fields into MINIMAL_FIELDS', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          tasks: [{ id: 't1', name: 'Test', dueDate: '2026-03-01T17:00:00.000Z', reason: 'due_soon' }],
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({
+        query: { type: 'tasks', mode: 'today' },
+      });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      // Should have today-specific fields
+      expect(scriptArg).toContain('reason');
+      expect(scriptArg).toContain('daysOverdue');
+      expect(scriptArg).toContain('modified');
+      // But not all detail fields (note shouldn't be there)
+      expect(scriptArg).not.toContain('estimatedMinutes');
     });
   });
 

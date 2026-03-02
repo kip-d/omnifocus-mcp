@@ -116,15 +116,21 @@ function emitTagComparison(operator: ComparisonOperator, tags: string[]): string
   }
 }
 
-function emitProjectComparison(operator: ComparisonOperator, projectId: string): string {
+function emitProjectComparison(operator: ComparisonOperator, projectValue: string): string {
   // Project can be null, so we need null-safe access
   const accessor = 'task.containingProject()';
 
+  // Determine if value looks like an ID (alphanumeric with possible - or _, length > 10)
+  // or a project name (anything else)
+  const isLikelyId = /^[a-zA-Z0-9_-]+$/.test(projectValue) && projectValue.length > 10;
+  const prop = isLikelyId ? 'id().primaryKey()' : 'name()';
+  const val = emitValue(projectValue);
+
   switch (operator) {
     case '==':
-      return `(${accessor} && ${accessor}.id().primaryKey() === ${emitValue(projectId)})`;
+      return `(${accessor} && ${accessor}.${prop} === ${val})`;
     case '!=':
-      return `(!${accessor} || ${accessor}.id().primaryKey() !== ${emitValue(projectId)})`;
+      return `(!${accessor} || ${accessor}.${prop} !== ${val})`;
     default:
       throw new Error(`Unsupported project operator: ${operator}`);
   }

@@ -187,32 +187,43 @@ export const SAFE_UTILITIES = `
 export const PROJECT_VALIDATION = `
   function validateProject(projectId, doc) {
     if (!projectId) return { valid: true, project: null };
-    
-    // Find by iteration (avoid the whose method)
+
+    // Use OmniJS bridge for O(1) lookup by id.primaryKey (JXA .id() returns a different format)
     let foundProject = null;
-    const projects = doc.flattenedProjects();
-    for (let i = 0; i < projects.length; i++) {
-      try { if (projects[i].id() === projectId) { foundProject = projects[i]; break; } } catch (e) {}
-    }
-    
+    try {
+      const findScript = '(' +
+        '() => {' +
+          'var target = ' + JSON.stringify(projectId) + ';' +
+          'var proj = Project.byIdentifier(target);' +
+          'if (!proj) proj = flattenedProjects.find(function(p) { return p.name === target; });' +
+          'if (!proj) return JSON.stringify({ found: false });' +
+          'return JSON.stringify({ found: true, index: flattenedProjects.indexOf(proj) });' +
+        '}' +
+      ')()';
+      const findResult = JSON.parse(app.evaluateJavascript(findScript));
+      if (findResult.found && findResult.index >= 0) {
+        foundProject = doc.flattenedProjects()[findResult.index];
+      }
+    } catch (e) {}
+
     if (!foundProject) {
       // Check if it's a numeric-only ID (Claude Desktop bug)
       const isNumericOnly = /^\\d+$/.test(projectId);
       let errorMessage = 'Project not found: ' + projectId;
-      
+
       if (isNumericOnly) {
         errorMessage += ". CLAUDE DESKTOP BUG DETECTED: Claude Desktop may have extracted numbers from an alphanumeric project ID (e.g., '547' from 'az5Ieo4ip7K'). Please use the list_projects tool to get the correct full project ID and try again.";
       }
-      
-      return { 
-        valid: false, 
-        error: errorMessage 
+
+      return {
+        valid: false,
+        error: errorMessage
       };
     }
-    
-    return { 
-      valid: true, 
-      project: foundProject 
+
+    return {
+      valid: true,
+      project: foundProject
     };
   }
 `;

@@ -95,16 +95,30 @@ describe('emitJXA', () => {
       expect(code).toBe('/^review.*/i.test(task.name())');
     });
 
-    it('emits project ID check', () => {
+    it('emits project ID check for ID-like values', () => {
       const ast: FilterNode = {
         type: 'comparison',
         field: 'task.containingProject',
         operator: '==',
-        value: 'abc123',
+        value: 'n60OG59wsSg',
       };
       const code = emitJXA(ast);
       expect(code).toContain('task.containingProject()');
-      expect(code).toContain('abc123');
+      expect(code).toContain('.id().primaryKey()');
+      expect(code).toContain('n60OG59wsSg');
+    });
+
+    it('emits project name check for name-like values', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'My Project',
+      };
+      const code = emitJXA(ast);
+      expect(code).toContain('task.containingProject()');
+      expect(code).toContain('.name()');
+      expect(code).toContain('My Project');
     });
 
     it('emits task ID check', () => {

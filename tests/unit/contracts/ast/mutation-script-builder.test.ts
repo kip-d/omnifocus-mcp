@@ -101,6 +101,18 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('Work Project');
   });
 
+  it('uses OmniJS bridge for project lookup instead of JXA .id()', async () => {
+    const result = await buildCreateTaskScript({
+      name: 'Project Task',
+      project: 'some-project-id',
+    });
+
+    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
+    expect(result.script).toContain('Project.byIdentifier');
+    // Should NOT use JXA .id() comparison which returns a different value
+    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
+  });
+
   it('handles null project (inbox)', async () => {
     const result = await buildCreateTaskScript({
       name: 'Inbox Task',
@@ -162,6 +174,15 @@ describe('buildCreateTaskScript', () => {
     const result = await buildCreateTaskScript({ name: 'Test' });
 
     expect(result.script).toContain('JSON.stringify');
+  });
+
+  it('returns OmniJS id.primaryKey instead of JXA .id() for created task', async () => {
+    const result = await buildCreateTaskScript({ name: 'Test Task' });
+
+    // Should bridge to OmniJS to get id.primaryKey for the response
+    expect(result.script).toContain('id.primaryKey');
+    // Should NOT use bare `const taskId = task.id();` as the final response ID
+    expect(result.script).not.toMatch(/const taskId = task\.id\(\);/);
   });
 });
 
@@ -236,6 +257,62 @@ describe('buildCreateProjectScript', () => {
 
     expect(result.script).toContain('deferDate');
     expect(result.script).toContain('2026-03-01');
+  });
+
+  it('uses OmniJS bridge for folder lookup instead of JXA .id()', () => {
+    const result = buildCreateProjectScript({
+      name: 'Project in Folder',
+      folder: 'some-folder-id',
+    });
+
+    // Should use OmniJS Folder.byIdentifier for correct id.primaryKey matching
+    expect(result.script).toContain('Folder.byIdentifier');
+    // Should NOT use JXA .id() comparison which returns a different value
+    expect(result.script).not.toMatch(/folders\[i\]\.id\(\)/);
+  });
+
+  it('supports " : " folder path syntax for nested folders (OMN-15)', () => {
+    const result = buildCreateProjectScript({
+      name: 'Deep Project',
+      folder: 'Work : Engineering : Backend',
+    });
+
+    // Should parse " : " separated path and walk folder tree
+    expect(result.script).toContain('parseFolderPath');
+    expect(result.script).toContain('Work : Engineering : Backend');
+  });
+
+  it('supports "/" folder path syntax matching read-side folderPath format', () => {
+    const result = buildCreateProjectScript({
+      name: 'Slash Project',
+      folder: 'Work/Engineering/Backend',
+    });
+
+    // Should support "/" separated path (matching omnifocus_read folderPath format)
+    expect(result.script).toContain('parseFolderPath');
+    expect(result.script).toContain('Work/Engineering/Backend');
+  });
+
+  it('falls back to leaf name matching for simple folder names', () => {
+    const result = buildCreateProjectScript({
+      name: 'Simple Folder Project',
+      folder: 'Work',
+    });
+
+    // Should include name fallback for simple (non-path) folder names
+    expect(result.script).toContain('Folder.byIdentifier');
+    expect(result.script).toContain('.name');
+  });
+
+  it('returns OmniJS id.primaryKey instead of JXA .id() for created project', () => {
+    const result = buildCreateProjectScript({
+      name: 'Test Project',
+    });
+
+    // Should bridge to OmniJS to get id.primaryKey for the response
+    expect(result.script).toContain('id.primaryKey');
+    // Should NOT use bare `const projectId = project.id();` as the final response ID
+    expect(result.script).not.toMatch(/const projectId = project\.id\(\);/);
   });
 });
 
@@ -480,6 +557,27 @@ describe('buildUpdateProjectScript', () => {
 
     expect(result.script).toContain('sequential');
   });
+
+  it('uses Project.byIdentifier for O(1) lookup instead of JXA .id()', async () => {
+    const result = await buildUpdateProjectScript('project-123', {
+      name: 'Updated',
+    });
+
+    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
+    expect(result.script).toContain('Project.byIdentifier');
+    // Should NOT use JXA .id() comparison which returns a different value
+    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
+  });
+
+  it('falls back to name matching when Project.byIdentifier fails', async () => {
+    const result = await buildUpdateProjectScript('My Project Name', {
+      name: 'Updated',
+    });
+
+    // Should support both ID and name lookup
+    expect(result.script).toContain('Project.byIdentifier');
+    expect(result.script).toContain('My Project Name');
+  });
 });
 
 describe('buildCompleteScript', () => {
@@ -614,6 +712,17 @@ describe('buildBatchScript', () => {
     expect(result.script).toContain('Updated');
   });
 
+  it('uses OmniJS bridge for project lookup instead of JXA .id()', () => {
+    const result = buildBatchScript('task', [
+      { operation: 'create', target: 'task', data: { name: 'Task', projectId: 'proj-id' } },
+    ]);
+
+    // Should use OmniJS Project.byIdentifier for correct id.primaryKey matching
+    expect(result.script).toContain('Project.byIdentifier');
+    // Should NOT use JXA .id() comparison which returns a different value
+    expect(result.script).not.toMatch(/projects\[.*\]\.id\(\)/);
+  });
+
   it('supports tempId for parent references', () => {
     const result = buildBatchScript(
       'task',
@@ -645,6 +754,26 @@ describe('buildBatchScript', () => {
     );
 
     expect(result.script).toContain('tempIdMapping');
+  });
+
+  it('uses OmniJS bridge for batch update task lookup instead of JXA .id()', () => {
+    const result = buildBatchScript('task', [
+      { operation: 'update', target: 'task', id: 'task-abc', changes: { flagged: true } },
+    ]);
+
+    // Should use OmniJS Task.byIdentifier for correct id.primaryKey matching
+    expect(result.script).toContain('Task.byIdentifier');
+    // Should NOT use JXA .id() comparison which returns a different ID format
+    expect(result.script).not.toMatch(/allTasks\[.*\]\.id\(\)\s*===\s*op\.id/);
+  });
+
+  it('returns OmniJS id.primaryKey instead of JXA .id() for batch-created tasks', () => {
+    const result = buildBatchScript('task', [{ operation: 'create', target: 'task', data: { name: 'Batch Task' } }]);
+
+    // Should bridge to OmniJS to get id.primaryKey for the response
+    expect(result.script).toContain('id.primaryKey');
+    // Should NOT use bare `const taskId = task.id();` as the final response ID
+    expect(result.script).not.toMatch(/const taskId = task\.id\(\);/);
   });
 });
 
