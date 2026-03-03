@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { QueryCompiler } from '../../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../../src/contracts/filters.js';
 import type { ReadInput } from '../../../../../src/tools/unified/schemas/read-schema.js';
@@ -244,7 +244,7 @@ describe('QueryCompiler', () => {
     });
 
     describe('logical operator handling', () => {
-      it('logs warning for OR operator and uses first condition', () => {
+      it('transforms OR branches into orBranches array', () => {
         const compiler = new QueryCompiler();
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -252,9 +252,10 @@ describe('QueryCompiler', () => {
           OR: [{ status: 'active' }, { flagged: true }],
         });
 
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('OR operator not yet supported'));
-        // Should use first condition
-        expect(result.completed).toBe(false);
+        // Should NOT warn — OR is now supported
+        expect(warnSpy).not.toHaveBeenCalled();
+        // Should produce orBranches with each branch independently transformed
+        expect(result.orBranches).toEqual([{ completed: false, projectStatus: ['active'] }, { flagged: true }]);
 
         warnSpy.mockRestore();
       });

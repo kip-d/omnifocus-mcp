@@ -93,15 +93,10 @@ export class QueryCompiler {
     }
 
     if (input.OR && Array.isArray(input.OR)) {
-      // Log warning and use first condition only
-      console.warn(
-        '[QueryCompiler] OR operator not yet supported - using first condition only. ' +
-          'If you need OR logic, please open an issue with your use case.',
-      );
-      if (input.OR.length > 0) {
-        return this.transformFilters(input.OR[0] as FlatQueryFilter);
-      }
-      return result;
+      if (input.OR.length === 0) return result;
+      return {
+        orBranches: input.OR.map((condition) => this.transformFilters(condition as FlatQueryFilter)),
+      };
     }
 
     if (input.NOT) {

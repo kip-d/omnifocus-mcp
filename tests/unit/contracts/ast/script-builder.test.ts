@@ -126,6 +126,20 @@ describe('buildFilteredTasksScript', () => {
     });
   });
 
+  describe('OR filter (orBranches)', () => {
+    it('generates script with || for orBranches', () => {
+      const filter: TaskFilter = {
+        orBranches: [{ flagged: true }, { completed: false }],
+      };
+      const result = buildFilteredTasksScript(filter);
+
+      expect(result.script).toContain('||');
+      expect(result.script).toContain('task.flagged === true');
+      expect(result.script).toContain('task.completed === false');
+      expect(result.isEmptyFilter).toBe(false);
+    });
+  });
+
   describe('combined filters', () => {
     it('generates script with multiple filter types', () => {
       const filter: TaskFilter = {

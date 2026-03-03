@@ -526,7 +526,7 @@ Combine filters with `AND`, `OR`, `NOT` — one level only (no nesting operators
   ]
 } } }
 
-// OR: first matching condition used (OR support is limited)
+// OR: returns tasks matching ANY branch (full OR support)
 { query: { type: "tasks", filters: {
   OR: [
     { flagged: true },

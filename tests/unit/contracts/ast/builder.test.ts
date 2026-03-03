@@ -663,6 +663,53 @@ describe('buildAST', () => {
     });
   });
 
+  describe('orBranches filter', () => {
+    it('produces OrNode from orBranches with two branches', () => {
+      const filter: TaskFilter = {
+        orBranches: [{ flagged: true }, { blocked: true }],
+      };
+      const ast = buildAST(filter);
+
+      expect(ast).toEqual({
+        type: 'or',
+        children: [
+          { type: 'comparison', field: 'task.flagged', operator: '==', value: true },
+          { type: 'comparison', field: 'task.blocked', operator: '==', value: true },
+        ],
+      });
+    });
+
+    it('unwraps single-branch orBranches to the branch itself', () => {
+      const filter: TaskFilter = {
+        orBranches: [{ flagged: true }],
+      };
+      const ast = buildAST(filter);
+
+      // Single branch should unwrap (no OrNode wrapper)
+      expect(ast).toEqual({
+        type: 'comparison',
+        field: 'task.flagged',
+        operator: '==',
+        value: true,
+      });
+    });
+
+    it('produces OrNode with complex branch conditions', () => {
+      const filter: TaskFilter = {
+        orBranches: [{ completed: false, flagged: true }, { dueBefore: '2026-03-10' }],
+      };
+      const ast = buildAST(filter);
+
+      expect(ast.type).toBe('or');
+      if (ast.type !== 'or') return;
+      expect(ast.children).toHaveLength(2);
+      // First branch: AND(completed, flagged)
+      expect(ast.children[0].type).toBe('and');
+      // Second branch: AND(exists(dueDate), dueDate <= ...)
+      expect(ast.children[1].type).toBe('and');
+    });
+  });
+
   describe('project filter with name', () => {
     it('transforms project string to containingProject comparison', () => {
       const filter: TaskFilter = { project: 'Work Projects' };

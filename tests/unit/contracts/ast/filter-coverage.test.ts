@@ -217,17 +217,23 @@ describe('QueryCompiler.transformFilters', () => {
       expect(result.completed).toBe(true);
     });
 
-    it('handles OR by using first condition', () => {
-      // OR is not fully supported - falls back to first condition
+    it('transforms OR into orBranches array', () => {
       const result = compiler.transformFilters({
         OR: [{ flagged: true }, { status: 'completed' }],
       });
-      expect(result.flagged).toBe(true);
+      expect(result.orBranches).toEqual([{ flagged: true }, { completed: true, projectStatus: ['done'] }]);
     });
 
     it('returns empty filter for empty OR array', () => {
       const result = compiler.transformFilters({ OR: [] });
       expect(Object.keys(result).length).toBe(0);
+    });
+
+    it('transforms OR with date branches', () => {
+      const result = compiler.transformFilters({
+        OR: [{ flagged: true }, { dueDate: { before: '2026-03-10' } }],
+      });
+      expect(result.orBranches).toEqual([{ flagged: true }, { dueBefore: '2026-03-10' }]);
     });
   });
 

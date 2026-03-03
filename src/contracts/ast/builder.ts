@@ -48,7 +48,12 @@ export const DATE_FILTER_DEFS: readonly DateFilterDef[] = [
   { field: 'task.dueDate', after: 'dueAfter', before: 'dueBefore', operator: 'dueDateOperator', skipWhen: 'todayMode' },
   { field: 'task.deferDate', after: 'deferAfter', before: 'deferBefore', operator: 'deferDateOperator' },
   { field: 'task.plannedDate', after: 'plannedAfter', before: 'plannedBefore', operator: 'plannedDateOperator' },
-  { field: 'task.completionDate', after: 'completionAfter', before: 'completionBefore', operator: 'completionDateOperator' },
+  {
+    field: 'task.completionDate',
+    after: 'completionAfter',
+    before: 'completionBefore',
+    operator: 'completionDateOperator',
+  },
 ];
 
 /**
@@ -188,6 +193,13 @@ export const REGISTRY_KNOWN_FIELDS: readonly string[] = Array.from(new Set(FILTE
  * @returns FilterNode representing the filter logic
  */
 export function buildAST(filter: TaskFilter | NormalizedTaskFilter): FilterNode {
+  // Handle OR branches: each branch becomes a separate AST subtree
+  if (filter.orBranches && filter.orBranches.length > 0) {
+    const branchNodes = filter.orBranches.map((branch) => buildAST(branch));
+    if (branchNodes.length === 1) return branchNodes[0];
+    return or(...branchNodes);
+  }
+
   const conditions: FilterNode[] = [];
 
   for (const def of FILTER_DEFS) {

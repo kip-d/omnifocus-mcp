@@ -155,6 +155,14 @@ export interface TaskFilter {
   // --- Mode (for backward compat with existing code) ---
   mode?: 'all' | 'inbox' | 'today' | 'overdue' | 'flagged' | 'available' | 'search';
 
+  // --- OR Logic ---
+  /**
+   * OR branches: each entry is an independent TaskFilter.
+   * buildAST() wraps them in an OrNode.
+   * Populated by QueryCompiler when the public API uses { OR: [...] }.
+   */
+  orBranches?: TaskFilter[];
+
   // --- Legacy (PUBLIC API deprecation) ---
   /**
    * @deprecated PUBLIC API ONLY - Use `completed: true` instead
@@ -330,6 +338,7 @@ export const FILTER_PROPERTY_NAMES = [
   'limit',
   'offset',
   'mode',
+  'orBranches',
   'includeCompleted', // deprecated
 ] as const;
 
