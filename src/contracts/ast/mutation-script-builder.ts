@@ -1059,6 +1059,7 @@ export async function buildUpdateTaskScript(taskId: string, changes: TaskUpdateD
         if (changes.name !== undefined) task.name = changes.name;
         if (changes.note !== undefined) task.note = changes.note;
         if (changes.flagged !== undefined) task.flagged = changes.flagged;
+        if (changes.sequential !== undefined) task.sequential = changes.sequential;
 
         // Handle dates
         if (changes.dueDate !== undefined) {
