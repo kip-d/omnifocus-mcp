@@ -517,27 +517,9 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
     let targetContainer = doc.inboxTasks;
     let parentTask = null;
 
-    if (taskData.parentTaskId) {
-      // Use OmniJS bridge for O(1) parent task lookup (JXA .id() differs from id.primaryKey)
-      const findParentScript = \`
-        (() => {
-          var task = Task.byIdentifier(\${JSON.stringify(taskData.parentTaskId)});
-          if (!task) return JSON.stringify({ found: false });
-          return JSON.stringify({ found: true, index: flattenedTasks.indexOf(task) });
-        })()
-      \`;
-      const findParentResult = JSON.parse(app.evaluateJavascript(findParentScript));
-      if (findParentResult.found && findParentResult.index >= 0) {
-        parentTask = doc.flattenedTasks()[findParentResult.index];
-      }
-      if (!parentTask) {
-        return JSON.stringify({
-          error: true,
-          message: "Parent task not found: " + taskData.parentTaskId
-        });
-      }
-      targetContainer = parentTask.tasks;
-    } else if (taskData.projectId) {
+    // parentTaskId nesting handled post-creation via OmniJS moveTasks (OMN-31)
+    // Pre-creation index bridge is unreliable: JXA/OmniJS flattenedTasks differ (OMN-28/29)
+    if (taskData.projectId) {
       // Use OmniJS bridge for O(1) project lookup (JXA .id() differs from id.primaryKey)
       const findProjectScript = \`
         (() => {
@@ -618,6 +600,24 @@ export async function buildCreateTaskScript(data: TaskCreateData): Promise<Gener
         task.note = curNote.substring(bridgeNonce.length);
       }
     } catch(e) {}
+
+    // Post-creation: move task under parent if parentTaskId specified (OMN-31)
+    // Uses OmniJS moveTasks() with primaryKey lookup — reliable unlike index bridging
+    // Note: taskId may equal jxaId (common for persisted tasks) — always attempt move
+    if (taskData.parentTaskId) {
+      try {
+        const moveScript = \`
+          (() => {
+            var child = Task.byIdentifier('\${taskId}');
+            var parent = Task.byIdentifier(\${JSON.stringify(taskData.parentTaskId)});
+            if (!child || !parent) return JSON.stringify({ moved: false, reason: 'not found' });
+            moveTasks([child], parent.ending);
+            return JSON.stringify({ moved: true });
+          })()
+        \`;
+        JSON.parse(app.evaluateJavascript(moveScript));
+      } catch(e) {}
+    }
 
     // Set tags via bridge
     let appliedTags = [];

@@ -1571,7 +1571,9 @@ SAFETY:
 
     // Fall back to direct project assignment when parentTempId wasn't used
     if (!projectId && !parentTaskId) {
-      if (item.project) {
+      if (item.parentTaskId && typeof item.parentTaskId === 'string') {
+        parentTaskId = item.parentTaskId;
+      } else if (item.project) {
         projectId = item.project;
       }
     }

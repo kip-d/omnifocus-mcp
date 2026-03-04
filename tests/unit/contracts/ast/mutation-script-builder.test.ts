@@ -132,6 +132,22 @@ describe('buildCreateTaskScript', () => {
     expect(result.script).toContain('parent-123');
   });
 
+  it('uses post-creation OmniJS moveTasks for parentTaskId nesting (OMN-31)', async () => {
+    const result = await buildCreateTaskScript({
+      name: 'Subtask',
+      parentTaskId: 'parent-pk-456',
+    });
+
+    // Should use moveTasks in OmniJS (reliable primaryKey lookup) instead of
+    // pre-creation index bridge (broken: JXA/OmniJS arrays have different ordering)
+    expect(result.script).toContain('moveTasks');
+    expect(result.script).toContain('parent-pk-456');
+
+    // Should NOT use the broken index-bridge pattern for parent lookup
+    // (index from OmniJS flattenedTasks doesn't match JXA doc.flattenedTasks())
+    expect(result.script).not.toMatch(/flattenedTasks\.indexOf.*parentTaskId|parentTask.*flattenedTasks\(\)\[/);
+  });
+
   it('includes repetition rule with DayOfWeek objects', async () => {
     const result = await buildCreateTaskScript({
       name: 'Recurring Task',

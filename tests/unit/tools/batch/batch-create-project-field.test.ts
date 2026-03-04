@@ -129,4 +129,45 @@ describe('Batch create project field', () => {
 
     taskSpy.mockRestore();
   });
+
+  it('should pass parentTaskId to buildCreateTaskScript when provided (OMN-31)', async () => {
+    const cache = new StubCache();
+    const tool = new OmniFocusWriteTool(cache as any);
+
+    const spy = vi.spyOn(scriptBuilder, 'buildCreateTaskScript').mockResolvedValue({
+      script: 'mock script',
+      operation: 'create',
+      target: 'task',
+      description: 'mock',
+    });
+
+    vi.spyOn(tool as any, 'execJson').mockResolvedValue({
+      success: true,
+      data: { taskId: 'new-subtask-id' },
+    });
+
+    await tool.execute({
+      mutation: {
+        operation: 'batch',
+        target: 'task',
+        operations: [
+          {
+            operation: 'create',
+            target: 'task',
+            data: {
+              tempId: 'subtask1',
+              name: 'Research: Deploy software',
+              parentTaskId: 'existing-parent-task-id',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    const taskCreateData = spy.mock.calls[0][0];
+    expect(taskCreateData).toHaveProperty('parentTaskId', 'existing-parent-task-id');
+
+    spy.mockRestore();
+  });
 });
