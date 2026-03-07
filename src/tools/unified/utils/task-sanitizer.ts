@@ -2,7 +2,7 @@
  * Task update sanitization utilities
  *
  * Task update sanitization shared by OmniFocusWriteTool and any future consumers.
- * Originally extracted from the legacy ManageTaskTool.sanitizeUpdates().
+ * Originally extracted from the superseded ManageTaskTool.sanitizeUpdates().
  *
  * Handles:
  * - String coercion for booleans (MCP bridge sends "true"/"false")
@@ -176,7 +176,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   }
 
   // Handle project ID (allow null/empty string)
-  // Support both 'projectId' (legacy) and 'project' (unified API)
+  // Support both 'projectId' (deprecated compatibility alias) and 'project' (unified API)
   // Note: downstream mutation-script-builder.ts expects 'project' field
   if (updates.projectId !== undefined) {
     sanitized.project = updates.projectId;

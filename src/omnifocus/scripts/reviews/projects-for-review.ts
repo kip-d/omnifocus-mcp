@@ -198,7 +198,7 @@ export function buildProjectsForReviewScript(params: ProjectsForReviewParams): s
   `;
 }
 
-// Legacy export for backwards compatibility (template-based)
+// Compatibility template export for placeholder-based callers
 export const PROJECTS_FOR_REVIEW_SCRIPT = `
   (() => {
     const app = Application('OmniFocus');

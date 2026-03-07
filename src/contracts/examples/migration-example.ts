@@ -168,7 +168,7 @@ export function demo(): void {
   const filter = compileQuery({ status: 'completed', tags: ['urgent'] });
   console.log('Compiled filter:', filter);
 
-  // Normalize (handles legacy properties)
+  // Normalize (handles deprecated compatibility properties)
   const normalized = normalizeFilter(filter);
   console.log('Normalized:', normalized);
 
