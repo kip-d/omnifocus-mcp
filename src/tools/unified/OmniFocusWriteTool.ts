@@ -285,7 +285,7 @@ SAFETY:
     if (data.tags) createArgs.tags = data.tags;
     if (data.sequential !== undefined) createArgs.sequential = data.sequential;
 
-    // Handle repetition rules - prefer unified API format (repetitionRule) over legacy format
+    // Handle repetition rules - prefer unified API format (repetitionRule) over deprecated compatibility format
     let repetitionRuleForCreate: RepetitionRule | undefined;
     if (data.repetitionRule && typeof data.repetitionRule === 'object') {
       // Unified API format - use directly

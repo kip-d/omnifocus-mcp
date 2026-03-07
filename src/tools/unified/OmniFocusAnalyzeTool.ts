@@ -21,7 +21,7 @@ import { WORKFLOW_ANALYSIS_V3 } from '../../omnifocus/scripts/analytics/workflow
 import { GET_RECURRING_PATTERNS_SCRIPT } from '../../omnifocus/scripts/recurring.js';
 import { buildRecurringTasksScript } from '../../omnifocus/scripts/recurring/analyze-recurring-tasks-ast.js';
 import {
-  PROJECTS_FOR_REVIEW_SCRIPT,
+  buildProjectsForReviewScript,
   MARK_PROJECT_REVIEWED_SCRIPT,
   SET_REVIEW_SCHEDULE_SCRIPT,
 } from '../../omnifocus/scripts/reviews.js';
@@ -2643,7 +2643,9 @@ SCOPE FILTERING:
       } as StandardResponseV2<unknown>;
     }
 
-    const script = this.omniAutomation.buildScript(PROJECTS_FOR_REVIEW_SCRIPT, { filter: args });
+    // Use the builder as the primary path to avoid maintaining two active code paths.
+    // Keep PROJECTS_FOR_REVIEW_SCRIPT as a compatibility template export for external callers.
+    const script = buildProjectsForReviewScript({ filter: args });
     const result = await this.execJson<ReviewListData>(script);
     if (isScriptError(result)) {
       return createErrorResponseV2(

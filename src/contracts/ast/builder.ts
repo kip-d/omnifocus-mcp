@@ -133,7 +133,7 @@ export const FILTER_DEFS: readonly FilterDef[] = [
   },
 
   // --- Text search ---
-  // Support both filter.text and filter.search (legacy alias for compatibility)
+  // Support both filter.text and filter.search (deprecated compatibility alias)
   // Per spec (filters.ts:113-115), search checks BOTH name AND note
   {
     fields: ['task.name', 'task.note'],

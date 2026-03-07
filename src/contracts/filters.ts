@@ -163,9 +163,10 @@ export interface TaskFilter {
    */
   orBranches?: TaskFilter[];
 
-  // --- Legacy (PUBLIC API deprecation) ---
+  // --- Deprecated compatibility alias (PUBLIC API deprecation) ---
   /**
-   * @deprecated PUBLIC API ONLY - Use `completed: true` instead
+   * @deprecated PUBLIC API ONLY - Use `completed` instead.
+   * Removal plan: keep through v4.x for external client compatibility, remove no earlier than v5.0.
    *
    * INTERNAL DESIGN NOTE: The codebase intentionally uses dual naming:
    * - PUBLIC API: `completed` (what users should use)
@@ -381,7 +382,7 @@ const NORMALIZED_FILTER_BRAND = '__normalized__' as const;
  * Benefits:
  * - Catches property name mismatches at compile time (e.g., includeCompleted vs completed)
  * - Ensures default operators are set (tagsOperator, textOperator)
- * - Guarantees legacy properties have been converted
+ * - Guarantees deprecated compatibility properties have been converted
  *
  * Usage:
  *   const filter: TaskFilter = { completed: false };
@@ -404,7 +405,7 @@ export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): f
 // =============================================================================
 
 /**
- * Normalize legacy filter properties to current standard
+ * Normalize deprecated compatibility filter properties to current standard
  *
  * This handles the `includeCompleted` → `completed` migration and returns
  * a branded NormalizedTaskFilter that can be used with script builders.
@@ -413,14 +414,14 @@ export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): f
  * all filters have been properly processed.
  */
 export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
-  // Destructure to separate legacy property from the rest
+  // Destructure to separate deprecated compatibility property from the rest
   // This gives us type safety: rest is Omit<TaskFilter, 'includeCompleted'>
   const { includeCompleted, ...rest } = filter;
 
-  // Start with the non-legacy properties (properly typed)
+  // Start with the non-deprecated properties (properly typed)
   const normalized: Omit<TaskFilter, 'includeCompleted'> = { ...rest };
 
-  // Handle legacy includeCompleted → completed conversion
+  // Handle deprecated includeCompleted → completed conversion
   if (includeCompleted !== undefined && normalized.completed === undefined) {
     // Convert includeCompleted to completed
     // includeCompleted: true means show completed tasks

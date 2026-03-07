@@ -282,7 +282,7 @@ function generateFieldProjection(
  * @returns Generated script ready for execution
  *
  * IMPORTANT: This function requires a NormalizedTaskFilter to ensure:
- * - Legacy properties (includeCompleted) have been converted
+ * - Deprecated compatibility properties (includeCompleted) have been converted
  * - Default operators are set
  * - Property name mismatches are caught at compile time
  */

@@ -24,5 +24,5 @@ export { BULK_DELETE_TASKS_SCRIPT } from './tasks/delete-tasks-bulk.js';
 // Old templates archived: list-tasks-omnijs.ts, update-task-v3.ts
 export { buildListTasksScriptV4 } from './tasks/list-tasks-ast.js';
 
-// Legacy helper export
-// Note: legacy SAFE_UTILITIES_SCRIPT re-export removed. Import directly from './shared/helpers.js' if needed.
+// Compatibility note for helper exports
+// Note: deprecated SAFE_UTILITIES_SCRIPT re-export removed. Import directly from './shared/helpers.js' if needed.
