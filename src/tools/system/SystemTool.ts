@@ -121,6 +121,38 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
     openWorldHint: false,
   };
 
+  /**
+   * Hand-crafted minimal JSON Schema for MCP tool advertisement.
+   * Server-side validation still uses the full Zod SystemToolSchema.
+   */
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['version', 'diagnostics', 'metrics', 'cache'],
+          description:
+            'Operation to perform: get version info, run diagnostics, get performance metrics, or get cache statistics',
+        },
+        testScript: {
+          type: 'string',
+          description: 'Optional custom script to test for diagnostics (defaults to basic list_tasks)',
+        },
+        metricsType: {
+          type: 'string',
+          enum: ['summary', 'detailed'],
+          description: 'Type of metrics to return: summary for overview, detailed for full metrics',
+        },
+        cacheAction: {
+          type: 'string',
+          enum: ['stats', 'clear'],
+          description: 'Cache action: stats to get statistics, clear to invalidate all cached data',
+        },
+      },
+    };
+  }
+
   private diagnosticOmni: DiagnosticOmniAutomation;
 
   constructor(cache: import('../../cache/CacheManager.js').CacheManager) {
