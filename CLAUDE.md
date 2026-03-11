@@ -48,6 +48,31 @@ focuses on developer implementation details.
 
 **Files:** `src/tools/unified/` (schemas, compilers, tools)
 
+## 🔧 Dual-Schema Architecture (inputSchema vs Zod)
+
+Each tool has **two schemas** that must stay in sync:
+
+| Schema                     | Purpose                                   | Location                               |
+| -------------------------- | ----------------------------------------- | -------------------------------------- |
+| **Zod schema**             | Server-side validation (full, recursive)  | `src/tools/unified/schemas/`           |
+| **`inputSchema` override** | MCP advertisement (hand-crafted, compact) | `get inputSchema()` in each tool class |
+
+`BaseTool.inputSchema` **throws** if a subclass forgets to override. There is no auto-conversion.
+
+**When changing a Zod schema, you MUST also update the corresponding `inputSchema` override.** Changes include:
+adding/removing/renaming fields, changing enums, adding new operations to discriminated unions, or modifying
+descriptions. The `inputSchema` is what MCP clients (Claude Desktop, etc.) see to understand available parameters.
+
+| Tool                   | inputSchema location                        |
+| ---------------------- | ------------------------------------------- |
+| `OmniFocusReadTool`    | `src/tools/unified/OmniFocusReadTool.ts`    |
+| `OmniFocusWriteTool`   | `src/tools/unified/OmniFocusWriteTool.ts`   |
+| `OmniFocusAnalyzeTool` | `src/tools/unified/OmniFocusAnalyzeTool.ts` |
+| `SystemTool`           | `src/tools/system/SystemTool.ts`            |
+
+Also update the tool's **description string** if the change affects user-facing behavior (new operations, changed
+semantics).
+
 ---
 
 ## 📚 Architecture Documentation
@@ -168,7 +193,7 @@ process.stdin.on('end', async () => {
 ```bash
 # Build & Test
 npm run build                    # Required before running
-npm run test:unit                # ~2 seconds, 1487 tests
+npm run test:unit                # ~2 seconds, 1622 tests
 npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing
