@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildCreateTaskScript,
   buildCreateProjectScript,
+  buildCreateFolderScript,
   buildUpdateTaskScript,
   buildUpdateProjectScript,
   buildCompleteScript,
@@ -877,5 +878,61 @@ describe('script structure consistency', () => {
         new Function(script);
       }).not.toThrow();
     });
+  });
+});
+
+describe('buildCreateFolderScript', () => {
+  it('generates valid JXA script for top-level folder creation', () => {
+    const result = buildCreateFolderScript({
+      name: 'Home',
+    });
+
+    expect(result.script).toContain("Application('OmniFocus')");
+    expect(result.script).toContain('Home');
+    expect(result.operation).toBe('create');
+    expect(result.target).toBe('folder');
+    expect(result.description).toBe('Create folder: Home');
+  });
+
+  it('generates valid JXA script for nested folder creation', () => {
+    const result = buildCreateFolderScript({
+      name: 'Home',
+      parentFolder: 'Personal',
+    });
+
+    expect(result.script).toContain("Application('OmniFocus')");
+    expect(result.script).toContain('Home');
+    expect(result.script).toContain('Personal');
+    expect(result.script).toContain('parseFolderPath');
+    expect(result.script).toContain('resolveFolderPath');
+  });
+
+  it('generates syntactically valid JavaScript', () => {
+    const result = buildCreateFolderScript({
+      name: 'Test Folder',
+      parentFolder: 'Parent : Child',
+    });
+
+    expect(() => {
+      new Function(result.script);
+    }).not.toThrow();
+  });
+
+  it('includes folder ID bridging logic', () => {
+    const result = buildCreateFolderScript({
+      name: 'Bridged Folder',
+    });
+
+    expect(result.script).toContain('primaryKey');
+    expect(result.script).toContain('flattenedFolders');
+  });
+
+  it('handles parent folder not found with error response', () => {
+    const result = buildCreateFolderScript({
+      name: 'Orphan',
+      parentFolder: 'NonExistent',
+    });
+
+    expect(result.script).toContain('Parent folder not found');
   });
 });

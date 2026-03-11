@@ -121,6 +121,12 @@ const UpdateChangesSchema = z
   })
   .strict();
 
+// Folder create data schema — minimal: just name + optional parent folder
+const FolderCreateDataSchema = z.object({
+  name: z.string().min(1),
+  parentFolder: z.string().optional(),
+});
+
 // Enhanced batch item schema with hierarchical relationships.
 // Exported so batch-schemas.ts can derive from it (single source of truth).
 export const BatchItemDataSchema = CreateDataSchema.extend({
@@ -167,12 +173,17 @@ const TagActionSchema = z.enum([
 
 // Mutation schema - discriminated union by operation
 const MutationSchema = z.discriminatedUnion('operation', [
-  // Create operation
+  // Create operation (task/project)
   z.object({
     operation: z.literal('create'),
     target: z.enum(['task', 'project']),
     data: CreateDataSchema,
     minimalResponse: z.boolean().optional(), // Bug #21: Reduce response size
+  }),
+  // Create folder operation
+  z.object({
+    operation: z.literal('create_folder'),
+    data: FolderCreateDataSchema,
   }),
   // Update operation
   z.object({
