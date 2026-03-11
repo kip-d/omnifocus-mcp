@@ -107,9 +107,3 @@ export function buildBulkCompleteTasksScript(params: BulkCompleteParams): string
     })()
   `;
 }
-
-// Legacy export for backwards compatibility
-export const BULK_COMPLETE_TASKS_SCRIPT = buildBulkCompleteTasksScript({
-  taskIds: [],
-  completionDate: null,
-});
