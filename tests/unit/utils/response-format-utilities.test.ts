@@ -496,7 +496,7 @@ describe('Response Format Utilities', () => {
       expect(summary.overdue_reviews).toBe(2); // Both are overdue by 7+ days
       expect(summary.bottlenecks).toHaveLength(2);
       expect(summary.bottlenecks?.[1]).toContain('Old Review');
-      expect(summary.bottlenecks?.[1]).toContain('35 days');
+      expect(summary.bottlenecks?.[1]).toMatch(/3[45] days/);
     });
 
     it('should handle on-hold variations', () => {

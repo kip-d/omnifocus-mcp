@@ -345,7 +345,7 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
       if (reviewDate < now) {
         summary.needs_review = (summary.needs_review || 0) + 1;
         const overdueDays = Math.floor((now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (overdueDays > 7) {
+        if (overdueDays >= 7) {
           summary.overdue_reviews = (summary.overdue_reviews || 0) + 1;
         }
         if (overdueDays > mostOverdueDays) {
