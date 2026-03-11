@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { coerceNumber, coerceObject } from '../../schemas/coercion-helpers.js';
+import { EXPORT_FIELD_MAP } from '../../../contracts/ast/script-builder.js';
 
 // Filter operators for flexible queries
 const TagFilterSchema = z.object({
@@ -155,25 +156,9 @@ const ExportFormatEnum = z.enum(['json', 'csv', 'markdown']);
 // Export type enum (what to export)
 const ExportTypeEnum = z.enum(['tasks', 'projects', 'all']);
 
-// Export field selection (used by inline export in OmniFocusReadTool)
-const ExportFieldEnum = z.enum([
-  'id',
-  'name',
-  'note',
-  'project',
-  'tags',
-  'deferDate',
-  'dueDate',
-  'plannedDate',
-  'completed',
-  'completionDate',
-  'flagged',
-  'estimated',
-  'created',
-  'createdDate',
-  'modified',
-  'modifiedDate',
-]);
+// Export field selection — derived from EXPORT_FIELD_MAP (single source of truth)
+const exportFieldNames = Object.keys(EXPORT_FIELD_MAP) as [string, ...string[]];
+const ExportFieldEnum = z.enum(exportFieldNames);
 
 // =============================================================================
 // SHARED BASE + PER-TYPE QUERY SCHEMAS

@@ -1290,10 +1290,10 @@ export function buildProjectByIdScript(projectId: string, fields: string[] = [])
 // =============================================================================
 
 /**
- * Export-specific field names (may differ from query fields)
+ * Single source of truth for export field names and their OmniJS projections.
+ * read-schema.ts derives ExportFieldEnum from the keys of this map.
  */
-const EXPORT_FIELD_MAP: Record<string, string> = {
-  // Map export field names to projection code
+export const EXPORT_FIELD_MAP: Record<string, string> = {
   id: 'id: task.id.primaryKey',
   name: 'name: task.name || "Unnamed Task"',
   note: 'note: task.note || ""',
@@ -1302,6 +1302,7 @@ const EXPORT_FIELD_MAP: Record<string, string> = {
   tags: 'tags: task.tags.map(t => t.name)',
   deferDate: 'deferDate: task.deferDate ? task.deferDate.toISOString() : ""',
   dueDate: 'dueDate: task.dueDate ? task.dueDate.toISOString() : ""',
+  plannedDate: 'plannedDate: task.plannedDate ? task.plannedDate.toISOString() : ""',
   completed: 'completed: task.completed || false',
   completionDate: 'completionDate: task.completionDate ? task.completionDate.toISOString() : ""',
   flagged: 'flagged: task.flagged || false',
