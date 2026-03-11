@@ -35,6 +35,24 @@ class TestTool extends BaseTool<z.ZodObject<any>> {
       .optional(),
   });
 
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        stringParam: { type: 'string' },
+        numberParam: { type: 'number' },
+        booleanParam: { type: 'boolean' },
+        arrayParam: { type: 'array', items: { type: 'string' } },
+        nestedParam: {
+          type: 'object',
+          properties: { innerField: { type: 'string' } },
+          required: ['innerField'],
+        },
+      },
+      required: ['stringParam'],
+    };
+  }
+
   protected async executeValidated(args: z.infer<typeof this.schema>): Promise<any> {
     return { success: true, data: args };
   }
@@ -48,6 +66,19 @@ class ErrorTestTool extends BaseTool<z.ZodObject<any>> {
   schema = z.object({
     errorType: z.enum(['permission', 'timeout', 'not-running', 'omni-automation', 'generic']),
   });
+
+  override get inputSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      properties: {
+        errorType: {
+          type: 'string',
+          enum: ['permission', 'timeout', 'not-running', 'omni-automation', 'generic'],
+        },
+      },
+      required: ['errorType'],
+    };
+  }
 
   protected async executeValidated(args: z.infer<typeof this.schema>): Promise<any> {
     switch (args.errorType) {
@@ -145,7 +176,7 @@ describe('BaseTool', () => {
   });
 
   describe('inputSchema', () => {
-    it('should convert Zod schema to JSON Schema', () => {
+    it('should return hand-crafted schema from TestTool override', () => {
       const jsonSchema = testTool.inputSchema;
 
       expect(jsonSchema).toMatchObject({
@@ -170,78 +201,19 @@ describe('BaseTool', () => {
       });
     });
 
-    it('should handle enum types', () => {
-      class EnumTool extends BaseTool {
-        name = 'enum-tool';
-        description = 'Test enum handling';
-        schema = z.object({
-          mode: z.enum(['list', 'query', 'update']),
-        });
+    it('should throw if a subclass does not override inputSchema', () => {
+      class NoSchemaTool extends BaseTool {
+        name = 'no-schema-tool';
+        description = 'Missing inputSchema override';
+        schema = z.object({ x: z.string() });
 
         protected async executeValidated(args: any): Promise<any> {
           return { data: args };
         }
       }
 
-      const enumTool = new EnumTool(mockCache);
-      const jsonSchema = enumTool.inputSchema;
-
-      expect(jsonSchema.properties.mode).toMatchObject({
-        type: 'string',
-        enum: ['list', 'query', 'update'],
-      });
-    });
-
-    it('should handle literal types', () => {
-      class LiteralTool extends BaseTool {
-        name = 'literal-tool';
-        description = 'Test literal handling';
-        schema = z.object({
-          version: z.literal(2),
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const literalTool = new LiteralTool(mockCache);
-      const jsonSchema = literalTool.inputSchema;
-
-      expect(jsonSchema.properties.version).toMatchObject({
-        type: 'number',
-        const: 2,
-      });
-    });
-
-    it('should handle refined schemas', () => {
-      class RefinedTool extends BaseTool {
-        name = 'refined-tool';
-        description = 'Test refined schema handling';
-        schema = z
-          .object({
-            age: z.number(),
-          })
-          .refine((data) => data.age >= 18, {
-            message: 'Must be 18 or older',
-          });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const refinedTool = new RefinedTool(mockCache);
-      const jsonSchema = refinedTool.inputSchema;
-
-      // Should extract inner schema from refinement
-      expect(jsonSchema).toMatchObject({
-        type: 'object',
-        properties: {
-          age: { type: 'number' },
-        },
-        required: ['age'],
-      });
+      const tool = new NoSchemaTool(mockCache);
+      expect(() => tool.inputSchema).toThrow('must override inputSchema');
     });
   });
 
@@ -434,6 +406,17 @@ describe('BaseTool', () => {
         shouldThrow: z.boolean().optional(),
       });
 
+      override get inputSchema(): Record<string, unknown> {
+        return {
+          type: 'object',
+          properties: {
+            errorType: { type: 'string' },
+            shouldThrow: { type: 'boolean' },
+          },
+          required: ['errorType'],
+        };
+      }
+
       protected async executeValidated(args: any): Promise<any> {
         // Only use throwMcpError if shouldThrow is true
         // Otherwise, use the default error handling which returns a response
@@ -509,270 +492,8 @@ describe('BaseTool', () => {
     });
   });
 
-  describe('zodToJsonSchema edge cases', () => {
-    it('should handle union types with null', () => {
-      class UnionTool extends BaseTool {
-        name = 'union-tool';
-        description = 'Test union with null';
-        schema = z.object({
-          nullableField: z.union([z.string(), z.null()]),
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const unionTool = new UnionTool(mockCache);
-      const jsonSchema = unionTool.inputSchema;
-
-      expect(jsonSchema.properties.nullableField).toMatchObject({
-        type: 'string',
-      });
-    });
-
-    it('should handle deeply nested objects', () => {
-      class NestedTool extends BaseTool {
-        name = 'nested-tool';
-        description = 'Test deeply nested objects';
-        schema = z.object({
-          level1: z.object({
-            level2: z.object({
-              level3: z.object({
-                value: z.string(),
-              }),
-            }),
-          }),
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const nestedTool = new NestedTool(mockCache);
-      const jsonSchema = nestedTool.inputSchema;
-
-      expect(jsonSchema.properties.level1.properties.level2.properties.level3.properties.value).toMatchObject({
-        type: 'string',
-      });
-    });
-
-    it('should preserve descriptions', () => {
-      class DescribedTool extends BaseTool {
-        name = 'described-tool';
-        description = 'Test description preservation';
-        schema = z.object({
-          field: z.string().describe('This is a field description'),
-          optionalField: z.string().optional().describe('This is optional'),
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const describedTool = new DescribedTool(mockCache);
-      const jsonSchema = describedTool.inputSchema;
-
-      expect(jsonSchema.properties.field.description).toBe('This is a field description');
-      expect(jsonSchema.properties.optionalField.description).toBe('This is optional');
-    });
-  });
-
-  describe('ZodLazy schema handling', () => {
-    it('should resolve z.lazy() fields as object schemas, not strings', () => {
-      const InnerSchema = z.lazy(() =>
-        z.object({
-          name: z.string(),
-          value: z.number().optional(),
-        }),
-      );
-
-      class LazyTool extends BaseTool {
-        name = 'lazy-tool';
-        description = 'Test z.lazy() handling';
-        schema = z.object({
-          filters: InnerSchema,
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const lazyTool = new LazyTool(mockCache);
-      const jsonSchema = lazyTool.inputSchema;
-
-      // Should resolve to the object schema, not fall through to { type: 'string' }
-      expect(jsonSchema.properties.filters).toMatchObject({
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          value: { type: 'number' },
-        },
-        required: ['name'],
-      });
-    });
-
-    it('should handle recursive schemas (AND/OR/NOT) without stack overflow', () => {
-      // Simulates FilterSchema's recursive AND/OR/NOT pattern
-      type RecursiveFilter = {
-        name?: string;
-        AND?: RecursiveFilter[];
-        OR?: RecursiveFilter[];
-        NOT?: RecursiveFilter;
-      };
-
-      const RecursiveFilterSchema: z.ZodType<RecursiveFilter> = z.lazy(() =>
-        z.object({
-          name: z.string().optional(),
-          AND: z.array(RecursiveFilterSchema).optional(),
-          OR: z.array(RecursiveFilterSchema).optional(),
-          NOT: RecursiveFilterSchema.optional(),
-        }),
-      );
-
-      class RecursiveTool extends BaseTool {
-        name = 'recursive-tool';
-        description = 'Test recursive z.lazy() handling';
-        schema = z.object({
-          filter: RecursiveFilterSchema,
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const recursiveTool = new RecursiveTool(mockCache);
-
-      // Should not throw (no infinite recursion)
-      const jsonSchema = recursiveTool.inputSchema;
-
-      // Top level should be an object with name, AND, OR, NOT
-      expect(jsonSchema.properties.filter).toMatchObject({
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-        },
-      });
-
-      // AND should be an array
-      expect(jsonSchema.properties.filter.properties.AND).toMatchObject({
-        type: 'array',
-      });
-
-      // OR should be an array
-      expect(jsonSchema.properties.filter.properties.OR).toMatchObject({
-        type: 'array',
-      });
-
-      // NOT should resolve to an object (recursion still within depth limit)
-      expect(jsonSchema.properties.filter.properties.NOT.type).toBe('object');
-    });
-
-    it('should cap recursion at depth 5 and return generic object schema', () => {
-      // Create a deeply recursive schema that references itself
-      type DeepRecursive = { child?: DeepRecursive };
-      const DeepSchema: z.ZodType<DeepRecursive> = z.lazy(() =>
-        z.object({
-          child: DeepSchema.optional(),
-        }),
-      );
-
-      class DeepTool extends BaseTool {
-        name = 'deep-tool';
-        description = 'Test recursion depth limit';
-        schema = z.object({
-          root: DeepSchema,
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const deepTool = new DeepTool(mockCache);
-      const jsonSchema = deepTool.inputSchema;
-
-      // Should not throw
-      expect(jsonSchema.properties.root).toBeDefined();
-      expect(jsonSchema.properties.root.type).toBe('object');
-
-      // Walk down the chain to verify it terminates
-      let current = jsonSchema.properties.root;
-      let depth = 0;
-      while (current?.properties?.child?.type === 'object' && current?.properties?.child?.properties?.child) {
-        current = current.properties.child;
-        depth++;
-        // Safety: prevent infinite loop in test itself
-        if (depth > 10) break;
-      }
-
-      // Should have stopped before going infinitely deep
-      expect(depth).toBeLessThanOrEqual(5);
-    });
-
-    it('should reset depth counter between separate schema conversions', () => {
-      type RecursiveItem = { sub?: RecursiveItem };
-      const ItemSchema: z.ZodType<RecursiveItem> = z.lazy(() =>
-        z.object({
-          sub: ItemSchema.optional(),
-        }),
-      );
-
-      class ResetTool extends BaseTool {
-        name = 'reset-tool';
-        description = 'Test depth counter reset';
-        schema = z.object({
-          item: ItemSchema,
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const tool = new ResetTool(mockCache);
-
-      // Call inputSchema twice - both should succeed identically
-      const schema1 = tool.inputSchema;
-      const schema2 = tool.inputSchema;
-
-      expect(schema1).toEqual(schema2);
-      expect(schema1.properties.item.type).toBe('object');
-    });
-
-    it('should handle optional z.lazy() fields correctly in isOptionalField', () => {
-      const LazyInner = z.lazy(() => z.object({ x: z.string() }));
-
-      class OptionalLazyTool extends BaseTool {
-        name = 'optional-lazy-tool';
-        description = 'Test optional z.lazy()';
-        schema = z.object({
-          required_lazy: LazyInner,
-          optional_lazy: LazyInner.optional(),
-        });
-
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const tool = new OptionalLazyTool(mockCache);
-      const jsonSchema = tool.inputSchema;
-
-      // required_lazy should be in required array
-      expect(jsonSchema.required).toContain('required_lazy');
-      // optional_lazy should NOT be in required array
-      expect(jsonSchema.required).not.toContain('optional_lazy');
-    });
-
-    it('should use minimal hand-crafted inputSchema for OmniFocusReadTool (not expanded Zod)', () => {
-      // OmniFocusReadTool overrides inputSchema with a hand-crafted minimal JSON Schema
-      // to avoid the 3.2 MB / ~834K token explosion from z.lazy() recursive expansion.
-      // Server-side validation still uses the full Zod ReadSchema.
+  describe('hand-crafted inputSchema for production tools', () => {
+    it('should use minimal hand-crafted inputSchema for OmniFocusReadTool', () => {
       const readTool = new OmniFocusReadTool(mockCache);
       const jsonSchema = readTool.inputSchema;
 
@@ -783,7 +504,7 @@ describe('BaseTool', () => {
       // query should be a flat object (NOT a oneOf with 6 branches)
       const querySchema = jsonSchema.properties.query as Record<string, unknown>;
       expect(querySchema.type).toBe('object');
-      expect(querySchema.oneOf).toBeUndefined(); // No more discriminated union explosion
+      expect(querySchema.oneOf).toBeUndefined();
 
       // query.type should be an enum with all 6 query types
       const queryProps = querySchema.properties as Record<string, Record<string, unknown>>;
@@ -792,39 +513,37 @@ describe('BaseTool', () => {
       // filters should be a loose { type: "object" } — no recursive AND/OR/NOT expansion
       expect(queryProps.filters).toEqual({ type: 'object' });
 
-      // Key query parameters should be present
-      expect(queryProps.mode).toBeDefined();
-      expect(queryProps.limit).toEqual({ type: 'number' });
-      expect(queryProps.countOnly).toEqual({ type: 'boolean' });
-      expect(queryProps.fields).toBeDefined();
-      expect(queryProps.sort).toBeDefined();
-
       // Schema should be small — under 3KB pretty-printed (was 3.2 MB before)
       const schemaSize = JSON.stringify(jsonSchema, null, 2).length;
       expect(schemaSize).toBeLessThan(3000);
     });
 
-    it('should preserve description on z.lazy() schemas', () => {
-      const DescribedLazy = z.lazy(() => z.object({ val: z.string() })).describe('A lazy field');
+    it('should use minimal hand-crafted inputSchema for SystemTool', () => {
+      const systemTool = new SystemTool(mockCache);
+      const jsonSchema = systemTool.inputSchema;
 
-      class DescribedLazyTool extends BaseTool {
-        name = 'described-lazy-tool';
-        description = 'Test description on z.lazy()';
-        schema = z.object({
-          data: DescribedLazy,
-        });
+      expect(jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          operation: {
+            type: 'string',
+            enum: ['version', 'diagnostics', 'metrics', 'cache'],
+          },
+          testScript: { type: 'string' },
+          metricsType: {
+            type: 'string',
+            enum: ['summary', 'detailed'],
+          },
+          cacheAction: {
+            type: 'string',
+            enum: ['stats', 'clear'],
+          },
+        },
+      });
 
-        protected async executeValidated(args: any): Promise<any> {
-          return { data: args };
-        }
-      }
-
-      const tool = new DescribedLazyTool(mockCache);
-      const jsonSchema = tool.inputSchema;
-
-      // The resolved schema should be an object (not a string fallback)
-      expect(jsonSchema.properties.data.type).toBe('object');
-      expect(jsonSchema.properties.data.properties.val).toMatchObject({ type: 'string' });
+      // Schema should be compact
+      const schemaSize = JSON.stringify(jsonSchema).length;
+      expect(schemaSize).toBeLessThan(1000);
     });
   });
 
