@@ -19,6 +19,7 @@
 import type {
   TaskCreateData,
   ProjectCreateData,
+  FolderCreateData,
   TaskUpdateData,
   ProjectUpdateData,
   MutationTarget,
@@ -1018,6 +1019,123 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
     operation: 'create',
     target: 'project',
     description: `Create project: ${data.name}`,
+  };
+}
+
+/**
+ * Build a JXA script for creating a folder.
+ * Supports:
+ * - Top-level folders (no parentFolder)
+ * - Nested folders (parentFolder by name, path " : " or "/", or ID)
+ */
+export function buildCreateFolderScript(data: FolderCreateData): GeneratedMutationScript {
+  const folderData = { name: data.name, parentFolder: data.parentFolder };
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+  const doc = app.defaultDocument();
+  const folderData = ${JSON.stringify(folderData)};
+
+  try {
+    // Find parent folder if specified — use OmniJS bridge for id.primaryKey + path syntax
+    let targetParent = null;
+    if (folderData.parentFolder) {
+      const findFolderScript = \`
+        (() => {
+          ${OMNIJS_PARSE_FOLDER_PATH}
+          ${OMNIJS_RESOLVE_FOLDER_PATH}
+
+          var target = \${JSON.stringify(folderData.parentFolder)};
+
+          // 1. Try parsing as a path (" : " or "/")
+          var pathSegs = parseFolderPath(target);
+          if (pathSegs) {
+            var found = resolveFolderPath(pathSegs);
+            if (found) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(found) });
+          }
+
+          // 2. Try by identifier (id.primaryKey)
+          var folder = Folder.byIdentifier(target);
+          if (folder) return JSON.stringify({ found: true, index: flattenedFolders.indexOf(folder) });
+
+          // 3. Fall back to leaf name match
+          for (var i = 0; i < flattenedFolders.length; i++) {
+            if (flattenedFolders[i].name === target) {
+              return JSON.stringify({ found: true, index: i });
+            }
+          }
+
+          return JSON.stringify({ found: false });
+        })()
+      \`;
+      const findFolderResult = JSON.parse(app.evaluateJavascript(findFolderScript));
+      if (findFolderResult.found && findFolderResult.index >= 0) {
+        targetParent = doc.flattenedFolders()[findFolderResult.index];
+      } else {
+        return JSON.stringify({
+          error: true,
+          message: 'Parent folder not found: ' + folderData.parentFolder,
+          context: 'create_folder'
+        });
+      }
+    }
+
+    // Create folder
+    const folder = app.Folder({ name: folderData.name });
+
+    // Add to parent or root
+    if (targetParent) {
+      targetParent.folders.push(folder);
+    } else {
+      doc.folders.push(folder);
+    }
+
+    const jxaFolderId = folder.id();
+
+    // Bridge to get OmniJS id.primaryKey
+    let folderId = jxaFolderId;
+    try {
+      const allFolders = doc.flattenedFolders();
+      let folderIndex = -1;
+      for (let i = 0; i < allFolders.length; i++) {
+        try { if (allFolders[i].id() === jxaFolderId) { folderIndex = i; break; } } catch (e) {}
+      }
+      if (folderIndex >= 0) {
+        const idScript = \`
+          (() => {
+            var f = flattenedFolders[\${folderIndex}];
+            if (f) return JSON.stringify({ pk: f.id.primaryKey });
+            return JSON.stringify({ pk: null });
+          })()
+        \`;
+        const idResult = JSON.parse(app.evaluateJavascript(idScript));
+        if (idResult.pk) folderId = idResult.pk;
+      }
+    } catch (e) {}
+
+    return JSON.stringify({
+      folderId: folderId,
+      name: folder.name(),
+      parentFolder: targetParent ? targetParent.name() : null,
+      created: true
+    });
+
+  } catch (error) {
+    return JSON.stringify({
+      error: true,
+      message: error.message || String(error),
+      context: 'create_folder'
+    });
+  }
+})();
+`;
+
+  return {
+    script: script.trim(),
+    operation: 'create',
+    target: 'folder',
+    description: `Create folder: ${data.name}`,
   };
 }
 

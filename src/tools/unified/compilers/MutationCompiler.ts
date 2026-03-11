@@ -1,6 +1,11 @@
 import type { WriteInput } from '../schemas/write-schema.js';
 import type { RepetitionRule } from '../../../contracts/mutations.js';
 
+interface FolderCreateData {
+  name: string;
+  parentFolder?: string;
+}
+
 interface CreateData {
   name: string;
   note?: string;
@@ -66,6 +71,10 @@ export type CompiledMutation =
       minimalResponse?: boolean; // Bug #21: Reduce response size
     }
   | {
+      operation: 'create_folder';
+      data: FolderCreateData;
+    }
+  | {
       operation: 'update';
       target: 'task' | 'project';
       taskId?: string;
@@ -124,6 +133,12 @@ export class MutationCompiler {
           target: mutation.target,
           data: mutation.data as CreateData,
           minimalResponse: mutation.minimalResponse, // Bug #21
+        };
+
+      case 'create_folder':
+        return {
+          operation: 'create_folder',
+          data: mutation.data as FolderCreateData,
         };
 
       case 'update': {

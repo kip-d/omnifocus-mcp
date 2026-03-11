@@ -567,4 +567,90 @@ describe('WriteSchema', () => {
       expect(data.reviewInterval).toBe(7);
     }
   });
+
+  // ─── Folder creation ──────────────────────────────────────────────
+
+  it('validates create_folder with name only (top-level)', () => {
+    const input = {
+      mutation: {
+        operation: 'create_folder',
+        data: {
+          name: 'Home',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mutation.operation).toBe('create_folder');
+      const data = (result.data.mutation as { data: { name: string } }).data;
+      expect(data.name).toBe('Home');
+    }
+  });
+
+  it('validates create_folder with parentFolder (nested folder)', () => {
+    const input = {
+      mutation: {
+        operation: 'create_folder',
+        data: {
+          name: 'Home',
+          parentFolder: 'Personal',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { name: string; parentFolder: string } }).data;
+      expect(data.name).toBe('Home');
+      expect(data.parentFolder).toBe('Personal');
+    }
+  });
+
+  it('validates create_folder with path syntax parentFolder', () => {
+    const input = {
+      mutation: {
+        operation: 'create_folder',
+        data: {
+          name: 'Phones',
+          parentFolder: 'Library : Electronics',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { name: string; parentFolder: string } }).data;
+      expect(data.parentFolder).toBe('Library : Electronics');
+    }
+  });
+
+  it('rejects create_folder without name', () => {
+    const input = {
+      mutation: {
+        operation: 'create_folder',
+        data: {},
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects create_folder with empty name', () => {
+    const input = {
+      mutation: {
+        operation: 'create_folder',
+        data: {
+          name: '',
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
 });

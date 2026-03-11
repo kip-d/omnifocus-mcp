@@ -11,6 +11,7 @@ import { TaskId } from '../../utils/branded-types.js';
 import {
   buildUpdateProjectScript,
   buildCreateProjectScript,
+  buildCreateFolderScript,
   buildCompleteScript,
   buildDeleteScript,
   buildCreateTaskScript,
@@ -21,6 +22,7 @@ import {
 import type {
   ProjectUpdateData,
   ProjectCreateData,
+  FolderCreateData,
   RepetitionRule,
   TaskCreateData,
 } from '../../contracts/mutations.js';
@@ -51,12 +53,19 @@ export class OmniFocusWriteTool extends BaseTool<typeof WriteSchema, unknown> {
 
 OPERATIONS:
 - create: New task/project with data
+- create_folder: New folder (name required, optional parentFolder for nesting)
 - update: Modify existing (provide id + changes)
 - complete: Mark done (provide id)
 - delete: Remove permanently (provide id)
 - batch: Multiple operations in one call
 - bulk_delete: Delete multiple items by IDs
 - tag_manage: Manage tag hierarchy (create, rename, delete, merge, nest, unnest, reparent)
+
+FOLDER CREATION:
+- operation: "create_folder"
+- data.name: Folder name (required)
+- data.parentFolder: Parent folder name, path ("Parent : Child"), or ID (optional, omit for top-level)
+- Supports nested path creation with " : " syntax
 
 BATCH OPERATIONS:
 - operations: Array of create, update, complete, and delete operations
@@ -117,7 +126,7 @@ SAFETY:
             // Discriminator
             operation: {
               type: 'string',
-              enum: ['create', 'update', 'complete', 'delete', 'batch', 'bulk_delete', 'tag_manage'],
+              enum: ['create', 'create_folder', 'update', 'complete', 'delete', 'batch', 'bulk_delete', 'tag_manage'],
             },
             target: { type: 'string', enum: ['task', 'project'] },
 
@@ -202,6 +211,11 @@ SAFETY:
     // Tag management operations
     if (compiled.operation === 'tag_manage') {
       return this.handleTagManage(compiled);
+    }
+
+    // Folder creation
+    if (compiled.operation === 'create_folder') {
+      return this.handleFolderCreate(compiled);
     }
 
     // Handle dry-run for batch operations
@@ -1071,6 +1085,61 @@ SAFETY:
     return createSuccessResponseV2('omnifocus_write', { project: { deleted: true }, operation: 'delete' }, undefined, {
       ...timer.toMetadata(),
       operation: 'delete',
+    });
+  }
+
+  // ─── Folder operations (inline) ─────────────────────────────────────
+
+  /**
+   * Create a new folder via buildCreateFolderScript (AST mutation builder).
+   */
+  private async handleFolderCreate(
+    compiled: Extract<CompiledMutation, { operation: 'create_folder' }>,
+  ): Promise<unknown> {
+    const timer = new OperationTimerV2();
+    const data = compiled.data;
+
+    if (!data.name) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'MISSING_PARAMETER',
+        'Folder name is required',
+        'Add a name parameter with the folder name',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const folderData: FolderCreateData = {
+      name: data.name,
+      parentFolder: data.parentFolder,
+    };
+
+    const generatedScript = buildCreateFolderScript(folderData);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      const errorMessage = result.error || 'Failed to create folder';
+      if (typeof errorMessage === 'string' && this.isJxaAccessDenied(errorMessage)) {
+        return this.jxaAccessDeniedError(timer);
+      }
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'CREATE_FAILED',
+        typeof errorMessage === 'string' ? errorMessage : 'Script execution failed',
+        'Check the folder name and parent folder, then try again',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    // Invalidate cache — folders affect project/folder listings
+    this.cache.invalidate('projects');
+    this.cache.invalidate('folders');
+
+    return createSuccessResponseV2('omnifocus_write', { folder: result.data, operation: 'create_folder' }, undefined, {
+      ...timer.toMetadata(),
+      operation: 'create_folder',
     });
   }
 

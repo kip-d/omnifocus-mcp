@@ -23,7 +23,7 @@ export type MutationOperation = 'create' | 'update' | 'complete' | 'delete' | 'b
 /**
  * Target entity types
  */
-export type MutationTarget = 'task' | 'project';
+export type MutationTarget = 'task' | 'project' | 'folder';
 
 // =============================================================================
 // REPETITION RULE
@@ -168,6 +168,14 @@ export interface ProjectCreateData {
   sequential?: boolean;
   status?: 'active' | 'on_hold' | 'completed' | 'dropped';
   reviewInterval?: number; // Days between reviews
+}
+
+/**
+ * Data for creating a new folder
+ */
+export interface FolderCreateData {
+  name: string;
+  parentFolder?: string; // Parent folder name, path (" : " or "/"), or ID. Omit for top-level.
 }
 
 // =============================================================================

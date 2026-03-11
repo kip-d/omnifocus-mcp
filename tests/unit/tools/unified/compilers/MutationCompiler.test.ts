@@ -45,4 +45,43 @@ describe('MutationCompiler', () => {
     expect(compiled.taskId).toBe('task-123');
     expect(compiled.changes?.flagged).toBe(true);
   });
+
+  it('should compile create_folder mutation', () => {
+    const input: WriteInput = {
+      mutation: {
+        operation: 'create_folder' as const,
+        data: {
+          name: 'Home',
+          parentFolder: 'Personal',
+        },
+      },
+    };
+
+    const compiled = compiler.compile(input);
+
+    expect(compiled.operation).toBe('create_folder');
+    if (compiled.operation === 'create_folder') {
+      expect(compiled.data.name).toBe('Home');
+      expect(compiled.data.parentFolder).toBe('Personal');
+    }
+  });
+
+  it('should compile create_folder without parentFolder', () => {
+    const input: WriteInput = {
+      mutation: {
+        operation: 'create_folder' as const,
+        data: {
+          name: 'Top Level Folder',
+        },
+      },
+    };
+
+    const compiled = compiler.compile(input);
+
+    expect(compiled.operation).toBe('create_folder');
+    if (compiled.operation === 'create_folder') {
+      expect(compiled.data.name).toBe('Top Level Folder');
+      expect(compiled.data.parentFolder).toBeUndefined();
+    }
+  });
 });
