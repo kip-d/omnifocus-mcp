@@ -239,6 +239,21 @@ function validateProjectCreate(data: ProjectCreateData): void {
 }
 
 /**
+ * Validate that a folder creation is inside the sandbox
+ */
+function validateFolderCreate(data: FolderCreateData): void {
+  if (!isTestMode()) return;
+
+  if (data.parentFolder !== SANDBOX_FOLDER_NAME) {
+    throw new Error(
+      'TEST GUARD: Folders must be created inside sandbox folder. ' +
+        `Got parentFolder: "${data.parentFolder || '(none)'}". ` +
+        `Use parentFolder: "${SANDBOX_FOLDER_NAME}"`,
+    );
+  }
+}
+
+/**
  * Validate that a task creation is in sandbox or has __TEST__ prefix for inbox
  */
 async function validateTaskCreate(data: TaskCreateData): Promise<void> {
@@ -1029,6 +1044,9 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
  * - Nested folders (parentFolder by name, path " : " or "/", or ID)
  */
 export function buildCreateFolderScript(data: FolderCreateData): GeneratedMutationScript {
+  // Test sandbox guard
+  validateFolderCreate(data);
+
   const folderData = { name: data.name, parentFolder: data.parentFolder };
 
   const script = `

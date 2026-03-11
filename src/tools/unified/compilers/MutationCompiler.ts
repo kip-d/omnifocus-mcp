@@ -1,10 +1,5 @@
 import type { WriteInput } from '../schemas/write-schema.js';
-import type { RepetitionRule } from '../../../contracts/mutations.js';
-
-interface FolderCreateData {
-  name: string;
-  parentFolder?: string;
-}
+import type { RepetitionRule, FolderCreateData } from '../../../contracts/mutations.js';
 
 interface CreateData {
   name: string;

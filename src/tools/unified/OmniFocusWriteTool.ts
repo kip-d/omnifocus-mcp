@@ -65,7 +65,7 @@ FOLDER CREATION:
 - operation: "create_folder"
 - data.name: Folder name (required)
 - data.parentFolder: Parent folder name, path ("Parent : Child"), or ID (optional, omit for top-level)
-- Supports nested path creation with " : " syntax
+- Supports nested path lookup with " : " syntax (parent must already exist)
 
 BATCH OPERATIONS:
 - operations: Array of create, update, complete, and delete operations
