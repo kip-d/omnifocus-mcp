@@ -11,92 +11,168 @@ import type { FilterNode, ComparisonNode, ExistsNode, ComparisonOperator } from 
 import { SYNTHETIC_FIELD_MAP } from '../types.js';
 
 /**
+ * Result of emitting a filter node to OmniJS code.
+ * Separates setup code (preamble) from the filter expression (predicate).
+ */
+export interface EmitResult {
+  /** Code that runs once before the filter loop (variable declarations, lookups) */
+  preamble: string;
+  /** The filter predicate expression */
+  predicate: string;
+}
+
+/**
  * Emit OmniJS JavaScript code from a FilterAST
  *
  * @param ast - The FilterNode to emit
- * @returns JavaScript code string
+ * @returns EmitResult with preamble and predicate
  */
-export function emitOmniJS(ast: FilterNode): string {
+export function emitOmniJS(ast: FilterNode): EmitResult {
+  let projectCounter = 0;
+  function nextProjectVar(): string {
+    return `__projectTarget_${projectCounter++}`;
+  }
+
+  function emitNode(node: FilterNode): EmitResult {
+    switch (node.type) {
+      case 'literal':
+        return { preamble: '', predicate: String(node.value) };
+
+      case 'comparison':
+        return emitComparison(node);
+
+      case 'exists':
+        return { preamble: '', predicate: emitExists(node) };
+
+      case 'and': {
+        if (node.children.length === 0) return { preamble: '', predicate: 'true' };
+        const results = node.children.map(emitNode);
+        const preamble = results
+          .map((r) => r.preamble)
+          .filter(Boolean)
+          .join('\n');
+        const predicate = `(${results.map((r) => r.predicate).join(' && ')})`;
+        return { preamble, predicate };
+      }
+
+      case 'or': {
+        if (node.children.length === 0) return { preamble: '', predicate: 'false' };
+        const results = node.children.map(emitNode);
+        const preamble = results
+          .map((r) => r.preamble)
+          .filter(Boolean)
+          .join('\n');
+        const predicate = `(${results.map((r) => r.predicate).join(' || ')})`;
+        return { preamble, predicate };
+      }
+
+      case 'not': {
+        const child = emitNode(node.child);
+        return { preamble: child.preamble, predicate: `!(${child.predicate})` };
+      }
+
+      default:
+        throw new Error(`Unknown node type: ${(node as FilterNode).type}`);
+    }
+  }
+
+  function emitComparison(node: ComparisonNode): EmitResult {
+    const { field, operator, value } = node;
+
+    // Special handling for taskTags (array operations)
+    if (field === 'taskTags') {
+      return { preamble: '', predicate: emitTagComparison(operator, value as string[]) };
+    }
+
+    // Special handling for project ID
+    if (field === 'task.containingProject') {
+      return emitProjectComparison(operator, value as string);
+    }
+
+    // Synthetic fields: consult registry for special emission logic
+    const syntheticDef = SYNTHETIC_FIELD_MAP.get(field);
+    if (syntheticDef?.omnijs) {
+      return { preamble: '', predicate: syntheticDef.omnijs(operator, value) };
+    }
+
+    // Get the field accessor (OmniJS uses direct property access)
+    const accessor = getFieldAccessor(field);
+
+    // Handle different operators
+    let predicate: string;
+    switch (operator) {
+      case '==':
+        predicate = `${accessor} === ${emitValue(value)}`;
+        break;
+
+      case '!=':
+        predicate = `${accessor} !== ${emitValue(value)}`;
+        break;
+
+      case '<':
+      case '>':
+      case '<=':
+      case '>=':
+        predicate = emitDateComparison(accessor, operator, value as string);
+        break;
+
+      case 'includes':
+        predicate = `${accessor}.toLowerCase().includes(${emitValue(value)}.toLowerCase())`;
+        break;
+
+      case 'matches':
+        predicate = `/${String(value)}/i.test(${accessor})`;
+        break;
+
+      case 'some':
+      case 'every':
+        // Generic array operators (shouldn't reach here for taskTags)
+        predicate = `${accessor}.${operator}(v => ${emitValue(value)}.includes(v))`;
+        break;
+
+      default:
+        throw new Error(`Unknown operator: ${String(operator)}`);
+    }
+
+    return { preamble: '', predicate };
+  }
+
+  function emitProjectComparison(operator: ComparisonOperator, projectValue: string): EmitResult {
+    const varName = nextProjectVar();
+    const val = JSON.stringify(projectValue);
+
+    const preamble = `var ${varName} = (function() {
+  var target = ${val};
+  var byId = Project.byIdentifier(target);
+  if (byId) return { project: byId, method: "id", duplicates: 0, allMatches: [{ id: byId.id.primaryKey, name: byId.name }] };
+  var byName = flattenedProjects.byName(target);
+  if (!byName) return null;
+  var matches = document.projectsMatching(target);
+  var exact = matches.filter(function(p) { return p.name === target; });
+  return {
+    project: byName,
+    method: "name",
+    duplicates: exact.length - 1,
+    allMatches: exact.map(function(p) { return { id: p.id.primaryKey, name: p.name }; })
+  };
+})();`;
+
+    let predicate: string;
+    switch (operator) {
+      case '==':
+        predicate = `(${varName} && task.containingProject === ${varName}.project)`;
+        break;
+      case '!=':
+        predicate = `(!${varName} || task.containingProject !== ${varName}.project)`;
+        break;
+      default:
+        throw new Error(`Unsupported project operator: ${operator}`);
+    }
+
+    return { preamble, predicate };
+  }
+
   return emitNode(ast);
-}
-
-function emitNode(node: FilterNode): string {
-  switch (node.type) {
-    case 'literal':
-      return String(node.value);
-
-    case 'comparison':
-      return emitComparison(node);
-
-    case 'exists':
-      return emitExists(node);
-
-    case 'and':
-      if (node.children.length === 0) return 'true';
-      return `(${node.children.map(emitNode).join(' && ')})`;
-
-    case 'or':
-      if (node.children.length === 0) return 'false';
-      return `(${node.children.map(emitNode).join(' || ')})`;
-
-    case 'not':
-      return `!(${emitNode(node.child)})`;
-
-    default:
-      throw new Error(`Unknown node type: ${(node as FilterNode).type}`);
-  }
-}
-
-function emitComparison(node: ComparisonNode): string {
-  const { field, operator, value } = node;
-
-  // Special handling for taskTags (array operations)
-  if (field === 'taskTags') {
-    return emitTagComparison(operator, value as string[]);
-  }
-
-  // Special handling for project ID
-  if (field === 'task.containingProject') {
-    return emitProjectComparison(operator, value as string);
-  }
-
-  // Synthetic fields: consult registry for special emission logic
-  const syntheticDef = SYNTHETIC_FIELD_MAP.get(field);
-  if (syntheticDef?.omnijs) {
-    return syntheticDef.omnijs(operator, value);
-  }
-
-  // Get the field accessor (OmniJS uses direct property access)
-  const accessor = getFieldAccessor(field);
-
-  // Handle different operators
-  switch (operator) {
-    case '==':
-      return `${accessor} === ${emitValue(value)}`;
-
-    case '!=':
-      return `${accessor} !== ${emitValue(value)}`;
-
-    case '<':
-    case '>':
-    case '<=':
-    case '>=':
-      return emitDateComparison(accessor, operator, value as string);
-
-    case 'includes':
-      return `${accessor}.toLowerCase().includes(${emitValue(value)}.toLowerCase())`;
-
-    case 'matches':
-      return `/${String(value)}/i.test(${accessor})`;
-
-    case 'some':
-    case 'every':
-      // Generic array operators (shouldn't reach here for taskTags)
-      return `${accessor}.${operator}(v => ${emitValue(value)}.includes(v))`;
-
-    default:
-      throw new Error(`Unknown operator: ${String(operator)}`);
-  }
 }
 
 function emitTagComparison(operator: ComparisonOperator, tags: string[]): string {
@@ -113,25 +189,6 @@ function emitTagComparison(operator: ComparisonOperator, tags: string[]): string
 
     default:
       throw new Error(`Unsupported tag operator: ${operator}`);
-  }
-}
-
-function emitProjectComparison(operator: ComparisonOperator, projectValue: string): string {
-  const accessor = 'task.containingProject';
-
-  // Determine if value looks like an ID (alphanumeric with possible - or _, length > 10)
-  // or a project name (anything else)
-  const isLikelyId = /^[a-zA-Z0-9_-]+$/.test(projectValue) && projectValue.length > 10;
-  const prop = isLikelyId ? 'id.primaryKey' : 'name';
-  const val = emitValue(projectValue);
-
-  switch (operator) {
-    case '==':
-      return `(${accessor} && ${accessor}.${prop} === ${val})`;
-    case '!=':
-      return `(!${accessor} || ${accessor}.${prop} !== ${val})`;
-    default:
-      throw new Error(`Unsupported project operator: ${operator}`);
   }
 }
 
