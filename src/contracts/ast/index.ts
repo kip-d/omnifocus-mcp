@@ -51,6 +51,7 @@ export { validateFilterAST } from './validator.js';
 // Emitters
 export { emitJXA } from './emitters/jxa.js';
 export { emitOmniJS } from './emitters/omnijs.js';
+export type { EmitResult } from './emitters/omnijs.js';
 
 // Filter Code Generator (high-level API)
 export type { EmitTarget, GenerateFilterCodeResult, GenerateFilterCodeError } from './filter-generator.js';
