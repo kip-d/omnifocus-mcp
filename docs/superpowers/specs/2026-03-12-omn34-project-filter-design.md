@@ -56,12 +56,9 @@ var __projectTarget_0 = (function () {
 
 **Predicate:**
 
-```javascript
-// == operator
-(__projectTarget_0 && task.containingProject === __projectTarget_0.project)(
-  // != operator
-  !__projectTarget_0 || task.containingProject !== __projectTarget_0.project,
-);
+```
+== operator:  (__projectTarget_0 && task.containingProject === __projectTarget_0.project)
+!= operator:  (!__projectTarget_0 || task.containingProject !== __projectTarget_0.project)
 ```
 
 ### Design Decisions
