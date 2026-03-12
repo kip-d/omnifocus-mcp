@@ -69,8 +69,8 @@ describe('emitter isolation', () => {
         operator: '==',
         value: true,
       };
-      const code = emitOmniJS(ast);
-      expect(code).toBe('task.flagged === true');
+      const result = emitOmniJS(ast);
+      expect(result.predicate).toBe('task.flagged === true');
     });
 
     it('emits correct code for an AND node', () => {
@@ -81,10 +81,10 @@ describe('emitter isolation', () => {
           { type: 'exists', field: 'task.dueDate', exists: true },
         ],
       };
-      const code = emitOmniJS(ast);
-      expect(code).toContain('task.completed === false');
-      expect(code).toContain('task.dueDate !== null');
-      expect(code).toContain('&&');
+      const result = emitOmniJS(ast);
+      expect(result.predicate).toContain('task.completed === false');
+      expect(result.predicate).toContain('task.dueDate !== null');
+      expect(result.predicate).toContain('&&');
     });
 
     it('emits correct code for an OR node', () => {
@@ -95,8 +95,8 @@ describe('emitter isolation', () => {
           { type: 'comparison', field: 'task.completed', operator: '==', value: false },
         ],
       };
-      const code = emitOmniJS(ast);
-      expect(code).toContain('||');
+      const result = emitOmniJS(ast);
+      expect(result.predicate).toContain('||');
     });
   });
 
@@ -108,9 +108,9 @@ describe('emitter isolation', () => {
         operator: '==',
         value: true,
       };
-      const code = emitJXA(ast);
+      const result = emitJXA(ast);
       // JXA uses method calls: task.flagged()
-      expect(code).toBe('task.flagged() === true');
+      expect(result.predicate).toBe('task.flagged() === true');
     });
   });
 });
@@ -215,23 +215,23 @@ describe('FilterPipeline', () => {
   });
 
   it('auto-builds and auto-validates when calling .emit()', () => {
-    const code = FilterPipeline.from({ flagged: true }).emit('omnijs');
-    expect(code).toBe('task.flagged === true');
+    const result = FilterPipeline.from({ flagged: true }).emit('omnijs');
+    expect(result.predicate).toBe('task.flagged === true');
   });
 
   it('emits JXA code', () => {
-    const code = FilterPipeline.from({ flagged: true }).emit('jxa');
-    expect(code).toBe('task.flagged() === true');
+    const result = FilterPipeline.from({ flagged: true }).emit('jxa');
+    expect(result.predicate).toBe('task.flagged() === true');
   });
 
   it('defaults to omnijs target', () => {
-    const code = FilterPipeline.from({ completed: false }).emit();
-    expect(code).toBe('task.completed === false');
+    const result = FilterPipeline.from({ completed: false }).emit();
+    expect(result.predicate).toBe('task.completed === false');
   });
 
   it('emits true for empty filter', () => {
-    const code = FilterPipeline.from({}).emit('omnijs');
-    expect(code).toBe('true');
+    const result = FilterPipeline.from({}).emit('omnijs');
+    expect(result.predicate).toBe('true');
   });
 
   it('handles complex filter through full pipeline', () => {
@@ -242,12 +242,12 @@ describe('FilterPipeline', () => {
       tagsOperator: 'OR',
       dueBefore: '2025-12-31',
     };
-    const code = FilterPipeline.from(filter).emit('omnijs');
+    const result = FilterPipeline.from(filter).emit('omnijs');
 
-    expect(code).toContain('task.completed === false');
-    expect(code).toContain('task.flagged === true');
-    expect(code).toContain('taskTags');
-    expect(code).toContain('2025-12-31');
+    expect(result.predicate).toContain('task.completed === false');
+    expect(result.predicate).toContain('task.flagged === true');
+    expect(result.predicate).toContain('taskTags');
+    expect(result.predicate).toContain('2025-12-31');
   });
 });
 
@@ -291,9 +291,9 @@ describe('cross-stage contract', () => {
         `Validation failed for ${name}: ${validation.errors.map((e) => e.message).join('; ')}`,
       ).toBe(true);
 
-      const code = emitOmniJS(ast);
-      expect(code.length).toBeGreaterThan(0);
-      expect(code).not.toBe('true');
+      const result = emitOmniJS(ast);
+      expect(result.predicate.length).toBeGreaterThan(0);
+      expect(result.predicate).not.toBe('true');
     });
 
     it(`build -> validate -> emit (jxa) succeeds for ${name}`, () => {
@@ -301,9 +301,9 @@ describe('cross-stage contract', () => {
       const validation = validateFilterAST(ast);
       expect(validation.valid).toBe(true);
 
-      const code = emitJXA(ast);
-      expect(code.length).toBeGreaterThan(0);
-      expect(code).not.toBe('true');
+      const result = emitJXA(ast);
+      expect(result.predicate.length).toBeGreaterThan(0);
+      expect(result.predicate).not.toBe('true');
     });
   }
 });
