@@ -9,38 +9,61 @@
 
 import type { FilterNode, ComparisonNode, ExistsNode, ComparisonOperator } from '../types.js';
 import { SYNTHETIC_FIELD_MAP } from '../types.js';
+import type { EmitResult } from './omnijs.js';
+export type { EmitResult } from './omnijs.js';
 
 /**
  * Emit JXA JavaScript code from a FilterAST
  *
  * @param ast - The FilterNode to emit
- * @returns JavaScript code string
+ * @returns EmitResult with preamble and predicate
  */
-export function emitJXA(ast: FilterNode): string {
+export function emitJXA(ast: FilterNode): EmitResult {
   return emitNode(ast);
 }
 
-function emitNode(node: FilterNode): string {
+function emitNode(node: FilterNode): EmitResult {
   switch (node.type) {
     case 'literal':
-      return String(node.value);
+      return { preamble: '', predicate: String(node.value) };
 
     case 'comparison':
-      return emitComparison(node);
+      return { preamble: '', predicate: emitComparison(node) };
 
     case 'exists':
-      return emitExists(node);
+      return { preamble: '', predicate: emitExists(node) };
 
-    case 'and':
-      if (node.children.length === 0) return 'true';
-      return `(${node.children.map(emitNode).join(' && ')})`;
+    case 'and': {
+      if (node.children.length === 0) return { preamble: '', predicate: 'true' };
+      const andResults = node.children.map(emitNode);
+      return {
+        preamble: andResults
+          .map((r) => r.preamble)
+          .filter(Boolean)
+          .join('\n'),
+        predicate: `(${andResults.map((r) => r.predicate).join(' && ')})`,
+      };
+    }
 
-    case 'or':
-      if (node.children.length === 0) return 'false';
-      return `(${node.children.map(emitNode).join(' || ')})`;
+    case 'or': {
+      if (node.children.length === 0) return { preamble: '', predicate: 'false' };
+      const orResults = node.children.map(emitNode);
+      return {
+        preamble: orResults
+          .map((r) => r.preamble)
+          .filter(Boolean)
+          .join('\n'),
+        predicate: `(${orResults.map((r) => r.predicate).join(' || ')})`,
+      };
+    }
 
-    case 'not':
-      return `!(${emitNode(node.child)})`;
+    case 'not': {
+      const childResult = emitNode(node.child);
+      return {
+        preamble: childResult.preamble,
+        predicate: `!(${childResult.predicate})`,
+      };
+    }
 
     default:
       throw new Error(`Unknown node type: ${(node as FilterNode).type}`);
