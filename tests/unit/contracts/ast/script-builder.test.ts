@@ -918,3 +918,45 @@ describe('note truncation in project field projection', () => {
     expect(result.script).toContain('note: project.note || ""');
   });
 });
+
+// =============================================================================
+// PREAMBLE AND WARNING ASSEMBLY TESTS
+// =============================================================================
+
+describe('buildFilteredTasksScript preamble and warning injection', () => {
+  it('embeds project resolution preamble before matchesFilter', () => {
+    const filter = { projectId: 'Work' };
+    const result = buildFilteredTasksScript(filter, { limit: 10 });
+    expect(result.script).toContain('Project.byIdentifier');
+    expect(result.script).toContain('flattenedProjects.byName');
+    expect(result.script).toContain('__projectTarget_0');
+    const preambleIndex = result.script.indexOf('__projectTarget_0 = (function');
+    const matchesFilterIndex = result.script.indexOf('function matchesFilter');
+    expect(preambleIndex).toBeLessThan(matchesFilterIndex);
+  });
+
+  it('embeds preamble in sort path', () => {
+    const filter = { projectId: 'Work' };
+    const result = buildFilteredTasksScript(filter, {
+      limit: 10,
+      sort: [{ field: 'dueDate', direction: 'asc' }],
+    });
+    expect(result.script).toContain('__projectTarget_0');
+    expect(result.script).toContain('allResults.sort');
+  });
+
+  it('includes warning assembly code when project filter present', () => {
+    const filter = { projectId: 'Home Renovation' };
+    const result = buildFilteredTasksScript(filter, { limit: 10 });
+    expect(result.script).toContain('__warnings');
+    expect(result.script).toContain('__duplicateProjects');
+    expect(result.script).toContain('duplicates > 0');
+  });
+
+  it('does not include warning assembly when no project filter', () => {
+    const filter = { flagged: true };
+    const result = buildFilteredTasksScript(filter, { limit: 10 });
+    expect(result.script).not.toContain('__warnings');
+    expect(result.script).not.toContain('__duplicateProjects');
+  });
+});
