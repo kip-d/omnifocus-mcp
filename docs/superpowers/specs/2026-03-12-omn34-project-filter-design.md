@@ -170,7 +170,7 @@ changes needed — warnings ride the existing metadata path.
 | `generateFilterBlock()`       | `filter-generator.ts` | Emits preamble before predicate assignment                                                   |
 | `buildFilteredTasksScript()`  | `script-builder.ts`   | Injects `filterCode.preamble` before `matchesFilter` definition, both sort and no-sort paths |
 | `buildInboxScript()`          | `script-builder.ts`   | Same preamble injection pattern                                                              |
-| `buildRepeatingTasksScript()` | `script-builder.ts`   | Same preamble injection pattern                                                              |
+| `buildRecurringTasksScript()` | `script-builder.ts`   | Same preamble injection pattern                                                              |
 | `buildExportTasksScript()`    | `script-builder.ts`   | Same preamble injection pattern                                                              |
 | JXA fast-search path          | `script-builder.ts`   | Uses JXA emitter (preamble always empty); update to destructure `EmitResult`                 |
 
