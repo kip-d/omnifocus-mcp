@@ -329,11 +329,12 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
 (() => {
   const allResults = [];
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   flattenedTasks.forEach(task => {
@@ -378,11 +379,12 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   const limit = ${limit};
   ${offsetVars}
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   flattenedTasks.forEach(task => {
@@ -521,10 +523,11 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   const limit = ${limit};
   ${offsetVars}
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate for inbox
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   inbox.forEach(task => {
@@ -686,11 +689,12 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
   const now = new Date();
   let count = 0;
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   // Helper to fetch repeat rule via bridge for complete data
@@ -1421,11 +1425,12 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
         let totalProcessed = 0;
         const maxTasks = ${limit};
 
+        ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
         // AST-generated filter predicate
         // Filter: ${filterDescription}
         function matchesFilter(task) {
           const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-          return ${filterCode};
+          return ${filterCode.predicate};
         }
 
         flattenedTasks.forEach(task => {
@@ -1844,7 +1849,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
   // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed
-  const needsTags = filterCode.includes('taskTags');
+  const needsTags = filterCode.predicate.includes('taskTags');
 
   // Build the complete script - pure JXA for maximum performance
   // Critical: Do NOT use app.evaluateJavascript() - it's ~40x slower!
@@ -1867,7 +1872,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     // AST-generated filter predicate (JXA syntax with method calls)
     // Filter: ${filterDescription}
     function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
-      return ${filterCode};
+      return ${filterCode.predicate};
     }
 
     // Iterate using for loop (faster than forEach in JXA)
