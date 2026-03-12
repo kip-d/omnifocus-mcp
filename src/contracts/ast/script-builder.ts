@@ -296,6 +296,10 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Generate the filter predicate code
   const filterCode = generateFilterCode(filter, 'omnijs');
 
+  // Determine if we have a project name preamble (for duplicate warning assembly)
+  const projectValue = filter.projectId ?? filter.project;
+  const hasProjectPreamble = !!filterCode.preamble;
+
   // Build description
   const filterDescription = describeFilterForScript(filter);
 
@@ -354,6 +358,18 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Slice for pagination
   const sliced = allResults.slice(${offset}, ${offset} + ${limit});
 
+  ${
+    hasProjectPreamble
+      ? `
+  var __warnings = [];
+  var __duplicateProjects = [];
+  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
+    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
+    __duplicateProjects = __projectTarget_0.allMatches;
+  }`
+      : ''
+  }
+
   return JSON.stringify({
     tasks: sliced,
     count: sliced.length,
@@ -361,7 +377,9 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     ${offset > 0 ? `offset_applied: ${offset},` : ''}
     sorted_in_script: true,
     mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)}
+    filter_description: ${JSON.stringify(filterDescription)},
+    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
+    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
   });
 })()
 `;
@@ -402,12 +420,26 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     count++;
   });
 
+  ${
+    hasProjectPreamble
+      ? `
+  var __warnings = [];
+  var __duplicateProjects = [];
+  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
+    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
+    __duplicateProjects = __projectTarget_0.allMatches;
+  }`
+      : ''
+  }
+
   return JSON.stringify({
     tasks: results,
     count: results.length,
     ${offsetMetadata}
     mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)}
+    filter_description: ${JSON.stringify(filterDescription)},
+    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
+    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
   });
 })()
 `;
