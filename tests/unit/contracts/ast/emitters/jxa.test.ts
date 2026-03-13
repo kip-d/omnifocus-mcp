@@ -1,19 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { emitJXA } from '../../../../../src/contracts/ast/emitters/jxa.js';
+import { emitJXA, type EmitResult } from '../../../../../src/contracts/ast/emitters/jxa.js';
 import type { FilterNode } from '../../../../../src/contracts/ast/types.js';
+
+function expectPredicate(result: EmitResult, expected: string): void {
+  expect(result.preamble).toBe('');
+  expect(result.predicate).toBe(expected);
+}
 
 describe('emitJXA', () => {
   describe('literal nodes', () => {
     it('emits true for literal true', () => {
       const ast: FilterNode = { type: 'literal', value: true };
       const code = emitJXA(ast);
-      expect(code).toBe('true');
+      expectPredicate(code, 'true');
     });
 
     it('emits false for literal false', () => {
       const ast: FilterNode = { type: 'literal', value: false };
       const code = emitJXA(ast);
-      expect(code).toBe('false');
+      expectPredicate(code, 'false');
     });
   });
 
@@ -26,7 +31,7 @@ describe('emitJXA', () => {
         value: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.completed() === false');
+      expectPredicate(code, 'task.completed() === false');
     });
 
     it('emits equality check for true value', () => {
@@ -37,7 +42,7 @@ describe('emitJXA', () => {
         value: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.flagged() === true');
+      expectPredicate(code, 'task.flagged() === true');
     });
 
     it('emits inequality check', () => {
@@ -48,7 +53,7 @@ describe('emitJXA', () => {
         value: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.completed() !== true');
+      expectPredicate(code, 'task.completed() !== true');
     });
 
     it('emits less than comparison for dates', () => {
@@ -59,7 +64,7 @@ describe('emitJXA', () => {
         value: '2025-12-31',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() <= new Date("2025-12-31")');
+      expectPredicate(code, 'task.dueDate() <= new Date("2025-12-31")');
     });
 
     it('emits greater than comparison for dates', () => {
@@ -70,7 +75,7 @@ describe('emitJXA', () => {
         value: '2025-01-01',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() >= new Date("2025-01-01")');
+      expectPredicate(code, 'task.dueDate() >= new Date("2025-01-01")');
     });
 
     it('emits includes for string contains', () => {
@@ -81,7 +86,7 @@ describe('emitJXA', () => {
         value: 'review',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.name().toLowerCase().includes("review".toLowerCase())');
+      expectPredicate(code, 'task.name().toLowerCase().includes("review".toLowerCase())');
     });
 
     it('emits regex match for matches operator', () => {
@@ -92,7 +97,7 @@ describe('emitJXA', () => {
         value: '^review.*',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('/^review.*/i.test(task.name())');
+      expectPredicate(code, '/^review.*/i.test(task.name())');
     });
 
     it('emits project ID check for ID-like values', () => {
@@ -103,9 +108,9 @@ describe('emitJXA', () => {
         value: 'n60OG59wsSg',
       };
       const code = emitJXA(ast);
-      expect(code).toContain('task.containingProject()');
-      expect(code).toContain('.id().primaryKey()');
-      expect(code).toContain('n60OG59wsSg');
+      expect(code.predicate).toContain('task.containingProject()');
+      expect(code.predicate).toContain('.id().primaryKey()');
+      expect(code.predicate).toContain('n60OG59wsSg');
     });
 
     it('emits project name check for name-like values', () => {
@@ -116,9 +121,9 @@ describe('emitJXA', () => {
         value: 'My Project',
       };
       const code = emitJXA(ast);
-      expect(code).toContain('task.containingProject()');
-      expect(code).toContain('.name()');
-      expect(code).toContain('My Project');
+      expect(code.predicate).toContain('task.containingProject()');
+      expect(code.predicate).toContain('.name()');
+      expect(code.predicate).toContain('My Project');
     });
 
     it('emits task ID check', () => {
@@ -129,7 +134,7 @@ describe('emitJXA', () => {
         value: 'xyz789',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.id().primaryKey() === "xyz789"');
+      expectPredicate(code, 'task.id().primaryKey() === "xyz789"');
     });
   });
 
@@ -143,7 +148,7 @@ describe('emitJXA', () => {
       };
       const code = emitJXA(ast);
       // JXA treats dropped as a regular boolean property (no Task.Status enum)
-      expect(code).toBe('task.dropped() === true');
+      expectPredicate(code, 'task.dropped() === true');
     });
 
     it('emits dropped method call for dropped: false', () => {
@@ -154,7 +159,7 @@ describe('emitJXA', () => {
         value: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dropped() === false');
+      expectPredicate(code, 'task.dropped() === false');
     });
 
     it('emits available method call for available: true', () => {
@@ -165,7 +170,7 @@ describe('emitJXA', () => {
         value: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.available() === true');
+      expectPredicate(code, 'task.available() === true');
     });
 
     it('emits available method call for available: false', () => {
@@ -176,7 +181,7 @@ describe('emitJXA', () => {
         value: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.available() === false');
+      expectPredicate(code, 'task.available() === false');
     });
 
     it('emits blocked method call for blocked: true', () => {
@@ -187,7 +192,7 @@ describe('emitJXA', () => {
         value: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.blocked() === true');
+      expectPredicate(code, 'task.blocked() === true');
     });
 
     it('emits blocked method call for blocked: false', () => {
@@ -198,7 +203,7 @@ describe('emitJXA', () => {
         value: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.blocked() === false');
+      expectPredicate(code, 'task.blocked() === false');
     });
 
     it('emits tagStatusValid method call for tagStatusValid: true', () => {
@@ -210,7 +215,7 @@ describe('emitJXA', () => {
       };
       const code = emitJXA(ast);
       // JXA doesn't have special tagStatusValid handling - uses direct method call
-      expect(code).toBe('task.tagStatusValid() === true');
+      expectPredicate(code, 'task.tagStatusValid() === true');
     });
 
     it('emits inInbox method call', () => {
@@ -221,7 +226,7 @@ describe('emitJXA', () => {
         value: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.inInbox() === true');
+      expectPredicate(code, 'task.inInbox() === true');
     });
   });
 
@@ -234,7 +239,7 @@ describe('emitJXA', () => {
         value: '2025-12-31',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() < new Date("2025-12-31")');
+      expectPredicate(code, 'task.dueDate() < new Date("2025-12-31")');
     });
 
     it('emits strict greater than for dates', () => {
@@ -245,7 +250,7 @@ describe('emitJXA', () => {
         value: '2025-01-01',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() > new Date("2025-01-01")');
+      expectPredicate(code, 'task.dueDate() > new Date("2025-01-01")');
     });
   });
 
@@ -258,7 +263,7 @@ describe('emitJXA', () => {
         value: 'reference',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.note().toLowerCase().includes("reference".toLowerCase())');
+      expectPredicate(code, 'task.note().toLowerCase().includes("reference".toLowerCase())');
     });
 
     it('emits regex match for note field', () => {
@@ -269,7 +274,7 @@ describe('emitJXA', () => {
         value: '\\d{4}-\\d{2}-\\d{2}',
       };
       const code = emitJXA(ast);
-      expect(code).toBe('/\\d{4}-\\d{2}-\\d{2}/i.test(task.note())');
+      expectPredicate(code, '/\\d{4}-\\d{2}-\\d{2}/i.test(task.note())');
     });
   });
 
@@ -285,9 +290,9 @@ describe('emitJXA', () => {
         },
       };
       const code = emitJXA(ast);
-      expect(code).toContain('!');
-      expect(code).toContain('taskTags.some');
-      expect(code).toContain('waiting');
+      expect(code.predicate).toContain('!');
+      expect(code.predicate).toContain('taskTags.some');
+      expect(code.predicate).toContain('waiting');
     });
   });
 
@@ -300,9 +305,9 @@ describe('emitJXA', () => {
         value: 'abc123',
       };
       const code = emitJXA(ast);
-      expect(code).toContain('!');
-      expect(code).toContain('task.containingProject()');
-      expect(code).toContain('abc123');
+      expect(code.predicate).toContain('!');
+      expect(code.predicate).toContain('task.containingProject()');
+      expect(code.predicate).toContain('abc123');
     });
   });
 
@@ -314,7 +319,7 @@ describe('emitJXA', () => {
         exists: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.repetitionRule() !== null');
+      expectPredicate(code, 'task.repetitionRule() !== null');
     });
 
     it('emits repetitionRule null check', () => {
@@ -324,7 +329,7 @@ describe('emitJXA', () => {
         exists: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.repetitionRule() === null');
+      expectPredicate(code, 'task.repetitionRule() === null');
     });
   });
 
@@ -336,7 +341,7 @@ describe('emitJXA', () => {
         exists: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.deferDate() !== null');
+      expectPredicate(code, 'task.deferDate() !== null');
     });
 
     it('emits plannedDate not exists check', () => {
@@ -346,7 +351,7 @@ describe('emitJXA', () => {
         exists: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.plannedDate() === null');
+      expectPredicate(code, 'task.plannedDate() === null');
     });
   });
 
@@ -359,10 +364,10 @@ describe('emitJXA', () => {
         value: ['work', 'urgent'],
       };
       const code = emitJXA(ast);
-      expect(code).toContain('taskTags');
-      expect(code).toContain('some');
-      expect(code).toContain('work');
-      expect(code).toContain('urgent');
+      expect(code.predicate).toContain('taskTags');
+      expect(code.predicate).toContain('some');
+      expect(code.predicate).toContain('work');
+      expect(code.predicate).toContain('urgent');
     });
 
     it('emits every check for AND tags', () => {
@@ -373,8 +378,8 @@ describe('emitJXA', () => {
         value: ['work', 'urgent'],
       };
       const code = emitJXA(ast);
-      expect(code).toContain('taskTags');
-      expect(code).toContain('every');
+      expect(code.predicate).toContain('taskTags');
+      expect(code.predicate).toContain('every');
     });
   });
 
@@ -386,7 +391,7 @@ describe('emitJXA', () => {
         exists: true,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() !== null');
+      expectPredicate(code, 'task.dueDate() !== null');
     });
 
     it('emits null check for exists: false', () => {
@@ -396,7 +401,7 @@ describe('emitJXA', () => {
         exists: false,
       };
       const code = emitJXA(ast);
-      expect(code).toBe('task.dueDate() === null');
+      expectPredicate(code, 'task.dueDate() === null');
     });
   });
 
@@ -410,7 +415,7 @@ describe('emitJXA', () => {
         ],
       };
       const code = emitJXA(ast);
-      expect(code).toBe('(task.completed() === false && task.flagged() === true)');
+      expectPredicate(code, '(task.completed() === false && task.flagged() === true)');
     });
 
     it('emits OR with || operator', () => {
@@ -422,7 +427,7 @@ describe('emitJXA', () => {
         ],
       };
       const code = emitJXA(ast);
-      expect(code).toBe('(task.flagged() === true || task.blocked() === true)');
+      expectPredicate(code, '(task.flagged() === true || task.blocked() === true)');
     });
 
     it('emits NOT with ! operator', () => {
@@ -436,7 +441,7 @@ describe('emitJXA', () => {
         },
       };
       const code = emitJXA(ast);
-      expect(code).toBe('!(task.completed() === true)');
+      expectPredicate(code, '!(task.completed() === true)');
     });
 
     it('handles nested logical nodes', () => {
@@ -454,20 +459,20 @@ describe('emitJXA', () => {
         ],
       };
       const code = emitJXA(ast);
-      expect(code).toContain('&&');
-      expect(code).toContain('||');
+      expect(code.predicate).toContain('&&');
+      expect(code.predicate).toContain('||');
     });
 
     it('returns true for empty AND', () => {
       const ast: FilterNode = { type: 'and', children: [] };
       const code = emitJXA(ast);
-      expect(code).toBe('true');
+      expectPredicate(code, 'true');
     });
 
     it('returns false for empty OR', () => {
       const ast: FilterNode = { type: 'or', children: [] };
       const code = emitJXA(ast);
-      expect(code).toBe('false');
+      expectPredicate(code, 'false');
     });
   });
 });

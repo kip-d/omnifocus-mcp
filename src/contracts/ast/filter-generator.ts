@@ -19,7 +19,7 @@ import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
 import { emitJXA } from './emitters/jxa.js';
-import { emitOmniJS } from './emitters/omnijs.js';
+import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 
 // =============================================================================
 // TYPES
@@ -29,7 +29,7 @@ export type EmitTarget = 'jxa' | 'omnijs';
 
 export interface GenerateFilterCodeResult {
   success: boolean;
-  code: string;
+  code: EmitResult;
   ast: FilterNode;
   validation: ValidationResult;
   target: EmitTarget;
@@ -80,7 +80,7 @@ export class FilterPipeline {
     return this;
   }
 
-  emit(target: EmitTarget = 'omnijs'): string {
+  emit(target: EmitTarget = 'omnijs'): EmitResult {
     if (!this._ast) this.build();
     if (!this._validation) this.validate();
 
@@ -114,9 +114,12 @@ export class FilterPipeline {
  *
  * @param filter - The TaskFilter or NormalizedTaskFilter to transform
  * @param target - The target language ('jxa' or 'omnijs')
- * @returns Generated code string, or throws if validation fails
+ * @returns EmitResult with preamble and predicate, or throws if validation fails
  */
-export function generateFilterCode(filter: TaskFilter | NormalizedTaskFilter, target: EmitTarget = 'omnijs'): string {
+export function generateFilterCode(
+  filter: TaskFilter | NormalizedTaskFilter,
+  target: EmitTarget = 'omnijs',
+): EmitResult {
   return FilterPipeline.from(filter).emit(target);
 }
 
@@ -169,12 +172,11 @@ export function generateFilterFunction(
   filter: TaskFilter | NormalizedTaskFilter,
   target: EmitTarget = 'omnijs',
 ): string {
-  const code = generateFilterCode(filter, target);
+  const { preamble, predicate } = generateFilterCode(filter, target);
 
-  // Wrap in a function that receives task and taskTags
-  return `function matchesFilter(task, taskTags) {
+  return `${preamble ? preamble + '\n' : ''}function matchesFilter(task, taskTags) {
   taskTags = taskTags || (task.tags ? task.tags.map(t => t.name) : []);
-  return ${code};
+  return ${predicate};
 }`;
 }
 
@@ -188,12 +190,12 @@ export function generateFilterFunction(
  * @returns Complete filter code block ready to embed in OmniJS script
  */
 export function generateFilterBlock(filter: TaskFilter): string {
-  const code = generateFilterCode(filter, 'omnijs');
+  const { preamble, predicate } = generateFilterCode(filter, 'omnijs');
 
   return `
-// Generated filter predicate
+${preamble ? preamble + '\n' : ''}// Generated filter predicate
 const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-const matchesFilter = ${code};
+const matchesFilter = ${predicate};
 if (!matchesFilter) return;
 `;
 }

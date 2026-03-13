@@ -296,6 +296,10 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Generate the filter predicate code
   const filterCode = generateFilterCode(filter, 'omnijs');
 
+  // Determine if we have a project name preamble (for duplicate warning assembly)
+  const projectValue = filter.projectId ?? filter.project;
+  const hasProjectPreamble = !!filterCode.preamble;
+
   // Build description
   const filterDescription = describeFilterForScript(filter);
 
@@ -329,11 +333,12 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
 (() => {
   const allResults = [];
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   flattenedTasks.forEach(task => {
@@ -353,6 +358,18 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Slice for pagination
   const sliced = allResults.slice(${offset}, ${offset} + ${limit});
 
+  ${
+    hasProjectPreamble
+      ? `
+  var __warnings = [];
+  var __duplicateProjects = [];
+  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
+    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
+    __duplicateProjects = __projectTarget_0.allMatches;
+  }`
+      : ''
+  }
+
   return JSON.stringify({
     tasks: sliced,
     count: sliced.length,
@@ -360,7 +377,9 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     ${offset > 0 ? `offset_applied: ${offset},` : ''}
     sorted_in_script: true,
     mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)}
+    filter_description: ${JSON.stringify(filterDescription)},
+    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
+    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
   });
 })()
 `;
@@ -378,11 +397,12 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   const limit = ${limit};
   ${offsetVars}
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   flattenedTasks.forEach(task => {
@@ -400,12 +420,26 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
     count++;
   });
 
+  ${
+    hasProjectPreamble
+      ? `
+  var __warnings = [];
+  var __duplicateProjects = [];
+  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
+    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
+    __duplicateProjects = __projectTarget_0.allMatches;
+  }`
+      : ''
+  }
+
   return JSON.stringify({
     tasks: results,
     count: results.length,
     ${offsetMetadata}
     mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)}
+    filter_description: ${JSON.stringify(filterDescription)},
+    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
+    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
   });
 })()
 `;
@@ -521,10 +555,11 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   const limit = ${limit};
   ${offsetVars}
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate for inbox
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   inbox.forEach(task => {
@@ -686,11 +721,12 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
   const now = new Date();
   let count = 0;
 
+  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
   // AST-generated filter predicate
   // Filter: ${filterDescription}
   function matchesFilter(task) {
     const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode};
+    return ${filterCode.predicate};
   }
 
   // Helper to fetch repeat rule via bridge for complete data
@@ -1421,11 +1457,12 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
         let totalProcessed = 0;
         const maxTasks = ${limit};
 
+        ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
         // AST-generated filter predicate
         // Filter: ${filterDescription}
         function matchesFilter(task) {
           const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-          return ${filterCode};
+          return ${filterCode.predicate};
         }
 
         flattenedTasks.forEach(task => {
@@ -1844,7 +1881,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
   // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed
-  const needsTags = filterCode.includes('taskTags');
+  const needsTags = filterCode.predicate.includes('taskTags');
 
   // Build the complete script - pure JXA for maximum performance
   // Critical: Do NOT use app.evaluateJavascript() - it's ~40x slower!
@@ -1867,7 +1904,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     // AST-generated filter predicate (JXA syntax with method calls)
     // Filter: ${filterDescription}
     function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
-      return ${filterCode};
+      return ${filterCode.predicate};
     }
 
     // Iterate using for loop (faster than forEach in JXA)

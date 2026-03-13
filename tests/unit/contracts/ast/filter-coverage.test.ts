@@ -299,11 +299,11 @@ describe('emitter parity', () => {
     it(`both emitters produce non-empty output for: ${name}`, () => {
       const ast = buildAST(filter);
 
-      const omnijsCode = emitOmniJS(ast);
-      const jxaCode = emitJXA(ast);
+      const omnijsResult = emitOmniJS(ast);
+      const jxaResult = emitJXA(ast);
 
-      expect(omnijsCode.length).toBeGreaterThan(0);
-      expect(jxaCode.length).toBeGreaterThan(0);
+      expect(omnijsResult.predicate.length).toBeGreaterThan(0);
+      expect(jxaResult.predicate.length).toBeGreaterThan(0);
     });
 
     it(`AST validates for: ${name}`, () => {

@@ -1,19 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { emitOmniJS } from '../../../../../src/contracts/ast/emitters/omnijs.js';
+import { emitOmniJS, type EmitResult } from '../../../../../src/contracts/ast/emitters/omnijs.js';
 import type { FilterNode } from '../../../../../src/contracts/ast/types.js';
+
+function expectPredicate(result: EmitResult, expected: string): void {
+  expect(result.preamble).toBe('');
+  expect(result.predicate).toBe(expected);
+}
 
 describe('emitOmniJS', () => {
   describe('literal nodes', () => {
     it('emits true for literal true', () => {
       const ast: FilterNode = { type: 'literal', value: true };
       const code = emitOmniJS(ast);
-      expect(code).toBe('true');
+      expectPredicate(code, 'true');
     });
 
     it('emits false for literal false', () => {
       const ast: FilterNode = { type: 'literal', value: false };
       const code = emitOmniJS(ast);
-      expect(code).toBe('false');
+      expectPredicate(code, 'false');
     });
   });
 
@@ -27,7 +32,7 @@ describe('emitOmniJS', () => {
       };
       const code = emitOmniJS(ast);
       // OmniJS uses direct property access, not method calls
-      expect(code).toBe('task.completed === false');
+      expectPredicate(code, 'task.completed === false');
     });
 
     it('emits equality check for true value', () => {
@@ -38,7 +43,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.flagged === true');
+      expectPredicate(code, 'task.flagged === true');
     });
 
     it('emits inequality check', () => {
@@ -49,7 +54,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.completed !== true');
+      expectPredicate(code, 'task.completed !== true');
     });
 
     it('emits less than comparison for dates', () => {
@@ -60,7 +65,7 @@ describe('emitOmniJS', () => {
         value: '2025-12-31',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.dueDate <= new Date("2025-12-31")');
+      expectPredicate(code, 'task.dueDate <= new Date("2025-12-31")');
     });
 
     it('emits includes for string contains', () => {
@@ -71,7 +76,7 @@ describe('emitOmniJS', () => {
         value: 'review',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.name.toLowerCase().includes("review".toLowerCase())');
+      expectPredicate(code, 'task.name.toLowerCase().includes("review".toLowerCase())');
     });
 
     it('emits regex match for matches operator', () => {
@@ -82,7 +87,7 @@ describe('emitOmniJS', () => {
         value: '^review.*',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('/^review.*/i.test(task.name)');
+      expectPredicate(code, '/^review.*/i.test(task.name)');
     });
 
     it('emits project ID check', () => {
@@ -93,8 +98,8 @@ describe('emitOmniJS', () => {
         value: 'abc123',
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('task.containingProject');
-      expect(code).toContain('abc123');
+      expect(code.predicate).toContain('task.containingProject');
+      expect(code.preamble).toContain('abc123');
     });
 
     it('emits task ID check', () => {
@@ -105,7 +110,7 @@ describe('emitOmniJS', () => {
         value: 'xyz789',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.id.primaryKey === "xyz789"');
+      expectPredicate(code, 'task.id.primaryKey === "xyz789"');
     });
   });
 
@@ -118,7 +123,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Dropped');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Dropped');
     });
 
     it('emits not dropped check for dropped: false', () => {
@@ -129,7 +134,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Dropped');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Dropped');
     });
 
     it('emits not dropped for dropped != true', () => {
@@ -140,7 +145,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Dropped');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Dropped');
     });
 
     it('emits dropped for dropped != false', () => {
@@ -151,7 +156,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Dropped');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Dropped');
     });
   });
 
@@ -164,7 +169,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Available');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Available');
     });
 
     it('emits not available check for available: false', () => {
@@ -175,7 +180,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Available');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Available');
     });
 
     it('emits not available for available != true', () => {
@@ -186,7 +191,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Available');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Available');
     });
 
     it('emits available for available != false', () => {
@@ -197,7 +202,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Available');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Available');
     });
   });
 
@@ -210,7 +215,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Blocked');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Blocked');
     });
 
     it('emits not blocked check for blocked: false', () => {
@@ -221,7 +226,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Blocked');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Blocked');
     });
 
     it('emits not blocked for blocked != true', () => {
@@ -232,7 +237,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus !== Task.Status.Blocked');
+      expectPredicate(code, 'task.taskStatus !== Task.Status.Blocked');
     });
 
     it('emits blocked for blocked != false', () => {
@@ -243,7 +248,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.taskStatus === Task.Status.Blocked');
+      expectPredicate(code, 'task.taskStatus === Task.Status.Blocked');
     });
   });
 
@@ -255,7 +260,7 @@ describe('emitOmniJS', () => {
         exists: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.repetitionRule !== null');
+      expectPredicate(code, 'task.repetitionRule !== null');
     });
 
     it('emits repetitionRule null check for hasRepetitionRule: false', () => {
@@ -265,7 +270,7 @@ describe('emitOmniJS', () => {
         exists: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.repetitionRule === null');
+      expectPredicate(code, 'task.repetitionRule === null');
     });
   });
 
@@ -278,8 +283,8 @@ describe('emitOmniJS', () => {
         value: ['work', 'urgent'],
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('taskTags');
-      expect(code).toContain('some');
+      expect(code.predicate).toContain('taskTags');
+      expect(code.predicate).toContain('some');
     });
 
     it('emits every check for AND tags', () => {
@@ -290,8 +295,8 @@ describe('emitOmniJS', () => {
         value: ['work', 'urgent'],
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('taskTags');
-      expect(code).toContain('every');
+      expect(code.predicate).toContain('taskTags');
+      expect(code.predicate).toContain('every');
     });
   });
 
@@ -303,7 +308,7 @@ describe('emitOmniJS', () => {
         exists: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.dueDate !== null');
+      expectPredicate(code, 'task.dueDate !== null');
     });
 
     it('emits null check for exists: false', () => {
@@ -313,7 +318,7 @@ describe('emitOmniJS', () => {
         exists: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.dueDate === null');
+      expectPredicate(code, 'task.dueDate === null');
     });
   });
 
@@ -326,10 +331,10 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('task.tags.length === 0');
-      expect(code).toContain('Tag.Status.Active');
-      expect(code).toContain('Tag.Status.OnHold');
-      expect(code).toContain('||');
+      expect(code.predicate).toContain('task.tags.length === 0');
+      expect(code.predicate).toContain('Tag.Status.Active');
+      expect(code.predicate).toContain('Tag.Status.OnHold');
+      expect(code.predicate).toContain('||');
     });
 
     it('emits negated tag status check for tagStatusValid: false', () => {
@@ -340,8 +345,8 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('task.tags.length > 0');
-      expect(code).toContain('!task.tags.some');
+      expect(code.predicate).toContain('task.tags.length > 0');
+      expect(code.predicate).toContain('!task.tags.some');
     });
 
     it('emits negated check for tagStatusValid != true', () => {
@@ -353,8 +358,8 @@ describe('emitOmniJS', () => {
       };
       const code = emitOmniJS(ast);
       // != true should be same as == false
-      expect(code).toContain('task.tags.length > 0');
-      expect(code).toContain('!task.tags.some');
+      expect(code.predicate).toContain('task.tags.length > 0');
+      expect(code.predicate).toContain('!task.tags.some');
     });
   });
 
@@ -367,7 +372,7 @@ describe('emitOmniJS', () => {
         value: '2025-12-31',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.dueDate < new Date("2025-12-31")');
+      expectPredicate(code, 'task.dueDate < new Date("2025-12-31")');
     });
 
     it('emits strict greater than for dates', () => {
@@ -378,7 +383,7 @@ describe('emitOmniJS', () => {
         value: '2025-01-01',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.dueDate > new Date("2025-01-01")');
+      expectPredicate(code, 'task.dueDate > new Date("2025-01-01")');
     });
 
     it('emits greater than or equal for dates', () => {
@@ -389,7 +394,7 @@ describe('emitOmniJS', () => {
         value: '2025-06-01',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.deferDate >= new Date("2025-06-01")');
+      expectPredicate(code, 'task.deferDate >= new Date("2025-06-01")');
     });
   });
 
@@ -402,7 +407,7 @@ describe('emitOmniJS', () => {
         value: 'important',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.note.toLowerCase().includes("important".toLowerCase())');
+      expectPredicate(code, 'task.note.toLowerCase().includes("important".toLowerCase())');
     });
 
     it('emits regex match for note field', () => {
@@ -413,47 +418,7 @@ describe('emitOmniJS', () => {
         value: '\\d+-note',
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('/\\d+-note/i.test(task.note)');
-    });
-  });
-
-  describe('project comparisons with names', () => {
-    it('emits name-based project check for short project strings', () => {
-      const ast: FilterNode = {
-        type: 'comparison',
-        field: 'task.containingProject',
-        operator: '==',
-        value: 'Work',
-      };
-      const code = emitOmniJS(ast);
-      // Short strings are treated as names, not IDs
-      expect(code).toContain('task.containingProject');
-      expect(code).toContain('.name');
-      expect(code).toContain('Work');
-    });
-
-    it('emits ID-based project check for long alphanumeric strings', () => {
-      const ast: FilterNode = {
-        type: 'comparison',
-        field: 'task.containingProject',
-        operator: '==',
-        value: 'abcdef123456789',
-      };
-      const code = emitOmniJS(ast);
-      expect(code).toContain('id.primaryKey');
-      expect(code).toContain('abcdef123456789');
-    });
-
-    it('emits project != comparison', () => {
-      const ast: FilterNode = {
-        type: 'comparison',
-        field: 'task.containingProject',
-        operator: '!=',
-        value: 'Personal',
-      };
-      const code = emitOmniJS(ast);
-      expect(code).toContain('!');
-      expect(code).toContain('Personal');
+      expectPredicate(code, '/\\d+-note/i.test(task.note)');
     });
   });
 
@@ -469,10 +434,10 @@ describe('emitOmniJS', () => {
         },
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('!');
-      expect(code).toContain('taskTags.some');
-      expect(code).toContain('waiting');
-      expect(code).toContain('someday');
+      expect(code.predicate).toContain('!');
+      expect(code.predicate).toContain('taskTags.some');
+      expect(code.predicate).toContain('waiting');
+      expect(code.predicate).toContain('someday');
     });
   });
 
@@ -486,8 +451,8 @@ describe('emitOmniJS', () => {
       };
       const code = emitOmniJS(ast);
       // != false should be same as == true
-      expect(code).toContain('task.tags.length === 0');
-      expect(code).toContain('Tag.Status.Active');
+      expect(code.predicate).toContain('task.tags.length === 0');
+      expect(code.predicate).toContain('Tag.Status.Active');
     });
   });
 
@@ -500,7 +465,7 @@ describe('emitOmniJS', () => {
         value: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.inInbox === true');
+      expectPredicate(code, 'task.inInbox === true');
     });
 
     it('emits inInbox false check', () => {
@@ -511,7 +476,7 @@ describe('emitOmniJS', () => {
         value: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.inInbox === false');
+      expectPredicate(code, 'task.inInbox === false');
     });
   });
 
@@ -523,7 +488,7 @@ describe('emitOmniJS', () => {
         exists: true,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.deferDate !== null');
+      expectPredicate(code, 'task.deferDate !== null');
     });
 
     it('emits plannedDate not exists check', () => {
@@ -533,7 +498,7 @@ describe('emitOmniJS', () => {
         exists: false,
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('task.plannedDate === null');
+      expectPredicate(code, 'task.plannedDate === null');
     });
   });
 
@@ -547,7 +512,7 @@ describe('emitOmniJS', () => {
         ],
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('(task.completed === false && task.flagged === true)');
+      expectPredicate(code, '(task.completed === false && task.flagged === true)');
     });
 
     it('emits OR with || operator', () => {
@@ -560,7 +525,7 @@ describe('emitOmniJS', () => {
       };
       const code = emitOmniJS(ast);
       // task.blocked is a synthetic field that maps to Task.Status.Blocked
-      expect(code).toBe('(task.flagged === true || task.taskStatus === Task.Status.Blocked)');
+      expectPredicate(code, '(task.flagged === true || task.taskStatus === Task.Status.Blocked)');
     });
 
     it('emits NOT with ! operator', () => {
@@ -574,7 +539,7 @@ describe('emitOmniJS', () => {
         },
       };
       const code = emitOmniJS(ast);
-      expect(code).toBe('!(task.completed === true)');
+      expectPredicate(code, '!(task.completed === true)');
     });
 
     it('handles nested logical nodes', () => {
@@ -598,23 +563,152 @@ describe('emitOmniJS', () => {
         ],
       };
       const code = emitOmniJS(ast);
-      expect(code).toContain('&&');
-      expect(code).toContain('||');
-      expect(code).toContain('task.completed === false');
-      expect(code).toContain('task.flagged === true');
-      expect(code).toContain('task.dueDate !== null');
+      expect(code.predicate).toContain('&&');
+      expect(code.predicate).toContain('||');
+      expect(code.predicate).toContain('task.completed === false');
+      expect(code.predicate).toContain('task.flagged === true');
+      expect(code.predicate).toContain('task.dueDate !== null');
     });
 
     it('returns true for empty AND', () => {
       const ast: FilterNode = { type: 'and', children: [] };
       const code = emitOmniJS(ast);
-      expect(code).toBe('true');
+      expectPredicate(code, 'true');
     });
 
     it('returns false for empty OR', () => {
       const ast: FilterNode = { type: 'or', children: [] };
       const code = emitOmniJS(ast);
-      expect(code).toBe('false');
+      expectPredicate(code, 'false');
+    });
+  });
+
+  describe('project resolution (EmitResult preamble)', () => {
+    it('emits resolution preamble for project == comparison', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'My Project',
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('Project.byIdentifier');
+      expect(result.preamble).toContain('flattenedProjects.byName');
+      expect(result.preamble).toContain('document.projectsMatching');
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.predicate).toBe('(__projectTarget_0 && task.containingProject === __projectTarget_0.project)');
+    });
+
+    it('emits negation predicate for project != comparison', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '!=',
+        value: 'My Project',
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.predicate).toBe('(!__projectTarget_0 || task.containingProject !== __projectTarget_0.project)');
+    });
+
+    it('uses unique variable names for multiple project comparisons', () => {
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          {
+            type: 'comparison',
+            field: 'task.containingProject',
+            operator: '==',
+            value: 'Project A',
+          },
+          {
+            type: 'comparison',
+            field: 'task.containingProject',
+            operator: '!=',
+            value: 'Project B',
+          },
+        ],
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.preamble).toContain('__projectTarget_1');
+      expect(result.predicate).toContain('__projectTarget_0');
+      expect(result.predicate).toContain('__projectTarget_1');
+    });
+
+    it('merges preambles from AND children', () => {
+      const ast: FilterNode = {
+        type: 'and',
+        children: [
+          {
+            type: 'comparison',
+            field: 'task.containingProject',
+            operator: '==',
+            value: 'My Project',
+          },
+          {
+            type: 'comparison',
+            field: 'task.flagged',
+            operator: '==',
+            value: true,
+          },
+        ],
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.predicate).toContain('__projectTarget_0');
+      expect(result.predicate).toContain('task.flagged === true');
+    });
+
+    it('merges preambles from OR children', () => {
+      const ast: FilterNode = {
+        type: 'or',
+        children: [
+          {
+            type: 'comparison',
+            field: 'task.containingProject',
+            operator: '==',
+            value: 'Project A',
+          },
+          {
+            type: 'comparison',
+            field: 'task.containingProject',
+            operator: '==',
+            value: 'Project B',
+          },
+        ],
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.preamble).toContain('__projectTarget_1');
+    });
+
+    it('passes preamble through NOT node', () => {
+      const ast: FilterNode = {
+        type: 'not',
+        child: {
+          type: 'comparison',
+          field: 'task.containingProject',
+          operator: '==',
+          value: 'My Project',
+        },
+      };
+      const result = emitOmniJS(ast);
+      expect(result.preamble).toContain('__projectTarget_0');
+      expect(result.predicate).toContain('!(');
+    });
+
+    it('resets counter per emitOmniJS call', () => {
+      const ast: FilterNode = {
+        type: 'comparison',
+        field: 'task.containingProject',
+        operator: '==',
+        value: 'My Project',
+      };
+      const result1 = emitOmniJS(ast);
+      const result2 = emitOmniJS(ast);
+      expect(result1.preamble).toContain('__projectTarget_0');
+      expect(result2.preamble).toContain('__projectTarget_0');
     });
   });
 });

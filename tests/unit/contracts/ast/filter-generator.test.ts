@@ -13,16 +13,16 @@ describe('generateFilterCode', () => {
   describe('end-to-end pipeline', () => {
     it('generates OmniJS code for simple boolean filter', () => {
       const filter: TaskFilter = { completed: false };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toBe('task.completed === false');
+      expect(result.predicate).toBe('task.completed === false');
     });
 
     it('generates JXA code for simple boolean filter', () => {
       const filter: TaskFilter = { completed: false };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
-      expect(code).toBe('task.completed() === false');
+      expect(result.predicate).toBe('task.completed() === false');
     });
 
     it('generates code for combined filters', () => {
@@ -32,76 +32,92 @@ describe('generateFilterCode', () => {
         tags: ['work'],
         tagsOperator: 'OR',
       };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.completed === false');
-      expect(code).toContain('task.flagged === true');
-      expect(code).toContain('taskTags');
-      expect(code).toContain('&&'); // All conditions ANDed together
+      expect(result.predicate).toContain('task.completed === false');
+      expect(result.predicate).toContain('task.flagged === true');
+      expect(result.predicate).toContain('taskTags');
+      expect(result.predicate).toContain('&&'); // All conditions ANDed together
     });
 
     it('defaults to omnijs target', () => {
       const filter: TaskFilter = { flagged: true };
-      const code = generateFilterCode(filter);
+      const result = generateFilterCode(filter);
 
       // OmniJS uses direct property access (no parentheses)
-      expect(code).toBe('task.flagged === true');
+      expect(result.predicate).toBe('task.flagged === true');
     });
 
     it('returns true for empty filter', () => {
       const filter: TaskFilter = {};
-      const code = generateFilterCode(filter);
+      const result = generateFilterCode(filter);
 
-      expect(code).toBe('true');
+      expect(result.predicate).toBe('true');
+    });
+
+    it('generateFilterCode returns EmitResult with preamble and predicate', () => {
+      const filter = { completed: false, flagged: true };
+      const result = generateFilterCode(filter);
+      expect(result).toHaveProperty('preamble');
+      expect(result).toHaveProperty('predicate');
+      expect(result.preamble).toBe('');
+      expect(result.predicate).toContain('task.completed');
+    });
+
+    it('generateFilterCode returns preamble for project filter', () => {
+      const filter = { projectId: 'My Project' };
+      const result = generateFilterCode(filter);
+      expect(result.preamble).toContain('Project.byIdentifier');
+      expect(result.predicate).toContain('__projectTarget_0');
     });
   });
 
   describe('tag filters', () => {
     it('generates OR tag filter', () => {
       const filter: TaskFilter = { tags: ['urgent', 'important'], tagsOperator: 'OR' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('taskTags.some');
-      expect(code).toContain('urgent');
-      expect(code).toContain('important');
+      expect(result.predicate).toContain('taskTags.some');
+      expect(result.predicate).toContain('urgent');
+      expect(result.predicate).toContain('important');
     });
 
     it('generates AND tag filter', () => {
       const filter: TaskFilter = { tags: ['work', 'meeting'], tagsOperator: 'AND' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('every');
-      expect(code).toContain('work');
-      expect(code).toContain('meeting');
+      expect(result.predicate).toContain('every');
+      expect(result.predicate).toContain('work');
+      expect(result.predicate).toContain('meeting');
     });
 
     it('generates NOT_IN tag filter', () => {
       const filter: TaskFilter = { tags: ['waiting'], tagsOperator: 'NOT_IN' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('!');
-      expect(code).toContain('some');
-      expect(code).toContain('waiting');
+      expect(result.predicate).toContain('!');
+      expect(result.predicate).toContain('some');
+      expect(result.predicate).toContain('waiting');
     });
   });
 
   describe('date filters', () => {
     it('generates due date before filter', () => {
       const filter: TaskFilter = { dueBefore: '2025-12-31' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.dueDate !== null');
-      expect(code).toContain('task.dueDate <=');
-      expect(code).toContain('2025-12-31');
+      expect(result.predicate).toContain('task.dueDate !== null');
+      expect(result.predicate).toContain('task.dueDate <=');
+      expect(result.predicate).toContain('2025-12-31');
     });
 
     it('generates due date after filter', () => {
       const filter: TaskFilter = { dueAfter: '2025-01-01' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.dueDate !== null');
-      expect(code).toContain('task.dueDate >=');
-      expect(code).toContain('2025-01-01');
+      expect(result.predicate).toContain('task.dueDate !== null');
+      expect(result.predicate).toContain('task.dueDate >=');
+      expect(result.predicate).toContain('2025-01-01');
     });
 
     it('generates due date range filter (BETWEEN)', () => {
@@ -110,112 +126,112 @@ describe('generateFilterCode', () => {
         dueBefore: '2025-12-31',
         dueDateOperator: 'BETWEEN',
       };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.dueDate !== null');
-      expect(code).toContain('>=');
-      expect(code).toContain('<=');
+      expect(result.predicate).toContain('task.dueDate !== null');
+      expect(result.predicate).toContain('>=');
+      expect(result.predicate).toContain('<=');
     });
   });
 
   describe('text filters', () => {
     it('generates contains text filter', () => {
       const filter: TaskFilter = { text: 'review', textOperator: 'CONTAINS' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('includes');
-      expect(code).toContain('review');
+      expect(result.predicate).toContain('includes');
+      expect(result.predicate).toContain('review');
     });
 
     it('generates matches text filter', () => {
       const filter: TaskFilter = { text: '^meeting', textOperator: 'MATCHES' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('test');
-      expect(code).toContain('^meeting');
+      expect(result.predicate).toContain('test');
+      expect(result.predicate).toContain('^meeting');
     });
   });
 
   describe('synthetic status fields end-to-end', () => {
     it('generates OmniJS code for dropped: true using Task.Status enum', () => {
       const filter: TaskFilter = { dropped: true };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toBe('task.taskStatus === Task.Status.Dropped');
+      expect(result.predicate).toBe('task.taskStatus === Task.Status.Dropped');
     });
 
     it('generates OmniJS code for dropped: false', () => {
       const filter: TaskFilter = { dropped: false };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toBe('task.taskStatus !== Task.Status.Dropped');
+      expect(result.predicate).toBe('task.taskStatus !== Task.Status.Dropped');
     });
 
     it('generates OmniJS code for available: true using Task.Status enum', () => {
       const filter: TaskFilter = { available: true };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toBe('task.taskStatus === Task.Status.Available');
+      expect(result.predicate).toBe('task.taskStatus === Task.Status.Available');
     });
 
     it('generates OmniJS code for blocked: true using Task.Status enum', () => {
       const filter: TaskFilter = { blocked: true };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toBe('task.taskStatus === Task.Status.Blocked');
+      expect(result.predicate).toBe('task.taskStatus === Task.Status.Blocked');
     });
 
     it('generates JXA code for dropped: true as direct method call', () => {
       const filter: TaskFilter = { dropped: true };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
       // JXA doesn't use Task.Status enum
-      expect(code).toBe('task.dropped() === true');
+      expect(result.predicate).toBe('task.dropped() === true');
     });
 
     it('generates JXA code for available: true as direct method call', () => {
       const filter: TaskFilter = { available: true };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
-      expect(code).toBe('task.available() === true');
+      expect(result.predicate).toBe('task.available() === true');
     });
   });
 
   describe('tagStatusValid end-to-end', () => {
     it('generates OmniJS code for tagStatusValid: true', () => {
       const filter: TaskFilter = { tagStatusValid: true };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.tags.length === 0');
-      expect(code).toContain('Tag.Status.Active');
+      expect(result.predicate).toContain('task.tags.length === 0');
+      expect(result.predicate).toContain('Tag.Status.Active');
     });
 
     it('generates OmniJS code for tagStatusValid: false', () => {
       const filter: TaskFilter = { tagStatusValid: false };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.tags.length > 0');
-      expect(code).toContain('!task.tags.some');
+      expect(result.predicate).toContain('task.tags.length > 0');
+      expect(result.predicate).toContain('!task.tags.some');
     });
   });
 
   describe('defer date end-to-end', () => {
     it('generates OmniJS code for defer date range', () => {
       const filter: TaskFilter = { deferAfter: '2025-01-01', deferBefore: '2025-06-30' };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.deferDate !== null');
-      expect(code).toContain('2025-01-01');
-      expect(code).toContain('2025-06-30');
+      expect(result.predicate).toContain('task.deferDate !== null');
+      expect(result.predicate).toContain('2025-01-01');
+      expect(result.predicate).toContain('2025-06-30');
     });
 
     it('generates JXA code for defer date before', () => {
       const filter: TaskFilter = { deferBefore: '2025-12-31' };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
-      expect(code).toContain('task.deferDate()');
-      expect(code).toContain('!== null');
-      expect(code).toContain('2025-12-31');
+      expect(result.predicate).toContain('task.deferDate()');
+      expect(result.predicate).toContain('!== null');
+      expect(result.predicate).toContain('2025-12-31');
     });
   });
 
@@ -226,19 +242,19 @@ describe('generateFilterCode', () => {
         plannedBefore: '2025-03-31',
         plannedDateOperator: 'BETWEEN',
       };
-      const code = generateFilterCode(filter, 'omnijs');
+      const result = generateFilterCode(filter, 'omnijs');
 
-      expect(code).toContain('task.plannedDate !== null');
-      expect(code).toContain('>=');
-      expect(code).toContain('<=');
+      expect(result.predicate).toContain('task.plannedDate !== null');
+      expect(result.predicate).toContain('>=');
+      expect(result.predicate).toContain('<=');
     });
 
     it('generates JXA code for planned date after', () => {
       const filter: TaskFilter = { plannedAfter: '2025-01-01' };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
-      expect(code).toContain('task.plannedDate()');
-      expect(code).toContain('2025-01-01');
+      expect(result.predicate).toContain('task.plannedDate()');
+      expect(result.predicate).toContain('2025-01-01');
     });
   });
 
@@ -250,12 +266,12 @@ describe('generateFilterCode', () => {
         tags: ['urgent'],
         tagsOperator: 'OR',
       };
-      const code = generateFilterCode(filter, 'jxa');
+      const result = generateFilterCode(filter, 'jxa');
 
-      expect(code).toContain('task.completed()');
-      expect(code).toContain('task.flagged()');
-      expect(code).toContain('taskTags');
-      expect(code).toContain('&&');
+      expect(result.predicate).toContain('task.completed()');
+      expect(result.predicate).toContain('task.flagged()');
+      expect(result.predicate).toContain('taskTags');
+      expect(result.predicate).toContain('&&');
     });
   });
 });
@@ -267,7 +283,7 @@ describe('generateFilterCodeSafe', () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.code).toBe('task.flagged === true');
+      expect(result.code.predicate).toBe('task.flagged === true');
       expect(result.ast.type).toBe('comparison');
       expect(result.validation.valid).toBe(true);
       expect(result.target).toBe('omnijs');
@@ -298,8 +314,8 @@ describe('generateFilterCodeSafe with JXA target', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.target).toBe('jxa');
-      expect(result.code).toContain('task.completed()');
-      expect(result.code).toContain('task.flagged()');
+      expect(result.code.predicate).toContain('task.completed()');
+      expect(result.code.predicate).toContain('task.flagged()');
     }
   });
 });
@@ -319,6 +335,22 @@ describe('generateFilterFunction', () => {
     const fnCode = generateFilterFunction(filter, 'omnijs');
 
     expect(fnCode).toContain('taskTags = taskTags || (task.tags');
+  });
+
+  it('generateFilterFunction places preamble before function body', () => {
+    const filter = { projectId: 'Work' };
+    const result = generateFilterFunction(filter);
+    const preambleIndex = result.indexOf('__projectTarget_0 = (function');
+    const functionIndex = result.indexOf('function matchesFilter');
+    expect(preambleIndex).toBeGreaterThanOrEqual(0);
+    expect(preambleIndex).toBeLessThan(functionIndex);
+  });
+
+  it('generateFilterFunction omits preamble when not needed', () => {
+    const filter = { flagged: true };
+    const result = generateFilterFunction(filter);
+    expect(result).not.toContain('__projectTarget');
+    expect(result).toContain('function matchesFilter');
   });
 });
 
