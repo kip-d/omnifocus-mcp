@@ -230,9 +230,10 @@ function generateFieldProjection(
           if (!rule) return null;
           try {
             return {
-              recurrence: rule.recurrence || null,
-              repetitionMethod: rule.method ? rule.method.toString() : null,
-              ruleString: rule.ruleString || null
+              ruleString: rule.ruleString || null,
+              scheduleType: rule.scheduleType ? rule.scheduleType.toString() : null,
+              anchorDateKey: rule.anchorDateKey ? rule.anchorDateKey.toString() : null,
+              catchUpAutomatically: rule.catchUpAutomatically ?? null
             };
           } catch (e) { return null; }
         })()`);
