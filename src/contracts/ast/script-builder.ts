@@ -233,7 +233,7 @@ function generateFieldProjection(
               ruleString: rule.ruleString || null,
               scheduleType: rule.scheduleType ? rule.scheduleType.toString() : null,
               anchorDateKey: rule.anchorDateKey ? rule.anchorDateKey.toString() : null,
-              catchUpAutomatically: rule.catchUpAutomatically
+              catchUpAutomatically: rule.catchUpAutomatically ?? null
             };
           } catch (e) { return null; }
         })()`);
