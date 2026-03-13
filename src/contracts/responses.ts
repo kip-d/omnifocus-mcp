@@ -128,12 +128,13 @@ export interface ProjectData {
 }
 
 /**
- * Repetition rule data
+ * Repetition rule data (v4.7+ modern properties)
  */
 export interface RepetitionRuleData {
-  recurrence?: string | null;
-  repetitionMethod?: string | null;
   ruleString?: string | null;
+  scheduleType?: string | null;
+  anchorDateKey?: string | null;
+  catchUpAutomatically?: boolean;
 }
 
 // =============================================================================
