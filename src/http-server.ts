@@ -102,6 +102,8 @@ export class HttpServerManager {
       const startTime = Date.now();
       const requestId = randomUUID();
 
+      this.applyCorsHeaders(res);
+
       logger.debug('Incoming request', {
         requestId,
         method: req.method,
@@ -166,10 +168,7 @@ export class HttpServerManager {
    */
   private handleOptionsRequest(_req: IncomingMessage, res: ServerResponse): void {
     res.writeHead(200, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Session-Id, MCP-Protocol-Version',
-      'Access-Control-Max-Age': '86400',
+      ...this.getCorsHeaders(),
       'Content-Length': '0',
     });
     res.end();
@@ -471,6 +470,27 @@ export class HttpServerManager {
     }
 
     return safeHeaders;
+  }
+
+  /**
+   * Applies CORS headers to a response
+   */
+  private applyCorsHeaders(res: ServerResponse): void {
+    for (const [header, value] of Object.entries(this.getCorsHeaders())) {
+      res.setHeader(header, value);
+    }
+  }
+
+  /**
+   * Returns the default CORS header set
+   */
+  private getCorsHeaders(): Record<string, string> {
+    return {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Session-Id, MCP-Protocol-Version',
+      'Access-Control-Max-Age': '86400',
+    };
   }
 
   /**
