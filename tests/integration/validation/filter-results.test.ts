@@ -289,6 +289,7 @@ describe('Filter Results Validation', () => {
             text: { contains: searchTerm },
             dueDate: { between: [startStr, endStr] },
           },
+          details: true,
           limit: 50,
         },
       });
