@@ -197,19 +197,27 @@ npm run test:unit                # ~2 seconds, 1622 tests
 npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' | node dist/index.js
 ```
 
 ## MCP Specification
 
-**Spec:** https://modelcontextprotocol.io/specification/2025-06-18/
+**Spec:** https://modelcontextprotocol.io/specification/2025-11-25/
 
 | Detail           | Value                                                           |
 | ---------------- | --------------------------------------------------------------- |
-| Protocol Version | 2025-06-18                                                      |
+| Protocol Version | 2025-11-25                                                      |
 | Transport        | stdio (stdin/stdout)                                            |
-| SDK              | @modelcontextprotocol/sdk@1.17.4                                |
+| SDK              | @modelcontextprotocol/sdk@1.29.0                                |
 | Response Format  | `{ content: [{ type: 'text', text: JSON.stringify(result) }] }` |
+
+### Why we use `Server` instead of `McpServer`
+
+SDK 1.29.0 deprecates `Server` in favor of `McpServer`, with the note: _"Only use Server for advanced use cases."_ We
+stay on `Server` because `McpServer.registerTool()` requires Zod schemas and auto-converts them to JSON Schema
+internally. This project uses hand-crafted compact `inputSchema` overrides (see Dual-Schema Architecture above) to
+minimize token usage in MCP advertisement payloads — an optimization `McpServer` cannot support. This qualifies as the
+"advanced use case" the deprecation note allows for. Re-evaluate if `McpServer` adds raw JSON Schema support.
 
 ## Project Structure
 
