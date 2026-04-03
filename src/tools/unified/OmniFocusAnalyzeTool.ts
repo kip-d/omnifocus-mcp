@@ -74,6 +74,22 @@ interface TestMockOverdueData {
 
 type OverdueDataUnion = OverdueAnalysisData | TestMockOverdueData;
 
+function classifyAnalyticsError(errorMessage: string): { errorCode: string; suggestion: string } {
+  if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+    return { errorCode: 'SCRIPT_TIMEOUT', suggestion: 'Try reducing the analysis period or exclude project/tag stats for faster results' };
+  }
+  if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+    return { errorCode: 'OMNIFOCUS_NOT_RUNNING', suggestion: 'Start OmniFocus and ensure it is running' };
+  }
+  if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+    return { errorCode: 'PERMISSION_DENIED', suggestion: 'Enable automation access in System Settings > Privacy & Security > Automation' };
+  }
+  if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
+    return { errorCode: 'NO_DATA', suggestion: 'Add some tasks to OmniFocus before running productivity analysis' };
+  }
+  return { errorCode: 'STATS_ERROR', suggestion: 'Ensure OmniFocus is running and has data to analyze' };
+}
+
 function isTestMockOverdueFormat(data: OverdueDataUnion): data is TestMockOverdueData {
   return 'recommendations' in data && Array.isArray(data.recommendations);
 }
@@ -422,69 +438,11 @@ SCOPE FILTERING:
         );
       }
 
-      // Handle the script result - unwrap v3 envelope
-      interface ScriptOverview {
-        totalTasks?: number;
-        completedTasks?: number;
-        completionRate?: number;
-        activeProjects?: number;
-        overdueCount?: number;
-      }
-
-      interface ScriptData {
-        summary?: ScriptOverview;
-        projectStats?: Record<string, unknown>;
-        tagStats?: Record<string, unknown>;
-        insights?: string[];
-      }
-
-      let actualData: unknown;
-
-      if (result && typeof result === 'object' && result !== null) {
-        if ('data' in result) {
-          actualData = (result as { data: unknown }).data;
-        } else {
-          actualData = result;
-        }
-
-        if (
-          actualData &&
-          typeof actualData === 'object' &&
-          actualData !== null &&
-          'ok' in actualData &&
-          'data' in actualData
-        ) {
-          actualData = (actualData as { ok: boolean; data: unknown }).data;
-        }
-      } else {
-        actualData = result;
-      }
-
-      let overview: ScriptOverview;
-      let projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
-      let tagStatsArray: Record<string, unknown>;
-      let insights: string[];
-
-      if (actualData && typeof actualData === 'object' && actualData !== null && 'summary' in actualData) {
-        const typedScriptData = actualData as ScriptData;
-        const summary = typedScriptData.summary!;
-        overview = {
-          totalTasks: summary.totalTasks || 0,
-          completedTasks: summary.completedTasks || 0,
-          completionRate: summary.completionRate || 0,
-          activeProjects: summary.activeProjects || 0,
-          overdueCount: summary.overdueCount || 0,
-        };
-
-        projectStatsArray = includeProjectStats ? typedScriptData.projectStats || [] : [];
-        tagStatsArray = includeTagStats ? typedScriptData.tagStats || {} : {};
-        insights = typedScriptData.insights || [];
-      } else {
-        overview = { totalTasks: 0, completedTasks: 0, completionRate: 0, activeProjects: 0, overdueCount: 0 };
-        projectStatsArray = [];
-        tagStatsArray = {};
-        insights = [];
-      }
+      const { overview, projectStatsArray, tagStatsArray, insights } = this.unwrapProductivityResult(
+        result,
+        includeProjectStats,
+        includeTagStats,
+      );
 
       const responseData = {
         period,
@@ -519,23 +477,7 @@ SCOPE FILTERING:
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-
-      let suggestion = 'Ensure OmniFocus is running and has data to analyze';
-      let errorCode = 'STATS_ERROR';
-
-      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-        errorCode = 'SCRIPT_TIMEOUT';
-        suggestion = 'Try reducing the analysis period or exclude project/tag stats for faster results';
-      } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
-        errorCode = 'OMNIFOCUS_NOT_RUNNING';
-        suggestion = 'Start OmniFocus and ensure it is running';
-      } else if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
-        errorCode = 'PERMISSION_DENIED';
-        suggestion = 'Enable automation access in System Settings > Privacy & Security > Automation';
-      } else if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
-        errorCode = 'NO_DATA';
-        suggestion = 'Add some tasks to OmniFocus before running productivity analysis';
-      }
+      const { errorCode, suggestion } = classifyAnalyticsError(errorMessage);
 
       return createErrorResponseV2(
         'productivity_stats',
@@ -546,6 +488,64 @@ SCOPE FILTERING:
         timer.toMetadata(),
       );
     }
+  }
+
+  private unwrapProductivityResult(
+    result: unknown,
+    includeProjectStats: boolean,
+    includeTagStats: boolean,
+  ): {
+    overview: { totalTasks: number; completedTasks: number; completionRate: number; activeProjects: number; overdueCount: number };
+    projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
+    tagStatsArray: Record<string, unknown>;
+    insights: string[];
+  } {
+    interface ScriptOverview {
+      totalTasks?: number;
+      completedTasks?: number;
+      completionRate?: number;
+      activeProjects?: number;
+      overdueCount?: number;
+    }
+    interface ScriptData {
+      summary?: ScriptOverview;
+      projectStats?: Record<string, unknown>;
+      tagStats?: Record<string, unknown>;
+      insights?: string[];
+    }
+
+    let actualData: unknown;
+    if (result && typeof result === 'object' && result !== null) {
+      actualData = 'data' in result ? (result as { data: unknown }).data : result;
+      if (
+        actualData && typeof actualData === 'object' && actualData !== null &&
+        'ok' in actualData && 'data' in actualData
+      ) {
+        actualData = (actualData as { ok: boolean; data: unknown }).data;
+      }
+    } else {
+      actualData = result;
+    }
+
+    const empty = { totalTasks: 0, completedTasks: 0, completionRate: 0, activeProjects: 0, overdueCount: 0 };
+    if (!actualData || typeof actualData !== 'object' || !('summary' in actualData)) {
+      return { overview: empty, projectStatsArray: [], tagStatsArray: {}, insights: [] };
+    }
+
+    const typedScriptData = actualData as ScriptData;
+    const summary = typedScriptData.summary!;
+    return {
+      overview: {
+        totalTasks: summary.totalTasks || 0,
+        completedTasks: summary.completedTasks || 0,
+        completionRate: summary.completionRate || 0,
+        activeProjects: summary.activeProjects || 0,
+        overdueCount: summary.overdueCount || 0,
+      },
+      projectStatsArray: includeProjectStats ? typedScriptData.projectStats || [] : [],
+      tagStatsArray: includeTagStats ? typedScriptData.tagStats || {} : {},
+      insights: typedScriptData.insights || [],
+    };
   }
 
   private extractProductivityKeyFindings(data: {
@@ -1097,67 +1097,12 @@ SCOPE FILTERING:
             };
             break;
           }
-          case 'wip_limits': {
-            const tasksByProject = new Map<string, typeof slimData.tasks>();
-            for (const task of slimData.tasks) {
-              if (task.projectId) {
-                if (!tasksByProject.has(task.projectId)) {
-                  tasksByProject.set(task.projectId, []);
-                }
-                tasksByProject.get(task.projectId)!.push(task);
-              }
-            }
-
-            const projectsWithTasks = slimData.projects.map((project) => ({
-              id: project.id,
-              name: project.name,
-              status: project.status,
-              sequential: false,
-              tasks: (tasksByProject.get(project.id) || []).map((task) => ({
-                id: task.id,
-                completed: task.completed,
-                blocked: task.status === 'blocked',
-                deferDate: task.deferDate || null,
-              })),
-            }));
-
-            const wipResult = analyzeWipLimits(projectsWithTasks, { wipLimit: options.wip_limit });
-            findings.wip_limits = {
-              type: 'wip_limits',
-              severity: wipResult.overloadedProjects > 5 ? 'warning' : 'info',
-              count: wipResult.overloadedProjects,
-              items: {
-                projects_over_limit: wipResult.projectsOverWipLimit,
-                healthy_projects: wipResult.healthyProjects,
-                overloaded_projects: wipResult.overloadedProjects,
-              },
-              recommendation: wipResult.recommendations.join(' ') || 'All projects within WIP limits.',
-            };
+          case 'wip_limits':
+            findings.wip_limits = this.analyzeWipPattern(slimData, options.wip_limit);
             break;
-          }
-          case 'due_date_bunching': {
-            const bunchingResult = analyzeDueDateBunching(
-              slimData.tasks.map((t) => ({
-                id: t.id,
-                dueDate: t.dueDate || null,
-                completed: t.completed,
-                project: t.project || 'Inbox',
-              })),
-              { threshold: options.bunching_threshold },
-            );
-            findings.due_date_bunching = {
-              type: 'due_date_bunching',
-              severity: bunchingResult.bunchedDates.length > 3 ? 'warning' : 'info',
-              count: bunchingResult.bunchedDates.length,
-              items: {
-                bunched_dates: bunchingResult.bunchedDates,
-                average_tasks_per_day: bunchingResult.averageTasksPerDay,
-                peak_day: bunchingResult.peakDay,
-              },
-              recommendation: bunchingResult.recommendations.join(' ') || 'Deadline distribution looks manageable.',
-            };
+          case 'due_date_bunching':
+            findings.due_date_bunching = this.analyzeBunchingPattern(slimData.tasks, options.bunching_threshold);
             break;
-          }
         }
       }
 
@@ -1176,6 +1121,70 @@ SCOPE FILTERING:
       this.patternLogger.error('Analysis failed', { error });
       return this.handleErrorV2(error);
     }
+  }
+
+  private analyzeWipPattern(
+    slimData: { tasks: SlimTask[]; projects: ProjectData[] },
+    wipLimit: number,
+  ): PatternFinding {
+    const tasksByProject = new Map<string, SlimTask[]>();
+    for (const task of slimData.tasks) {
+      if (task.projectId) {
+        if (!tasksByProject.has(task.projectId)) {
+          tasksByProject.set(task.projectId, []);
+        }
+        tasksByProject.get(task.projectId)!.push(task);
+      }
+    }
+
+    const projectsWithTasks = slimData.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      sequential: false,
+      tasks: (tasksByProject.get(project.id) || []).map((task) => ({
+        id: task.id,
+        completed: task.completed,
+        blocked: task.status === 'blocked',
+        deferDate: task.deferDate || null,
+      })),
+    }));
+
+    const wipResult = analyzeWipLimits(projectsWithTasks, { wipLimit });
+    return {
+      type: 'wip_limits',
+      severity: wipResult.overloadedProjects > 5 ? 'warning' : 'info',
+      count: wipResult.overloadedProjects,
+      items: {
+        projects_over_limit: wipResult.projectsOverWipLimit,
+        healthy_projects: wipResult.healthyProjects,
+        overloaded_projects: wipResult.overloadedProjects,
+      },
+      recommendation: wipResult.recommendations.join(' ') || 'All projects within WIP limits.',
+    };
+  }
+
+  private analyzeBunchingPattern(tasks: SlimTask[], bunchingThreshold: number): PatternFinding {
+    const bunchingResult = analyzeDueDateBunching(
+      tasks.map((t) => ({
+        id: t.id,
+        dueDate: t.dueDate || null,
+        completed: t.completed,
+        project: t.project || 'Inbox',
+      })),
+      { threshold: bunchingThreshold },
+    );
+    return {
+      type: 'due_date_bunching',
+      severity: bunchingResult.bunchedDates.length > 3 ? 'warning' : 'info',
+      count: bunchingResult.bunchedDates.length,
+      items: {
+        bunched_dates: bunchingResult.bunchedDates,
+        average_tasks_per_day: bunchingResult.averageTasksPerDay,
+        peak_day: bunchingResult.peakDay,
+      },
+      recommendation: bunchingResult.recommendations.join(' ') || 'Deadline distribution looks manageable.',
+    };
   }
 
   private async fetchSlimmedData(
@@ -1500,29 +1509,8 @@ SCOPE FILTERING:
       }
     }
 
-    const tagNames = Array.from(tagStats.keys());
-    for (let i = 0; i < tagNames.length - 1; i++) {
-      for (let j = i + 1; j < tagNames.length; j++) {
-        const similarity = this.calculateSimilarity(tagNames[i], tagNames[j]);
-        if (similarity > 0.8 && similarity < 1.0) {
-          findings.potential_synonyms.push({
-            tag1: tagNames[i],
-            tag2: tagNames[j],
-            similarity,
-            combined_usage: (tagStats.get(tagNames[i]) || 0) + (tagStats.get(tagNames[j]) || 0),
-          });
-        }
-      }
-    }
-
-    const totalTagUsage = Array.from(tagStats.values()).reduce((a, b) => a + b, 0);
-    let entropy = 0;
-    for (const count of tagStats.values()) {
-      const p = count / totalTagUsage;
-      if (p > 0) {
-        entropy -= p * Math.log2(p);
-      }
-    }
+    this.detectSynonyms(tagStats, findings);
+    const entropy = this.calculateTagEntropy(tagStats);
 
     const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
 
@@ -1542,6 +1530,39 @@ SCOPE FILTERING:
       },
       recommendation: this.generateTagRecommendation(findings),
     };
+  }
+
+  private detectSynonyms(
+    tagStats: Map<string, number>,
+    findings: { potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }> },
+  ): void {
+    const tagNames = Array.from(tagStats.keys());
+    for (let i = 0; i < tagNames.length - 1; i++) {
+      for (let j = i + 1; j < tagNames.length; j++) {
+        const similarity = this.calculateSimilarity(tagNames[i], tagNames[j]);
+        if (similarity > 0.8 && similarity < 1.0) {
+          findings.potential_synonyms.push({
+            tag1: tagNames[i],
+            tag2: tagNames[j],
+            similarity,
+            combined_usage: (tagStats.get(tagNames[i]) || 0) + (tagStats.get(tagNames[j]) || 0),
+          });
+        }
+      }
+    }
+  }
+
+  private calculateTagEntropy(tagStats: Map<string, number>): number {
+    const totalTagUsage = Array.from(tagStats.values()).reduce((a, b) => a + b, 0);
+    if (totalTagUsage === 0) return 0;
+    let entropy = 0;
+    for (const count of tagStats.values()) {
+      const p = count / totalTagUsage;
+      if (p > 0) {
+        entropy -= p * Math.log2(p);
+      }
+    }
+    return entropy;
   }
 
   private generateTagRecommendation(findings: {
