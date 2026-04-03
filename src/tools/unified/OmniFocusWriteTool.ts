@@ -1211,54 +1211,10 @@ SAFETY:
 
     // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
-      try {
-        let autoTempIdCounter = 0;
-        const items: BatchItem[] = createOps.map((op) => {
-          const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
-          if (!item.tempId) {
-            item.tempId = `auto_temp_${++autoTempIdCounter}`;
-          }
-          return item;
-        });
-
-        const createResult = await this.executeBatchCreates(items, {
-          createSequentially: compiled.createSequentially ?? true,
-          atomicOperation: compiled.atomicOperation ?? false,
-          returnMapping: compiled.returnMapping ?? true,
-          stopOnError: compiled.stopOnError ?? true,
-        });
-
-        if (createResult.success === false && createResult.rolledBack) {
-          // Atomic operation failed and was rolled back
-          results.errors.push(createResult);
-          if (compiled.stopOnError) hadError = true;
-        } else if (createResult.failed > 0 && compiled.stopOnError) {
-          results.errors.push(createResult);
-          hadError = true;
-        } else {
-          results.created.push(createResult);
-        }
-
-        // Extract tempId mapping for subsequent operations
-        createdCount = createResult.created;
-        if (createResult.mapping) {
-          tempIdMapping = createResult.mapping;
-        }
-      } catch (err) {
-        if (err instanceof DependencyGraphError) {
-          results.errors.push({
-            phase: 'create',
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: err.message,
-            },
-            details: err.details,
-          });
-        } else {
-          results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
-        }
-        if (compiled.stopOnError) hadError = true;
-      }
+      const createPhase = await this.executeBatchCreatePhase(createOps, compiled, results);
+      createdCount = createPhase.createdCount;
+      tempIdMapping = createPhase.tempIdMapping;
+      hadError = createPhase.hadError;
     }
 
     // Phase 2-4: Updates, completes, deletes — route through inline handlers
@@ -1343,6 +1299,62 @@ SAFETY:
       default:
         throw new Error(`Unexpected batch task operation: ${op.operation}`);
     }
+  }
+
+  private async executeBatchCreatePhase(
+    createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
+    results: { created: unknown[]; errors: unknown[] },
+  ): Promise<{ createdCount: number; tempIdMapping: Record<string, string>; hadError: boolean }> {
+    let tempIdMapping: Record<string, string> = {};
+    let createdCount = 0;
+    let hadError = false;
+
+    try {
+      let autoTempIdCounter = 0;
+      const items: BatchItem[] = createOps.map((op) => {
+        const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
+        if (!item.tempId) {
+          item.tempId = `auto_temp_${++autoTempIdCounter}`;
+        }
+        return item;
+      });
+
+      const createResult = await this.executeBatchCreates(items, {
+        createSequentially: compiled.createSequentially ?? true,
+        atomicOperation: compiled.atomicOperation ?? false,
+        returnMapping: compiled.returnMapping ?? true,
+        stopOnError: compiled.stopOnError ?? true,
+      });
+
+      if (createResult.success === false && createResult.rolledBack) {
+        results.errors.push(createResult);
+        if (compiled.stopOnError) hadError = true;
+      } else if (createResult.failed > 0 && compiled.stopOnError) {
+        results.errors.push(createResult);
+        hadError = true;
+      } else {
+        results.created.push(createResult);
+      }
+
+      createdCount = createResult.created;
+      if (createResult.mapping) {
+        tempIdMapping = createResult.mapping;
+      }
+    } catch (err) {
+      if (err instanceof DependencyGraphError) {
+        results.errors.push({
+          phase: 'create',
+          error: { code: 'VALIDATION_ERROR', message: err.message },
+          details: err.details,
+        });
+      } else {
+        results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
+      }
+      if (compiled.stopOnError) hadError = true;
+    }
+
+    return { createdCount, tempIdMapping, hadError };
   }
 
   /**

@@ -35,13 +35,13 @@
 | Priority | Function | Before | After | Strategy |
 |----------|----------|--------|-------|----------|
 | 1 | `generateTaskSummary` | 52 | ≤25 | Extracted `countTaskStats`, `generateTaskInsights`, `generateTaskPreview` |
-| 2 | `routeToBatch` | 51 | 39 | Extracted `dispatchBatchOp` method for operation routing |
+| 2 | `routeToBatch` | 51 | ≤25 | Extracted `executeBatchCreatePhase` and `dispatchBatchOp` methods |
 | 3 | `sortTasks` | 40 | ≤25 | Extracted `compareValues` and `toSortableString` helpers |
 | 4 | `validateRepetitionRule` | 32 | ≤25 | Extracted `validateDaysOfWeek`, `validateArrayRange` |
 | 5 | `executeBatchCreates` | 35 | ≤25 | Extracted `invalidateBatchCaches` method |
 | — | `generateProjectSummary` | 32 | ≤25 | Extracted stalled project detection helper |
 
-**Result:** 22 → 17 cognitive complexity warnings, 99 → 92 total warnings, 0 errors.
+**Result:** 22 → 16 cognitive complexity warnings, 99 → 91 total warnings, 0 errors.
 
 ## Skip List (with reasoning)
 
