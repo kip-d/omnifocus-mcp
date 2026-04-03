@@ -221,7 +221,7 @@ function detectPeopleTags(text: string): string[] {
   const tags: string[] = [];
 
   for (const pattern of PEOPLE_PATTERNS) {
-    const match = text.match(pattern.pattern);
+    const match = pattern.pattern.exec(text);
     if (match && match[1]) {
       const name = match[1];
       // Filter out common words that aren't names

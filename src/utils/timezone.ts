@@ -43,7 +43,7 @@ export function getSystemTimezone(): string {
     // Method 4: Read from /etc/localtime symlink (Linux/Unix)
     try {
       const tzPath = execSync('readlink /etc/localtime', { encoding: 'utf8', timeout: 1000 }).trim();
-      const match = tzPath.match(/zoneinfo\/(.+)$/);
+      const match = /zoneinfo\/(.+)$/.exec(tzPath);
       if (match) {
         return match[1];
       }
