@@ -1626,7 +1626,8 @@ SCOPE FILTERING:
     const bunchedEntries: Array<[string, number]> = Array.from(findings.deadline_bunching.entries());
     const bunchedDates = bunchedEntries.filter(([_, count]) => count > 5).sort((a, b) => b[1] - a[1]);
 
-    const severity = findings.overdue.length > 10 ? 'critical' : findings.overdue.length > 5 ? 'warning' : 'info';
+    const overdueLevel = findings.overdue.length > 5 ? 'warning' : 'info';
+    const severity = findings.overdue.length > 10 ? 'critical' : overdueLevel;
 
     const deadlineInfo = {
       overdue_count: findings.overdue.length,
@@ -1689,12 +1690,14 @@ SCOPE FILTERING:
         const daysWaiting = task.createdDate
           ? Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000))
           : 0;
+        const tagOrBlocked = hasWaitingTag ? 'tag' : 'blocked';
+        const waitingReason: 'name_pattern' | 'tag' | 'blocked' = isWaiting ? 'name_pattern' : tagOrBlocked;
 
         waitingTasks.push({
           id: task.id,
           name: task.name,
           project: task.project,
-          reason: isWaiting ? 'name_pattern' : hasWaitingTag ? 'tag' : 'blocked',
+          reason: waitingReason,
           days_waiting: daysWaiting,
         });
       }
@@ -1797,9 +1800,10 @@ SCOPE FILTERING:
 
     const healthScore = Math.max(0, 100 - criticalCount * 20 - warningCount * 10);
 
+    const fairOrNeedsAttention = healthScore >= 60 ? 'Fair' : 'Needs Attention';
     return {
       health_score: healthScore,
-      health_rating: healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Fair' : 'Needs Attention',
+      health_rating: healthScore >= 80 ? 'Good' : fairOrNeedsAttention,
       total_tasks_analyzed: data.tasks.length,
       total_projects_analyzed: data.projects.length,
       patterns_analyzed: Object.keys(findings).length,
@@ -2265,8 +2269,8 @@ SCOPE FILTERING:
 
     try {
       const input = compiled.params.text;
-      const extractMode =
-        compiled.params.extractTasks !== undefined ? (compiled.params.extractTasks ? 'action_items' : 'both') : 'both';
+      const taskMode = compiled.params.extractTasks ? 'action_items' : 'both';
+      const extractMode = compiled.params.extractTasks !== undefined ? taskMode : 'both';
       const defaultProject = compiled.params.defaultProject;
       const defaultTags = compiled.params.defaultTags;
 
@@ -2591,7 +2595,8 @@ SCOPE FILTERING:
     if (name.length > 10) score++;
     if (tags.length > 0) score++;
     if (dates.dueDate || dates.deferDate) score++;
-    return score >= 2 ? 'high' : score === 1 ? 'medium' : 'low';
+    const mediumOrLow = score === 1 ? 'medium' : 'low';
+    return score >= 2 ? 'high' : mediumOrLow;
   }
 
   private extractNote(fullText: string, taskName: string): string | undefined {
