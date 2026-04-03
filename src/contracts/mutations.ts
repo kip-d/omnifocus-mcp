@@ -560,6 +560,50 @@ function validateBulkDeleteMutation(mutation: BulkDeleteMutation, errors: Mutati
 const VALID_FREQUENCIES = ['minutely', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'];
 const VALID_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
+function validateDaysOfWeek(
+  daysOfWeek: NonNullable<RepetitionRule['daysOfWeek']>,
+  errors: MutationValidationError[],
+): void {
+  for (const daySpec of daysOfWeek) {
+    if (!VALID_DAYS.includes(daySpec.day)) {
+      errors.push({
+        code: 'INVALID_VALUE',
+        message: `Invalid day: ${daySpec.day}. Must be one of: ${VALID_DAYS.join(', ')}`,
+        field: 'repetitionRule.daysOfWeek',
+      });
+      break;
+    }
+    // Validate position if provided (-5 to 5, but not 0)
+    if (daySpec.position !== undefined && (daySpec.position === 0 || daySpec.position < -5 || daySpec.position > 5)) {
+      errors.push({
+        code: 'INVALID_VALUE',
+        message: `Invalid position: ${daySpec.position}. Must be 1-5 or -1 to -5 (not 0)`,
+        field: 'repetitionRule.daysOfWeek',
+      });
+      break;
+    }
+  }
+}
+
+function validateArrayRange(
+  items: number[],
+  min: number,
+  max: number,
+  fieldName: string,
+  errors: MutationValidationError[],
+): void {
+  for (const item of items) {
+    if (item === 0 || item < min || item > max) {
+      errors.push({
+        code: 'INVALID_VALUE',
+        message: `Invalid ${fieldName}: ${item}. Must be 1-${max} or -1 to ${min} (not 0)`,
+        field: `repetitionRule.${fieldName}`,
+      });
+      break;
+    }
+  }
+}
+
 function validateRepetitionRule(rule: RepetitionRule, errors: MutationValidationError[]): void {
   // Validate frequency
   if (!VALID_FREQUENCIES.includes(rule.frequency)) {
@@ -581,39 +625,12 @@ function validateRepetitionRule(rule: RepetitionRule, errors: MutationValidation
 
   // Validate daysOfWeek (BYDAY)
   if (rule.daysOfWeek) {
-    for (const daySpec of rule.daysOfWeek) {
-      if (!VALID_DAYS.includes(daySpec.day)) {
-        errors.push({
-          code: 'INVALID_VALUE',
-          message: `Invalid day: ${daySpec.day}. Must be one of: ${VALID_DAYS.join(', ')}`,
-          field: 'repetitionRule.daysOfWeek',
-        });
-        break;
-      }
-      // Validate position if provided (-5 to 5, but not 0)
-      if (daySpec.position !== undefined && (daySpec.position === 0 || daySpec.position < -5 || daySpec.position > 5)) {
-        errors.push({
-          code: 'INVALID_VALUE',
-          message: `Invalid position: ${daySpec.position}. Must be 1-5 or -1 to -5 (not 0)`,
-          field: 'repetitionRule.daysOfWeek',
-        });
-        break;
-      }
-    }
+    validateDaysOfWeek(rule.daysOfWeek, errors);
   }
 
   // Validate daysOfMonth (BYMONTHDAY)
   if (rule.daysOfMonth) {
-    for (const day of rule.daysOfMonth) {
-      if (day === 0 || day < -31 || day > 31) {
-        errors.push({
-          code: 'INVALID_VALUE',
-          message: `Invalid day of month: ${day}. Must be 1-31 or -1 to -31 (not 0)`,
-          field: 'repetitionRule.daysOfMonth',
-        });
-        break;
-      }
-    }
+    validateArrayRange(rule.daysOfMonth, -31, 31, 'daysOfMonth', errors);
   }
 
   // Validate count (COUNT)
@@ -645,16 +662,7 @@ function validateRepetitionRule(rule: RepetitionRule, errors: MutationValidation
 
   // Validate setPositions (BYSETPOS)
   if (rule.setPositions) {
-    for (const pos of rule.setPositions) {
-      if (pos === 0 || pos < -366 || pos > 366) {
-        errors.push({
-          code: 'INVALID_VALUE',
-          message: `Invalid set position: ${pos}. Must be 1-366 or -1 to -366 (not 0)`,
-          field: 'repetitionRule.setPositions',
-        });
-        break;
-      }
-    }
+    validateArrayRange(rule.setPositions, -366, 366, 'setPositions', errors);
   }
 
   // Warn about conflicting COUNT and UNTIL (both provided)

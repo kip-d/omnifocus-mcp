@@ -18,6 +18,43 @@ import { createLogger } from '../../../utils/logger.js';
 
 const logger = createLogger('task-sanitizer');
 
+/**
+ * Sanitize a single date field with its corresponding clear flag.
+ *
+ * Handles: clear-flag → null, string → localToUTC conversion, explicit null passthrough.
+ * Explicit null is always allowed (harmless for fields that also have a clear flag).
+ */
+function sanitizeDateField(
+  updates: Record<string, unknown>,
+  sanitized: Record<string, unknown>,
+  fieldName: string,
+  clearFlagName: string,
+  dateType: 'due' | 'defer' | 'planned' | 'completion',
+): void {
+  if (updates[clearFlagName]) {
+    logger.debug(`Clearing ${fieldName} (${clearFlagName} flag set)`);
+    sanitized[fieldName] = null;
+  } else if (updates[fieldName] !== undefined) {
+    const value = updates[fieldName];
+    logger.debug(`Processing ${fieldName}:`, { value, type: typeof value });
+
+    if (typeof value === 'string') {
+      try {
+        const utcDate = localToUTC(value, dateType);
+        logger.debug(`${fieldName} converted to UTC:`, { original: value, converted: utcDate });
+        sanitized[fieldName] = utcDate;
+      } catch (error) {
+        logger.warn(`Invalid ${fieldName} format: ${value}`, error);
+      }
+    } else if (value === null) {
+      // Allow explicit null to clear the date
+      sanitized[fieldName] = null;
+    } else {
+      logger.warn(`Unexpected ${fieldName} type:`, { value, type: typeof value });
+    }
+  }
+}
+
 export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
 
@@ -41,123 +78,12 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
   }
 
   // Handle date fields with separate clear flags
-  if (updates.clearDueDate) {
-    logger.debug('Clearing dueDate (clearDueDate flag set)');
-    sanitized.dueDate = null; // Clear the date
-  } else if (updates.dueDate !== undefined) {
-    logger.debug('Processing dueDate:', {
-      value: updates.dueDate,
-      type: typeof updates.dueDate,
-    });
+  sanitizeDateField(updates, sanitized, 'dueDate', 'clearDueDate', 'due');
+  sanitizeDateField(updates, sanitized, 'deferDate', 'clearDeferDate', 'defer');
+  sanitizeDateField(updates, sanitized, 'plannedDate', 'clearPlannedDate', 'planned');
 
-    if (typeof updates.dueDate === 'string') {
-      try {
-        // Convert local time to UTC for OmniFocus
-        const utcDate = localToUTC(updates.dueDate, 'due');
-        logger.debug('Date converted to UTC:', {
-          original: updates.dueDate,
-          converted: utcDate,
-        });
-        sanitized.dueDate = utcDate;
-      } catch (error) {
-        logger.warn(`Invalid dueDate format: ${updates.dueDate}`, error);
-      }
-    } else {
-      logger.warn('Unexpected dueDate type:', {
-        value: updates.dueDate,
-        type: typeof updates.dueDate,
-      });
-    }
-  }
-
-  if (updates.clearDeferDate) {
-    logger.debug('Clearing deferDate (clearDeferDate flag set)');
-    sanitized.deferDate = null; // Clear the date
-  } else if (updates.deferDate !== undefined) {
-    logger.debug('Processing deferDate:', {
-      value: updates.deferDate,
-      type: typeof updates.deferDate,
-    });
-
-    if (typeof updates.deferDate === 'string') {
-      try {
-        // Convert local time to UTC for OmniFocus
-        const utcDate = localToUTC(updates.deferDate, 'defer');
-        logger.debug('DeferDate converted to UTC:', {
-          original: updates.deferDate,
-          converted: utcDate,
-        });
-        sanitized.deferDate = utcDate;
-      } catch (error) {
-        logger.warn(`Invalid deferDate format: ${updates.deferDate}`, error);
-      }
-    } else {
-      logger.warn('Unexpected deferDate type:', {
-        value: updates.deferDate,
-        type: typeof updates.deferDate,
-      });
-    }
-  }
-
-  // Handle plannedDate (OmniFocus 4.7+ feature)
-  if (updates.clearPlannedDate) {
-    logger.debug('Clearing plannedDate (clearPlannedDate flag set)');
-    sanitized.plannedDate = null; // Clear the date
-  } else if (updates.plannedDate !== undefined) {
-    logger.debug('Processing plannedDate:', {
-      value: updates.plannedDate,
-      type: typeof updates.plannedDate,
-    });
-
-    if (typeof updates.plannedDate === 'string') {
-      try {
-        // Convert local time to UTC for OmniFocus
-        const utcDate = localToUTC(updates.plannedDate, 'planned');
-        logger.debug('PlannedDate converted to UTC:', {
-          original: updates.plannedDate,
-          converted: utcDate,
-        });
-        sanitized.plannedDate = utcDate;
-      } catch (error) {
-        logger.warn(`Invalid plannedDate format: ${updates.plannedDate}`, error);
-      }
-    } else if (updates.plannedDate === null) {
-      // Allow explicit null to clear the date
-      sanitized.plannedDate = null;
-    } else {
-      logger.warn('Unexpected plannedDate type:', {
-        value: updates.plannedDate,
-        type: typeof updates.plannedDate,
-      });
-    }
-  }
-
-  // Handle completion date (for complete operation)
-  if (updates.completionDate !== undefined && updates.completionDate !== null) {
-    logger.debug('Processing completionDate:', {
-      value: updates.completionDate,
-      type: typeof updates.completionDate,
-    });
-
-    if (typeof updates.completionDate === 'string') {
-      try {
-        // Convert local time to UTC for OmniFocus
-        const utcDate = localToUTC(updates.completionDate, 'completion');
-        logger.debug('CompletionDate converted to UTC:', {
-          original: updates.completionDate,
-          converted: utcDate,
-        });
-        sanitized.completionDate = utcDate;
-      } catch (error) {
-        logger.warn(`Invalid completionDate format: ${updates.completionDate}`, error);
-      }
-    } else {
-      logger.warn('Unexpected completionDate type:', {
-        value: updates.completionDate,
-        type: typeof updates.completionDate,
-      });
-    }
-  }
+  // Handle completion date (for complete operation) — no clear flag, reuse helper with empty key
+  sanitizeDateField(updates, sanitized, 'completionDate', 'clearCompletionDate', 'completion');
 
   // Handle numeric fields with separate clear flag
   if (updates.clearEstimatedMinutes) {
