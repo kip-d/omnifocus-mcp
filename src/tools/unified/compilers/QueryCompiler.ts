@@ -50,11 +50,12 @@ export class QueryCompiler {
     // Transform filters from API schema to internal contract, then normalize
     const rawFilters: TaskFilter = query.filters ? this.transformFilters(query.filters) : {};
     const filters = normalizeFilter(rawFilters);
+    const taskMode = 'mode' in query && query.mode ? query.mode : 'all';
 
     return {
       type: query.type,
       // Task-specific — default mode to 'all' for task queries only
-      mode: query.type === 'tasks' ? ('mode' in query && query.mode ? query.mode : 'all') : undefined,
+      mode: query.type === 'tasks' ? taskMode : undefined,
       filters,
       fields: 'fields' in query ? query.fields : undefined,
       sort: 'sort' in query ? query.sort : undefined,

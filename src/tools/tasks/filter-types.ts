@@ -39,10 +39,6 @@ export interface NumberFilter {
   upperBound?: number; // For BETWEEN operator
 }
 
-/**
- * Boolean filter (no operator needed)
- */
-export type BooleanFilter = boolean;
 
 /**
  * Advanced query filters with operator support
@@ -59,11 +55,11 @@ export interface QueryFilters {
   tags?: ArrayFilter;
 
   // Status filters
-  completed?: BooleanFilter;
-  flagged?: BooleanFilter;
-  available?: BooleanFilter;
-  blocked?: BooleanFilter;
-  inInbox?: BooleanFilter;
+  completed?: boolean;
+  flagged?: boolean;
+  available?: boolean;
+  blocked?: boolean;
+  inInbox?: boolean;
 
   // Date filters
   dueDate?: DateFilter;

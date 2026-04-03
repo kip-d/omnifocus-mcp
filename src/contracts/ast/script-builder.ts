@@ -313,12 +313,11 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   // Determine completion filter behavior
   // If filter explicitly sets completed, use that
   // Otherwise, use includeCompleted option
+  const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
   const completionCheck =
     filter.completed !== undefined
       ? '' // AST handles it
-      : includeCompleted
-        ? ''
-        : 'if (task.completed) return;';
+      : defaultCompletionCheck;
 
   // When sort is specified, we collect ALL matching tasks, sort in-script, then slice.
   // This ensures sort+limit returns correctly ordered results instead of arbitrary-then-sorted.
@@ -536,12 +535,11 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
 
   // Determine completion filter - exclude completed by default for inbox
+  const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
   const completionCheck =
     filter.completed !== undefined
       ? '' // AST handles it if explicitly set in filter
-      : includeCompleted
-        ? ''
-        : 'if (task.completed) return;';
+      : defaultCompletionCheck;
 
   // Only include offset logic when offset > 0
   const useOffset = offset > 0;

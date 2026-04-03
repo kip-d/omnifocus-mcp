@@ -45,7 +45,7 @@ function findDueDate(text: string): string | undefined {
 
   for (const phrase of duePhrases) {
     const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,]+?)(?:\\.|$|,|;)`, 'i');
-    const match = textLower.match(pattern);
+    const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
       const parsed = parseRelativeDate(dateStr);
@@ -76,7 +76,7 @@ function findDeferDate(text: string): string | undefined {
 
   for (const phrase of deferPhrases) {
     const pattern = new RegExp(`\\b${phrase}\\s+([\\w\\s,]+?)(?:\\.|$|,|;)`, 'i');
-    const match = textLower.match(pattern);
+    const match = pattern.exec(textLower);
     if (match) {
       const dateStr = match[1].trim();
       const parsed = parseRelativeDate(dateStr);
@@ -88,9 +88,8 @@ function findDeferDate(text: string): string | undefined {
 
   // Pattern: "follow up [with X]" - treat as defer date with natural language date
   if (/\bfollow up\b/i.test(text)) {
-    const followUpMatch = text.match(
-      /follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
-    );
+    const followUpMatch =
+      /follow up.*?(next\s+\w+|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.exec(text);
     if (followUpMatch) {
       const parsed = parseRelativeDate(followUpMatch[1]);
       if (parsed) {
@@ -232,14 +231,14 @@ function getEndOfMonth(date: Date): Date {
  */
 function parseSpecificDate(dateStr: string): Date | undefined {
   // ISO format: YYYY-MM-DD
-  const isoMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+  const isoMatch = /(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   }
 
   // Slash format: MM/DD or MM/DD/YYYY
-  const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/);
+  const slashMatch = /(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/.exec(dateStr);
   if (slashMatch) {
     const [, month, day, year] = slashMatch;
     const currentYear = new Date().getFullYear();
@@ -267,8 +266,8 @@ function parseSpecificDate(dateStr: string): Date | undefined {
     const fullPattern = new RegExp(`\\b${monthNames[i]}\\s+(\\d{1,2})\\b`, 'i');
     const abbrPattern = new RegExp(`\\b${monthAbbr[i]}\\.?\\s+(\\d{1,2})\\b`, 'i');
 
-    const fullMatch = dateStr.match(fullPattern);
-    const abbrMatch = dateStr.match(abbrPattern);
+    const fullMatch = fullPattern.exec(dateStr);
+    const abbrMatch = abbrPattern.exec(dateStr);
 
     if (fullMatch || abbrMatch) {
       const match = fullMatch || abbrMatch;
