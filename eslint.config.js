@@ -1,11 +1,15 @@
 import eslint from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 
 export default [
   // Base ESLint recommended rules
   eslint.configs.recommended,
+
+  // SonarJS recommended rules (code smell & bug detection)
+  sonarjs.configs.recommended,
 
   // TypeScript files configuration
   {
@@ -57,6 +61,28 @@ export default [
       'no-trailing-spaces': 'error',
       'eol-last': ['error', 'always'],
 
+      // SonarJS overrides — relaxed for this codebase
+      'sonarjs/cognitive-complexity': ['warn', 25],
+      'sonarjs/no-nested-conditional': 'warn',
+      'sonarjs/different-types-comparison': 'warn',
+      'sonarjs/deprecation': 'warn',
+      'sonarjs/prefer-regexp-exec': 'warn',
+      'sonarjs/slow-regex': 'warn',
+      'sonarjs/no-commented-code': 'warn',
+      'sonarjs/todo-tag': 'warn',
+      'sonarjs/fixme-tag': 'warn',
+      'sonarjs/pseudo-random': 'off',        // Only used for nonces/ephemeral IDs
+      'sonarjs/no-os-command-from-path': 'off', // Expected: JXA/osascript execution
+      'sonarjs/no-nested-functions': 'off',  // Common TS/functional pattern
+      'sonarjs/code-eval': 'off',            // Required for JXA evaluateJavascript
+      'sonarjs/void-use': 'off',             // void used intentionally for fire-and-forget
+      'sonarjs/use-type-alias': 'warn',
+      'sonarjs/no-nested-template-literals': 'warn',
+      'sonarjs/no-alphabetical-sort': 'warn',
+      'sonarjs/redundant-type-aliases': 'warn',
+      'sonarjs/no-misleading-array-reverse': 'warn',
+      'sonarjs/no-undefined-argument': 'warn',
+
       // Additional useful rules
       'no-case-declarations': 'error',
       '@typescript-eslint/no-base-to-string': 'warn',
@@ -78,6 +104,11 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+      'sonarjs/no-identical-functions': 'off',
+      'sonarjs/no-commented-code': 'off',
+      'sonarjs/cognitive-complexity': 'off',
+      'sonarjs/no-nested-conditional': 'off',
+      'sonarjs/no-dead-store': 'off',
     },
   },
 
