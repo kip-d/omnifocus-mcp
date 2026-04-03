@@ -224,16 +224,19 @@ interface DormantProject {
 }
 
 // Meeting notes types
+type ProjectMatchLevel = 'exact' | 'partial' | 'none';
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 interface ExtractedTask {
   tempId: string;
   name: string;
   suggestedProject: string | null;
-  projectMatch: 'exact' | 'partial' | 'none';
+  projectMatch: ProjectMatchLevel;
   suggestedTags: string[];
   suggestedDueDate?: string;
   suggestedDeferDate?: string;
   estimatedMinutes?: number;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: ConfidenceLevel;
   sourceText: string;
   note?: string;
 }
@@ -247,7 +250,7 @@ interface ExtractedProject {
     estimatedMinutes?: number;
     suggestedTags?: string[];
   }>;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: ConfidenceLevel;
   sourceText: string;
 }
 
@@ -583,7 +586,10 @@ SCOPE FILTERING:
     }
 
     if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
-      const topProject = data.stats.projectStats.sort((a, b) => (b.completedCount || 0) - (a.completedCount || 0))[0];
+      const sortedProjectStats = [...data.stats.projectStats].sort(
+        (a, b) => (b.completedCount || 0) - (a.completedCount || 0),
+      );
+      const topProject = sortedProjectStats[0];
       if (topProject && topProject.completedCount > 0) {
         findings.push(`Most productive project: ${topProject.name} (${topProject.completedCount} completed)`);
       }
@@ -1747,7 +1753,7 @@ SCOPE FILTERING:
       min: Math.min(...estimates),
       max: Math.max(...estimates),
       mean: estimates.reduce((a, b) => a + b, 0) / estimates.length,
-      median: estimates.sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
+      median: [...estimates].sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
     };
 
     const patterns: string[] = [];
@@ -1831,7 +1837,7 @@ SCOPE FILTERING:
 
       wfLogger.info(`Starting workflow analysis with depth: ${analysisDepth}, focus: ${focusAreas.join(', ')}`);
 
-      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort().join('_')}_${maxInsights}`;
+      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort((a, b) => a.localeCompare(b)).join('_')}_${maxInsights}`;
 
       const cached = this.cache.get<{
         insights?: Array<string | { insight?: string; message?: string }>;

@@ -4,14 +4,16 @@
  */
 
 // Type interfaces for OmniFocus data structures
+type DateFieldValue = string | Date | null;
+
 interface OmniFocusTask {
   id?: string;
   name?: string;
   completed?: boolean;
   flagged?: boolean;
   status?: string;
-  dueDate?: string | Date | null;
-  plannedDate?: string | Date | null;
+  dueDate?: DateFieldValue;
+  plannedDate?: DateFieldValue;
   project?: string | null;
   [key: string]: unknown;
 }
@@ -20,8 +22,8 @@ interface OmniFocusProject {
   id?: string;
   name?: string;
   status?: string;
-  nextReviewDate?: string | Date | null;
-  modifiedDate?: string | Date | null;
+  nextReviewDate?: DateFieldValue;
+  modifiedDate?: DateFieldValue;
   [key: string]: unknown;
 }
 
@@ -249,12 +251,10 @@ function generateTaskPreview(tasks: unknown[], now: Date): TaskSummary['preview'
     .map((t) => ({
       id: t.id || '',
       name: t.name || '',
-      dueDate:
-        t.dueDate && t.dueDate !== null
-          ? typeof t.dueDate === 'string'
-            ? t.dueDate
-            : t.dueDate.toISOString()
-          : undefined,
+      dueDate: (() => {
+        if (!t.dueDate || t.dueDate === null) return undefined;
+        return typeof t.dueDate === 'string' ? t.dueDate : t.dueDate.toISOString();
+      })(),
       project: t.project || undefined,
       flagged: t.flagged,
     }));
@@ -709,7 +709,8 @@ export function normalizeDateInput(
   const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
   if (dateOnlyPattern.test(String(input).trim())) {
     // Parse with context-appropriate default time
-    const defaultTime = context === 'defer' ? '08:00' : context === 'due' ? '17:00' : '12:00';
+    const dueOrDefault = context === 'due' ? '17:00' : '12:00';
+    const defaultTime = context === 'defer' ? '08:00' : dueOrDefault;
     const parsed = new Date(input + ' ' + defaultTime);
     if (!isNaN(parsed.getTime())) {
       return parsed;

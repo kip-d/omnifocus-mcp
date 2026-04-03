@@ -93,12 +93,11 @@ export function flattenBatchResults(results: NestedBatchResults): FlatBatchResul
   // Errors — map from { phase, id, error } to flat format
   for (const errorItem of results.errors) {
     const err = errorItem as { phase?: string; id?: string; error?: string | { message?: string } };
+    const errorFallback = typeof err.error === 'object' ? err.error?.message : String(err.error);
     const errorMsg =
       typeof err.error === 'string'
         ? err.error
-        : typeof err.error === 'object'
-          ? err.error?.message
-          : String(err.error);
+        : errorFallback;
     flat.push({
       operation: err.phase || 'unknown',
       success: false as const,

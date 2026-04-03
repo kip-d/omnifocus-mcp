@@ -419,18 +419,16 @@ SAFETY:
       delete converted.projectId;
       return { data: converted };
     } catch (dateError) {
-      const fieldName =
-        dateError instanceof Error && dateError.message.includes('defer')
-          ? 'deferDate'
-          : dateError instanceof Error && dateError.message.includes('planned')
-            ? 'plannedDate'
-            : 'dueDate';
-      const providedValue =
-        fieldName === 'deferDate'
-          ? createArgs.deferDate
-          : fieldName === 'plannedDate'
-            ? createArgs.plannedDate
-            : createArgs.dueDate;
+      const isDefer = dateError instanceof Error && dateError.message.includes('defer');
+      const isPlanned = dateError instanceof Error && dateError.message.includes('planned');
+      const plannedOrDue = isPlanned ? 'plannedDate' : 'dueDate';
+      const fieldName = isDefer ? 'deferDate' : plannedOrDue;
+      const fieldValues: Record<string, string | undefined> = {
+        deferDate: createArgs.deferDate,
+        plannedDate: createArgs.plannedDate,
+        dueDate: createArgs.dueDate,
+      };
+      const providedValue = fieldValues[fieldName];
       const errorDetails = invalidDateError(fieldName, providedValue || '');
       return {
         isError: true,
@@ -658,12 +656,11 @@ SAFETY:
         const errorValue = rawData.error;
         const subSuccess = rawData.success;
         if (errorValue || subSuccess === false) {
+          const errorFallback = typeof errorValue === 'string' ? errorValue : 'Script execution failed';
           const errorMessage =
             typeof rawData.message === 'string'
               ? rawData.message
-              : typeof errorValue === 'string'
-                ? errorValue
-                : 'Script execution failed';
+              : errorFallback;
           return createErrorResponseV2(
             'omnifocus_write',
             'SCRIPT_ERROR',

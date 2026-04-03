@@ -77,6 +77,8 @@ export function projectFieldsOnResult(
 // TASK QUERY BUILDER
 // =============================================================================
 
+type ExportFormat = 'json' | 'csv' | 'markdown';
+
 interface TaskQueryPlan {
   script: string;
   filter: TaskFilter;
@@ -742,7 +744,7 @@ PERFORMANCE:
 
   private async handleExport(compiled: CompiledQuery): Promise<unknown> {
     const exportType = compiled.exportType || 'tasks';
-    const format = (compiled.format || 'json') as 'json' | 'csv' | 'markdown';
+    const format = (compiled.format || 'json') as ExportFormat;
     const timer = new OperationTimerV2();
 
     try {
@@ -770,7 +772,7 @@ PERFORMANCE:
 
   private async handleTaskExport(
     compiled: CompiledQuery,
-    format: 'json' | 'csv' | 'markdown',
+    format: ExportFormat,
     timer: OperationTimerV2,
   ): Promise<unknown> {
     // Build ExportFilter from compiled query filters
@@ -810,7 +812,7 @@ PERFORMANCE:
       return createSuccessResponseV2(
         'export',
         {
-          format: data.format as 'json' | 'csv' | 'markdown',
+          format: data.format as ExportFormat,
           exportType: 'tasks' as const,
           data: data.data as string | object,
           count: data.count,
@@ -831,7 +833,7 @@ PERFORMANCE:
   }
 
   private async handleProjectExport(
-    format: 'json' | 'csv' | 'markdown',
+    format: ExportFormat,
     includeStats: boolean,
     timer: OperationTimerV2,
   ): Promise<unknown> {
@@ -857,7 +859,7 @@ PERFORMANCE:
       return createSuccessResponseV2(
         'export',
         {
-          format: data.format as 'json' | 'csv' | 'markdown',
+          format: data.format as ExportFormat,
           exportType: 'projects' as const,
           data: data.data as string | object,
           count: data.count,
@@ -880,7 +882,7 @@ PERFORMANCE:
 
   private async handleBulkExport(
     compiled: CompiledQuery,
-    format: 'json' | 'csv' | 'markdown',
+    format: ExportFormat,
     timer: OperationTimerV2,
   ): Promise<unknown> {
     const outputDirectory = compiled.outputDirectory;
