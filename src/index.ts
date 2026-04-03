@@ -137,7 +137,7 @@ export async function runServer() {
 async function runStdioServer(cacheManager: CacheManager) {
   logger.info('Starting server in stdio mode');
 
-  // Create server instance with MCP 2025-11-25 metadata
+  // Create server instance with MCP metadata (SDK 1.29.0, protocol 2025-11-25)
   const versionInfo = getVersionInfo();
   const stdioServer = new Server(
     {
