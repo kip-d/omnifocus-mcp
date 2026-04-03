@@ -2026,183 +2026,10 @@ SCOPE FILTERING:
 
     try {
       switch (operation) {
-        case 'analyze': {
-          const analyzeOptions = {
-            activeOnly: true,
-            includeCompleted: false,
-            includeDropped: false,
-            includeHistory: false,
-            sortBy: (compiled.params?.sortBy === 'nextDue' ? 'dueDate' : compiled.params?.sortBy) as
-              | 'name'
-              | 'dueDate'
-              | 'frequency'
-              | 'project'
-              | undefined,
-          };
-
-          const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
-          const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
-          if (cachedAnalysis) {
-            return cachedAnalysis;
-          }
-
-          const generatedScript = buildRecurringTasksScript(analyzeOptions);
-          const result = await this.execJson(generatedScript.script);
-
-          if (isScriptError(result)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'SCRIPT_ERROR',
-              result.error || 'Analysis failed',
-              'Check error details',
-              result.details,
-              timer.toMetadata(),
-            );
-          }
-
-          if (!isScriptSuccess(result)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'UNEXPECTED_RESULT',
-              'Unexpected script result format',
-              undefined,
-              { result },
-              timer.toMetadata(),
-            );
-          }
-
-          const envelope = result.data as {
-            ok?: boolean;
-            v?: string;
-            tasks?: unknown[];
-            summary?: Record<string, unknown>;
-          };
-          const analyzeResult = {
-            tasks: envelope.tasks || [],
-            summary: envelope.summary || {},
-          };
-
-          const analyzeResponse = createSuccessResponseV2(
-            'recurring_tasks',
-            {
-              recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
-              summary: analyzeResult.summary as { totalRecurring: number; byFrequency?: Record<string, number> },
-            },
-            undefined,
-            {
-              ...timer.toMetadata(),
-              operation: 'analyze',
-              filters_applied: analyzeOptions,
-              total_analyzed: analyzeResult.tasks?.length || 0,
-              optimization: 'ast_phase4',
-            },
-          );
-
-          this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
-          return analyzeResponse;
-        }
-
-        case 'patterns': {
-          const patternsOptions = { activeOnly: true, includeCompleted: false, includeDropped: false };
-
-          const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
-          const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
-          if (cachedPatterns) {
-            return cachedPatterns;
-          }
-
-          const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
-            options: patternsOptions,
-          });
-          const patternsScriptResult = await this.execJson(patternsScript);
-
-          if (isScriptError(patternsScriptResult)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'SCRIPT_ERROR',
-              patternsScriptResult.error || 'Pattern analysis failed',
-              'Check error details',
-              patternsScriptResult.details,
-              timer.toMetadata(),
-            );
-          }
-
-          if (!isScriptSuccess(patternsScriptResult)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'UNEXPECTED_RESULT',
-              'Unexpected script result format',
-              undefined,
-              { result: patternsScriptResult },
-              timer.toMetadata(),
-            );
-          }
-
-          const patternsResult = patternsScriptResult.data as {
-            totalRecurring: number;
-            patterns: unknown[];
-            byProject: unknown[];
-            mostCommon: Record<string, unknown>;
-          };
-
-          const insights: string[] = [];
-          if (patternsResult.totalRecurring === 0) {
-            insights.push('No recurring tasks found in your OmniFocus database');
-          } else {
-            if (patternsResult.mostCommon) {
-              insights.push(
-                `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
-              );
-            }
-            if (patternsResult.patterns && patternsResult.patterns.length > 0) {
-              insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
-              const weeklyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
-              ).length;
-              const dailyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
-              ).length;
-              const monthlyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
-              ).length;
-              if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
-              if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
-              if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
-            }
-            if (patternsResult.byProject && patternsResult.byProject.length > 0) {
-              const projectWithMostRecurring = patternsResult.byProject[0];
-              insights.push(
-                `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
-              );
-            }
-          }
-
-          const patternsResponse = createSuccessResponseV2(
-            'recurring_tasks',
-            {
-              recurringTasks: [] as RecurringTaskV2[],
-              summary: { totalRecurring: patternsResult.totalRecurring, byFrequency: {} as Record<string, number> },
-              patterns: {} as Record<string, RecurringTaskV2[]>,
-              byProject: patternsResult.byProject || [],
-              mostCommon: patternsResult.mostCommon,
-              insights,
-            },
-            undefined,
-            {
-              ...timer.toMetadata(),
-              operation: 'patterns',
-              filters_applied: patternsOptions,
-              patterns_found: patternsResult.patterns?.length || 0,
-            },
-          );
-
-          this.cache.set('analytics', patternsCacheKey, patternsResponse);
-          return patternsResponse;
-        }
-
+        case 'analyze':
+          return await this.executeRecurringAnalyze(compiled, timer);
+        case 'patterns':
+          return await this.executeRecurringPatterns(timer);
         default:
           return createErrorResponseV2(
             'recurring_tasks',
@@ -2216,6 +2043,198 @@ SCOPE FILTERING:
     } catch (error) {
       return this.handleErrorV2(error);
     }
+  }
+
+  private async executeRecurringAnalyze(
+    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const analyzeOptions = {
+      activeOnly: true,
+      includeCompleted: false,
+      includeDropped: false,
+      includeHistory: false,
+      sortBy: (compiled.params?.sortBy === 'nextDue' ? 'dueDate' : compiled.params?.sortBy) as
+        | 'name'
+        | 'dueDate'
+        | 'frequency'
+        | 'project'
+        | undefined,
+    };
+
+    const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
+    const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
+    if (cachedAnalysis) {
+      return cachedAnalysis;
+    }
+
+    const generatedScript = buildRecurringTasksScript(analyzeOptions);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'SCRIPT_ERROR',
+        result.error || 'Analysis failed',
+        'Check error details',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'UNEXPECTED_RESULT',
+        'Unexpected script result format',
+        undefined,
+        { result },
+        timer.toMetadata(),
+      );
+    }
+
+    const envelope = result.data as {
+      ok?: boolean;
+      v?: string;
+      tasks?: unknown[];
+      summary?: Record<string, unknown>;
+    };
+    const analyzeResult = {
+      tasks: envelope.tasks || [],
+      summary: envelope.summary || {},
+    };
+
+    const analyzeResponse = createSuccessResponseV2(
+      'recurring_tasks',
+      {
+        recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
+        summary: analyzeResult.summary as { totalRecurring: number; byFrequency?: Record<string, number> },
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'analyze',
+        filters_applied: analyzeOptions,
+        total_analyzed: analyzeResult.tasks?.length || 0,
+        optimization: 'ast_phase4',
+      },
+    );
+
+    this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
+    return analyzeResponse;
+  }
+
+  private async executeRecurringPatterns(timer: OperationTimerV2): Promise<unknown> {
+    const patternsOptions = { activeOnly: true, includeCompleted: false, includeDropped: false };
+
+    const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
+    const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
+    if (cachedPatterns) {
+      return cachedPatterns;
+    }
+
+    const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
+      options: patternsOptions,
+    });
+    const patternsScriptResult = await this.execJson(patternsScript);
+
+    if (isScriptError(patternsScriptResult)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'SCRIPT_ERROR',
+        patternsScriptResult.error || 'Pattern analysis failed',
+        'Check error details',
+        patternsScriptResult.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (!isScriptSuccess(patternsScriptResult)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'UNEXPECTED_RESULT',
+        'Unexpected script result format',
+        undefined,
+        { result: patternsScriptResult },
+        timer.toMetadata(),
+      );
+    }
+
+    const patternsResult = patternsScriptResult.data as {
+      totalRecurring: number;
+      patterns: unknown[];
+      byProject: unknown[];
+      mostCommon: Record<string, unknown>;
+    };
+
+    const insights = this.generateRecurringPatternInsights(patternsResult);
+
+    const patternsResponse = createSuccessResponseV2(
+      'recurring_tasks',
+      {
+        recurringTasks: [] as RecurringTaskV2[],
+        summary: { totalRecurring: patternsResult.totalRecurring, byFrequency: {} as Record<string, number> },
+        patterns: {} as Record<string, RecurringTaskV2[]>,
+        byProject: patternsResult.byProject || [],
+        mostCommon: patternsResult.mostCommon,
+        insights,
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'patterns',
+        filters_applied: patternsOptions,
+        patterns_found: patternsResult.patterns?.length || 0,
+      },
+    );
+
+    this.cache.set('analytics', patternsCacheKey, patternsResponse);
+    return patternsResponse;
+  }
+
+  private generateRecurringPatternInsights(patternsResult: {
+    totalRecurring: number;
+    patterns: unknown[];
+    byProject: unknown[];
+    mostCommon: Record<string, unknown>;
+  }): string[] {
+    const insights: string[] = [];
+    if (patternsResult.totalRecurring === 0) {
+      insights.push('No recurring tasks found in your OmniFocus database');
+      return insights;
+    }
+
+    if (patternsResult.mostCommon) {
+      insights.push(
+        `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
+      );
+    }
+    if (patternsResult.patterns && patternsResult.patterns.length > 0) {
+      insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
+      const weeklyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
+      ).length;
+      const dailyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
+      ).length;
+      const monthlyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
+      ).length;
+      if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
+      if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
+      if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
+    }
+    if (patternsResult.byProject && patternsResult.byProject.length > 0) {
+      const projectWithMostRecurring = patternsResult.byProject[0];
+      insights.push(
+        `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
+      );
+    }
+
+    return insights;
   }
 
   // =========================================================================
