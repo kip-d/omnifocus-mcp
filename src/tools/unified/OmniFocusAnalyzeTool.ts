@@ -74,6 +74,22 @@ interface TestMockOverdueData {
 
 type OverdueDataUnion = OverdueAnalysisData | TestMockOverdueData;
 
+function classifyAnalyticsError(errorMessage: string): { errorCode: string; suggestion: string } {
+  if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+    return { errorCode: 'SCRIPT_TIMEOUT', suggestion: 'Try reducing the analysis period or exclude project/tag stats for faster results' };
+  }
+  if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
+    return { errorCode: 'OMNIFOCUS_NOT_RUNNING', suggestion: 'Start OmniFocus and ensure it is running' };
+  }
+  if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
+    return { errorCode: 'PERMISSION_DENIED', suggestion: 'Enable automation access in System Settings > Privacy & Security > Automation' };
+  }
+  if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
+    return { errorCode: 'NO_DATA', suggestion: 'Add some tasks to OmniFocus before running productivity analysis' };
+  }
+  return { errorCode: 'STATS_ERROR', suggestion: 'Ensure OmniFocus is running and has data to analyze' };
+}
+
 function isTestMockOverdueFormat(data: OverdueDataUnion): data is TestMockOverdueData {
   return 'recommendations' in data && Array.isArray(data.recommendations);
 }
@@ -208,16 +224,19 @@ interface DormantProject {
 }
 
 // Meeting notes types
+type ProjectMatchLevel = 'exact' | 'partial' | 'none';
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 interface ExtractedTask {
   tempId: string;
   name: string;
   suggestedProject: string | null;
-  projectMatch: 'exact' | 'partial' | 'none';
+  projectMatch: ProjectMatchLevel;
   suggestedTags: string[];
   suggestedDueDate?: string;
   suggestedDeferDate?: string;
   estimatedMinutes?: number;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: ConfidenceLevel;
   sourceText: string;
   note?: string;
 }
@@ -231,7 +250,7 @@ interface ExtractedProject {
     estimatedMinutes?: number;
     suggestedTags?: string[];
   }>;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: ConfidenceLevel;
   sourceText: string;
 }
 
@@ -422,69 +441,11 @@ SCOPE FILTERING:
         );
       }
 
-      // Handle the script result - unwrap v3 envelope
-      interface ScriptOverview {
-        totalTasks?: number;
-        completedTasks?: number;
-        completionRate?: number;
-        activeProjects?: number;
-        overdueCount?: number;
-      }
-
-      interface ScriptData {
-        summary?: ScriptOverview;
-        projectStats?: Record<string, unknown>;
-        tagStats?: Record<string, unknown>;
-        insights?: string[];
-      }
-
-      let actualData: unknown;
-
-      if (result && typeof result === 'object' && result !== null) {
-        if ('data' in result) {
-          actualData = (result as { data: unknown }).data;
-        } else {
-          actualData = result;
-        }
-
-        if (
-          actualData &&
-          typeof actualData === 'object' &&
-          actualData !== null &&
-          'ok' in actualData &&
-          'data' in actualData
-        ) {
-          actualData = (actualData as { ok: boolean; data: unknown }).data;
-        }
-      } else {
-        actualData = result;
-      }
-
-      let overview: ScriptOverview;
-      let projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
-      let tagStatsArray: Record<string, unknown>;
-      let insights: string[];
-
-      if (actualData && typeof actualData === 'object' && actualData !== null && 'summary' in actualData) {
-        const typedScriptData = actualData as ScriptData;
-        const summary = typedScriptData.summary!;
-        overview = {
-          totalTasks: summary.totalTasks || 0,
-          completedTasks: summary.completedTasks || 0,
-          completionRate: summary.completionRate || 0,
-          activeProjects: summary.activeProjects || 0,
-          overdueCount: summary.overdueCount || 0,
-        };
-
-        projectStatsArray = includeProjectStats ? typedScriptData.projectStats || [] : [];
-        tagStatsArray = includeTagStats ? typedScriptData.tagStats || {} : {};
-        insights = typedScriptData.insights || [];
-      } else {
-        overview = { totalTasks: 0, completedTasks: 0, completionRate: 0, activeProjects: 0, overdueCount: 0 };
-        projectStatsArray = [];
-        tagStatsArray = {};
-        insights = [];
-      }
+      const { overview, projectStatsArray, tagStatsArray, insights } = this.unwrapProductivityResult(
+        result,
+        includeProjectStats,
+        includeTagStats,
+      );
 
       const responseData = {
         period,
@@ -519,23 +480,7 @@ SCOPE FILTERING:
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-
-      let suggestion = 'Ensure OmniFocus is running and has data to analyze';
-      let errorCode = 'STATS_ERROR';
-
-      if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-        errorCode = 'SCRIPT_TIMEOUT';
-        suggestion = 'Try reducing the analysis period or exclude project/tag stats for faster results';
-      } else if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
-        errorCode = 'OMNIFOCUS_NOT_RUNNING';
-        suggestion = 'Start OmniFocus and ensure it is running';
-      } else if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
-        errorCode = 'PERMISSION_DENIED';
-        suggestion = 'Enable automation access in System Settings > Privacy & Security > Automation';
-      } else if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
-        errorCode = 'NO_DATA';
-        suggestion = 'Add some tasks to OmniFocus before running productivity analysis';
-      }
+      const { errorCode, suggestion } = classifyAnalyticsError(errorMessage);
 
       return createErrorResponseV2(
         'productivity_stats',
@@ -546,6 +491,64 @@ SCOPE FILTERING:
         timer.toMetadata(),
       );
     }
+  }
+
+  private unwrapProductivityResult(
+    result: unknown,
+    includeProjectStats: boolean,
+    includeTagStats: boolean,
+  ): {
+    overview: { totalTasks: number; completedTasks: number; completionRate: number; activeProjects: number; overdueCount: number };
+    projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
+    tagStatsArray: Record<string, unknown>;
+    insights: string[];
+  } {
+    interface ScriptOverview {
+      totalTasks?: number;
+      completedTasks?: number;
+      completionRate?: number;
+      activeProjects?: number;
+      overdueCount?: number;
+    }
+    interface ScriptData {
+      summary?: ScriptOverview;
+      projectStats?: Record<string, unknown>;
+      tagStats?: Record<string, unknown>;
+      insights?: string[];
+    }
+
+    let actualData: unknown;
+    if (result && typeof result === 'object' && result !== null) {
+      actualData = 'data' in result ? (result as { data: unknown }).data : result;
+      if (
+        actualData && typeof actualData === 'object' && actualData !== null &&
+        'ok' in actualData && 'data' in actualData
+      ) {
+        actualData = (actualData as { ok: boolean; data: unknown }).data;
+      }
+    } else {
+      actualData = result;
+    }
+
+    const empty = { totalTasks: 0, completedTasks: 0, completionRate: 0, activeProjects: 0, overdueCount: 0 };
+    if (!actualData || typeof actualData !== 'object' || !('summary' in actualData)) {
+      return { overview: empty, projectStatsArray: [], tagStatsArray: {}, insights: [] };
+    }
+
+    const typedScriptData = actualData as ScriptData;
+    const summary = typedScriptData.summary!;
+    return {
+      overview: {
+        totalTasks: summary.totalTasks || 0,
+        completedTasks: summary.completedTasks || 0,
+        completionRate: summary.completionRate || 0,
+        activeProjects: summary.activeProjects || 0,
+        overdueCount: summary.overdueCount || 0,
+      },
+      projectStatsArray: includeProjectStats ? typedScriptData.projectStats || [] : [],
+      tagStatsArray: includeTagStats ? typedScriptData.tagStats || {} : {},
+      insights: typedScriptData.insights || [],
+    };
   }
 
   private extractProductivityKeyFindings(data: {
@@ -583,7 +586,10 @@ SCOPE FILTERING:
     }
 
     if (data.stats?.projectStats && data.stats.projectStats.length > 0) {
-      const topProject = data.stats.projectStats.sort((a, b) => (b.completedCount || 0) - (a.completedCount || 0))[0];
+      const sortedProjectStats = [...data.stats.projectStats].sort(
+        (a, b) => (b.completedCount || 0) - (a.completedCount || 0),
+      );
+      const topProject = sortedProjectStats[0];
       if (topProject && topProject.completedCount > 0) {
         findings.push(`Most productive project: ${topProject.name} (${topProject.completedCount} completed)`);
       }
@@ -1097,67 +1103,12 @@ SCOPE FILTERING:
             };
             break;
           }
-          case 'wip_limits': {
-            const tasksByProject = new Map<string, typeof slimData.tasks>();
-            for (const task of slimData.tasks) {
-              if (task.projectId) {
-                if (!tasksByProject.has(task.projectId)) {
-                  tasksByProject.set(task.projectId, []);
-                }
-                tasksByProject.get(task.projectId)!.push(task);
-              }
-            }
-
-            const projectsWithTasks = slimData.projects.map((project) => ({
-              id: project.id,
-              name: project.name,
-              status: project.status,
-              sequential: false,
-              tasks: (tasksByProject.get(project.id) || []).map((task) => ({
-                id: task.id,
-                completed: task.completed,
-                blocked: task.status === 'blocked',
-                deferDate: task.deferDate || null,
-              })),
-            }));
-
-            const wipResult = analyzeWipLimits(projectsWithTasks, { wipLimit: options.wip_limit });
-            findings.wip_limits = {
-              type: 'wip_limits',
-              severity: wipResult.overloadedProjects > 5 ? 'warning' : 'info',
-              count: wipResult.overloadedProjects,
-              items: {
-                projects_over_limit: wipResult.projectsOverWipLimit,
-                healthy_projects: wipResult.healthyProjects,
-                overloaded_projects: wipResult.overloadedProjects,
-              },
-              recommendation: wipResult.recommendations.join(' ') || 'All projects within WIP limits.',
-            };
+          case 'wip_limits':
+            findings.wip_limits = this.analyzeWipPattern(slimData, options.wip_limit);
             break;
-          }
-          case 'due_date_bunching': {
-            const bunchingResult = analyzeDueDateBunching(
-              slimData.tasks.map((t) => ({
-                id: t.id,
-                dueDate: t.dueDate || null,
-                completed: t.completed,
-                project: t.project || 'Inbox',
-              })),
-              { threshold: options.bunching_threshold },
-            );
-            findings.due_date_bunching = {
-              type: 'due_date_bunching',
-              severity: bunchingResult.bunchedDates.length > 3 ? 'warning' : 'info',
-              count: bunchingResult.bunchedDates.length,
-              items: {
-                bunched_dates: bunchingResult.bunchedDates,
-                average_tasks_per_day: bunchingResult.averageTasksPerDay,
-                peak_day: bunchingResult.peakDay,
-              },
-              recommendation: bunchingResult.recommendations.join(' ') || 'Deadline distribution looks manageable.',
-            };
+          case 'due_date_bunching':
+            findings.due_date_bunching = this.analyzeBunchingPattern(slimData.tasks, options.bunching_threshold);
             break;
-          }
         }
       }
 
@@ -1176,6 +1127,70 @@ SCOPE FILTERING:
       this.patternLogger.error('Analysis failed', { error });
       return this.handleErrorV2(error);
     }
+  }
+
+  private analyzeWipPattern(
+    slimData: { tasks: SlimTask[]; projects: ProjectData[] },
+    wipLimit: number,
+  ): PatternFinding {
+    const tasksByProject = new Map<string, SlimTask[]>();
+    for (const task of slimData.tasks) {
+      if (task.projectId) {
+        if (!tasksByProject.has(task.projectId)) {
+          tasksByProject.set(task.projectId, []);
+        }
+        tasksByProject.get(task.projectId)!.push(task);
+      }
+    }
+
+    const projectsWithTasks = slimData.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      sequential: false,
+      tasks: (tasksByProject.get(project.id) || []).map((task) => ({
+        id: task.id,
+        completed: task.completed,
+        blocked: task.status === 'blocked',
+        deferDate: task.deferDate || null,
+      })),
+    }));
+
+    const wipResult = analyzeWipLimits(projectsWithTasks, { wipLimit });
+    return {
+      type: 'wip_limits',
+      severity: wipResult.overloadedProjects > 5 ? 'warning' : 'info',
+      count: wipResult.overloadedProjects,
+      items: {
+        projects_over_limit: wipResult.projectsOverWipLimit,
+        healthy_projects: wipResult.healthyProjects,
+        overloaded_projects: wipResult.overloadedProjects,
+      },
+      recommendation: wipResult.recommendations.join(' ') || 'All projects within WIP limits.',
+    };
+  }
+
+  private analyzeBunchingPattern(tasks: SlimTask[], bunchingThreshold: number): PatternFinding {
+    const bunchingResult = analyzeDueDateBunching(
+      tasks.map((t) => ({
+        id: t.id,
+        dueDate: t.dueDate || null,
+        completed: t.completed,
+        project: t.project || 'Inbox',
+      })),
+      { threshold: bunchingThreshold },
+    );
+    return {
+      type: 'due_date_bunching',
+      severity: bunchingResult.bunchedDates.length > 3 ? 'warning' : 'info',
+      count: bunchingResult.bunchedDates.length,
+      items: {
+        bunched_dates: bunchingResult.bunchedDates,
+        average_tasks_per_day: bunchingResult.averageTasksPerDay,
+        peak_day: bunchingResult.peakDay,
+      },
+      recommendation: bunchingResult.recommendations.join(' ') || 'Deadline distribution looks manageable.',
+    };
   }
 
   private async fetchSlimmedData(
@@ -1500,6 +1515,31 @@ SCOPE FILTERING:
       }
     }
 
+    this.detectSynonyms(tagStats, findings);
+    const entropy = this.calculateTagEntropy(tagStats);
+
+    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
+
+    const highEntropy = entropy > 5 ? 'High diversity - consider consolidation' : 'Moderate diversity';
+    const entropyInterpretation = entropy < 2 ? 'Low diversity - consider more tags' : highEntropy;
+
+    return {
+      type: 'tag_audit',
+      severity,
+      count: tagStats.size,
+      items: {
+        ...findings,
+        entropy: entropy.toFixed(2),
+        entropy_interpretation: entropyInterpretation,
+      },
+      recommendation: this.generateTagRecommendation(findings),
+    };
+  }
+
+  private detectSynonyms(
+    tagStats: Map<string, number>,
+    findings: { potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }> },
+  ): void {
     const tagNames = Array.from(tagStats.keys());
     for (let i = 0; i < tagNames.length - 1; i++) {
       for (let j = i + 1; j < tagNames.length; j++) {
@@ -1514,8 +1554,11 @@ SCOPE FILTERING:
         }
       }
     }
+  }
 
+  private calculateTagEntropy(tagStats: Map<string, number>): number {
     const totalTagUsage = Array.from(tagStats.values()).reduce((a, b) => a + b, 0);
+    if (totalTagUsage === 0) return 0;
     let entropy = 0;
     for (const count of tagStats.values()) {
       const p = count / totalTagUsage;
@@ -1523,25 +1566,7 @@ SCOPE FILTERING:
         entropy -= p * Math.log2(p);
       }
     }
-
-    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
-
-    return {
-      type: 'tag_audit',
-      severity,
-      count: tagStats.size,
-      items: {
-        ...findings,
-        entropy: entropy.toFixed(2),
-        entropy_interpretation:
-          entropy < 2
-            ? 'Low diversity - consider more tags'
-            : entropy > 5
-              ? 'High diversity - consider consolidation'
-              : 'Moderate diversity',
-      },
-      recommendation: this.generateTagRecommendation(findings),
-    };
+    return entropy;
   }
 
   private generateTagRecommendation(findings: {
@@ -1607,7 +1632,8 @@ SCOPE FILTERING:
     const bunchedEntries: Array<[string, number]> = Array.from(findings.deadline_bunching.entries());
     const bunchedDates = bunchedEntries.filter(([_, count]) => count > 5).sort((a, b) => b[1] - a[1]);
 
-    const severity = findings.overdue.length > 10 ? 'critical' : findings.overdue.length > 5 ? 'warning' : 'info';
+    const overdueLevel = findings.overdue.length > 5 ? 'warning' : 'info';
+    const severity = findings.overdue.length > 10 ? 'critical' : overdueLevel;
 
     const deadlineInfo = {
       overdue_count: findings.overdue.length,
@@ -1670,12 +1696,14 @@ SCOPE FILTERING:
         const daysWaiting = task.createdDate
           ? Math.floor((Date.now() - new Date(task.createdDate).getTime()) / (24 * 60 * 60 * 1000))
           : 0;
+        const tagOrBlocked = hasWaitingTag ? 'tag' : 'blocked';
+        const waitingReason: 'name_pattern' | 'tag' | 'blocked' = isWaiting ? 'name_pattern' : tagOrBlocked;
 
         waitingTasks.push({
           id: task.id,
           name: task.name,
           project: task.project,
-          reason: isWaiting ? 'name_pattern' : hasWaitingTag ? 'tag' : 'blocked',
+          reason: waitingReason,
           days_waiting: daysWaiting,
         });
       }
@@ -1725,7 +1753,7 @@ SCOPE FILTERING:
       min: Math.min(...estimates),
       max: Math.max(...estimates),
       mean: estimates.reduce((a, b) => a + b, 0) / estimates.length,
-      median: estimates.sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
+      median: [...estimates].sort((a, b) => a - b)[Math.floor(estimates.length / 2)],
     };
 
     const patterns: string[] = [];
@@ -1778,9 +1806,10 @@ SCOPE FILTERING:
 
     const healthScore = Math.max(0, 100 - criticalCount * 20 - warningCount * 10);
 
+    const fairOrNeedsAttention = healthScore >= 60 ? 'Fair' : 'Needs Attention';
     return {
       health_score: healthScore,
-      health_rating: healthScore >= 80 ? 'Good' : healthScore >= 60 ? 'Fair' : 'Needs Attention',
+      health_rating: healthScore >= 80 ? 'Good' : fairOrNeedsAttention,
       total_tasks_analyzed: data.tasks.length,
       total_projects_analyzed: data.projects.length,
       patterns_analyzed: Object.keys(findings).length,
@@ -1808,7 +1837,7 @@ SCOPE FILTERING:
 
       wfLogger.info(`Starting workflow analysis with depth: ${analysisDepth}, focus: ${focusAreas.join(', ')}`);
 
-      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort().join('_')}_${maxInsights}`;
+      const cacheKey = `workflow_analysis_${analysisDepth}_${[...focusAreas].sort((a, b) => a.localeCompare(b)).join('_')}_${maxInsights}`;
 
       const cached = this.cache.get<{
         insights?: Array<string | { insight?: string; message?: string }>;
@@ -2026,183 +2055,10 @@ SCOPE FILTERING:
 
     try {
       switch (operation) {
-        case 'analyze': {
-          const analyzeOptions = {
-            activeOnly: true,
-            includeCompleted: false,
-            includeDropped: false,
-            includeHistory: false,
-            sortBy: (compiled.params?.sortBy === 'nextDue' ? 'dueDate' : compiled.params?.sortBy) as
-              | 'name'
-              | 'dueDate'
-              | 'frequency'
-              | 'project'
-              | undefined,
-          };
-
-          const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
-          const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
-          if (cachedAnalysis) {
-            return cachedAnalysis;
-          }
-
-          const generatedScript = buildRecurringTasksScript(analyzeOptions);
-          const result = await this.execJson(generatedScript.script);
-
-          if (isScriptError(result)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'SCRIPT_ERROR',
-              result.error || 'Analysis failed',
-              'Check error details',
-              result.details,
-              timer.toMetadata(),
-            );
-          }
-
-          if (!isScriptSuccess(result)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'UNEXPECTED_RESULT',
-              'Unexpected script result format',
-              undefined,
-              { result },
-              timer.toMetadata(),
-            );
-          }
-
-          const envelope = result.data as {
-            ok?: boolean;
-            v?: string;
-            tasks?: unknown[];
-            summary?: Record<string, unknown>;
-          };
-          const analyzeResult = {
-            tasks: envelope.tasks || [],
-            summary: envelope.summary || {},
-          };
-
-          const analyzeResponse = createSuccessResponseV2(
-            'recurring_tasks',
-            {
-              recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
-              summary: analyzeResult.summary as { totalRecurring: number; byFrequency?: Record<string, number> },
-            },
-            undefined,
-            {
-              ...timer.toMetadata(),
-              operation: 'analyze',
-              filters_applied: analyzeOptions,
-              total_analyzed: analyzeResult.tasks?.length || 0,
-              optimization: 'ast_phase4',
-            },
-          );
-
-          this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
-          return analyzeResponse;
-        }
-
-        case 'patterns': {
-          const patternsOptions = { activeOnly: true, includeCompleted: false, includeDropped: false };
-
-          const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
-          const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
-          if (cachedPatterns) {
-            return cachedPatterns;
-          }
-
-          const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
-            options: patternsOptions,
-          });
-          const patternsScriptResult = await this.execJson(patternsScript);
-
-          if (isScriptError(patternsScriptResult)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'SCRIPT_ERROR',
-              patternsScriptResult.error || 'Pattern analysis failed',
-              'Check error details',
-              patternsScriptResult.details,
-              timer.toMetadata(),
-            );
-          }
-
-          if (!isScriptSuccess(patternsScriptResult)) {
-            return createErrorResponseV2(
-              'recurring_tasks',
-              'UNEXPECTED_RESULT',
-              'Unexpected script result format',
-              undefined,
-              { result: patternsScriptResult },
-              timer.toMetadata(),
-            );
-          }
-
-          const patternsResult = patternsScriptResult.data as {
-            totalRecurring: number;
-            patterns: unknown[];
-            byProject: unknown[];
-            mostCommon: Record<string, unknown>;
-          };
-
-          const insights: string[] = [];
-          if (patternsResult.totalRecurring === 0) {
-            insights.push('No recurring tasks found in your OmniFocus database');
-          } else {
-            if (patternsResult.mostCommon) {
-              insights.push(
-                `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
-              );
-            }
-            if (patternsResult.patterns && patternsResult.patterns.length > 0) {
-              insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
-              const weeklyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
-              ).length;
-              const dailyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
-              ).length;
-              const monthlyCount = patternsResult.patterns.filter(
-                (p: unknown) =>
-                  (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
-              ).length;
-              if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
-              if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
-              if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
-            }
-            if (patternsResult.byProject && patternsResult.byProject.length > 0) {
-              const projectWithMostRecurring = patternsResult.byProject[0];
-              insights.push(
-                `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
-              );
-            }
-          }
-
-          const patternsResponse = createSuccessResponseV2(
-            'recurring_tasks',
-            {
-              recurringTasks: [] as RecurringTaskV2[],
-              summary: { totalRecurring: patternsResult.totalRecurring, byFrequency: {} as Record<string, number> },
-              patterns: {} as Record<string, RecurringTaskV2[]>,
-              byProject: patternsResult.byProject || [],
-              mostCommon: patternsResult.mostCommon,
-              insights,
-            },
-            undefined,
-            {
-              ...timer.toMetadata(),
-              operation: 'patterns',
-              filters_applied: patternsOptions,
-              patterns_found: patternsResult.patterns?.length || 0,
-            },
-          );
-
-          this.cache.set('analytics', patternsCacheKey, patternsResponse);
-          return patternsResponse;
-        }
-
+        case 'analyze':
+          return await this.executeRecurringAnalyze(compiled, timer);
+        case 'patterns':
+          return await this.executeRecurringPatterns(timer);
         default:
           return createErrorResponseV2(
             'recurring_tasks',
@@ -2218,6 +2074,198 @@ SCOPE FILTERING:
     }
   }
 
+  private async executeRecurringAnalyze(
+    compiled: Extract<CompiledAnalysis, { type: 'recurring_tasks' }>,
+    timer: OperationTimerV2,
+  ): Promise<unknown> {
+    const analyzeOptions = {
+      activeOnly: true,
+      includeCompleted: false,
+      includeDropped: false,
+      includeHistory: false,
+      sortBy: (compiled.params?.sortBy === 'nextDue' ? 'dueDate' : compiled.params?.sortBy) as
+        | 'name'
+        | 'dueDate'
+        | 'frequency'
+        | 'project'
+        | undefined,
+    };
+
+    const analyzeCacheKey = `recurring_${JSON.stringify(analyzeOptions)}`;
+    const cachedAnalysis = this.cache.get('analytics', analyzeCacheKey);
+    if (cachedAnalysis) {
+      return cachedAnalysis;
+    }
+
+    const generatedScript = buildRecurringTasksScript(analyzeOptions);
+    const result = await this.execJson(generatedScript.script);
+
+    if (isScriptError(result)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'SCRIPT_ERROR',
+        result.error || 'Analysis failed',
+        'Check error details',
+        result.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'UNEXPECTED_RESULT',
+        'Unexpected script result format',
+        undefined,
+        { result },
+        timer.toMetadata(),
+      );
+    }
+
+    const envelope = result.data as {
+      ok?: boolean;
+      v?: string;
+      tasks?: unknown[];
+      summary?: Record<string, unknown>;
+    };
+    const analyzeResult = {
+      tasks: envelope.tasks || [],
+      summary: envelope.summary || {},
+    };
+
+    const analyzeResponse = createSuccessResponseV2(
+      'recurring_tasks',
+      {
+        recurringTasks: analyzeResult.tasks as RecurringTaskV2[],
+        summary: analyzeResult.summary as { totalRecurring: number; byFrequency?: Record<string, number> },
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'analyze',
+        filters_applied: analyzeOptions,
+        total_analyzed: analyzeResult.tasks?.length || 0,
+        optimization: 'ast_phase4',
+      },
+    );
+
+    this.cache.set('analytics', analyzeCacheKey, analyzeResponse);
+    return analyzeResponse;
+  }
+
+  private async executeRecurringPatterns(timer: OperationTimerV2): Promise<unknown> {
+    const patternsOptions = { activeOnly: true, includeCompleted: false, includeDropped: false };
+
+    const patternsCacheKey = `recurring_patterns_${JSON.stringify(patternsOptions)}`;
+    const cachedPatterns = this.cache.get('analytics', patternsCacheKey);
+    if (cachedPatterns) {
+      return cachedPatterns;
+    }
+
+    const patternsScript = this.omniAutomation.buildScript(GET_RECURRING_PATTERNS_SCRIPT, {
+      options: patternsOptions,
+    });
+    const patternsScriptResult = await this.execJson(patternsScript);
+
+    if (isScriptError(patternsScriptResult)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'SCRIPT_ERROR',
+        patternsScriptResult.error || 'Pattern analysis failed',
+        'Check error details',
+        patternsScriptResult.details,
+        timer.toMetadata(),
+      );
+    }
+
+    if (!isScriptSuccess(patternsScriptResult)) {
+      return createErrorResponseV2(
+        'recurring_tasks',
+        'UNEXPECTED_RESULT',
+        'Unexpected script result format',
+        undefined,
+        { result: patternsScriptResult },
+        timer.toMetadata(),
+      );
+    }
+
+    const patternsResult = patternsScriptResult.data as {
+      totalRecurring: number;
+      patterns: unknown[];
+      byProject: unknown[];
+      mostCommon: Record<string, unknown>;
+    };
+
+    const insights = this.generateRecurringPatternInsights(patternsResult);
+
+    const patternsResponse = createSuccessResponseV2(
+      'recurring_tasks',
+      {
+        recurringTasks: [] as RecurringTaskV2[],
+        summary: { totalRecurring: patternsResult.totalRecurring, byFrequency: {} as Record<string, number> },
+        patterns: {} as Record<string, RecurringTaskV2[]>,
+        byProject: patternsResult.byProject || [],
+        mostCommon: patternsResult.mostCommon,
+        insights,
+      },
+      undefined,
+      {
+        ...timer.toMetadata(),
+        operation: 'patterns',
+        filters_applied: patternsOptions,
+        patterns_found: patternsResult.patterns?.length || 0,
+      },
+    );
+
+    this.cache.set('analytics', patternsCacheKey, patternsResponse);
+    return patternsResponse;
+  }
+
+  private generateRecurringPatternInsights(patternsResult: {
+    totalRecurring: number;
+    patterns: unknown[];
+    byProject: unknown[];
+    mostCommon: Record<string, unknown>;
+  }): string[] {
+    const insights: string[] = [];
+    if (patternsResult.totalRecurring === 0) {
+      insights.push('No recurring tasks found in your OmniFocus database');
+      return insights;
+    }
+
+    if (patternsResult.mostCommon) {
+      insights.push(
+        `Most common recurrence pattern: ${(patternsResult.mostCommon as { pattern?: string }).pattern} (${(patternsResult.mostCommon as { count?: number }).count} tasks)`,
+      );
+    }
+    if (patternsResult.patterns && patternsResult.patterns.length > 0) {
+      insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
+      const weeklyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
+      ).length;
+      const dailyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
+      ).length;
+      const monthlyCount = patternsResult.patterns.filter(
+        (p: unknown) =>
+          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
+      ).length;
+      if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
+      if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
+      if (monthlyCount > 0) insights.push(`${monthlyCount} monthly patterns found`);
+    }
+    if (patternsResult.byProject && patternsResult.byProject.length > 0) {
+      const projectWithMostRecurring = patternsResult.byProject[0];
+      insights.push(
+        `Project "${(projectWithMostRecurring as { project?: string }).project}" has the most recurring tasks (${(projectWithMostRecurring as { count?: number }).count})`,
+      );
+    }
+
+    return insights;
+  }
+
   // =========================================================================
   // Parse Meeting Notes
   // =========================================================================
@@ -2227,8 +2275,8 @@ SCOPE FILTERING:
 
     try {
       const input = compiled.params.text;
-      const extractMode =
-        compiled.params.extractTasks !== undefined ? (compiled.params.extractTasks ? 'action_items' : 'both') : 'both';
+      const taskMode = compiled.params.extractTasks ? 'action_items' : 'both';
+      const extractMode = compiled.params.extractTasks !== undefined ? taskMode : 'both';
       const defaultProject = compiled.params.defaultProject;
       const defaultTags = compiled.params.defaultTags;
 
@@ -2358,21 +2406,21 @@ SCOPE FILTERING:
     ];
 
     for (const pattern of projectPatterns) {
-      const match = line.match(pattern);
+      const match = pattern.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'high' };
       }
     }
 
     if (/^[A-Z]/.test(line) && /^(.+?):\s*$/.test(line)) {
-      const match = line.match(/^(.+?):\s*$/);
+      const match = /^(.+?):\s*$/.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'medium' };
       }
     }
 
     if (/(then|after that|followed by|next step)/i.test(line)) {
-      const match = line.match(/^(.+?)(?:\s*[:|-]|\s+(then|after|followed))/i);
+      const match = /^(.+?)(?:\s*[:|-]|\s+(then|after|followed))/i.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'medium' };
       }
@@ -2488,15 +2536,15 @@ SCOPE FILTERING:
 
   private detectAssignee(text: string): string[] {
     const tags: string[] = [];
-    const assigneeMatch = text.match(/^(\w+)\s+(to|needs to|will|should)\b/i);
+    const assigneeMatch = /^(\w+)\s+(to|needs to|will|should)\b/i.exec(text);
     if (assigneeMatch) {
       tags.push(`@${assigneeMatch[1].toLowerCase()}`);
     }
-    const waitingMatch = text.match(/waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i);
+    const waitingMatch = /waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i.exec(text);
     if (waitingMatch) {
       tags.push(`@waiting-for-${waitingMatch[1].toLowerCase()}`);
     }
-    const agendaMatch = text.match(/(ask|check with|discuss with|talk to)\s+(\w+)/i);
+    const agendaMatch = /(ask|check with|discuss with|talk to)\s+(\w+)/i.exec(text);
     if (agendaMatch) {
       tags.push(`@agenda-${agendaMatch[2].toLowerCase()}`);
     }
@@ -2553,7 +2601,8 @@ SCOPE FILTERING:
     if (name.length > 10) score++;
     if (tags.length > 0) score++;
     if (dates.dueDate || dates.deferDate) score++;
-    return score >= 2 ? 'high' : score === 1 ? 'medium' : 'low';
+    const mediumOrLow = score === 1 ? 'medium' : 'low';
+    return score >= 2 ? 'high' : mediumOrLow;
   }
 
   private extractNote(fullText: string, taskName: string): string | undefined {
