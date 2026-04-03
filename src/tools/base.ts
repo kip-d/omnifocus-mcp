@@ -90,65 +90,6 @@ export function isRawSuccessResponse(value: unknown): value is RawOmniFocusData 
 }
 
 /**
- * If a result is already in ScriptResult format, inspect for nested legacy errors.
- * Returns the ScriptResult (possibly converted to error) or null if not in ScriptResult format.
- */
-function handleScriptResultFormat<T>(res: unknown): ScriptResult<T> | null {
-  if (!res || typeof res !== 'object' || !('success' in res)) {
-    return null;
-  }
-  const scriptResult = res as ScriptResult<T>;
-
-  if (scriptResult.success === true && isLegacyScriptError(scriptResult.data)) {
-    return createScriptError(
-      getLegacyErrorMessage(scriptResult.data),
-      'Legacy script error',
-      scriptResult.data,
-    );
-  }
-
-  return scriptResult;
-}
-
-/**
- * Classify an unknown result from OmniFocus into a typed ScriptResult.
- * Handles all response formats: ScriptResult, string, success objects, error objects.
- */
-function classifyResult<T>(res: unknown): ScriptResult<T> {
-  // Handle null/undefined results
-  if (res === null || res === undefined) {
-    return createScriptError('NULL_RESULT', 'Script returned null or undefined');
-  }
-
-  // If already in ScriptResult format, inspect for nested legacy errors before returning
-  const scriptResult = handleScriptResultFormat<T>(res);
-  if (scriptResult) {
-    return scriptResult;
-  }
-
-  // Handle raw string results (try to parse JSON)
-  if (typeof res === 'string') {
-    return parseStringResult<T>(res);
-  }
-
-  // Handle object responses that indicate success patterns
-  if (isRawSuccessResponse(res)) {
-    return createScriptSuccess<T>(res as T);
-  }
-
-  // Check for explicit error indication in object responses
-  if (res && typeof res === 'object') {
-    const errorResult = checkObjectForError<T>(res);
-    if (errorResult) {
-      return errorResult;
-    }
-  }
-
-  // Default: wrap as success
-  return createScriptSuccess<T>(res as T);
-}
-
-/**
  * Parse a raw string result from OmniFocus script execution.
  * Attempts JSON parsing and checks for legacy error format.
  */
