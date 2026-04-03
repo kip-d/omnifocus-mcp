@@ -132,87 +132,59 @@ export interface StandardResponseV2<T> {
   };
 }
 
-/**
- * Generate enhanced task summary with insights and preview
- */
-export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskSummary {
-  const now = new Date();
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
-  const tomorrowEnd = new Date(todayEnd);
-  tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+function countTaskStats(
+  task: OmniFocusTask,
+  breakdown: TaskSummary['breakdown'],
+  now: Date,
+  todayEnd: Date,
+  tomorrowEnd: Date,
+  tracker: { mostOverdueTask: OmniFocusTask | null; mostOverdueDays: number },
+): void {
+  if (task.completed) breakdown!.completed = (breakdown!.completed || 0) + 1;
+  if (task.flagged) breakdown!.flagged = (breakdown!.flagged || 0) + 1;
+  if (task.status === 'available') breakdown!.available = (breakdown!.available || 0) + 1;
+  if (task.status === 'blocked') breakdown!.blocked = (breakdown!.blocked || 0) + 1;
 
-  const summary: TaskSummary = {
-    total_count: tasks.length,
-    returned_count: Math.min(tasks.length, limit),
-    breakdown: {
-      overdue: 0,
-      due_today: 0,
-      due_tomorrow: 0,
-      flagged: 0,
-      completed: 0,
-      available: 0,
-      blocked: 0,
-      // Planned date metrics
-      planned_today: 0,
-      planned_upcoming: 0,
-      planned_past: 0,
-      has_planned_date: 0,
-    },
-    key_insights: [],
-    preview: [],
-  };
+  if (task.dueDate) {
+    const dueDate = new Date(task.dueDate);
 
-  let mostOverdueTask: OmniFocusTask | null = null;
-  let mostOverdueDays = 0;
-
-  for (const taskItem of tasks) {
-    // Type assertion for OmniFocus task data from scripts
-    const task = taskItem as OmniFocusTask;
-
-    // Count by status
-    if (task.completed) summary.breakdown!.completed = (summary.breakdown!.completed || 0) + 1;
-    if (task.flagged) summary.breakdown!.flagged = (summary.breakdown!.flagged || 0) + 1;
-    if (task.status === 'available') summary.breakdown!.available = (summary.breakdown!.available || 0) + 1;
-    if (task.status === 'blocked') summary.breakdown!.blocked = (summary.breakdown!.blocked || 0) + 1;
-
-    // Count by due date
-    if (task.dueDate) {
-      const dueDate = new Date(task.dueDate);
-
-      if (dueDate < now && !task.completed) {
-        summary.breakdown!.overdue = (summary.breakdown!.overdue || 0) + 1;
-        const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (overdueDays > mostOverdueDays) {
-          mostOverdueDays = overdueDays;
-          mostOverdueTask = task;
-        }
-      } else if (dueDate <= todayEnd) {
-        summary.breakdown!.due_today = (summary.breakdown!.due_today || 0) + 1;
-      } else if (dueDate <= tomorrowEnd) {
-        summary.breakdown!.due_tomorrow = (summary.breakdown!.due_tomorrow || 0) + 1;
+    if (dueDate < now && !task.completed) {
+      breakdown!.overdue = (breakdown!.overdue || 0) + 1;
+      const overdueDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (overdueDays > tracker.mostOverdueDays) {
+        tracker.mostOverdueDays = overdueDays;
+        tracker.mostOverdueTask = task;
       }
-    }
-
-    // Count by planned date
-    if (task.plannedDate) {
-      summary.breakdown!.has_planned_date = (summary.breakdown!.has_planned_date || 0) + 1;
-      const plannedDate = new Date(task.plannedDate);
-
-      if (plannedDate < now && !task.completed) {
-        summary.breakdown!.planned_past = (summary.breakdown!.planned_past || 0) + 1;
-      } else if (plannedDate <= todayEnd) {
-        summary.breakdown!.planned_today = (summary.breakdown!.planned_today || 0) + 1;
-      } else {
-        summary.breakdown!.planned_upcoming = (summary.breakdown!.planned_upcoming || 0) + 1;
-      }
+    } else if (dueDate <= todayEnd) {
+      breakdown!.due_today = (breakdown!.due_today || 0) + 1;
+    } else if (dueDate <= tomorrowEnd) {
+      breakdown!.due_tomorrow = (breakdown!.due_tomorrow || 0) + 1;
     }
   }
 
-  // Generate key insights
+  if (task.plannedDate) {
+    breakdown!.has_planned_date = (breakdown!.has_planned_date || 0) + 1;
+    const plannedDate = new Date(task.plannedDate);
+
+    if (plannedDate < now && !task.completed) {
+      breakdown!.planned_past = (breakdown!.planned_past || 0) + 1;
+    } else if (plannedDate <= todayEnd) {
+      breakdown!.planned_today = (breakdown!.planned_today || 0) + 1;
+    } else {
+      breakdown!.planned_upcoming = (breakdown!.planned_upcoming || 0) + 1;
+    }
+  }
+}
+
+function generateTaskInsights(
+  summary: TaskSummary,
+  tasks: unknown[],
+  now: Date,
+  mostOverdueTask: OmniFocusTask | null,
+  mostOverdueDays: number,
+): string[] {
   const insights: string[] = [];
 
-  // Overdue insight
   if (summary.breakdown!.overdue && summary.breakdown!.overdue > 0) {
     if (mostOverdueTask) {
       insights.push(
@@ -223,7 +195,6 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
     }
   }
 
-  // Pattern detection for bottlenecks
   const projectCounts: Record<string, number> = {};
   for (const taskItem of tasks) {
     const task = taskItem as OmniFocusTask;
@@ -235,7 +206,6 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
     }
   }
 
-  // Find project with most overdue tasks
   const projectBottlenecks = Object.entries(projectCounts)
     .filter(([_, count]) => count >= 3)
     .sort((a, b) => b[1] - a[1]);
@@ -245,24 +215,22 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
     insights.push(`${projectName} has ${count} overdue tasks (potential bottleneck)`);
   }
 
-  // Today's priority
   if (summary.breakdown!.due_today && summary.breakdown!.due_today > 0) {
     insights.push(`${summary.breakdown!.due_today} task${summary.breakdown!.due_today > 1 ? 's' : ''} due today`);
   }
 
-  // Blocked tasks warning
   if (summary.breakdown!.blocked && summary.breakdown!.blocked > 5) {
     insights.push(`${summary.breakdown!.blocked} tasks blocked - review dependencies`);
   }
 
-  summary.key_insights = insights.slice(0, 3); // Limit to 3 insights
+  return insights.slice(0, 3);
+}
 
-  // Generate preview of most important tasks
+function generateTaskPreview(tasks: unknown[], now: Date): TaskSummary['preview'] {
   const previewTasks = tasks
     .map((item) => item as OmniFocusTask)
     .filter((t) => !t.completed)
     .sort((a, b) => {
-      // Sort by: overdue first, then due today, then flagged
       const aDate = isValidDateValue(a.dueDate) ? new Date(a.dueDate) : null;
       const bDate = isValidDateValue(b.dueDate) ? new Date(b.dueDate) : null;
 
@@ -292,10 +260,86 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
     }));
 
   if (previewTasks.length > 0) {
-    summary.preview = previewTasks;
+    return previewTasks;
+  }
+  return [];
+}
+
+/**
+ * Generate enhanced task summary with insights and preview
+ */
+export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskSummary {
+  const now = new Date();
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  const tomorrowEnd = new Date(todayEnd);
+  tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+  const summary: TaskSummary = {
+    total_count: tasks.length,
+    returned_count: Math.min(tasks.length, limit),
+    breakdown: {
+      overdue: 0,
+      due_today: 0,
+      due_tomorrow: 0,
+      flagged: 0,
+      completed: 0,
+      available: 0,
+      blocked: 0,
+      planned_today: 0,
+      planned_upcoming: 0,
+      planned_past: 0,
+      has_planned_date: 0,
+    },
+    key_insights: [],
+    preview: [],
+  };
+
+  const tracker = { mostOverdueTask: null as OmniFocusTask | null, mostOverdueDays: 0 };
+
+  for (const taskItem of tasks) {
+    countTaskStats(taskItem as OmniFocusTask, summary.breakdown, now, todayEnd, tomorrowEnd, tracker);
   }
 
+  summary.key_insights = generateTaskInsights(summary, tasks, now, tracker.mostOverdueTask, tracker.mostOverdueDays);
+  summary.preview = generateTaskPreview(tasks, now);
+
   return summary;
+}
+
+function detectProjectBottlenecks(
+  summary: ProjectSummary,
+  projects: unknown[],
+  now: Date,
+  mostOverdueReview: OmniFocusProject | null,
+  mostOverdueDays: number,
+): string[] {
+  const bottlenecks: string[] = [];
+
+  if (summary.overdue_reviews && summary.overdue_reviews > 0) {
+    bottlenecks.push(`${summary.overdue_reviews} projects haven't been reviewed in 7+ days`);
+  }
+
+  if (mostOverdueReview && mostOverdueDays > 30) {
+    bottlenecks.push(`"${mostOverdueReview.name}" hasn't been reviewed in ${mostOverdueDays} days`);
+  }
+
+  const stalledCount = projects
+    .map((item) => item as OmniFocusProject)
+    .filter((p) => {
+      if (p.status !== 'active') return false;
+      if (!isValidDateValue(p.modifiedDate)) return false;
+      const daysSinceModified = Math.floor(
+        (now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24),
+      );
+      return daysSinceModified > 14;
+    }).length;
+
+  if (stalledCount > 0) {
+    bottlenecks.push(`${stalledCount} active projects with no activity in 14+ days`);
+  }
+
+  return bottlenecks.slice(0, 3);
 }
 
 /**
@@ -318,10 +362,8 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
   const now = new Date();
 
   for (const projectItem of projects) {
-    // Type assertion for OmniFocus project data from scripts
     const project = projectItem as OmniFocusProject;
 
-    // Count by status
     switch (project.status) {
       case 'active':
         summary.active = (summary.active || 0) + 1;
@@ -339,7 +381,6 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
         break;
     }
 
-    // Check for review
     if (isValidDateValue(project.nextReviewDate)) {
       const reviewDate = new Date(project.nextReviewDate);
       if (reviewDate < now) {
@@ -356,36 +397,8 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
     }
   }
 
-  // Generate insights and detect bottlenecks
-  const bottlenecks: string[] = [];
+  summary.bottlenecks = detectProjectBottlenecks(summary, projects, now, mostOverdueReview, mostOverdueDays);
 
-  if (summary.overdue_reviews && summary.overdue_reviews > 0) {
-    bottlenecks.push(`${summary.overdue_reviews} projects haven't been reviewed in 7+ days`);
-  }
-
-  if (mostOverdueReview && mostOverdueDays > 30) {
-    bottlenecks.push(`"${mostOverdueReview.name}" hasn't been reviewed in ${mostOverdueDays} days`);
-  }
-
-  // Detect stalled projects (active but no recent activity)
-  const stalledProjects = projects
-    .map((item) => item as OmniFocusProject)
-    .filter((p) => {
-      if (p.status !== 'active') return false;
-      if (!isValidDateValue(p.modifiedDate)) return false;
-      const daysSinceModified = Math.floor(
-        (now.getTime() - new Date(p.modifiedDate).getTime()) / (1000 * 60 * 60 * 24),
-      );
-      return daysSinceModified > 14;
-    });
-
-  if (stalledProjects.length > 0) {
-    bottlenecks.push(`${stalledProjects.length} active projects with no activity in 14+ days`);
-  }
-
-  summary.bottlenecks = bottlenecks.slice(0, 3);
-
-  // Generate key insight
   if (summary.needs_review && summary.needs_review > 0) {
     summary.key_insight = `${summary.needs_review} project${summary.needs_review > 1 ? 's' : ''} need review`;
   } else if (summary.active) {

@@ -1277,28 +1277,8 @@ SAFETY:
 
       for (const op of phase.ops) {
         try {
-          // Resolve tempId references if the id matches a tempId from creates
           const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-
-          let result: unknown;
-          if (op.target === 'project' && op.operation === 'update') {
-            result = await this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
-          } else if (op.target === 'project') {
-            // Route project operations through inline handlers
-            if (op.operation === 'complete') {
-              result = await this.handleProjectComplete(resolvedId!);
-            } else if (op.operation === 'delete') {
-              result = await this.handleProjectDelete(resolvedId!);
-            } else {
-              // Fallback: should not reach here for valid batch operations
-              throw new Error(`Unsupported batch project operation: ${op.operation}`);
-            }
-          } else {
-            // Task operations — use inline handlers via the main dispatch
-            // Build a compiled mutation and dispatch it
-            const taskCompiled = this.buildTaskCompiledForBatch(op, resolvedId);
-            result = await this.dispatchTaskOperation(taskCompiled);
-          }
+          const result = await this.dispatchBatchOp(op, resolvedId);
           results[phase.resultKey].push(result);
         } catch (err) {
           results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
@@ -1379,6 +1359,29 @@ SAFETY:
       default:
         throw new Error(`Unexpected task operation for dispatch: ${(compiled as { operation: string }).operation}`);
     }
+  }
+
+  /**
+   * Dispatch a single batch operation (project or task) to the correct handler.
+   */
+  private async dispatchBatchOp(
+    op: { operation: string; target: string; id?: string; changes?: unknown; completionDate?: string },
+    resolvedId?: string,
+  ): Promise<unknown> {
+    if (op.target === 'project') {
+      switch (op.operation) {
+        case 'update':
+          return this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
+        case 'complete':
+          return this.handleProjectComplete(resolvedId!);
+        case 'delete':
+          return this.handleProjectDelete(resolvedId!);
+        default:
+          throw new Error(`Unsupported batch project operation: ${op.operation}`);
+      }
+    }
+    const taskCompiled = this.buildTaskCompiledForBatch(op, resolvedId);
+    return this.dispatchTaskOperation(taskCompiled);
   }
 
   // ─── Batch create (inlined from BatchCreateTool) ────────────────────
@@ -1477,25 +1480,7 @@ SAFETY:
     // Step 6: Smart cache invalidation after successful batch creations
     const createdCount = resolver.getCreatedCount();
     if (createdCount > 0) {
-      this.cache.invalidate('projects');
-
-      const projectIds = new Set<string>();
-      const tags = new Set<string>();
-
-      for (const item of items) {
-        if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
-          const realId = resolver.getRealId(item.tempId);
-          if (realId) projectIds.add(realId);
-        }
-        if (item.tags) {
-          item.tags.forEach((tag: string) => tags.add(tag));
-        }
-      }
-
-      projectIds.forEach((id) => this.cache.invalidateProject(id));
-      tags.forEach((tag) => this.cache.invalidateTag(tag));
-      this.cache.invalidateTaskQueries(['today', 'inbox']);
-      this.cache.invalidate('analytics');
+      this.invalidateBatchCaches(items, batchResults, resolver);
     }
 
     // Step 7: Build response
@@ -1519,6 +1504,32 @@ SAFETY:
     }
 
     return response;
+  }
+
+  private invalidateBatchCaches(
+    items: BatchItem[],
+    batchResults: BatchItemCreationResult[],
+    resolver: TempIdResolver,
+  ): void {
+    this.cache.invalidate('projects');
+
+    const projectIds = new Set<string>();
+    const tags = new Set<string>();
+
+    for (const item of items) {
+      if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
+        const realId = resolver.getRealId(item.tempId);
+        if (realId) projectIds.add(realId);
+      }
+      if (item.tags) {
+        item.tags.forEach((tag: string) => tags.add(tag));
+      }
+    }
+
+    projectIds.forEach((id) => this.cache.invalidateProject(id));
+    tags.forEach((tag) => this.cache.invalidateTag(tag));
+    this.cache.invalidateTaskQueries(['today', 'inbox']);
+    this.cache.invalidate('analytics');
   }
 
   /**
