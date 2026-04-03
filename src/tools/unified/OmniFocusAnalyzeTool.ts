@@ -1514,6 +1514,9 @@ SCOPE FILTERING:
 
     const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
 
+    const highEntropy = entropy > 5 ? 'High diversity - consider consolidation' : 'Moderate diversity';
+    const entropyInterpretation = entropy < 2 ? 'Low diversity - consider more tags' : highEntropy;
+
     return {
       type: 'tag_audit',
       severity,
@@ -1521,12 +1524,7 @@ SCOPE FILTERING:
       items: {
         ...findings,
         entropy: entropy.toFixed(2),
-        entropy_interpretation:
-          entropy < 2
-            ? 'Low diversity - consider more tags'
-            : entropy > 5
-              ? 'High diversity - consider consolidation'
-              : 'Moderate diversity',
+        entropy_interpretation: entropyInterpretation,
       },
       recommendation: this.generateTagRecommendation(findings),
     };
@@ -2398,21 +2396,21 @@ SCOPE FILTERING:
     ];
 
     for (const pattern of projectPatterns) {
-      const match = line.match(pattern);
+      const match = pattern.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'high' };
       }
     }
 
     if (/^[A-Z]/.test(line) && /^(.+?):\s*$/.test(line)) {
-      const match = line.match(/^(.+?):\s*$/);
+      const match = /^(.+?):\s*$/.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'medium' };
       }
     }
 
     if (/(then|after that|followed by|next step)/i.test(line)) {
-      const match = line.match(/^(.+?)(?:\s*[:|-]|\s+(then|after|followed))/i);
+      const match = /^(.+?)(?:\s*[:|-]|\s+(then|after|followed))/i.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'medium' };
       }
@@ -2528,15 +2526,15 @@ SCOPE FILTERING:
 
   private detectAssignee(text: string): string[] {
     const tags: string[] = [];
-    const assigneeMatch = text.match(/^(\w+)\s+(to|needs to|will|should)\b/i);
+    const assigneeMatch = /^(\w+)\s+(to|needs to|will|should)\b/i.exec(text);
     if (assigneeMatch) {
       tags.push(`@${assigneeMatch[1].toLowerCase()}`);
     }
-    const waitingMatch = text.match(/waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i);
+    const waitingMatch = /waiting\s+(?:for|on)\s+(\w+)(?:'s)?/i.exec(text);
     if (waitingMatch) {
       tags.push(`@waiting-for-${waitingMatch[1].toLowerCase()}`);
     }
-    const agendaMatch = text.match(/(ask|check with|discuss with|talk to)\s+(\w+)/i);
+    const agendaMatch = /(ask|check with|discuss with|talk to)\s+(\w+)/i.exec(text);
     if (agendaMatch) {
       tags.push(`@agenda-${agendaMatch[2].toLowerCase()}`);
     }

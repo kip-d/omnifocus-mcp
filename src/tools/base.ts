@@ -570,12 +570,12 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
           executeJson?: (script: string) => Promise<unknown>;
           execute?: (script: string) => Promise<unknown>;
         };
-        const res =
-          typeof omni.executeJson === 'function'
-            ? await omni.executeJson(script)
-            : typeof omni.execute === 'function'
-              ? await omni.execute(script)
-              : null;
+        let res: unknown = null;
+        if (typeof omni.executeJson === 'function') {
+          res = await omni.executeJson(script);
+        } else if (typeof omni.execute === 'function') {
+          res = await omni.execute(script);
+        }
 
         // Handle null/undefined results
         if (res === null || res === undefined) {

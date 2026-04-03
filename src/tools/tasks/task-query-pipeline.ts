@@ -211,7 +211,8 @@ function compareValues(aValue: unknown, bValue: unknown): number {
     return aValue - bValue;
   }
   if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
-    return aValue === bValue ? 0 : aValue ? -1 : 1;
+    if (aValue === bValue) return 0;
+    return aValue ? -1 : 1;
   }
   if (aValue instanceof Date && bValue instanceof Date) {
     return aValue.getTime() - bValue.getTime();
