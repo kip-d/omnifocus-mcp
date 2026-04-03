@@ -125,13 +125,13 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
 
   const logger: Logger = {
     info: (message: string, ..._args: unknown[]) => {
-      logWithContext('info', message, [], undefined);
+      logWithContext('info', message, []);
     },
     error: (message: string, ...args: unknown[]) => {
       // Enhanced error logging with better context preservation
       const errArg = args && args.length === 1 && args[0] instanceof Error ? (args[0] as Error).message : undefined;
       const finalMessage = errArg ? `${message} ${errArg}` : message;
-      logWithContext('error', finalMessage, useStructuredLogging ? args : [], undefined);
+      logWithContext('error', finalMessage, useStructuredLogging ? args : []);
 
       // Log error metrics for telemetry (privacy-safe - no user data)
       if (typeof args[0] === 'object' && args[0] !== null && 'errorType' in args[0]) {
@@ -148,10 +148,10 @@ export function createLogger(context: string, initialContext?: LogContext): Logg
       }
     },
     debug: (message: string, ...args: unknown[]) => {
-      logWithContext('debug', message, args, undefined);
+      logWithContext('debug', message, args);
     },
     warn: (message: string, ..._args: unknown[]) => {
-      logWithContext('warn', message, [], undefined);
+      logWithContext('warn', message, []);
     },
     withCorrelation: (correlationId: string) => {
       return createLogger(context, {

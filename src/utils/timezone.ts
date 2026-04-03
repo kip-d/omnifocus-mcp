@@ -43,7 +43,7 @@ export function getSystemTimezone(): string {
     // Method 4: Read from /etc/localtime symlink (Linux/Unix)
     try {
       const tzPath = execSync('readlink /etc/localtime', { encoding: 'utf8', timeout: 1000 }).trim();
-      const match = tzPath.match(/zoneinfo\/(.+)$/);
+      const match = /zoneinfo\/(.+)$/.exec(tzPath);
       if (match) {
         return match[1];
       }
@@ -104,7 +104,8 @@ export function localToUTC(
 
   if (!hasTime) {
     // Date only - use context-appropriate default time
-    const defaultTime = context === 'defer' ? '08:00:00' : context === 'due' ? '17:00:00' : '12:00:00';
+    const dueOrDefault = context === 'due' ? '17:00:00' : '12:00:00';
+    const defaultTime = context === 'defer' ? '08:00:00' : dueOrDefault;
     dateStr = `${localDateStr}T${defaultTime}`;
   } else {
     // Has time - ensure proper format
