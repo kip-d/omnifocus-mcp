@@ -15,9 +15,10 @@ export class CacheManager {
   };
 
   private config: CacheConfig = {
-    // TTL values are chosen to balance freshness with the benefit of cache warming.
-    // Tasks change frequently, so a shorter TTL keeps the view up-to-date.
-    tasks: { ttl: 300 * 1000 }, // 5 min - ideal for cache warm + typical GTD operations.
+    // Tasks are intentionally NOT cached at the tool layer (OmniFocusReadTool always
+    // fetches fresh). This TTL exists only for the cache-warmer and any future callers
+    // that explicitly opt in. Task data changes too frequently for stale reads to be safe.
+    tasks: { ttl: 300 * 1000 }, // 5 min - cache-warmer only; ReadTool bypasses cache.
     // Projects and tags change less often; original TTLs kept for test stability.
     projects: { ttl: 300 * 1000 }, // 5 min - original value for compatibility.
     folders: { ttl: 600 * 1000 }, // 10 min - unchanged.
