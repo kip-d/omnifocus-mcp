@@ -33,6 +33,12 @@ import {
  * }
  */
 
+function statusToCompleted(status?: string): boolean | undefined {
+  if (status === 'completed') return true;
+  if (status === 'active') return false;
+  return undefined;
+}
+
 /**
  * AFTER: TypeScript enforces correct property names
  */
@@ -40,7 +46,7 @@ function compileQuery(input: { status?: string; tags?: string[] }): TaskFilter {
   // createFilter() ensures we use correct property names
   // If we typo 'complted', TypeScript errors immediately
   return createFilter({
-    completed: input.status === 'completed' ? true : input.status === 'active' ? false : undefined,
+    completed: statusToCompleted(input.status),
     tags: input.tags,
     tagsOperator: 'OR',
   });

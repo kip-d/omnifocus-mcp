@@ -39,6 +39,42 @@ import { flattenBatchResults } from './batch-response-flatten.js';
 // Convert string IDs to branded types for type safety (compile-time only, no runtime validation)
 const convertToTaskId = (id: string): TaskId => id as TaskId;
 
+/**
+ * Unwrap v3 envelope format if present.
+ * Scripts return: {ok: true, v: "3", data: {...}}
+ * After extracting .data we get the envelope; this unwraps to the inner data.
+ */
+function unwrapV3Envelope(result: unknown): unknown {
+  if (result && typeof result === 'object') {
+    const envelope = result as { ok?: boolean; v?: string; data?: unknown };
+    if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
+      return envelope.data;
+    }
+  }
+  return result;
+}
+
+/**
+ * Build recovery suggestions based on error message content from task creation failures.
+ */
+function buildCreateErrorRecovery(errorMessage: string): string[] {
+  if (errorMessage.toLowerCase().includes('project')) {
+    return [
+      'Use list_projects to find valid project IDs',
+      'Ensure the project exists and is not completed',
+    ];
+  } else if (errorMessage.toLowerCase().includes('parent')) {
+    return [
+      'Use list_tasks to find valid parent task IDs',
+      'Ensure the parent task exists and can have subtasks',
+    ];
+  }
+  return [
+    'Check that all required parameters are provided',
+    'Verify OmniFocus is running and not showing dialogs',
+  ];
+}
+
 interface BatchItemCreationResult {
   tempId: string;
   realId: string | null;
@@ -302,186 +338,31 @@ SAFETY:
     // Handle repetition rules - prefer unified API format (repetitionRule) over legacy format
     let repetitionRuleForCreate: RepetitionRule | undefined;
     if (data.repetitionRule && typeof data.repetitionRule === 'object') {
-      // Unified API format - use directly
       repetitionRuleForCreate = data.repetitionRule as RepetitionRule;
       this.logger.debug('Using unified API repetitionRule for creation', {
         repetitionRule: repetitionRuleForCreate,
       });
     }
 
-    // Convert local dates to UTC for OmniFocus with error handling
-    let convertedTaskData;
-    try {
-      convertedTaskData = {
-        ...createArgs,
-        dueDate: createArgs.dueDate ? localToUTC(createArgs.dueDate, 'due') : undefined,
-        deferDate: createArgs.deferDate ? localToUTC(createArgs.deferDate, 'defer') : undefined,
-        plannedDate: createArgs.plannedDate ? localToUTC(createArgs.plannedDate, 'planned') : undefined,
-        // Map projectId to project for mutation contract compatibility
-        project: createArgs.projectId,
-      };
-      // Remove projectId since mutation contract uses 'project'
-      delete convertedTaskData.projectId;
-    } catch (dateError) {
-      const fieldName =
-        dateError instanceof Error && dateError.message.includes('defer')
-          ? 'deferDate'
-          : dateError instanceof Error && dateError.message.includes('planned')
-            ? 'plannedDate'
-            : 'dueDate';
-      const providedValue =
-        fieldName === 'deferDate'
-          ? createArgs.deferDate
-          : fieldName === 'plannedDate'
-            ? createArgs.plannedDate
-            : createArgs.dueDate;
-      const errorDetails = invalidDateError(fieldName, providedValue || '');
-      return createErrorResponseV2(
-        'omnifocus_write',
-        'INVALID_DATE_FORMAT',
-        errorDetails.message,
-        formatErrorWithRecovery(errorDetails),
-        {
-          recovery: errorDetails.recovery,
-          providedValue,
-        },
-        timer.toMetadata(),
-      );
-    }
+    // Convert local dates to UTC for OmniFocus
+    const dateResult = this.convertTaskDates(createArgs, timer);
+    if ('isError' in dateResult) return dateResult.response;
+    const convertedTaskData = dateResult.data;
 
     this.logger.debug('Converted task data for script execution', { convertedTaskData });
 
-    // Use AST-powered mutation builder
-    const script = (await buildCreateTaskScript(convertedTaskData as TaskCreateData)).script;
-    let createResult: unknown;
+    // Execute the create script
+    const createResult = await this.executeCreateScript(convertedTaskData, timer);
+    if ('isError' in createResult) return createResult.response;
 
-    try {
-      const scriptResult = await this.execJson(script);
-      this.logger.debug('execJson returned result', { scriptResult });
+    // Parse and validate the result
+    const parseResult = this.parseAndValidateCreateResult(createResult.data, timer);
+    if ('isError' in parseResult) return parseResult.response;
 
-      if (isScriptError(scriptResult)) {
-        return createErrorResponseV2(
-          'omnifocus_write',
-          'SCRIPT_ERROR',
-          scriptResult.error || 'Script execution failed',
-          undefined,
-          scriptResult.details,
-          timer.toMetadata(),
-        );
-      }
-      createResult = (scriptResult as ScriptExecutionResult).data;
-    } catch (e) {
-      this.logger.error('Script execution threw error', { error: e });
-      return this.handleErrorV2<TaskOperationDataV2>(e);
-    }
+    const { parsedResult, createdTaskId } = parseResult;
 
-    this.logger.debug('Processing script result', { createResult });
-
-    if (
-      createResult &&
-      typeof createResult === 'object' &&
-      'error' in createResult &&
-      (createResult as { error: unknown }).error
-    ) {
-      // Enhanced error response with recovery suggestions
-      const errorMessage = (createResult as { message?: string }).message || 'Failed to create task';
-      const recovery = [];
-
-      if (errorMessage.toLowerCase().includes('project')) {
-        recovery.push('Use list_projects to find valid project IDs');
-        recovery.push('Ensure the project exists and is not completed');
-      } else if (errorMessage.toLowerCase().includes('parent')) {
-        recovery.push('Use list_tasks to find valid parent task IDs');
-        recovery.push('Ensure the parent task exists and can have subtasks');
-      } else {
-        recovery.push('Check that all required parameters are provided');
-        recovery.push('Verify OmniFocus is running and not showing dialogs');
-      }
-
-      return createErrorResponseV2(
-        'omnifocus_write',
-        'SCRIPT_ERROR',
-        errorMessage,
-        'Verify the inputs and OmniFocus state',
-        { rawResult: createResult as unknown, recovery },
-        timer.toMetadata(),
-      );
-    }
-
-    // Parse the JSON result since the script may return a JSON string
-    let parsedCreateResult: unknown;
-    try {
-      parsedCreateResult = typeof createResult === 'string' ? JSON.parse(createResult) : createResult;
-    } catch (parseError) {
-      this.logger.error(`Failed to parse create task result: ${String(createResult)}`);
-      const errorDetails = parsingError('task creation', String(createResult), 'valid JSON');
-      return createErrorResponseV2(
-        'omnifocus_write',
-        'INTERNAL_ERROR',
-        errorDetails.message,
-        'Ensure script returns valid JSON',
-        {
-          received: createResult,
-          parseError: parseError instanceof Error ? parseError.message : String(parseError),
-          recovery: errorDetails.recovery,
-        },
-        timer.toMetadata(),
-      );
-    }
-
-    // Handle v3 envelope format - unwrap if present
-    // Scripts return: {ok: true, v: "3", data: {...}}
-    // execJson wraps it: {success: true, data: {ok: true, v: "3", data: {...}}}
-    // After extracting .data we have: {ok: true, v: "3", data: {...}}
-    // We need to unwrap to: {...}
-    if (parsedCreateResult && typeof parsedCreateResult === 'object') {
-      const envelope = parsedCreateResult as { ok?: boolean; v?: string; data?: unknown };
-      if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
-        this.logger.debug('Unwrapping v3 envelope', { envelope });
-        parsedCreateResult = envelope.data;
-      }
-    }
-
-    // Check if parsedResult is valid
-    if (
-      !parsedCreateResult ||
-      typeof parsedCreateResult !== 'object' ||
-      (!(parsedCreateResult as Record<string, unknown>).taskId && !(parsedCreateResult as Record<string, unknown>).id)
-    ) {
-      return createErrorResponseV2(
-        'omnifocus_write',
-        'INTERNAL_ERROR',
-        'Invalid response from create task script',
-        'Have the script return an object with id/taskId',
-        { received: parsedCreateResult as unknown },
-        timer.toMetadata(),
-      );
-    }
-
-    const createdTaskId =
-      (parsedCreateResult as { taskId?: string; id?: string }).taskId ||
-      (parsedCreateResult as { id?: string }).id ||
-      null;
-    this.logger.debug('Post-create task ID', { createdTaskId });
-
-    if (repetitionRuleForCreate && createdTaskId) {
-      try {
-        this.logger.debug('Applying repeat rule via update', { repetitionRule: repetitionRuleForCreate });
-        // Use AST-powered mutation builder - repetitionRuleForCreate is already in contract format
-        const repeatOnlyScript = (
-          await buildUpdateTaskScript(createdTaskId, { repetitionRule: repetitionRuleForCreate })
-        ).script;
-        const repeatUpdateResult = await this.execJson(repeatOnlyScript);
-        this.logger.debug('Repeat rule update result', { repeatUpdateResult });
-        if (isScriptError(repeatUpdateResult)) {
-          this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
-        } else {
-          this.logger.info('Repeat rule applied post-creation for task', { taskId: createdTaskId });
-        }
-      } catch (repeatError) {
-        this.logger.warn('Exception applying repeat rule post-creation', repeatError);
-      }
-    }
+    // Apply repetition rule post-creation if needed
+    await this.applyRepetitionRulePostCreate(repetitionRuleForCreate, createdTaskId);
 
     // Smart cache invalidation after successful task creation
     this.cache.invalidateForTaskChange({
@@ -492,14 +373,14 @@ SAFETY:
       affectsOverdue: false, // New tasks can't be overdue
     });
 
-    this.logger.debug('Returning success response', { parsedCreateResult });
+    this.logger.debug('Returning success response', { parsedResult });
 
     return createSuccessResponseV2(
       'omnifocus_write',
       {
-        task: parsedCreateResult,
-        id: createdTaskId, // Expose id at top level for convenience
-        name: (parsedCreateResult as Record<string, unknown>).name, // Expose name at top level
+        task: parsedResult,
+        id: createdTaskId,
+        name: (parsedResult as Record<string, unknown>).name,
         operation: 'create' as const,
       },
       undefined,
@@ -517,6 +398,203 @@ SAFETY:
         },
       },
     );
+  }
+
+  /**
+   * Convert local dates in task creation args to UTC.
+   * Returns either the converted data or an error response.
+   */
+  private convertTaskDates(
+    createArgs: Partial<TaskCreationArgs>,
+    timer: OperationTimerV2,
+  ): { data: Record<string, unknown> } | { isError: true; response: unknown } {
+    try {
+      const converted: Record<string, unknown> = {
+        ...createArgs,
+        dueDate: createArgs.dueDate ? localToUTC(createArgs.dueDate, 'due') : undefined,
+        deferDate: createArgs.deferDate ? localToUTC(createArgs.deferDate, 'defer') : undefined,
+        plannedDate: createArgs.plannedDate ? localToUTC(createArgs.plannedDate, 'planned') : undefined,
+        project: createArgs.projectId,
+      };
+      delete converted.projectId;
+      return { data: converted };
+    } catch (dateError) {
+      const isDefer = dateError instanceof Error && dateError.message.includes('defer');
+      const isPlanned = dateError instanceof Error && dateError.message.includes('planned');
+      const plannedOrDue = isPlanned ? 'plannedDate' : 'dueDate';
+      const fieldName = isDefer ? 'deferDate' : plannedOrDue;
+      const fieldValues: Record<string, string | undefined> = {
+        deferDate: createArgs.deferDate,
+        plannedDate: createArgs.plannedDate,
+        dueDate: createArgs.dueDate,
+      };
+      const providedValue = fieldValues[fieldName];
+      const errorDetails = invalidDateError(fieldName, providedValue || '');
+      return {
+        isError: true,
+        response: createErrorResponseV2(
+          'omnifocus_write',
+          'INVALID_DATE_FORMAT',
+          errorDetails.message,
+          formatErrorWithRecovery(errorDetails),
+          { recovery: errorDetails.recovery, providedValue },
+          timer.toMetadata(),
+        ),
+      };
+    }
+  }
+
+  /**
+   * Build and execute the task creation script.
+   * Returns the raw result data or an error response.
+   */
+  private async executeCreateScript(
+    convertedTaskData: Record<string, unknown>,
+    timer: OperationTimerV2,
+  ): Promise<{ data: unknown } | { isError: true; response: unknown }> {
+    const script = (await buildCreateTaskScript(convertedTaskData as unknown as TaskCreateData)).script;
+
+    let createResult: unknown;
+    try {
+      const scriptResult = await this.execJson(script);
+      this.logger.debug('execJson returned result', { scriptResult });
+
+      if (isScriptError(scriptResult)) {
+        return {
+          isError: true,
+          response: createErrorResponseV2(
+            'omnifocus_write',
+            'SCRIPT_ERROR',
+            scriptResult.error || 'Script execution failed',
+            undefined,
+            scriptResult.details,
+            timer.toMetadata(),
+          ),
+        };
+      }
+      createResult = (scriptResult as ScriptExecutionResult).data;
+    } catch (e) {
+      this.logger.error('Script execution threw error', { error: e });
+      return { isError: true, response: this.handleErrorV2<TaskOperationDataV2>(e) };
+    }
+
+    this.logger.debug('Processing script result', { createResult });
+
+    // Check for error in result object
+    if (
+      createResult &&
+      typeof createResult === 'object' &&
+      'error' in createResult &&
+      (createResult as { error: unknown }).error
+    ) {
+      const errorMessage = (createResult as { message?: string }).message || 'Failed to create task';
+      const recovery = buildCreateErrorRecovery(errorMessage);
+      return {
+        isError: true,
+        response: createErrorResponseV2(
+          'omnifocus_write',
+          'SCRIPT_ERROR',
+          errorMessage,
+          'Verify the inputs and OmniFocus state',
+          { rawResult: createResult as unknown, recovery },
+          timer.toMetadata(),
+        ),
+      };
+    }
+
+    return { data: createResult };
+  }
+
+  /**
+   * Parse raw create result, unwrap v3 envelope, and validate structure.
+   * Returns the parsed result and task ID, or an error response.
+   */
+  private parseAndValidateCreateResult(
+    createResult: unknown,
+    timer: OperationTimerV2,
+  ): { parsedResult: unknown; createdTaskId: string | null } | { isError: true; response: unknown } {
+    let parsedResult: unknown;
+    try {
+      parsedResult = typeof createResult === 'string' ? JSON.parse(createResult) : createResult;
+    } catch (parseError) {
+      this.logger.error(`Failed to parse create task result: ${String(createResult)}`);
+      const errorDetails = parsingError('task creation', String(createResult), 'valid JSON');
+      return {
+        isError: true,
+        response: createErrorResponseV2(
+          'omnifocus_write',
+          'INTERNAL_ERROR',
+          errorDetails.message,
+          'Ensure script returns valid JSON',
+          {
+            received: createResult,
+            parseError: parseError instanceof Error ? parseError.message : String(parseError),
+            recovery: errorDetails.recovery,
+          },
+          timer.toMetadata(),
+        ),
+      };
+    }
+
+    // Unwrap v3 envelope if present
+    const unwrapped = unwrapV3Envelope(parsedResult);
+    if (unwrapped !== parsedResult) {
+      this.logger.debug('Unwrapping v3 envelope', { envelope: parsedResult });
+      parsedResult = unwrapped;
+    }
+
+    // Validate structure
+    if (
+      !parsedResult ||
+      typeof parsedResult !== 'object' ||
+      (!(parsedResult as Record<string, unknown>).taskId && !(parsedResult as Record<string, unknown>).id)
+    ) {
+      return {
+        isError: true,
+        response: createErrorResponseV2(
+          'omnifocus_write',
+          'INTERNAL_ERROR',
+          'Invalid response from create task script',
+          'Have the script return an object with id/taskId',
+          { received: parsedResult as unknown },
+          timer.toMetadata(),
+        ),
+      };
+    }
+
+    const createdTaskId =
+      (parsedResult as { taskId?: string; id?: string }).taskId ||
+      (parsedResult as { id?: string }).id ||
+      null;
+    this.logger.debug('Post-create task ID', { createdTaskId });
+
+    return { parsedResult, createdTaskId };
+  }
+
+  /**
+   * Apply a repetition rule to a newly created task via an update script.
+   */
+  private async applyRepetitionRulePostCreate(
+    repetitionRule: RepetitionRule | undefined,
+    taskId: string | null,
+  ): Promise<void> {
+    if (!repetitionRule || !taskId) return;
+
+    try {
+      this.logger.debug('Applying repeat rule via update', { repetitionRule });
+      const repeatOnlyScript = (
+        await buildUpdateTaskScript(taskId, { repetitionRule })
+      ).script;
+      const repeatUpdateResult = await this.execJson(repeatOnlyScript);
+      this.logger.debug('Repeat rule update result', { repeatUpdateResult });
+      if (isScriptError(repeatUpdateResult)) {
+        this.logger.warn('Failed to apply repeat rule during task creation', repeatUpdateResult.error);
+      } else {
+        this.logger.info('Repeat rule applied post-creation for task', { taskId });
+      }
+    } catch (repeatError) {
+      this.logger.warn('Exception applying repeat rule post-creation', repeatError);
+    }
   }
 
   // ─── Task Update ────────────────────────────────────────────────────
@@ -578,12 +656,11 @@ SAFETY:
         const errorValue = rawData.error;
         const subSuccess = rawData.success;
         if (errorValue || subSuccess === false) {
+          const errorFallback = typeof errorValue === 'string' ? errorValue : 'Script execution failed';
           const errorMessage =
             typeof rawData.message === 'string'
               ? rawData.message
-              : typeof errorValue === 'string'
-                ? errorValue
-                : 'Script execution failed';
+              : errorFallback;
           return createErrorResponseV2(
             'omnifocus_write',
             'SCRIPT_ERROR',
@@ -598,12 +675,10 @@ SAFETY:
     let parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
 
     // Handle v3 envelope format - unwrap if present
-    if (parsedUpdateResult && typeof parsedUpdateResult === 'object') {
-      const envelope = parsedUpdateResult as { ok?: boolean; v?: string; data?: unknown };
-      if (envelope.ok === true && envelope.v === '3' && envelope.data !== undefined) {
-        this.logger.debug('Unwrapping v3 envelope for update', { envelope });
-        parsedUpdateResult = envelope.data;
-      }
+    const unwrappedUpdate = unwrapV3Envelope(parsedUpdateResult);
+    if (unwrappedUpdate !== parsedUpdateResult) {
+      this.logger.debug('Unwrapping v3 envelope for update', { envelope: parsedUpdateResult });
+      parsedUpdateResult = unwrappedUpdate;
     }
 
     // Smart cache invalidation after successful update
@@ -1211,54 +1286,10 @@ SAFETY:
 
     // Phase 1: Creates (inline batch create with hierarchy support)
     if (createOps.length > 0 && !hadError) {
-      try {
-        let autoTempIdCounter = 0;
-        const items: BatchItem[] = createOps.map((op) => {
-          const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
-          if (!item.tempId) {
-            item.tempId = `auto_temp_${++autoTempIdCounter}`;
-          }
-          return item;
-        });
-
-        const createResult = await this.executeBatchCreates(items, {
-          createSequentially: compiled.createSequentially ?? true,
-          atomicOperation: compiled.atomicOperation ?? false,
-          returnMapping: compiled.returnMapping ?? true,
-          stopOnError: compiled.stopOnError ?? true,
-        });
-
-        if (createResult.success === false && createResult.rolledBack) {
-          // Atomic operation failed and was rolled back
-          results.errors.push(createResult);
-          if (compiled.stopOnError) hadError = true;
-        } else if (createResult.failed > 0 && compiled.stopOnError) {
-          results.errors.push(createResult);
-          hadError = true;
-        } else {
-          results.created.push(createResult);
-        }
-
-        // Extract tempId mapping for subsequent operations
-        createdCount = createResult.created;
-        if (createResult.mapping) {
-          tempIdMapping = createResult.mapping;
-        }
-      } catch (err) {
-        if (err instanceof DependencyGraphError) {
-          results.errors.push({
-            phase: 'create',
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: err.message,
-            },
-            details: err.details,
-          });
-        } else {
-          results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
-        }
-        if (compiled.stopOnError) hadError = true;
-      }
+      const createPhase = await this.executeBatchCreatePhase(createOps, compiled, results);
+      createdCount = createPhase.createdCount;
+      tempIdMapping = createPhase.tempIdMapping;
+      hadError = createPhase.hadError;
     }
 
     // Phase 2-4: Updates, completes, deletes — route through inline handlers
@@ -1277,28 +1308,8 @@ SAFETY:
 
       for (const op of phase.ops) {
         try {
-          // Resolve tempId references if the id matches a tempId from creates
           const resolvedId = op.id && tempIdMapping[op.id] ? tempIdMapping[op.id] : op.id;
-
-          let result: unknown;
-          if (op.target === 'project' && op.operation === 'update') {
-            result = await this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
-          } else if (op.target === 'project') {
-            // Route project operations through inline handlers
-            if (op.operation === 'complete') {
-              result = await this.handleProjectComplete(resolvedId!);
-            } else if (op.operation === 'delete') {
-              result = await this.handleProjectDelete(resolvedId!);
-            } else {
-              // Fallback: should not reach here for valid batch operations
-              throw new Error(`Unsupported batch project operation: ${op.operation}`);
-            }
-          } else {
-            // Task operations — use inline handlers via the main dispatch
-            // Build a compiled mutation and dispatch it
-            const taskCompiled = this.buildTaskCompiledForBatch(op, resolvedId);
-            result = await this.dispatchTaskOperation(taskCompiled);
-          }
+          const result = await this.dispatchBatchOp(op, resolvedId);
           results[phase.resultKey].push(result);
         } catch (err) {
           results.errors.push({ phase: phase.name, id: op.id, error: String(err) });
@@ -1365,6 +1376,62 @@ SAFETY:
     }
   }
 
+  private async executeBatchCreatePhase(
+    createOps: Extract<CompiledMutation, { operation: 'batch' }>['operations'],
+    compiled: Extract<CompiledMutation, { operation: 'batch' }>,
+    results: { created: unknown[]; errors: unknown[] },
+  ): Promise<{ createdCount: number; tempIdMapping: Record<string, string>; hadError: boolean }> {
+    let tempIdMapping: Record<string, string> = {};
+    let createdCount = 0;
+    let hadError = false;
+
+    try {
+      let autoTempIdCounter = 0;
+      const items: BatchItem[] = createOps.map((op) => {
+        const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
+        if (!item.tempId) {
+          item.tempId = `auto_temp_${++autoTempIdCounter}`;
+        }
+        return item;
+      });
+
+      const createResult = await this.executeBatchCreates(items, {
+        createSequentially: compiled.createSequentially ?? true,
+        atomicOperation: compiled.atomicOperation ?? false,
+        returnMapping: compiled.returnMapping ?? true,
+        stopOnError: compiled.stopOnError ?? true,
+      });
+
+      if (createResult.success === false && createResult.rolledBack) {
+        results.errors.push(createResult);
+        if (compiled.stopOnError) hadError = true;
+      } else if (createResult.failed > 0 && compiled.stopOnError) {
+        results.errors.push(createResult);
+        hadError = true;
+      } else {
+        results.created.push(createResult);
+      }
+
+      createdCount = createResult.created;
+      if (createResult.mapping) {
+        tempIdMapping = createResult.mapping;
+      }
+    } catch (err) {
+      if (err instanceof DependencyGraphError) {
+        results.errors.push({
+          phase: 'create',
+          error: { code: 'VALIDATION_ERROR', message: err.message },
+          details: err.details,
+        });
+      } else {
+        results.errors.push({ phase: 'create', error: { code: 'INTERNAL_ERROR', message: String(err) } });
+      }
+      if (compiled.stopOnError) hadError = true;
+    }
+
+    return { createdCount, tempIdMapping, hadError };
+  }
+
   /**
    * Dispatch a task operation to the correct inline handler.
    */
@@ -1379,6 +1446,29 @@ SAFETY:
       default:
         throw new Error(`Unexpected task operation for dispatch: ${(compiled as { operation: string }).operation}`);
     }
+  }
+
+  /**
+   * Dispatch a single batch operation (project or task) to the correct handler.
+   */
+  private async dispatchBatchOp(
+    op: { operation: string; target: string; id?: string; changes?: unknown; completionDate?: string },
+    resolvedId?: string,
+  ): Promise<unknown> {
+    if (op.target === 'project') {
+      switch (op.operation) {
+        case 'update':
+          return this.handleProjectUpdateDirect(resolvedId!, op.changes as ProjectUpdateData);
+        case 'complete':
+          return this.handleProjectComplete(resolvedId!);
+        case 'delete':
+          return this.handleProjectDelete(resolvedId!);
+        default:
+          throw new Error(`Unsupported batch project operation: ${op.operation}`);
+      }
+    }
+    const taskCompiled = this.buildTaskCompiledForBatch(op, resolvedId);
+    return this.dispatchTaskOperation(taskCompiled);
   }
 
   // ─── Batch create (inlined from BatchCreateTool) ────────────────────
@@ -1477,25 +1567,7 @@ SAFETY:
     // Step 6: Smart cache invalidation after successful batch creations
     const createdCount = resolver.getCreatedCount();
     if (createdCount > 0) {
-      this.cache.invalidate('projects');
-
-      const projectIds = new Set<string>();
-      const tags = new Set<string>();
-
-      for (const item of items) {
-        if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
-          const realId = resolver.getRealId(item.tempId);
-          if (realId) projectIds.add(realId);
-        }
-        if (item.tags) {
-          item.tags.forEach((tag: string) => tags.add(tag));
-        }
-      }
-
-      projectIds.forEach((id) => this.cache.invalidateProject(id));
-      tags.forEach((tag) => this.cache.invalidateTag(tag));
-      this.cache.invalidateTaskQueries(['today', 'inbox']);
-      this.cache.invalidate('analytics');
+      this.invalidateBatchCaches(items, batchResults, resolver);
     }
 
     // Step 7: Build response
@@ -1519,6 +1591,32 @@ SAFETY:
     }
 
     return response;
+  }
+
+  private invalidateBatchCaches(
+    items: BatchItem[],
+    batchResults: BatchItemCreationResult[],
+    resolver: TempIdResolver,
+  ): void {
+    this.cache.invalidate('projects');
+
+    const projectIds = new Set<string>();
+    const tags = new Set<string>();
+
+    for (const item of items) {
+      if (item.type === 'project' && batchResults.find((r) => r.tempId === item.tempId)?.success) {
+        const realId = resolver.getRealId(item.tempId);
+        if (realId) projectIds.add(realId);
+      }
+      if (item.tags) {
+        item.tags.forEach((tag: string) => tags.add(tag));
+      }
+    }
+
+    projectIds.forEach((id) => this.cache.invalidateProject(id));
+    tags.forEach((tag) => this.cache.invalidateTag(tag));
+    this.cache.invalidateTaskQueries(['today', 'inbox']);
+    this.cache.invalidate('analytics');
   }
 
   /**

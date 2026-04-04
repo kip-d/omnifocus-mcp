@@ -196,6 +196,30 @@ export function parseTasks(tasks: unknown[]): OmniFocusTask[] {
 // SORTING
 // =============================================================================
 
+function toSortableString(value: unknown): string {
+  if (typeof value === 'object' && value !== null) {
+    return JSON.stringify(value);
+  }
+  return String(value as string | number | boolean);
+}
+
+function compareValues(aValue: unknown, bValue: unknown): number {
+  if (typeof aValue === 'string' && typeof bValue === 'string') {
+    return aValue.localeCompare(bValue, undefined, { sensitivity: 'base' });
+  }
+  if (typeof aValue === 'number' && typeof bValue === 'number') {
+    return aValue - bValue;
+  }
+  if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
+    if (aValue === bValue) return 0;
+    return aValue ? -1 : 1;
+  }
+  if (aValue instanceof Date && bValue instanceof Date) {
+    return aValue.getTime() - bValue.getTime();
+  }
+  return toSortableString(aValue).localeCompare(toSortableString(bValue));
+}
+
 /**
  * Sort tasks based on provided sort options.
  *
@@ -221,31 +245,7 @@ export function sortTasks(tasks: OmniFocusTask[], sortOptions?: SortOption[]): O
         return -1;
       }
 
-      let comparison = 0;
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        comparison = aValue.localeCompare(bValue, undefined, { sensitivity: 'base' });
-      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-        comparison = aValue - bValue;
-      } else if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
-        comparison = aValue === bValue ? 0 : aValue ? -1 : 1;
-      } else if (aValue instanceof Date && bValue instanceof Date) {
-        comparison = aValue.getTime() - bValue.getTime();
-      } else {
-        let aStr: string;
-        let bStr: string;
-        if (typeof aValue === 'object' && aValue !== null) {
-          aStr = JSON.stringify(aValue);
-        } else {
-          aStr = String(aValue as string | number | boolean);
-        }
-        if (typeof bValue === 'object' && bValue !== null) {
-          bStr = JSON.stringify(bValue);
-        } else {
-          bStr = String(bValue as string | number | boolean);
-        }
-        comparison = aStr.localeCompare(bStr);
-      }
-
+      const comparison = compareValues(aValue, bValue);
       if (comparison !== 0) {
         return option.direction === 'desc' ? -comparison : comparison;
       }

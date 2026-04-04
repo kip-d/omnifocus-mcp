@@ -90,6 +90,43 @@ export function isRawSuccessResponse(value: unknown): value is RawOmniFocusData 
 }
 
 /**
+ * Parse a raw string result from OmniFocus script execution.
+ * Attempts JSON parsing and checks for legacy error format.
+ */
+function parseStringResult<T>(res: string): ScriptResult<T> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const parsed = JSON.parse(res);
+
+    if (isLegacyScriptError(parsed)) {
+      const details = parsed.details !== undefined ? parsed.details : parsed;
+      return createScriptError(getLegacyErrorMessage(parsed), 'Legacy script error', details);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return createScriptSuccess<T>(parsed);
+  } catch {
+    return createScriptSuccess<T>(res as T);
+  }
+}
+
+/**
+ * Check if an object response indicates an explicit error.
+ * Returns a ScriptResult error if found, or null if the object is not an error.
+ */
+function checkObjectForError<T>(res: object): ScriptResult<T> | null {
+  const obj = res as RawOmniFocusData;
+  if (obj.success === false || obj.error) {
+    return createScriptError(
+      (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
+      typeof obj.context === 'string' ? obj.context : undefined,
+      obj.details,
+    );
+  }
+  return null;
+}
+
+/**
  * Base class for all MCP tools with Zod schema validation
  * @template TSchema - The Zod schema type for input validation
  * @template TResponse - The response type returned by executeValidated (defaults to unknown for flexibility)
@@ -533,12 +570,12 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
           executeJson?: (script: string) => Promise<unknown>;
           execute?: (script: string) => Promise<unknown>;
         };
-        const res =
-          typeof omni.executeJson === 'function'
-            ? await omni.executeJson(script)
-            : typeof omni.execute === 'function'
-              ? await omni.execute(script)
-              : null;
+        let res: unknown = null;
+        if (typeof omni.executeJson === 'function') {
+          res = await omni.executeJson(script);
+        } else if (typeof omni.execute === 'function') {
+          res = await omni.execute(script);
+        }
 
         // Handle null/undefined results
         if (res === null || res === undefined) {
@@ -562,20 +599,7 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
 
         // Handle raw string results (try to parse JSON)
         if (typeof res === 'string') {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            const parsed = JSON.parse(res);
-
-            if (isLegacyScriptError(parsed)) {
-              const details = parsed.details !== undefined ? parsed.details : parsed;
-              return createScriptError(getLegacyErrorMessage(parsed), 'Legacy script error', details);
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            return createScriptSuccess<T>(parsed);
-          } catch {
-            return createScriptSuccess<T>(res as T);
-          }
+          return parseStringResult<T>(res);
         }
 
         // Handle object responses that indicate success patterns
@@ -585,13 +609,9 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
 
         // Check for explicit error indication in object responses
         if (res && typeof res === 'object') {
-          const obj = res as RawOmniFocusData;
-          if (obj.success === false || obj.error) {
-            return createScriptError(
-              (typeof obj.error === 'string' ? obj.error : obj.message) || 'Script execution failed',
-              typeof obj.context === 'string' ? obj.context : undefined,
-              obj.details,
-            );
+          const errorResult = checkObjectForError<T>(res);
+          if (errorResult) {
+            return errorResult;
           }
         }
 
