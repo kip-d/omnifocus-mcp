@@ -373,7 +373,7 @@ export class OmniAutomation {
       return String(value);
     }
 
-    if (typeof value === 'object' && value !== null) {
+    if (typeof value === 'object') {
       // Safely handle objects
       try {
         const entries = Object.entries(value)

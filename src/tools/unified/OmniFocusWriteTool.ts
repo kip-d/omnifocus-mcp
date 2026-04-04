@@ -59,20 +59,11 @@ function unwrapV3Envelope(result: unknown): unknown {
  */
 function buildCreateErrorRecovery(errorMessage: string): string[] {
   if (errorMessage.toLowerCase().includes('project')) {
-    return [
-      'Use list_projects to find valid project IDs',
-      'Ensure the project exists and is not completed',
-    ];
+    return ['Use list_projects to find valid project IDs', 'Ensure the project exists and is not completed'];
   } else if (errorMessage.toLowerCase().includes('parent')) {
-    return [
-      'Use list_tasks to find valid parent task IDs',
-      'Ensure the parent task exists and can have subtasks',
-    ];
+    return ['Use list_tasks to find valid parent task IDs', 'Ensure the parent task exists and can have subtasks'];
   }
-  return [
-    'Check that all required parameters are provided',
-    'Verify OmniFocus is running and not showing dialogs',
-  ];
+  return ['Check that all required parameters are provided', 'Verify OmniFocus is running and not showing dialogs'];
 }
 
 interface BatchItemCreationResult {
@@ -563,9 +554,7 @@ SAFETY:
     }
 
     const createdTaskId =
-      (parsedResult as { taskId?: string; id?: string }).taskId ||
-      (parsedResult as { id?: string }).id ||
-      null;
+      (parsedResult as { taskId?: string; id?: string }).taskId || (parsedResult as { id?: string }).id || null;
     this.logger.debug('Post-create task ID', { createdTaskId });
 
     return { parsedResult, createdTaskId };
@@ -582,9 +571,7 @@ SAFETY:
 
     try {
       this.logger.debug('Applying repeat rule via update', { repetitionRule });
-      const repeatOnlyScript = (
-        await buildUpdateTaskScript(taskId, { repetitionRule })
-      ).script;
+      const repeatOnlyScript = (await buildUpdateTaskScript(taskId, { repetitionRule })).script;
       const repeatUpdateResult = await this.execJson(repeatOnlyScript);
       this.logger.debug('Repeat rule update result', { repeatUpdateResult });
       if (isScriptError(repeatUpdateResult)) {
@@ -650,39 +637,72 @@ SAFETY:
       );
     }
 
-    if (isScriptSuccess(updateResult)) {
-      const rawData = updateResult.data as { success?: unknown; error?: unknown; message?: unknown } | undefined;
-      if (rawData && typeof rawData === 'object') {
-        const errorValue = rawData.error;
-        const subSuccess = rawData.success;
-        if (errorValue || subSuccess === false) {
-          const errorFallback = typeof errorValue === 'string' ? errorValue : 'Script execution failed';
-          const errorMessage =
-            typeof rawData.message === 'string'
-              ? rawData.message
-              : errorFallback;
-          return createErrorResponseV2(
-            'omnifocus_write',
-            'SCRIPT_ERROR',
-            errorMessage,
-            'Verify task exists and params are valid',
-            rawData,
-            timer.toMetadata(),
-          );
-        }
-      }
+    const embeddedError = this.extractEmbeddedScriptError(updateResult);
+    if (embeddedError) {
+      return createErrorResponseV2(
+        'omnifocus_write',
+        'SCRIPT_ERROR',
+        embeddedError.message,
+        'Verify task exists and params are valid',
+        embeddedError.rawData,
+        timer.toMetadata(),
+      );
     }
-    let parsedUpdateResult = (updateResult as ScriptExecutionResult).data;
 
-    // Handle v3 envelope format - unwrap if present
+    const parsedUpdateResult = this.unwrapUpdateResult(updateResult);
+
+    this.invalidateCacheForTaskUpdate(safeUpdates);
+    this.logger.info(`Updated task: ${taskId}`);
+
+    if (minimalResponse) {
+      return {
+        success: true,
+        id: taskId,
+        operation: 'update_task',
+        task_id: taskId, // Keep for backwards compatibility
+        fields_updated: Object.keys(safeUpdates),
+      };
+    }
+
+    return this.buildTaskUpdateResponse(taskId, safeUpdates, parsedUpdateResult, timer);
+  }
+
+  /**
+   * Check if a script success result contains an embedded error in its data payload.
+   */
+  private extractEmbeddedScriptError(result: ScriptExecutionResult): { message: string; rawData: unknown } | null {
+    if (!result.success) return null;
+
+    const rawData = result.data as { success?: unknown; error?: unknown; message?: unknown } | undefined;
+    if (!rawData || typeof rawData !== 'object') return null;
+
+    const { error: errorValue, success: subSuccess } = rawData;
+    if (!errorValue && subSuccess !== false) return null;
+
+    const errorFallback = typeof errorValue === 'string' ? errorValue : 'Script execution failed';
+    const message = typeof rawData.message === 'string' ? rawData.message : errorFallback;
+    return { message, rawData };
+  }
+
+  /**
+   * Unwrap the update result, handling v3 envelope format.
+   */
+  private unwrapUpdateResult(updateResult: ScriptExecutionResult): unknown {
+    let parsedUpdateResult = updateResult.data;
+
     const unwrappedUpdate = unwrapV3Envelope(parsedUpdateResult);
     if (unwrappedUpdate !== parsedUpdateResult) {
       this.logger.debug('Unwrapping v3 envelope for update', { envelope: parsedUpdateResult });
       parsedUpdateResult = unwrappedUpdate;
     }
 
-    // Smart cache invalidation after successful update
-    // Collect all affected tags (tags, addTags, removeTags)
+    return parsedUpdateResult;
+  }
+
+  /**
+   * Invalidate caches affected by a task update.
+   */
+  private invalidateCacheForTaskUpdate(safeUpdates: Record<string, unknown>): void {
     const affectedTags: string[] = [];
     if (isStringArray(safeUpdates.tags)) affectedTags.push(...safeUpdates.tags);
     if (isStringArray(safeUpdates.addTags)) affectedTags.push(...safeUpdates.addTags);
@@ -695,21 +715,17 @@ SAFETY:
       affectsToday: typeof safeUpdates.dueDate === 'string' ? this.isDueSoon(safeUpdates.dueDate) : false,
       affectsOverdue: false, // Updates don't automatically make things overdue
     });
+  }
 
-    this.logger.info(`Updated task: ${taskId}`);
-
-    // Handle response levels for context optimization
-    if (minimalResponse) {
-      return {
-        success: true,
-        id: taskId,
-        operation: 'update_task',
-        task_id: taskId, // Keep for backwards compatibility
-        fields_updated: Object.keys(safeUpdates),
-      };
-    }
-
-    // Transform new schema-validated result to expected format
+  /**
+   * Build the full success response for a task update.
+   */
+  private buildTaskUpdateResponse(
+    taskId: string,
+    safeUpdates: Record<string, unknown>,
+    parsedUpdateResult: unknown,
+    timer: OperationTimerV2,
+  ): unknown {
     const taskData = (parsedUpdateResult as { task?: Record<string, unknown> })?.task ||
       parsedUpdateResult || { id: taskId, name: 'Unknown' };
     const transformedResult = {
@@ -899,41 +915,53 @@ SAFETY:
     const timer = new OperationTimerV2();
 
     if (compiled.target === 'project') {
-      // Project bulk delete — iterate through individual delete operations
-      const deleteResults: Array<{ projectId: string; status: string }> = [];
-      const deleteErrors: unknown[] = [];
-
-      for (const id of compiled.ids) {
-        try {
-          const deleteResult = await this.handleProjectDelete(id);
-          const success =
-            deleteResult && typeof deleteResult === 'object' && (deleteResult as { success?: boolean }).success;
-          if (success) {
-            deleteResults.push({ projectId: id, status: 'deleted' });
-          } else {
-            deleteErrors.push({ projectId: id, error: 'Delete failed' });
-          }
-        } catch (err) {
-          deleteErrors.push({ projectId: id, error: String(err) });
-        }
-      }
-
-      return createSuccessResponseV2(
-        'omnifocus_write',
-        {
-          operation: 'bulk_delete',
-          successCount: deleteResults.length,
-          errorCount: deleteErrors.length,
-          results: deleteResults,
-          errors: deleteErrors.length > 0 ? deleteErrors : undefined,
-        },
-        undefined,
-        timer.toMetadata(),
-      );
+      return this.handleBulkDeleteProjects(compiled.ids, timer);
     }
 
-    // Task bulk delete — direct execution
-    const taskIds = compiled.ids.map((id) => convertToTaskId(id));
+    return this.handleBulkDeleteTasks(compiled.ids, timer);
+  }
+
+  /**
+   * Bulk delete projects by iterating through individual delete operations.
+   */
+  private async handleBulkDeleteProjects(ids: string[], timer: OperationTimerV2): Promise<unknown> {
+    const deleteResults: Array<{ projectId: string; status: string }> = [];
+    const deleteErrors: unknown[] = [];
+
+    for (const id of ids) {
+      try {
+        const deleteResult = await this.handleProjectDelete(id);
+        const success =
+          deleteResult && typeof deleteResult === 'object' && (deleteResult as { success?: boolean }).success;
+        if (success) {
+          deleteResults.push({ projectId: id, status: 'deleted' });
+        } else {
+          deleteErrors.push({ projectId: id, error: 'Delete failed' });
+        }
+      } catch (err) {
+        deleteErrors.push({ projectId: id, error: String(err) });
+      }
+    }
+
+    return createSuccessResponseV2(
+      'omnifocus_write',
+      {
+        operation: 'bulk_delete',
+        successCount: deleteResults.length,
+        errorCount: deleteErrors.length,
+        results: deleteResults,
+        errors: deleteErrors.length > 0 ? deleteErrors : undefined,
+      },
+      undefined,
+      timer.toMetadata(),
+    );
+  }
+
+  /**
+   * Bulk delete tasks via direct script execution.
+   */
+  private async handleBulkDeleteTasks(ids: string[], timer: OperationTimerV2): Promise<unknown> {
+    const taskIds = ids.map((id) => convertToTaskId(id));
     const results: Array<{ taskId: string; status: string }> = [];
     const errors: unknown[] = [];
 
@@ -945,21 +973,8 @@ SAFETY:
 
       if (isScriptError(result)) {
         errors.push({ error: result.error || 'Bulk delete failed' });
-      } else if (result.data && typeof result.data === 'object') {
-        const bulkResult = result.data as {
-          deleted?: Array<{ id: string; name: string }>;
-          errors?: Array<{ taskId: string; error: string }>;
-        };
-
-        if (Array.isArray(bulkResult.deleted)) {
-          for (const item of bulkResult.deleted) {
-            results.push({ taskId: item.id, status: 'deleted' });
-          }
-        }
-
-        if (Array.isArray(bulkResult.errors)) {
-          errors.push(...bulkResult.errors);
-        }
+      } else {
+        this.collectBulkDeleteResults(result, results, errors);
       }
 
       // Invalidate task cache after bulk operation
@@ -977,6 +992,32 @@ SAFETY:
     };
 
     return createSuccessResponseV2('omnifocus_write', responseData, undefined, timer.toMetadata());
+  }
+
+  /**
+   * Extract deleted items and errors from a bulk delete script result.
+   */
+  private collectBulkDeleteResults(
+    result: ScriptExecutionResult,
+    results: Array<{ taskId: string; status: string }>,
+    errors: unknown[],
+  ): void {
+    if (!result.data || typeof result.data !== 'object') return;
+
+    const bulkResult = result.data as {
+      deleted?: Array<{ id: string; name: string }>;
+      errors?: Array<{ taskId: string; error: string }>;
+    };
+
+    if (Array.isArray(bulkResult.deleted)) {
+      for (const item of bulkResult.deleted) {
+        results.push({ taskId: item.id, status: 'deleted' });
+      }
+    }
+
+    if (Array.isArray(bulkResult.errors)) {
+      errors.push(...bulkResult.errors);
+    }
   }
 
   // ─── Project operations (inline) ────────────────────────────────────
@@ -1520,33 +1561,11 @@ SAFETY:
     // Step 4: Create items in order
     for (let i = 0; i < orderedItems.length; i++) {
       const item = orderedItems[i];
-      try {
-        const result = await this.createBatchItem(item, resolver);
-        batchResults.push(result);
+      const result = await this.executeSingleBatchCreate(item, resolver);
+      batchResults.push(result);
 
-        if (result.success && result.realId) {
-          resolver.resolve(item.tempId, result.realId);
-        } else {
-          resolver.markFailed(item.tempId, result.error || 'Creation failed');
-
-          if (options.stopOnError) {
-            break;
-          }
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        resolver.markFailed(item.tempId, errorMsg);
-        batchResults.push({
-          tempId: item.tempId,
-          realId: null,
-          success: false,
-          error: errorMsg,
-          type: item.type,
-        });
-
-        if (options.stopOnError) {
-          break;
-        }
+      if (!result.success && options.stopOnError) {
+        break;
       }
     }
 
@@ -1591,6 +1610,33 @@ SAFETY:
     }
 
     return response;
+  }
+
+  /**
+   * Execute a single batch create, resolving or marking failed in the resolver.
+   */
+  private async executeSingleBatchCreate(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
+    try {
+      const result = await this.createBatchItem(item, resolver);
+
+      if (result.success && result.realId) {
+        resolver.resolve(item.tempId, result.realId);
+      } else {
+        resolver.markFailed(item.tempId, result.error || 'Creation failed');
+      }
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      resolver.markFailed(item.tempId, errorMsg);
+      return {
+        tempId: item.tempId,
+        realId: null,
+        success: false,
+        error: errorMsg,
+        type: item.type,
+      };
+    }
   }
 
   private invalidateBatchCaches(
@@ -1703,47 +1749,12 @@ SAFETY:
    * Create a task within a batch operation.
    */
   private async createBatchTask(item: BatchItem, resolver: TempIdResolver): Promise<BatchItemCreationResult> {
-    // Resolve parent reference if present
-    let projectId: string | null = null;
-    let parentTaskId: string | null = null;
-
-    if (item.parentTempId) {
-      const parentRealId = resolver.getRealId(item.parentTempId);
-      if (!parentRealId) {
-        return {
-          tempId: item.tempId,
-          realId: null,
-          success: false,
-          error: `Parent not yet created: ${item.parentTempId}`,
-          type: 'task',
-        };
-      }
-
-      // Determine if parent is a project or task
-      const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
-      this.logger.info('Batch parentTempId resolution', {
-        tempId: item.tempId,
-        parentTempId: item.parentTempId,
-        parentRealId,
-        parentType: parentMapping?.type,
-        willSetProjectId: parentMapping?.type === 'project',
-        willSetParentTaskId: parentMapping?.type !== 'project',
-      });
-      if (parentMapping?.type === 'project') {
-        projectId = parentRealId;
-      } else {
-        parentTaskId = parentRealId;
-      }
+    const parentIds = this.resolveBatchTaskParent(item, resolver);
+    if ('isError' in parentIds) {
+      return parentIds.response;
     }
 
-    // Fall back to direct project assignment when parentTempId wasn't used
-    if (!projectId && !parentTaskId) {
-      if (item.parentTaskId && typeof item.parentTaskId === 'string') {
-        parentTaskId = item.parentTaskId;
-      } else if (item.project) {
-        projectId = item.project;
-      }
-    }
+    const { projectId, parentTaskId } = parentIds;
 
     this.logger.info('Batch task create resolved IDs', {
       tempId: item.tempId,
@@ -1752,7 +1763,6 @@ SAFETY:
       taskName: item.name,
     });
 
-    // Capture repetitionRule before building task data (applied post-create, same as handleTaskCreate)
     const repetitionRuleForBatch = item.repetitionRule as RepetitionRule | undefined;
 
     const taskData: TaskCreateData = {
@@ -1773,49 +1783,102 @@ SAFETY:
     const result = await this.execJson(generatedScript.script);
 
     if (isScriptError(result)) {
+      return { tempId: item.tempId, realId: null, success: false, error: result.error, type: 'task' };
+    }
+
+    const realId = this.extractCreatedTaskId(result);
+    if (!realId) {
       return {
         tempId: item.tempId,
         realId: null,
         success: false,
-        error: result.error,
+        error: 'No task ID returned from script',
         type: 'task',
       };
     }
 
-    if (isScriptSuccess(result) && result.data) {
-      const data = result.data as { taskId?: string };
-      const realId = data.taskId;
+    await this.applyRepetitionRuleSilently(realId, repetitionRuleForBatch);
+    markTaskAsValidated(realId);
 
-      if (realId) {
-        // Apply repetition rule post-create (same pattern as handleTaskCreate)
-        if (repetitionRuleForBatch) {
-          try {
-            const repeatScript = (await buildUpdateTaskScript(realId, { repetitionRule: repetitionRuleForBatch }))
-              .script;
-            await this.execJson(repeatScript);
-          } catch {
-            this.logger.warn('Failed to apply repeat rule in batch task creation', { taskId: realId });
-          }
-        }
+    return { tempId: item.tempId, realId, success: true, type: 'task' };
+  }
 
-        markTaskAsValidated(realId);
+  /**
+   * Resolve parent project/task IDs for a batch task item.
+   * Returns either resolved IDs or an early-exit error response.
+   */
+  private resolveBatchTaskParent(
+    item: BatchItem,
+    resolver: TempIdResolver,
+  ): { projectId: string | null; parentTaskId: string | null } | { isError: true; response: BatchItemCreationResult } {
+    let projectId: string | null = null;
+    let parentTaskId: string | null = null;
 
+    if (item.parentTempId) {
+      const parentRealId = resolver.getRealId(item.parentTempId);
+      if (!parentRealId) {
         return {
-          tempId: item.tempId,
-          realId,
-          success: true,
-          type: 'task',
+          isError: true,
+          response: {
+            tempId: item.tempId,
+            realId: null,
+            success: false,
+            error: `Parent not yet created: ${item.parentTempId}`,
+            type: 'task',
+          },
         };
       }
+
+      const parentMapping = resolver.getDetailedStatus().find((m) => m.tempId === item.parentTempId);
+      this.logger.info('Batch parentTempId resolution', {
+        tempId: item.tempId,
+        parentTempId: item.parentTempId,
+        parentRealId,
+        parentType: parentMapping?.type,
+        willSetProjectId: parentMapping?.type === 'project',
+        willSetParentTaskId: parentMapping?.type !== 'project',
+      });
+
+      if (parentMapping?.type === 'project') {
+        projectId = parentRealId;
+      } else {
+        parentTaskId = parentRealId;
+      }
+
+      return { projectId, parentTaskId };
     }
 
-    return {
-      tempId: item.tempId,
-      realId: null,
-      success: false,
-      error: 'No task ID returned from script',
-      type: 'task',
-    };
+    // Fall back to direct project assignment when parentTempId wasn't used
+    if (item.parentTaskId && typeof item.parentTaskId === 'string') {
+      parentTaskId = item.parentTaskId;
+    } else if (item.project) {
+      projectId = item.project;
+    }
+
+    return { projectId, parentTaskId };
+  }
+
+  /**
+   * Extract taskId from a successful script result, or null if not present.
+   */
+  private extractCreatedTaskId(result: ScriptExecutionResult): string | null {
+    if (!result.success || !result.data) return null;
+    const data = result.data as { taskId?: string };
+    return data.taskId || null;
+  }
+
+  /**
+   * Apply a repetition rule post-create, logging warnings on failure.
+   */
+  private async applyRepetitionRuleSilently(taskId: string, repetitionRule: RepetitionRule | undefined): Promise<void> {
+    if (!repetitionRule) return;
+
+    try {
+      const repeatScript = (await buildUpdateTaskScript(taskId, { repetitionRule })).script;
+      await this.execJson(repeatScript);
+    } catch {
+      this.logger.warn('Failed to apply repeat rule in batch task creation', { taskId });
+    }
   }
 
   /**

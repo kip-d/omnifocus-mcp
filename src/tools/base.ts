@@ -139,7 +139,6 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
   // Circuit breaker for OmniFocus connectivity
   private circuitBreaker: CircuitBreaker;
 
-
   constructor(
     cache: CacheManager,
     private correlationId?: string,
@@ -218,30 +217,21 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
    */
   async execute(args: unknown): Promise<TResponse> {
     const startTime = Date.now();
-    let errorType: string | undefined;
-    let resultSize: number | undefined;
+    const parameterCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
 
     try {
-      // Validate input with Zod
       const validated = this.schema.parse(args) as z.infer<TSchema>;
-
-      // Count parameters for metrics
-      const parameterCount = typeof args === 'object' && args !== null ? Object.keys(args).length : 0;
-
-      // Log the validated input
       this.logger.debug(`Executing ${this.name} with validated args:`, validated);
 
-      // Execute the tool-specific logic
       const result = await this.executeValidated(validated);
 
-      // Calculate result size for metrics (approximate JSON size)
+      let resultSize: number | undefined;
       try {
         resultSize = JSON.stringify(result).length;
       } catch {
-        resultSize = undefined; // Skip if result is not serializable
+        resultSize = undefined;
       }
 
-      // Record successful execution metrics
       this.recordExecutionMetrics({
         toolName: this.name,
         executionTime: Date.now() - startTime,
@@ -254,63 +244,12 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
 
       return result;
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        errorType = 'VALIDATION_ERROR';
+      return this.handleExecuteError(error, args, startTime, parameterCount);
+    }
+  }
 
-        // Convert Zod errors to MCP errors with helpful messages
-        const issues = error.issues
-          .map((issue) => {
-            const path = issue.path.join('.');
-            return `${path}: ${issue.message}`;
-          })
-          .join(', ');
-
-        // Log validation failure for analysis
-        this.logToolFailure(args, 'VALIDATION_ERROR', issues, error.issues);
-
-        // Record validation error metrics
-        this.recordExecutionMetrics({
-          toolName: this.name,
-          executionTime: Date.now() - startTime,
-          success: false,
-          errorType,
-          timestamp: startTime,
-          correlationId: this.correlationId,
-          parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
-        });
-
-        throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${issues}`, {
-          validation_errors: error.issues,
-        });
-      }
-
-      // Re-throw McpErrors directly (from throwMcpError calls)
-      if (error instanceof McpError) {
-        errorType = 'MCP_ERROR';
-
-        // Record MCP error metrics
-        this.recordExecutionMetrics({
-          toolName: this.name,
-          executionTime: Date.now() - startTime,
-          success: false,
-          errorType,
-          timestamp: startTime,
-          correlationId: this.correlationId,
-          parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
-        });
-
-        throw error;
-      }
-
-      // Categorize the error for metrics
-      const categorizedError = categorizeError(error, this.name);
-      errorType = categorizedError.errorType;
-
-      // Log other failures for analysis
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage, undefined, categorizedError);
-
-      // Record execution error metrics
+  private handleExecuteError(error: unknown, args: unknown, startTime: number, parameterCount: number): TResponse {
+    const recordFailure = (errorType: string) => {
       this.recordExecutionMetrics({
         toolName: this.name,
         executionTime: Date.now() - startTime,
@@ -318,12 +257,30 @@ export abstract class BaseTool<TSchema extends z.ZodType = z.ZodType, TResponse 
         errorType,
         timestamp: startTime,
         correlationId: this.correlationId,
-        parameterCount: typeof args === 'object' && args !== null ? Object.keys(args).length : 0,
+        parameterCount,
       });
+    };
 
-      // Handle other errors - return standardized V2 error response
-      return this.handleErrorV2<TResponse>(error) as TResponse;
+    if (error instanceof z.ZodError) {
+      const issues = error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+      this.logToolFailure(args, 'VALIDATION_ERROR', issues, error.issues);
+      recordFailure('VALIDATION_ERROR');
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${issues}`, {
+        validation_errors: error.issues,
+      });
     }
+
+    if (error instanceof McpError) {
+      recordFailure('MCP_ERROR');
+      throw error;
+    }
+
+    const categorizedError = categorizeError(error, this.name);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    this.logToolFailure(args, 'EXECUTION_ERROR', errorMessage, undefined, categorizedError);
+    recordFailure(categorizedError.errorType);
+
+    return this.handleErrorV2<TResponse>(error) as TResponse;
   }
 
   /**

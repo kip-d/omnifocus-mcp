@@ -178,6 +178,34 @@ function countTaskStats(
   }
 }
 
+function describeOverdueInsight(
+  breakdown: NonNullable<TaskSummary['breakdown']>,
+  mostOverdueTask: OmniFocusTask | null,
+  mostOverdueDays: number,
+): string | null {
+  if (!breakdown.overdue || breakdown.overdue <= 0) return null;
+  if (mostOverdueTask) {
+    return `${breakdown.overdue} tasks overdue, oldest: "${mostOverdueTask.name}" (${mostOverdueDays} days)`;
+  }
+  return `${breakdown.overdue} task${breakdown.overdue > 1 ? 's' : ''} overdue`;
+}
+
+function findProjectBottleneck(tasks: unknown[], now: Date): string | null {
+  const projectCounts: Record<string, number> = {};
+  for (const taskItem of tasks) {
+    const task = taskItem as OmniFocusTask;
+    if (isValidStringValue(task.project) && !task.completed && isValidDateValue(task.dueDate)) {
+      if (new Date(task.dueDate) < now) {
+        projectCounts[task.project] = (projectCounts[task.project] || 0) + 1;
+      }
+    }
+  }
+  const top = Object.entries(projectCounts)
+    .filter(([, count]) => count >= 3)
+    .sort((a, b) => b[1] - a[1])[0];
+  return top ? `${top[0]} has ${top[1]} overdue tasks (potential bottleneck)` : null;
+}
+
 function generateTaskInsights(
   summary: TaskSummary,
   tasks: unknown[],
@@ -186,43 +214,19 @@ function generateTaskInsights(
   mostOverdueDays: number,
 ): string[] {
   const insights: string[] = [];
+  const breakdown = summary.breakdown!;
 
-  if (summary.breakdown!.overdue && summary.breakdown!.overdue > 0) {
-    if (mostOverdueTask) {
-      insights.push(
-        `${summary.breakdown!.overdue} tasks overdue, oldest: "${mostOverdueTask.name}" (${mostOverdueDays} days)`,
-      );
-    } else {
-      insights.push(`${summary.breakdown!.overdue} task${summary.breakdown!.overdue > 1 ? 's' : ''} overdue`);
-    }
+  const overdueInsight = describeOverdueInsight(breakdown, mostOverdueTask, mostOverdueDays);
+  if (overdueInsight) insights.push(overdueInsight);
+
+  const bottleneck = findProjectBottleneck(tasks, now);
+  if (bottleneck) insights.push(bottleneck);
+
+  if (breakdown.due_today && breakdown.due_today > 0) {
+    insights.push(`${breakdown.due_today} task${breakdown.due_today > 1 ? 's' : ''} due today`);
   }
-
-  const projectCounts: Record<string, number> = {};
-  for (const taskItem of tasks) {
-    const task = taskItem as OmniFocusTask;
-    if (isValidStringValue(task.project) && !task.completed && isValidDateValue(task.dueDate)) {
-      const dueDate = new Date(task.dueDate);
-      if (dueDate < now) {
-        projectCounts[task.project] = (projectCounts[task.project] || 0) + 1;
-      }
-    }
-  }
-
-  const projectBottlenecks = Object.entries(projectCounts)
-    .filter(([_, count]) => count >= 3)
-    .sort((a, b) => b[1] - a[1]);
-
-  if (projectBottlenecks.length > 0) {
-    const [projectName, count] = projectBottlenecks[0];
-    insights.push(`${projectName} has ${count} overdue tasks (potential bottleneck)`);
-  }
-
-  if (summary.breakdown!.due_today && summary.breakdown!.due_today > 0) {
-    insights.push(`${summary.breakdown!.due_today} task${summary.breakdown!.due_today > 1 ? 's' : ''} due today`);
-  }
-
-  if (summary.breakdown!.blocked && summary.breakdown!.blocked > 5) {
-    insights.push(`${summary.breakdown!.blocked} tasks blocked - review dependencies`);
+  if (breakdown.blocked && breakdown.blocked > 5) {
+    insights.push(`${breakdown.blocked} tasks blocked - review dependencies`);
   }
 
   return insights.slice(0, 3);
@@ -252,7 +256,7 @@ function generateTaskPreview(tasks: unknown[], now: Date): TaskSummary['preview'
       id: t.id || '',
       name: t.name || '',
       dueDate: (() => {
-        if (!t.dueDate || t.dueDate === null) return undefined;
+        if (!t.dueDate) return undefined;
         return typeof t.dueDate === 'string' ? t.dueDate : t.dueDate.toISOString();
       })(),
       project: t.project || undefined,
@@ -305,6 +309,13 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
   summary.preview = generateTaskPreview(tasks, now);
 
   return summary;
+}
+
+function trackReviewStatus(project: OmniFocusProject, now: Date, _currentMax: number): { overdueDays: number } | null {
+  if (!isValidDateValue(project.nextReviewDate)) return null;
+  const reviewDate = new Date(project.nextReviewDate);
+  if (reviewDate >= now) return null;
+  return { overdueDays: Math.floor((now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60 * 24)) };
 }
 
 function detectProjectBottlenecks(
@@ -361,38 +372,32 @@ export function generateProjectSummary(projects: unknown[]): ProjectSummary {
   let mostOverdueDays = 0;
   const now = new Date();
 
+  const STATUS_KEY: Record<string, keyof ProjectSummary> = {
+    active: 'active',
+    'on-hold': 'on_hold',
+    onHold: 'on_hold',
+    done: 'completed',
+    completed: 'completed',
+    dropped: 'dropped',
+  };
+
   for (const projectItem of projects) {
     const project = projectItem as OmniFocusProject;
 
-    switch (project.status) {
-      case 'active':
-        summary.active = (summary.active || 0) + 1;
-        break;
-      case 'on-hold':
-      case 'onHold':
-        summary.on_hold = (summary.on_hold || 0) + 1;
-        break;
-      case 'done':
-      case 'completed':
-        summary.completed = (summary.completed || 0) + 1;
-        break;
-      case 'dropped':
-        summary.dropped = (summary.dropped || 0) + 1;
-        break;
+    const key = project.status ? STATUS_KEY[project.status] : undefined;
+    if (key) {
+      (summary as Record<string, number>)[key] = ((summary as Record<string, number>)[key] || 0) + 1;
     }
 
-    if (isValidDateValue(project.nextReviewDate)) {
-      const reviewDate = new Date(project.nextReviewDate);
-      if (reviewDate < now) {
-        summary.needs_review = (summary.needs_review || 0) + 1;
-        const overdueDays = Math.floor((now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (overdueDays >= 7) {
-          summary.overdue_reviews = (summary.overdue_reviews || 0) + 1;
-        }
-        if (overdueDays > mostOverdueDays) {
-          mostOverdueDays = overdueDays;
-          mostOverdueReview = project;
-        }
+    const reviewTracker = trackReviewStatus(project, now, mostOverdueDays);
+    if (reviewTracker) {
+      summary.needs_review = (summary.needs_review || 0) + 1;
+      if (reviewTracker.overdueDays >= 7) {
+        summary.overdue_reviews = (summary.overdue_reviews || 0) + 1;
+      }
+      if (reviewTracker.overdueDays > mostOverdueDays) {
+        mostOverdueDays = reviewTracker.overdueDays;
+        mostOverdueReview = project;
       }
     }
   }

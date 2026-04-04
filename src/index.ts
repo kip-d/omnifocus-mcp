@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// eslint-disable-next-line sonarjs/deprecation -- Server required until MCP SDK supports inputSchema on McpServer
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerTools } from './tools/index.js';
@@ -139,6 +140,7 @@ async function runStdioServer(cacheManager: CacheManager) {
 
   // Create server instance with MCP 2025-11-25 metadata
   const versionInfo = getVersionInfo();
+  // eslint-disable-next-line sonarjs/deprecation
   const stdioServer = new Server(
     {
       name: 'omnifocus-mcp-cached',

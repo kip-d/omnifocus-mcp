@@ -1,3 +1,4 @@
+// eslint-disable-next-line sonarjs/deprecation -- Server required until MCP SDK supports inputSchema on McpServer
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   ListPromptsRequestSchema,
@@ -15,6 +16,7 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('prompts');
 
+// eslint-disable-next-line sonarjs/deprecation
 export function registerPrompts(server: Server): void {
   const prompts: Map<string, BasePrompt> = new Map();
 

@@ -287,6 +287,143 @@ function generateFieldProjection(
  * - Default operators are set
  * - Property name mismatches are caught at compile time
  */
+/** Context shared between script-building helper functions */
+interface ScriptBuildContext {
+  filterCode: { preamble?: string; predicate: string };
+  filterDescription: string;
+  fieldProjection: string;
+  completionCheck: string;
+  hasProjectPreamble: boolean;
+  projectValue: string | undefined | null;
+  limit: number;
+  offset: number;
+}
+
+/** Generate the duplicate-project warnings block (shared by sort and no-sort paths) */
+function generateWarningsBlock(ctx: ScriptBuildContext): string {
+  if (!ctx.hasProjectPreamble) return '';
+  return `
+  var __warnings = [];
+  var __duplicateProjects = [];
+  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
+    __warnings.push("Multiple projects named " + ${JSON.stringify(String(ctx.projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
+    __duplicateProjects = __projectTarget_0.allMatches;
+  }`;
+}
+
+/** Generate the warnings metadata fields for JSON.stringify output */
+function generateWarningsMetadata(hasProjectPreamble: boolean): string {
+  if (!hasProjectPreamble) return '';
+  return `warnings: __warnings,
+    duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,`;
+}
+
+/** Generate the shared matchesFilter preamble + function declaration */
+function generateMatchesFilterBlock(ctx: ScriptBuildContext): string {
+  return `${ctx.filterCode.preamble ? ctx.filterCode.preamble + '\n' : ''}
+  // AST-generated filter predicate
+  // Filter: ${ctx.filterDescription}
+  function matchesFilter(task) {
+    const taskTags = task.tags ? task.tags.map(t => t.name) : [];
+    return ${ctx.filterCode.predicate};
+  }`;
+}
+
+/** Build script for sort-before-limit path: collect all -> sort -> slice */
+function buildSortedScript(ctx: ScriptBuildContext, sort: SortSpec[]): string {
+  const sortComparator = generateSortComparator(sort);
+  const warningsBlock = generateWarningsBlock(ctx);
+  const warningsMetadata = generateWarningsMetadata(ctx.hasProjectPreamble);
+  const matchesFilterBlock = generateMatchesFilterBlock(ctx);
+  const offsetMetadata = ctx.offset > 0 ? `offset_applied: ${ctx.offset},` : '';
+
+  return `
+(() => {
+  const allResults = [];
+
+  ${matchesFilterBlock}
+
+  flattenedTasks.forEach(task => {
+    ${ctx.completionCheck}
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    allResults.push({
+      ${ctx.fieldProjection}
+    });
+  });
+
+  // Sort all matched results in-script before applying limit
+  allResults.sort(${sortComparator});
+
+  // Slice for pagination
+  const sliced = allResults.slice(${ctx.offset}, ${ctx.offset} + ${ctx.limit});
+
+  ${warningsBlock}
+
+  return JSON.stringify({
+    tasks: sliced,
+    count: sliced.length,
+    total_matched: allResults.length,
+    ${offsetMetadata}
+    sorted_in_script: true,
+    mode: 'ast_filtered',
+    filter_description: ${JSON.stringify(ctx.filterDescription)},
+    ${warningsMetadata}
+  });
+})()
+`;
+}
+
+/** Build script for no-sort fast path: limit during iteration */
+function buildUnsortedScript(ctx: ScriptBuildContext): string {
+  const useOffset = ctx.offset > 0;
+  const offsetVars = useOffset ? `const offset = ${ctx.offset};\n  let skipped = 0;` : '';
+  const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
+  const offsetMetadata = useOffset ? `offset_applied: ${ctx.offset},` : '';
+  const warningsBlock = generateWarningsBlock(ctx);
+  const warningsMetadata = generateWarningsMetadata(ctx.hasProjectPreamble);
+  const matchesFilterBlock = generateMatchesFilterBlock(ctx);
+
+  return `
+(() => {
+  const results = [];
+  let count = 0;
+  const limit = ${ctx.limit};
+  ${offsetVars}
+
+  ${matchesFilterBlock}
+
+  flattenedTasks.forEach(task => {
+    if (count >= limit) return;
+    ${ctx.completionCheck}
+
+    // Apply AST-generated filter
+    if (!matchesFilter(task)) return;
+
+    ${offsetCheck}
+
+    results.push({
+      ${ctx.fieldProjection}
+    });
+    count++;
+  });
+
+  ${warningsBlock}
+
+  return JSON.stringify({
+    tasks: results,
+    count: results.length,
+    ${offsetMetadata}
+    mode: 'ast_filtered',
+    filter_description: ${JSON.stringify(ctx.filterDescription)},
+    ${warningsMetadata}
+  });
+})()
+`;
+}
+
 export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: ScriptOptions = {}): GeneratedScript {
   const { limit = 50, offset = 0, fields = [], includeCompleted = false, sort, noteTruncateLength } = options;
 
@@ -296,10 +433,6 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
 
   // Generate the filter predicate code
   const filterCode = generateFilterCode(filter, 'omnijs');
-
-  // Determine if we have a project name preamble (for duplicate warning assembly)
-  const projectValue = filter.projectId ?? filter.project;
-  const hasProjectPreamble = !!filterCode.preamble;
 
   // Build description
   const filterDescription = describeFilterForScript(filter);
@@ -311,139 +444,24 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   });
 
   // Determine completion filter behavior
-  // If filter explicitly sets completed, use that
-  // Otherwise, use includeCompleted option
+  // If filter explicitly sets completed, use that; otherwise, use includeCompleted option
   const defaultCompletionCheck = includeCompleted ? '' : 'if (task.completed) return;';
-  const completionCheck =
-    filter.completed !== undefined
-      ? '' // AST handles it
-      : defaultCompletionCheck;
+  const completionCheck = filter.completed !== undefined ? '' : defaultCompletionCheck;
 
-  // When sort is specified, we collect ALL matching tasks, sort in-script, then slice.
+  const ctx: ScriptBuildContext = {
+    filterCode,
+    filterDescription,
+    fieldProjection,
+    completionCheck,
+    hasProjectPreamble: !!filterCode.preamble,
+    projectValue: filter.projectId ?? filter.project,
+    limit,
+    offset,
+  };
+
+  // When sort is specified, collect ALL matching tasks, sort in-script, then slice.
   // This ensures sort+limit returns correctly ordered results instead of arbitrary-then-sorted.
-  const hasSort = sort && sort.length > 0;
-
-  let script: string;
-
-  if (hasSort) {
-    // Sort-before-limit path: collect all -> sort -> slice(offset, offset+limit)
-    const sortComparator = generateSortComparator(sort);
-
-    script = `
-(() => {
-  const allResults = [];
-
-  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
-  // AST-generated filter predicate
-  // Filter: ${filterDescription}
-  function matchesFilter(task) {
-    const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode.predicate};
-  }
-
-  flattenedTasks.forEach(task => {
-    ${completionCheck}
-
-    // Apply AST-generated filter
-    if (!matchesFilter(task)) return;
-
-    allResults.push({
-      ${fieldProjection}
-    });
-  });
-
-  // Sort all matched results in-script before applying limit
-  allResults.sort(${sortComparator});
-
-  // Slice for pagination
-  const sliced = allResults.slice(${offset}, ${offset} + ${limit});
-
-  ${
-    hasProjectPreamble
-      ? `
-  var __warnings = [];
-  var __duplicateProjects = [];
-  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
-    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
-    __duplicateProjects = __projectTarget_0.allMatches;
-  }`
-      : ''
-  }
-
-  return JSON.stringify({
-    tasks: sliced,
-    count: sliced.length,
-    total_matched: allResults.length,
-    ${offset > 0 ? `offset_applied: ${offset},` : ''}
-    sorted_in_script: true,
-    mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)},
-    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
-    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
-  });
-})()
-`;
-  } else {
-    // Original fast path: no sort, limit during iteration
-    const useOffset = offset > 0;
-    const offsetVars = useOffset ? `const offset = ${offset};\n  let skipped = 0;` : '';
-    const offsetCheck = useOffset ? 'if (skipped < offset) { skipped++; return; }' : '';
-    const offsetMetadata = useOffset ? `offset_applied: ${offset},` : '';
-
-    script = `
-(() => {
-  const results = [];
-  let count = 0;
-  const limit = ${limit};
-  ${offsetVars}
-
-  ${filterCode.preamble ? filterCode.preamble + '\n' : ''}
-  // AST-generated filter predicate
-  // Filter: ${filterDescription}
-  function matchesFilter(task) {
-    const taskTags = task.tags ? task.tags.map(t => t.name) : [];
-    return ${filterCode.predicate};
-  }
-
-  flattenedTasks.forEach(task => {
-    if (count >= limit) return;
-    ${completionCheck}
-
-    // Apply AST-generated filter
-    if (!matchesFilter(task)) return;
-
-    ${offsetCheck}
-
-    results.push({
-      ${fieldProjection}
-    });
-    count++;
-  });
-
-  ${
-    hasProjectPreamble
-      ? `
-  var __warnings = [];
-  var __duplicateProjects = [];
-  if (typeof __projectTarget_0 !== 'undefined' && __projectTarget_0 && __projectTarget_0.duplicates > 0) {
-    __warnings.push("Multiple projects named " + ${JSON.stringify(String(projectValue || ''))} + " found (" + (__projectTarget_0.duplicates + 1) + " total). Showing tasks from the first match. Use project ID to target a specific one.");
-    __duplicateProjects = __projectTarget_0.allMatches;
-  }`
-      : ''
-  }
-
-  return JSON.stringify({
-    tasks: results,
-    count: results.length,
-    ${offsetMetadata}
-    mode: 'ast_filtered',
-    filter_description: ${JSON.stringify(filterDescription)},
-    ${hasProjectPreamble ? 'warnings: __warnings,' : ''}
-    ${hasProjectPreamble ? 'duplicateProjects: __duplicateProjects.length > 0 ? __duplicateProjects : undefined,' : ''}
-  });
-})()
-`;
-  }
+  const script = sort && sort.length > 0 ? buildSortedScript(ctx, sort) : buildUnsortedScript(ctx);
 
   return {
     script: script.trim(),
@@ -920,45 +938,45 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
 // HELPER FUNCTIONS
 // =============================================================================
 
+/** Boolean filter fields and their true/false descriptions */
+const BOOLEAN_FILTER_DESCRIPTORS: Array<{ key: keyof TaskFilter; trueLabel: string; falseLabel: string }> = [
+  { key: 'completed', trueLabel: 'completed', falseLabel: 'active' },
+  { key: 'dropped', trueLabel: 'dropped', falseLabel: 'not dropped' },
+  { key: 'hasRepetitionRule', trueLabel: 'recurring', falseLabel: 'non-recurring' },
+  { key: 'flagged', trueLabel: 'flagged', falseLabel: 'not flagged' },
+  { key: 'blocked', trueLabel: 'blocked', falseLabel: 'not blocked' },
+  { key: 'available', trueLabel: 'available', falseLabel: 'not available' },
+  { key: 'inInbox', trueLabel: 'inbox', falseLabel: 'not inbox' },
+];
+
+function describeDueDateRange(filter: TaskFilter): string | undefined {
+  if (!filter.dueBefore && !filter.dueAfter) return undefined;
+  if (filter.dueBefore && filter.dueAfter) return `due: ${filter.dueAfter} to ${filter.dueBefore}`;
+  if (filter.dueBefore) return `due before: ${filter.dueBefore}`;
+  return `due after: ${filter.dueAfter}`;
+}
+
 function describeFilterForScript(filter: TaskFilter): string {
   const conditions: string[] = [];
 
-  if (filter.completed !== undefined) {
-    conditions.push(filter.completed ? 'completed' : 'active');
+  for (const { key, trueLabel, falseLabel } of BOOLEAN_FILTER_DESCRIPTORS) {
+    if (filter[key] !== undefined) {
+      conditions.push(filter[key] ? trueLabel : falseLabel);
+    }
   }
-  if (filter.dropped !== undefined) {
-    conditions.push(filter.dropped ? 'dropped' : 'not dropped');
-  }
-  if (filter.hasRepetitionRule !== undefined) {
-    conditions.push(filter.hasRepetitionRule ? 'recurring' : 'non-recurring');
-  }
-  if (filter.flagged !== undefined) {
-    conditions.push(filter.flagged ? 'flagged' : 'not flagged');
-  }
-  if (filter.blocked !== undefined) {
-    conditions.push(filter.blocked ? 'blocked' : 'not blocked');
-  }
-  if (filter.available !== undefined) {
-    conditions.push(filter.available ? 'available' : 'not available');
-  }
-  if (filter.inInbox !== undefined) {
-    conditions.push(filter.inInbox ? 'inbox' : 'not inbox');
-  }
+
   if (filter.tags && filter.tags.length > 0) {
     conditions.push(`tags[${filter.tagsOperator || 'AND'}]: ${filter.tags.join(', ')}`);
   }
   if (filter.text || filter.search) {
     conditions.push(`text: "${filter.text || filter.search}"`);
   }
-  if (filter.dueBefore || filter.dueAfter) {
-    if (filter.dueBefore && filter.dueAfter) {
-      conditions.push(`due: ${filter.dueAfter} to ${filter.dueBefore}`);
-    } else if (filter.dueBefore) {
-      conditions.push(`due before: ${filter.dueBefore}`);
-    } else {
-      conditions.push(`due after: ${filter.dueAfter}`);
-    }
+
+  const dueDescription = describeDueDateRange(filter);
+  if (dueDescription) {
+    conditions.push(dueDescription);
   }
+
   if (filter.projectId) {
     conditions.push(`project: ${filter.projectId}`);
   }

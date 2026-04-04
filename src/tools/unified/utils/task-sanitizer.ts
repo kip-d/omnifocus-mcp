@@ -55,91 +55,69 @@ function sanitizeDateField(
   }
 }
 
+function coerceBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value === 'true';
+  return undefined;
+}
+
+function coerceNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+function sanitizeStringTags(arr: unknown[]): string[] {
+  return arr.filter((tag: unknown) => typeof tag === 'string') as string[];
+}
+
 export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<string, unknown> {
   const sanitized: Record<string, unknown> = {};
-
-  // Only log keys, not values (privacy-safe)
   logger.debug('Sanitizing updates with keys:', Object.keys(updates));
 
-  // Handle string fields
-  if (typeof updates.name === 'string') {
-    sanitized.name = updates.name;
-  }
-  if (typeof updates.note === 'string') {
-    sanitized.note = updates.note;
-  }
+  // String fields
+  if (typeof updates.name === 'string') sanitized.name = updates.name;
+  if (typeof updates.note === 'string') sanitized.note = updates.note;
 
-  // Handle boolean fields (with MCP bridge coercion support)
-  if (typeof updates.flagged === 'boolean') {
-    sanitized.flagged = updates.flagged;
-  } else if (typeof updates.flagged === 'string') {
-    // Handle MCP bridge string coercion
-    sanitized.flagged = updates.flagged === 'true';
-  }
+  // Boolean fields (with MCP bridge coercion)
+  const flagged = coerceBoolean(updates.flagged);
+  if (flagged !== undefined) sanitized.flagged = flagged;
 
-  // Handle date fields with separate clear flags
+  // Date fields with separate clear flags
   sanitizeDateField(updates, sanitized, 'dueDate', 'clearDueDate', 'due');
   sanitizeDateField(updates, sanitized, 'deferDate', 'clearDeferDate', 'defer');
   sanitizeDateField(updates, sanitized, 'plannedDate', 'clearPlannedDate', 'planned');
-
-  // Handle completion date (for complete operation) — no clear flag, reuse helper with empty key
   sanitizeDateField(updates, sanitized, 'completionDate', 'clearCompletionDate', 'completion');
 
-  // Handle numeric fields with separate clear flag
+  // Numeric fields with clear flag
   if (updates.clearEstimatedMinutes) {
     logger.debug('Clearing estimatedMinutes (clearEstimatedMinutes flag set)');
-    sanitized.estimatedMinutes = null; // Clear the estimate
+    sanitized.estimatedMinutes = null;
   } else if (updates.estimatedMinutes !== undefined) {
-    // Handle MCP bridge string coercion
-    if (typeof updates.estimatedMinutes === 'string') {
-      const parsed = parseInt(updates.estimatedMinutes, 10);
-      if (!isNaN(parsed)) {
-        sanitized.estimatedMinutes = parsed;
-      }
-    } else if (typeof updates.estimatedMinutes === 'number') {
-      sanitized.estimatedMinutes = updates.estimatedMinutes;
-    }
+    const parsed = coerceNumber(updates.estimatedMinutes);
+    if (parsed !== undefined) sanitized.estimatedMinutes = parsed;
   }
 
-  // Handle project ID (allow null/empty string)
-  // Support both 'projectId' (legacy) and 'project' (unified API)
-  // Note: downstream mutation-script-builder.ts expects 'project' field
-  if (updates.projectId !== undefined) {
-    sanitized.project = updates.projectId;
-  } else if (updates.project !== undefined) {
-    sanitized.project = updates.project;
-  }
+  // Project ID: support both 'projectId' (legacy) and 'project' (unified API)
+  if (updates.projectId !== undefined) sanitized.project = updates.projectId;
+  else if (updates.project !== undefined) sanitized.project = updates.project;
 
-  // Handle tags array (replaces all tags)
-  if (Array.isArray(updates.tags)) {
-    sanitized.tags = updates.tags.filter((tag: unknown) => typeof tag === 'string');
-  }
+  // Tag arrays
+  if (Array.isArray(updates.tags)) sanitized.tags = sanitizeStringTags(updates.tags);
+  if (Array.isArray(updates.addTags)) sanitized.addTags = sanitizeStringTags(updates.addTags);
+  if (Array.isArray(updates.removeTags)) sanitized.removeTags = sanitizeStringTags(updates.removeTags);
 
-  // Handle addTags array (adds to existing tags)
-  if (Array.isArray(updates.addTags)) {
-    sanitized.addTags = updates.addTags.filter((tag: unknown) => typeof tag === 'string');
-  }
+  // Parent task ID
+  if (updates.parentTaskId !== undefined) sanitized.parentTaskId = updates.parentTaskId;
 
-  // Handle removeTags array (removes from existing tags)
-  if (Array.isArray(updates.removeTags)) {
-    sanitized.removeTags = updates.removeTags.filter((tag: unknown) => typeof tag === 'string');
-  }
+  // Sequential flag (with MCP bridge coercion)
+  const sequential = coerceBoolean(updates.sequential);
+  if (sequential !== undefined) sanitized.sequential = sequential;
 
-  // Handle parent task ID (allow null/empty string)
-  if (updates.parentTaskId !== undefined) {
-    sanitized.parentTaskId = updates.parentTaskId;
-  }
-
-  // Handle sequential flag (with MCP bridge coercion support)
-  if (typeof updates.sequential === 'boolean') {
-    sanitized.sequential = updates.sequential;
-  } else if (typeof updates.sequential === 'string') {
-    // Handle MCP bridge string coercion
-    sanitized.sequential = updates.sequential === 'true';
-  }
-
-  // Handle repetitionRule (unified API format - OmniFocus 4.7+)
-  // Object = set/update rule, null = clear rule (matches dueDate: null pattern)
+  // Repetition rule (object = set, null = clear)
   if (updates.repetitionRule === null) {
     sanitized.repetitionRule = null;
     logger.debug('Clearing repetitionRule (null)');
@@ -148,7 +126,7 @@ export function sanitizeTaskUpdates(updates: Record<string, unknown>): Record<st
     logger.debug('Passing through repetitionRule:', updates.repetitionRule);
   }
 
-  // Handle status field (completed/dropped)
+  // Status field
   if (updates.status === 'completed' || updates.status === 'dropped') {
     sanitized.status = updates.status;
   }

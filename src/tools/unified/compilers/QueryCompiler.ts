@@ -81,47 +81,80 @@ export class QueryCompiler {
    * This is the single translation point for filter property names.
    */
   transformFilters(input: QueryFilter): TaskFilter {
+    // Handle logical operators first — each returns early
+    const logicalResult = this.transformLogicalOperator(input);
+    if (logicalResult) return logicalResult;
+
     const result: TaskFilter = {};
 
-    // Handle logical operators (items are FlatFilterValue — no nested AND/OR/NOT)
+    this.transformStatus(input, result);
+    this.transformTags(input, result);
+    this.transformDates(input, result);
+    this.transformTextFilters(input, result);
+
+    // Boolean passthrough
+    if (input.flagged !== undefined) result.flagged = input.flagged;
+    if (input.available !== undefined) result.available = input.available;
+    if (input.blocked !== undefined) result.blocked = input.blocked;
+    if (input.inInbox !== undefined) result.inInbox = input.inInbox;
+
+    // Project transformation
+    if (input.project === null) {
+      result.inInbox = true;
+    } else if (typeof input.project === 'string') {
+      result.projectId = input.project;
+    }
+
+    // ID/folder passthrough
+    if (input.id) result.id = input.id;
+    if (input.folder) result.folder = input.folder;
+
+    // Safety net: warn on unknown properties that survived schema validation
+    const unknownProps = validateFilterProperties(result as Record<string, unknown>);
+    if (unknownProps.length > 0) {
+      console.warn(
+        `[QueryCompiler] Unknown filter properties detected: ${unknownProps.join(', ')}. ` +
+          'These will be ignored. Check for typos or missing pipeline support.',
+      );
+    }
+
+    return result;
+  }
+
+  private transformLogicalOperator(input: QueryFilter): TaskFilter | null {
     if (input.AND && Array.isArray(input.AND)) {
-      // Merge all conditions via Object.assign (flat merge, not recursive)
+      const result: TaskFilter = {};
       for (const condition of input.AND) {
-        const transformed = this.transformFilters(condition as FlatQueryFilter);
-        Object.assign(result, transformed);
+        Object.assign(result, this.transformFilters(condition as FlatQueryFilter));
       }
       return result;
     }
 
     if (input.OR && Array.isArray(input.OR)) {
-      if (input.OR.length === 0) return result;
+      if (input.OR.length === 0) return {};
       return {
         orBranches: input.OR.map((condition) => this.transformFilters(condition as FlatQueryFilter)),
       };
     }
 
     if (input.NOT) {
-      // Handle simple NOT cases
       const notFilter = input.NOT as FlatQueryFilter;
-      if (notFilter.status === 'completed') {
-        result.completed = false;
-      } else if (notFilter.status === 'active') {
-        result.completed = true;
-      } else {
-        console.warn('[QueryCompiler] Complex NOT operator simplified. Original: ' + JSON.stringify(notFilter));
-      }
-      return result;
+      if (notFilter.status === 'completed') return { completed: false };
+      if (notFilter.status === 'active') return { completed: true };
+      console.warn('[QueryCompiler] Complex NOT operator simplified. Original: ' + JSON.stringify(notFilter));
+      return {};
     }
 
-    // Status transformation
+    return null;
+  }
+
+  private transformStatus(input: QueryFilter, result: TaskFilter): void {
     if (input.status === 'completed') {
       result.completed = true;
     } else if (input.status === 'active') {
       result.completed = false;
     }
-    // 'dropped' and 'on_hold' don't map to completion status
 
-    // Preserve raw status for project queries (ProjectFilter uses ProjectStatus[])
     if (input.status) {
       const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {
         active: 'active',
@@ -134,47 +167,24 @@ export class QueryCompiler {
         result.projectStatus = [mapped];
       }
     }
+  }
 
-    // Tag transformation
-    if (input.tags) {
-      const tagFilter = input.tags as { any?: string[]; all?: string[]; none?: string[] };
-      if (tagFilter.any && tagFilter.any.length > 0) {
-        result.tags = tagFilter.any;
-        result.tagsOperator = 'OR';
-      } else if (tagFilter.all && tagFilter.all.length > 0) {
-        result.tags = tagFilter.all;
-        result.tagsOperator = 'AND';
-      } else if (tagFilter.none && tagFilter.none.length > 0) {
-        result.tags = tagFilter.none;
-        result.tagsOperator = 'NOT_IN';
-      }
+  private transformTags(input: QueryFilter, result: TaskFilter): void {
+    if (!input.tags) return;
+    const tagFilter = input.tags as { any?: string[]; all?: string[]; none?: string[] };
+    if (tagFilter.any && tagFilter.any.length > 0) {
+      result.tags = tagFilter.any;
+      result.tagsOperator = 'OR';
+    } else if (tagFilter.all && tagFilter.all.length > 0) {
+      result.tags = tagFilter.all;
+      result.tagsOperator = 'AND';
+    } else if (tagFilter.none && tagFilter.none.length > 0) {
+      result.tags = tagFilter.none;
+      result.tagsOperator = 'NOT_IN';
     }
+  }
 
-    // Date transformation helper
-    const transformDateFilter = (
-      dateFilter: { before?: string; after?: string; between?: [string, string] } | undefined,
-      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore',
-      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter' | 'completionAfter',
-      operatorKey?: 'dueDateOperator' | 'plannedDateOperator' | 'completionDateOperator',
-    ) => {
-      if (!dateFilter) return;
-
-      if ('before' in dateFilter && dateFilter.before) {
-        (result as Record<string, unknown>)[beforeKey] = dateFilter.before;
-      }
-      if ('after' in dateFilter && dateFilter.after) {
-        (result as Record<string, unknown>)[afterKey] = dateFilter.after;
-      }
-      if ('between' in dateFilter && dateFilter.between) {
-        (result as Record<string, unknown>)[afterKey] = dateFilter.between[0];
-        (result as Record<string, unknown>)[beforeKey] = dateFilter.between[1];
-        if (operatorKey) {
-          (result as Record<string, unknown>)[operatorKey] = 'BETWEEN';
-        }
-      }
-    };
-
-    // Date transformations — loop over all date field definitions
+  private transformDates(input: QueryFilter, result: TaskFilter): void {
     const dateFieldDefs: Array<{
       inputKey: string;
       beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore';
@@ -198,17 +208,28 @@ export class QueryCompiler {
     ];
 
     for (const def of dateFieldDefs) {
-      transformDateFilter(
-        (input as Record<string, unknown>)[def.inputKey] as
-          | { before?: string; after?: string; between?: [string, string] }
-          | undefined,
-        def.beforeKey,
-        def.afterKey,
-        def.operatorKey,
-      );
-    }
+      const dateFilter = (input as Record<string, unknown>)[def.inputKey] as
+        | { before?: string; after?: string; between?: [string, string] }
+        | undefined;
+      if (!dateFilter) continue;
 
-    // Text transformation
+      if ('before' in dateFilter && dateFilter.before) {
+        (result as Record<string, unknown>)[def.beforeKey] = dateFilter.before;
+      }
+      if ('after' in dateFilter && dateFilter.after) {
+        (result as Record<string, unknown>)[def.afterKey] = dateFilter.after;
+      }
+      if ('between' in dateFilter && dateFilter.between) {
+        (result as Record<string, unknown>)[def.afterKey] = dateFilter.between[0];
+        (result as Record<string, unknown>)[def.beforeKey] = dateFilter.between[1];
+        if (def.operatorKey) {
+          (result as Record<string, unknown>)[def.operatorKey] = 'BETWEEN';
+        }
+      }
+    }
+  }
+
+  private transformTextFilters(input: QueryFilter, result: TaskFilter): void {
     if (input.text) {
       const textFilter = input.text as { contains?: string; matches?: string };
       if ('contains' in textFilter && textFilter.contains) {
@@ -220,7 +241,6 @@ export class QueryCompiler {
       }
     }
 
-    // Name filter transformation (for project name search)
     if (input.name) {
       const nameFilter = input.name as { contains?: string; matches?: string };
       if ('contains' in nameFilter && nameFilter.contains) {
@@ -229,47 +249,5 @@ export class QueryCompiler {
         result.search = nameFilter.matches;
       }
     }
-
-    // Boolean passthrough
-    if (input.flagged !== undefined) {
-      result.flagged = input.flagged;
-    }
-    if (input.available !== undefined) {
-      result.available = input.available;
-    }
-    if (input.blocked !== undefined) {
-      result.blocked = input.blocked;
-    }
-    if (input.inInbox !== undefined) {
-      result.inInbox = input.inInbox;
-    }
-
-    // Project transformation
-    if (input.project === null) {
-      result.inInbox = true;
-    } else if (typeof input.project === 'string') {
-      result.projectId = input.project;
-    }
-
-    // ID passthrough
-    if (input.id) {
-      result.id = input.id;
-    }
-
-    // Folder passthrough (for project filtering)
-    if (input.folder) {
-      result.folder = input.folder;
-    }
-
-    // Safety net: warn on unknown properties that survived schema validation
-    const unknownProps = validateFilterProperties(result as Record<string, unknown>);
-    if (unknownProps.length > 0) {
-      console.warn(
-        `[QueryCompiler] Unknown filter properties detected: ${unknownProps.join(', ')}. ` +
-          'These will be ignored. Check for typos or missing pipeline support.',
-      );
-    }
-
-    return result;
   }
 }

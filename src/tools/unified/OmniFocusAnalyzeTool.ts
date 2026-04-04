@@ -76,13 +76,19 @@ type OverdueDataUnion = OverdueAnalysisData | TestMockOverdueData;
 
 function classifyAnalyticsError(errorMessage: string): { errorCode: string; suggestion: string } {
   if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-    return { errorCode: 'SCRIPT_TIMEOUT', suggestion: 'Try reducing the analysis period or exclude project/tag stats for faster results' };
+    return {
+      errorCode: 'SCRIPT_TIMEOUT',
+      suggestion: 'Try reducing the analysis period or exclude project/tag stats for faster results',
+    };
   }
   if (errorMessage.includes('not running') || errorMessage.includes("can't find process")) {
     return { errorCode: 'OMNIFOCUS_NOT_RUNNING', suggestion: 'Start OmniFocus and ensure it is running' };
   }
   if (errorMessage.includes('1743') || errorMessage.includes('Not allowed to send Apple events')) {
-    return { errorCode: 'PERMISSION_DENIED', suggestion: 'Enable automation access in System Settings > Privacy & Security > Automation' };
+    return {
+      errorCode: 'PERMISSION_DENIED',
+      suggestion: 'Enable automation access in System Settings > Privacy & Security > Automation',
+    };
   }
   if (errorMessage.includes('no data') || errorMessage.includes('empty database')) {
     return { errorCode: 'NO_DATA', suggestion: 'Add some tasks to OmniFocus before running productivity analysis' };
@@ -498,7 +504,13 @@ SCOPE FILTERING:
     includeProjectStats: boolean,
     includeTagStats: boolean,
   ): {
-    overview: { totalTasks: number; completedTasks: number; completionRate: number; activeProjects: number; overdueCount: number };
+    overview: {
+      totalTasks: number;
+      completedTasks: number;
+      completionRate: number;
+      activeProjects: number;
+      overdueCount: number;
+    };
     projectStatsArray: Array<{ name: string; completedCount: number }> | Record<string, unknown>;
     tagStatsArray: Record<string, unknown>;
     insights: string[];
@@ -518,12 +530,9 @@ SCOPE FILTERING:
     }
 
     let actualData: unknown;
-    if (result && typeof result === 'object' && result !== null) {
+    if (result && typeof result === 'object') {
       actualData = 'data' in result ? (result as { data: unknown }).data : result;
-      if (
-        actualData && typeof actualData === 'object' && actualData !== null &&
-        'ok' in actualData && 'data' in actualData
-      ) {
+      if (actualData && typeof actualData === 'object' && 'ok' in actualData && 'data' in actualData) {
         actualData = (actualData as { ok: boolean; data: unknown }).data;
       }
     } else {
@@ -752,55 +761,81 @@ SCOPE FILTERING:
     const findings: string[] = [];
 
     if (data.velocity) {
-      const { tasksCompleted, averagePerDay, trend, predictedCapacity } = data.velocity;
-      if (tasksCompleted && tasksCompleted > 0) {
-        const avgPerDay = averagePerDay || 0;
-        findings.push(`Completed ${tasksCompleted} tasks (avg ${avgPerDay.toFixed(1)}/day)`);
-      }
-
-      if (trend === 'increasing') {
-        findings.push('Velocity trending upward');
-      } else if (trend === 'decreasing') {
-        findings.push('Velocity trending downward');
-      } else {
-        findings.push('Velocity stable');
-      }
-
-      if (predictedCapacity && predictedCapacity > 0) {
-        findings.push(`Predicted capacity: ${Math.round(predictedCapacity)} tasks/week`);
-      }
+      this.collectVelocityFindings(data.velocity, findings);
     }
 
-    if (data.velocity?.peakDay?.date && data.velocity.peakDay.count > 0) {
-      findings.push(`Peak day: ${data.velocity.peakDay.date} (${data.velocity.peakDay.count} tasks)`);
-    }
-
-    if (data.patterns?.byDayOfWeek) {
-      const days = Object.entries(data.patterns.byDayOfWeek).sort((a, b) => {
-        const aVal = typeof a[1] === 'number' ? a[1] : 0;
-        const bVal = typeof b[1] === 'number' ? b[1] : 0;
-        return bVal - aVal;
-      });
-      if (days.length > 0) {
-        const dayCount = typeof days[0][1] === 'number' ? days[0][1] : 0;
-        if (dayCount > 0) {
-          findings.push(`Most productive: ${days[0][0]}s`);
-        }
-      }
-    }
-
-    if (data.patterns?.byProject && Array.isArray(data.patterns.byProject) && data.patterns.byProject.length > 0) {
-      const topProject = data.patterns.byProject[0];
-      if (topProject && topProject.completed > 0) {
-        findings.push(`Fastest moving project: ${topProject.name}`);
-      }
-    }
+    this.collectPeakDayFinding(data.velocity?.peakDay, findings);
+    this.collectMostProductiveDayFinding(data.patterns?.byDayOfWeek, findings);
+    this.collectTopProjectFinding(data.patterns?.byProject, findings);
 
     if (data.insights && Array.isArray(data.insights) && data.insights.length > 0) {
       findings.push(data.insights[0]);
     }
 
     return findings.length > 0 ? findings : ['No velocity data available for this period'];
+  }
+
+  private static readonly TREND_LABELS: Record<string, string> = {
+    increasing: 'Velocity trending upward',
+    decreasing: 'Velocity trending downward',
+  };
+
+  private collectVelocityFindings(
+    velocity: {
+      tasksCompleted?: number;
+      averagePerDay?: number;
+      trend?: string;
+      predictedCapacity?: number;
+    },
+    findings: string[],
+  ): void {
+    const { tasksCompleted, averagePerDay, trend, predictedCapacity } = velocity;
+
+    if (tasksCompleted && tasksCompleted > 0) {
+      const avgPerDay = averagePerDay || 0;
+      findings.push(`Completed ${tasksCompleted} tasks (avg ${avgPerDay.toFixed(1)}/day)`);
+    }
+
+    findings.push(OmniFocusAnalyzeTool.TREND_LABELS[trend ?? ''] ?? 'Velocity stable');
+
+    if (predictedCapacity && predictedCapacity > 0) {
+      findings.push(`Predicted capacity: ${Math.round(predictedCapacity)} tasks/week`);
+    }
+  }
+
+  private collectPeakDayFinding(peakDay: { date: string | null; count: number } | undefined, findings: string[]): void {
+    if (peakDay?.date && peakDay.count > 0) {
+      findings.push(`Peak day: ${peakDay.date} (${peakDay.count} tasks)`);
+    }
+  }
+
+  private collectMostProductiveDayFinding(byDayOfWeek: Record<string, number> | undefined, findings: string[]): void {
+    if (!byDayOfWeek) return;
+
+    const days = Object.entries(byDayOfWeek).sort((a, b) => {
+      const aVal = typeof a[1] === 'number' ? a[1] : 0;
+      const bVal = typeof b[1] === 'number' ? b[1] : 0;
+      return bVal - aVal;
+    });
+
+    if (days.length > 0) {
+      const dayCount = typeof days[0][1] === 'number' ? days[0][1] : 0;
+      if (dayCount > 0) {
+        findings.push(`Most productive: ${days[0][0]}s`);
+      }
+    }
+  }
+
+  private collectTopProjectFinding(
+    byProject: Array<{ name: string; completed: number }> | undefined,
+    findings: string[],
+  ): void {
+    if (!Array.isArray(byProject) || byProject.length === 0) return;
+
+    const topProject = byProject[0];
+    if (topProject && topProject.completed > 0) {
+      findings.push(`Fastest moving project: ${topProject.name}`);
+    }
   }
 
   // =========================================================================
@@ -1477,6 +1512,30 @@ SCOPE FILTERING:
       tagStats.set(tag.name, tag.taskCount || 0);
     }
 
+    this.indexTaskTags(tasks, tagStats, tagProjects);
+
+    const findings = this.classifyTags(tagStats, tagProjects);
+
+    this.detectSynonyms(tagStats, findings);
+    const entropy = this.calculateTagEntropy(tagStats);
+
+    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
+    const entropyInterpretation = this.interpretEntropy(entropy);
+
+    return {
+      type: 'tag_audit',
+      severity,
+      count: tagStats.size,
+      items: {
+        ...findings,
+        entropy: entropy.toFixed(2),
+        entropy_interpretation: entropyInterpretation,
+      },
+      recommendation: this.generateTagRecommendation(findings),
+    };
+  }
+
+  private indexTaskTags(tasks: SlimTask[], tagStats: Map<string, number>, tagProjects: Map<string, Set<string>>): void {
     for (const task of tasks) {
       for (const tag of task.tags) {
         if (!tagStats.has(tag)) {
@@ -1490,19 +1549,24 @@ SCOPE FILTERING:
         }
       }
     }
+  }
 
-    const findings: {
-      total_tags: number;
-      unused_tags: string[];
-      underused_tags: Array<{ tag: string; count: number }>;
-      overused_tags: Array<{ tag: string; count: number; project_spread: number }>;
-      potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }>;
-    } = {
+  private classifyTags(
+    tagStats: Map<string, number>,
+    tagProjects: Map<string, Set<string>>,
+  ): {
+    total_tags: number;
+    unused_tags: string[];
+    underused_tags: Array<{ tag: string; count: number }>;
+    overused_tags: Array<{ tag: string; count: number; project_spread: number }>;
+    potential_synonyms: Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }>;
+  } {
+    const findings = {
       total_tags: tagStats.size,
-      unused_tags: [],
-      underused_tags: [],
-      overused_tags: [],
-      potential_synonyms: [],
+      unused_tags: [] as string[],
+      underused_tags: [] as Array<{ tag: string; count: number }>,
+      overused_tags: [] as Array<{ tag: string; count: number; project_spread: number }>,
+      potential_synonyms: [] as Array<{ tag1: string; tag2: string; similarity: number; combined_usage: number }>,
     };
 
     for (const [tag, count] of tagStats) {
@@ -1515,25 +1579,13 @@ SCOPE FILTERING:
       }
     }
 
-    this.detectSynonyms(tagStats, findings);
-    const entropy = this.calculateTagEntropy(tagStats);
+    return findings;
+  }
 
-    const severity = findings.underused_tags.length > 10 || findings.potential_synonyms.length > 5 ? 'warning' : 'info';
-
-    const highEntropy = entropy > 5 ? 'High diversity - consider consolidation' : 'Moderate diversity';
-    const entropyInterpretation = entropy < 2 ? 'Low diversity - consider more tags' : highEntropy;
-
-    return {
-      type: 'tag_audit',
-      severity,
-      count: tagStats.size,
-      items: {
-        ...findings,
-        entropy: entropy.toFixed(2),
-        entropy_interpretation: entropyInterpretation,
-      },
-      recommendation: this.generateTagRecommendation(findings),
-    };
+  private interpretEntropy(entropy: number): string {
+    if (entropy < 2) return 'Low diversity - consider more tags';
+    if (entropy > 5) return 'High diversity - consider consolidation';
+    return 'Moderate diversity';
   }
 
   private detectSynonyms(
@@ -1890,7 +1942,7 @@ SCOPE FILTERING:
         }
       }
 
-      if (!scriptData || typeof scriptData !== 'object' || scriptData === null) {
+      if (!scriptData || typeof scriptData !== 'object') {
         return createErrorResponseV2(
           'workflow_analysis',
           'NO_DATA',
@@ -2001,7 +2053,7 @@ SCOPE FILTERING:
 
     if (data.insights && Array.isArray(data.insights)) {
       findings.push(
-        ...data.insights.slice(0, 3).map((i) => {
+        ...(data.insights as unknown[]).slice(0, 3).map((i) => {
           if (typeof i === 'string') return i;
           if (typeof i === 'object' && i !== null) {
             const insight =
@@ -2016,7 +2068,7 @@ SCOPE FILTERING:
 
     if (data.recommendations && Array.isArray(data.recommendations)) {
       findings.push(
-        ...data.recommendations.slice(0, 2).map((r) => {
+        ...(data.recommendations as unknown[]).slice(0, 2).map((r) => {
           if (typeof r === 'string') return r;
           if (typeof r === 'object' && r !== null) {
             const rec =
@@ -2241,16 +2293,13 @@ SCOPE FILTERING:
     if (patternsResult.patterns && patternsResult.patterns.length > 0) {
       insights.push(`Found ${patternsResult.patterns.length} different recurrence patterns`);
       const weeklyCount = patternsResult.patterns.filter(
-        (p: unknown) =>
-          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
+        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('week'),
       ).length;
       const dailyCount = patternsResult.patterns.filter(
-        (p: unknown) =>
-          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
+        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('day'),
       ).length;
       const monthlyCount = patternsResult.patterns.filter(
-        (p: unknown) =>
-          (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
+        (p: unknown) => (p as { pattern?: string }).pattern && (p as { pattern?: string }).pattern?.includes('month'),
       ).length;
       if (weeklyCount > 0) insights.push(`${weeklyCount} weekly patterns found`);
       if (dailyCount > 0) insights.push(`${dailyCount} daily patterns found`);
@@ -2343,38 +2392,16 @@ SCOPE FILTERING:
         continue;
       }
 
-      if (args.extractMode !== 'action_items') {
-        const projectMatch = this.detectProject(trimmed);
-        if (projectMatch) {
-          if (currentProject) {
-            projects.push(currentProject);
-          }
-          currentProject = {
-            tempId: `proj_${projectCounter++}`,
-            name: projectMatch.name,
-            tasks: [],
-            confidence: projectMatch.confidence,
-            sourceText: trimmed,
-          };
-          continue;
-        }
+      const projectResult = this.tryExtractProject(trimmed, args.extractMode, currentProject, projects, projectCounter);
+      if (projectResult) {
+        currentProject = projectResult.currentProject;
+        projectCounter = projectResult.projectCounter;
+        continue;
       }
 
-      if (args.extractMode !== 'projects') {
-        const task = this.extractTask(trimmed, args, taskCounter, currentProject !== null);
-        if (task) {
-          if (currentProject) {
-            currentProject.tasks.push({
-              tempId: task.tempId,
-              name: task.name,
-              estimatedMinutes: task.estimatedMinutes,
-              suggestedTags: task.suggestedTags,
-            });
-          } else {
-            tasks.push(task);
-          }
-          taskCounter++;
-        }
+      const taskResult = this.tryExtractAndAssignTask(trimmed, args, taskCounter, currentProject, tasks);
+      if (taskResult) {
+        taskCounter = taskResult.taskCounter;
       }
     }
 
@@ -2383,6 +2410,67 @@ SCOPE FILTERING:
     }
 
     return { tasks, projects };
+  }
+
+  private tryExtractProject(
+    trimmed: string,
+    extractMode: string,
+    currentProject: ExtractedProject | null,
+    projects: ExtractedProject[],
+    projectCounter: number,
+  ): { currentProject: ExtractedProject; projectCounter: number } | null {
+    if (extractMode === 'action_items') return null;
+
+    const projectMatch = this.detectProject(trimmed);
+    if (!projectMatch) return null;
+
+    if (currentProject) {
+      projects.push(currentProject);
+    }
+
+    return {
+      currentProject: {
+        tempId: `proj_${projectCounter}`,
+        name: projectMatch.name,
+        tasks: [],
+        confidence: projectMatch.confidence,
+        sourceText: trimmed,
+      },
+      projectCounter: projectCounter + 1,
+    };
+  }
+
+  private tryExtractAndAssignTask(
+    trimmed: string,
+    args: {
+      extractMode: string;
+      suggestTags: boolean;
+      suggestDueDates: boolean;
+      suggestEstimates: boolean;
+      existingProjects?: string[];
+      defaultProject?: string;
+    },
+    taskCounter: number,
+    currentProject: ExtractedProject | null,
+    tasks: ExtractedTask[],
+  ): { taskCounter: number } | null {
+    if (args.extractMode === 'projects') return null;
+
+    const task = this.extractTask(trimmed, args, taskCounter, currentProject !== null);
+    if (!task) return null;
+
+    if (currentProject) {
+      currentProject.tasks.push({
+        tempId: task.tempId,
+        name: task.name,
+        estimatedMinutes: task.estimatedMinutes,
+        suggestedTags: task.suggestedTags,
+      });
+    } else {
+      tasks.push(task);
+    }
+
+    return { taskCounter: taskCounter + 1 };
   }
 
   private isNonActionable(line: string): boolean {
@@ -2399,10 +2487,9 @@ SCOPE FILTERING:
 
   private detectProject(line: string): { name: string; confidence: 'high' | 'medium' | 'low' } | null {
     const projectPatterns = [
-      /^(.+?)\s+project:/i,
+      /^(.*\S)\s+project:/i,
       /^project:\s*(.+)/i,
-      /^(.+?):\s*(create|build|design|plan|implement)/i,
-      /(.+?)\s+(includes?|involves?|requires?):/i,
+      /^([^:]+):\s*(create|build|design|plan|implement)/i,
     ];
 
     for (const pattern of projectPatterns) {
@@ -2410,6 +2497,11 @@ SCOPE FILTERING:
       if (match) {
         return { name: match[1].trim(), confidence: 'high' };
       }
+    }
+
+    const includesIdx = line.search(/\b(includes?|involves?|requires?):/i);
+    if (includesIdx > 0) {
+      return { name: line.substring(0, includesIdx).trim(), confidence: 'high' };
     }
 
     if (/^[A-Z]/.test(line) && /^(.+?):\s*$/.test(line)) {
@@ -2420,7 +2512,7 @@ SCOPE FILTERING:
     }
 
     if (/(then|after that|followed by|next step)/i.test(line)) {
-      const match = /^(.+?)(?:\s*[:|-]|\s+(then|after|followed))/i.exec(line);
+      const match = /^(.*\S)(?:\s*[:|]|\s*-|\s+(then|after|followed))/i.exec(line);
       if (match) {
         return { name: match[1].trim(), confidence: 'medium' };
       }
@@ -2526,11 +2618,12 @@ SCOPE FILTERING:
 
   private extractTaskName(text: string): string {
     let name = text.replace(/\b(by|for|with|from)\s+\w+\b/gi, '');
-    name = name.replace(/\s+(by|on|before|after|until)\s+[\w\s,]+$/i, '');
-    name = name.replace(
-      /\s+(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week)$/i,
-      '',
-    );
+    const datePreposIdx = name.search(/\s(by|on|before|after|until)\s/i);
+    if (datePreposIdx >= 0) {
+      name = name.substring(0, datePreposIdx);
+    }
+    name = name.replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i, '');
+    name = name.replace(/\b(next|this) week$/i, '');
     return name.trim();
   }
 

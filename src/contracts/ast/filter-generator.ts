@@ -215,53 +215,40 @@ export function isEmptyFilter(filter: TaskFilter): boolean {
 /**
  * Get a human-readable description of the filter
  */
-export function describeFilter(filter: TaskFilter): string {
-  const conditions: string[] = [];
+function describeBooleanFlags(filter: TaskFilter): string[] {
+  const BOOLEAN_FLAGS: Array<{ key: keyof TaskFilter; label: string }> = [
+    { key: 'completed', label: 'completed' },
+    { key: 'flagged', label: 'flagged' },
+    { key: 'blocked', label: 'blocked' },
+    { key: 'available', label: 'available' },
+    { key: 'inInbox', label: 'in inbox' },
+  ];
+  return BOOLEAN_FLAGS.filter(({ key }) => filter[key] !== undefined).map(({ key, label }) =>
+    filter[key] ? label : `not ${label}`,
+  );
+}
 
-  if (filter.completed !== undefined) {
-    conditions.push(filter.completed ? 'completed' : 'not completed');
-  }
-  if (filter.flagged !== undefined) {
-    conditions.push(filter.flagged ? 'flagged' : 'not flagged');
-  }
-  if (filter.blocked !== undefined) {
-    conditions.push(filter.blocked ? 'blocked' : 'not blocked');
-  }
-  if (filter.available !== undefined) {
-    conditions.push(filter.available ? 'available' : 'not available');
-  }
-  if (filter.inInbox !== undefined) {
-    conditions.push(filter.inInbox ? 'in inbox' : 'not in inbox');
-  }
+function describeDateRange(filter: TaskFilter): string | null {
+  if (!filter.dueBefore && !filter.dueAfter) return null;
+  if (filter.dueBefore && filter.dueAfter) return `due between ${filter.dueAfter} and ${filter.dueBefore}`;
+  return filter.dueBefore ? `due before ${filter.dueBefore}` : `due after ${filter.dueAfter}`;
+}
+
+export function describeFilter(filter: TaskFilter): string {
+  const conditions: string[] = describeBooleanFlags(filter);
+
   if (filter.tags && filter.tags.length > 0) {
-    const op = filter.tagsOperator || 'AND';
-    conditions.push(`tags ${op} [${filter.tags.join(', ')}]`);
+    conditions.push(`tags ${filter.tagsOperator || 'AND'} [${filter.tags.join(', ')}]`);
   }
   if (filter.text) {
-    const op = filter.textOperator || 'CONTAINS';
-    conditions.push(`name ${op} "${filter.text}"`);
+    conditions.push(`name ${filter.textOperator || 'CONTAINS'} "${filter.text}"`);
   }
-  if (filter.dueBefore || filter.dueAfter) {
-    if (filter.dueBefore && filter.dueAfter) {
-      conditions.push(`due between ${filter.dueAfter} and ${filter.dueBefore}`);
-    } else if (filter.dueBefore) {
-      conditions.push(`due before ${filter.dueBefore}`);
-    } else {
-      conditions.push(`due after ${filter.dueAfter}`);
-    }
-  }
-  if (filter.projectId) {
-    conditions.push(`in project ${filter.projectId}`);
-  }
-  if (filter.id) {
-    conditions.push(`id = ${filter.id}`);
-  }
+  const dateDesc = describeDateRange(filter);
+  if (dateDesc) conditions.push(dateDesc);
+  if (filter.projectId) conditions.push(`in project ${filter.projectId}`);
+  if (filter.id) conditions.push(`id = ${filter.id}`);
 
-  if (conditions.length === 0) {
-    return 'all tasks';
-  }
-
-  return conditions.join(' AND ');
+  return conditions.length === 0 ? 'all tasks' : conditions.join(' AND ');
 }
 
 // =============================================================================

@@ -1,5 +1,6 @@
 import { createLogger } from './utils/logger.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+// eslint-disable-next-line sonarjs/deprecation -- Server required until MCP SDK supports inputSchema on McpServer
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { registerTools } from './tools/index.js';
@@ -15,7 +16,7 @@ const logger = createLogger('session-manager');
 export interface SessionConfig {
   sessionId: string;
   transport: StreamableHTTPServerTransport;
-  server: Server;
+  server: Server; // eslint-disable-line sonarjs/deprecation
   createdAt: Date;
   lastActivity: Date;
 }
@@ -93,11 +94,13 @@ export class SessionManager {
 
     // Create a new server instance for this session with MCP 2025-11-25 metadata
     const versionInfo = getVersionInfo();
+    // eslint-disable-next-line sonarjs/deprecation
     const server = new Server(
       {
         name: 'omnifocus-mcp-cached',
         version: versionInfo.version,
-        description: 'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
+        description:
+          'MCP server for OmniFocus task management with GTD-optimized workflows, analytics, and batch operations',
         websiteUrl: 'https://github.com/kip-d/omnifocus-mcp',
       },
       {

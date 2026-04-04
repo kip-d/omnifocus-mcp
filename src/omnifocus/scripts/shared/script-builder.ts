@@ -16,7 +16,7 @@ export function buildParameterDeclarations(params: ScriptParameters): string {
   const declarations: string[] = [];
 
   // Sort keys for consistent output
-  const sortedKeys = Object.keys(params).sort();
+  const sortedKeys = Object.keys(params).sort((a, b) => a.localeCompare(b));
 
   for (const key of sortedKeys) {
     // Each parameter gets its own const declaration
@@ -60,7 +60,7 @@ export function extractExpectedParameters(template: string): string[] {
     params.add(match[1]);
   }
 
-  return Array.from(params).sort();
+  return Array.from(params).sort((a, b) => a.localeCompare(b));
 }
 
 /**

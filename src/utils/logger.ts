@@ -45,7 +45,7 @@ const SENSITIVE_KEYS = new Set(['name', 'note', 'notes', 'taskName', 'projectNam
 export function redactArgs<T>(value: T, depth = 0): T {
   if (depth > 6) return value; // Avoid pathological recursion
 
-  if (value === null || value === undefined) return value;
+  if (value == null) return value;
   if (typeof value !== 'object') return value;
 
   if (Array.isArray(value)) {

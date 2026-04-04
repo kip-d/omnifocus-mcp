@@ -415,7 +415,7 @@ export function isNormalizedFilter(filter: TaskFilter | NormalizedTaskFilter): f
 export function normalizeFilter(filter: TaskFilter): NormalizedTaskFilter {
   // Destructure to separate legacy property from the rest
   // This gives us type safety: rest is Omit<TaskFilter, 'includeCompleted'>
-  const { includeCompleted, ...rest } = filter;
+  const { includeCompleted, ...rest } = filter; // eslint-disable-line sonarjs/deprecation -- migrating away from legacy field
 
   // Start with the non-legacy properties (properly typed)
   const normalized: Omit<TaskFilter, 'includeCompleted'> = { ...rest };

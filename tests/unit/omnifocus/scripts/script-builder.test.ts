@@ -181,7 +181,7 @@ describe('Script Builder', () => {
 
       const result = extractExpectedParameters(template);
 
-      expect(result).toEqual(['USER_ID', 'snake_case', 'user_id']);
+      expect(result).toEqual(['snake_case', 'user_id', 'USER_ID']);
     });
 
     it('should not extract partial matches', () => {

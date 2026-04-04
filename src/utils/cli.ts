@@ -25,41 +25,44 @@ export const DEFAULT_CLI_CONFIG: CLIConfig = {
  * Parses command line arguments and environment variables
  * to determine server configuration
  */
+function parsePort(value: string, label: string, fallback: number): number {
+  const port = parseInt(value, 10);
+  if (!isNaN(port) && port > 0 && port < 65536) return port;
+  logger.warn(`Invalid ${label} value: ${value}, using default: ${fallback}`);
+  return fallback;
+}
+
+function consumeNextArg(args: string[], i: number): string | null {
+  if (i + 1 >= args.length) return null;
+  const next = args[i + 1];
+  return next.startsWith('--') ? null : next;
+}
+
 export function parseCLIArgs(): CLIConfig {
   const args = process.argv.slice(2);
   const config: CLIConfig = { ...DEFAULT_CLI_CONFIG };
 
-  // Parse command line arguments
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-
-    switch (arg) {
+    switch (args[i]) {
       case '--http':
         config.httpMode = true;
         break;
-      case '--port':
-        if (i + 1 < args.length) {
-          const portValue = args[i + 1];
-          if (!portValue.startsWith('--')) {
-            const port = parseInt(portValue, 10);
-            if (!isNaN(port) && port > 0 && port < 65536) {
-              config.port = port;
-              i++; // Skip next argument
-            } else {
-              logger.warn(`Invalid port value: ${portValue}, using default: ${config.port}`);
-            }
-          }
+      case '--port': {
+        const val = consumeNextArg(args, i);
+        if (val) {
+          config.port = parsePort(val, 'port', config.port);
+          i++;
         }
         break;
-      case '--host':
-        if (i + 1 < args.length) {
-          const hostValue = args[i + 1];
-          if (!hostValue.startsWith('--')) {
-            config.host = hostValue;
-            i++; // Skip next argument
-          }
+      }
+      case '--host': {
+        const val = consumeNextArg(args, i);
+        if (val) {
+          config.host = val;
+          i++;
         }
         break;
+      }
       case '--help':
       case '-h':
         printHelp();
@@ -68,25 +71,11 @@ export function parseCLIArgs(): CLIConfig {
     }
   }
 
-  // Check environment variables (override command line args)
-  if (process.env.MCP_AUTH_TOKEN) {
-    config.authToken = process.env.MCP_AUTH_TOKEN;
-  }
+  // Environment variables override command line args
+  if (process.env.MCP_AUTH_TOKEN) config.authToken = process.env.MCP_AUTH_TOKEN;
+  if (process.env.MCP_PORT) config.port = parsePort(process.env.MCP_PORT, 'MCP_PORT', config.port);
+  if (process.env.MCP_HOST) config.host = process.env.MCP_HOST;
 
-  if (process.env.MCP_PORT) {
-    const port = parseInt(process.env.MCP_PORT, 10);
-    if (!isNaN(port) && port > 0 && port < 65536) {
-      config.port = port;
-    } else {
-      logger.warn(`Invalid MCP_PORT value: ${process.env.MCP_PORT}, using default: ${config.port}`);
-    }
-  }
-
-  if (process.env.MCP_HOST) {
-    config.host = process.env.MCP_HOST;
-  }
-
-  // Log configuration in debug mode
   logger.debug('CLI Configuration:', {
     httpMode: config.httpMode,
     port: config.port,
