@@ -66,11 +66,8 @@ export function getVersionInfo(): VersionInfo {
     // Run git commands from the project root directory
     const gitOptions = { encoding: 'utf8' as const, cwd: projectRoot };
 
-    // Get current commit hash
-    gitCommitHash = execSync('git rev-parse HEAD', gitOptions).trim();
-
     // Get short commit hash
-    const shortHash = execSync('git rev-parse --short HEAD', gitOptions).trim();
+    gitCommitHash = execSync('git rev-parse --short HEAD', gitOptions).trim();
 
     // Get current branch
     gitBranch = execSync('git rev-parse --abbrev-ref HEAD', gitOptions).trim();
@@ -88,8 +85,6 @@ export function getVersionInfo(): VersionInfo {
     } catch {
       // If git status fails, assume clean
     }
-
-    gitCommitHash = shortHash; // Use short hash for display
   } catch {
     // If git commands fail, use defaults
   }

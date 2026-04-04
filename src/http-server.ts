@@ -189,7 +189,7 @@ export class HttpServerManager {
     }
 
     // Extract bearer token
-    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
     if (!match || !match[1]) {
       return false;
     }

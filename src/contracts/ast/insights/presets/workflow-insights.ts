@@ -41,7 +41,8 @@ export const PRODUCTIVITY_INSIGHTS: InsightConfig[] = [
     condition: (m) => m.tasks.overdue > 0,
     generate: (m) => {
       const avgOverdue = m.time.avgOverdueDays > 0 ? Math.round(m.time.avgOverdueDays) : 0;
-      return `${m.tasks.overdue} tasks are overdue${avgOverdue > 0 ? `, averaging ${avgOverdue} days late` : ''}`;
+      const overdueDetail = avgOverdue > 0 ? `, averaging ${avgOverdue} days late` : '';
+      return `${m.tasks.overdue} tasks are overdue${overdueDetail}`;
     },
     priority: (m) => (m.tasks.overdue > 10 ? 'high' : 'medium'),
   },
