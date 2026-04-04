@@ -62,7 +62,7 @@ export default [
       'eol-last': ['error', 'always'],
 
       // SonarJS overrides — relaxed for this codebase
-      'sonarjs/cognitive-complexity': ['warn', 25],
+      'sonarjs/cognitive-complexity': ['warn', 20],
       'sonarjs/no-nested-conditional': 'warn',
       'sonarjs/different-types-comparison': 'warn',
       'sonarjs/deprecation': 'warn',
@@ -71,11 +71,11 @@ export default [
       'sonarjs/no-commented-code': 'warn',
       'sonarjs/todo-tag': 'warn',
       'sonarjs/fixme-tag': 'warn',
-      'sonarjs/pseudo-random': 'off',        // Only used for nonces/ephemeral IDs
+      'sonarjs/pseudo-random': 'off', // Only used for nonces/ephemeral IDs
       'sonarjs/no-os-command-from-path': 'off', // Expected: JXA/osascript execution
-      'sonarjs/no-nested-functions': 'off',  // Common TS/functional pattern
-      'sonarjs/code-eval': 'off',            // Required for JXA evaluateJavascript
-      'sonarjs/void-use': 'off',             // void used intentionally for fire-and-forget
+      'sonarjs/no-nested-functions': 'off', // Common TS/functional pattern
+      'sonarjs/code-eval': 'off', // Required for JXA evaluateJavascript
+      'sonarjs/void-use': 'off', // void used intentionally for fire-and-forget
       'sonarjs/use-type-alias': 'warn',
       'sonarjs/no-nested-template-literals': 'warn',
       'sonarjs/no-alphabetical-sort': 'warn',
