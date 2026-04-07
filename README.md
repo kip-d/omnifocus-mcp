@@ -102,13 +102,14 @@ See the [HTTP Transport Guide](docs/user/HTTP-TRANSPORT.md) for setup, authentic
 
 ## Testing
 
-| Suite       | Command                    | Tests           | Time     |
-| ----------- | -------------------------- | --------------- | -------- |
-| Unit        | `npm run test:unit`        | 1634 (70 files) | ~2s      |
-| Integration | `npm run test:integration` | 73              | ~2 min   |
-| All         | `npm test`                 | Both suites     | ~2.5 min |
+| Suite       | Command                    | Tests           | Time   |
+| ----------- | -------------------------- | --------------- | ------ |
+| Unit        | `npm run test:unit`        | 1634 (70 files) | ~2s    |
+| Integration | `npm run test:integration` | 73              | ~4 min |
+| All         | `npm test`                 | Both suites     | ~4 min |
 
-Integration tests require OmniFocus running on macOS. Set `DISABLE_INTEGRATION_TESTS=true` to skip them.
+Integration tests require OmniFocus running on macOS and exercise real database queries. Timing scales with database
+size (the ~4 min figure is against a ~2,500 task database). Set `DISABLE_INTEGRATION_TESTS=true` to skip them.
 
 ## Limitations
 
