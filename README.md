@@ -113,10 +113,10 @@ size (the ~4 min figure is against a ~2,500 task database). Set `DISABLE_INTEGRA
 
 ## Limitations
 
-- **Task Movement** -- Moving tasks between projects may recreate the task with a new ID.
-- **Sequential Blocking** -- Inbox tasks do not appear as blocked (requires project context).
+- **macOS only** -- The server communicates with OmniFocus via Apple's JXA and OmniAutomation APIs, which require macOS.
+  Remote access from other platforms is possible via [HTTP transport](docs/user/HTTP-TRANSPORT.md).
 
-See [Troubleshooting](docs/user/TROUBLESHOOTING.md) for workarounds.
+See [Troubleshooting](docs/user/TROUBLESHOOTING.md) for common issues.
 
 ## License
 
