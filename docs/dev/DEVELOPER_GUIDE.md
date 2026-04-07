@@ -16,7 +16,7 @@ For developers integrating or extending the OmniFocus MCP server.
 
 ---
 
-## Unified API (v3.0.0)
+## Unified API (v4.1.0)
 
 Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 
@@ -71,12 +71,42 @@ Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 ### Batch Operations (omnifocus_write)
 
 ```javascript
-{ "mutation": { "operation": "batch", "target": "project", "operations": [
+{ "mutation": { "operation": "batch", "operations": [
     { "operation": "create", "target": "project", "data": { "name": "Vacation Planning", "sequential": true, "tempId": "proj1" } },
-    { "operation": "create", "target": "task", "data": { "name": "Book flights", "parentTempId": "proj1" } },
-    { "operation": "create", "target": "task", "data": { "name": "Reserve hotel", "parentTempId": "proj1" } }
+    { "operation": "create", "target": "task", "data": { "name": "Book flights", "tempId": "t1", "parentTempId": "proj1" } },
+    { "operation": "create", "target": "task", "data": { "name": "Reserve hotel", "tempId": "t2", "parentTempId": "proj1" } }
   ], "createSequentially": true, "returnMapping": true } }
 ```
+
+### Recurring Tasks (omnifocus_write)
+
+```javascript
+// Daily (fixed schedule)
+{ "mutation": { "operation": "create", "target": "task", "data": {
+    "name": "Daily standup",
+    "repetitionRule": { "frequency": "daily", "interval": 1, "method": "fixed" }
+} } }
+
+// Weekly on Mon/Wed/Fri
+{ "mutation": { "operation": "create", "target": "task", "data": {
+    "name": "Exercise",
+    "repetitionRule": { "frequency": "weekly", "interval": 1, "daysOfWeek": [{ "day": "MO" }, { "day": "WE" }, { "day": "FR" }] }
+} } }
+
+// Monthly, repeat from completion date
+{ "mutation": { "operation": "create", "target": "task", "data": {
+    "name": "Review finances",
+    "repetitionRule": { "frequency": "monthly", "interval": 1, "method": "defer-after-completion" }
+} } }
+```
+
+| Field        | Type                                                      | Description                    |
+| ------------ | --------------------------------------------------------- | ------------------------------ |
+| `frequency`  | `daily`, `weekly`, `monthly`, `yearly`                    | Recurrence period (required)   |
+| `interval`   | number                                                    | Every Nth period (default: 1)  |
+| `daysOfWeek` | `[{ day: "MO" }]` etc.                                    | Days for weekly recurrence     |
+| `method`     | `fixed`, `due-after-completion`, `defer-after-completion` | Schedule method                |
+| `endDate`    | `YYYY-MM-DD`                                              | Stop recurring after this date |
 
 ### Tags & Folders (omnifocus_read)
 
