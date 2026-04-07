@@ -97,12 +97,23 @@ FOLDER CREATION:
 BATCH OPERATIONS:
 - operations: Array of create, update, complete, and delete operations
 - Execution order: creates first, then updates, completes, deletes last
-- tempId: Optional for creates (auto-generated if not provided)
-- parentTempId: Reference parent by tempId for hierarchies
+- Put tempId and parentTempId inside data (not at operation level)
 - Updates/completes can reference tempIds from creates in the same batch
 - createSequentially: true (respects dependencies)
 - returnMapping: true (returns tempId → realId map)
 - stopOnError: true (halt on first failure)
+- Example with subtasks:
+  { "mutation": { "operation": "batch", "operations": [
+    { "operation": "create", "target": "task", "data": { "name": "Parent", "tempId": "p1", "project": "My Project" } },
+    { "operation": "create", "target": "task", "data": { "name": "Subtask", "tempId": "s1", "parentTempId": "p1" } }
+  ] } }
+
+REPETITION RULES (in data.repetitionRule):
+- frequency: "daily"|"weekly"|"monthly"|"yearly" (required)
+- interval: number (default 1)
+- method: "fixed"|"due-after-completion"|"defer-after-completion" (default "fixed")
+- daysOfWeek: [{ day: "SU"|"MO"|"TU"|"WE"|"TH"|"FR"|"SA", position?: number }] (for weekly)
+- daysOfMonth: [1-31] (for monthly, -1 = last day)
 
 TAG OPERATIONS:
 - tags: [...] - Replace all tags
@@ -1430,6 +1441,15 @@ SAFETY:
       let autoTempIdCounter = 0;
       const items: BatchItem[] = createOps.map((op) => {
         const item = { type: op.target as 'task' | 'project', ...op.data } as BatchItem;
+        // Accept tempId/parentTempId at operation level too (LLMs may place them here
+        // instead of inside data — both locations now work)
+        const opAny = op as unknown as Record<string, unknown>;
+        if (opAny.tempId && !item.tempId) {
+          item.tempId = opAny.tempId as string;
+        }
+        if (opAny.parentTempId && !item.parentTempId) {
+          item.parentTempId = opAny.parentTempId as string;
+        }
         if (!item.tempId) {
           item.tempId = `auto_temp_${++autoTempIdCounter}`;
         }
