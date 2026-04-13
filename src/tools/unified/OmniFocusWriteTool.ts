@@ -5,7 +5,16 @@ import { MutationCompiler, type CompiledMutation } from './compilers/MutationCom
 import { TempIdResolver } from './utils/tempid-resolver.js';
 import { DependencyGraph, DependencyGraphError } from './utils/dependency-graph.js';
 import type { BatchItem } from './schemas/batch-schemas.js';
-import { MANAGE_TAGS_SCRIPT } from '../../omnifocus/scripts/tags/manage-tags.js';
+import {
+  buildCreateTagScript,
+  buildRenameTagScript,
+  buildDeleteTagScript,
+  buildMergeTagsScript,
+  buildNestTagScript,
+  buildUnparentTagScript,
+  buildReparentTagScript,
+} from '../../contracts/ast/tag-mutation-script-builder.js';
+import type { GeneratedMutationScript } from '../../contracts/ast/mutation-script-builder.js';
 import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
 import { TaskId } from '../../utils/branded-types.js';
 import {
@@ -1920,6 +1929,56 @@ SAFETY:
     }
   }
 
+  private validateTagManageParams(
+    action: string,
+    tagName: string | undefined,
+    newName: string | undefined,
+    targetTag: string | undefined,
+    timer: OperationTimerV2,
+  ): unknown | null {
+    if (!action) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'action is required for manage operation',
+        undefined,
+        { operation: 'manage' },
+        timer.toMetadata(),
+      );
+    }
+    if (!tagName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'tagName is required for manage operation',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+    if (action === 'rename' && !newName) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'newName is required for rename action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+    if (action === 'merge' && !targetTag) {
+      return createErrorResponseV2(
+        'tags',
+        'MISSING_PARAMETER',
+        'targetTag is required for merge action',
+        undefined,
+        { operation: 'manage', action },
+        timer.toMetadata(),
+      );
+    }
+    return null;
+  }
+
   private async handleTagManage(compiled: Extract<CompiledMutation, { operation: 'tag_manage' }>): Promise<unknown> {
     const timer = new OperationTimerV2();
 
@@ -1931,63 +1990,46 @@ SAFETY:
     const targetTag = compiled.targetTag;
     const parentTagName = compiled.parentTag;
 
-    // Validate required parameters
-    if (!action) {
-      return createErrorResponseV2(
-        'tags',
-        'MISSING_PARAMETER',
-        'action is required for manage operation',
-        undefined,
-        { operation: 'manage' },
-        timer.toMetadata(),
-      );
-    }
+    const validationError = this.validateTagManageParams(action, tagName, newName, targetTag, timer);
+    if (validationError) return validationError;
 
-    if (!tagName) {
-      return createErrorResponseV2(
-        'tags',
-        'MISSING_PARAMETER',
-        'tagName is required for manage operation',
-        undefined,
-        { operation: 'manage', action },
-        timer.toMetadata(),
-      );
+    // Dispatch to per-action AST builder
+    let generated: GeneratedMutationScript;
+    switch (action) {
+      case 'create':
+        generated = await buildCreateTagScript({ tagName, parentTagName });
+        break;
+      case 'rename':
+        generated = await buildRenameTagScript({ tagName, newName: newName! });
+        break;
+      case 'delete':
+        generated = await buildDeleteTagScript({ tagName });
+        break;
+      case 'merge':
+        generated = await buildMergeTagsScript({ tagName, targetTag: targetTag! });
+        break;
+      case 'nest':
+        generated = await buildNestTagScript({ tagName, parentTagName });
+        break;
+      case 'unparent':
+        generated = await buildUnparentTagScript({ tagName });
+        break;
+      case 'reparent':
+        generated = await buildReparentTagScript({ tagName, parentTagName });
+        break;
+      default: {
+        const _exhaustive: never = action;
+        return createErrorResponseV2(
+          'tags',
+          'INVALID_ACTION',
+          `Unknown tag action: ${String(_exhaustive)}`,
+          undefined,
+          undefined,
+          timer.toMetadata(),
+        );
+      }
     }
-
-    // Validate action-specific requirements
-    if (action === 'rename' && !newName) {
-      return createErrorResponseV2(
-        'tags',
-        'MISSING_PARAMETER',
-        'newName is required for rename action',
-        undefined,
-        { operation: 'manage', action },
-        timer.toMetadata(),
-      );
-    }
-
-    if (action === 'merge' && !targetTag) {
-      return createErrorResponseV2(
-        'tags',
-        'MISSING_PARAMETER',
-        'targetTag is required for merge action',
-        undefined,
-        { operation: 'manage', action },
-        timer.toMetadata(),
-      );
-    }
-
-    // Execute manage tags script
-    const script = this.omniAutomation.buildScript(MANAGE_TAGS_SCRIPT, {
-      action,
-      tagName,
-      newName,
-      targetTag,
-      parentTagName,
-      parentTagId: undefined,
-      mutuallyExclusive: undefined,
-    });
-    const result = await this.execJson(script);
+    const result = await this.execJson(generated.script);
 
     if (!isScriptSuccess(result)) {
       return createErrorResponseV2(

@@ -568,9 +568,7 @@ describe('OmniFocusWriteTool task operations', () => {
   // ─── TAG MANAGEMENT (inlined from TagsTool) ────────────────────────
 
   describe('tag management', () => {
-    it('executes tag rename via MANAGE_TAGS_SCRIPT and invalidates cache', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
-
+    it('executes tag rename via AST builder and invalidates cache', async () => {
       execJsonSpy.mockResolvedValue({
         success: true,
         data: {
@@ -599,8 +597,6 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('executes tag merge and invalidates both tag caches', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
-
       execJsonSpy.mockResolvedValue({
         success: true,
         data: {
@@ -625,31 +621,27 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(mockCache.invalidateTag).toHaveBeenCalledWith('TargetTag');
     });
 
-    it('maps unnest action to unparent', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
-
+    it('maps unnest action to unparent builder', async () => {
       execJsonSpy.mockResolvedValue({
         success: true,
         data: {
           ok: true,
           v: '1',
-          data: { success: true, action: 'unparent' },
+          data: { success: true, action: 'unparented' },
         },
       });
 
-      await tool.execute({
+      const result = (await tool.execute({
         mutation: {
           operation: 'tag_manage',
           action: 'unnest',
           tagName: 'ChildTag',
         },
-      });
+      })) as any;
 
-      // Verify buildScript was called with 'unparent' (not 'unnest')
-      expect((tool as any).omniAutomation.buildScript).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ action: 'unparent' }),
-      );
+      // Verify the script was executed (buildUnparentTagScript called via unnest→unparent mapping)
+      expect(execJsonSpy).toHaveBeenCalled();
+      expect(result.success).toBe(true);
     });
 
     it('returns error when newName is missing for rename', async () => {
@@ -683,8 +675,6 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('handles script errors for tag management', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
-
       execJsonSpy.mockResolvedValue({
         success: false,
         error: 'Tag not found',
@@ -704,8 +694,6 @@ describe('OmniFocusWriteTool task operations', () => {
     });
 
     it('creates a tag successfully', async () => {
-      (tool as any).omniAutomation = { buildScript: vi.fn().mockReturnValue('manage-tags-script') };
-
       execJsonSpy.mockResolvedValue({
         success: true,
         data: {

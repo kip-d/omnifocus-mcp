@@ -23,7 +23,7 @@ export type MutationOperation = 'create' | 'update' | 'complete' | 'delete' | 'b
 /**
  * Target entity types
  */
-export type MutationTarget = 'task' | 'project' | 'folder';
+export type MutationTarget = 'task' | 'project' | 'folder' | 'tag';
 
 // =============================================================================
 // REPETITION RULE

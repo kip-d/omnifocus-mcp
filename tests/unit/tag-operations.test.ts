@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTagsScript } from '../../src/contracts/ast/tag-script-builder.js';
-import { MANAGE_TAGS_SCRIPT } from '../../src/omnifocus/scripts/tags/manage-tags.js';
+import { buildMergeTagsScript, buildCreateTagScript } from '../../src/contracts/ast/tag-mutation-script-builder.js';
 
 describe('Tag Operations Fix Verification', () => {
   it('should use OmniJS bridge for tag property access (AST)', () => {
@@ -12,50 +12,57 @@ describe('Tag Operations Fix Verification', () => {
     expect(script).toContain('tag.id.primaryKey');
   });
 
-  it('should use OmniJS bridge for merge tag retagging', () => {
+  it('should use OmniJS bridge for merge tag retagging', async () => {
+    const { script } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
     // Merge must use evaluateJavascript (OmniJS bridge) — JXA tag mutations silently fail
-    expect(MANAGE_TAGS_SCRIPT).toContain('app.evaluateJavascript(mergeScript)');
+    expect(script).toContain('app.evaluateJavascript(mergeScript)');
 
     // Should use singular OmniJS methods inside the bridge
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.removeTag(srcTag)');
-    expect(MANAGE_TAGS_SCRIPT).toContain('task.addTag(tgtTag)');
+    expect(script).toContain('task.removeTag(srcTag)');
+    expect(script).toContain('task.addTag(tgtTag)');
   });
 
-  it('should not use JXA plural tag methods for merge', () => {
+  it('should not use JXA plural tag methods for merge', async () => {
+    const { script } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
     // JXA plural methods (addTags/removeTags) silently fail — must not be used
-    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.removeTags(');
-    expect(MANAGE_TAGS_SCRIPT).not.toContain('task.addTags(');
+    expect(script).not.toContain('task.removeTags(');
+    expect(script).not.toContain('task.addTags(');
   });
 
-  it('should return JSON stringified results', () => {
+  it('should return JSON stringified results', async () => {
     // Verify all return statements use JSON.stringify
     const returnPattern = /return JSON\.stringify\(/g;
     const { script: listScript } = buildTagsScript({ mode: 'full' });
+    const { script: mergeScript } = await buildMergeTagsScript({ tagName: 'src', targetTag: 'tgt' });
     const listMatches = listScript.match(returnPattern);
-    const manageMatches = MANAGE_TAGS_SCRIPT.match(returnPattern);
+    const mergeMatches = mergeScript.match(returnPattern);
 
     expect(listMatches).not.toBeNull();
     expect(listMatches!.length).toBeGreaterThan(0);
-    expect(manageMatches).not.toBeNull();
-    expect(manageMatches!.length).toBeGreaterThan(0);
+    expect(mergeMatches).not.toBeNull();
+    expect(mergeMatches!.length).toBeGreaterThan(0);
   });
 });
 
-describe('MANAGE_TAGS_SCRIPT - nested tag hierarchy syntax', () => {
-  it('should contain parseTagPath helper function', () => {
-    expect(MANAGE_TAGS_SCRIPT).toContain('function parseTagPath(');
+describe('Tag mutation builders - nested tag hierarchy syntax', () => {
+  it('should contain parseTagPath helper function', async () => {
+    const { script } = await buildCreateTagScript({ tagName: 'Test' });
+    expect(script).toContain('function parseTagPath(');
   });
 
-  it('should use OmniJS bridge for path tag creation', () => {
+  it('should use OmniJS bridge for path tag creation', async () => {
+    const { script } = await buildCreateTagScript({ tagName: 'Test' });
     // Path creation uses evaluateJavascript with new Tag(name, parent)
-    expect(MANAGE_TAGS_SCRIPT).toContain('new Tag(segments[i], parent)');
+    expect(script).toContain('new Tag(segments[i], parent)');
   });
 
-  it('should check for path syntax conflict with parentTagName', () => {
-    expect(MANAGE_TAGS_SCRIPT).toContain('Cannot use path syntax');
+  it('should check for path syntax conflict with parentTagName', async () => {
+    const { script } = await buildCreateTagScript({ tagName: 'Test' });
+    expect(script).toContain('Cannot use path syntax');
   });
 
-  it('should handle path syntax in create action', () => {
-    expect(MANAGE_TAGS_SCRIPT).toContain('parseTagPath(tagName)');
+  it('should handle path syntax in create action', async () => {
+    const { script } = await buildCreateTagScript({ tagName: 'Test' });
+    expect(script).toContain('parseTagPath(tagName)');
   });
 });

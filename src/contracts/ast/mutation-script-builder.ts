@@ -35,7 +35,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 const SANDBOX_FOLDER_NAME = '__MCP_TEST_SANDBOX__';
-const TEST_TAG_PREFIX = '__test-';
+export const TEST_TAG_PREFIX = '__test-';
 const TEST_INBOX_PREFIX = '__TEST__';
 
 // Cache the sandbox folder ID to avoid repeated lookups
@@ -51,7 +51,7 @@ let cachedSandboxFolderId: string | null = null;
  * This allows unit tests to run without sandbox restrictions while
  * integration tests that actually write to OmniFocus are protected.
  */
-function isTestMode(): boolean {
+export function isTestMode(): boolean {
   return process.env.NODE_ENV === 'test' && process.env.SANDBOX_GUARD_ENABLED === 'true';
 }
 

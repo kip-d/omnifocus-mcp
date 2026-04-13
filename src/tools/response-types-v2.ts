@@ -150,7 +150,7 @@ export interface TagOperationDataV2 {
     message?: string;
     data?: unknown;
   };
-  action: 'create' | 'rename' | 'delete' | 'merge' | 'nest' | 'unparent' | 'reparent' | 'set_mutual_exclusivity';
+  action: 'create' | 'rename' | 'delete' | 'merge' | 'nest' | 'unparent' | 'reparent';
   tagName: string;
   newName?: string;
   targetTag?: string;
