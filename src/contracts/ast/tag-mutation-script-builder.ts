@@ -19,7 +19,7 @@ import { isTestMode, TEST_TAG_PREFIX } from './mutation-script-builder.js';
  * Validate that a tag mutation targets a test-prefixed tag when running
  * in integration test mode. Prevents accidental mutation of real tags.
  */
-async function validateTagMutation(tagName: string): Promise<void> {
+function validateTagMutation(tagName: string): void {
   if (!isTestMode()) return;
   if (!tagName.startsWith(TEST_TAG_PREFIX)) {
     throw new Error(`TEST GUARD: Tag mutations must target "${TEST_TAG_PREFIX}"-prefixed tags. Got: "${tagName}"`);
@@ -72,11 +72,11 @@ function tagScriptEpilogue(): string {
 
 // ─── Builders ───────────────────────────────────────────────────────
 
-export async function buildCreateTagScript(data: {
+export function buildCreateTagScript(data: {
   tagName: string;
   parentTagName?: string;
   parentTagId?: string;
-}): Promise<GeneratedMutationScript> {
+}): GeneratedMutationScript {
   validateTagMutation(data.tagName);
 
   const tagName = JSON.stringify(data.tagName);
@@ -292,10 +292,7 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'create', target: 'tag' as MutationTarget };
 }
 
-export async function buildRenameTagScript(data: {
-  tagName: string;
-  newName: string;
-}): Promise<GeneratedMutationScript> {
+export function buildRenameTagScript(data: { tagName: string; newName: string }): GeneratedMutationScript {
   validateTagMutation(data.tagName);
   validateTagMutation(data.newName);
 
@@ -344,7 +341,7 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'rename', target: 'tag' as MutationTarget };
 }
 
-export async function buildDeleteTagScript(data: { tagName: string }): Promise<GeneratedMutationScript> {
+export function buildDeleteTagScript(data: { tagName: string }): GeneratedMutationScript {
   validateTagMutation(data.tagName);
 
   const tagName = JSON.stringify(data.tagName);
@@ -390,10 +387,7 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'delete', target: 'tag' as MutationTarget };
 }
 
-export async function buildMergeTagsScript(data: {
-  tagName: string;
-  targetTag: string;
-}): Promise<GeneratedMutationScript> {
+export function buildMergeTagsScript(data: { tagName: string; targetTag: string }): GeneratedMutationScript {
   validateTagMutation(data.tagName);
   validateTagMutation(data.targetTag);
 
@@ -510,11 +504,11 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'merge', target: 'tag' as MutationTarget };
 }
 
-export async function buildNestTagScript(data: {
+export function buildNestTagScript(data: {
   tagName: string;
   parentTagName?: string;
   parentTagId?: string;
-}): Promise<GeneratedMutationScript> {
+}): GeneratedMutationScript {
   validateTagMutation(data.tagName);
   if (data.parentTagName) validateTagMutation(data.parentTagName);
 
@@ -603,7 +597,7 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'nest', target: 'tag' as MutationTarget };
 }
 
-export async function buildUnparentTagScript(data: { tagName: string }): Promise<GeneratedMutationScript> {
+export function buildUnparentTagScript(data: { tagName: string }): GeneratedMutationScript {
   validateTagMutation(data.tagName);
 
   const tagName = JSON.stringify(data.tagName);
@@ -658,11 +652,11 @@ ${tagScriptEpilogue()}`;
   return { script, operation: 'unparent', target: 'tag' as MutationTarget };
 }
 
-export async function buildReparentTagScript(data: {
+export function buildReparentTagScript(data: {
   tagName: string;
   parentTagName?: string;
   parentTagId?: string;
-}): Promise<GeneratedMutationScript> {
+}): GeneratedMutationScript {
   validateTagMutation(data.tagName);
   if (data.parentTagName) validateTagMutation(data.parentTagName);
 
