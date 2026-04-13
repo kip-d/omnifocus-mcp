@@ -15,7 +15,12 @@ import {
   buildReparentTagScript,
 } from '../../contracts/ast/tag-mutation-script-builder.js';
 import type { GeneratedMutationScript } from '../../contracts/ast/mutation-script-builder.js';
-import { createSuccessResponseV2, createErrorResponseV2, OperationTimerV2 } from '../../utils/response-format.js';
+import {
+  createSuccessResponseV2,
+  createErrorResponseV2,
+  OperationTimerV2,
+  type StandardResponseV2,
+} from '../../utils/response-format.js';
 import { TaskId } from '../../utils/branded-types.js';
 import {
   buildUpdateProjectScript,
@@ -1935,7 +1940,7 @@ SAFETY:
     newName: string | undefined,
     targetTag: string | undefined,
     timer: OperationTimerV2,
-  ): unknown | null {
+  ): StandardResponseV2<unknown> | null {
     if (!action) {
       return createErrorResponseV2(
         'tags',
