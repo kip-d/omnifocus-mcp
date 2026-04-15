@@ -224,6 +224,15 @@ describe('BatchItemSchema', () => {
         expect(result.data.reviewInterval).toBe(14);
       }
     });
+
+    it('should accept reviewInterval as { steps, unit } object (OMN-38)', () => {
+      const input = { type: 'project', tempId: 'p1', name: 'P', reviewInterval: { steps: 1, unit: 'weeks' } };
+      const result = BatchItemSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reviewInterval).toBe(7);
+      }
+    });
   });
 
   describe('repetitionRule', () => {

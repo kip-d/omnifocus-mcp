@@ -129,6 +129,12 @@ REPETITION RULES (in data.repetitionRule):
 - daysOfWeek: [{ day: "SU"|"MO"|"TU"|"WE"|"TH"|"FR"|"SA", position?: number }] (for weekly)
 - daysOfMonth: [1-31] (for monthly, -1 = last day)
 
+REVIEW INTERVAL (project-only, in data.reviewInterval or changes.reviewInterval):
+- Number of days: 7 (weekly), 14 (biweekly), 30 (monthly)
+- Object form: { steps: 1, unit: "weeks" } or { steps: 2, unit: "months" }
+- Valid units: "days", "weeks", "months", "years" (singular also accepted)
+- Both forms are accepted; object form matches OmniFocus read output
+
 TAG OPERATIONS:
 - tags: [...] - Replace all tags
 - addTags: [...] - Add to existing

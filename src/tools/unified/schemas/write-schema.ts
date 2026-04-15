@@ -53,6 +53,33 @@ const RepetitionRuleSchema = z.object({
 const _repetitionRuleKeysSync: SameKeys<z.output<typeof RepetitionRuleSchema>, RepetitionRule> = true;
 void _repetitionRuleKeysSync;
 
+// Review interval: accepts days (number/string) or { steps, unit } object.
+// Object form is what OmniFocus reads back; number form is what the script builder expects.
+const UNIT_TO_DAYS: Record<string, number> = {
+  days: 1,
+  day: 1,
+  weeks: 7,
+  week: 7,
+  months: 30,
+  month: 30,
+  years: 365,
+  year: 365,
+};
+
+const ReviewIntervalObjectSchema = z
+  .object({
+    steps: z.union([z.number(), z.string().transform((v) => parseInt(v, 10))]).pipe(z.number().min(1)),
+    unit: z.string(),
+  })
+  .transform((obj) => {
+    const multiplier = UNIT_TO_DAYS[obj.unit.toLowerCase()] ?? 1;
+    return obj.steps * multiplier;
+  });
+
+const ReviewIntervalSchema = z
+  .union([z.number(), z.string().transform((v) => parseInt(v, 10)), ReviewIntervalObjectSchema])
+  .pipe(z.number().min(1));
+
 // Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm (never ISO-8601 with Z suffix)
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?$/;
 const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
@@ -79,10 +106,7 @@ const CreateDataSchema = z.object({
   folder: z.string().optional(),
   sequential: coerceBoolean().optional(),
   status: z.enum(['active', 'on_hold', 'completed', 'dropped']).optional(),
-  reviewInterval: z
-    .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-    .pipe(z.number())
-    .optional(),
+  reviewInterval: ReviewIntervalSchema.optional(),
 });
 
 // Update changes schema
@@ -114,10 +138,7 @@ const UpdateChangesSchema = z
     repetitionRule: z.union([RepetitionRuleSchema, z.null()]).optional(), // Set (object) or clear (null)
     // Project-specific update fields
     sequential: coerceBoolean().optional(),
-    reviewInterval: z
-      .union([z.number(), z.string().transform((v) => parseInt(v, 10))])
-      .pipe(z.number())
-      .optional(),
+    reviewInterval: ReviewIntervalSchema.optional(),
   })
   .strict();
 

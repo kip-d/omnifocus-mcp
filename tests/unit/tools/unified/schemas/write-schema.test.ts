@@ -568,6 +568,96 @@ describe('WriteSchema', () => {
     }
   });
 
+  // ─── Round 3: reviewInterval object form (OMN-38) ─────────────────
+
+  it('accepts reviewInterval as { steps, unit } object in project create', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'project',
+        data: {
+          name: 'Weekly review project',
+          reviewInterval: { steps: 1, unit: 'weeks' },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { reviewInterval: number } }).data;
+      expect(data.reviewInterval).toBe(7);
+    }
+  });
+
+  it('accepts reviewInterval as { steps, unit } with plural and singular units', () => {
+    const cases = [
+      { input: { steps: 2, unit: 'weeks' }, expected: 14 },
+      { input: { steps: 1, unit: 'week' }, expected: 7 },
+      { input: { steps: 3, unit: 'days' }, expected: 3 },
+      { input: { steps: 1, unit: 'day' }, expected: 1 },
+      { input: { steps: 1, unit: 'months' }, expected: 30 },
+      { input: { steps: 1, unit: 'month' }, expected: 30 },
+      { input: { steps: 1, unit: 'years' }, expected: 365 },
+      { input: { steps: 1, unit: 'year' }, expected: 365 },
+    ];
+
+    for (const { input: ri, expected } of cases) {
+      const result = WriteSchema.safeParse({
+        mutation: {
+          operation: 'create',
+          target: 'project',
+          data: { name: 'Test', reviewInterval: ri },
+        },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const data = (result.data.mutation as { data: { reviewInterval: number } }).data;
+        expect(data.reviewInterval).toBe(expected);
+      }
+    }
+  });
+
+  it('accepts reviewInterval object in project update changes', () => {
+    const input = {
+      mutation: {
+        operation: 'update',
+        target: 'project',
+        id: 'proj-1',
+        changes: {
+          reviewInterval: { steps: 2, unit: 'months' },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const changes = (result.data.mutation as { changes: { reviewInterval: number } }).changes;
+      expect(changes.reviewInterval).toBe(60);
+    }
+  });
+
+  it('coerces string steps in reviewInterval object (MCP bridge)', () => {
+    const input = {
+      mutation: {
+        operation: 'create',
+        target: 'project',
+        data: {
+          name: 'Coercion test',
+          reviewInterval: { steps: '2', unit: 'weeks' },
+        },
+      },
+    };
+
+    const result = WriteSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = (result.data.mutation as { data: { reviewInterval: number } }).data;
+      expect(data.reviewInterval).toBe(14);
+    }
+  });
+
   // ─── Folder creation ──────────────────────────────────────────────
 
   it('validates create_folder with name only (top-level)', () => {
