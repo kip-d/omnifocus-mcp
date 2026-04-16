@@ -7,9 +7,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { OmniFocusReadTool } from '../../../../src/tools/unified/OmniFocusReadTool.js';
 import { CacheManager } from '../../../../src/cache/CacheManager.js';
 import type { ScriptResult } from '../../../../src/omnifocus/script-result-types.js';
+
+// Unique per-process temp subpath for export tests. fs is mocked below, so
+// nothing is actually written — but use os.tmpdir() (plus pid) anyway so
+// the string isn't a hardcoded world-writable path and the pattern stays
+// correct if fs mocking is ever removed.
+const TEST_EXPORT_DIR = join(tmpdir(), `omnifocus-mcp-export-test-${process.pid}`);
 
 vi.mock('../../../../src/cache/CacheManager');
 vi.mock('../../../../src/omnifocus/OmniAutomation');
@@ -646,8 +654,7 @@ describe('OmniFocusReadTool', () => {
             type: 'export',
             exportType: 'all',
             format: 'json',
-            // eslint-disable-next-line sonarjs/publicly-writable-directories -- test-only path; execution is mocked via fs mock at top of file
-            outputDirectory: '/tmp/export-test',
+            outputDirectory: TEST_EXPORT_DIR,
             includeCompleted: true,
             includeStats: true,
           },
