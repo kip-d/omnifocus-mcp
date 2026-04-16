@@ -257,6 +257,82 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── OMN-19: summary suppression on narrow lookups ─────────────
+  // Linear OMN-19 — trim review/bottleneck summary from project lookup responses.
+  // Decision: heuristic over explicit param. Skip summary iff the caller
+  // provided a narrow lookup filter (name-search or id). Broad browses
+  // (no filter, status-only, folder-only) still return the summary, which
+  // is useful for weekly-review workflows. See Linear issue for the full
+  // Option 1 / 2 / 3 trade-off.
+  describe('OMN-19 summary suppression on narrow lookups', () => {
+    const projectsPayload = {
+      success: true as const,
+      data: {
+        projects: [{ id: 'p1', name: 'OmniFocus MCP', status: 'active' }],
+        metadata: { total_available: 1 },
+      },
+    };
+
+    it('strips summary when name.contains filter is present (lookup-by-name)', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { name: { contains: 'OmniFocus' } } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeUndefined();
+    });
+
+    it('strips summary when id filter is present (lookup-by-id)', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { id: 'p1' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeUndefined();
+    });
+
+    it('preserves summary for broad browses (no narrow filter)', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects' },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+      expect(result.summary.total_projects).toBe(1);
+    });
+
+    it('preserves summary for status-only browses (dashboard-like)', async () => {
+      execJsonSpy.mockResolvedValueOnce(projectsPayload satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { status: 'active' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.summary).toBeDefined();
+    });
+
+    it('strips summary on cache hit when narrow lookup', async () => {
+      (mockCache.get as ReturnType<typeof vi.fn>).mockReturnValue({
+        projects: [{ id: 'cached-1', name: 'Cached Project', status: 'active' }],
+      });
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { name: { contains: 'Cached' } } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.from_cache).toBe(true);
+      expect(result.summary).toBeUndefined();
+    });
+  });
+
   // ─── Thin-by-default project field resolution ──────────────────
 
   describe('thin-by-default project field resolution', () => {
@@ -570,6 +646,7 @@ describe('OmniFocusReadTool', () => {
             type: 'export',
             exportType: 'all',
             format: 'json',
+            // eslint-disable-next-line sonarjs/publicly-writable-directories -- test-only path; execution is mocked via fs mock at top of file
             outputDirectory: '/tmp/export-test',
             includeCompleted: true,
             includeStats: true,

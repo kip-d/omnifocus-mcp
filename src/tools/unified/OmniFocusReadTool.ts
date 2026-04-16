@@ -528,6 +528,14 @@ PERFORMANCE:
       projectFilter.text = compiled.filters.search;
     }
 
+    // OMN-19: suppress review/bottleneck summary on narrow lookups (name or id).
+    // Rationale: the summary is built for weekly-review/dashboard flows but is
+    // pure noise when the caller is doing "find this one project to get its ID."
+    // Status- and folder-only browses still return the summary — those look
+    // dashboard-ish and users may be scanning review state. See Linear OMN-19
+    // for the full option trade-off (explicit param vs heuristic vs slim mode).
+    const isNarrowLookup = Boolean(compiled.filters.search || compiled.filters.id);
+
     // Build cache key
     const cacheParams = { ...projectFilter, limit, includeStats };
     const cacheKey = `projects_list_${JSON.stringify(cacheParams)}`;
@@ -540,6 +548,8 @@ PERFORMANCE:
         from_cache: true,
         operation: 'list',
       }) as unknown as Record<string, unknown>;
+
+      if (isNarrowLookup) delete cacheResult.summary;
 
       // Post-hoc field projection (always applied for thin-by-default)
       return projectFieldsOnResult(cacheResult, effectiveFields);
@@ -575,6 +585,8 @@ PERFORMANCE:
       from_cache: false,
       operation: 'list',
     }) as unknown as Record<string, unknown>;
+
+    if (isNarrowLookup) delete listResult.summary;
 
     // Post-hoc field projection (always applied for thin-by-default)
     return projectFieldsOnResult(listResult, effectiveFields);
