@@ -157,7 +157,8 @@ const SAFE_TEMPLATE = [
 ## Testing
 
 ```bash
-node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
+npm run test:unit         # ~2s
+npm run test:integration  # requires OmniFocus; ~4 min against a ~2500-task database
 ```
 
 | Environment | Behavior |
@@ -181,7 +182,7 @@ node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
 
 ## Tool Architecture
 
-4 unified tools (v3.0.0 Unified Builder API):
+4 unified tools (v4.1.0 Unified Builder API):
 
 | Tool | Purpose |
 |------|---------|

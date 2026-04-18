@@ -7,6 +7,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **OmniFocus 4.7+ repetition rules** — Reading tasks with repetition rules works again on current OmniFocus versions;
+  deprecated fields have been replaced with the modern API. Older tasks missing `catchUpAutomatically` no longer throw.
+- **`reviewInterval` accepts the `{ steps, unit }` object form** (OMN-38), matching what OmniFocus returns when reading
+  projects.
+- **Narrow project lookups omit the full project summary** (OMN-19) — Looking up a single project by ID or name returns
+  just that project's data without a noisy database-wide summary.
+
+### Improved
+
+- **Clearer MCP tool descriptions** for `repetitionRule`, batch `parentTempId`, and `includeCompleted`, so assistants
+  pick the right field on the first try.
+- **README restructured for public visitors.** API examples moved to the Developer Guide; the landing page now focuses
+  on what end users can do in natural language.
+
+### Developer Notes
+
+- Tag management migrated from the legacy string template to AST builders; tag mutation builders are now synchronous.
+- Export test output path uses `os.tmpdir()` so the suite runs cleanly on systems without a writable repo root.
+- SonarJS lint plugin adopted with `--max-warnings=0`; cognitive-complexity threshold tightened from 25 to 20.
+- New developer docs: architecture map, session handoff notes, dual-schema (Zod vs `inputSchema`) guidance in CLAUDE.md.
+
+## [4.1.0] - 2026-03-13
+
+### Fixed
+
+- **Duplicate project names no longer silently match the wrong project** (OMN-34). When a project filter resolves to
+  more than one project, the query returns a warning listing every match (with IDs, folder paths, and status) so you or
+  your assistant can pick the intended one. Existing unique-name filters behave exactly as before.
+
+### Developer Notes
+
+- New `EmitResult` type and shared project-resolution preamble are injected into every script builder; filter generator
+  and pipeline handle the richer return shape.
+- Structured `duplicateProjects` metadata added to filter responses.
+
+## [4.0.0] - 2026-02-22
+
+Large follow-up release to the v3.0.0 unified API. Focus: reliability of writes, correctness of IDs returned from
+create operations, and a much smaller schema footprint over the wire.
+
+### Added
+
+- **Create folders via `omnifocus_write`** — New `create_folder` operation lets you create folders (including nested
+  paths) alongside tasks and projects. (#48)
+- **Top-level `OR` in query filters** (OMN-30) — Filters can now mix `OR` groups at the top level, not just nested
+  inside `AND`.
+- **`repetitionRule` on updates** — Recurrence can be added or changed via `omnifocus_write` update, not just at
+  creation.
+- **`sequential` flag on task updates** (OMN-31) — Switch an existing action group between sequential and parallel.
+
+### Fixed
+
+- **New task IDs are always correct** (OMN-29) — Create operations resolve the real task ID via a note-marker bridge,
+  so the returned ID is what you'll find in OmniFocus (no more stale JXA IDs).
+- **Tag assignment on newly created tasks is reliable** (OMN-27) — Fresh tag IDs are bridged through OmniJS instead of
+  relying on JXA's cached references.
+- **Batch operations honor `parentTempId`** (OMN-28, OMN-31) — Tasks created inside a batch are placed in the right
+  project and can nest under sibling tasks created in the same batch.
+- **Responses return accurate IDs by default** (OMN-14, OMN-15) — Eliminated the remaining JXA `.id()` mismatches and
+  trimmed default responses so they're significantly smaller without losing essential fields.
+- **Deletes execute correctly under OmniJS** — Switched to `deleteObject()` instead of `item.remove()`.
+- **`overdue_reviews` off-by-one fixed** — Projects due for review today are no longer reported as overdue.
+- **Write pipeline wiring gaps closed** — A dozen fields that were accepted by the schema but dropped before execution
+  now flow through end-to-end.
+
+### Improved
+
+- **Advertised schema is ~99% smaller** — Replaced auto-generated JSON Schemas (a 3.2 MB `omnifocus_read` schema, plus
+  oversized `omnifocus_write` and `omnifocus_analyze` schemas) with hand-crafted minimal versions (OMN-18). A size
+  regression guard prevents accidental regrowth. MCP clients now pay a fraction of the context cost they used to.
+- **Leaner default responses** — Read queries no longer include redundant `data.preview`; batch write responses use a
+  single flat metadata envelope.
+
+### Developer Notes
+
+- Removed the manual `zod-to-json-schema` converter from `BaseTool` (OMN-16); each tool now supplies its own
+  hand-crafted `inputSchema` override and `BaseTool` throws if it's missing. The `zod-to-json-schema` devDependency is
+  gone.
+- `ExportFieldEnum` derived from `EXPORT_FIELD_MAP` keys (OMN-17) — single source of truth.
+- `FilterSchema` no longer uses `z.lazy()` recursion, eliminating a class of type-inference problems.
+- The `omnifocus-assistant` skill moved to user level via symlink; skill docs audited for post-bug-fix behavior.
+- Dropped the stale `.eslintignore` (flat config handles it) and excluded worktree directories from Vitest discovery.
+
 ## [3.0.0] - 2025-11-06
 
 ### BREAKING CHANGES
