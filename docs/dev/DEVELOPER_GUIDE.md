@@ -108,7 +108,7 @@ Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 | `method`     | `fixed`, `due-after-completion`, `defer-after-completion` | Schedule method                |
 | `endDate`    | `YYYY-MM-DD`                                              | Stop recurring after this date |
 
-### Tags & Folders (omnifocus_read)
+### Tags & Folders (omnifocus_read / omnifocus_write)
 
 ```javascript
 // List tags
@@ -116,6 +116,21 @@ Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 
 // List folders
 { "query": { "type": "folders" } }
+
+// Create a folder (optionally under a parent folder)
+{ "mutation": { "operation": "create_folder", "data": { "name": "Clients", "parentFolder": "Work" } } }
+
+// Tag management: create | rename | delete | merge | nest
+{ "mutation": { "operation": "tag_manage", "action": "create", "tagName": "@errand" } }
+{ "mutation": { "operation": "tag_manage", "action": "rename", "tagName": "@errand", "newName": "@shopping" } }
+{ "mutation": { "operation": "tag_manage", "action": "merge",  "tagName": "@old", "targetTag": "@new" } }
+{ "mutation": { "operation": "tag_manage", "action": "nest",   "tagName": "@phone", "parentTag": "@contexts" } }
+```
+
+### Bulk Delete (omnifocus_write)
+
+```javascript
+{ "mutation": { "operation": "bulk_delete", "target": "task", "ids": ["id1", "id2", "id3"] } }
 ```
 
 ### Analytics (omnifocus_analyze)
@@ -136,9 +151,13 @@ Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 
 ### System
 
+`system` is a top-level tool, not a `query.type`. Call it directly:
+
 ```javascript
-{ "query": { "type": "system", "operation": "version" } }
-{ "query": { "type": "system", "operation": "diagnostics" } }
+{ "operation": "version" }
+{ "operation": "diagnostics" }
+{ "operation": "metrics" }
+{ "operation": "cache" }
 ```
 
 ---

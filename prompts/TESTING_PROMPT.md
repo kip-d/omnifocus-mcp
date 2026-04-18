@@ -1,6 +1,6 @@
 # OmniFocus MCP Test Suite
 
-**Version:** v3.0.0+ Unified API **Time:** ~10 minutes **Purpose:** Validate MCP server functionality with real
+**Version:** Unified API (current v4.1.0) **Time:** ~10 minutes **Purpose:** Validate MCP server functionality with real
 OmniFocus operations
 
 ---
@@ -39,7 +39,7 @@ If automated tests fail, fix those first.
 system({operation: "version"})
 ```
 
-**REPORT:** `✅ Test 1: OmniFocus MCP v3.x.x`
+**REPORT:** `✅ Test 1: OmniFocus MCP v4.x.x`
 
 ---
 

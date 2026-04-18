@@ -27,7 +27,7 @@ focuses on developer implementation details.
 
 ---
 
-## 🎯 Unified API (v3.0.0)
+## 🎯 Unified API (v4.1.0)
 
 **Tools:** `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`
 
@@ -193,7 +193,7 @@ process.stdin.on('end', async () => {
 ```bash
 # Build & Test
 npm run build                    # Required before running
-npm run test:unit                # ~2 seconds, 1622 tests
+npm run test:unit                # ~2 seconds, ~1644 tests
 npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing

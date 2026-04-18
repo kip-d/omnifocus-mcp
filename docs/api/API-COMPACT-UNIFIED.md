@@ -1,4 +1,4 @@
-# OmniFocus MCP v3.0.0 - Unified Builder API (4 Tools)
+# OmniFocus MCP v4.1.0 - Unified Builder API (4 Tools)
 
 > **⚠️ For Claude Desktop Users:** Do NOT add this document to your system prompt or instructions. The MCP tool
 > descriptions already provide ~11,200 tokens of comprehensive documentation. Instead, use the slim
@@ -7,7 +7,7 @@
 
 **Status:** STABLE - Production-ready unified API with comprehensive testing and validation
 
-**📖 More Resources:** [Testing Prompt](../../TESTING_PROMPT.md) | [Full Docs](../../CLAUDE.md)
+**📖 More Resources:** [Testing Prompt](../../prompts/TESTING_PROMPT.md) | [Full Docs](../../CLAUDE.md)
 
 ---
 
@@ -151,7 +151,8 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
 ```typescript
 {
   mutation: {
-    operation: "create" | "update" | "complete" | "delete" | "batch",
+    operation: "create" | "create_folder" | "update" | "complete" | "delete"
+             | "batch" | "bulk_delete" | "tag_manage",
 
     // For create
     target?: "task" | "project",
@@ -167,18 +168,32 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
       plannedDate?: string,
       flagged?: boolean,
       estimatedMinutes?: number,
-      sequential?: boolean,
+      sequential?: boolean,     // Also supported on update (action groups)
       parentTaskId?: string,
-      repeatRule?: {...}
+      repetitionRule?: {...}
     },
+
+    // For create_folder
+    // data: { name: string, parentFolder?: string }
 
     // For update/complete/delete
     id?: string,
     changes?: {...},  // Same fields as data
 
     // For batch
-    operations?: Array<{target, data}>,
-    dryRun?: boolean  // Preview what would happen without executing
+    operations?: Array<{operation, target, data, tempId?, parentTempId?}>,
+    createSequentially?: boolean,  // default true
+    atomicOperation?: boolean,
+    returnMapping?: boolean,
+    stopOnError?: boolean,
+    dryRun?: boolean,              // Preview without executing
+
+    // For bulk_delete
+    // target: "task" | "project", ids: string[] (1..100), dryRun?: boolean
+
+    // For tag_manage
+    // action: "create" | "rename" | "delete" | "merge" | "nest" | "unnest" | "reparent"
+    // tagName: string; newName?, targetTag?, parentTag?: string
   }
 }
 ```
@@ -274,9 +289,33 @@ Four unified tools provide streamlined MCP interface for LLM optimization:
     }
   }
 }
+
+// Create a folder (optionally under a parent)
+{
+  mutation: {
+    operation: "create_folder",
+    data: { name: "Clients", parentFolder: "Work" }
+  }
+}
+
+// Bulk delete (up to 100 ids)
+{
+  mutation: {
+    operation: "bulk_delete",
+    target: "task",
+    ids: ["abc", "def", "ghi"],
+    dryRun: false
+  }
+}
+
+// Tag management
+{ mutation: { operation: "tag_manage", action: "create", tagName: "@errand" } }
+{ mutation: { operation: "tag_manage", action: "rename", tagName: "@errand", newName: "@shopping" } }
+{ mutation: { operation: "tag_manage", action: "merge",  tagName: "@old", targetTag: "@new" } }
+{ mutation: { operation: "tag_manage", action: "nest",   tagName: "@phone", parentTag: "@contexts" } }
 ```
 
-**Internal routing:** ManageTaskTool, BatchCreateTool, ProjectsTool, TagsTool
+**Internal routing:** ManageTaskTool, BatchCreateTool, ManageFolderTool, TagsTool, ProjectsTool
 
 ---
 
@@ -532,7 +571,7 @@ WorkflowAnalysisTool, RecurringTasksTool, ParseMeetingNotesTool, ManageReviewsTo
 - ✅ All 4 tools registered and tested
 - ✅ End-to-end integration tests passing (17/17)
 - ✅ User testing complete with 100% success rate
-- ✅ Production ready (v3.0.0)
+- ✅ Production ready (v4.1.0)
 
 ---
 
