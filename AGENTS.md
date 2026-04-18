@@ -44,7 +44,7 @@
 - **PRs**: include clear description, linked issues, test plan (`npm test`/coverage output), and any perf impact. Update
   docs when changing tools/prompts or public types. PRs must pass `lint`, `typecheck`, and all CI tests.
 
-## Unified API (v3.0.0+)
+## Unified API
 
 The server exposes 4 unified MCP tools that consolidate all functionality:
 
