@@ -39,7 +39,7 @@ If automated tests fail, fix those first.
 system({operation: "version"})
 ```
 
-**REPORT:** `✅ Test 1: OmniFocus MCP v3.x.x`
+**REPORT:** `✅ Test 1: OmniFocus MCP v4.x.x`
 
 ---
 
