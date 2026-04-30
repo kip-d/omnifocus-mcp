@@ -1,7 +1,7 @@
 # OmniFocus MCP Test Suite
 
-**Version:** Unified API (current v4.1.0) **Time:** ~10 minutes **Purpose:** Validate MCP server functionality with real
-OmniFocus operations
+**Version:** Unified API **Time:** ~10 minutes **Purpose:** Validate MCP server functionality with real OmniFocus
+operations
 
 ---
 

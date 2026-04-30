@@ -1,4 +1,4 @@
-# OmniFocus MCP v4.1.0 - Unified Builder API (4 Tools)
+# OmniFocus MCP - Unified Builder API (4 Tools)
 
 > **⚠️ For Claude Desktop Users:** Do NOT add this document to your system prompt or instructions. The MCP tool
 > descriptions already provide ~11,200 tokens of comprehensive documentation. Instead, use the slim
@@ -571,7 +571,7 @@ WorkflowAnalysisTool, RecurringTasksTool, ParseMeetingNotesTool, ManageReviewsTo
 - ✅ All 4 tools registered and tested
 - ✅ End-to-end integration tests passing (17/17)
 - ✅ User testing complete with 100% success rate
-- ✅ Production ready (v4.1.0)
+- ✅ Production ready
 
 ---
 

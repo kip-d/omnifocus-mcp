@@ -107,7 +107,7 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 ## 📖 API Reference
 
-**Unified Builder API (4 Tools) — current: v4.1.0**
+**Unified Builder API (4 Tools)**
 
 - **[docs/api/API-COMPACT-UNIFIED.md](api/API-COMPACT-UNIFIED.md)** - Primary API reference
 - **[docs/api/README.md](api/README.md)** - API documentation overview
@@ -198,8 +198,8 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 **Testing prompts:**
 
-- **[TESTING_PROMPT.md](../prompts/TESTING_PROMPT.md)** - Unified testing guide for the 4-tool API with natural
-  language scenarios, technical validation, error handling, performance tests, and cleanup system
+- **[TESTING_PROMPT.md](../prompts/TESTING_PROMPT.md)** - Unified testing guide for the 4-tool API with natural language
+  scenarios, technical validation, error handling, performance tests, and cleanup system
 - **[.archive/testing-prompts/](../.archive/testing-prompts/)** - Archived testing prompts (consolidated November 2025)
 
 ---
@@ -330,7 +330,7 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 - **Debugging**: PATTERNS.md, DEBUGGING_WORKFLOW.md, LESSONS_LEARNED.md
 - **Performance**: BENCHMARK_RESULTS.md, PERFORMANCE.md, Hardware analysis docs
 - **Testing**: TEST_CLEANUP_GUIDE.md, REAL_LLM_TESTING.md, Evaluation suite
-- **API**: API-COMPACT-UNIFIED.md (unified 4-tool API, current v4.1.0)
+- **API**: API-COMPACT-UNIFIED.md (unified 4-tool API)
 - **Workflows**: GTD-WORKFLOW-MANUAL.md, SMART_CAPTURE.md, Built-in prompts
 
 ---

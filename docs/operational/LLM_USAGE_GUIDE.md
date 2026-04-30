@@ -2,7 +2,7 @@
 
 ## Overview
 
-Best practices for AI agents using the OmniFocus MCP Server unified API (current v4.1.0).
+Best practices for AI agents using the OmniFocus MCP Server unified API.
 
 ## The 4 Unified Tools
 

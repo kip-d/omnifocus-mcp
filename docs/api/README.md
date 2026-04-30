@@ -1,6 +1,7 @@
 # API Reference Documentation
 
-Complete API specifications for the OmniFocus MCP server v4.1.0.
+Complete API specifications for the OmniFocus MCP server. The current version lives in
+[package.json](../../package.json); release notes in [CHANGELOG.md](../../CHANGELOG.md).
 
 ## ⚠️ Important: Context Window Guidance
 
@@ -14,7 +15,7 @@ critical tips (date conversion, inbox assignment, countOnly, tags) without dupli
 
 ---
 
-## Current API (v4.1.0 Unified Builder API)
+## Current API (Unified Builder API)
 
 ### **API-COMPACT-UNIFIED.md** - Human Reference
 

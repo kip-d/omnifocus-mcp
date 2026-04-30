@@ -27,7 +27,7 @@ focuses on developer implementation details.
 
 ---
 
-## 🎯 Unified API (v4.1.0)
+## 🎯 Unified API
 
 **Tools:** `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`
 
@@ -145,6 +145,9 @@ const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 
 - Archive obsolete docs to `.archive/` → push to https://github.com/kip-d/omnifocus-mcp-archive
 - Follow Strunk's Elements of Style (tables > prose, omit needless words, active voice)
+- **Don't hardcode the current version in prose.** `package.json` and `CHANGELOG.md` are the single source of truth.
+  Historical references like "introduced in v3.0.0" are fine — descriptive labels like "(current v4.1.0)" go stale on
+  every release.
 
 ## 🚨 MCP Bridge Type Coercion
 

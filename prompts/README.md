@@ -118,7 +118,7 @@ The unified API consolidates everything into **4 unified tools**:
 
 ### If tools aren't working:
 
-1. Check version: Should be 4.1.0 or higher
+1. Check version: should match the latest entry in [CHANGELOG.md](../CHANGELOG.md)
 2. Run diagnostics: `system` tool with `{ operation: "diagnostics" }` (`system` is a top-level tool, not a `query.type`)
 3. Check Claude Desktop logs for errors
 

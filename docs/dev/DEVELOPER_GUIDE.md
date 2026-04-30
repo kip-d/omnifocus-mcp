@@ -16,7 +16,7 @@ For developers integrating or extending the OmniFocus MCP server.
 
 ---
 
-## Unified API (v4.1.0)
+## Unified API
 
 Four tools: `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`.
 
