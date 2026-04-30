@@ -252,9 +252,15 @@ See [API Reference](../api/API-COMPACT-UNIFIED.md).
 
 ## Privacy
 
-- All processing runs locally on your Mac
-- OmniFocus data stays in OmniFocus
-- The server accesses OmniFocus only when you ask
+- The MCP server runs locally on your Mac and reads OmniFocus only when your assistant asks it to
+- The server itself does not send your data anywhere
+
+However, your **MCP client** (Claude Desktop, etc.) sends tool results to whatever LLM it is configured to use. If that
+LLM is cloud-hosted (e.g., Claude via Anthropic's API), then the task names, notes, projects, tags, and dates returned
+by this server are sent to that provider as part of the conversation. Only a fully local model keeps that data
+on-device.
+
+See [Privacy and Logging](PRIVACY_AND_LOGGING.md) for what the server logs and how sensitive fields are redacted.
 
 ## Getting Help
 
