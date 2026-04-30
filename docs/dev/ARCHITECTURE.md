@@ -6,11 +6,11 @@ Hybrid JavaScript execution: JXA entry point with OmniJS bridge for operations J
 
 ## Execution Model
 
-| Layer | Context | Use |
-|-------|---------|-----|
-| **JXA** | `osascript -l JavaScript` | Entry point, reads, simple CRUD |
-| **Bridge** | `app.evaluateJavascript()` | Tag assignment, repetition rules, bulk ops |
-| **Pure OmniJS** | N/A | Never used directly |
+| Layer           | Context                    | Use                                        |
+| --------------- | -------------------------- | ------------------------------------------ |
+| **JXA**         | `osascript -l JavaScript`  | Entry point, reads, simple CRUD            |
+| **Bridge**      | `app.evaluateJavascript()` | Tag assignment, repetition rules, bulk ops |
+| **Pure OmniJS** | N/A                        | Never used directly                        |
 
 ---
 
@@ -27,7 +27,8 @@ Operation needed?
 └── Bulk (>100 items) → JXA + Bridge
 ```
 
-**Bridge required for:** Tag assignment (JXA limitation), task movement (preserves IDs), repetition rules, perspective queries.
+**Bridge required for:** Tag assignment (JXA limitation), task movement (preserves IDs), repetition rules, perspective
+queries.
 
 ---
 
@@ -83,10 +84,10 @@ src/omnifocus/scripts/shared/
 
 ## Script Size
 
-| Context | Limit | Current Max |
-|---------|-------|-------------|
-| JXA Direct | 523KB | ~31KB (6%) |
-| OmniJS Bridge | 261KB | Well under |
+| Context       | Limit | Current Max |
+| ------------- | ----- | ----------- |
+| JXA Direct    | 523KB | ~31KB (6%)  |
+| OmniJS Bridge | 261KB | Well under  |
 
 Size is rarely the limiting factor.
 
@@ -94,12 +95,12 @@ Size is rarely the limiting factor.
 
 ## Performance
 
-| Rule | Why |
-|------|-----|
-| Never use `whose()`/`where()` | 25+ seconds |
-| Direct iteration + try/catch | 50% faster than wrappers |
-| Early exit conditions | Check completed/date first |
-| Cache timestamps | Don't create Date objects in loops |
+| Rule                          | Why                                |
+| ----------------------------- | ---------------------------------- |
+| Never use `whose()`/`where()` | 25+ seconds                        |
+| Direct iteration + try/catch  | 50% faster than wrappers           |
+| Early exit conditions         | Check completed/date first         |
+| Cache timestamps              | Don't create Date objects in loops |
 
 **Bridge for performance:** Bulk operations (>100 items), perspective queries.
 
@@ -110,8 +111,11 @@ Size is rarely the limiting factor.
 ```javascript
 // JXA
 function safeGet(fn) {
-  try { return fn(); }
-  catch (e) { return null; }
+  try {
+    return fn();
+  } catch (e) {
+    return null;
+  }
 }
 const name = safeGet(() => task.name()) || 'Unnamed';
 
@@ -120,7 +124,9 @@ function executeBridgeOp(app, template, params) {
   try {
     const result = app.evaluateJavascript(formatBridgeScript(template, params));
     return JSON.parse(result);
-  } catch (e) { return { success: false, error: String(e) }; }
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
 }
 ```
 
@@ -138,7 +144,7 @@ const SAFE_TEMPLATE = [
   '  task.clearTags();',
   '  tags.forEach(n => task.addTag(Tag.byName(n) || new Tag(n)));',
   '  return JSON.stringify({ success: true });',
-  '})()'
+  '})()',
 ].join('\\n');
 ```
 
@@ -146,49 +152,50 @@ const SAFE_TEMPLATE = [
 
 ## Anti-Patterns
 
-| Don't | Do |
-|-------|-----|
+| Don't                                                    | Do                                                   |
+| -------------------------------------------------------- | ---------------------------------------------------- |
 | String concatenation: `` `task.name = "${userInput}"` `` | Template with `formatBridgeScript(template, params)` |
-| `doc.flattenedTasks.whose({ completed: false })()` | Direct iteration with early exit |
-| Pure OmniJS without JXA wrapper | `app.evaluateJavascript(omniJsScript)` |
+| `doc.flattenedTasks.whose({ completed: false })()`       | Direct iteration with early exit                     |
+| Pure OmniJS without JXA wrapper                          | `app.evaluateJavascript(omniJsScript)`               |
 
 ---
 
 ## Testing
 
 ```bash
-node test-single-tool.js tasks '{"mode":"today","limit":"3"}'
+npm run test:unit         # ~2s
+npm run test:integration  # requires OmniFocus; ~4 min against a ~2500-task database
 ```
 
-| Environment | Behavior |
-|-------------|----------|
-| CLI | Read operations work; write may fail |
-| Claude Desktop | All operations work |
+| Environment    | Behavior                             |
+| -------------- | ------------------------------------ |
+| CLI            | Read operations work; write may fail |
+| Claude Desktop | All operations work                  |
 
 ---
 
 ## Benchmarks
 
-| Operation | Time |
-|-----------|------|
-| Task queries (2000+ tasks) | <1s |
-| Task creation | <0.5s |
-| Tag operations via bridge | <1s |
-| Bulk exports | 2-5s |
-| Using `whose()` | 25+s |
+| Operation                  | Time  |
+| -------------------------- | ----- |
+| Task queries (2000+ tasks) | <1s   |
+| Task creation              | <0.5s |
+| Tag operations via bridge  | <1s   |
+| Bulk exports               | 2-5s  |
+| Using `whose()`            | 25+s  |
 
 ---
 
 ## Tool Architecture
 
-4 unified tools (v3.0.0 Unified Builder API):
+4 unified tools (Unified Builder API):
 
-| Tool | Purpose |
-|------|---------|
-| `omnifocus_read` | Query tasks, projects, tags, folders, perspectives |
-| `omnifocus_write` | Create, update, complete, delete tasks/projects |
-| `omnifocus_analyze` | Productivity stats, velocity, overdue, patterns |
-| `system` | Version, diagnostics, metrics |
+| Tool                | Purpose                                            |
+| ------------------- | -------------------------------------------------- |
+| `omnifocus_read`    | Query tasks, projects, tags, folders, perspectives |
+| `omnifocus_write`   | Create, update, complete, delete tasks/projects    |
+| `omnifocus_analyze` | Productivity stats, velocity, overdue, patterns    |
+| `system`            | Version, diagnostics, metrics                      |
 
 Discriminated union schemas route to backend implementations.
 

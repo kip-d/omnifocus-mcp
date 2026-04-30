@@ -27,7 +27,7 @@ focuses on developer implementation details.
 
 ---
 
-## 🎯 Unified API (v3.0.0)
+## 🎯 Unified API
 
 **Tools:** `omnifocus_read`, `omnifocus_write`, `omnifocus_analyze`, `system`
 
@@ -145,6 +145,9 @@ const bridgeResult = bridgeSetTags(app, taskId, tagNames);
 
 - Archive obsolete docs to `.archive/` → push to https://github.com/kip-d/omnifocus-mcp-archive
 - Follow Strunk's Elements of Style (tables > prose, omit needless words, active voice)
+- **Don't hardcode the current version in prose.** `package.json` and `CHANGELOG.md` are the single source of truth.
+  Historical references like "introduced in v3.0.0" are fine — descriptive labels like "(current v4.1.0)" go stale on
+  every release.
 
 ## 🚨 MCP Bridge Type Coercion
 
@@ -193,7 +196,7 @@ process.stdin.on('end', async () => {
 ```bash
 # Build & Test
 npm run build                    # Required before running
-npm run test:unit                # ~2 seconds, 1622 tests
+npm run test:unit                # ~2 seconds, ~1644 tests
 npm run test:integration         # ~2 minutes, 73 tests (use npm, not bun)
 
 # MCP Testing

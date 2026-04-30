@@ -81,9 +81,6 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
   properties
 - **[docs/dev/TAG_FILTERING_BUG_ANALYSIS.md](dev/TAG_FILTERING_BUG_ANALYSIS.md)** - Tag filtering implementation
   analysis
-- **[docs/dev/META_FIELDS_OPPORTUNITIES.md](dev/META_FIELDS_OPPORTUNITIES.md)** - Metadata field enhancement
-  opportunities
-- **[docs/dev/META_FIELDS_SUMMARY.md](dev/META_FIELDS_SUMMARY.md)** - Metadata field summary
 - **[docs/dev/MCP_SPECIFICATION_ALIGNMENT.md](dev/MCP_SPECIFICATION_ALIGNMENT.md)** - MCP protocol compliance details
 - **[docs/dev/SDK_UPGRADE_RECOMMENDATION.md](dev/SDK_UPGRADE_RECOMMENDATION.md)** - MCP SDK upgrade guidance
 
@@ -110,9 +107,9 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 ## 📖 API Reference
 
-**v3.0.0 Unified Builder API (4 Tools):**
+**Unified Builder API (4 Tools)**
 
-- **[docs/api/API-COMPACT-UNIFIED.md](api/API-COMPACT-UNIFIED.md)** - Primary API reference for v3.0.0
+- **[docs/api/API-COMPACT-UNIFIED.md](api/API-COMPACT-UNIFIED.md)** - Primary API reference
 - **[docs/api/README.md](api/README.md)** - API documentation overview
 
 **The 4 unified tools:**
@@ -201,8 +198,8 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 **Testing prompts:**
 
-- **[TESTING_PROMPT.md](../prompts/TESTING_PROMPT.md)** - Unified testing guide for v3.0.0 API (4 tools) with natural
-  language scenarios, technical validation, error handling, performance tests, and cleanup system
+- **[TESTING_PROMPT.md](../prompts/TESTING_PROMPT.md)** - Unified testing guide for the 4-tool API with natural language
+  scenarios, technical validation, error handling, performance tests, and cleanup system
 - **[.archive/testing-prompts/](../.archive/testing-prompts/)** - Archived testing prompts (consolidated November 2025)
 
 ---
@@ -219,6 +216,21 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
   Script helper consolidation design
 - **[docs/plans/2025-11-07-phase2-helper-refactoring-foundation.md](plans/2025-11-07-phase2-helper-refactoring-foundation.md)** -
   Phase 2 helper refactoring
+- **[docs/plans/2026-02-10-nested-tag-hierarchy-syntax.md](plans/2026-02-10-nested-tag-hierarchy-syntax.md)** - Nested
+  tag hierarchy syntax
+- **[docs/plans/2026-02-15-batch-mixed-operations-design.md](plans/2026-02-15-batch-mixed-operations-design.md)** -
+  Batch mixed operations (design)
+- **[docs/plans/2026-02-15-batch-mixed-operations-plan.md](plans/2026-02-15-batch-mixed-operations-plan.md)** - Batch
+  mixed operations (plan)
+- **[docs/plans/2026-02-19-discriminated-fields-enum-design.md](plans/2026-02-19-discriminated-fields-enum-design.md)** -
+  Discriminated fields enum (design)
+- **[docs/plans/2026-02-19-discriminated-fields-enum-impl.md](plans/2026-02-19-discriminated-fields-enum-impl.md)** -
+  Discriminated fields enum (implementation)
+- **[docs/plans/2026-02-20-inbox-definition-fix.md](plans/2026-02-20-inbox-definition-fix.md)** - Inbox definition fix
+- **[docs/plans/2026-02-20-legacy-tool-removal-design.md](plans/2026-02-20-legacy-tool-removal-design.md)** - Legacy
+  tool removal (design)
+- **[docs/plans/2026-02-20-legacy-tool-removal-plan.md](plans/2026-02-20-legacy-tool-removal-plan.md)** - Legacy tool
+  removal (plan)
 - **[docs/plans/README-MULTI-MACHINE-SYNC.md](plans/README-MULTI-MACHINE-SYNC.md)** - Multi-machine sync overview
 - **[docs/plans/things-to-check-out.md](plans/things-to-check-out.md)** - Ideas and items to investigate
 
@@ -318,7 +330,7 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 - **Debugging**: PATTERNS.md, DEBUGGING_WORKFLOW.md, LESSONS_LEARNED.md
 - **Performance**: BENCHMARK_RESULTS.md, PERFORMANCE.md, Hardware analysis docs
 - **Testing**: TEST_CLEANUP_GUIDE.md, REAL_LLM_TESTING.md, Evaluation suite
-- **API**: API-COMPACT-UNIFIED.md (v3.0.0 unified 4-tool API)
+- **API**: API-COMPACT-UNIFIED.md (unified 4-tool API)
 - **Workflows**: GTD-WORKFLOW-MANUAL.md, SMART_CAPTURE.md, Built-in prompts
 
 ---
@@ -347,7 +359,7 @@ October 2025 checkpoints have been archived to `.archive/dev-historical-oct-2025
 
 ---
 
-**Last Updated**: 2026-02-08 **Total Documents**: ~100 (after archiving historical docs) **Documentation Coverage**:
+**Last Updated**: 2026-04-18 **Total Documents**: ~100 (after archiving historical docs) **Documentation Coverage**:
 Comprehensive (user, developer, API, operations, evaluation, testing)
 
 **Archived to**: `.archive/` directory and https://github.com/kip-d/omnifocus-mcp-archive (completed plans, Oct 2025

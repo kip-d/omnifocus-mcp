@@ -1,6 +1,7 @@
 # API Reference Documentation
 
-Complete API specifications for the OmniFocus MCP server v3.0.0.
+Complete API specifications for the OmniFocus MCP server. The current version lives in
+[package.json](../../package.json); release notes in [CHANGELOG.md](../../CHANGELOG.md).
 
 ## ⚠️ Important: Context Window Guidance
 
@@ -14,7 +15,7 @@ critical tips (date conversion, inbox assignment, countOnly, tags) without dupli
 
 ---
 
-## Current API (v3.0.0 Unified Builder API)
+## Current API (Unified Builder API)
 
 ### **API-COMPACT-UNIFIED.md** - Human Reference
 
@@ -36,6 +37,7 @@ The v3.0.0 API consolidates 17 legacy tools into **4 unified tools**:
 - countOnly queries (33x faster for counts)
 - dryRun mode for batch preview
 - Export to JSON/CSV/Markdown
+- Folder creation, bulk delete, and tag management all routed through `omnifocus_write`
 
 **Use this for:**
 

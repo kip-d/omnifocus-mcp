@@ -36,7 +36,7 @@ security principles are enforced, and best practices are followed.
 
 ### 3. Tool Implementation ✅
 
-**4 Unified Tools (v3.0.0 API):**
+**4 Unified Tools (introduced in v3.0.0):**
 
 - ✅ **omnifocus_read** - Query tasks, projects, tags, perspectives, folders, export
 - ✅ **omnifocus_write** - Create/update/complete/delete tasks and projects, batch operations

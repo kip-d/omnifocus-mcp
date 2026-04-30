@@ -1,4 +1,4 @@
-# OmniFocus MCP v3.0.0 Prompts
+# OmniFocus MCP Prompts
 
 This directory contains ready-to-use prompts for testing and using the OmniFocus MCP server with Claude Desktop.
 
@@ -53,7 +53,7 @@ prompt provides higher value per token.
 
 #### [TESTING_PROMPT.md](./TESTING_PROMPT.md)
 
-Comprehensive test suite for the v3.0.0 unified API. Use this to verify your installation is working correctly.
+Comprehensive test suite for the unified API. Use this to verify your installation is working correctly.
 
 - Tests all CRUD operations via `omnifocus_read` and `omnifocus_write`
 - Validates advanced features (batch, export, analytics)
@@ -94,9 +94,9 @@ Complete GTD (Getting Things Done) workflow for daily use.
 2. Customize the sections you need
 3. Save your own variations for different contexts (work, personal, etc.)
 
-## v3.0.0 Unified API
+## Unified API
 
-The v3.0.0 API consolidates everything into **4 unified tools**:
+The unified API consolidates everything into **4 unified tools**:
 
 | Tool                | Purpose                                     |
 | ------------------- | ------------------------------------------- |
@@ -118,8 +118,8 @@ The v3.0.0 API consolidates everything into **4 unified tools**:
 
 ### If tools aren't working:
 
-1. Check version: Should be 3.0.0 or higher
-2. Run diagnostics: `system` tool with `{ query: { type: "system", operation: "diagnostics" } }`
+1. Check version: should match the latest entry in [CHANGELOG.md](../CHANGELOG.md)
+2. Run diagnostics: `system` tool with `{ operation: "diagnostics" }` (`system` is a top-level tool, not a `query.type`)
 3. Check Claude Desktop logs for errors
 
 ## Creating Custom Prompts
@@ -170,7 +170,7 @@ You can access these prompts by asking Claude to "use the [prompt_name] prompt":
 | **[Manual Templates](.)** (this directory)        | Beginners, customization, offline use | Copy/paste entire prompt into Claude         |
 | **[MCP Prompts](../src/prompts/)** (programmatic) | Advanced users, integrated workflows  | Ask Claude to "use the [prompt_name] prompt" |
 
-Both approaches use the same underlying v3 unified API and provide similar functionality through different interfaces.
+Both approaches use the same underlying unified API and provide similar functionality through different interfaces.
 
 ## Support
 

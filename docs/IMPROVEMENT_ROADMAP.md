@@ -1,5 +1,10 @@
 # OmniFocus MCP Server - Improvement Roadmap
 
+> **Historical document.** This roadmap covers completed work through January 2026. For changes since then — the v4.0.0
+> and v4.1.0 reliability release, OMN-series fixes, schema size reductions, SonarJS adoption, AST migrations, and
+> OmniFocus 4.7+ API updates — see **[CHANGELOG.md](../CHANGELOG.md)**. This file is kept for history and won't be
+> updated per release.
+
 _Generated: September 19, 2025_ _Updated: January 2, 2026_ _Status: ALL Quick Win Phases COMPLETED + Advanced Search +
 Smart Capture + AST Bug Fixes - Foundation solid, high-value features delivered_
 
