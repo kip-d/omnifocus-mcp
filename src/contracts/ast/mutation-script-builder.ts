@@ -908,9 +908,18 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try { project.plannedDate = new Date(projectData.plannedDate); } catch (e) {}
     }
 
-    // Set review interval
+    // Set review interval — OmniFocus expects { unit, steps } object, not seconds.
+    // Convert the schema-normalized days value into the most natural { unit, steps } form.
     if (projectData.reviewInterval) {
-      try { project.reviewInterval = projectData.reviewInterval * 24 * 60 * 60; } catch (e) {}
+      try {
+        const _riDays = projectData.reviewInterval;
+        let _riUnit, _riSteps;
+        if (_riDays % 365 === 0) { _riUnit = "years"; _riSteps = _riDays / 365; }
+        else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
+        else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
+        else { _riUnit = "days"; _riSteps = _riDays; }
+        project.reviewInterval = { unit: _riUnit, steps: _riSteps };
+      } catch (e) {}
     }
 
     const jxaProjectId = project.id();
@@ -1529,9 +1538,16 @@ export async function buildUpdateProjectScript(
         if (changes.flagged !== undefined) project.flagged = changes.flagged;
         if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
-        // Handle review interval (convert days to seconds for OmniFocus)
+        // Handle review interval — OmniFocus expects { unit, steps } object, not seconds.
+        // Convert the schema-normalized days value into the most natural { unit, steps } form.
         if (changes.reviewInterval !== undefined) {
-          project.reviewInterval = changes.reviewInterval * 24 * 60 * 60;
+          const _riDays = changes.reviewInterval;
+          let _riUnit, _riSteps;
+          if (_riDays % 365 === 0) { _riUnit = "years"; _riSteps = _riDays / 365; }
+          else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
+          else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
+          else { _riUnit = "days"; _riSteps = _riDays; }
+          project.reviewInterval = { unit: _riUnit, steps: _riSteps };
         }
 
         // Handle dates
