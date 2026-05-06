@@ -908,19 +908,10 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       try { project.plannedDate = new Date(projectData.plannedDate); } catch (e) {}
     }
 
-    // Set review interval — OmniFocus expects { unit, steps } object, not seconds.
-    // Convert the schema-normalized days value into the most natural { unit, steps } form.
-    if (projectData.reviewInterval) {
-      try {
-        const _riDays = projectData.reviewInterval;
-        let _riUnit, _riSteps;
-        if (_riDays % 365 === 0) { _riUnit = "years"; _riSteps = _riDays / 365; }
-        else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
-        else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
-        else { _riUnit = "days"; _riSteps = _riDays; }
-        project.reviewInterval = { unit: _riUnit, steps: _riSteps };
-      } catch (e) {}
-    }
+    // reviewInterval is set later, via OmniJS bridge — see the block after
+    // projectId resolution. JXA's setter rejects plain JS objects (requires
+    // typed Project.ReviewInterval), and constructing that type from JXA isn't
+    // available, so the bridge is the only working path.
 
     const jxaProjectId = project.id();
 
@@ -971,6 +962,30 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
           })()
         \`;
         app.evaluateJavascript(statusScript);
+      } catch (e) {}
+    }
+
+    // Set reviewInterval via OmniJS bridge — Project.reviewInterval requires a
+    // typed Project.ReviewInterval value that JXA can't construct from a plain
+    // object. OmniJS accepts the { unit, steps } object form directly.
+    // Convert the schema-normalized days value to the most natural unit first.
+    if (projectData.reviewInterval) {
+      try {
+        const _riDays = projectData.reviewInterval;
+        let _riUnit, _riSteps;
+        if (_riDays % 365 === 0) { _riUnit = "years"; _riSteps = _riDays / 365; }
+        else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
+        else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
+        else { _riUnit = "days"; _riSteps = _riDays; }
+        const riScript = \`
+          (() => {
+            const proj = Project.byIdentifier('\${projectId}');
+            if (!proj) return JSON.stringify({success: false});
+            proj.reviewInterval = { unit: "\${_riUnit}", steps: \${_riSteps} };
+            return JSON.stringify({success: true});
+          })()
+        \`;
+        app.evaluateJavascript(riScript);
       } catch (e) {}
     }
 
@@ -1538,8 +1553,10 @@ export async function buildUpdateProjectScript(
         if (changes.flagged !== undefined) project.flagged = changes.flagged;
         if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
-        // Handle review interval — OmniFocus expects { unit, steps } object, not seconds.
-        // Convert the schema-normalized days value into the most natural { unit, steps } form.
+        // Set reviewInterval via OmniJS bridge — Project.reviewInterval requires a
+        // typed Project.ReviewInterval value that JXA can't construct from a plain
+        // object. OmniJS accepts the { unit, steps } object form directly.
+        // Convert the schema-normalized days value to the most natural unit first.
         if (changes.reviewInterval !== undefined) {
           const _riDays = changes.reviewInterval;
           let _riUnit, _riSteps;
@@ -1547,7 +1564,15 @@ export async function buildUpdateProjectScript(
           else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
           else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
           else { _riUnit = "days"; _riSteps = _riDays; }
-          project.reviewInterval = { unit: _riUnit, steps: _riSteps };
+          const riScript = \`
+            (() => {
+              const proj = Project.byIdentifier('\${projectId}');
+              if (!proj) return JSON.stringify({success: false});
+              proj.reviewInterval = { unit: "\${_riUnit}", steps: \${_riSteps} };
+              return JSON.stringify({success: true});
+            })()
+          \`;
+          app.evaluateJavascript(riScript);
         }
 
         // Handle dates

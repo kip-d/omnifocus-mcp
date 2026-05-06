@@ -259,10 +259,13 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('7');
   });
 
-  // OMN-38 follow-up: previous fix accepted { steps, unit } at the schema layer
-  // but the script builder was still assigning a number-of-seconds to
-  // project.reviewInterval, which OmniFocus rejects (requires Project.ReviewInterval object).
-  // These assertions lock in the corrected assignment so the bug can't regress silently.
+  // OMN-38 follow-up: previous schema fix accepted { steps, unit } input but
+  // the script builder still assigned number-of-seconds to project.reviewInterval.
+  // OmniFocus rejected this with type-mismatch errors. The corrected path:
+  //  1. Convert schema-normalized days into the most natural { unit, steps } form.
+  //  2. Assign via OmniJS bridge — JXA can't construct the typed
+  //     Project.ReviewInterval value, but OmniJS accepts the plain object.
+  // These assertions lock in BOTH layers so the bug can't regress silently.
   describe('reviewInterval script generation (OMN-38 regression guards)', () => {
     it('does NOT multiply by 24*60*60 (the previous broken behavior)', () => {
       const result = buildCreateProjectScript({
@@ -273,13 +276,26 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).not.toContain('*24*60*60');
     });
 
-    it('assigns reviewInterval as a { unit, steps } object', () => {
+    it('does NOT assign reviewInterval directly in JXA (would fail with type mismatch)', () => {
       const result = buildCreateProjectScript({
-        name: 'Object Form',
+        name: 'No JXA Direct Assign',
         reviewInterval: 7,
       });
-      // Must assign an object literal with both fields, not a bare number.
-      expect(result.script).toMatch(/project\.reviewInterval\s*=\s*\{[^}]*unit:[^}]*steps:/);
+      // The JXA project variable must NOT have reviewInterval assigned to it directly.
+      // The only valid assignment target is `proj` (inside the OmniJS bridge script).
+      expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
+    });
+
+    it('routes reviewInterval through the OmniJS bridge', () => {
+      const result = buildCreateProjectScript({
+        name: 'Bridged',
+        reviewInterval: 7,
+      });
+      // The bridge calls Project.byIdentifier and assigns to `proj` inside an
+      // app.evaluateJavascript() invocation. All three markers must be present.
+      expect(result.script).toContain('Project.byIdentifier');
+      expect(result.script).toContain('app.evaluateJavascript');
+      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*\{\s*unit:/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', () => {
@@ -606,8 +622,12 @@ describe('buildUpdateProjectScript', () => {
     expect(result.script).toContain('14');
   });
 
-  // OMN-38 follow-up: same regression guard as the create path.
-  // Update script must produce a { unit, steps } assignment, never a bare seconds number.
+  // OMN-38 follow-up: same regression guard set as the create path.
+  // The corrected update path must:
+  //  1. NOT multiply days by seconds.
+  //  2. NOT assign directly to the JXA `project` variable (JXA setter rejects).
+  //  3. Route through Project.byIdentifier in an app.evaluateJavascript() bridge.
+  //  4. Embed the days→{unit, steps} conversion for all four natural units.
   describe('reviewInterval update script (OMN-38 regression guards)', () => {
     it('does NOT multiply by 24*60*60 (the previous broken behavior)', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
@@ -615,9 +635,16 @@ describe('buildUpdateProjectScript', () => {
       expect(result.script).not.toContain('*24*60*60');
     });
 
-    it('assigns reviewInterval as a { unit, steps } object', async () => {
+    it('does NOT assign reviewInterval directly in JXA (would fail with type mismatch)', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).toMatch(/project\.reviewInterval\s*=\s*\{[^}]*unit:[^}]*steps:/);
+      expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
+    });
+
+    it('routes reviewInterval through the OmniJS bridge', async () => {
+      const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
+      expect(result.script).toContain('Project.byIdentifier');
+      expect(result.script).toContain('app.evaluateJavascript');
+      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*\{\s*unit:/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', async () => {
