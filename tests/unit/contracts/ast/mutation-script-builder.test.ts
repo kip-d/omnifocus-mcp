@@ -303,17 +303,24 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
     });
 
-    it('routes reviewInterval through the OmniJS bridge with in-place mutation', () => {
+    it('routes reviewInterval through the OmniJS bridge with read-modify-reassign', () => {
       const result = buildCreateProjectScript({
         name: 'Bridged',
         reviewInterval: 7,
       });
-      // The bridge invokes Project.byIdentifier inside app.evaluateJavascript
-      // and mutates the existing reviewInterval instance's properties.
+      // Bridge: Project.byIdentifier inside app.evaluateJavascript.
+      // Read-modify-reassign: read proj.reviewInterval into a local, mutate
+      // it, then assign back. Direct in-place mutation silently no-ops
+      // because the getter returns a snapshot.
       expect(result.script).toContain('Project.byIdentifier');
       expect(result.script).toContain('app.evaluateJavascript');
-      expect(result.script).toMatch(/proj\.reviewInterval\.steps\s*=/);
-      expect(result.script).toMatch(/proj\.reviewInterval\.unit\s*=/);
+      // Local snapshot read
+      expect(result.script).toMatch(/(?:const|let|var)\s+ri\s*=\s*proj\.reviewInterval/);
+      // Mutation on the local
+      expect(result.script).toMatch(/\bri\.steps\s*=/);
+      expect(result.script).toMatch(/\bri\.unit\s*=/);
+      // Re-assignment back
+      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*ri\b/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', () => {
@@ -663,12 +670,14 @@ describe('buildUpdateProjectScript', () => {
       expect(result.script).not.toContain('new Project.ReviewInterval');
     });
 
-    it('mutates the existing project.reviewInterval instance in place', async () => {
+    it('uses read-modify-reassign on project.reviewInterval', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      // The working pattern: assign to the .steps and .unit properties of the
-      // existing instance, never reassign the property itself.
-      expect(result.script).toMatch(/project\.reviewInterval\.steps\s*=/);
-      expect(result.script).toMatch(/project\.reviewInterval\.unit\s*=/);
+      // Read into local, mutate, reassign. Direct in-place mutation on
+      // project.reviewInterval silently no-ops (getter returns a snapshot).
+      expect(result.script).toMatch(/(?:const|let|var)\s+_ri\s*=\s*project\.reviewInterval/);
+      expect(result.script).toMatch(/\b_ri\.steps\s*=/);
+      expect(result.script).toMatch(/\b_ri\.unit\s*=/);
+      expect(result.script).toMatch(/project\.reviewInterval\s*=\s*_ri\b/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', async () => {

@@ -968,8 +968,9 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
     // Set reviewInterval via OmniJS bridge — strictly typechecked.
     // The class is non-constructible from user code (zero-arg construction
     // fails with a CallbackObject error). Plain objects and Numbers are also
-    // rejected. Every project has a default instance, so we mutate it in
-    // place inside the bridge script.
+    // rejected. In-place mutation also silently no-ops (the getter returns
+    // a snapshot). The working pattern: read the existing typed instance,
+    // mutate the local reference, then re-assign it back.
     // Convert the schema-normalized days value to the most natural unit first.
     if (projectData.reviewInterval) {
       try {
@@ -982,9 +983,12 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
         const riScript = \`
           (() => {
             const proj = Project.byIdentifier('\${projectId}');
-            if (!proj || !proj.reviewInterval) return JSON.stringify({success: false});
-            proj.reviewInterval.steps = \${_riSteps};
-            proj.reviewInterval.unit = "\${_riUnit}";
+            if (!proj) return JSON.stringify({success: false});
+            const ri = proj.reviewInterval;
+            if (!ri) return JSON.stringify({success: false});
+            ri.steps = \${_riSteps};
+            ri.unit = "\${_riUnit}";
+            proj.reviewInterval = ri;
             return JSON.stringify({success: true});
           })()
         \`;
@@ -1559,7 +1563,11 @@ export async function buildUpdateProjectScript(
         // Set reviewInterval — strictly typechecked by OmniJS.
         // Plain objects, Numbers, and zero-arg construction all fail.
         // The class is non-constructible from user code (CallbackObject error).
-        // Every project has a default instance, so we mutate it in place.
+        // In-place mutation of project.reviewInterval also silently no-ops
+        // (the getter returns a snapshot, not a live reference).
+        // Working pattern: read the existing typed instance, mutate the local
+        // reference, then re-assign it back so the typecheck accepts the
+        // (already-typed) value.
         // Convert the schema-normalized days value to the most natural unit first.
         if (changes.reviewInterval !== undefined) {
           const _riDays = changes.reviewInterval;
@@ -1568,9 +1576,11 @@ export async function buildUpdateProjectScript(
           else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
           else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
           else { _riUnit = "days"; _riSteps = _riDays; }
-          if (project.reviewInterval) {
-            project.reviewInterval.steps = _riSteps;
-            project.reviewInterval.unit = _riUnit;
+          const _ri = project.reviewInterval;
+          if (_ri) {
+            _ri.steps = _riSteps;
+            _ri.unit = _riUnit;
+            project.reviewInterval = _ri;
           }
         }
 
