@@ -259,15 +259,17 @@ describe('buildCreateProjectScript', () => {
     expect(result.script).toContain('7');
   });
 
-  // OMN-38 follow-up: previous schema fix accepted { steps, unit } input but
-  // the script builder still assigned number-of-seconds to project.reviewInterval.
-  // OmniFocus rejected this with type-mismatch errors. The corrected path:
-  //  1. Convert schema-normalized days into the most natural { unit, steps } form.
-  //  2. Assign via OmniJS bridge — JXA can't construct the typed
-  //     Project.ReviewInterval value, but OmniJS accepts the plain object.
-  // These assertions lock in BOTH layers so the bug can't regress silently.
+  // OMN-38 follow-up: layered fix history.
+  //  - First attempt (aa56117): schema-layer fix only; script still wrote number-of-seconds.
+  //  - Second attempt (959394e): wrote { unit, steps } object; OmniJS rejected with "type Object".
+  //  - Final fix: Project.reviewInterval is a typed class. Construct via
+  //      new Project.ReviewInterval(); ri.steps = N; ri.unit = "weeks"; project.reviewInterval = ri;
+  //    Plain objects and Numbers both fail strict typecheck.
+  // Create path: runs in JXA, so the OmniJS construction happens inside an
+  //   app.evaluateJavascript() bridge.
+  // (Update path has its own guards below.)
   describe('reviewInterval script generation (OMN-38 regression guards)', () => {
-    it('does NOT multiply by 24*60*60 (the previous broken behavior)', () => {
+    it('does NOT multiply by 24*60*60 (broken seconds-conversion attempt)', () => {
       const result = buildCreateProjectScript({
         name: 'No Seconds',
         reviewInterval: 7,
@@ -276,26 +278,38 @@ describe('buildCreateProjectScript', () => {
       expect(result.script).not.toContain('*24*60*60');
     });
 
-    it('does NOT assign reviewInterval directly in JXA (would fail with type mismatch)', () => {
+    it('does NOT assign a plain object literal (broken plain-object attempt)', () => {
+      const result = buildCreateProjectScript({
+        name: 'No Plain Object',
+        reviewInterval: 7,
+      });
+      // OmniJS strictly typechecks; assigning a plain object literal would throw at runtime.
+      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*unit:/);
+      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*steps:/);
+    });
+
+    it('does NOT assign reviewInterval directly in JXA (JXA cannot construct the typed value)', () => {
       const result = buildCreateProjectScript({
         name: 'No JXA Direct Assign',
         reviewInterval: 7,
       });
       // The JXA project variable must NOT have reviewInterval assigned to it directly.
-      // The only valid assignment target is `proj` (inside the OmniJS bridge script).
       expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
     });
 
-    it('routes reviewInterval through the OmniJS bridge', () => {
+    it('routes reviewInterval through the OmniJS bridge with class construction', () => {
       const result = buildCreateProjectScript({
         name: 'Bridged',
         reviewInterval: 7,
       });
-      // The bridge calls Project.byIdentifier and assigns to `proj` inside an
-      // app.evaluateJavascript() invocation. All three markers must be present.
+      // The bridge invokes Project.byIdentifier inside app.evaluateJavascript,
+      // constructs a Project.ReviewInterval instance, and assigns it.
       expect(result.script).toContain('Project.byIdentifier');
       expect(result.script).toContain('app.evaluateJavascript');
-      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*\{\s*unit:/);
+      expect(result.script).toContain('new Project.ReviewInterval()');
+      expect(result.script).toMatch(/ri\.steps\s*=/);
+      expect(result.script).toMatch(/ri\.unit\s*=/);
+      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*ri\b/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', () => {
@@ -622,29 +636,32 @@ describe('buildUpdateProjectScript', () => {
     expect(result.script).toContain('14');
   });
 
-  // OMN-38 follow-up: same regression guard set as the create path.
-  // The corrected update path must:
-  //  1. NOT multiply days by seconds.
-  //  2. NOT assign directly to the JXA `project` variable (JXA setter rejects).
-  //  3. Route through Project.byIdentifier in an app.evaluateJavascript() bridge.
-  //  4. Embed the days→{unit, steps} conversion for all four natural units.
+  // OMN-38 follow-up: update path runs INSIDE the outer updateScript template,
+  // which itself runs in OmniJS via app.evaluateJavascript at the JXA wrapper.
+  // Therefore no further bridging is needed — the assignment runs directly in
+  // OmniJS. The class-construction pattern (new Project.ReviewInterval(); set
+  // properties; assign) is the only form OmniJS accepts.
   describe('reviewInterval update script (OMN-38 regression guards)', () => {
-    it('does NOT multiply by 24*60*60 (the previous broken behavior)', async () => {
+    it('does NOT multiply by 24*60*60 (broken seconds-conversion attempt)', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
       expect(result.script).not.toContain('* 24 * 60 * 60');
       expect(result.script).not.toContain('*24*60*60');
     });
 
-    it('does NOT assign reviewInterval directly in JXA (would fail with type mismatch)', async () => {
+    it('does NOT assign a plain object literal (broken plain-object attempt)', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).not.toMatch(/\bproject\.reviewInterval\s*=/);
+      // OmniJS strictly typechecks; plain objects fail with "given a value of type Object".
+      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*unit:/);
+      expect(result.script).not.toMatch(/reviewInterval\s*=\s*\{\s*steps:/);
     });
 
-    it('routes reviewInterval through the OmniJS bridge', async () => {
+    it('constructs a Project.ReviewInterval instance and assigns it to project.reviewInterval', async () => {
       const result = await buildUpdateProjectScript('project-123', { reviewInterval: 14 });
-      expect(result.script).toContain('Project.byIdentifier');
-      expect(result.script).toContain('app.evaluateJavascript');
-      expect(result.script).toMatch(/proj\.reviewInterval\s*=\s*\{\s*unit:/);
+      // The class-construction pattern: new instance, set properties, assign.
+      expect(result.script).toContain('new Project.ReviewInterval()');
+      expect(result.script).toMatch(/_ri\.steps\s*=/);
+      expect(result.script).toMatch(/_ri\.unit\s*=/);
+      expect(result.script).toMatch(/project\.reviewInterval\s*=\s*_ri\b/);
     });
 
     it('embeds the days→{unit, steps} conversion logic for all natural units', async () => {
