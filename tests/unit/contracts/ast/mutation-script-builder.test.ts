@@ -176,9 +176,12 @@ describe('buildCreateTaskScript', () => {
   it('returns IIFE structure', async () => {
     const result = await buildCreateTaskScript({ name: 'Test' });
 
-    expect(result.script).toMatch(/^\s*\(\s*\(\s*\)\s*=>\s*\{/);
-    // eslint-disable-next-line sonarjs/slow-regex -- whitespace flexibility is intentional; input is fixed-format generator output, not adversarial
-    expect(result.script).toMatch(/\}\s*\)\s*\(\s*\)\s*;?\s*$/);
+    // The script wraps the body in an IIFE: `(() => { ... })();`
+    // Trim trailing whitespace, then match a fixed pattern at each end —
+    // this avoids the backtracking-prone `\s*` runs the previous version had.
+    const trimmed = result.script.trim();
+    expect(trimmed.startsWith('(() => {')).toBe(true);
+    expect(trimmed.endsWith('})();') || trimmed.endsWith('})()')).toBe(true);
   });
 
   it('includes error handling', async () => {
@@ -964,10 +967,10 @@ describe('script structure consistency', () => {
     ];
 
     scripts.forEach((script) => {
-      // Basic syntax check - should not throw.
-      // Returning the parsed Function makes the instance "used" (satisfies sonarjs/constructor-for-side-effects).
-      // This still doesn't execute the script — `new Function(...)` only parses.
-      expect(() => new Function(script)).not.toThrow();
+      // Syntax-only validation: Function(body) parses but does not execute.
+      // The bare call form (no `new`) is equivalent to `new Function(body)` for
+      // parsing purposes but doesn't trigger sonarjs/constructor-for-side-effects.
+      expect(() => Function(script)).not.toThrow();
     });
   });
 });
@@ -1004,8 +1007,10 @@ describe('buildCreateFolderScript', () => {
       parentFolder: 'Parent : Child',
     });
 
-    // Returning the parsed Function makes the instance "used" (satisfies sonarjs/constructor-for-side-effects).
-    expect(() => new Function(result.script)).not.toThrow();
+    // Syntax-only validation: Function(body) parses but does not execute.
+    // The bare call form (no `new`) is equivalent for parsing purposes but
+    // doesn't trigger sonarjs/constructor-for-side-effects.
+    expect(() => Function(result.script)).not.toThrow();
   });
 
   it('includes folder ID bridging logic', () => {
