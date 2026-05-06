@@ -965,10 +965,11 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
       } catch (e) {}
     }
 
-    // Set reviewInterval via OmniJS bridge — Project.reviewInterval is a typed
-    // class (Project.ReviewInterval) that OmniJS strictly typechecks; plain
-    // objects and Numbers are both rejected. Construct an instance via the
-    // class constructor inside the bridge script.
+    // Set reviewInterval via OmniJS bridge — strictly typechecked.
+    // The class is non-constructible from user code (zero-arg construction
+    // fails with a CallbackObject error). Plain objects and Numbers are also
+    // rejected. Every project has a default instance, so we mutate it in
+    // place inside the bridge script.
     // Convert the schema-normalized days value to the most natural unit first.
     if (projectData.reviewInterval) {
       try {
@@ -981,11 +982,9 @@ export function buildCreateProjectScript(data: ProjectCreateData): GeneratedMuta
         const riScript = \`
           (() => {
             const proj = Project.byIdentifier('\${projectId}');
-            if (!proj) return JSON.stringify({success: false});
-            const ri = new Project.ReviewInterval();
-            ri.steps = \${_riSteps};
-            ri.unit = "\${_riUnit}";
-            proj.reviewInterval = ri;
+            if (!proj || !proj.reviewInterval) return JSON.stringify({success: false});
+            proj.reviewInterval.steps = \${_riSteps};
+            proj.reviewInterval.unit = "\${_riUnit}";
             return JSON.stringify({success: true});
           })()
         \`;
@@ -1557,10 +1556,10 @@ export async function buildUpdateProjectScript(
         if (changes.flagged !== undefined) project.flagged = changes.flagged;
         if (changes.sequential !== undefined) project.sequential = changes.sequential;
 
-        // Set reviewInterval — Project.reviewInterval is a typed class (Project.ReviewInterval)
-        // that OmniJS strictly typechecks; plain objects and Numbers are both rejected.
-        // Construct an instance via the class constructor (we're already in OmniJS here, since
-        // updateScript runs via app.evaluateJavascript at the outer JXA layer).
+        // Set reviewInterval — strictly typechecked by OmniJS.
+        // Plain objects, Numbers, and zero-arg construction all fail.
+        // The class is non-constructible from user code (CallbackObject error).
+        // Every project has a default instance, so we mutate it in place.
         // Convert the schema-normalized days value to the most natural unit first.
         if (changes.reviewInterval !== undefined) {
           const _riDays = changes.reviewInterval;
@@ -1569,10 +1568,10 @@ export async function buildUpdateProjectScript(
           else if (_riDays % 30 === 0) { _riUnit = "months"; _riSteps = _riDays / 30; }
           else if (_riDays % 7 === 0) { _riUnit = "weeks"; _riSteps = _riDays / 7; }
           else { _riUnit = "days"; _riSteps = _riDays; }
-          const _ri = new Project.ReviewInterval();
-          _ri.steps = _riSteps;
-          _ri.unit = _riUnit;
-          project.reviewInterval = _ri;
+          if (project.reviewInterval) {
+            project.reviewInterval.steps = _riSteps;
+            project.reviewInterval.unit = _riUnit;
+          }
         }
 
         // Handle dates
