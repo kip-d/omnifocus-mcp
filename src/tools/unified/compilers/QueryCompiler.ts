@@ -154,11 +154,19 @@ export class QueryCompiler {
   }
 
   private transformStatus(input: QueryFilter, result: TaskFilter): void {
+    // Task-scope mapping. The same `status` value means different things at the
+    // task level vs project level, so map both — downstream code uses whichever
+    // is meaningful for the query type. (OMN-50: previously the `dropped` value
+    // only set projectStatus, silently no-op for task queries.)
     if (input.status === 'completed') {
       result.completed = true;
     } else if (input.status === 'active') {
       result.completed = false;
+    } else if (input.status === 'dropped') {
+      result.dropped = true;
     }
+    // Note: `on_hold` has no task-level equivalent — only projects can be
+    // on-hold. Tracked as a follow-up to OMN-50.
 
     if (input.status) {
       const STATUS_TO_PROJECT: Record<string, ProjectStatus> = {

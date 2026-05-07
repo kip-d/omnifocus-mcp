@@ -210,9 +210,12 @@ const TASK_LEVEL_FILTER_KEYS = new Set([
 ]);
 
 // Tracked but unfixed:
-// - 'dropped' currently maps to projectStatus only; should also set result.dropped = true (OMN-50)
-// - 'on_hold' has no task equivalent; either remove from schema for task scope or define semantics (OMN-50)
-const KNOWN_INEFFECTIVE_STATUS = new Set(['dropped', 'on_hold']);
+// - 'on_hold' has no task equivalent; either remove from schema for task scope
+//   or define semantics (follow-up to OMN-50; currently silently no-op for tasks)
+//
+// Fixed in OMN-50 commit:
+// - 'dropped' now sets result.dropped = true and produces task-level filtering
+const KNOWN_INEFFECTIVE_STATUS = new Set(['on_hold']);
 
 // =============================================================================
 // TaskFieldEnum ↔ DEFAULT_FIELDS completeness (OMN-51 class)
@@ -226,19 +229,13 @@ const KNOWN_INEFFECTIVE_STATUS = new Set(['dropped', 'on_hold']);
 // The drift is between the documented behavior (advertised in the tool
 // description) and the internal default-field membership.
 
-const KNOWN_DETAIL_FIELDS_GAPS = new Set([
-  // Tracked in OMN-51. Either add to DETAIL_FIELDS (preferred) or update docs.
-  'added',
-  'modified',
-  'dropDate',
-  'completionDate',
-  'repetitionRule',
-]);
-
 describe('Parity: TaskFieldEnum ↔ DEFAULT_FIELDS membership (OMN-51 class)', () => {
+  // OMN-51 closed all known gaps. If a new TaskFieldEnum member is added without
+  // a corresponding DETAIL_FIELDS entry, the per-field test below will fail —
+  // either add the field to DETAIL_FIELDS, or wrap that field in an `it.fails`
+  // block referencing a follow-up ticket.
   for (const field of TaskFieldEnum.options) {
-    const testFn = KNOWN_DETAIL_FIELDS_GAPS.has(field) ? it.fails : it;
-    testFn(`DEFAULT_FIELDS includes "${field}" (reachable via details: true)`, () => {
+    it(`DEFAULT_FIELDS includes "${field}" (reachable via details: true)`, () => {
       expect(DEFAULT_FIELDS).toContain(field);
     });
   }

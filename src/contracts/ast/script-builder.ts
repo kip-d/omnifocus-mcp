@@ -92,6 +92,15 @@ export const MINIMAL_FIELDS = [
 
 /**
  * Heavier fields gated behind details=true or explicit field selection.
+ *
+ * Must include every TaskFieldEnum member not already in MINIMAL_FIELDS, so
+ * `details: true` returns "all fields" as documented. (OMN-51: previously
+ * `added`, `modified`, `dropDate`, `completionDate`, and `repetitionRule`
+ * were declared in TaskFieldEnum but absent here, leaving them unreachable
+ * via `details: true` and silently contradicting the tool description.)
+ *
+ * Enforced by the parity test in
+ * `tests/unit/architecture/schema-impl-parity.test.ts`.
  */
 export const DETAIL_FIELDS = [
   'note',
@@ -103,6 +112,12 @@ export const DETAIL_FIELDS = [
   'blocked',
   'inInbox',
   'projectId',
+  // OMN-51: previously omitted, restored to match documented "all fields" behavior.
+  'added',
+  'modified',
+  'dropDate',
+  'completionDate',
+  'repetitionRule',
 ];
 
 /**

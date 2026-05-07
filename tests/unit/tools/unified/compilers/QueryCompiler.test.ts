@@ -229,6 +229,28 @@ describe('QueryCompiler', () => {
       });
     });
 
+    // OMN-50: status: 'dropped' previously only set projectStatus (no task effect).
+    // Each task-level status value must produce a task-filter property the AST builder uses.
+    describe('status filter task-level effects (OMN-50)', () => {
+      it('status: "active" sets completed: false', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ status: 'active' });
+        expect(result.completed).toBe(false);
+      });
+
+      it('status: "completed" sets completed: true', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ status: 'completed' });
+        expect(result.completed).toBe(true);
+      });
+
+      it('status: "dropped" sets dropped: true (OMN-50 fix)', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ status: 'dropped' });
+        expect(result.dropped).toBe(true);
+      });
+    });
+
     describe('project/inbox transformation', () => {
       it('transforms project: null to inInbox: true', () => {
         const compiler = new QueryCompiler();
