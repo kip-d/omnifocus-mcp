@@ -20,6 +20,7 @@ import {
 import {
   buildFilteredTasksScript,
   buildFilteredProjectsScript,
+  buildTaskCountScript,
   DEFAULT_FIELDS,
 } from '../../../src/contracts/ast/script-builder.js';
 import { QueryCompiler } from '../../../src/tools/unified/compilers/QueryCompiler.js';
@@ -235,6 +236,40 @@ describe('Parity: TaskFieldEnum ↔ DEFAULT_FIELDS membership (OMN-51 class)', (
       expect(DEFAULT_FIELDS).toContain(field);
     });
   }
+});
+
+// =============================================================================
+// countOnly path ↔ standard path: implicit-default parity (OMN-52 class)
+// =============================================================================
+//
+// `buildTaskCountScript` (countOnly path) and `buildFilteredTasksScript`
+// (standard path) must apply the same implicit defaults. The standard path
+// hardcodes `if (task.completed) return;` regardless of filter; the count
+// path historically did not, producing different counts for the same filter.
+// (See OMN-52: live verification showed 134 vs 284 for the same filter
+// because the count path included completed tasks.)
+//
+// This test asserts both paths exclude completed by default. Add a similar
+// assertion if a new implicit default is introduced in either path.
+
+describe('Parity: countOnly path implicit defaults match standard path (OMN-52 class)', () => {
+  it('count script excludes completed tasks when filter does not specify (matches list path default)', () => {
+    const countScript = buildTaskCountScript({}).script;
+    const listScript = buildFilteredTasksScript({}, { fields: ['id'] }).script;
+
+    // The list script hardcodes the exclusion; the count script should reach
+    // the equivalent via filter normalization (filter.completed = false).
+    // Both should produce code that references task.completed in some way.
+    expect(listScript).toMatch(/task\.completed/);
+    expect(countScript).toMatch(/task\.completed/);
+  });
+
+  it('count script preserves explicit filter.completed = true (does not override user intent)', () => {
+    const countScript = buildTaskCountScript({ completed: true }).script;
+    // When user explicitly asks for completed tasks, the predicate must
+    // compare === true (not === false from the implicit default).
+    expect(countScript).toMatch(/task\.completed\(\)\s*===\s*true/);
+  });
 });
 
 // =============================================================================

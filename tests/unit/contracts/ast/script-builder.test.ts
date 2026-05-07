@@ -504,10 +504,15 @@ describe('buildTaskCountScript', () => {
       expect(result.script).toContain('task.completed() === false');
     });
 
-    it('generates empty filter as true for no filters', () => {
+    it('iterates flattenedTasks() for no filters and applies completed-exclusion default', () => {
       const result = buildTaskCountScript({});
       expect(result.script).toContain('doc.flattenedTasks()');
-      expect(result.isEmptyFilter).toBe(true);
+      // OMN-52: an "empty" input filter is no longer empty after normalization —
+      // the count path applies the same `completed: false` default as the list
+      // path so both produce equivalent counts. The AST therefore contains a
+      // task.completed === false comparison node, so isEmptyFilter is false.
+      expect(result.isEmptyFilter).toBe(false);
+      expect(result.script).toMatch(/task\.completed\(\)\s*===\s*false/);
     });
 
     it('generates project name comparison for name-like project filter', () => {

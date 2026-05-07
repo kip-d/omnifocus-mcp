@@ -1904,17 +1904,21 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   // Determine if we're counting inbox tasks
   const checkInbox = normalizedFilter.inInbox === true;
 
-  // Strip inInbox from filter code when using pre-filtered inbox collection
-  // (same pattern as list-tasks-ast.ts:58 — already handled by collection selection)
-  // Also default to excluding completed tasks for inbox, matching the regular path
-  const filterForCode = checkInbox
-    ? (() => {
-        const f = { ...normalizedFilter };
-        delete f.inInbox;
-        if (f.completed === undefined) f.completed = false;
-        return f;
-      })()
-    : normalizedFilter;
+  // OMN-52: Match the OmniJS list path's implicit default of excluding completed
+  // tasks when the user hasn't asked for them. The OmniJS path hardcodes
+  // `if (task.completed) return;` regardless of filter — without the matching
+  // default here, the same filter produces different counts via countOnly vs
+  // standard path (verified live: standard returned 134, countOnly returned 284
+  // for `estimatedMinutesLessThan: 30` due to 150 completed tasks slipping in).
+  //
+  // For inbox queries, also strip inInbox from the predicate since the
+  // pre-filtered inbox collection (`doc.inboxTasks()`) already handles it.
+  const filterForCode = (() => {
+    const f = { ...normalizedFilter };
+    if (checkInbox) delete f.inInbox;
+    if (f.completed === undefined) f.completed = false;
+    return f;
+  })();
 
   // Build AST and generate JXA filter code (NOT OmniJS!)
   const ast = buildAST(filterForCode);
