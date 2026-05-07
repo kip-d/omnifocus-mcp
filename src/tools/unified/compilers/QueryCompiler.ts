@@ -99,7 +99,12 @@ export class QueryCompiler {
     if (input.inInbox !== undefined) result.inInbox = input.inInbox;
 
     // Project transformation
-    if (input.project === null) {
+    // OMN-43: explicit `projectId` takes precedence (fast path, unambiguous).
+    // `project: null` still maps to inbox; `project: "string"` is treated as
+    // a name-or-id with name lookup fallback (handled in the OmniJS emitter).
+    if (typeof input.projectId === 'string') {
+      result.projectId = input.projectId;
+    } else if (input.project === null) {
       result.inInbox = true;
     } else if (typeof input.project === 'string') {
       result.projectId = input.project;

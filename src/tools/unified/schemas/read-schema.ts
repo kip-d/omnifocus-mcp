@@ -45,6 +45,11 @@ const filterFields = {
   status: z.enum(['active', 'completed', 'dropped', 'on_hold']).optional(),
   tags: TagFilterSchema.optional(),
   project: z.union([z.string(), z.null()]).optional(),
+  // OMN-43: explicit projectId filter for fast, unambiguous project-scoped queries.
+  // `project` accepts a string but is name-resolution-first (with id fallback) and
+  // ambiguous when multiple projects share a name. `projectId` is unambiguous and
+  // takes the fast path through Project.byIdentifier().
+  projectId: z.string().optional(),
   dueDate: DateFilterSchema.optional(),
   deferDate: DateFilterSchema.optional(),
   plannedDate: DateFilterSchema.optional(),

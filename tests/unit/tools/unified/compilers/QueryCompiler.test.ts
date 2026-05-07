@@ -241,6 +241,25 @@ describe('QueryCompiler', () => {
         const result = compiler.transformFilters({ project: 'abc123' });
         expect(result.projectId).toBe('abc123');
       });
+
+      // OMN-43: explicit projectId filter key for unambiguous, fast project-scoped queries.
+      it('passes explicit projectId through to result.projectId', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ projectId: 'h1Y_Mpkz5fL' });
+        expect(result.projectId).toBe('h1Y_Mpkz5fL');
+      });
+
+      it('explicit projectId takes precedence over project string', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ projectId: 'real-id', project: 'name-fallback' });
+        expect(result.projectId).toBe('real-id');
+      });
+
+      it('explicit projectId does not turn on inInbox', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ projectId: 'h1Y_Mpkz5fL' });
+        expect(result.inInbox).toBeUndefined();
+      });
     });
 
     describe('logical operator handling', () => {

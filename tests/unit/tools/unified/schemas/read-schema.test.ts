@@ -192,6 +192,34 @@ describe('ReadSchema', () => {
     });
   });
 
+  // OMN-43: explicit projectId filter key. Previously the only project-related
+  // filter was `project` (string-or-null), which routed string values through a
+  // name-resolution path that failed with SCRIPT_ERROR for ambiguous or unmatched
+  // names. `projectId` gives consumers a direct, unambiguous, fast path.
+  describe('projectId filter (OMN-43)', () => {
+    it('should accept projectId on tasks queries', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { projectId: 'h1Y_Mpkz5fL' },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept projectId alongside other filters', () => {
+      const input = {
+        query: {
+          type: 'tasks',
+          filters: { projectId: 'h1Y_Mpkz5fL', flagged: true },
+        },
+      };
+      const result = ReadSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('completionDate filter (Bug 3)', () => {
     it('should accept completionDate.before', () => {
       const input = {
