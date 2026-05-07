@@ -11,8 +11,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { TaskFieldEnum, FILTER_FIELD_NAMES } from '../../../src/tools/unified/schemas/read-schema.js';
-import { buildFilteredTasksScript } from '../../../src/contracts/ast/script-builder.js';
+import {
+  TaskFieldEnum,
+  ProjectFieldEnum,
+  SortFieldEnum,
+  FILTER_FIELD_NAMES,
+} from '../../../src/tools/unified/schemas/read-schema.js';
+import { buildFilteredTasksScript, buildFilteredProjectsScript } from '../../../src/contracts/ast/script-builder.js';
 import { QueryCompiler } from '../../../src/tools/unified/compilers/QueryCompiler.js';
 import { createTaskResponseV2, createListResponseV2, generateTaskSummary } from '../../../src/utils/response-format.js';
 
@@ -123,6 +128,147 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
 // The bug shape: a response builder produces a summary block whose
 // returned_count diverges from the actual data. This invariant must hold for
 // every code path that emits a summary alongside data.
+
+// =============================================================================
+// ProjectFieldEnum ↔ generateProjectFieldProjection (OMN-47 audit)
+// =============================================================================
+//
+// Same shape as TaskFieldEnum parity, but for projects. A missing case in the
+// project projection switch silently drops the field from server responses.
+
+describe('Parity: ProjectFieldEnum ↔ generateProjectFieldProjection (OMN-47 audit)', () => {
+  for (const field of ProjectFieldEnum.options) {
+    it(`projects "${field}" when requested via fields: [...]`, () => {
+      const result = buildFilteredProjectsScript({}, { fields: [field] });
+      const projectionPattern = new RegExp(`\\b${field}\\s*:`);
+      expect(result.script).toMatch(projectionPattern);
+    });
+  }
+});
+
+// =============================================================================
+// SortFieldEnum ↔ generateSortComparator (OMN-47 audit)
+// =============================================================================
+//
+// Every sortable field declared in the schema must be referenced in the sort
+// comparator. The comparator hardcodes type-classification arrays (date / bool
+// / number); a SortFieldEnum member missing from all of them falls through to
+// the generic-string branch, which silently produces wrong ordering for date
+// or numeric fields.
+
+describe('Parity: SortFieldEnum ↔ generateSortComparator (OMN-47 audit)', () => {
+  for (const field of SortFieldEnum.options) {
+    it(`sort comparator references "${field}"`, () => {
+      const result = buildFilteredTasksScript({}, { fields: ['id', 'name'], sort: [{ field, direction: 'asc' }] });
+      // Comparator emits `a.${field}` and `b.${field}` to read the sort key.
+      const accessorPattern = new RegExp(`a\\.${field}\\b`);
+      expect(result.script).toMatch(accessorPattern);
+    });
+  }
+});
+
+// =============================================================================
+// status filter values produce TASK-level filtering effects (OMN-50 class)
+// =============================================================================
+//
+// Distinct from the simple "recognized vs dropped" drift — here the compiler
+// "recognizes" the field but maps it incorrectly to a different scope. For
+// tasks, `status: "dropped"` should produce a task-level filter (e.g.
+// `result.dropped = true`), not a project-level filter (`result.projectStatus`).
+// The latter has no effect on task queries, silently returning unfiltered results.
+//
+// Bug shape verified live: `status: "dropped"` returned 2855 tasks (entire DB).
+
+const TASK_LEVEL_FILTER_KEYS = new Set([
+  'completed',
+  'dropped',
+  'flagged',
+  'available',
+  'blocked',
+  'inInbox',
+  'projectId',
+  'id',
+  'name',
+  'tags',
+  // Date filters (any of these proves task-level filtering)
+  'dueBefore',
+  'dueAfter',
+  'deferBefore',
+  'deferAfter',
+  'plannedBefore',
+  'plannedAfter',
+  'completionBefore',
+  'completionAfter',
+  // Text filters
+  'text',
+  'textOperator',
+  'search',
+]);
+
+// Tracked but unfixed:
+// - 'dropped' currently maps to projectStatus only; should also set result.dropped = true (OMN-50)
+// - 'on_hold' has no task equivalent; either remove from schema for task scope or define semantics (OMN-50)
+const KNOWN_INEFFECTIVE_STATUS = new Set(['dropped', 'on_hold']);
+
+// =============================================================================
+// MutationSchema operations ↔ dispatcher cases (defensive)
+// =============================================================================
+//
+// The schema declares 8 top-level mutation operations. The dispatcher in
+// OmniFocusWriteTool routes each to a handler. A new operation added to the
+// schema without a corresponding handler would hit the default case at
+// runtime; this test enforces the relationship at PR time.
+//
+// We do not import the handler directly — instead, this test scans the source
+// of OmniFocusWriteTool.ts to confirm each operation literal appears in its
+// dispatch logic. Brittle if the dispatch is restructured, but precisely the
+// kind of "make a deliberate change to the test if you change the dispatch"
+// guard that surfaces drift.
+
+describe('Parity: MutationSchema operations ↔ dispatcher (defensive)', () => {
+  const KNOWN_MUTATION_OPERATIONS = [
+    'create',
+    'create_folder',
+    'update',
+    'complete',
+    'delete',
+    'batch',
+    'bulk_delete',
+    'tag_manage',
+  ];
+
+  it('write tool source references every known operation by name', async () => {
+    // Read the dispatch source — if the dispatcher moves, update this path.
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const url = await import('node:url');
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const writeToolPath = path.resolve(here, '../../../src/tools/unified/OmniFocusWriteTool.ts');
+    const source = fs.readFileSync(writeToolPath, 'utf8');
+
+    for (const op of KNOWN_MUTATION_OPERATIONS) {
+      // Each op should appear at least once as a string literal in dispatch logic.
+      const literalPattern = new RegExp(`['"]${op}['"]`);
+      expect(source, `operation "${op}" not referenced in OmniFocusWriteTool.ts`).toMatch(literalPattern);
+    }
+  });
+});
+
+describe('Parity: status filter values produce task-level filtering (OMN-50 class)', () => {
+  const TASK_STATUSES = ['active', 'completed', 'dropped', 'on_hold'] as const;
+
+  for (const status of TASK_STATUSES) {
+    const testFn = KNOWN_INEFFECTIVE_STATUS.has(status) ? it.fails : it;
+    testFn(`status: "${status}" produces a task-level filter, not just projectStatus`, () => {
+      const compiler = new QueryCompiler();
+
+      const result = compiler.transformFilters({ status } as any) as Record<string, unknown>;
+
+      const taskLevelKeys = Object.keys(result).filter((k) => TASK_LEVEL_FILTER_KEYS.has(k));
+      expect(taskLevelKeys.length).toBeGreaterThan(0);
+    });
+  }
+});
 
 describe('Invariant: summary.returned_count === data[key].length (OMN-42 class)', () => {
   it('createTaskResponseV2 — small payload, no truncation', () => {
