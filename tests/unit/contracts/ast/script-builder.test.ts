@@ -323,6 +323,25 @@ describe('field projections for today mode', () => {
     expect(result.script).toContain('toISOString');
   });
 
+  // OMN-45: `added` and `dropDate` were declared in the schema field enum but
+  // had no projection case in script-builder, so server responses silently
+  // omitted them even when the user explicitly requested them.
+  it('generates added field projection (OMN-45 regression)', () => {
+    const result = buildFilteredTasksScript({}, { fields: ['id', 'added'] });
+
+    expect(result.script).toContain('added:');
+    expect(result.script).toContain('task.added');
+    expect(result.script).toContain('toISOString');
+  });
+
+  it('generates dropDate field projection (OMN-45 regression)', () => {
+    const result = buildFilteredTasksScript({}, { fields: ['id', 'dropDate'] });
+
+    expect(result.script).toContain('dropDate:');
+    expect(result.script).toContain('task.dropDate');
+    expect(result.script).toContain('toISOString');
+  });
+
   it('threads dueSoonDays to reason field when provided via filter', () => {
     const filter = { todayMode: true, dueBefore: '2026-02-12', dueSoonDays: 5 };
     const result = buildFilteredTasksScript(filter, { fields: ['reason'] });

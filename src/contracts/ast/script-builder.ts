@@ -265,6 +265,17 @@ function generateFieldProjection(
       case 'modified':
         projections.push('modified: task.modified ? task.modified.toISOString() : null');
         break;
+      // OMN-45: `added` and `dropDate` were declared in the field enum but had
+      // no projection case, so server responses silently omitted them even when
+      // the schema accepted `fields: ["added"]`. The Task properties exist in
+      // OmniJS as `task.added` (creation timestamp) and `task.dropDate` (when
+      // a task was dropped, null otherwise).
+      case 'added':
+        projections.push('added: task.added ? task.added.toISOString() : null');
+        break;
+      case 'dropDate':
+        projections.push('dropDate: task.dropDate ? task.dropDate.toISOString() : null');
+        break;
     }
   }
 
