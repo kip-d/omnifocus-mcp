@@ -223,6 +223,9 @@ export const KNOWN_FIELDS = [
   'task.containingProject',
   'task.repetitionRule', // RepetitionRule object or null
   'taskTags', // Special: array of tag names
+
+  // Numeric properties (OMN-49)
+  'task.estimatedMinutes',
 ] as const;
 
 export type KnownField = (typeof KNOWN_FIELDS)[number];

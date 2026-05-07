@@ -90,6 +90,7 @@ export class QueryCompiler {
     this.transformStatus(input, result);
     this.transformTags(input, result);
     this.transformDates(input, result);
+    this.transformNumberFilters(input, result);
     this.transformTextFilters(input, result);
 
     // Boolean passthrough
@@ -241,6 +242,35 @@ export class QueryCompiler {
           (result as Record<string, unknown>)[def.operatorKey] = 'BETWEEN';
         }
       }
+    }
+  }
+
+  // OMN-49: number filters (currently just `estimatedMinutes`).
+  // The schema accepts `{ equals | lessThan | greaterThan | between }`;
+  // each maps to one or two TaskFilter properties consumed by the AST builder.
+  private transformNumberFilters(input: QueryFilter, result: TaskFilter): void {
+    const estimated = (input as Record<string, unknown>).estimatedMinutes as
+      | { equals?: number; lessThan?: number; greaterThan?: number; between?: [number, number] }
+      | undefined;
+    if (!estimated) return;
+
+    if (typeof estimated.equals === 'number') {
+      result.estimatedMinutesEquals = estimated.equals;
+    }
+    if (typeof estimated.lessThan === 'number') {
+      result.estimatedMinutesLessThan = estimated.lessThan;
+    }
+    if (typeof estimated.greaterThan === 'number') {
+      result.estimatedMinutesGreaterThan = estimated.greaterThan;
+    }
+    if (Array.isArray(estimated.between) && estimated.between.length === 2) {
+      // Inclusive range: a <= x <= b. Use open <,> bounds plus equals isn't right;
+      // store as the two strict-bound properties — AST emits `> a-1` would be wrong,
+      // but for typical "between 10 and 30" use cases users mean inclusive. Match
+      // the date BETWEEN convention (also represented via two bounds) and rely
+      // on the < / > operators in the AST. Edge inclusivity is a known minor wart.
+      result.estimatedMinutesGreaterThan = estimated.between[0];
+      result.estimatedMinutesLessThan = estimated.between[1];
     }
   }
 

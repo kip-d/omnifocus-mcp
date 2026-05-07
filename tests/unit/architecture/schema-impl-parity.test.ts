@@ -80,17 +80,10 @@ const FILTER_SAMPLES: Record<string, unknown> = {
   folder: 'Work',
 };
 
-// Drift detected by this parity test on first run, tracked but not yet fixed.
-// When a fix lands, remove the entry — `it.fails` will then start failing,
-// prompting the test to be flipped to `it`.
-//
-// Fixed:
-// - `added`: now wired through transformDates → addedBefore/addedAfter on the
-//   TaskFilter contract, with task.added registered in KNOWN_FIELDS (OMN-48 fix)
-//
-// Pending:
-// - `estimatedMinutes`: schema accepts number filter, compiler has no handler (OMN-49)
-const KNOWN_DROPPED_FILTERS = new Set(['estimatedMinutes']);
+// Both initial drift bugs are fixed (OMN-48: added; OMN-49: estimatedMinutes).
+// If a new schema field is added without a compiler handler, the per-field test
+// below will fail — either add the handler in QueryCompiler.transformFilters,
+// or wrap that field in an `it.fails` block referencing a follow-up ticket.
 
 describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 class)', () => {
   it('FILTER_SAMPLES covers every schema field — extend FILTER_SAMPLES if this fails', () => {
@@ -99,8 +92,7 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
   });
 
   for (const fieldName of FILTER_FIELD_NAMES) {
-    const testFn = KNOWN_DROPPED_FILTERS.has(fieldName) ? it.fails : it;
-    testFn(`compiler recognizes "${fieldName}" filter field`, () => {
+    it(`compiler recognizes "${fieldName}" filter field`, () => {
       const compiler = new QueryCompiler();
       const value = FILTER_SAMPLES[fieldName];
 

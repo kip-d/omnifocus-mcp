@@ -253,6 +253,36 @@ describe('QueryCompiler', () => {
       });
     });
 
+    // OMN-49: estimatedMinutes filter previously had no compiler handler — the
+    // schema accepted it but the filter was silently dropped, so users querying
+    // for "tasks under 30 minutes" got unfiltered results.
+    describe('estimatedMinutes filter (OMN-49)', () => {
+      it('estimatedMinutes: { equals: N } sets estimatedMinutesEquals', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ estimatedMinutes: { equals: 30 } });
+        expect(result.estimatedMinutesEquals).toBe(30);
+      });
+
+      it('estimatedMinutes: { lessThan: N } sets estimatedMinutesLessThan', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ estimatedMinutes: { lessThan: 30 } });
+        expect(result.estimatedMinutesLessThan).toBe(30);
+      });
+
+      it('estimatedMinutes: { greaterThan: N } sets estimatedMinutesGreaterThan', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ estimatedMinutes: { greaterThan: 60 } });
+        expect(result.estimatedMinutesGreaterThan).toBe(60);
+      });
+
+      it('estimatedMinutes: { between: [a, b] } sets both bounds', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ estimatedMinutes: { between: [10, 30] } });
+        expect(result.estimatedMinutesGreaterThan).toBe(10);
+        expect(result.estimatedMinutesLessThan).toBe(30);
+      });
+    });
+
     // OMN-50: status: 'dropped' previously only set projectStatus (no task effect).
     // Each task-level status value must produce a task-filter property the AST builder uses.
     describe('status filter task-level effects (OMN-50)', () => {

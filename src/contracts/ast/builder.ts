@@ -176,6 +176,26 @@ export const FILTER_DEFS: readonly FilterDef[] = [
       return comparison('task.containingProject', '==', projectFilter);
     },
   },
+
+  // --- Estimated minutes (numeric) filter (OMN-49) ---
+  {
+    fields: ['task.estimatedMinutes'],
+    build: (f) => {
+      const conditions: FilterNode[] = [];
+      if (f.estimatedMinutesEquals !== undefined) {
+        conditions.push(comparison('task.estimatedMinutes', '==', f.estimatedMinutesEquals));
+      }
+      if (f.estimatedMinutesLessThan !== undefined) {
+        conditions.push(comparison('task.estimatedMinutes', '<', f.estimatedMinutesLessThan));
+      }
+      if (f.estimatedMinutesGreaterThan !== undefined) {
+        conditions.push(comparison('task.estimatedMinutes', '>', f.estimatedMinutesGreaterThan));
+      }
+      if (conditions.length === 0) return null;
+      if (conditions.length === 1) return conditions[0];
+      return and(...conditions);
+    },
+  },
 ];
 
 /**

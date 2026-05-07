@@ -42,7 +42,7 @@ export interface ValidationResult {
 /**
  * Expected types for known fields
  */
-const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array'> = {
+const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array' | 'number'> = {
   'task.completed': 'boolean',
   'task.flagged': 'boolean',
   'task.blocked': 'boolean',
@@ -55,6 +55,7 @@ const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array'> = {
   'task.added': 'date', // OMN-48
   'task.completionDate': 'date',
   'task.plannedDate': 'date',
+  'task.estimatedMinutes': 'number', // OMN-49
   'task.name': 'string',
   'task.note': 'string',
   'task.id.primaryKey': 'string',
@@ -277,7 +278,7 @@ function isKnownField(field: string): boolean {
 
 function isTypeCompatible(
   value: unknown,
-  expectedType: 'boolean' | 'string' | 'date' | 'array',
+  expectedType: 'boolean' | 'string' | 'date' | 'array' | 'number',
   operator: string,
 ): boolean {
   switch (expectedType) {
@@ -291,6 +292,8 @@ function isTypeCompatible(
       // For array fields, the value should be an array (for some/every)
       // or could be checked with includes
       return Array.isArray(value) || ['some', 'every'].includes(operator);
+    case 'number':
+      return typeof value === 'number';
     default:
       return true;
   }

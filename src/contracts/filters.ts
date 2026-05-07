@@ -100,6 +100,11 @@ export interface TaskFilter {
   addedBefore?: string;
   addedDateOperator?: DateOperator; // BETWEEN, <=, >=
 
+  // OMN-49: filter by estimated duration (minutes).
+  estimatedMinutesEquals?: number;
+  estimatedMinutesLessThan?: number;
+  estimatedMinutesGreaterThan?: number;
+
   // --- Boolean Flags ---
   flagged?: boolean;
   blocked?: boolean;
@@ -330,6 +335,10 @@ export const FILTER_PROPERTY_NAMES = [
   'addedAfter',
   'addedBefore',
   'addedDateOperator',
+  // OMN-49
+  'estimatedMinutesEquals',
+  'estimatedMinutesLessThan',
+  'estimatedMinutesGreaterThan',
   'flagged',
   'blocked',
   'available',

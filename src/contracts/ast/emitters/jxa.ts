@@ -104,6 +104,11 @@ function emitComparison(node: ComparisonNode): string {
     case '>':
     case '<=':
     case '>=':
+      // OMN-49: numeric comparisons (e.g. estimatedMinutes < 30) emit raw operators;
+      // string values are still treated as ISO date strings (existing behavior).
+      if (typeof value === 'number') {
+        return `${accessor} ${operator} ${value}`;
+      }
       return emitDateComparison(accessor, operator, value as string);
 
     case 'includes':

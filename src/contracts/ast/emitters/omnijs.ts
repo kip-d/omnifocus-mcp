@@ -113,7 +113,12 @@ export function emitOmniJS(ast: FilterNode): EmitResult {
       case '>':
       case '<=':
       case '>=':
-        predicate = emitDateComparison(accessor, operator, value as string);
+        // OMN-49: numeric comparisons emit raw operators; strings stay date-typed.
+        if (typeof value === 'number') {
+          predicate = `${accessor} ${operator} ${value}`;
+        } else {
+          predicate = emitDateComparison(accessor, operator, value as string);
+        }
         break;
 
       case 'includes':
