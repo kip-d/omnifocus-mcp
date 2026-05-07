@@ -69,6 +69,10 @@ const filterFields = {
 // Used inside AND/OR/NOT arrays to prevent nesting.
 const FlatFilterSchema = z.object(filterFields).strict();
 
+// Exported for parity tests (OMN-47): every key the schema accepts must be
+// recognized by QueryCompiler.transformFilters.
+export const FILTER_FIELD_NAMES = Object.keys(filterFields) as readonly string[];
+
 // Full filter: base fields + one level of AND/OR/NOT (referencing FlatFilterSchema).
 const FilterSchema = z
   .object({
@@ -92,7 +96,8 @@ export interface FilterValue extends FlatFilterValue {
 // =============================================================================
 
 // Task field enum — matches fields in buildListTasksScriptV4
-const TaskFieldEnum = z.enum([
+// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
+export const TaskFieldEnum = z.enum([
   'id',
   'name',
   'completed',
@@ -118,7 +123,8 @@ const TaskFieldEnum = z.enum([
 ]);
 
 // Project field enum — matches fields in buildProjectFieldProjections (script-builder.ts:778-824)
-const ProjectFieldEnum = z.enum([
+// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
+export const ProjectFieldEnum = z.enum([
   'id',
   'name',
   'status',
@@ -137,7 +143,8 @@ const ProjectFieldEnum = z.enum([
 ]);
 
 // Sort field enum for type safety
-const SortFieldEnum = z.enum([
+// Exported for parity tests in tests/unit/architecture/schema-impl-parity.test.ts (OMN-47).
+export const SortFieldEnum = z.enum([
   'dueDate',
   'deferDate',
   'plannedDate',
