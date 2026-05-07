@@ -55,12 +55,13 @@ describe('Response Format Utilities', () => {
     });
 
     it('should measure accurate time differences', () => {
-      const _start = timer.toMetadata();
+      const start = timer.toMetadata();
       vi.advanceTimersByTime(500);
       const mid = timer.toMetadata();
       vi.advanceTimersByTime(500);
       const end = timer.toMetadata();
 
+      expect(start.query_time_ms).toBe(0);
       expect(mid.query_time_ms).toBeGreaterThanOrEqual(500);
       expect(end.query_time_ms).toBeGreaterThanOrEqual(1000);
     });
@@ -456,6 +457,59 @@ describe('Response Format Utilities', () => {
       expect(summary.breakdown?.planned_today).toBe(0);
       expect(summary.breakdown?.planned_upcoming).toBe(0);
       expect(summary.breakdown?.has_planned_date).toBe(0);
+    });
+
+    // Regression: OMN-42. Previously returned_count was Math.min(tasks.length, 25),
+    // capping at the unused-default limit and silently disagreeing with data.tasks.length
+    // for any paginated response above 25 items.
+    it('returned_count must equal tasks.length for collections larger than the legacy 25-item cap', () => {
+      const tasks = Array.from({ length: 250 }, (_, i) => ({
+        id: String(i),
+        name: `Task ${i}`,
+        completed: false,
+      }));
+
+      const summary = generateTaskSummary(tasks);
+
+      expect(summary.total_count).toBe(250);
+      expect(summary.returned_count).toBe(250);
+    });
+  });
+
+  // OMN-42: summary.returned_count must always equal data.tasks.length, even
+  // when response truncation reduces the payload.
+  describe('createTaskResponseV2 returned_count invariant', () => {
+    it('keeps summary.returned_count == data.tasks.length when truncation triggers', () => {
+      // Build tasks large enough in serialized form to exceed CHARACTER_LIMIT (25000)
+      // so truncateResponse halves the array.
+      const padding = 'x'.repeat(200);
+      const tasks = Array.from({ length: 400 }, (_, i) => ({
+        id: String(i),
+        name: `Task ${i} ${padding}`,
+        completed: false,
+      }));
+
+      const response = createTaskResponseV2('test', tasks);
+      const dataTasksLength = (response.data as { tasks: unknown[] }).tasks.length;
+
+      expect(response.metadata.truncated).toBe(true);
+      expect(dataTasksLength).toBeLessThan(400);
+      expect((response.summary as any).returned_count).toBe(dataTasksLength);
+      expect((response.summary as any).total_count).toBe(400);
+    });
+
+    it('keeps summary.returned_count == data.tasks.length when no truncation', () => {
+      const tasks = Array.from({ length: 50 }, (_, i) => ({
+        id: String(i),
+        name: `Task ${i}`,
+        completed: false,
+      }));
+
+      const response = createTaskResponseV2('test', tasks);
+
+      expect(response.metadata.truncated).toBeUndefined();
+      expect((response.summary as any).returned_count).toBe(50);
+      expect((response.data as { tasks: unknown[] }).tasks.length).toBe(50);
     });
   });
 

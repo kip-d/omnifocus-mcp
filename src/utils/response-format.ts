@@ -270,9 +270,15 @@ function generateTaskPreview(tasks: unknown[], now: Date): TaskSummary['preview'
 }
 
 /**
- * Generate enhanced task summary with insights and preview
+ * Generate enhanced task summary with insights and preview.
+ *
+ * `returned_count` mirrors `tasks.length` — callers pass the array that will
+ * appear in `data.tasks`, so the two must stay equal. (See OMN-42: the previous
+ * implementation accepted an unused `limit` parameter defaulting to 25 and used
+ * `Math.min(tasks.length, limit)`, silently capping the count for paginated
+ * responses larger than 25 items.)
  */
-export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskSummary {
+export function generateTaskSummary(tasks: unknown[]): TaskSummary {
   const now = new Date();
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
@@ -281,7 +287,7 @@ export function generateTaskSummary(tasks: unknown[], limit: number = 25): TaskS
 
   const summary: TaskSummary = {
     total_count: tasks.length,
-    returned_count: Math.min(tasks.length, limit),
+    returned_count: tasks.length,
     breakdown: {
       overdue: 0,
       due_today: 0,
@@ -611,6 +617,13 @@ export function createTaskResponseV2<T>(
 
   // Apply truncation
   const { data: truncatedTasks, truncation } = truncateResponse(tasks);
+
+  // Invariant (OMN-42): summary.returned_count must equal data.tasks.length.
+  // Truncation reduces the returned set, so the summary count must follow.
+  // total_count stays at the pre-truncation length to communicate the full dataset.
+  if (truncation?.truncated) {
+    summary.returned_count = truncatedTasks.length;
+  }
 
   return {
     success: true,
