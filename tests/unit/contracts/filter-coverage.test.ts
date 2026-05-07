@@ -47,6 +47,10 @@ describe('Filter Coverage Safety Net', () => {
         completionAfter: 'x',
         completionBefore: 'x',
         completionDateOperator: 'BETWEEN',
+        // OMN-48
+        addedAfter: 'x',
+        addedBefore: 'x',
+        addedDateOperator: 'BETWEEN',
       };
       const filterKeys = Object.keys(sampleFilter);
 

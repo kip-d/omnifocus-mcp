@@ -211,6 +211,8 @@ export const KNOWN_FIELDS = [
   'task.completionDate',
   'task.effectiveDueDate',
   'task.effectiveDeferDate',
+  // OMN-48: filter by creation timestamp.
+  'task.added',
 
   // String properties
   'task.name',

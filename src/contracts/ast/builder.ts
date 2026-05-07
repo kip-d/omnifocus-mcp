@@ -54,6 +54,8 @@ export const DATE_FILTER_DEFS: readonly DateFilterDef[] = [
     before: 'completionBefore',
     operator: 'completionDateOperator',
   },
+  // OMN-48: filter by creation timestamp.
+  { field: 'task.added', after: 'addedAfter', before: 'addedBefore', operator: 'addedDateOperator' },
 ];
 
 /**

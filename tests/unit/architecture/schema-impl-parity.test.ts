@@ -84,9 +84,13 @@ const FILTER_SAMPLES: Record<string, unknown> = {
 // When a fix lands, remove the entry — `it.fails` will then start failing,
 // prompting the test to be flipped to `it`.
 //
-// - `added`: schema accepts date filter, compiler.transformDates doesn't enumerate it (OMN-48)
+// Fixed:
+// - `added`: now wired through transformDates → addedBefore/addedAfter on the
+//   TaskFilter contract, with task.added registered in KNOWN_FIELDS (OMN-48 fix)
+//
+// Pending:
 // - `estimatedMinutes`: schema accepts number filter, compiler has no handler (OMN-49)
-const KNOWN_DROPPED_FILTERS = new Set(['added', 'estimatedMinutes']);
+const KNOWN_DROPPED_FILTERS = new Set(['estimatedMinutes']);
 
 describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 class)', () => {
   it('FILTER_SAMPLES covers every schema field — extend FILTER_SAMPLES if this fails', () => {

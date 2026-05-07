@@ -146,8 +146,10 @@ describe('FILTER_DEFS unified registry', () => {
   });
 
   describe('DATE_FILTER_DEFS backward compatibility', () => {
-    it('DATE_FILTER_DEFS is still exported and has 4 entries', () => {
-      expect(DATE_FILTER_DEFS).toHaveLength(4);
+    it('DATE_FILTER_DEFS is still exported and has all expected entries', () => {
+      // Update this assertion when adding/removing date filter defs.
+      // Current: dueDate, deferDate, plannedDate, completionDate, added (OMN-48).
+      expect(DATE_FILTER_DEFS).toHaveLength(5);
     });
 
     it('DATE_FILTER_DEFS fields are subset of REGISTRY_KNOWN_FIELDS', () => {

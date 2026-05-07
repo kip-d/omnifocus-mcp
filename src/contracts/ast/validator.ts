@@ -52,6 +52,9 @@ const FIELD_TYPES: Record<string, 'boolean' | 'string' | 'date' | 'array'> = {
   'task.deferDate': 'date',
   'task.effectiveDueDate': 'date',
   'task.effectiveDeferDate': 'date',
+  'task.added': 'date', // OMN-48
+  'task.completionDate': 'date',
+  'task.plannedDate': 'date',
   'task.name': 'string',
   'task.note': 'string',
   'task.id.primaryKey': 'string',

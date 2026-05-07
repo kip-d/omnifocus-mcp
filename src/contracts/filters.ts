@@ -95,6 +95,11 @@ export interface TaskFilter {
   completionBefore?: string;
   completionDateOperator?: DateOperator; // How to compare completion dates
 
+  // OMN-48: filter by task creation timestamp.
+  addedAfter?: string;
+  addedBefore?: string;
+  addedDateOperator?: DateOperator; // BETWEEN, <=, >=
+
   // --- Boolean Flags ---
   flagged?: boolean;
   blocked?: boolean;
@@ -321,6 +326,10 @@ export const FILTER_PROPERTY_NAMES = [
   'completionAfter',
   'completionBefore',
   'completionDateOperator',
+  // OMN-48
+  'addedAfter',
+  'addedBefore',
+  'addedDateOperator',
   'flagged',
   'blocked',
   'available',

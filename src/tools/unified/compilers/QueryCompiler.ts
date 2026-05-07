@@ -200,9 +200,9 @@ export class QueryCompiler {
   private transformDates(input: QueryFilter, result: TaskFilter): void {
     const dateFieldDefs: Array<{
       inputKey: string;
-      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore';
-      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter' | 'completionAfter';
-      operatorKey?: 'dueDateOperator' | 'plannedDateOperator' | 'completionDateOperator';
+      beforeKey: 'dueBefore' | 'deferBefore' | 'plannedBefore' | 'completionBefore' | 'addedBefore';
+      afterKey: 'dueAfter' | 'deferAfter' | 'plannedAfter' | 'completionAfter' | 'addedAfter';
+      operatorKey?: 'dueDateOperator' | 'plannedDateOperator' | 'completionDateOperator' | 'addedDateOperator';
     }> = [
       { inputKey: 'dueDate', beforeKey: 'dueBefore', afterKey: 'dueAfter', operatorKey: 'dueDateOperator' },
       { inputKey: 'deferDate', beforeKey: 'deferBefore', afterKey: 'deferAfter' },
@@ -218,6 +218,8 @@ export class QueryCompiler {
         afterKey: 'completionAfter',
         operatorKey: 'completionDateOperator',
       },
+      // OMN-48: filter tasks by creation timestamp.
+      { inputKey: 'added', beforeKey: 'addedBefore', afterKey: 'addedAfter', operatorKey: 'addedDateOperator' },
     ];
 
     for (const def of dateFieldDefs) {

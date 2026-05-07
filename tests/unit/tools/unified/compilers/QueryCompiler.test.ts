@@ -229,6 +229,30 @@ describe('QueryCompiler', () => {
       });
     });
 
+    // OMN-48: `added` date filter previously had no handler in transformDates,
+    // silently dropping the filter and returning unfiltered results.
+    describe('added date filter (OMN-48)', () => {
+      it('added: { after } sets addedAfter', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ added: { after: '2024-01-01' } });
+        expect(result.addedAfter).toBe('2024-01-01');
+      });
+
+      it('added: { before } sets addedBefore', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ added: { before: '2024-12-31' } });
+        expect(result.addedBefore).toBe('2024-12-31');
+      });
+
+      it('added: { between: [a, b] } sets both bounds and BETWEEN operator', () => {
+        const compiler = new QueryCompiler();
+        const result = compiler.transformFilters({ added: { between: ['2024-01-01', '2024-12-31'] } });
+        expect(result.addedAfter).toBe('2024-01-01');
+        expect(result.addedBefore).toBe('2024-12-31');
+        expect(result.addedDateOperator).toBe('BETWEEN');
+      });
+    });
+
     // OMN-50: status: 'dropped' previously only set projectStatus (no task effect).
     // Each task-level status value must produce a task-filter property the AST builder uses.
     describe('status filter task-level effects (OMN-50)', () => {
