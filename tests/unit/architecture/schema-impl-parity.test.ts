@@ -17,7 +17,11 @@ import {
   SortFieldEnum,
   FILTER_FIELD_NAMES,
 } from '../../../src/tools/unified/schemas/read-schema.js';
-import { buildFilteredTasksScript, buildFilteredProjectsScript } from '../../../src/contracts/ast/script-builder.js';
+import {
+  buildFilteredTasksScript,
+  buildFilteredProjectsScript,
+  DEFAULT_FIELDS,
+} from '../../../src/contracts/ast/script-builder.js';
 import { QueryCompiler } from '../../../src/tools/unified/compilers/QueryCompiler.js';
 import { createTaskResponseV2, createListResponseV2, generateTaskSummary } from '../../../src/utils/response-format.js';
 
@@ -211,6 +215,36 @@ const TASK_LEVEL_FILTER_KEYS = new Set([
 const KNOWN_INEFFECTIVE_STATUS = new Set(['dropped', 'on_hold']);
 
 // =============================================================================
+// TaskFieldEnum ↔ DEFAULT_FIELDS completeness (OMN-51 class)
+// =============================================================================
+//
+// The tool description claims `details: true` returns "all fields with full
+// notes". Internally that maps to DEFAULT_FIELDS = MINIMAL + DETAIL. If a
+// TaskFieldEnum member isn't in DEFAULT_FIELDS, it's unreachable via
+// `details: true` — users have to know it exists and request it explicitly.
+//
+// The drift is between the documented behavior (advertised in the tool
+// description) and the internal default-field membership.
+
+const KNOWN_DETAIL_FIELDS_GAPS = new Set([
+  // Tracked in OMN-51. Either add to DETAIL_FIELDS (preferred) or update docs.
+  'added',
+  'modified',
+  'dropDate',
+  'completionDate',
+  'repetitionRule',
+]);
+
+describe('Parity: TaskFieldEnum ↔ DEFAULT_FIELDS membership (OMN-51 class)', () => {
+  for (const field of TaskFieldEnum.options) {
+    const testFn = KNOWN_DETAIL_FIELDS_GAPS.has(field) ? it.fails : it;
+    testFn(`DEFAULT_FIELDS includes "${field}" (reachable via details: true)`, () => {
+      expect(DEFAULT_FIELDS).toContain(field);
+    });
+  }
+});
+
+// =============================================================================
 // MutationSchema operations ↔ dispatcher cases (defensive)
 // =============================================================================
 //
@@ -250,6 +284,42 @@ describe('Parity: MutationSchema operations ↔ dispatcher (defensive)', () => {
       // Each op should appear at least once as a string literal in dispatch logic.
       const literalPattern = new RegExp(`['"]${op}['"]`);
       expect(source, `operation "${op}" not referenced in OmniFocusWriteTool.ts`).toMatch(literalPattern);
+    }
+  });
+});
+
+// =============================================================================
+// TagActionSchema actions ↔ handleTagManage (defensive)
+// =============================================================================
+//
+// The tag_manage operation has its own action enum (create/rename/delete/
+// merge/nest/unnest/reparent). The handler aliases `unnest → unparent` before
+// dispatch. This source-scan test ensures every action is referenced in the
+// handler — same defensive pattern as the mutation-operations test above.
+
+describe('Parity: TagActionSchema actions ↔ handleTagManage (defensive)', () => {
+  // Source-of-truth list, mirroring TagActionSchema in write-schema.ts.
+  // When a new tag action is added there, this list must be updated alongside
+  // the handler — and that simultaneous edit is exactly the discipline we want.
+  const TAG_ACTIONS = ['create', 'rename', 'delete', 'merge', 'nest', 'unnest', 'reparent'];
+
+  it('write tool source references every tag action (or its alias)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const url = await import('node:url');
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const writeToolPath = path.resolve(here, '../../../src/tools/unified/OmniFocusWriteTool.ts');
+    const source = fs.readFileSync(writeToolPath, 'utf8');
+
+    // Known alias: unnest → unparent (handleTagManage rewrites the action before dispatch).
+    const aliases: Record<string, string> = { unnest: 'unparent' };
+
+    for (const action of TAG_ACTIONS) {
+      const dispatchedName = aliases[action] ?? action;
+      const literalPattern = new RegExp(`['"]${dispatchedName}['"]`);
+      expect(source, `tag action "${action}" (dispatched as "${dispatchedName}") not referenced`).toMatch(
+        literalPattern,
+      );
     }
   });
 });
