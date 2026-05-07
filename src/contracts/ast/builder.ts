@@ -192,8 +192,10 @@ export const FILTER_DEFS: readonly FilterDef[] = [
         conditions.push(comparison('task.estimatedMinutes', '>', f.estimatedMinutesGreaterThan));
       }
       if (conditions.length === 0) return null;
-      if (conditions.length === 1) return conditions[0];
-      return and(...conditions);
+      // OMN-53: AND in an existence check so tasks with no estimate (null) don't
+      // accidentally match operators like `< 30` due to JS null-as-zero coercion.
+      // Mirrors the date-filter pattern.
+      return and(exists('task.estimatedMinutes', true), ...conditions);
     },
   },
 ];
