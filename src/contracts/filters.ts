@@ -209,6 +209,10 @@ export type ProjectStatus = 'active' | 'onHold' | 'done' | 'dropped';
  * @see docs/plans/2025-11-25-phase3-ast-extension-design.md
  */
 export interface ProjectFilter {
+  // --- Identification ---
+  /** Exact project ID lookup (OMN-40). Triggers fast-path via Project.byIdentifier. */
+  id?: string;
+
   // --- Status Filter ---
   /**
    * Filter by project status - can match multiple statuses
@@ -246,6 +250,7 @@ export interface ProjectFilter {
  * Known project filter property names (for validation)
  */
 export const PROJECT_FILTER_PROPERTY_NAMES = [
+  'id',
   'status',
   'flagged',
   'needsReview',

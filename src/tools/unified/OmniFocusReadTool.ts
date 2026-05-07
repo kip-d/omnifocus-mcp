@@ -9,6 +9,7 @@ import {
   buildFilteredProjectsScript,
   buildFilteredFoldersScript,
   buildExportTasksScript,
+  buildProjectByIdScript,
   NOTE_TRUNCATE_LENGTH,
   resolveEffectiveTaskFields,
   resolveEffectiveProjectFields,
@@ -504,6 +505,65 @@ PERFORMANCE:
     });
   }
 
+  /**
+   * OMN-40: project id-lookup fast path. Uses Project.byIdentifier() for O(1)
+   * lookup, bypasses the projects-list cache (whose key did not include id), and
+   * defensively verifies the returned project's id matches the request.
+   */
+  private async executeProjectIdLookup(projectId: string, fields: string[], timer: OperationTimerV2): Promise<unknown> {
+    const generated = buildProjectByIdScript(projectId, fields);
+    const result = await this.execJson(generated.script);
+
+    if (!isScriptSuccess(result)) {
+      return createErrorResponseV2(
+        'projects',
+        'SCRIPT_ERROR',
+        `Failed to find project with ID: ${projectId}`,
+        'Verify the project ID is correct and OmniFocus is running',
+        isScriptError(result) ? result.details : undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const data = result.data as { projects?: unknown[]; items?: unknown[] };
+    const projects = this.parseProjects(data.projects || data.items || []);
+
+    if (projects.length === 0) {
+      return createErrorResponseV2(
+        'projects',
+        'NOT_FOUND',
+        `Project not found with ID: ${projectId}`,
+        'Verify the project ID is correct and the project exists',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const found = projects[0] as { id?: string };
+    if (found.id !== projectId) {
+      return createErrorResponseV2(
+        'projects',
+        'ID_MISMATCH',
+        `Project ID mismatch: requested ${projectId}, received ${found.id ?? 'unknown'}`,
+        'This indicates a potential issue with the OmniFocus script - please report this bug',
+        undefined,
+        timer.toMetadata(),
+      );
+    }
+
+    const listResult = createListResponseV2('projects', projects, 'projects', {
+      ...timer.toMetadata(),
+      from_cache: false,
+      operation: 'list',
+      mode: 'id_lookup',
+    }) as unknown as Record<string, unknown>;
+
+    // Narrow lookup — strip the dashboard-style summary (matches OMN-19 rule).
+    delete listResult.summary;
+
+    return projectFieldsOnResult(listResult, fields);
+  }
+
   private async handleProjectQuery(compiled: CompiledQuery): Promise<unknown> {
     const timer = new OperationTimerV2();
     const limit = compiled.limit || 25;
@@ -512,6 +572,14 @@ PERFORMANCE:
     // Resolve effective project fields
     const userExplicitFields = compiled.fields && compiled.fields.length > 0 ? compiled.fields : undefined;
     const effectiveFields = resolveEffectiveProjectFields(userExplicitFields, compiled.details);
+
+    // OMN-40: id-lookup fast path. The generic project query previously ignored
+    // `compiled.filters.id` and shared a cache key keyed only by status/folder/
+    // text/limit, so id-filtered queries returned arbitrary cached projects.
+    // Use Project.byIdentifier() for O(1) lookup with id-mismatch verification.
+    if (compiled.filters.id) {
+      return this.executeProjectIdLookup(compiled.filters.id, effectiveFields, timer);
+    }
 
     // Build ProjectFilter from compiled query
     const projectFilter: ProjectFilter = {};

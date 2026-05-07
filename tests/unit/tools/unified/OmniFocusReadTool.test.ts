@@ -341,6 +341,77 @@ describe('OmniFocusReadTool', () => {
     });
   });
 
+  // ─── OMN-40: project id-lookup correctness ─────────────────────
+
+  describe('OMN-40 project id-lookup', () => {
+    it('returns the requested project for id filter (was previously ignored)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'h1Y_Mpkz5fL', name: 'Personal/Miscellaneous', status: 'active' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { id: 'h1Y_Mpkz5fL' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.projects).toHaveLength(1);
+      expect(result.data.projects[0].id).toBe('h1Y_Mpkz5fL');
+      expect(result.metadata.mode).toBe('id_lookup');
+    });
+
+    it('returns NOT_FOUND when the id does not match any project', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: { projects: [], metadata: { total_available: 0 } },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { id: 'nonexistent-id' } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('NOT_FOUND');
+    });
+
+    it('returns ID_MISMATCH if the script returns a project with a different id (defensive)', async () => {
+      // This shouldn't happen with Project.byIdentifier(), but the mismatch
+      // check guards against future script-builder bugs of the same shape.
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'wrong-id', name: 'Some Other Project', status: 'active' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      const result = (await tool.execute({
+        query: { type: 'projects', filters: { id: 'requested-id' } },
+      })) as any;
+
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('ID_MISMATCH');
+    });
+
+    it('uses Project.byIdentifier() in the script (O(1) lookup, not iteration)', async () => {
+      execJsonSpy.mockResolvedValueOnce({
+        success: true,
+        data: {
+          projects: [{ id: 'p1', name: 'P', status: 'active' }],
+          metadata: { total_available: 1 },
+        },
+      } satisfies ScriptResult);
+
+      await tool.execute({ query: { type: 'projects', filters: { id: 'p1' } } });
+
+      const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+      expect(scriptArg).toContain('Project.byIdentifier');
+    });
+  });
+
   // ─── Thin-by-default project field resolution ──────────────────
 
   describe('thin-by-default project field resolution', () => {
