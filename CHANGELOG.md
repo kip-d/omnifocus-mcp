@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   projects.
 - **Narrow project lookups omit the full project summary** (OMN-19) — Looking up a single project by ID or name returns
   just that project's data without a noisy database-wide summary.
+- **Tasks export honors `outputDirectory` and `includeCompleted`** (OMN-44) — `omnifocus_read` with
+  `type: "export", exportType: "tasks"` was silently capping the response at 1000 records and ignoring both knobs. When
+  `outputDirectory` is set, the export is written to `tasks.<format>` and the implicit cap rises to 5000;
+  `includeCompleted: false` now actually excludes completed tasks. Response-path exports emit `summary.truncated: true`
+  when the cap fires so callers can detect partial datasets.
 
 ### Improved
 
@@ -46,8 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [4.0.0] - 2026-02-22
 
-Large follow-up release to the v3.0.0 unified API. Focus: reliability of writes, correctness of IDs returned from
-create operations, and a much smaller schema footprint over the wire.
+Large follow-up release to the v3.0.0 unified API. Focus: reliability of writes, correctness of IDs returned from create
+operations, and a much smaller schema footprint over the wire.
 
 ### Added
 
@@ -61,8 +66,8 @@ create operations, and a much smaller schema footprint over the wire.
 
 ### Fixed
 
-- **New task IDs are always correct** (OMN-29) — Create operations resolve the real task ID via a note-marker bridge,
-  so the returned ID is what you'll find in OmniFocus (no more stale JXA IDs).
+- **New task IDs are always correct** (OMN-29) — Create operations resolve the real task ID via a note-marker bridge, so
+  the returned ID is what you'll find in OmniFocus (no more stale JXA IDs).
 - **Tag assignment on newly created tasks is reliable** (OMN-27) — Fresh tag IDs are bridged through OmniJS instead of
   relying on JXA's cached references.
 - **Batch operations honor `parentTempId`** (OMN-28, OMN-31) — Tasks created inside a batch are placed in the right

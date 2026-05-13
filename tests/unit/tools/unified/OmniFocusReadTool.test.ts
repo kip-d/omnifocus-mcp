@@ -772,6 +772,157 @@ describe('OmniFocusReadTool', () => {
         expect(result.data.format).toBe('json');
       });
     });
+
+    // OMN-44: tasks export silently dropped records and ignored includeCompleted.
+    // Two distinct bugs in handleTaskExport: outputDirectory was never read
+    // (only handleBulkExport consumed it), and includeCompleted was never
+    // mapped onto the export filter. Sibling-handler drift.
+    describe('OMN-44 tasks export honors outputDirectory + includeCompleted', () => {
+      it('writes tasks to disk and raises the cap when outputDirectory is set', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [{ id: 't1' }], count: 1 },
+        } satisfies ScriptResult);
+
+        const fsModule = await import('fs');
+        const writeSpy = vi.mocked(fsModule.writeFileSync);
+        writeSpy.mockClear();
+        const mkdirSpy = vi.mocked(fsModule.mkdirSync);
+        mkdirSpy.mockClear();
+
+        const result = (await tool.execute({
+          query: {
+            type: 'export',
+            exportType: 'tasks',
+            format: 'json',
+            outputDirectory: TEST_EXPORT_DIR,
+          },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        // File was written
+        expect(writeSpy).toHaveBeenCalledTimes(1);
+        const [writtenPath] = writeSpy.mock.calls[0];
+        expect(String(writtenPath)).toContain(TEST_EXPORT_DIR);
+        expect(String(writtenPath)).toMatch(/tasks\.json$/);
+        // outputPath is reported back to the caller
+        expect(result.data.outputPath).toBe(writtenPath);
+        // The implicit cap is no longer 1000 when writing to disk; the script
+        // is generated with a substantially higher maxTasks ceiling.
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        const match = scriptArg.match(/const maxTasks = (\d+);/);
+        expect(match).not.toBeNull();
+        const maxTasks = Number(match![1]);
+        expect(maxTasks).toBeGreaterThanOrEqual(5000);
+      });
+
+      it('keeps the 1000 default cap when outputDirectory is NOT set', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [], count: 0 },
+        } satisfies ScriptResult);
+
+        const fsModule = await import('fs');
+        const writeSpy = vi.mocked(fsModule.writeFileSync);
+        writeSpy.mockClear();
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks', format: 'json' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        // No file written when outputDirectory is absent
+        expect(writeSpy).not.toHaveBeenCalled();
+        // The cap is the historical 1000 default
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        const match = scriptArg.match(/const maxTasks = (\d+);/);
+        expect(match).not.toBeNull();
+        expect(Number(match![1])).toBe(1000);
+      });
+
+      it('honors includeCompleted=false for tasks export', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [], count: 0 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: {
+            type: 'export',
+            exportType: 'tasks',
+            format: 'json',
+            includeCompleted: false,
+          },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        // The script must filter out completed tasks. The OmniJS predicate
+        // emitted by the AST builder references task.completed in the filter.
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        expect(scriptArg).toContain('completed');
+        expect(scriptArg).toMatch(/!\s*task\.completed|task\.completed\s*===\s*false|completed:\s*false/);
+      });
+
+      it('treats includeCompleted=true (default) as no completed-filter', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [], count: 0 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: {
+            type: 'export',
+            exportType: 'tasks',
+            format: 'json',
+            includeCompleted: true,
+          },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        // No completed predicate emitted into the filter
+        const scriptArg = execJsonSpy.mock.calls[0][0] as string;
+        // Filter description is emitted as a comment; check the predicate body
+        // does not constrain task.completed. The AST emits `true` for an empty
+        // filter.
+        expect(scriptArg).toContain('return true;');
+      });
+
+      it('flags truncation in summary when the script reports limited=true', async () => {
+        // Script already detects truncation via `tasksAdded >= maxTasks` and
+        // emits `limited: true` (script-builder.ts). Handler must surface it.
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: {
+            format: 'json',
+            data: new Array(1000).fill({ id: 'x' }),
+            count: 1000,
+            limited: true,
+          },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks', format: 'json' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.summary?.truncated).toBe(true);
+        expect(result.data.summary?.cap).toBe(1000);
+      });
+
+      it('does NOT flag truncation when count is below the cap', async () => {
+        execJsonSpy.mockResolvedValueOnce({
+          success: true,
+          data: { format: 'json', data: [{ id: 't1' }], count: 1 },
+        } satisfies ScriptResult);
+
+        const result = (await tool.execute({
+          query: { type: 'export', exportType: 'tasks', format: 'json' },
+        })) as any;
+
+        expect(result.success).toBe(true);
+        expect(result.data.summary?.truncated).not.toBe(true);
+      });
+    });
   });
 
   // ─── Thin-by-default field resolution ─────────────────────────

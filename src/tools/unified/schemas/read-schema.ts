@@ -250,9 +250,19 @@ const ExportQuerySchema = BaseQuerySchema.merge(
     exportType: ExportTypeEnum.optional().describe('What to export: tasks, projects, or all'),
     format: ExportFormatEnum.optional().describe('Export format: json, csv, or markdown'),
     exportFields: z.array(ExportFieldEnum).optional().describe('Fields to include in export'),
-    outputDirectory: z.string().optional().describe('Directory for bulk export (required when exportType=all)'),
+    outputDirectory: z
+      .string()
+      .optional()
+      .describe(
+        'Directory to write the export. With exportType="tasks" writes tasks.<format> and raises the cap; required for exportType="all".',
+      ),
     includeStats: z.boolean().optional().describe('Include statistics in project export'),
-    includeCompleted: z.boolean().optional().describe('Include completed tasks in export'),
+    includeCompleted: z
+      .boolean()
+      .optional()
+      .describe(
+        'Include completed tasks in export (default true). Honored by exportType="tasks" and exportType="all".',
+      ),
   }),
 ).strict();
 
