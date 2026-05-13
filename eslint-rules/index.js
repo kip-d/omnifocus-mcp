@@ -47,12 +47,12 @@ const plugin = {
         type: 'suggestion',
         docs: {
           description:
-            'Tool-response methods should construct results via createSuccessResponseV2 / createErrorResponseV2 / createListResponse, not plain object literals',
+            'Tool-response methods should construct results via createSuccessResponseV2 / createErrorResponseV2 / createListResponseV2, not plain object literals',
         },
         schema: [],
         messages: {
           useStandardResponse:
-            'Use createSuccessResponseV2, createErrorResponseV2, or createListResponse instead of returning a plain {success|data} object literal',
+            'Use createSuccessResponseV2, createErrorResponseV2, or createListResponseV2 instead of returning a plain {success|data} object literal',
         },
       },
       create(context) {
@@ -131,7 +131,21 @@ const plugin = {
         },
       },
       create(context) {
-        const RESPONSE_BUILDERS = new Set(['createSuccessResponse', 'createErrorResponse', 'createListResponse']);
+        // Per-builder metadata-arg index. Signatures are not uniform:
+        //   V1 (legacy, no longer called in src/): metadata is the 3rd arg.
+        //   createSuccessResponseV2(op, data, summary?, metadata?)   — 4th arg.
+        //   createListResponseV2   (op, items, itemType, metadata?)  — 4th arg.
+        //   createErrorResponseV2  (op, code, msg, suggestion?, details?, metadata?) — 6th arg.
+        //   createTaskResponseV2   (op, tasks, metadata?)            — 3rd arg.
+        const METADATA_ARG_INDEX = {
+          createSuccessResponse: 2,
+          createErrorResponse: 2,
+          createListResponse: 2,
+          createSuccessResponseV2: 3,
+          createErrorResponseV2: 5,
+          createListResponseV2: 3,
+          createTaskResponseV2: 2,
+        };
         return {
           Property(node) {
             const objExpr = node.parent;
@@ -143,8 +157,9 @@ const plugin = {
               (callee && callee.type === 'Identifier' && callee.name) ||
               (callee && callee.type === 'MemberExpression' && callee.property && callee.property.name) ||
               null;
-            if (!calleeName || !RESPONSE_BUILDERS.has(calleeName)) return;
-            if (call.arguments[2] !== objExpr) return;
+            const metaIndex = calleeName ? METADATA_ARG_INDEX[calleeName] : undefined;
+            if (typeof metaIndex !== 'number') return;
+            if (call.arguments[metaIndex] !== objExpr) return;
 
             const key = (node.key && (node.key.name || node.key.value)) || null;
             if (typeof key === 'string' && /[a-z][A-Z]/.test(key)) {

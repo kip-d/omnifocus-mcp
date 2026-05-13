@@ -179,7 +179,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
           `Invalid operation: ${String(operation)}`,
           undefined,
           { operation },
-          { executionTime: 0 },
+          { execution_time: 0 },
         );
     }
   }
@@ -479,7 +479,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         ...timer.toMetadata(),
         operation: 'diagnostics',
         health: allSuccessful ? 'healthy' : 'degraded',
-        testScript: args.testScript,
+        test_script: args.testScript,
       });
     } catch (error) {
       return createErrorResponseV2(
@@ -518,7 +518,7 @@ export class SystemTool extends BaseTool<typeof SystemToolSchema> {
         createSuccessResponseV2('system', result, undefined, {
           ...timer.toMetadata(),
           operation: 'metrics',
-          metricsType,
+          metrics_type: metricsType,
         }),
       );
     } catch (error) {
