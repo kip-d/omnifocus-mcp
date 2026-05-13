@@ -1,168 +1,218 @@
 /**
- * Custom ESLint rules for OmniFocus MCP coding standards
+ * Custom ESLint rules for OmniFocus MCP coding standards.
+ *
+ * ESLint 9 flat-config plugin: top-level `meta` + `rules`, ESM default export.
+ * Uses ESLint 9 context properties (`context.filename`, `context.sourceCode`)
+ * rather than the deprecated `getFilename()` / `getSourceCode()` methods.
  */
 
-module.exports = {
+const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+
+function enclosingFunction(node) {
+  for (let n = node.parent; n; n = n.parent) {
+    if (FUNCTION_TYPES.has(n.type)) return n;
+  }
+  return null;
+}
+
+const plugin = {
+  meta: {
+    name: 'omnifocus-mcp-local',
+    version: '1.0.0',
+  },
   rules: {
-    /**
-     * Ensure all Tool classes extend BaseTool
-     */
     'extend-base-tool': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Tool classes must extend BaseTool' },
+        schema: [],
+        messages: {
+          mustExtendBaseTool: 'Tool classes must extend BaseTool',
+        },
+      },
       create(context) {
         return {
           ClassDeclaration(node) {
-            if (node.id && node.id.name.endsWith('Tool')) {
-              if (!node.superClass || node.superClass.name !== 'BaseTool') {
-                context.report({
-                  node,
-                  message: 'Tool classes must extend BaseTool',
-                });
-              }
+            if (!node.id || !node.id.name.endsWith('Tool')) return;
+            if (!node.superClass || node.superClass.type !== 'Identifier' || node.superClass.name !== 'BaseTool') {
+              context.report({ node, messageId: 'mustExtendBaseTool' });
             }
           },
         };
       },
     },
 
-    /**
-     * Ensure tools use standardized response functions
-     */
     'use-standard-response': {
+      meta: {
+        type: 'suggestion',
+        docs: {
+          description:
+            'Tool-response methods should construct results via createSuccessResponseV2 / createErrorResponseV2 / createListResponseV2, not plain object literals',
+        },
+        schema: [],
+        messages: {
+          useStandardResponse:
+            'Use createSuccessResponseV2, createErrorResponseV2, or createListResponseV2 instead of returning a plain {success|data} object literal',
+        },
+      },
       create(context) {
+        const filename = context.filename;
+        if (!filename.includes('/tools/') || !filename.endsWith('Tool.ts')) return {};
+
         return {
           ReturnStatement(node) {
-            // Check if we're in a tool file
-            const filename = context.getFilename();
-            if (!filename.includes('/tools/') || !filename.endsWith('Tool.ts')) {
-              return;
-            }
+            if (!node.argument || node.argument.type !== 'ObjectExpression') return;
 
-            // Check if returning an object literal directly
-            if (node.argument && node.argument.type === 'ObjectExpression') {
-              const properties = node.argument.properties.map((p) => p.key?.name);
+            // Only enforce inside methods that are annotated as producing a
+            // StandardResponse — helpers returning internal envelopes (unknown,
+            // domain objects) are not subject to this contract.
+            const fn = enclosingFunction(node);
+            if (!fn || !fn.returnType) return;
+            const annText = context.sourceCode.getText(fn.returnType);
+            if (!annText.includes('StandardResponse')) return;
 
-              // If it looks like a response object but not using standard functions
-              if (properties.includes('success') || properties.includes('data')) {
-                context.report({
-                  node,
-                  message:
-                    'Use createSuccessResponse, createErrorResponse, or createListResponse instead of returning plain objects',
-                });
-              }
+            const keys = node.argument.properties
+              .map((p) => (p.type === 'Property' && p.key && (p.key.name || p.key.value)) || null)
+              .filter(Boolean);
+            if (keys.includes('success') || keys.includes('data')) {
+              context.report({ node, messageId: 'useStandardResponse' });
             }
           },
         };
       },
     },
 
-    /**
-     * Ensure error handling uses this.handleError
-     */
     'use-handle-error': {
+      meta: {
+        type: 'suggestion',
+        docs: {
+          description:
+            'Catch blocks that return must route through a standard error sink (this.handleError[V2] or createErrorResponse[V2]) or rethrow',
+        },
+        schema: [],
+        messages: {
+          useHandleError:
+            'Catch blocks that return should use this.handleErrorV2(error), createErrorResponseV2(...), or rethrow — not return a plain object',
+        },
+      },
       create(context) {
+        const filename = context.filename;
+        if (!filename.includes('/tools/') || !filename.endsWith('Tool.ts')) return {};
+
+        const VALID_SINK = /\bthis\.handleError(V2)?\b|\bcreateErrorResponse(V2)?\b|\bthrow\b/;
+
         return {
           CatchClause(node) {
-            const filename = context.getFilename();
-            if (!filename.includes('/tools/') || !filename.endsWith('Tool.ts')) {
-              return;
-            }
+            // Only flag catches inside methods that produce tool responses —
+            // i.e., whose return-type annotation mentions StandardResponse.
+            const fn = enclosingFunction(node);
+            if (!fn || !fn.returnType) return;
+            const annText = context.sourceCode.getText(fn.returnType);
+            if (!annText.includes('StandardResponse')) return;
 
-            // Check if catch block body contains this.handleError
-            const sourceCode = context.getSourceCode();
-            const catchBody = sourceCode.getText(node.body);
-
-            if (!catchBody.includes('this.handleError')) {
-              // Check if it's throwing (which is sometimes acceptable)
-              if (!catchBody.includes('throw')) {
-                context.report({
-                  node,
-                  message: 'Use this.handleError(error) in catch blocks for consistent error handling',
-                });
-              }
-            }
+            const text = context.sourceCode.getText(node.body);
+            // Side-effecting catch blocks (no return) record sub-task results
+            // in loops; the consistent-error-response contract doesn't apply.
+            if (!/\breturn\b/.test(text)) return;
+            if (VALID_SINK.test(text)) return;
+            context.report({ node, messageId: 'useHandleError' });
           },
         };
       },
     },
 
-    /**
-     * Ensure metadata fields use snake_case
-     */
     'metadata-snake-case': {
+      meta: {
+        type: 'suggestion',
+        docs: { description: 'Metadata fields in response builders must use snake_case' },
+        schema: [],
+        messages: {
+          snakeCaseMetadata: "Metadata field '{{key}}' should use snake_case naming",
+        },
+      },
       create(context) {
+        // Per-builder metadata-arg index. Signatures are not uniform:
+        //   V1 (legacy, no longer called in src/): metadata is the 3rd arg.
+        //   createSuccessResponseV2(op, data, summary?, metadata?)   — 4th arg.
+        //   createListResponseV2   (op, items, itemType, metadata?)  — 4th arg.
+        //   createErrorResponseV2  (op, code, msg, suggestion?, details?, metadata?) — 6th arg.
+        //   createTaskResponseV2   (op, tasks, metadata?)            — 3rd arg.
+        const METADATA_ARG_INDEX = {
+          createSuccessResponse: 2,
+          createErrorResponse: 2,
+          createListResponse: 2,
+          createSuccessResponseV2: 3,
+          createErrorResponseV2: 5,
+          createListResponseV2: 3,
+          createTaskResponseV2: 2,
+        };
         return {
           Property(node) {
-            // Look for metadata object properties
-            if (node.parent && node.parent.parent) {
-              const parentNode = node.parent.parent;
+            const objExpr = node.parent;
+            if (!objExpr || objExpr.type !== 'ObjectExpression') return;
+            const call = objExpr.parent;
+            if (!call || call.type !== 'CallExpression') return;
+            const callee = call.callee;
+            const calleeName =
+              (callee && callee.type === 'Identifier' && callee.name) ||
+              (callee && callee.type === 'MemberExpression' && callee.property && callee.property.name) ||
+              null;
+            const metaIndex = calleeName ? METADATA_ARG_INDEX[calleeName] : undefined;
+            if (typeof metaIndex !== 'number') return;
+            if (call.arguments[metaIndex] !== objExpr) return;
 
-              // Check if this is likely a metadata object
-              if (parentNode.type === 'CallExpression') {
-                const callee = parentNode.callee;
-                if (
-                  callee.name === 'createSuccessResponse' ||
-                  callee.name === 'createErrorResponse' ||
-                  callee.name === 'createListResponse'
-                ) {
-                  // Check if property is in the metadata parameter (3rd argument)
-                  const args = parentNode.arguments;
-                  if (args[2] && node.parent === args[2]) {
-                    const key = node.key.name || node.key.value;
-
-                    // Check if key is camelCase (should be snake_case)
-                    if (key && /[a-z][A-Z]/.test(key)) {
-                      context.report({
-                        node,
-                        message: `Metadata field '${key}' should use snake_case naming`,
-                      });
-                    }
-                  }
-                }
-              }
+            const key = (node.key && (node.key.name || node.key.value)) || null;
+            if (typeof key === 'string' && /[a-z][A-Z]/.test(key)) {
+              context.report({ node, messageId: 'snakeCaseMetadata', data: { key } });
             }
           },
         };
       },
     },
 
-    /**
-     * Ensure schema files export Zod schemas
-     */
     'export-zod-schema': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description: 'Schema files must import zod and export at least one *Schema binding',
+        },
+        schema: [],
+        messages: {
+          missingZodImport: 'Schema files must import from zod',
+          missingSchemaExport: 'Schema files must export at least one Schema',
+        },
+      },
       create(context) {
+        const filename = context.filename;
+        if (!filename.includes('/schemas/') || !filename.endsWith('.ts')) return {};
+
+        // Files named *helper*.ts are utility modules (e.g., coerceBoolean factories)
+        // colocated with schemas — they import zod but don't define Schemas directly.
+        const isHelperModule = /helpers?\.ts$/i.test(filename);
+
         let hasZodImport = false;
         let hasSchemaExport = false;
 
         return {
           ImportDeclaration(node) {
-            if (node.source.value === 'zod') {
-              hasZodImport = true;
-            }
+            if (node.source.value === 'zod') hasZodImport = true;
           },
           ExportNamedDeclaration(node) {
-            if (node.declaration && node.declaration.declarations) {
-              node.declaration.declarations.forEach((decl) => {
-                if (decl.id.name && decl.id.name.endsWith('Schema')) {
-                  hasSchemaExport = true;
-                }
-              });
+            const decls = node.declaration && node.declaration.declarations;
+            if (!decls) return;
+            for (const d of decls) {
+              const name = d.id && d.id.name;
+              if (typeof name === 'string' && /Schema/.test(name)) {
+                hasSchemaExport = true;
+              }
             }
           },
-          'Program:exit'() {
-            const filename = context.getFilename();
-            if (filename.includes('/schemas/') && filename.endsWith('.ts')) {
-              if (!hasZodImport) {
-                context.report({
-                  node: context.getSourceCode().ast,
-                  message: 'Schema files must import from zod',
-                });
-              }
-              if (!hasSchemaExport) {
-                context.report({
-                  node: context.getSourceCode().ast,
-                  message: 'Schema files must export at least one Schema',
-                });
-              }
+          'Program:exit'(programNode) {
+            if (!hasZodImport) {
+              context.report({ node: programNode, messageId: 'missingZodImport' });
+            }
+            if (!hasSchemaExport && !isHelperModule) {
+              context.report({ node: programNode, messageId: 'missingSchemaExport' });
             }
           },
         };
@@ -170,3 +220,5 @@ module.exports = {
     },
   },
 };
+
+export default plugin;

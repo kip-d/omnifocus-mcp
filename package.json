@@ -35,7 +35,7 @@
     "test:dev": "./scripts/test-quick.sh",
     "test:cleanup": "npx tsx scripts/test-cleanup.ts",
     "lint": "eslint src --ext .ts",
-    "lint:strict": "eslint src --ext .ts --config .eslintrc.mcp.json",
+    "lint:strict": "eslint src --ext .ts --max-warnings=0",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "npx prettier --write \"**/*.{ts,js,json,md}\"",
     "format:check": "npx prettier --check \"**/*.{ts,js,json,md}\"",

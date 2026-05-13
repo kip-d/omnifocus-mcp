@@ -145,7 +145,7 @@ describe('SystemTool', () => {
       expect(result.success).toBe(true);
       expect(result.data.tests.list_tasks_script).toBeDefined();
       expect(result.data.tests.list_tasks_script.success).toBe(true);
-      expect(result.metadata.testScript).toBe('list_tasks');
+      expect(result.metadata.test_script).toBe('list_tasks');
     });
 
     it('should handle failed diagnostic tests', async () => {
