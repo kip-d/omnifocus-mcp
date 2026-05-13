@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { TEST_TAG_PREFIX } from '../helpers/sandbox-manager.js';
+import { expectOk } from '../helpers/expect-ok.js';
 
 describe('Analytics Validation - Actual Calculations', () => {
   let client: MCPTestClient;
@@ -96,7 +97,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       });
 
       // ✅ Validate calculation is reasonable
-      expect(result.success).toBe(true);
+      expectOk(result, 'productivity_stats');
       expect(result.data).toBeDefined();
 
       // Can't validate exact counts (other tasks may exist) but validate structure
@@ -154,7 +155,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       });
 
       // ✅ Validate analysis structure
-      expect(result.success).toBe(true);
+      expectOk(result, 'overdue_analysis');
       expect(result.data).toBeDefined();
       expect(result.data.stats).toBeDefined();
       expect(result.data.stats.summary).toBeDefined();
@@ -202,7 +203,7 @@ describe('Analytics Validation - Actual Calculations', () => {
       });
 
       // ✅ Validate velocity structure
-      expect(velocityResult.success).toBe(true);
+      expectOk(velocityResult, 'task_velocity');
       expect(velocityResult.data).toBeDefined();
       expect(velocityResult.data.velocity).toBeDefined();
 
@@ -241,8 +242,8 @@ describe('Analytics Validation - Actual Calculations', () => {
       expect(velocityResult.data.velocity.tasksCompleted).toBeGreaterThanOrEqual(0);
 
       // Both tools should succeed
-      expect(productivityResult.success).toBe(true);
-      expect(velocityResult.success).toBe(true);
+      expectOk(productivityResult, 'cross-tool productivity_stats');
+      expectOk(velocityResult, 'cross-tool task_velocity');
     }, 90000);
   });
 });

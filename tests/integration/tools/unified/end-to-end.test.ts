@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
+import { expectOk } from '../../helpers/expect-ok.js';
 
 describe('Unified Tools End-to-End Integration', () => {
   let serverProcess: ChildProcess;
@@ -222,7 +223,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
       // Verify success
       expect(parsed).toHaveProperty('success');
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'count-only active tasks');
 
       // Verify metadata includes count and optimization flag
       expect(parsed.metadata).toHaveProperty('total_count');
@@ -264,7 +265,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
       // Verify success
       expect(parsed).toHaveProperty('success');
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'count-only flagged tasks');
 
       // Verify count metadata
       expect(parsed.metadata).toHaveProperty('total_count');
@@ -293,7 +294,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const firstContent = (firstResult as { content: Array<{ type: string; text: string }> }).content;
         const firstParsed = JSON.parse(firstContent[0].text);
-        expect(firstParsed.success).toBe(true);
+        expectOk(firstParsed, 'paginate tasks page 1');
         const firstTaskIds = firstParsed.data?.tasks?.map((t: { id: string }) => t.id) || [];
 
         // Second request: get tasks 5-9
@@ -315,7 +316,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const secondContent = (secondResult as { content: Array<{ type: string; text: string }> }).content;
         const secondParsed = JSON.parse(secondContent[0].text);
-        expect(secondParsed.success).toBe(true);
+        expectOk(secondParsed, 'paginate tasks page 2');
         const secondTaskIds = secondParsed.data?.tasks?.map((t: { id: string }) => t.id) || [];
 
         // Verify no overlap between first and second page
@@ -344,7 +345,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const parsed = JSON.parse(content[0].text);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'offset_applied metadata');
         // The offset should be reflected in the response metadata
         expect(parsed.metadata).toHaveProperty('offset');
         expect(parsed.metadata.offset).toBe(10);
@@ -385,7 +386,7 @@ describe('Unified Tools End-to-End Integration', () => {
       if (!parsed.success) {
         console.error('Create task failed:', JSON.stringify(parsed.error, null, 2));
       }
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'create task (builder API)');
 
       // Extract task ID for subsequent tests
       if (parsed.data?.task?.taskId) {
@@ -428,7 +429,7 @@ describe('Unified Tools End-to-End Integration', () => {
       const responseText = content[0].text;
       const parsed = JSON.parse(responseText);
       expect(parsed).toHaveProperty('success');
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'update created task');
     }, 60000);
 
     it('should complete the task', async () => {
@@ -459,7 +460,7 @@ describe('Unified Tools End-to-End Integration', () => {
       const responseText = content[0].text;
       const parsed = JSON.parse(responseText);
       expect(parsed).toHaveProperty('success');
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'complete task');
     }, 60000);
 
     it('should delete the completed task', async () => {
@@ -490,7 +491,7 @@ describe('Unified Tools End-to-End Integration', () => {
       const responseText = content[0].text;
       const parsed = JSON.parse(responseText);
       expect(parsed).toHaveProperty('success');
-      expect(parsed.success).toBe(true);
+      expectOk(parsed, 'delete completed task');
     }, 60000);
   });
 
@@ -577,7 +578,7 @@ describe('Unified Tools End-to-End Integration', () => {
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const responseText = content[0].text;
         const parsed = JSON.parse(responseText);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'create task with planned date');
         expect(parsed.data?.task?.taskId).toBeDefined();
       }, 60000);
 
@@ -630,7 +631,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const updateContent = (updateResult as { content: Array<{ type: string; text: string }> }).content;
         const updateParsed = JSON.parse(updateContent[0].text);
-        expect(updateParsed.success).toBe(true);
+        expectOk(updateParsed, 'update planned date');
       }, 60000);
 
       it('should clear planned date when set to null', async () => {
@@ -658,6 +659,7 @@ describe('Unified Tools End-to-End Integration', () => {
         const createContent = (createResult as { content: Array<{ type: string; text: string }> }).content;
         const createParsed = JSON.parse(createContent[0].text);
         const taskId = createParsed.data?.task?.taskId;
+        expect(taskId).toBeDefined();
 
         // Clear planned date
         const updateResult = await sendRequest({
@@ -681,7 +683,7 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const updateContent = (updateResult as { content: Array<{ type: string; text: string }> }).content;
         const updateParsed = JSON.parse(updateContent[0].text);
-        expect(updateParsed.success).toBe(true);
+        expectOk(updateParsed, 'clear planned date');
       }, 60000);
     });
 
@@ -714,7 +716,7 @@ describe('Unified Tools End-to-End Integration', () => {
         expect(result).toBeDefined();
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const parsed = JSON.parse(content[0].text);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'create task with daily repeat');
         expect(parsed.data?.task?.taskId).toBeDefined();
       }, 60000);
 
@@ -746,7 +748,8 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const parsed = JSON.parse(content[0].text);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'create task with weekly repeat');
+        expect(parsed.data?.task?.taskId).toBeDefined();
       }, 60000);
 
       it('should create task with repeat rule and end date', async () => {
@@ -777,7 +780,8 @@ describe('Unified Tools End-to-End Integration', () => {
 
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const parsed = JSON.parse(content[0].text);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'create task with limited repeat');
+        expect(parsed.data?.task?.taskId).toBeDefined();
       }, 60000);
     });
 
@@ -798,7 +802,7 @@ describe('Unified Tools End-to-End Integration', () => {
         expect(result).toBeDefined();
         const content = (result as { content: Array<{ type: string; text: string }> }).content;
         const parsed = JSON.parse(content[0].text);
-        expect(parsed.success).toBe(true);
+        expectOk(parsed, 'system version');
         expect(parsed.metadata?.omnifocus_version).toBeDefined();
       }, 60000);
     });

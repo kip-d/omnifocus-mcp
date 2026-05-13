@@ -5,9 +5,9 @@
  * This is the foundation for Windows -> Mac remote OmniFocus access.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { HTTPTestClient } from './helpers/http-test-client.js';
-import { TEST_INBOX_PREFIX } from './helpers/sandbox-manager.js';
+import { expectOk } from './helpers/expect-ok.js';
 
 // Auto-enable on macOS with OmniFocus
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
@@ -125,10 +125,11 @@ d('HTTP Transport Integration Tests', () => {
       // Create a test task
       const createResult = (await client.createTestTask('HTTP Transport Test Task')) as {
         success: boolean;
+        error?: unknown;
         data: { task: { taskId: string; name: string } };
       };
 
-      expect(createResult.success).toBe(true);
+      expectOk(createResult, 'HTTP transport create task');
       expect(createResult.data.task.taskId).toBeTruthy();
       expect(createResult.data.task.name).toContain('HTTP Transport Test Task');
     });

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
+import { expectOk } from '../helpers/expect-ok.js';
 
 /**
  * P0 Priority: Filter Results Validation
@@ -40,7 +41,7 @@ describe('Filter Results Validation', () => {
       });
 
       // ✅ Validate response structure
-      expect(data.success).toBe(true);
+      expectOk(data, 'text filter');
       expect(Array.isArray(data.data?.tasks)).toBe(true);
 
       if (data.data.tasks.length > 0) {
@@ -87,7 +88,7 @@ describe('Filter Results Validation', () => {
         },
       });
 
-      expect(data.success).toBe(true);
+      expectOk(data, 'date range filter');
       expect(Array.isArray(data.data?.tasks)).toBe(true);
 
       if (data.data.tasks.length > 0) {
@@ -162,7 +163,7 @@ describe('Filter Results Validation', () => {
         },
       });
 
-      expect(data.success).toBe(true);
+      expectOk(data, 'tag filter (any)');
       expect(Array.isArray(data.data?.tasks)).toBe(true);
 
       if (data.data.tasks.length > 0) {
@@ -201,7 +202,7 @@ describe('Filter Results Validation', () => {
         },
       });
 
-      expect(data.success).toBe(true);
+      expectOk(data, 'tag filter (all)');
       expect(Array.isArray(data.data?.tasks)).toBe(true);
 
       if (data.data.tasks.length > 0) {
@@ -242,7 +243,7 @@ describe('Filter Results Validation', () => {
         },
       });
 
-      expect(data.success).toBe(true);
+      expectOk(data, 'tag filter (none)');
       expect(Array.isArray(data.data?.tasks)).toBe(true);
 
       if (data.data.tasks.length > 0) {
@@ -294,7 +295,7 @@ describe('Filter Results Validation', () => {
         },
       });
 
-      expect(data.success).toBe(true);
+      expectOk(data, 'combined text + date filter');
 
       if (data.data?.tasks?.length > 0) {
         // ✅ Validate EVERY result matches ALL filters

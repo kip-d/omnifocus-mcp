@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
 import { ensureSandboxFolder, fullCleanup, SANDBOX_FOLDER_NAME, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
+import { expectOk } from './helpers/expect-ok.js';
 
 // Only run on macOS with OmniFocus
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
@@ -104,7 +105,7 @@ d('Batch Operations Integration (Unified API)', () => {
 
     // Flat results: first item is the created project
     const createResult = response.data.results[0];
-    expect(createResult.success).toBe(true);
+    expectOk(createResult, 'batch create project (first result)');
     expect(createResult.operation).toBe('create');
     expect(createResult.id).toBeTruthy();
   }, 30000);

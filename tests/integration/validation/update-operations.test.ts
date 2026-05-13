@@ -22,6 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from '../helpers/shared-server.js';
 import { MCPTestClient } from '../helpers/mcp-test-client.js';
 import { fullCleanup, TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from '../helpers/sandbox-manager.js';
+import { expectOk } from '../helpers/expect-ok.js';
 
 describe('Update Operations - Read-Back Validation', () => {
   let client: MCPTestClient;
@@ -77,7 +78,7 @@ describe('Update Operations - Read-Back Validation', () => {
       },
     });
 
-    expect(result.success).toBe(true);
+    expectOk(result, `create task "${taskName}"`);
     expect(result.data?.task?.taskId).toBeDefined();
 
     const taskId = result.data.task.taskId;
@@ -93,7 +94,7 @@ describe('Update Operations - Read-Back Validation', () => {
       },
     });
 
-    expect(result.success).toBe(true);
+    expectOk(result, `read task ${taskId}`);
     expect(result.data?.tasks?.length).toBe(1);
     return result.data.tasks[0];
   }
@@ -140,7 +141,7 @@ describe('Update Operations - Read-Back Validation', () => {
 
       // 2. Update dueDate
       let updateResult = await updateTask(taskId, { dueDate: '2025-12-25' });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update dueDate');
 
       // Verify dueDate persisted
       let task = await readTask(taskId);
@@ -149,7 +150,7 @@ describe('Update Operations - Read-Back Validation', () => {
 
       // 3. Update deferDate
       updateResult = await updateTask(taskId, { deferDate: '2025-12-20' });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update deferDate');
 
       // Verify deferDate persisted (dueDate should still be set)
       task = await readTask(taskId);
@@ -160,7 +161,7 @@ describe('Update Operations - Read-Back Validation', () => {
       // 4. Clear dueDate using clearDueDate flag
       // Bug #14 Fix: Use clearDueDate boolean flag instead of dueDate: null
       updateResult = await updateTask(taskId, { clearDueDate: true });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'clear dueDate');
 
       // Verify dueDate was cleared
       task = await readTask(taskId);
@@ -174,7 +175,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const taskId = await createTask('Test update plannedDate');
 
       const updateResult = await updateTask(taskId, { plannedDate: '2025-12-18' });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update plannedDate');
 
       const task = await readTask(taskId);
 
@@ -199,7 +200,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const updateResult = await updateTask(taskId, {
         tags: [TEST_TAG, 'replaced1', 'replaced2', 'replaced3'],
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'replace tags');
 
       // Verify tags replaced (not merged)
       const task = await readTask(taskId);
@@ -224,7 +225,7 @@ describe('Update Operations - Read-Back Validation', () => {
       let updateResult = await updateTask(taskId, {
         addTags: ['new1', 'new2'],
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'addTags');
 
       // Verify tags appended
       let task = await readTask(taskId);
@@ -239,7 +240,7 @@ describe('Update Operations - Read-Back Validation', () => {
       updateResult = await updateTask(taskId, {
         addTags: ['existing1', 'another-new'],
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'addTags deduplication');
 
       // Verify no duplicates created
       task = await readTask(taskId);
@@ -264,7 +265,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const updateResult = await updateTask(taskId, {
         removeTags: ['remove1', 'remove2'],
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'removeTags');
 
       // Verify specified tags removed, others kept
       const task = await readTask(taskId);
@@ -287,14 +288,14 @@ describe('Update Operations - Read-Back Validation', () => {
       let updateResult = await updateTask(taskId, {
         note: 'This is an updated note',
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update note');
 
       let task = await readTask(taskId);
       expect(task.note).toBe('This is an updated note');
 
       // 2. Update flagged status
       updateResult = await updateTask(taskId, { flagged: true });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update flagged');
 
       task = await readTask(taskId);
       expect(task.flagged).toBe(true);
@@ -302,7 +303,7 @@ describe('Update Operations - Read-Back Validation', () => {
 
       // 3. Update estimatedMinutes
       updateResult = await updateTask(taskId, { estimatedMinutes: 30 });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'update estimatedMinutes');
 
       task = await readTask(taskId);
       expect(task.estimatedMinutes).toBe(30);
@@ -322,7 +323,7 @@ describe('Update Operations - Read-Back Validation', () => {
         estimatedMinutes: 45,
         addTags: ['urgent', 'priority'],
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'multi-field update');
 
       // Verify ALL changes persisted
       const task = await readTask(taskId);
@@ -347,7 +348,7 @@ describe('Update Operations - Read-Back Validation', () => {
       const updateResult = await updateTask(childTaskId, {
         parentTaskId: parentTaskId,
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'set parentTaskId');
 
       // 4. Read back and verify parent-child relationship
       const task = await readTask(childTaskId);
@@ -364,7 +365,7 @@ describe('Update Operations - Read-Back Validation', () => {
       let updateResult = await updateTask(childTaskId, {
         parentTaskId: parentTaskId,
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'set parentTaskId (pre-orphan)');
 
       // Verify it's a subtask
       let task = await readTask(childTaskId);
@@ -374,7 +375,7 @@ describe('Update Operations - Read-Back Validation', () => {
       updateResult = await updateTask(childTaskId, {
         parentTaskId: null,
       });
-      expect(updateResult.success).toBe(true);
+      expectOk(updateResult, 'clear parentTaskId');
 
       // 4. Verify parent relationship removed
       task = await readTask(childTaskId);

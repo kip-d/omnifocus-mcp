@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getSharedClient } from './helpers/shared-server.js';
 import { MCPTestClient } from './helpers/mcp-test-client.js';
 import { TEST_INBOX_PREFIX, TEST_TAG_PREFIX } from './helpers/sandbox-manager.js';
+import { expectOk } from './helpers/expect-ok.js';
 
 // Auto-enable on macOS with OmniFocus
 const RUN_INTEGRATION_TESTS = process.env.DISABLE_INTEGRATION_TESTS !== 'true' && process.platform === 'darwin';
@@ -83,7 +84,7 @@ d('MCP Protocol Compliance Tests', () => {
       if (result.success === false) {
         expect(result.error.message).toContain('OmniFocus');
       } else {
-        expect(result.success).toBe(true);
+        expectOk(result, 'list tasks');
         expect(result).toHaveProperty('data');
         expect(result.data).toHaveProperty('tasks');
         expect(result).toHaveProperty('metadata');
@@ -111,7 +112,7 @@ d('MCP Protocol Compliance Tests', () => {
         expect(result.success).toBe(false);
         expect(result.error.message).toContain('OmniFocus');
       } else {
-        expect(result.success).toBe(true);
+        expectOk(result, 'create task with tags');
         expect(result.data).toBeDefined();
         expect(result.data.task).toBeDefined();
         expect(result.data.task.taskId).toBeDefined();
@@ -144,7 +145,7 @@ d('MCP Protocol Compliance Tests', () => {
           errorMessage.includes('not running');
         expect(isOmniFocusError).toBe(true);
       } else {
-        expect(result.success).toBe(true);
+        expectOk(result, 'list projects');
         expect(result).toHaveProperty('data');
         expect(result.data).toHaveProperty('projects'); // Entity-specific key
         expect(result).toHaveProperty('metadata');
