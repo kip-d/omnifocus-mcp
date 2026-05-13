@@ -196,6 +196,7 @@ export interface ExportDataV2 {
   data: string | object;
   count: number;
   summary?: Record<string, unknown>;
+  outputPath?: string;
 }
 
 export type ExportResponseV2 = StandardResponseV2<ExportDataV2>;

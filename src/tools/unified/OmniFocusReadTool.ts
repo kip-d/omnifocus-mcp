@@ -190,7 +190,11 @@ RESPONSE CONTROL:
 
 COMPLETED TASKS:
 - Use filters: { completed: true } or filters: { status: "completed" } to query completed tasks
-- includeCompleted is for export operations only (type: "export")
+- includeCompleted is for export operations only (type: "export"); honored by exportType: "tasks" and exportType: "all"
+
+EXPORT TO DISK:
+- outputDirectory: when set with exportType: "tasks", writes tasks.<format> to disk (raises the implicit cap to 5000); required for exportType: "all"
+- A response-path export (no outputDirectory) caps at 1000 by default and emits summary.truncated when the cap fires; override with limit
 
 PERFORMANCE:
 - Use countOnly for counting questions
@@ -258,8 +262,16 @@ PERFORMANCE:
             exportType: { type: 'string', enum: ['tasks', 'projects', 'all'] },
             format: { type: 'string', enum: ['json', 'csv', 'markdown'] },
             exportFields: { type: 'array', items: { type: 'string' } },
-            outputDirectory: { type: 'string' },
-            includeCompleted: { type: 'boolean', description: 'Export only: include completed tasks in export' },
+            outputDirectory: {
+              type: 'string',
+              description:
+                'Export only: directory to write the export file to. With exportType:"tasks" writes tasks.<format> and raises the cap; required for exportType:"all".',
+            },
+            includeCompleted: {
+              type: 'boolean',
+              description:
+                'Export only: include completed tasks (default true). Honored by exportType:"tasks" and exportType:"all".',
+            },
           },
           required: ['type'],
         },
@@ -860,10 +872,14 @@ PERFORMANCE:
     format: ExportFormat,
     timer: OperationTimerV2,
   ): Promise<unknown> {
-    // Build ExportFilter from compiled query filters
+    const outputDirectory = compiled.outputDirectory;
+
+    // OMN-44: `filters.completed` (if set) takes precedence; `includeCompleted`
+    // is the higher-level convenience that the schema doc-comment promises.
+    const completedFromFlag = compiled.includeCompleted === false ? false : undefined;
     const exportFilter: ExportFilter = {
       available: compiled.filters.available,
-      completed: compiled.filters.completed,
+      completed: compiled.filters.completed ?? completedFromFlag,
       flagged: compiled.filters.flagged,
       project: undefined, // export filter uses project name, not in compiled.filters
       projectId: compiled.filters.projectId,
@@ -871,7 +887,10 @@ PERFORMANCE:
       tagsOperator: compiled.filters.tagsOperator as ExportFilter['tagsOperator'],
       search: compiled.filters.search,
     };
-    const limit = compiled.limit || 1000;
+    // OMN-44: response-size pressure does not apply when writing to disk, so
+    // raise the implicit cap; a user-supplied `limit` always wins.
+    const defaultCap = outputDirectory ? 5000 : 1000;
+    const limit = compiled.limit || defaultCap;
 
     const { script } = buildExportTasksScript(exportFilter, {
       limit,
@@ -893,7 +912,54 @@ PERFORMANCE:
     }
 
     if (isScriptSuccess(result)) {
-      const data = result.data as { format: string; data: unknown; count: number };
+      const data = result.data as {
+        format: string;
+        data: unknown;
+        count: number;
+        limited?: boolean;
+      };
+      const summary: Record<string, unknown> = {};
+      if (data.limited === true) {
+        summary.truncated = true;
+        summary.cap = limit;
+      }
+
+      // OMN-44: honor outputDirectory for tasks export. Write the payload to
+      // disk and return the path; skip embedding the full payload to keep the
+      // response small.
+      if (outputDirectory) {
+        try {
+          const fsSync = await import('fs');
+          fsSync.mkdirSync(outputDirectory, { recursive: true });
+          const outputPath = path.join(outputDirectory, `tasks.${format}`);
+          const payload = data.data;
+          const toWrite = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+          fsSync.writeFileSync(outputPath, toWrite, 'utf-8');
+          return createSuccessResponseV2(
+            'export',
+            {
+              format: data.format as ExportFormat,
+              exportType: 'tasks' as const,
+              data: { written_to: outputPath, count: data.count },
+              count: data.count,
+              outputPath,
+              ...(Object.keys(summary).length ? { summary } : {}),
+            },
+            undefined,
+            { ...timer.toMetadata(), operation: 'tasks' },
+          );
+        } catch (writeError) {
+          return createErrorResponseV2(
+            'export',
+            'WRITE_FAILED',
+            `Failed to write export file: ${String(writeError)}`,
+            undefined,
+            { outputDirectory, error: String(writeError) },
+            timer.toMetadata(),
+          );
+        }
+      }
+
       return createSuccessResponseV2(
         'export',
         {
@@ -901,6 +967,7 @@ PERFORMANCE:
           exportType: 'tasks' as const,
           data: data.data as string | object,
           count: data.count,
+          ...(Object.keys(summary).length ? { summary } : {}),
         },
         undefined,
         { ...timer.toMetadata(), operation: 'tasks' },
