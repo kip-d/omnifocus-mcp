@@ -102,14 +102,31 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
             try {
               const changes = [];
 
-              // Set review interval as plain object
-              // Note: OmniJS accepts { unit: "weeks", steps: N } format
+              // Set review interval. Project.reviewInterval is a strictly-typed
+              // Project.ReviewInterval — assigning a plain object, Number, or
+              // freshly-constructed instance is rejected by OmniJS (OMN-58).
+              // Working pattern: read the existing typed instance, mutate the
+              // local reference, reassign it (OMN-41 / OMN-60).
               if (reviewInterval) {
                 const unit = normalizeUnit(reviewInterval.unit);
                 const steps = reviewInterval.steps || 1;
-                // Set as plain object - OmniJS handles the conversion
-                targetProject.reviewInterval = { unit: unit, steps: steps };
-                changes.push("Review interval set to every " + steps + " " + reviewInterval.unit + "(s)");
+                const ri = targetProject.reviewInterval;
+                if (ri) {
+                  ri.steps = steps;
+                  ri.unit = unit;
+                  targetProject.reviewInterval = ri;
+                  changes.push("Review interval set to every " + steps + " " + unit);
+                } else {
+                  // No existing ReviewInterval instance to mutate, and OmniJS
+                  // cannot construct one from scratch (OMN-58). Fail loudly
+                  // rather than silently no-op.
+                  results.failed.push({
+                    projectId: projectId,
+                    projectName: targetProject.name,
+                    error: "Project has no existing reviewInterval instance to modify; OmniJS cannot construct one (OMN-41/OMN-58)"
+                  });
+                  continue;
+                }
               }
 
               // Set or calculate next review date
@@ -128,10 +145,13 @@ export const SET_REVIEW_SCHEDULE_SCRIPT = `
                 projectId: projectId,
                 projectName: targetProject.name,
                 changes: changes,
-                reviewInterval: reviewInterval ? {
-                  unit: reviewInterval.unit,
-                  steps: reviewInterval.steps
-                } : null,
+                // Echo the value actually persisted (read back), not the
+                // value requested — a setter that silently no-ops must not
+                // report success with the requested value (OMN-60).
+                reviewInterval: (function() {
+                  const ri = targetProject.reviewInterval;
+                  return ri ? { unit: ri.unit, steps: ri.steps } : null;
+                })(),
                 nextReviewDate: calculatedNextReviewDate ? calculatedNextReviewDate.toISOString() : null
               });
 

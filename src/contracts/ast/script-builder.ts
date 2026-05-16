@@ -1049,6 +1049,7 @@ const DEFAULT_PROJECT_FIELDS = [
   'sequential',
   'lastReviewDate',
   'nextReviewDate',
+  'reviewInterval', // OMN-60: emitted by the script so it can be projected when requested
 ];
 
 /**
@@ -1105,6 +1106,13 @@ function generateProjectFieldProjection(fields: string[], context?: { noteTrunca
         break;
       case 'nextReviewDate':
         projections.push('nextReviewDate: project.nextReviewDate ? project.nextReviewDate.toISOString() : null');
+        break;
+      case 'reviewInterval':
+        // OMN-60: OmniJS reviewInterval.unit is a plural string ('weeks'),
+        // .steps a number (verified via raw probe). null when unset.
+        projections.push(
+          'reviewInterval: project.reviewInterval ? { unit: project.reviewInterval.unit, steps: project.reviewInterval.steps } : null',
+        );
         break;
       case 'completedDate':
         projections.push('completedDate: project.completedDate ? project.completedDate.toISOString() : null');

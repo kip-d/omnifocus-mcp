@@ -430,7 +430,7 @@ describe('ReadSchema', () => {
       expect(ReadSchema.safeParse(taskInput).success).toBe(false);
     });
 
-    it('should accept all 15 project fields from script-builder', () => {
+    it('should accept all 16 project fields from script-builder', () => {
       const allProjectFields = [
         'id',
         'name',
@@ -446,6 +446,7 @@ describe('ReadSchema', () => {
         'sequential',
         'lastReviewDate',
         'nextReviewDate',
+        'reviewInterval', // OMN-60: readable review interval
         'defaultSingletonActionHolder',
       ];
       const input = {

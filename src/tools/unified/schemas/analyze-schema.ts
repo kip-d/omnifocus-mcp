@@ -90,6 +90,14 @@ const AnalysisSchema = z.discriminatedUnion('type', [
         operation: z.enum(['list_for_review', 'mark_reviewed', 'set_schedule', 'clear_schedule']).optional(),
         projectId: z.string().optional(),
         reviewDate: z.string().optional(),
+        // OMN-60: review interval for set_schedule. Object shape — passed
+        // through to SET_REVIEW_SCHEDULE_SCRIPT, which expects { unit, steps }.
+        reviewInterval: z
+          .object({
+            unit: z.enum(['day', 'week', 'month', 'year']),
+            steps: z.number().int().positive(),
+          })
+          .optional(),
       })
       .optional(),
   }),

@@ -48,4 +48,54 @@ describe('AnalyzeSchema', () => {
     const result = AnalyzeSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
+
+  describe('manage_reviews set_schedule reviewInterval (OMN-60)', () => {
+    it('accepts set_schedule with a reviewInterval and preserves it through parse', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'abc123',
+            reviewInterval: { unit: 'week', steps: 2 },
+          },
+        },
+      };
+
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const params = (result.data.analysis as { params?: Record<string, unknown> }).params;
+        expect(params?.reviewInterval).toEqual({ unit: 'week', steps: 2 });
+      }
+    });
+
+    it('rejects a reviewInterval with an invalid unit', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'abc123',
+            reviewInterval: { unit: 'fortnight', steps: 2 },
+          },
+        },
+      };
+
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it('still accepts set_schedule without a reviewInterval (field is optional)', () => {
+      const input = {
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'set_schedule', projectId: 'abc123' },
+        },
+      };
+
+      const result = AnalyzeSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+  });
 });

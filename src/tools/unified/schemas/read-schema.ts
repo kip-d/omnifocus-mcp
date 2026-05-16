@@ -139,6 +139,7 @@ export const ProjectFieldEnum = z.enum([
   'sequential',
   'lastReviewDate',
   'nextReviewDate',
+  'reviewInterval', // OMN-60: readable review interval { unit, steps }
   'defaultSingletonActionHolder',
 ]);
 
