@@ -139,7 +139,12 @@ describe('Review interval round-trip (OMN-60)', () => {
           fields: ['id', 'reviewInterval'],
         },
       },
-      extract: (r: any) => (r.data?.projects ?? []).find((p: any) => p.id === createdProjectId)?.reviewInterval?.steps,
+      extract: (r) => {
+        const projects =
+          (r.data as { projects?: Array<{ id: string; reviewInterval?: { steps?: number } }> } | undefined)?.projects ??
+          [];
+        return projects.find((p) => p.id === createdProjectId)?.reviewInterval?.steps;
+      },
       expected: 5,
       context: 'set_schedule reviewInterval steps round-trip',
     });

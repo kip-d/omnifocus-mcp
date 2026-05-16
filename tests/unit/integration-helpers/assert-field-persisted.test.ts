@@ -17,9 +17,9 @@ function fakeClient(result: FakeResult) {
   const calls: Array<{ tool: string; params: unknown }> = [];
   return {
     calls,
-    callTool: async (tool: string, params: unknown) => {
+    callTool: (tool: string, params: unknown) => {
       calls.push({ tool, params });
-      return result;
+      return Promise.resolve(result);
     },
   };
 }
@@ -35,7 +35,7 @@ describe('assertFieldPersisted', () => {
       assertFieldPersisted(client, {
         readTool: 'omnifocus_read',
         readParams: { query: { type: 'projects' } },
-        extract: (r: any) => r.data.project.reviewInterval,
+        extract: (r) => (r.data as { project: { reviewInterval: unknown } }).project.reviewInterval,
         expected: { unit: 'weeks', steps: 2 },
         context: 'reviewInterval round-trip',
       }),
@@ -52,7 +52,7 @@ describe('assertFieldPersisted', () => {
       assertFieldPersisted(client, {
         readTool: 'omnifocus_read',
         readParams: { query: { type: 'projects' } },
-        extract: (r: any) => r.data.project.reviewInterval,
+        extract: (r) => (r.data as { project: { reviewInterval: unknown } }).project.reviewInterval,
         expected: { unit: 'weeks', steps: 2 },
         context: 'reviewInterval round-trip',
       }),
@@ -71,7 +71,7 @@ describe('assertFieldPersisted', () => {
       assertFieldPersisted(client, {
         readTool: 'omnifocus_read',
         readParams: { query: { type: 'projects' } },
-        extract: (r: any) => r.data.project.reviewInterval,
+        extract: (r) => (r.data as { project: { reviewInterval: unknown } }).project.reviewInterval,
         expected: { unit: 'weeks', steps: 2 },
         context: 'reviewInterval round-trip',
       }),

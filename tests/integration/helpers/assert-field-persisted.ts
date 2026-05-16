@@ -28,8 +28,15 @@
  *   });
  */
 
+/** The StandardResponseV2-shaped envelope a read-back tool call returns. */
+export interface ReadBackResult {
+  success: boolean;
+  error?: unknown;
+  data?: unknown;
+}
+
 export interface ClientLike {
-  callTool(toolName: string, params?: unknown): Promise<unknown>;
+  callTool(toolName: string, params?: unknown): Promise<ReadBackResult>;
 }
 
 export interface AssertFieldPersistedSpec {
@@ -37,8 +44,12 @@ export interface AssertFieldPersistedSpec {
   readTool: string;
   /** Params for the read-back call. */
   readParams: unknown;
-  /** Pull the field under test out of the raw read result. */
-  extract: (readResult: any) => unknown;
+  /**
+   * Pull the field under test out of the raw read result. `data` is typed
+   * `unknown` — narrow it explicitly in the extractor (this helper exists to
+   * catch silent gaps; loose typing here would defeat its purpose).
+   */
+  extract: (readResult: ReadBackResult) => unknown;
   /** Value the field is expected to hold after the mutation. */
   expected: unknown;
   /** Short label for the failure message (what was being asserted). */
@@ -65,16 +76,16 @@ function show(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return String(value);
+    // Only reached when JSON.stringify throws (circular ref, BigInt). The raw
+    // value is not meaningfully renderable here; name the failure instead.
+    return `[unserializable ${typeof value}]`;
   }
 }
 
 export async function assertFieldPersisted(client: ClientLike, spec: AssertFieldPersistedSpec): Promise<void> {
   const label = spec.context ? `assertFieldPersisted(${spec.context})` : 'assertFieldPersisted';
 
-  const result = (await client.callTool(spec.readTool, spec.readParams)) as
-    | { success?: boolean; error?: unknown }
-    | undefined;
+  const result: ReadBackResult | undefined = await client.callTool(spec.readTool, spec.readParams);
 
   if (!result || result.success === false) {
     const errText = show(result?.error ?? result);
