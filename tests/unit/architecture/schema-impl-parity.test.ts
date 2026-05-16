@@ -41,9 +41,12 @@ import { SystemTool } from '../../../src/tools/system/SystemTool.js';
 describe('Parity: TaskFieldEnum ↔ generateFieldProjection (OMN-45 class)', () => {
   for (const field of TaskFieldEnum.options) {
     it(`projects "${field}" when requested via fields: [...]`, () => {
-      const result = buildFilteredTasksScript({}, { fields: [field] });
+      // performanceMode:'lite' suppresses the nextTask/taskCounts blocks,
+      // which otherwise emit `name:`/`flagged:`/`dueDate:` unconditionally and
+      // made this assertion vacuous (false-negative) for those fields — the
+      // exact OMN-60 bug shape this gate exists to catch (OMN-61).
+      const result = buildFilteredTasksScript({}, { fields: [field], performanceMode: 'lite' });
       // Each projection has the form `<field>: <expression>`.
-      // Use a regex anchored on the field name with optional whitespace.
       const projectionPattern = new RegExp(`\\b${field}\\s*:`);
       expect(result.script).toMatch(projectionPattern);
     });
@@ -144,7 +147,9 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
 describe('Parity: ProjectFieldEnum ↔ generateProjectFieldProjection (OMN-47 audit)', () => {
   for (const field of ProjectFieldEnum.options) {
     it(`projects "${field}" when requested via fields: [...]`, () => {
-      const result = buildFilteredProjectsScript({}, { fields: [field] });
+      // lite mode: see the TaskFieldEnum block above — suppresses nextTask,
+      // which otherwise made name/flagged/dueDate vacuously pass (OMN-61).
+      const result = buildFilteredProjectsScript({}, { fields: [field], performanceMode: 'lite' });
       const projectionPattern = new RegExp(`\\b${field}\\s*:`);
       expect(result.script).toMatch(projectionPattern);
     });
@@ -622,4 +627,55 @@ describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
       });
     });
   }
+});
+
+// =============================================================================
+// Reverse parity: projection emits no UNDECLARED key (OMN-61)
+// =============================================================================
+//
+// The forward blocks above prove every enum member is emitted. This proves the
+// converse: the projection must not emit a top-level `key: task.`/`key:
+// project.` entry that no Field enum declares (dead/undiscoverable output).
+// lite mode strips nextTask/taskCounts/stats so only the projection literal is
+// scanned. Object-valued projections whose RHS is not bare `task.`/`project.`
+// (e.g. repetitionRule's IIFE) are out of this scan by design — it guards
+// against undeclared scalar keys, not value shape.
+//
+// Context-only keys: emitted by derived/today-mode paths, intentionally not
+// caller-requestable via the Field enums. A new undeclared key forces a
+// conscious decision: declare it in the enum, or allowlist it here.
+
+const TASK_CONTEXT_ONLY_KEYS = ['effectivePlannedDate', 'reason', 'daysOverdue'];
+const PROJECT_CONTEXT_ONLY_KEYS: string[] = [];
+
+describe('Reverse parity: generateFieldProjection ↔ TaskFieldEnum (OMN-61)', () => {
+  it('emits no undeclared top-level task projection key', () => {
+    const declared = new Set<string>(TaskFieldEnum.options);
+    const { script } = buildFilteredTasksScript(
+      {},
+      {
+        fields: [...TaskFieldEnum.options],
+        performanceMode: 'lite',
+      },
+    );
+    const emitted = [...script.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):\s*task\./gm)].map((m) => m[1]);
+    const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !TASK_CONTEXT_ONLY_KEYS.includes(k));
+    expect(undeclared, `undeclared task projection key(s): ${undeclared.join(', ')}`).toEqual([]);
+  });
+});
+
+describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (OMN-61)', () => {
+  it('emits no undeclared top-level project projection key', () => {
+    const declared = new Set<string>(ProjectFieldEnum.options);
+    const { script } = buildFilteredProjectsScript(
+      {},
+      {
+        fields: [...ProjectFieldEnum.options],
+        performanceMode: 'lite',
+      },
+    );
+    const emitted = [...script.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):\s*project\./gm)].map((m) => m[1]);
+    const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !PROJECT_CONTEXT_ONLY_KEYS.includes(k));
+    expect(undeclared, `undeclared project projection key(s): ${undeclared.join(', ')}`).toEqual([]);
+  });
 });
