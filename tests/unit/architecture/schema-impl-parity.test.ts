@@ -432,6 +432,16 @@ describe('Invariant: summary.returned_count === data[key].length (OMN-42 class)'
 // advertised enum must never offer a value Zod rejects, and every Zod
 // discriminator value must be advertised somewhere (or be on the documented
 // allowlist below). That is exactly the OMN-43/45 drift shape, one layer up.
+//
+// SCOPE CAVEAT (do not over-trust): the subset check is union-based — an
+// advertised enum value is accepted if it appears at *any* enum/literal
+// position in the Zod tree, not necessarily the corresponding one. It
+// reliably catches globally-unknown values (typos, removed/renamed values,
+// garbage) but NOT a value that is valid at a *different* Zod path (e.g.
+// advertising query.exportType:['tags'] passes because 'tags' is a valid
+// query.type elsewhere). Per-path resolution through the coerceObject-wrapped
+// discriminatedUnion is deferred; tighten only if a real per-path drift slips
+// through in practice.
 
 // Deliberate, documented divergences between an advertised enum/discriminator
 // and the Zod schema. Empty = no intentional divergence. Add an entry ONLY
@@ -590,7 +600,7 @@ describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
         expect(jsonEnums.length).toBeGreaterThan(0);
       });
 
-      for (const { path, values } of collectJsonSchemaEnums(inputSchema)) {
+      for (const { path, values } of jsonEnums) {
         it(`advertised enum at ${path} contains only values Zod accepts`, () => {
           const rejected = values.filter((v) => !universe.has(v));
           expect(
