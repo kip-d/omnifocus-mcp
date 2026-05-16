@@ -25,6 +25,10 @@ import {
 } from '../../../src/contracts/ast/script-builder.js';
 import { QueryCompiler } from '../../../src/tools/unified/compilers/QueryCompiler.js';
 import { createTaskResponseV2, createListResponseV2, generateTaskSummary } from '../../../src/utils/response-format.js';
+import { OmniFocusReadTool } from '../../../src/tools/unified/OmniFocusReadTool.js';
+import { OmniFocusWriteTool } from '../../../src/tools/unified/OmniFocusWriteTool.js';
+import { OmniFocusAnalyzeTool } from '../../../src/tools/unified/OmniFocusAnalyzeTool.js';
+import { SystemTool } from '../../../src/tools/system/SystemTool.js';
 
 // =============================================================================
 // TaskFieldEnum ↔ generateFieldProjection (OMN-45 class)
@@ -407,4 +411,205 @@ describe('Invariant: summary.returned_count === data[key].length (OMN-42 class)'
     expect(summary.returned_count).toBe(250);
     expect(summary.total_count).toBe(250);
   });
+});
+
+// =============================================================================
+// inputSchema overrides ↔ Zod schema (OMN-47 S10 — the deferred surface)
+// =============================================================================
+//
+// Each unified tool advertises a hand-crafted minimal JSON Schema (the
+// `inputSchema` getter) for MCP tools/list, while server-side validation uses
+// the full Zod `schema`. CLAUDE.md flags these as a manual-sync risk: the two
+// can drift so the tool advertises a value Zod rejects (LLM is told a param is
+// valid → server 400s) or hides a whole query type Zod accepts.
+//
+// We do NOT assert deep structural equality: the inputSchema deliberately
+// *flattens* the Zod discriminatedUnion (filters as bare `{type:'object'}`,
+// `fields` as `string[]` not the enum) to keep the advertised schema ~1 KB
+// instead of ~22 KB (see OmniFocusReadTool.inputSchema doc-comment, mcp-design
+// memory). Flattening drops detail on purpose — that's allowed. What is NOT
+// allowed is an *enumeration* in inputSchema that disagrees with Zod: an
+// advertised enum must never offer a value Zod rejects, and every Zod
+// discriminator value must be advertised somewhere (or be on the documented
+// allowlist below). That is exactly the OMN-43/45 drift shape, one layer up.
+
+// Deliberate, documented divergences between an advertised enum/discriminator
+// and the Zod schema. Empty = no intentional divergence. Add an entry ONLY
+// with a justification + follow-up ticket; never to silence real drift.
+const EXPECTED_FLATTENINGS: Record<string, { discriminatorValuesNotAdvertised?: string[]; reason: string }> = {
+  // e.g. WriteTool: { discriminatorValuesNotAdvertised: ['x'], reason: '… (OMN-NN)' }
+};
+
+type ZodAny = { _def?: Record<string, unknown> } & Record<string, unknown>;
+
+// Collect every literal/enum primitive value reachable in a Zod schema tree.
+// This is the set of values the Zod schema can possibly accept at any enum or
+// literal position — the universe an advertised enum value must live within.
+function collectZodValueUniverse(root: unknown): Set<unknown> {
+  const out = new Set<unknown>();
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const def = (node as ZodAny)._def as Record<string, unknown> | undefined;
+    if (!def) return;
+    const typeName = def.typeName as string | undefined;
+    switch (typeName) {
+      case 'ZodLiteral':
+        out.add(def.value);
+        return;
+      case 'ZodEnum':
+        for (const v of def.values as unknown[]) out.add(v);
+        return;
+      case 'ZodNativeEnum':
+        for (const v of Object.values(def.values as object)) out.add(v);
+        return;
+      case 'ZodObject': {
+        const shape = (def.shape as () => Record<string, unknown>)();
+        for (const v of Object.values(shape)) visit(v);
+        return;
+      }
+      case 'ZodDiscriminatedUnion':
+      case 'ZodUnion':
+        for (const o of def.options as unknown[]) visit(o);
+        return;
+      case 'ZodIntersection':
+        visit(def.left);
+        visit(def.right);
+        return;
+      case 'ZodArray':
+      case 'ZodSet':
+        visit(def.type);
+        return;
+      case 'ZodOptional':
+      case 'ZodNullable':
+      case 'ZodDefault':
+      case 'ZodCatch':
+      case 'ZodReadonly':
+      case 'ZodBranded':
+      case 'ZodPromise':
+        visit(def.innerType);
+        return;
+      case 'ZodEffects': // z.preprocess / z.transform (coerceObject, coerceBoolean)
+        visit(def.schema);
+        return;
+      case 'ZodPipeline':
+        visit(def.in);
+        visit(def.out);
+        return;
+      default:
+        // Unknown wrapper — probe the common inner-schema keys defensively so a
+        // future Zod construct can't silently shrink the universe (the OMN-54
+        // empty-set failure mode).
+        for (const key of ['innerType', 'schema', 'type', 'in', 'out', 'left', 'right']) {
+          if (def[key]) visit(def[key]);
+        }
+        if (Array.isArray(def.options)) for (const o of def.options as unknown[]) visit(o);
+    }
+  };
+  visit(root);
+  return out;
+}
+
+// Collect every { enum: [...] } occurrence in a hand-crafted JSON Schema,
+// recording a dotted path for diagnostics.
+function collectJsonSchemaEnums(node: unknown, path = '$'): Array<{ path: string; values: unknown[] }> {
+  const found: Array<{ path: string; values: unknown[] }> = [];
+  const walk = (n: unknown, p: string): void => {
+    if (!n || typeof n !== 'object') return;
+    const obj = n as Record<string, unknown>;
+    if (Array.isArray(obj.enum)) found.push({ path: p, values: obj.enum });
+    if (obj.properties && typeof obj.properties === 'object') {
+      for (const [k, v] of Object.entries(obj.properties as object)) walk(v, `${p}.${k}`);
+    }
+    if (obj.items) walk(obj.items, `${p}[]`);
+    for (const comb of ['anyOf', 'oneOf', 'allOf'] as const) {
+      if (Array.isArray(obj[comb])) (obj[comb] as unknown[]).forEach((s, i) => walk(s, `${p}.${comb}[${i}]`));
+    }
+  };
+  walk(node, path);
+  return found;
+}
+
+// The discriminator literal-set(s) of any discriminatedUnion in the Zod tree:
+// every value here is a whole branch (query type / operation) the server
+// accepts; if one isn't advertised, that capability is invisible to clients.
+function collectZodDiscriminatorSets(root: unknown): Set<unknown> {
+  const out = new Set<unknown>();
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const def = (node as ZodAny)._def as Record<string, unknown> | undefined;
+    if (!def) return;
+    const typeName = def.typeName as string | undefined;
+    if (typeName === 'ZodDiscriminatedUnion') {
+      const discriminator = def.discriminator as string;
+      for (const opt of def.options as unknown[]) {
+        const odef = (opt as ZodAny)._def as Record<string, unknown>;
+        const shape = (odef.shape as () => Record<string, unknown>)();
+        const disc = shape[discriminator] as ZodAny | undefined;
+        if (disc?._def?.typeName === 'ZodLiteral') out.add(disc._def.value);
+      }
+    }
+    for (const key of ['innerType', 'schema', 'type', 'in', 'out', 'left', 'right']) {
+      if (def[key]) visit(def[key]);
+    }
+    if (def.typeName === 'ZodObject') {
+      for (const v of Object.values((def.shape as () => Record<string, unknown>)())) visit(v);
+    }
+    if (Array.isArray(def.options)) for (const o of def.options as unknown[]) visit(o);
+  };
+  visit(root);
+  return out;
+}
+
+describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
+  const tools = [
+    { name: 'OmniFocusReadTool', tool: new OmniFocusReadTool({} as never) },
+    { name: 'OmniFocusWriteTool', tool: new OmniFocusWriteTool({} as never) },
+    { name: 'OmniFocusAnalyzeTool', tool: new OmniFocusAnalyzeTool({} as never) },
+    { name: 'SystemTool', tool: new SystemTool({} as never) },
+  ];
+
+  for (const { name, tool } of tools) {
+    describe(name, () => {
+      const inputSchema = (tool as { inputSchema: Record<string, unknown> }).inputSchema;
+      const zodSchema = (tool as { schema: unknown }).schema;
+      const universe = collectZodValueUniverse(zodSchema);
+      const jsonEnums = collectJsonSchemaEnums(inputSchema);
+      const discriminatorSet = collectZodDiscriminatorSets(zodSchema);
+
+      it('introspection found a non-empty Zod value universe (guards vacuous pass)', () => {
+        // If a future Zod construct defeats the traversal, the universe goes
+        // empty and every subset check passes vacuously — fail loudly instead.
+        expect(universe.size).toBeGreaterThan(0);
+      });
+
+      it('inputSchema advertises at least one enum (guards vacuous pass)', () => {
+        expect(jsonEnums.length).toBeGreaterThan(0);
+      });
+
+      for (const { path, values } of collectJsonSchemaEnums(inputSchema)) {
+        it(`advertised enum at ${path} contains only values Zod accepts`, () => {
+          const rejected = values.filter((v) => !universe.has(v));
+          expect(
+            rejected,
+            `inputSchema advertises ${JSON.stringify(rejected)} at ${path}, but the Zod schema accepts none of these — clients would be told these are valid and get a validation error.`,
+          ).toEqual([]);
+        });
+      }
+
+      it('every Zod discriminator value is advertised somewhere in inputSchema', () => {
+        if (discriminatorSet.size === 0) return; // tool has no discriminatedUnion
+        const advertised = new Set(jsonEnums.flatMap((e) => e.values));
+        const allow = new Set(EXPECTED_FLATTENINGS[name]?.discriminatorValuesNotAdvertised ?? []);
+        const hidden = [...discriminatorSet].filter((v) => !advertised.has(v) && !allow.has(v));
+        expect(
+          hidden,
+          `Zod accepts discriminator value(s) ${JSON.stringify(hidden)} that inputSchema never advertises — that capability is invisible to MCP clients. Advertise it, or add to EXPECTED_FLATTENINGS with a ticket.`,
+        ).toEqual([]);
+      });
+    });
+  }
 });
