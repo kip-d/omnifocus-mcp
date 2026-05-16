@@ -41,11 +41,11 @@ import { SystemTool } from '../../../src/tools/system/SystemTool.js';
 describe('Parity: TaskFieldEnum ↔ generateFieldProjection (OMN-45 class)', () => {
   for (const field of TaskFieldEnum.options) {
     it(`projects "${field}" when requested via fields: [...]`, () => {
-      // performanceMode:'lite' suppresses the nextTask/taskCounts blocks,
-      // which otherwise emit `name:`/`flagged:`/`dueDate:` unconditionally and
-      // made this assertion vacuous (false-negative) for those fields — the
-      // exact OMN-60 bug shape this gate exists to catch (OMN-61).
-      const result = buildFilteredTasksScript({}, { fields: [field], performanceMode: 'lite' });
+      // Task projection is unconditional — buildFilteredTasksScript has no
+      // nextTask/taskCounts/stats block and ignores performanceMode — so this
+      // assertion was never vacuous. (The project block below was vacuous;
+      // see its note.) No lite arg needed here.
+      const result = buildFilteredTasksScript({}, { fields: [field] });
       // Each projection has the form `<field>: <expression>`.
       const projectionPattern = new RegExp(`\\b${field}\\s*:`);
       expect(result.script).toMatch(projectionPattern);
@@ -147,8 +147,11 @@ describe('Parity: FILTER_FIELD_NAMES ↔ QueryCompiler.transformFilters (OMN-43 
 describe('Parity: ProjectFieldEnum ↔ generateProjectFieldProjection (OMN-47 audit)', () => {
   for (const field of ProjectFieldEnum.options) {
     it(`projects "${field}" when requested via fields: [...]`, () => {
-      // lite mode: see the TaskFieldEnum block above — suppresses nextTask,
-      // which otherwise made name/flagged/dueDate vacuously pass (OMN-61).
+      // performanceMode:'lite' suppresses buildFilteredProjectsScript's
+      // nextTask/taskCounts block, which emits `name:`/`flagged:`/`dueDate:`
+      // unconditionally. Without lite this assertion passed for those three
+      // even with their projection case deleted — a silent false-negative for
+      // the exact OMN-60 bug shape this gate exists to catch (OMN-61).
       const result = buildFilteredProjectsScript({}, { fields: [field], performanceMode: 'lite' });
       const projectionPattern = new RegExp(`\\b${field}\\s*:`);
       expect(result.script).toMatch(projectionPattern);
@@ -641,9 +644,13 @@ describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
 // (e.g. repetitionRule's IIFE) are out of this scan by design — it guards
 // against undeclared scalar keys, not value shape.
 //
-// Context-only keys: emitted by derived/today-mode paths, intentionally not
-// caller-requestable via the Field enums. A new undeclared key forces a
-// conscious decision: declare it in the enum, or allowlist it here.
+// Context-only keys: names emitted only by derived/today-mode builder paths
+// this test does NOT drive (it requests just the enum members). With the
+// current request set the allowlist filter is therefore unreachable — it is a
+// forward guard for if/when this test is extended to exercise those paths (or
+// the regex widens), not an active filter today. Kept explicit so a future
+// extension that surfaces such a key makes a conscious choice: declare it in
+// the enum, or allowlist it here.
 
 const TASK_CONTEXT_ONLY_KEYS = ['effectivePlannedDate', 'reason', 'daysOverdue'];
 const PROJECT_CONTEXT_ONLY_KEYS: string[] = [];
