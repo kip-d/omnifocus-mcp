@@ -131,7 +131,16 @@ const plugin = {
         },
       },
       create(context) {
-        const RESPONSE_BUILDERS = new Set(['createSuccessResponse', 'createErrorResponse', 'createListResponse']);
+        // V2 response builders and the positional index of their `metadata`
+        // argument (see src/utils/response-format.ts signatures). The index
+        // differs per builder, so a flat name set is insufficient.
+        const METADATA_ARG_INDEX = {
+          createSuccessResponseV2: 3, // (operation, data, summary?, metadata)
+          createErrorResponseV2: 5, // (operation, errorCode, message, suggestion?, details?, metadata)
+          createTaskResponseV2: 2, // (operation, tasks, metadata)
+          createListResponseV2: 3, // (operation, items, itemType, metadata)
+          createAnalyticsResponseV2: 4, // (operation, data, analysisType, keyFindings, metadata)
+        };
         return {
           Property(node) {
             const objExpr = node.parent;
@@ -143,8 +152,8 @@ const plugin = {
               (callee && callee.type === 'Identifier' && callee.name) ||
               (callee && callee.type === 'MemberExpression' && callee.property && callee.property.name) ||
               null;
-            if (!calleeName || !RESPONSE_BUILDERS.has(calleeName)) return;
-            if (call.arguments[2] !== objExpr) return;
+            if (!calleeName || !Object.prototype.hasOwnProperty.call(METADATA_ARG_INDEX, calleeName)) return;
+            if (call.arguments[METADATA_ARG_INDEX[calleeName]] !== objExpr) return;
 
             const key = (node.key && (node.key.name || node.key.value)) || null;
             if (typeof key === 'string' && /[a-z][A-Z]/.test(key)) {
