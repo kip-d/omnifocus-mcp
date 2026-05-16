@@ -21,9 +21,9 @@
  *   await client.callTool('omnifocus_analyze', { ...set_schedule... });
  *   await assertFieldPersisted(client, {
  *     readTool: 'omnifocus_read',
- *     readParams: { query: { type: 'projects', filters: { id: projectId } } },
- *     extract: (r) => r.data.items[0].reviewInterval,
- *     expected: { unit: 'weeks', steps: 2 },
+ *     readParams: { query: { type: 'projects', filters: { folder }, fields: ['id', 'reviewInterval'] } },
+ *     extract: (r) => r.data.projects.find((p) => p.id === projectId).reviewInterval,
+ *     expected: { unit: 'months', steps: 5 },
  *     context: 'set_schedule reviewInterval',
  *   });
  */

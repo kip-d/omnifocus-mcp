@@ -96,7 +96,6 @@ const AnalysisSchema = z.discriminatedUnion('type', [
           .object({
             unit: z.enum(['day', 'week', 'month', 'year']),
             steps: z.number().int().positive(),
-            fixed: z.boolean().optional(),
           })
           .optional(),
       })

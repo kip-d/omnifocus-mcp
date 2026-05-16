@@ -68,7 +68,7 @@ export type CompiledAnalysis =
         projectId?: string;
         reviewDate?: string;
         // OMN-60: review interval for set_schedule, passed through to the script.
-        reviewInterval?: { unit: 'day' | 'week' | 'month' | 'year'; steps: number; fixed?: boolean };
+        reviewInterval?: { unit: 'day' | 'week' | 'month' | 'year'; steps: number };
       };
     };
 

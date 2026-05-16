@@ -286,7 +286,7 @@ ANALYSIS TYPES:
 - parse_meeting_notes: Extract action items from meeting notes
 - manage_reviews: Project review operations
   params: { operation, projectId, reviewDate, reviewInterval }
-  - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int, fixed?: bool }
+  - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int }
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
