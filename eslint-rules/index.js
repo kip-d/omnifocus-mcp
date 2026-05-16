@@ -137,6 +137,7 @@ const plugin = {
         //   createListResponseV2   (op, items, itemType, metadata?)  — 4th arg.
         //   createErrorResponseV2  (op, code, msg, suggestion?, details?, metadata?) — 6th arg.
         //   createTaskResponseV2   (op, tasks, metadata?)            — 3rd arg.
+        //   createAnalyticsResponseV2 (op, data, analysisType, keyFindings, metadata?) — 5th arg.
         const METADATA_ARG_INDEX = {
           createSuccessResponse: 2,
           createErrorResponse: 2,
@@ -145,6 +146,7 @@ const plugin = {
           createErrorResponseV2: 5,
           createListResponseV2: 3,
           createTaskResponseV2: 2,
+          createAnalyticsResponseV2: 4,
         };
         return {
           Property(node) {
