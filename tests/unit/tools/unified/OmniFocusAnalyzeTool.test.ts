@@ -699,4 +699,55 @@ describe('OmniFocusAnalyzeTool', () => {
       expect(size).toBeLessThan(1000);
     });
   });
+
+  // ==========================================================================
+  // manage_reviews set_schedule — reviewInterval wiring (OMN-60)
+  // ==========================================================================
+  describe('manage_reviews set_schedule reviewInterval wiring (OMN-60)', () => {
+    it('passes the requested reviewInterval through to the script (not hardcoded null)', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: true,
+        data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
+      });
+
+      await tool.execute({
+        analysis: {
+          type: 'manage_reviews',
+          params: {
+            operation: 'set_schedule',
+            projectId: 'p1',
+            reviewInterval: { unit: 'week', steps: 2 },
+          },
+        },
+      });
+
+      expect(mockOmni.buildScript).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ reviewInterval: { unit: 'week', steps: 2 } }),
+      );
+    });
+
+    it('passes reviewInterval: null when none is supplied (back-compat)', async () => {
+      mockCache.get.mockReturnValue(null);
+      mockOmni.buildScript.mockReturnValue('script');
+      mockOmni.executeJson.mockResolvedValue({
+        success: true,
+        data: { results: { successful: [], failed: [], summary: { successful_count: 0, failed_count: 0 } } },
+      });
+
+      await tool.execute({
+        analysis: {
+          type: 'manage_reviews',
+          params: { operation: 'set_schedule', projectId: 'p1' },
+        },
+      });
+
+      expect(mockOmni.buildScript).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ reviewInterval: null }),
+      );
+    });
+  });
 });

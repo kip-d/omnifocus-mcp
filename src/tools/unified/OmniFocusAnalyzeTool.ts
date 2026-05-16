@@ -285,6 +285,8 @@ ANALYSIS TYPES:
 - recurring_tasks: Recurring task patterns and frequencies
 - parse_meeting_notes: Extract action items from meeting notes
 - manage_reviews: Project review operations
+  params: { operation, projectId, reviewDate, reviewInterval }
+  - set_schedule accepts reviewInterval: { unit: 'day'|'week'|'month'|'year', steps: positive int, fixed?: bool }
 
 PERFORMANCE WARNINGS:
 - pattern_analysis on 1000+ items: ~5-10 seconds
@@ -2939,7 +2941,9 @@ SCOPE FILTERING:
 
     const script = this.omniAutomation.buildScript(SET_REVIEW_SCHEDULE_SCRIPT, {
       projectIds: brandedProjectIds,
-      reviewInterval: null,
+      // OMN-60: pass the requested interval through (was hardcoded null, which
+      // made the entire reviewInterval path dead code).
+      reviewInterval: compiled.params?.reviewInterval ?? null,
       nextReviewDate: compiled.params?.reviewDate ?? null,
     });
     const result = await this.execJson(script);

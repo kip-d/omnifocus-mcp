@@ -941,6 +941,12 @@ describe('note truncation in project field projection', () => {
 
     expect(result.script).toContain('note: project.note || ""');
   });
+
+  it('emits a reviewInterval projection when the reviewInterval field is requested (OMN-60)', () => {
+    const result = buildFilteredProjectsScript({}, { fields: ['id', 'reviewInterval'] });
+
+    expect(result.script).toContain('reviewInterval: project.reviewInterval');
+  });
 });
 
 // =============================================================================
