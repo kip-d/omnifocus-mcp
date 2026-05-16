@@ -3,6 +3,7 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
+import localRules from './eslint-rules/index.js';
 
 export default [
   // Base ESLint recommended rules
@@ -126,6 +127,31 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
+    },
+  },
+
+  // Custom OmniFocus MCP rules — applied to tool implementations
+  {
+    files: ['src/tools/**/*Tool.ts'],
+    plugins: {
+      'local-rules': localRules,
+    },
+    rules: {
+      'local-rules/extend-base-tool': 'error',
+      'local-rules/use-standard-response': 'warn',
+      'local-rules/use-handle-error': 'warn',
+      'local-rules/metadata-snake-case': 'warn',
+    },
+  },
+
+  // Custom OmniFocus MCP rules — applied to schema modules
+  {
+    files: ['src/tools/**/schemas/**/*.ts', 'src/tools/schemas/**/*.ts'],
+    plugins: {
+      'local-rules': localRules,
+    },
+    rules: {
+      'local-rules/export-zod-schema': 'warn',
     },
   },
 
