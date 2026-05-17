@@ -137,6 +137,11 @@ export const MINIMAL_PROJECT_FIELDS = ['id', 'name', 'status', 'flagged', 'dueDa
 
 /**
  * Heavier project fields gated behind details=true.
+ *
+ * Deliberately excludes OMN-62's `tags`/`plannedDate` (and OMN-60's
+ * `reviewInterval`): those are emitted by the script via DEFAULT_PROJECT_FIELDS
+ * but surface ONLY when explicitly requested via `fields`, never on a bare
+ * `details:true` — keeps the detailed response token-cheap and shape-stable.
  */
 export const DETAIL_PROJECT_FIELDS = ['note', 'folderPath', 'sequential', 'lastReviewDate', 'nextReviewDate'];
 
