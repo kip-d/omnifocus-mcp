@@ -1905,18 +1905,22 @@ export interface TaskCountOptions {
 }
 
 /**
- * Build a pure JXA script that counts tasks matching AST-generated filters
+ * Build a JXA script that counts tasks matching AST-generated filters by
+ * delegating the scan to OmniJS via a single app.evaluateJavascript() call.
  *
- * This replaces the manual filter logic in get-task-count.ts with AST-powered
- * filter generation, eliminating ~100 lines of duplicated filter code.
- *
- * Performance: Uses pure JXA (NOT OmniJS bridge) for ~40x faster execution
- * - Pure JXA iteration: ~42 seconds for 2,264 tasks
- * - OmniJS bridge: ~2 minutes (AppleEvent timeout!)
+ * Performance (OMN-57): pure-JXA counting iterates doc.flattenedTasks() with
+ * a per-element Apple-Event round-trip per task and per accessor — ~51 s for a
+ * ~2900-task DB. Running the count inside OmniJS removes that per-element IPC
+ * (one bridge round-trip total) → ~10 s. The remaining ~7-10 s is the
+ * flattenedTasks materialization, an irreducible floor with the public API.
+ * NOTE: the "evaluateJavascript is ~40x slower" heuristic holds only for
+ * SMALL result sets where bridge-setup cost dominates; for whole-DB iteration
+ * the per-element JXA IPC dominates and the bridge wins. Do not "optimize"
+ * this back to pure JXA.
  *
  * @param filter - TaskFilter criteria to count (normalized internally)
  * @param options - Count options (maxScan limit)
- * @returns Complete JXA script ready for execution
+ * @returns Complete JXA script (delegates to OmniJS) ready for execution
  */
 export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCountOptions = {}): GeneratedScript {
   const { maxScan = 10000 } = options;
@@ -1943,88 +1947,74 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
     return f;
   })();
 
-  // Build AST and generate JXA filter code (NOT OmniJS!)
+  // Build AST and generate OmniJS filter code
   const ast = buildAST(filterForCode);
   const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(filterForCode, 'jxa'); // Use JXA emitter
+  const filterCode = generateFilterCode(filterForCode, 'omnijs');
   const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
-  // This optimization saves ~50 seconds for 2,264 tasks when tags aren't needed
   const needsTags = filterCode.predicate.includes('taskTags');
 
-  // Build the complete script - pure JXA for maximum performance
-  // Critical: Do NOT use app.evaluateJavascript() - it's ~40x slower!
-  const script = `
+  // Count runs in OmniJS (see JSDoc): one bridge round-trip, no per-task IPC.
+  const omniJsSource = `
 (() => {
-  const app = Application('OmniFocus');
-  app.includeStandardAdditions = true;
-
   try {
     const startTime = Date.now();
     const maxScan = ${maxScan};
-    const doc = app.defaultDocument;
     let count = 0;
     let scanned = 0;
-
-    // Get tasks using pure JXA (fast!)
-    const tasks = ${checkInbox ? 'doc.inboxTasks()' : 'doc.flattenedTasks()'};
+    // OmniJS globals (property access, no ()): \`inbox\` is the pre-filtered
+    // inbox collection, \`flattenedTasks\` the whole-DB flattened collection.
+    const tasks = ${checkInbox ? 'inbox' : 'flattenedTasks'};
     const totalTasks = tasks.length;
-
-    // AST-generated filter predicate (JXA syntax with method calls)
-    // Filter: ${filterDescription}
+    ${filterCode.preamble ? filterCode.preamble + '\n    ' : ''}// Filter: ${filterDescription}
     function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
       return ${filterCode.predicate};
     }
-
-    // Iterate using for loop (faster than forEach in JXA)
+    // maxScan bounds only this (cheap, ~0.03ms/task) loop — NOT the
+    // flattenedTasks materialization above, which is the real cost and is
+    // already paid. \`limited:true\` no longer implies a perf saving (OMN-57).
     for (let i = 0; i < tasks.length && scanned < maxScan; i++) {
       scanned++;
       try {
         const task = tasks[i];
         ${
           needsTags
-            ? `// Get tags for this task (only when filter needs them)
-        let taskTags = [];
-        try {
-          const tags = task.tags();
-          if (tags) {
-            taskTags = tags.map(t => t.name());
-          }
-        } catch (e) {}
-
+            ? `let taskTags = [];
+        try { const tg = task.tags; if (tg) taskTags = tg.map(t => t.name); } catch (e) {}
         if (matchesFilter(task, taskTags)) {`
             : 'if (matchesFilter(task)) {'
         }
           count++;
         }
-      } catch (e) {
-        // Skip tasks that error during property access
-      }
+      } catch (e) {}
     }
-
     const endTime = Date.now();
-
     return JSON.stringify({
       count: count,
       filters_applied: ${JSON.stringify(filter)},
       query_time_ms: endTime - startTime,
-      optimization: 'pure_jxa${needsTags ? '_with_tags' : '_no_tags'}',
+      optimization: 'omnijs_count${needsTags ? '_with_tags' : '_no_tags'}',
       filter_description: ${JSON.stringify(filterDescription)},
       scanned: scanned,
       total_tasks: totalTasks,
-      ...(scanned >= maxScan ? {
-        warning: 'Count may be incomplete due to scan limit',
-        limited: true
-      } : { limited: false })
+      ...(scanned >= maxScan ? { warning: 'Count may be incomplete due to scan limit', limited: true } : { limited: false })
     });
-
   } catch (error) {
-    return JSON.stringify({
-      error: true,
-      message: error.message || String(error),
-      context: 'task_count_jxa'
-    });
+    return JSON.stringify({ error: true, message: (error && error.message) || String(error), context: 'task_count_omnijs' });
+  }
+})()`;
+
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`${omniJsSource}\`;
+    return app.evaluateJavascript(omniJsScript);
+  } catch (e) {
+    return JSON.stringify({ error: true, message: e.message || String(e), context: 'task_count_omnijs' });
   }
 })()
 `;
