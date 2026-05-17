@@ -138,9 +138,9 @@ export default [
     },
     rules: {
       'local-rules/extend-base-tool': 'error',
-      'local-rules/use-standard-response': 'warn',
-      'local-rules/use-handle-error': 'warn',
-      'local-rules/metadata-snake-case': 'warn',
+      'local-rules/use-standard-response': 'error',
+      'local-rules/use-handle-error': 'error',
+      'local-rules/metadata-snake-case': 'error',
     },
   },
 
@@ -154,7 +154,7 @@ export default [
       'local-rules': localRules,
     },
     rules: {
-      'local-rules/export-zod-schema': 'warn',
+      'local-rules/export-zod-schema': 'error',
     },
   },
 
