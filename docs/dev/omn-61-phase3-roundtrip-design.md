@@ -42,7 +42,7 @@ illustrative non-defaults.
 | repetitionRule    | a weekly rule              | repetitionRule    | bridge-applied — high risk             |
 | project           | a sandbox project id       | project/projectId | move                                   |
 | parentTaskId      | a sandbox parent task id   | parentTaskId      |                                        |
-| clearDueDate etc. | set then clear             | dueDate → null    | clear\* variants                       |
+| clearDueDate etc. | two-phase (see below)      | dueDate → null    | clear\* variants — NOT a single row    |
 
 ### Project (create + update)
 
@@ -53,6 +53,20 @@ illustrative non-defaults.
 | folder                                  | a sandbox folder         | folder         |                             |
 | sequential                              | `true`                   | sequential     | default false               |
 | reviewInterval                          | `{unit:'month',steps:5}` | reviewInterval | OMN-60 — the canonical case |
+
+### `clear*` rows — two-phase assertion (not a single round-trip)
+
+A `clear*` row's _expected_ read-back value **is** `null`. That collides head-on with hard lesson #2: a single read
+returning `null` cannot distinguish "cleared correctly" from "field never in the projection." Encode each `clear*` field
+as a **two-phase** assertion, not one matrix row:
+
+1. **Set phase** — write a non-default value → independent re-read → assert the field is **present and equals that
+   value**. This proves the field _is_ in the read projection, so phase 2's `null` is meaningful.
+2. **Clear phase** — issue the `clear*` op → independent re-read → assert the field is **`null`**.
+
+Phase 1 is the disambiguator: only after a value is provably visible does a subsequent `null` prove the clear fired. A
+`clear*` field whose set phase already reads back `undefined` is a read gap (lesson #2) → `xfail` + ticket, not a clear
+failure.
 
 ## Known read-gaps → `xfail` + ticket (do NOT treat as persistence failures)
 
@@ -84,7 +98,8 @@ it like the other integration suites (separate vitest project / `test:integratio
 ## Build checklist (next session)
 
 1. New `tests/integration/.../field-roundtrip.test.ts` from the OMN-60 template.
-2. Encode the matrix above as a table; one parametrized round-trip per row.
+2. Encode the matrix above as a table; one parametrized round-trip per row. Encode `clear*` fields as the two-phase
+   set→verify-present→clear→verify-null assertion, not a single row.
 3. `xfail` the two known read-gaps with the ticket id.
 4. Run once against live OmniFocus; any unexpected non-persistence is a real bug → systematic-debugging (remember:
    confounded-oracle + blind-instrument traps from OMN-60 before blaming the writer).
