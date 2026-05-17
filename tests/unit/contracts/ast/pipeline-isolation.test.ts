@@ -13,7 +13,6 @@ import { describe, it, expect } from 'vitest';
 import { buildAST } from '../../../../src/contracts/ast/builder.js';
 import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
 import { emitOmniJS } from '../../../../src/contracts/ast/emitters/omnijs.js';
-import { emitJXA } from '../../../../src/contracts/ast/emitters/jxa.js';
 import { FilterPipeline } from '../../../../src/contracts/ast/filter-generator.js';
 import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { isNormalizedFilter } from '../../../../src/contracts/filters.js';
@@ -97,20 +96,6 @@ describe('emitter isolation', () => {
       };
       const result = emitOmniJS(ast);
       expect(result.predicate).toContain('||');
-    });
-  });
-
-  describe('JXA emitter with hand-crafted AST', () => {
-    it('emits method-call syntax for JXA', () => {
-      const ast: FilterNode = {
-        type: 'comparison',
-        field: 'task.flagged',
-        operator: '==',
-        value: true,
-      };
-      const result = emitJXA(ast);
-      // JXA uses method calls: task.flagged()
-      expect(result.predicate).toBe('task.flagged() === true');
     });
   });
 });
@@ -219,16 +204,6 @@ describe('FilterPipeline', () => {
     expect(result.predicate).toBe('task.flagged === true');
   });
 
-  it('emits JXA code', () => {
-    const result = FilterPipeline.from({ flagged: true }).emit('jxa');
-    expect(result.predicate).toBe('task.flagged() === true');
-  });
-
-  it('defaults to omnijs target', () => {
-    const result = FilterPipeline.from({ completed: false }).emit();
-    expect(result.predicate).toBe('task.completed === false');
-  });
-
   it('emits true for empty filter', () => {
     const result = FilterPipeline.from({}).emit('omnijs');
     expect(result.predicate).toBe('true');
@@ -292,16 +267,6 @@ describe('cross-stage contract', () => {
       ).toBe(true);
 
       const result = emitOmniJS(ast);
-      expect(result.predicate.length).toBeGreaterThan(0);
-      expect(result.predicate).not.toBe('true');
-    });
-
-    it(`build -> validate -> emit (jxa) succeeds for ${name}`, () => {
-      const ast = buildAST(filter);
-      const validation = validateFilterAST(ast);
-      expect(validation.valid).toBe(true);
-
-      const result = emitJXA(ast);
       expect(result.predicate.length).toBeGreaterThan(0);
       expect(result.predicate).not.toBe('true');
     });

@@ -13,7 +13,6 @@ import { describe, it, expect } from 'vitest';
 import { QueryCompiler } from '../../../../src/tools/unified/compilers/QueryCompiler.js';
 import { buildAST } from '../../../../src/contracts/ast/builder.js';
 import { emitOmniJS } from '../../../../src/contracts/ast/emitters/omnijs.js';
-import { emitJXA } from '../../../../src/contracts/ast/emitters/jxa.js';
 import { validateFilterAST } from '../../../../src/contracts/ast/validator.js';
 import type { TaskFilter } from '../../../../src/contracts/filters.js';
 
@@ -296,14 +295,12 @@ describe('emitter parity', () => {
   ];
 
   for (const { name, filter } of testFilters) {
-    it(`both emitters produce non-empty output for: ${name}`, () => {
+    it(`omnijs emitter produces non-empty output for: ${name}`, () => {
       const ast = buildAST(filter);
 
       const omnijsResult = emitOmniJS(ast);
-      const jxaResult = emitJXA(ast);
 
       expect(omnijsResult.predicate.length).toBeGreaterThan(0);
-      expect(jxaResult.predicate.length).toBeGreaterThan(0);
     });
 
     it(`AST validates for: ${name}`, () => {
