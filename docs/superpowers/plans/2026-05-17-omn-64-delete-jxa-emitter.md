@@ -44,7 +44,10 @@ git rm tests/unit/contracts/ast/emitters/jxa.test.ts
 
 - Delete each `it(...)` whose body calls `generateFilterCode(filter, 'jxa')` or
   `generateFilterCodeSafe(filter, 'jxa')` — these are at lines ~23, ~186, ~194, ~230, ~254, ~269, ~312
-  (use the `'jxa'` literal to locate; remove the whole `it(...)` block each).
+  (use the `'jxa'` literal to locate; remove the whole `it(...)` block each). Removing the `~269` jxa
+  `it` empties its wrapper `describe('JXA target for combined filters', …)` (≈ lines 261–276) — delete
+  that now-empty `describe` block too. (Other jxa `it`s share a `describe` with omnijs `it`s — leave
+  those describes.)
 - Delete the entire `describe('generateFilterCodeSafe with JXA target', …)` block (≈ lines 309–321,
   contains the `:316` `expect(result.target).toBe('jxa')`).
 - Delete the `it('defaults to omnijs target', …)` case (≈ line 43) — a defaultable `target` no longer
@@ -62,6 +65,10 @@ git rm tests/unit/contracts/ast/emitters/jxa.test.ts
   case (the `emitOmniJS(ast)` at ~294) and **delete only** its sibling
   `it('build -> validate -> emit (jxa) succeeds for ${name}', …)` (the `emitJXA(ast)` at ~304). Do
   NOT delete the surrounding loop or the omnijs `it`.
+- Delete the `it('emits JXA code', …)` case (≈ lines 222–225, body calls
+  `FilterPipeline.from({ flagged: true }).emit('jxa')`). Its omnijs siblings at ~217 and ~232 retain
+  coverage. (This is the 5th jxa ref in this file — without removing it, Task 2 `tsc` fails on
+  `.emit('jxa')` once the `emit()` param is dropped.)
 - Delete the `it('defaults to omnijs target', …)` case (~227, calls `.emit()` arg-less — premise gone).
 - Keep `describe('OmniJS emitter with hand-crafted AST', …)`.
 

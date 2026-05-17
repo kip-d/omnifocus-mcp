@@ -112,6 +112,8 @@ exhaustive for the jxa references (the reviewer-confirmed compile-breaking ones 
     `build -> validate -> emit (omnijs) …` (the `emitOmniJS(ast)` at ~`:294`, unique non-empty
     coverage for ~21 filter shapes) and **delete only the sibling `build -> validate -> emit (jxa)
     succeeds for ${name}` `it`** (the `emitJXA(ast)` at ~`:304`). Do NOT delete the loop wholesale.
+  - Delete the `it('emits JXA code', …)` case (~`:222`, body `FilterPipeline.from(...).emit('jxa')`) —
+    a 5th jxa ref; omnijs siblings (~`:217`/`:232`) retain coverage.
   - The `'defaults to omnijs target'` case calling `FilterPipeline.from(...).emit()` arg-less
     (~`:227`): its premise (a default target) is gone — delete the case.
   - Keep the `describe('OmniJS emitter with hand-crafted AST')` describe.
