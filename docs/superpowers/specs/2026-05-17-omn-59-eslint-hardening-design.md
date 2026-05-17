@@ -10,7 +10,9 @@ Three coupled ESLint-rule issues block tightening the response-contract rules fr
 enforced (`error`):
 
 1. **12 camelCase metadata keys.** `src/tools/unified/OmniFocusAnalyzeTool.ts` passes camelCase keys into
-   the `createAnalyticsResponseV2` *metadata* envelope at 3 call-sites. They sit beside already-snake_case
+   the `createAnalyticsResponseV2` *metadata* envelope at 4 emit-sites across 3 analysis types
+   (`productivity_stats`; `task_velocity` in both its cached and fresh paths; `analyze_overdue`). They sit
+   beside already-snake_case
    metadata keys (`from_cache`, `query_time_ms` via `timer.toMetadata()`), so they are a genuine
    inconsistency, not an aged-out rule premise. PR #7 (`0683d6f`) added `createAnalyticsResponseV2` to the
    rule's `METADATA_ARG_INDEX`, which is what surfaced these 12 as warnings.
@@ -90,14 +92,22 @@ with a named-response-contract-type regex:
 // annotation means the method produces a tool response and is subject to
 // this rule. `SystemResponse` (SystemTool.ts) is a type alias for
 // StandardResponseV2; matched explicitly because the substring check missed it.
-const RESPONSE_CONTRACT_TYPES = /\b(StandardResponse|SystemResponse)\b/;
+// NOTE: NO trailing \b — `StandardResponse` must still match the longer
+// `StandardResponseV2` (no word boundary exists between `...Response` and
+// `V2`). A trailing \b would silently stop enforcing the ~8 methods annotated
+// `StandardResponseV2<...>` that are checked today — the exact regression this
+// fix must avoid.
+const RESPONSE_CONTRACT_TYPES = /\b(StandardResponse|SystemResponse)/;
 if (!RESPONSE_CONTRACT_TYPES.test(annText)) return;
 ```
 
-`StandardResponseV2` still matches (it contains `StandardResponse`, and `\bStandardResponse` matches at
-its start). Chosen over type-aware `parserServices` because exactly one alias exists and typed linting is
-not configured (YAGNI, low risk). The naming comment also discharges one #3 hardening item (documenting
-the gate's assumption).
+The leading `\b` anchors to the type-name start (annotations read `Promise<StandardResponseV2<...>>` /
+`Promise<SystemResponse>`, so the char before is `<`, a non-word char — boundary holds). **No trailing
+`\b`**: `\bStandardResponse` matches `StandardResponse`, `StandardResponseV2`, and any future
+`StandardResponseV3`; `\bSystemResponse` matches the alias. This preserves today's enforcement on all
+`StandardResponseV2`-annotated methods and additionally closes the `SystemResponse` gap. Chosen over
+type-aware `parserServices` because exactly one alias exists and typed linting is not configured (YAGNI,
+low risk). The naming comment also discharges one #3 hardening item (documenting the gate's assumption).
 
 ### 3. Minor hardening
 
@@ -122,12 +132,19 @@ Change `local-rules/use-standard-response`, `local-rules/use-handle-error`,
 
 ### 5. Regression test — `tests/unit/eslint-rules/`
 
-Using the RuleTester→vitest harness merged in PR #7, add a test that proves `use-standard-response`
-(and/or `use-handle-error`) now fires inside a method whose return type is an alias resolving to the
-response contract (the `Promise<SystemResponse>` shape). The test must be red against the pre-fix
-substring gate and green after — locking fix #2 against silent regression. Co-locate with or extend the
-existing `tests/unit/eslint-rules/metadata-snake-case.test.ts` pattern (separate rule → a sibling test
-file for the relevant rule).
+Using the RuleTester→vitest harness merged in PR #7, add tests for the relevant rule
+(`use-standard-response` and/or `use-handle-error`) covering **both**:
+
+1. **The gap being closed:** the rule fires inside a method whose return type is an alias resolving to
+   the response contract (the `Promise<SystemResponse>` shape) — red against the pre-fix substring gate,
+   green after.
+2. **The regression guard:** the rule still fires inside a method annotated
+   `Promise<StandardResponseV2<...>>` — this locks specifically against the trailing-`\b` class of
+   regression (a boundary bug that would match `SystemResponse` but break `StandardResponseV2`). A valid
+   case (a properly-conforming method) should also be present so the suite is non-vacuous.
+
+Co-locate with or extend the existing `tests/unit/eslint-rules/metadata-snake-case.test.ts` pattern
+(separate rule → a sibling test file for the relevant rule).
 
 ## Verification
 
