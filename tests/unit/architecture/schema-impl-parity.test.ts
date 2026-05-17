@@ -656,7 +656,6 @@ describe('Parity: tool inputSchema ↔ Zod schema (OMN-47 S10)', () => {
 // the enum, or allowlist it here.
 
 const TASK_CONTEXT_ONLY_KEYS = ['effectivePlannedDate', 'reason', 'daysOverdue'];
-const PROJECT_CONTEXT_ONLY_KEYS: string[] = [];
 
 describe('Reverse parity: generateFieldProjection ↔ TaskFieldEnum (OMN-61)', () => {
   it('emits no undeclared top-level task projection key', () => {
@@ -668,7 +667,7 @@ describe('Reverse parity: generateFieldProjection ↔ TaskFieldEnum (OMN-61)', (
         performanceMode: 'lite',
       },
     );
-    const emitted = [...script.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):\s*task\./gm)].map((m) => m[1]);
+    const emitted = [...script.matchAll(/^[ \t]*([A-Za-z]\w*):[ \t]*task\./gm)].map((m) => m[1]);
     const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !TASK_CONTEXT_ONLY_KEYS.includes(k));
     expect(undeclared, `undeclared task projection key(s): ${undeclared.join(', ')}`).toEqual([]);
   });
@@ -684,8 +683,10 @@ describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (O
         performanceMode: 'lite',
       },
     );
-    const emitted = [...script.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):\s*project\./gm)].map((m) => m[1]);
-    const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !PROJECT_CONTEXT_ONLY_KEYS.includes(k));
+    const emitted = [...script.matchAll(/^[ \t]*([A-Za-z]\w*):[ \t]*project\./gm)].map((m) => m[1]);
+    // No PROJECT context-only allowlist: every project projection key today is
+    // a declared ProjectFieldEnum member. Add one here if that ever changes.
+    const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k));
     expect(undeclared, `undeclared project projection key(s): ${undeclared.join(', ')}`).toEqual([]);
   });
 });
@@ -700,17 +701,31 @@ describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (O
 // the OMN-60 `fixed` bug shape (accepted, advertised, never applied). This is
 // the write-side analog of the read-side projection parity above.
 //
-// Builder-internal identifiers that are NOT user-settable schema fields
-// (linkage/placeholder vars) are allowlisted; a new one forces a conscious
-// choice rather than silently widening the accepted-but-internal surface.
-const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId', 'X'];
+// References the builder makes that are NOT user-settable fields of the two
+// schemas under test, allowlisted so the reverse guard doesn't false-fail:
+//   projectId    — builder's internal remap of the `project` schema field
+//   parentFolder — a field of FolderCreateDataSchema, a different schema this
+//                   gate intentionally does not cover
+// A new entry forces a conscious choice rather than silently widening the
+// accepted-but-internal surface.
+const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId'];
 
-const mutationBuilderSource = readFileSync(
-  fileURLToPath(new URL('../../../src/contracts/ast/mutation-script-builder.ts', import.meta.url)),
-  'utf8',
+// Strip comments before scanning the (checked-in, bounded) builder source:
+// it has a maintenance comment (`// ... if (data.X) ...`) that would
+// otherwise be captured as a phantom `X` reference, which would then have to
+// be masked by an allowlist entry.
+function stripComments(src: string): string {
+  // `[^\n]*` (not `.*$/m`) keeps the line-comment strip backtracking-free.
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+const mutationBuilderSource = stripComments(
+  readFileSync(
+    fileURLToPath(new URL('../../../src/contracts/ast/mutation-script-builder.ts', import.meta.url)),
+    'utf8',
+  ),
 );
 const builderRefs = new Set(
-  [...mutationBuilderSource.matchAll(/\b(?:data|changes|projectData)\.([A-Za-z][A-Za-z0-9_]*)/g)].map((m) => m[1]),
+  [...mutationBuilderSource.matchAll(/\b(?:data|changes|projectData)\.([A-Za-z]\w*)/g)].map((m) => m[1]),
 );
 
 describe('Parity: CreateDataSchema ↔ mutation-script-builder (OMN-61)', () => {
