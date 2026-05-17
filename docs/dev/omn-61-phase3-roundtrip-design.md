@@ -58,6 +58,8 @@ illustrative non-defaults.
 | folder                                  | a sandbox folder         | folder         |                             |
 | sequential                              | `true`                   | sequential     | default false               |
 | reviewInterval                          | `{unit:'month',steps:5}` | reviewInterval | OMN-60 — the canonical case |
+| tags                                    | `["__test-rt-<ts>"]`     | tags           | OMN-62 — bridge-applied     |
+| plannedDate                             | a specific future datetime | plannedDate  | OMN-62 — OF 4.7+            |
 
 ### `clear*` rows — two-phase assertion (not a single round-trip)
 
