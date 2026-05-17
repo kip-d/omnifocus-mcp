@@ -145,6 +145,9 @@ export default [
   },
 
   // Custom OmniFocus MCP rules — applied to schema modules
+  // Double-gate is deliberate: this config glob scopes the rule to schema
+  // dirs, and the rule body re-checks `filename.includes('/schemas/')` so it
+  // stays correct if applied via a broader config. Keep both in sync.
   {
     files: ['src/tools/**/schemas/**/*.ts', 'src/tools/schemas/**/*.ts'],
     plugins: {

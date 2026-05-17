@@ -182,7 +182,7 @@ const plugin = {
             if (call.arguments[metaIndex] !== objExpr) return;
 
             const key = (node.key && (node.key.name || node.key.value)) || null;
-            if (typeof key === 'string' && /[a-z][A-Z]/.test(key)) {
+            if (typeof key === 'string' && !/^[a-z0-9]+(_[a-z0-9]+)*$/.test(key)) {
               context.report({ node, messageId: 'snakeCaseMetadata', data: { key } });
             }
           },
@@ -204,6 +204,9 @@ const plugin = {
       },
       create(context) {
         const filename = context.filename;
+        // ASSUMPTION: detects only inline `export const XSchema = ...`. All
+        // schema files use that form today; `export { XSchema }` / re-export
+        // forms are intentionally not handled (YAGNI — no such file exists).
         if (!filename.includes('/schemas/') || !filename.endsWith('.ts')) return {};
 
         // Files named *helper*.ts are utility modules (e.g., coerceBoolean factories)
