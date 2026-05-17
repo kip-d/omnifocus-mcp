@@ -1957,24 +1957,28 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   const needsTags = filterCode.predicate.includes('taskTags');
 
   // Count runs in OmniJS (see JSDoc): one bridge round-trip, no per-task IPC.
-  const omniJsSource = `
+  const script = `
+(() => {
+  const app = Application('OmniFocus');
+
+  try {
+    const omniJsScript = \`
 (() => {
   try {
     const startTime = Date.now();
     const maxScan = ${maxScan};
     let count = 0;
     let scanned = 0;
-    // OmniJS globals (property access, no ()): \`inbox\` is the pre-filtered
-    // inbox collection, \`flattenedTasks\` the whole-DB flattened collection.
+    // OmniJS globals (property access, no parens): inbox is the pre-filtered
+    // inbox collection, flattenedTasks the whole-DB flattened collection.
     const tasks = ${checkInbox ? 'inbox' : 'flattenedTasks'};
     const totalTasks = tasks.length;
     ${filterCode.preamble ? filterCode.preamble + '\n    ' : ''}// Filter: ${filterDescription}
     function matchesFilter(task${needsTags ? ', taskTags' : ''}) {
       return ${filterCode.predicate};
     }
-    // maxScan bounds only this (cheap, ~0.03ms/task) loop — NOT the
-    // flattenedTasks materialization above, which is the real cost and is
-    // already paid. \`limited:true\` no longer implies a perf saving (OMN-57).
+    // maxScan bounds only this loop -- NOT the flattenedTasks materialization
+    // above, which is the real cost. limited:true no longer implies a perf saving (OMN-57).
     for (let i = 0; i < tasks.length && scanned < maxScan; i++) {
       scanned++;
       try {
@@ -2004,14 +2008,8 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   } catch (error) {
     return JSON.stringify({ error: true, message: (error && error.message) || String(error), context: 'task_count_omnijs' });
   }
-})()`;
-
-  const script = `
-(() => {
-  const app = Application('OmniFocus');
-
-  try {
-    const omniJsScript = \`${omniJsSource}\`;
+})()
+    \`;
     return app.evaluateJavascript(omniJsScript);
   } catch (e) {
     return JSON.stringify({ error: true, message: e.message || String(e), context: 'task_count_omnijs' });
