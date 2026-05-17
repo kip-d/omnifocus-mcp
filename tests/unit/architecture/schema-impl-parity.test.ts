@@ -9,6 +9,8 @@
 // for the original incidents. Add a new describe block here whenever you
 // introduce a new declaration↔implementation pairing.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi } from 'vitest';
 
 import {
@@ -17,6 +19,7 @@ import {
   SortFieldEnum,
   FILTER_FIELD_NAMES,
 } from '../../../src/tools/unified/schemas/read-schema.js';
+import { CreateDataSchema, UpdateChangesSchema } from '../../../src/tools/unified/schemas/write-schema.js';
 import {
   buildFilteredTasksScript,
   buildFilteredProjectsScript,
@@ -684,5 +687,64 @@ describe('Reverse parity: generateProjectFieldProjection ↔ ProjectFieldEnum (O
     const emitted = [...script.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):\s*project\./gm)].map((m) => m[1]);
     const undeclared = [...new Set(emitted)].filter((k) => !declared.has(k) && !PROJECT_CONTEXT_ONLY_KEYS.includes(k));
     expect(undeclared, `undeclared project projection key(s): ${undeclared.join(', ')}`).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Write-side parity: settable schema field ↔ mutation-script-builder (OMN-61)
+// =============================================================================
+//
+// Every field the create/update schemas accept must be *read* by the mutation
+// script builder as `data.<field>` / `changes.<field>` / `projectData.<field>`.
+// A schema field the builder never references is silently dropped on write —
+// the OMN-60 `fixed` bug shape (accepted, advertised, never applied). This is
+// the write-side analog of the read-side projection parity above.
+//
+// Builder-internal identifiers that are NOT user-settable schema fields
+// (linkage/placeholder vars) are allowlisted; a new one forces a conscious
+// choice rather than silently widening the accepted-but-internal surface.
+const BUILDER_INTERNAL_REFS = ['parentFolder', 'projectId', 'X'];
+
+const mutationBuilderSource = readFileSync(
+  fileURLToPath(new URL('../../../src/contracts/ast/mutation-script-builder.ts', import.meta.url)),
+  'utf8',
+);
+const builderRefs = new Set(
+  [...mutationBuilderSource.matchAll(/\b(?:data|changes|projectData)\.([A-Za-z][A-Za-z0-9_]*)/g)].map((m) => m[1]),
+);
+
+describe('Parity: CreateDataSchema ↔ mutation-script-builder (OMN-61)', () => {
+  for (const field of Object.keys(CreateDataSchema.shape)) {
+    it(`mutation builder reads create field "${field}"`, () => {
+      expect(
+        builderRefs.has(field),
+        `CreateDataSchema accepts "${field}" but mutation-script-builder never reads data/changes/projectData.${field} — it is silently dropped on create (OMN-60 bug shape).`,
+      ).toBe(true);
+    });
+  }
+});
+
+describe('Parity: UpdateChangesSchema ↔ mutation-script-builder (OMN-61)', () => {
+  for (const field of Object.keys(UpdateChangesSchema.shape)) {
+    it(`mutation builder reads update field "${field}"`, () => {
+      expect(
+        builderRefs.has(field),
+        `UpdateChangesSchema accepts "${field}" but mutation-script-builder never reads it — silently dropped on update (OMN-60 bug shape).`,
+      ).toBe(true);
+    });
+  }
+});
+
+describe('Reverse write parity: builder reads no undeclared settable key (OMN-61)', () => {
+  it('every data/changes/projectData reference is a schema field or allowlisted internal', () => {
+    const settable = new Set<string>([
+      ...Object.keys(CreateDataSchema.shape),
+      ...Object.keys(UpdateChangesSchema.shape),
+    ]);
+    const undeclared = [...builderRefs].filter((r) => !settable.has(r) && !BUILDER_INTERNAL_REFS.includes(r));
+    expect(
+      undeclared,
+      `mutation-script-builder reads data/changes/projectData key(s) ${JSON.stringify(undeclared)} that no settable schema declares and that are not allowlisted internals — declare them, or add to BUILDER_INTERNAL_REFS with a reason.`,
+    ).toEqual([]);
   });
 });
