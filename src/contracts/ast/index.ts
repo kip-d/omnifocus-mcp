@@ -4,7 +4,6 @@
  * This module provides:
  * - buildAST: Transform TaskFilter to FilterAST
  * - validateFilterAST: Validate AST for correctness
- * - emitJXA: Generate JXA JavaScript code
  * - emitOmniJS: Generate OmniJS JavaScript code
  *
  * @see docs/plans/2025-11-24-ast-filter-contracts-design.md
@@ -49,12 +48,11 @@ export type { ValidationResult, ValidationError, ValidationWarning } from './val
 export { validateFilterAST } from './validator.js';
 
 // Emitters
-export { emitJXA } from './emitters/jxa.js';
 export { emitOmniJS } from './emitters/omnijs.js';
 export type { EmitResult } from './emitters/omnijs.js';
 
 // Filter Code Generator (high-level API)
-export type { EmitTarget, GenerateFilterCodeResult, GenerateFilterCodeError } from './filter-generator.js';
+export type { GenerateFilterCodeResult, GenerateFilterCodeError } from './filter-generator.js';
 export {
   FilterPipeline,
   generateFilterCode,

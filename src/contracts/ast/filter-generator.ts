@@ -18,21 +18,17 @@ import type { TaskFilter, ProjectFilter, ProjectStatus, NormalizedTaskFilter } f
 import type { FilterNode } from './types.js';
 import { buildAST } from './builder.js';
 import { validateFilterAST, type ValidationResult } from './validator.js';
-import { emitJXA } from './emitters/jxa.js';
 import { emitOmniJS, type EmitResult } from './emitters/omnijs.js';
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export type EmitTarget = 'jxa' | 'omnijs';
-
 export interface GenerateFilterCodeResult {
   success: boolean;
   code: EmitResult;
   ast: FilterNode;
   validation: ValidationResult;
-  target: EmitTarget;
 }
 
 export interface GenerateFilterCodeError {
@@ -80,7 +76,7 @@ export class FilterPipeline {
     return this;
   }
 
-  emit(target: EmitTarget = 'omnijs'): EmitResult {
+  emit(): EmitResult {
     if (!this._ast) this.build();
     if (!this._validation) this.validate();
 
@@ -88,7 +84,7 @@ export class FilterPipeline {
       throw new Error(`Filter validation failed: ${this._validation!.errors.map((e) => e.message).join('; ')}`);
     }
 
-    return target === 'jxa' ? emitJXA(this._ast!) : emitOmniJS(this._ast!);
+    return emitOmniJS(this._ast!);
   }
 
   get ast(): FilterNode {
@@ -113,14 +109,10 @@ export class FilterPipeline {
  * Accepts both raw TaskFilter and NormalizedTaskFilter.
  *
  * @param filter - The TaskFilter or NormalizedTaskFilter to transform
- * @param target - The target language ('jxa' or 'omnijs')
  * @returns EmitResult with preamble and predicate, or throws if validation fails
  */
-export function generateFilterCode(
-  filter: TaskFilter | NormalizedTaskFilter,
-  target: EmitTarget = 'omnijs',
-): EmitResult {
-  return FilterPipeline.from(filter).emit(target);
+export function generateFilterCode(filter: TaskFilter | NormalizedTaskFilter): EmitResult {
+  return FilterPipeline.from(filter).emit();
 }
 
 /**
@@ -129,12 +121,10 @@ export function generateFilterCode(
  * Returns validation errors/warnings instead of throwing.
  *
  * @param filter - The TaskFilter or NormalizedTaskFilter to transform
- * @param target - The target language ('jxa' or 'omnijs')
  * @returns Full result with AST, validation, and generated code
  */
 export function generateFilterCodeSafe(
   filter: TaskFilter | NormalizedTaskFilter,
-  target: EmitTarget = 'omnijs',
 ): GenerateFilterCodeResult | GenerateFilterCodeError {
   const pipeline = FilterPipeline.from(filter).build().validate();
   const { ast, validation } = pipeline;
@@ -148,14 +138,13 @@ export function generateFilterCodeSafe(
     };
   }
 
-  const code = pipeline.emit(target);
+  const code = pipeline.emit();
 
   return {
     success: true,
     code,
     ast,
     validation,
-    target,
   };
 }
 
@@ -165,14 +154,10 @@ export function generateFilterCodeSafe(
  * This generates a function that can be called with a task object.
  *
  * @param filter - The TaskFilter or NormalizedTaskFilter to transform
- * @param target - The target language ('jxa' or 'omnijs')
  * @returns JavaScript function code string
  */
-export function generateFilterFunction(
-  filter: TaskFilter | NormalizedTaskFilter,
-  target: EmitTarget = 'omnijs',
-): string {
-  const { preamble, predicate } = generateFilterCode(filter, target);
+export function generateFilterFunction(filter: TaskFilter | NormalizedTaskFilter): string {
+  const { preamble, predicate } = generateFilterCode(filter);
 
   return `${preamble ? preamble + '\n' : ''}function matchesFilter(task, taskTags) {
   taskTags = taskTags || (task.tags ? task.tags.map(t => t.name) : []);
@@ -190,7 +175,7 @@ export function generateFilterFunction(
  * @returns Complete filter code block ready to embed in OmniJS script
  */
 export function generateFilterBlock(filter: TaskFilter): string {
-  const { preamble, predicate } = generateFilterCode(filter, 'omnijs');
+  const { preamble, predicate } = generateFilterCode(filter);
 
   return `
 ${preamble ? preamble + '\n' : ''}// Generated filter predicate
