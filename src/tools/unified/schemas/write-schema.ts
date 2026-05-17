@@ -86,7 +86,8 @@ const DATE_FORMAT_MSG = 'Date format: YYYY-MM-DD or YYYY-MM-DD HH:mm';
 
 // Create data schema — single source of truth for task/project creation fields.
 // Both the unified write tool and batch-schemas derive from this.
-const CreateDataSchema = z.object({
+// Exported for OMN-61 write-side parity testing (settable field ↔ builder).
+export const CreateDataSchema = z.object({
   name: z.string().min(1),
   note: z.string().optional(),
   project: z.union([z.string(), z.null()]).optional(),
@@ -110,7 +111,8 @@ const CreateDataSchema = z.object({
 });
 
 // Update changes schema
-const UpdateChangesSchema = z
+// Exported for OMN-61 write-side parity testing (settable field ↔ builder).
+export const UpdateChangesSchema = z
   .object({
     name: z.string().optional(),
     note: z.string().optional(),
