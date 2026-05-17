@@ -188,6 +188,8 @@ These are shorthand or `key: value` properties inside the metadata object. Examp
 
 Do NOT rename the local variables, input-parameter names, schema fields, or data-payload keys — only the metadata object keys at these 4 `createAnalyticsResponseV2` calls. Use `npm run lint` (Step 2) to confirm exactly the 12 expected warnings disappear.
 
+**Edit-disambiguation note:** several of these strings are NOT unique in the file — `groupBy,` (shorthand) recurs at the velocity-cached, velocity-fresh, and overdue sites, and `startDate: rangeStart,` / `endDate: rangeEnd,` are byte-identical at the velocity-cached (~671) and velocity-fresh (~729) sites. An exact-string editor will hit "not unique" failures. Disambiguate by the differing preceding line — the metadata object opens with `from_cache: true,` at the cached site (~671) and `from_cache: false,` at the fresh site (~729) — or edit each emit-site by reading its surrounding block first. The Step 2 warning-count gate catches any missed occurrence.
+
 - [ ] **Step 2: Verify the 12 warnings are gone**
 
 Run: `npm run lint:strict 2>&1 | grep -c "local-rules/metadata-snake-case" || echo 0`
@@ -198,7 +200,7 @@ Expected: `0 problems (0 errors, 0 warnings)`.
 - [ ] **Step 3: Verify no behavior/test regression**
 
 Run: `npm run build` — Expected: exit 0.
-Run: `npm run test:unit 2>&1 | grep -E "Test Files|Tests "` — Expected: all pass (count = prior 1877 baseline + the new `use-standard-response.test.ts` cases; no failures). If any analytics test fails asserting `metadata.<oldKey>`, that contradicts the spec's "no consumer" finding — STOP and surface.
+Run: `npm run test:unit 2>&1 | grep -E "Test Files|Tests "` — Expected: **zero failures** (the suite count is the pre-existing baseline plus the new `use-standard-response.test.ts` cases; do not assert an exact number — verify "0 failed", not equality). If any analytics test fails asserting `metadata.<oldKey>`, that contradicts the spec's "no consumer" finding — STOP and surface.
 
 - [ ] **Step 4: Commit**
 
