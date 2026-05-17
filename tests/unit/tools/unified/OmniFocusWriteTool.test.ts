@@ -130,6 +130,58 @@ describe('OmniFocusWriteTool task operations', () => {
       expect(result.success).toBe(false);
     });
 
+    it('OMN-63: backfills data.task.taskId from id when script omits taskId', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { id: 'task-xyz', name: 'No taskId here' }, // NOTE: no `taskId`
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'No taskId here' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.task.taskId).toBe('task-xyz'); // backfilled from id
+      expect(result.data.id).toBe('task-xyz'); // unchanged
+    });
+
+    it('OMN-63: preserves a script-emitted taskId (no id present)', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'real-tid', name: 'Has taskId' },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'Has taskId' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.task.taskId).toBe('real-tid'); // unclobbered
+    });
+
+    it('OMN-63: ??= is a no-op when both taskId and a differing id are present', async () => {
+      execJsonSpy.mockResolvedValue(
+        createScriptSuccess({
+          ok: true,
+          v: '3',
+          data: { taskId: 'tid-1', id: 'id-2', name: 'Both present' },
+        }),
+      );
+
+      const result = (await tool.execute({
+        mutation: { operation: 'create', target: 'task', data: { name: 'Both present' } },
+      })) as any;
+
+      expect(result.success).toBe(true);
+      expect(result.data.task.taskId).toBe('tid-1'); // taskId wins; not overwritten by id
+    });
+
     it('unwraps v3 envelope from create result', async () => {
       execJsonSpy.mockResolvedValue(
         createScriptSuccess({
