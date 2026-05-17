@@ -15,6 +15,16 @@ function enclosingFunction(node) {
   return null;
 }
 
+// Response-contract type names whose presence in a method's return-type
+// annotation means the method produces a tool response and is subject to
+// the use-standard-response / use-handle-error rules. `SystemResponse`
+// (SystemTool.ts) is a type alias for StandardResponseV2; matched explicitly
+// because the old substring check missed it. NO trailing \b — plain
+// `StandardResponse` must still match the longer `StandardResponseV2` (no word
+// boundary exists between `...Response` and `V2`); a trailing \b would silently
+// stop enforcing the ~8 methods annotated StandardResponseV2<...> checked today.
+const RESPONSE_CONTRACT_TYPES = /\b(StandardResponse|SystemResponse)/;
+
 const plugin = {
   meta: {
     name: 'omnifocus-mcp-local',
@@ -69,7 +79,7 @@ const plugin = {
             const fn = enclosingFunction(node);
             if (!fn || !fn.returnType) return;
             const annText = context.sourceCode.getText(fn.returnType);
-            if (!annText.includes('StandardResponse')) return;
+            if (!RESPONSE_CONTRACT_TYPES.test(annText)) return;
 
             const keys = node.argument.properties
               .map((p) => (p.type === 'Property' && p.key && (p.key.name || p.key.value)) || null)
@@ -108,7 +118,7 @@ const plugin = {
             const fn = enclosingFunction(node);
             if (!fn || !fn.returnType) return;
             const annText = context.sourceCode.getText(fn.returnType);
-            if (!annText.includes('StandardResponse')) return;
+            if (!RESPONSE_CONTRACT_TYPES.test(annText)) return;
 
             const text = context.sourceCode.getText(node.body);
             // Side-effecting catch blocks (no return) record sub-task results
@@ -164,7 +174,7 @@ const plugin = {
             if (call.arguments[metaIndex] !== objExpr) return;
 
             const key = (node.key && (node.key.name || node.key.value)) || null;
-            if (typeof key === 'string' && /[a-z][A-Z]/.test(key)) {
+            if (typeof key === 'string' && !/^[a-z0-9]+(_[a-z0-9]+)*$/.test(key)) {
               context.report({ node, messageId: 'snakeCaseMetadata', data: { key } });
             }
           },
@@ -186,6 +196,9 @@ const plugin = {
       },
       create(context) {
         const filename = context.filename;
+        // ASSUMPTION: detects only inline `export const XSchema = ...`. All
+        // schema files use that form today; `export { XSchema }` / re-export
+        // forms are intentionally not handled (YAGNI — no such file exists).
         if (!filename.includes('/schemas/') || !filename.endsWith('.ts')) return {};
 
         // Files named *helper*.ts are utility modules (e.g., coerceBoolean factories)

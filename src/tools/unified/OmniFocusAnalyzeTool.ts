@@ -482,8 +482,8 @@ SCOPE FILTERING:
       return createAnalyticsResponseV2('productivity_stats', responseData, 'Productivity Analysis', keyFindings, {
         from_cache: false,
         period,
-        includeProjectStats,
-        includeTagStats,
+        include_project_stats: includeProjectStats,
+        include_tag_stats: includeTagStats,
         ...timer.toMetadata(),
       });
     } catch (error) {
@@ -668,10 +668,10 @@ SCOPE FILTERING:
           this.extractVelocityKeyFindings(cached as Parameters<typeof this.extractVelocityKeyFindings>[0]),
           {
             from_cache: true,
-            startDate: rangeStart,
-            endDate: rangeEnd,
-            groupBy,
-            includeWeekends,
+            start_date: rangeStart,
+            end_date: rangeEnd,
+            group_by: groupBy,
+            include_weekends: includeWeekends,
             ...timer.toMetadata(),
           },
         );
@@ -726,10 +726,10 @@ SCOPE FILTERING:
 
       return createAnalyticsResponseV2('task_velocity', responseData, 'Task Velocity Analysis', keyFindings, {
         from_cache: false,
-        startDate: rangeStart,
-        endDate: rangeEnd,
-        groupBy,
-        includeWeekends,
+        start_date: rangeStart,
+        end_date: rangeEnd,
+        group_by: groupBy,
+        include_weekends: includeWeekends,
         ...timer.toMetadata(),
       });
     } catch (error) {
@@ -927,8 +927,8 @@ SCOPE FILTERING:
 
       return createAnalyticsResponseV2('analyze_overdue', responseData, 'Overdue Task Analysis', keyFindings, {
         from_cache: false,
-        groupBy,
-        includeCompleted: includeRecentlyCompleted,
+        group_by: groupBy,
+        include_completed: includeRecentlyCompleted,
         ...timer.toMetadata(),
       });
     } catch (error) {

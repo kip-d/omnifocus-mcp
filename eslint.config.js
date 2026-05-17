@@ -138,20 +138,23 @@ export default [
     },
     rules: {
       'local-rules/extend-base-tool': 'error',
-      'local-rules/use-standard-response': 'warn',
-      'local-rules/use-handle-error': 'warn',
-      'local-rules/metadata-snake-case': 'warn',
+      'local-rules/use-standard-response': 'error',
+      'local-rules/use-handle-error': 'error',
+      'local-rules/metadata-snake-case': 'error',
     },
   },
 
   // Custom OmniFocus MCP rules — applied to schema modules
+  // Double-gate is deliberate: this config glob scopes the rule to schema
+  // dirs, and the rule body re-checks `filename.includes('/schemas/')` so it
+  // stays correct if applied via a broader config. Keep both in sync.
   {
     files: ['src/tools/**/schemas/**/*.ts', 'src/tools/schemas/**/*.ts'],
     plugins: {
       'local-rules': localRules,
     },
     rules: {
-      'local-rules/export-zod-schema': 'warn',
+      'local-rules/export-zod-schema': 'error',
     },
   },
 
