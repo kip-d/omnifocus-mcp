@@ -588,6 +588,14 @@ SAFETY:
       (parsedResult as { taskId?: string; id?: string }).taskId || (parsedResult as { id?: string }).id || null;
     this.logger.debug('Post-create task ID', { createdTaskId });
 
+    // OMN-63: data.task is parsedResult verbatim; the create script emits
+    // `taskId` but some paths/races yield only `id` (or a transient JXA id),
+    // leaving data.task.taskId undefined while success:true. Backfill from
+    // createdTaskId (= taskId || id, guaranteed non-null here by the
+    // validation above) so the create-response contract holds deterministically.
+    // `??=` never clobbers a valid script-emitted taskId.
+    (parsedResult as Record<string, unknown>).taskId ??= createdTaskId;
+
     return { parsedResult, createdTaskId };
   }
 
