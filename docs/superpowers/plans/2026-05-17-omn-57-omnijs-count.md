@@ -130,8 +130,11 @@ predicate string and stays correct.
 Replace the `const script = \`(() => { const app = Application('OmniFocus'); ... })()\`` body
 (~1958-2029) with a JXA shell that builds an OmniJS source string and returns
 `app.evaluateJavascript(...)` verbatim. **Mirror the existing list-path embedding pattern in this same
-file** (e.g. the `app.evaluateJavascript(omniJsScript)` blocks around lines 1246-1290 / 1530-1560) for
-how the OmniJS string is constructed and escaped — do not hand-roll new escaping. The OmniJS source:
+file**: the complete JXA-shell → `const omniJsScript = \`…\`` (nested template) →
+`app.evaluateJavascript(omniJsScript)` → JXA-side `try/catch` returning
+`{ error:true, message, context }` block spans roughly lines **1168-1310** (grep this file for
+`app.evaluateJavascript(omniJsScript)` — hits ~1286/1559 — to find it). Reuse that escaping/embedding
+mechanism; do not hand-roll new escaping. The OmniJS source:
 
 ```js
 (() => {
@@ -264,10 +267,17 @@ for F in '{"status":"active"}' '{"flagged":true}' '{"inInbox":true}'; do
 done | node dist/index.js 2>/dev/null | grep -o '"total_count":[0-9]*\|"optimization":"[^"]*"\|"query_time_ms":[0-9]*'
 ```
 Expected: `optimization` = `omnijs_count_*`; `query_time_ms` for the whole-DB filters ≈ 8000-15000
-(not ≈ 50000); counts are sane. Then confirm parity: the pre-change baselines measured this session
-are `status:active` → **2263**, `flagged:true` → **15** on this DB. The new counts MUST match those
-(if the DB is unchanged). If a count differs, STOP — the OmniJS emitter diverged from the JXA emitter;
-do not proceed, surface it (this is the spec's primary risk).
+(not ≈ 50000); counts are sane. The `inInbox:true` case exercises the `checkInbox`/`inbox`-global
+branch — the highest-value parity case; make sure it's included.
+
+Then confirm parity. The pre-change baselines captured **this session** are `status:active` →
+**2263**, `flagged:true` → **15**. **These are only valid if the DB is unchanged since.** Because the
+DB mutates between sessions, do NOT trust stale baselines blindly — **re-baseline on the current DB**
+before comparing: from a separate checkout of `main` (or `git stash` the worktree changes), build and
+run the identical probe to capture the *current* pre-change JXA counts, then compare the OmniJS counts
+against those. The new OmniJS count MUST equal the freshly-measured JXA count for every probed filter.
+If any count differs, STOP — the OmniJS emitter diverged from the JXA emitter; do not proceed, surface
+it (this is the spec's primary risk).
 
 - [ ] **Step 3: The actual failing test, now under budget**
 
