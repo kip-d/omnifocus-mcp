@@ -60,8 +60,8 @@ Out of scope (correctly):
 
 ### 1. Rename 12 metadata keys — `src/tools/unified/OmniFocusAnalyzeTool.ts`
 
-Rename in the `createAnalyticsResponseV2` metadata objects at the 3 call-sites (`productivity_stats`
-~485; `task_velocity` cached ~671 and fresh ~729; `analyze_overdue` ~930):
+Rename in the `createAnalyticsResponseV2` metadata objects at the 4 emit-sites across 3 analysis types
+(`productivity_stats` ~485; `task_velocity` cached ~671 and fresh ~729; `analyze_overdue` ~930):
 
 | camelCase (current)   | snake_case (new)         |
 | --------------------- | ------------------------ |
