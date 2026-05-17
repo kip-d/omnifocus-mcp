@@ -383,6 +383,28 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
       extract: (p) => p?.reviewInterval?.steps,
       expected: 5,
     },
+    {
+      // OMN-62: was an it.fails read-gap (settable via CreateDataSchema but
+      // absent from ProjectFieldEnum/projection). Now a genuine round-trip.
+      // Bridge-applied like task tags — high silent-fail risk. Normalized
+      // oracle: name-array (project.tags.map(t => t.name)).
+      field: 'tags',
+      op: 'create',
+      setValue: [`__test-rt-${TS}`],
+      readFields: ['tags'],
+      extract: (p) => p?.tags,
+      expected: [`__test-rt-${TS}`],
+    },
+    {
+      // OMN-62: was an it.fails read-gap. OF 4.7+ planned date; accessor
+      // verified live via raw OmniJS probe. Epoch-normalized oracle.
+      field: 'plannedDate',
+      op: 'create',
+      setValue: TEST_DATETIME,
+      readFields: ['plannedDate'],
+      extract: (p) => (p?.plannedDate ? new Date(p.plannedDate).getTime() : p?.plannedDate),
+      expected: TEST_DATETIME_EPOCH,
+    },
   ];
 
   describe('project scalar fields', () => {
@@ -537,53 +559,12 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
     );
   });
 
-  // ── Known read-gaps → xfail + OMN-62 ──────────────────────────────────
-  // Settable on projects via the shared CreateDataSchema but ABSENT from
-  // ProjectFieldEnum / generateProjectFieldProjection — cannot be read back
-  // through the public API. This is the OMN-60 shape for two more fields.
-  // Failure mechanism: ProjectQuerySchema is .strict() and `fields` is
-  // z.array(ProjectFieldEnum), so requesting 'tags'/'plannedDate' is rejected
-  // by Zod at the tool boundary — the read returns success:false and
-  // assertFieldPersisted throws at its `success === false` guard (the
-  // extractor never runs). it.fails keeps the harness honest: "can't verify —
-  // read gap", not a green skip. When OMN-62 ships (adds them to the enum +
-  // projection) these flip green automatically; promote them to real rows in
-  // projectRows above.
-  describe('known read-gaps (OMN-62 — settable but unreadable on projects)', () => {
-    it.fails(
-      'project.tags — OMN-62: not in ProjectFieldEnum, cannot round-trip',
-      async () => {
-        const id = await createProject({ tags: [`__test-rt-${TS}`] });
-        // `fields: ['id','tags']` is rejected by ProjectQuerySchema (.strict,
-        // tags ∉ ProjectFieldEnum) → read success:false → assertFieldPersisted
-        // throws at its success guard. EXPECTED to throw until OMN-62 lands.
-        await assertFieldPersisted(client, {
-          readTool: 'omnifocus_read',
-          readParams: projectQuery(['tags']),
-          extract: (r) => findProject(r, id)?.tags,
-          expected: [`__test-rt-${TS}`],
-          context: 'project.tags (OMN-62 read gap)',
-        });
-      },
-      120000,
-    );
-
-    it.fails(
-      'project.plannedDate — OMN-62: not in ProjectFieldEnum, cannot round-trip',
-      async () => {
-        const id = await createProject({ plannedDate: TEST_DATETIME });
-        await assertFieldPersisted(client, {
-          readTool: 'omnifocus_read',
-          readParams: projectQuery(['plannedDate']),
-          extract: (r) => {
-            const v = findProject(r, id)?.plannedDate;
-            return v ? new Date(v).getTime() : v;
-          },
-          expected: TEST_DATETIME_EPOCH,
-          context: 'project.plannedDate (OMN-62 read gap)',
-        });
-      },
-      120000,
-    );
-  });
+  // ── OMN-62 RESOLVED ───────────────────────────────────────────────────
+  // project.tags and project.plannedDate were settable via the shared
+  // CreateDataSchema but absent from ProjectFieldEnum /
+  // generateProjectFieldProjection (the OMN-60 shape). OMN-62 added both to
+  // the enum + projection + inputSchema; they are now genuine round-trip
+  // rows in `projectRows` above. The former it.fails xfail placeholders are
+  // intentionally gone — keeping them would silently never exercise the
+  // now-working path (a vacuous green).
 });
