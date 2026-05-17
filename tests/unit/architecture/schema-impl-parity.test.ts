@@ -283,7 +283,7 @@ describe('Parity: countOnly path implicit defaults match standard path (OMN-52 c
     const countScript = buildTaskCountScript({ completed: true }).script;
     // When user explicitly asks for completed tasks, the predicate must
     // compare === true (not === false from the implicit default).
-    expect(countScript).toMatch(/task\.completed\(\)\s*===\s*true/);
+    expect(countScript).toMatch(/task\.completed\s*===\s*true/);
   });
 });
 

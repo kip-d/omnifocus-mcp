@@ -196,7 +196,7 @@ describe('Unified Tools End-to-End Integration', () => {
       expect(parsed).toHaveProperty('success');
     }, 60000);
 
-    it('should return count-only for active tasks (33x faster optimization)', async () => {
+    it('should return count-only for active tasks (OmniJS in-process count)', async () => {
       const result = await sendRequest({
         jsonrpc: '2.0',
         id: 6,
@@ -228,15 +228,15 @@ describe('Unified Tools End-to-End Integration', () => {
       // Verify metadata includes count and optimization flag
       expect(parsed.metadata).toHaveProperty('total_count');
       expect(parsed.metadata).toHaveProperty('count_only', true);
-      // Accept any pure JXA optimization (faster than OmniJS bridge)
-      expect(parsed.metadata.optimization).toMatch(/^pure_jxa/);
+      // OmniJS in-process count (OMN-57: one bridge round-trip, not per-element JXA IPC)
+      expect(parsed.metadata.optimization).toMatch(/^omnijs_count/);
       expect(typeof parsed.metadata.total_count).toBe('number');
 
       // Verify no task data returned (just count in metadata)
       if (parsed.data?.tasks) {
         expect(parsed.data.tasks.length).toBe(0);
       }
-    }, 60000);
+    }, 30000);
 
     it('should return count-only for flagged tasks', async () => {
       const result = await sendRequest({

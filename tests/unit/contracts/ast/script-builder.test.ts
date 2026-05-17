@@ -458,73 +458,85 @@ describe('buildRecurringTasksScript', () => {
 
 describe('buildTaskCountScript', () => {
   describe('inbox counting', () => {
-    it('uses doc.inboxTasks() when inInbox is true', () => {
+    it('uses OmniJS inbox global when inInbox is true', () => {
       const result = buildTaskCountScript({ inInbox: true });
-      expect(result.script).toContain('doc.inboxTasks()');
+      expect(result.script).toContain('evaluateJavascript');
+      expect(result.script).toContain('inbox');
+      expect(result.script).not.toContain('doc.inboxTasks()');
       expect(result.script).not.toContain('doc.flattenedTasks()');
     });
 
     it('strips inInbox from filter code (already handled by collection)', () => {
       const result = buildTaskCountScript({ inInbox: true });
-      // Should NOT generate task.inInbox() check — the collection is pre-filtered
-      expect(result.script).not.toContain('task.inInbox()');
+      // Should NOT generate task.inInbox check — the collection is pre-filtered
+      expect(result.script).not.toContain('task.inInbox');
     });
 
     it('defaults to excluding completed tasks for inbox counts', () => {
       const result = buildTaskCountScript({ inInbox: true });
-      // Should add completed: false when not explicitly set
-      expect(result.script).toContain('task.completed()');
+      // Should add completed: false when not explicitly set (OmniJS property access, no ())
+      expect(result.script).toContain('task.completed');
       expect(result.script).toContain('=== false');
     });
 
     it('respects explicit completed: true for inbox counts', () => {
       const result = buildTaskCountScript({ inInbox: true, completed: true });
-      expect(result.script).toContain('doc.inboxTasks()');
-      expect(result.script).toContain('task.completed() === true');
+      expect(result.script).toContain('inbox');
+      expect(result.script).toContain('task.completed === true');
     });
 
     it('does not treat project: null as inbox (that is QueryCompiler concern)', () => {
       // project: null → inInbox: true conversion happens in QueryCompiler,
       // not in normalizeFilter or buildTaskCountScript
       const result = buildTaskCountScript({ project: null } as TaskFilter);
-      expect(result.script).toContain('doc.flattenedTasks()');
+      expect(result.script).toContain('flattenedTasks');
+      expect(result.script).not.toContain('doc.flattenedTasks()');
     });
   });
 
   describe('non-inbox counting', () => {
-    it('uses doc.flattenedTasks() for general queries', () => {
+    it('uses OmniJS flattenedTasks global for general queries', () => {
       const result = buildTaskCountScript({ flagged: true });
-      expect(result.script).toContain('doc.flattenedTasks()');
+      expect(result.script).toContain('evaluateJavascript');
+      expect(result.script).toContain('flattenedTasks');
+      expect(result.script).not.toContain('doc.flattenedTasks()');
       expect(result.script).not.toContain('doc.inboxTasks()');
     });
 
     it('generates filter code for non-inbox filters', () => {
       const result = buildTaskCountScript({ flagged: true, completed: false });
-      expect(result.script).toContain('task.flagged() === true');
-      expect(result.script).toContain('task.completed() === false');
+      expect(result.script).toContain('task.flagged === true');
+      expect(result.script).toContain('task.completed === false');
     });
 
-    it('iterates flattenedTasks() for no filters and applies completed-exclusion default', () => {
+    it('iterates flattenedTasks for no filters and applies completed-exclusion default', () => {
       const result = buildTaskCountScript({});
-      expect(result.script).toContain('doc.flattenedTasks()');
+      expect(result.script).toContain('flattenedTasks');
+      expect(result.script).not.toContain('doc.flattenedTasks()');
       // OMN-52: an "empty" input filter is no longer empty after normalization —
       // the count path applies the same `completed: false` default as the list
       // path so both produce equivalent counts. The AST therefore contains a
       // task.completed === false comparison node, so isEmptyFilter is false.
       expect(result.isEmptyFilter).toBe(false);
-      expect(result.script).toMatch(/task\.completed\(\)\s*===\s*false/);
+      expect(result.script).toMatch(/task\.completed\s*===\s*false/);
     });
 
     it('generates project name comparison for name-like project filter', () => {
       const result = buildTaskCountScript({ project: 'My Project' });
-      expect(result.script).toContain('.name()');
+      expect(result.script).toContain('.name');
       expect(result.script).toContain('My Project');
     });
 
     it('generates project ID comparison for ID-like project filter', () => {
       const result = buildTaskCountScript({ project: 'n60OG59wsSg' });
-      expect(result.script).toContain('.id().primaryKey()');
+      expect(result.script).toContain('.id.primaryKey');
       expect(result.script).toContain('n60OG59wsSg');
+    });
+
+    it('uses omnijs_count discriminator (not pure_jxa)', () => {
+      const r = buildTaskCountScript({ flagged: true });
+      expect(r.script).toContain('omnijs_count');
+      expect(r.script).not.toContain('pure_jxa');
     });
   });
 });
