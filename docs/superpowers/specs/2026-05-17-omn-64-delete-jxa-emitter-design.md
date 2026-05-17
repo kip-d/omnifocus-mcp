@@ -47,6 +47,11 @@ Out of scope (explicit):
   still a JXA script that embeds OmniJS via `app.evaluateJavascript`). It is **unrelated** to the
   filter emitter and MUST remain unchanged. Likewise any `'jxa'` in `SCRIPT_SIZE_LIMITS` / script-size
   code or docs.
+- **`src/omnifocus/utils/script-size-monitor.ts`** (`'jxa'` script-size category type/defaults, ~lines
+  50/64/69/134) and **`src/tools/unified/OmniFocusWriteTool.ts:865,938`** (`method: 'jxa'` write-path
+  response-metadata label) — both use the string `'jxa'` for entirely unrelated concerns (script-size
+  budgeting; response metadata). MUST remain unchanged. These exist so the Verification grep gate is
+  scoped correctly (see Verification §4).
 - No change to `emitOmniJS`, the AST builder, validator, `SYNTHETIC_FIELD_DEFS[].omnijs`, or any
   generated-script behavior.
 - No semantic change to `dropped`/`available`/`blocked` (omnijs effective-status behavior is retained
@@ -62,37 +67,63 @@ Out of scope (explicit):
    - `FilterPipeline.emit`: drop the `target` parameter; body becomes
      `return emitOmniJS(this._ast!);` (was `target === 'jxa' ? emitJXA(...) : emitOmniJS(...)`).
    - Remove the `EmitTarget` type entirely.
-   - Drop the `target` parameter from `generateFilterCode`, `generateFilterCodeSafe`,
-     `generateFilterFunction` (all currently `target: EmitTarget = 'omnijs'`). Update their JSDoc
-     (`@param target`) accordingly. Internal calls (`generateFilterCode(filter, 'omnijs')` at
-     `:193`, `generateFilterBlock`) become arg-less.
+   - Drop the `target` parameter from `generateFilterCode` (:121), `generateFilterCodeSafe` (:137),
+     `generateFilterFunction` (:173), and `FilterPipeline.emit` (:83) — all currently
+     `target: EmitTarget = 'omnijs'`. Update their JSDoc (`@param target`) accordingly. Internal calls
+     (`generateFilterCode(filter, 'omnijs')` at `:193`, `generateFilterBlock`) become arg-less.
+   - **Remove the `target: EmitTarget` field from the `GenerateFilterCodeResult` interface
+     (`filter-generator.ts:35`) and its population site (`target: target` / `target,` at ~`:158`).**
+     This is part of "full `EmitTarget` removal"; `tsc` flags it but it must be enumerated. Any
+     surviving test asserting `result.target` must be updated (see Tests).
 3. **`src/contracts/ast/types.ts`:** remove the `jxa` property from the `SyntheticFieldDef` type and
    from all four `SYNTHETIC_FIELD_DEFS` entries (it is universally `null` and was read only by the
    deleted JXA emitter; `emitOmniJS` reads only `.omnijs`).
 4. **`src/contracts/ast/index.ts`:** remove `export { emitJXA } from './emitters/jxa.js';`, remove
    `EmitTarget` from the `export type { … }` line, and drop the `emitJXA` bullet from the file's doc
-   comment.
+   comment. (`GenerateFilterCodeResult`/`GenerateFilterCodeError` exports stay — only their `target`
+   field is gone.)
 5. **All `src/` callers** of `generateFilterCode(filter, 'omnijs')` (script-builder.ts:466, 582, 751,
    1502, 1953) → `generateFilterCode(filter)`. `tsc` will flag any missed call/import/type reference;
    treat a clean `tsc` as the completeness gate.
 
 ### Tests
 
-- **Delete** `tests/unit/contracts/ast/emitters/jxa.test.ts` (entire file is `describe('emitJXA', …)`).
-- **`tests/unit/contracts/ast/filter-generator.test.ts`:** remove every `it(...)` that passes
-  `'jxa'` to `generateFilterCode`/`generateFilterCodeSafe` (the JXA-syntax assertion cases) and the
-  `'defaults to omnijs target'` case (premise — a default target — no longer exists). Retain all
-  OmniJS cases; ensure each removed jxa case has an existing OmniJS counterpart (the file already has
-  `'generates OmniJS code for simple boolean filter'` etc.) — if a behavior was *only* covered via the
-  jxa case, retain an OmniJS-target equivalent so coverage isn't lost.
-- **`tests/unit/contracts/ast/pipeline-isolation.test.ts`:** remove the `import { emitJXA }`, the
-  `describe('JXA emitter with hand-crafted AST', …)` block, and the `.emit('jxa')` case. Keep the
-  OmniJS-emitter isolation describe.
-- **`tests/unit/contracts/ast/filter-coverage.test.ts`:** remove the `import { emitJXA }` and the
-  jxa-vs-omnijs parity/cross-check case using `emitJXA(ast)` (moot once jxa is gone). The
-  QueryCompiler.transformFilters coverage is untouched.
-- The plan will enumerate exact line ranges/case names per file; the principle: **no loss of OmniJS
-  behavioral coverage; remove only jxa-target assertions.**
+Guiding principle: **remove only jxa-target assertions/refs; never drop unique OmniJS behavioral
+coverage** (where a parameterized loop emits both a jxa `it` and an omnijs `it`, keep the omnijs `it`,
+delete only the jxa `it`). The plan will pin exact final line numbers; the dispositions below are
+exhaustive for the jxa references (the reviewer-confirmed compile-breaking ones are named explicitly).
+
+- **Delete** `tests/unit/contracts/ast/emitters/jxa.test.ts` — entire file is `describe('emitJXA', …)`.
+- **`tests/unit/contracts/ast/filter-generator.test.ts`:**
+  - Remove every `it(...)` passing `'jxa'` to `generateFilterCode`/`generateFilterCodeSafe` (the
+    JXA-syntax cases — `:23,186,194,230,254,269,312`) and the whole `generateFilterCodeSafe with JXA
+    target` block (`:316` region).
+  - Remove the `'defaults to omnijs target'` case (premise — a defaultable `target` — no longer
+    exists once the param is gone).
+  - **`:289` `expect(result.target).toBe('omnijs');`** is inside a KEPT case ("returns success result
+    for valid filter") — `GenerateFilterCodeResult.target` is being deleted, so this assertion is now
+    a compile error. **Remove just that one assertion line**; keep the rest of that case.
+  - Every removed jxa case already has an OmniJS counterpart in this file (e.g. `'generates OmniJS
+    code for simple boolean filter'`); no OmniJS coverage is lost.
+- **`tests/unit/contracts/ast/pipeline-isolation.test.ts`:**
+  - Remove `import { emitJXA }`.
+  - Remove the `describe('JXA emitter with hand-crafted AST', …)` block (the `emitJXA(ast)` at ~`:111`).
+  - In the parameterized **cross-stage contract loop**, each filter emits TWO `it`s: keep
+    `build -> validate -> emit (omnijs) …` (the `emitOmniJS(ast)` at ~`:294`, unique non-empty
+    coverage for ~21 filter shapes) and **delete only the sibling `build -> validate -> emit (jxa)
+    succeeds for ${name}` `it`** (the `emitJXA(ast)` at ~`:304`). Do NOT delete the loop wholesale.
+  - The `'defaults to omnijs target'` case calling `FilterPipeline.from(...).emit()` arg-less
+    (~`:227`): its premise (a default target) is gone — delete the case.
+  - Keep the `describe('OmniJS emitter with hand-crafted AST')` describe.
+- **`tests/unit/contracts/ast/filter-coverage.test.ts`:**
+  - Remove `import { emitJXA }`.
+  - The parameterized **emitter parity** loop emits two `it`s per filter:
+    `both emitters produce non-empty output for: ${name}` (uses `emitJXA` + `emitOmniJS`, ~22 filters)
+    and `AST validates for: ${name}` (no jxa). **Convert the first `it` to OmniJS-only** — drop the
+    `const jxaResult = emitJXA(ast)` line and its `expect(jxaResult…)` assertion; **keep the
+    `emitOmniJS` non-empty assertion** (unique coverage for ~22 filter shapes) and rename the `it` to
+    `omnijs emitter produces non-empty output for: ${name}`. Keep the `AST validates` `it`. The
+    `QueryCompiler.transformFilters` coverage is untouched.
 
 ## Verification
 
@@ -101,10 +132,13 @@ Out of scope (explicit):
 2. `npm run test:unit` — 0 failures after the test deletions/retargets. Net test count drops
    (jxa.test.ts removed) — expected; confirm no *omnijs* coverage regressed.
 3. `npm run lint:strict` — exit 0.
-4. **Grep gate:** `grep -rn "emitJXA\|EmitTarget" src/` returns nothing;
-   `grep -rn "'jxa'" src/` returns **only** `src/omnifocus/OmniAutomation.ts:51`
-   (`monitorScriptSize(script, 'jxa')`) and any script-size doc/category code — i.e. the filter
-   emitter is gone but the unrelated script-size label is intact and unchanged.
+4. **Grep gate (precise):** `grep -rn "emitJXA\|EmitTarget" src/` returns **nothing** — this is the
+   exact, true post-condition. Do NOT gate on the bare string `'jxa'`: it legitimately survives in
+   three unrelated places that MUST remain (asserting they still exist is part of the gate):
+   `src/omnifocus/OmniAutomation.ts:51` (`monitorScriptSize(script, 'jxa')`),
+   `src/omnifocus/utils/script-size-monitor.ts` (~`:50,64,69,134`, the script-size category), and
+   `src/tools/unified/OmniFocusWriteTool.ts:865,938` (`method: 'jxa'` response metadata). Confirm
+   these three are present and unchanged; only `emitJXA`/`EmitTarget` should be absent.
 5. Sanity: a representative `omnifocus_read` tasks query + a countOnly query still work (no
    behavior change expected — pipeline already OmniJS-only in production).
 
