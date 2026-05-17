@@ -89,6 +89,9 @@ the script result and assert `result.data.task.*`):
    verbatim → `taskId` undefined), GREEN after.
 2. **Preservation:** script result has a real `taskId` (and no `id`) → assert `result.data.task.taskId`
    is that exact value, unclobbered (guards against accidental `=` semantics).
+3. **`??=` no-op under both present:** script result has both `taskId` and a *different* `id` →
+   assert `result.data.task.taskId` is the original `taskId` (not the `id`), proving `??=` does not
+   overwrite and `createdTaskId`'s `taskId || id` precedence is consistent.
 
 Mirror the existing mocking/assertion pattern in that test file (it already drives create and reads
 `result.data.task.id` / `result.data.id` for v3 cases — use the same harness).
@@ -102,9 +105,10 @@ normalization should make them deterministic — a remaining flake means a diffe
 ## Verification
 
 1. `npm run build` — exit 0.
-2. `npm run test:unit` — new unit cases green; the existing `OmniFocusWriteTool.test.ts` cases that
-   read `data.id` / `data.task.id` (lines ~62/151/180/226 — update/v3 paths) **still green**
-   (unchanged by this change); full suite 0 failures.
+2. `npm run test:unit` — new unit cases green; the existing `OmniFocusWriteTool.test.ts` cases
+   **still green** unchanged: L62 reads `data.id` on the basic create path; L151/180/226 read
+   `data.task.id` on v3/update paths — this change only backfills a missing `taskId`, never alters
+   `id` or any path that already has a `taskId`. Full suite 0 failures.
 3. `npm run lint:strict` — exit 0 (no new `any`/warnings; OMN-59 left it clean).
 4. Integration: the two OMN-57 #2/#3 tests pass against live OmniFocus; optionally run each in
    isolation a few times to confirm determinism (the unit test already proves it).
