@@ -18,13 +18,6 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toBe('task.completed === false');
     });
 
-    it('generates JXA code for simple boolean filter', () => {
-      const filter: TaskFilter = { completed: false };
-      const result = generateFilterCode(filter, 'jxa');
-
-      expect(result.predicate).toBe('task.completed() === false');
-    });
-
     it('generates code for combined filters', () => {
       const filter: TaskFilter = {
         completed: false,
@@ -38,14 +31,6 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toContain('task.flagged === true');
       expect(result.predicate).toContain('taskTags');
       expect(result.predicate).toContain('&&'); // All conditions ANDed together
-    });
-
-    it('defaults to omnijs target', () => {
-      const filter: TaskFilter = { flagged: true };
-      const result = generateFilterCode(filter);
-
-      // OmniJS uses direct property access (no parentheses)
-      expect(result.predicate).toBe('task.flagged === true');
     });
 
     it('returns true for empty filter', () => {
@@ -180,21 +165,6 @@ describe('generateFilterCode', () => {
 
       expect(result.predicate).toBe('task.taskStatus === Task.Status.Blocked');
     });
-
-    it('generates JXA code for dropped: true as direct method call', () => {
-      const filter: TaskFilter = { dropped: true };
-      const result = generateFilterCode(filter, 'jxa');
-
-      // JXA doesn't use Task.Status enum
-      expect(result.predicate).toBe('task.dropped() === true');
-    });
-
-    it('generates JXA code for available: true as direct method call', () => {
-      const filter: TaskFilter = { available: true };
-      const result = generateFilterCode(filter, 'jxa');
-
-      expect(result.predicate).toBe('task.available() === true');
-    });
   });
 
   describe('tagStatusValid end-to-end', () => {
@@ -224,15 +194,6 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toContain('2025-01-01');
       expect(result.predicate).toContain('2025-06-30');
     });
-
-    it('generates JXA code for defer date before', () => {
-      const filter: TaskFilter = { deferBefore: '2025-12-31' };
-      const result = generateFilterCode(filter, 'jxa');
-
-      expect(result.predicate).toContain('task.deferDate()');
-      expect(result.predicate).toContain('!== null');
-      expect(result.predicate).toContain('2025-12-31');
-    });
   });
 
   describe('planned date end-to-end', () => {
@@ -248,31 +209,6 @@ describe('generateFilterCode', () => {
       expect(result.predicate).toContain('>=');
       expect(result.predicate).toContain('<=');
     });
-
-    it('generates JXA code for planned date after', () => {
-      const filter: TaskFilter = { plannedAfter: '2025-01-01' };
-      const result = generateFilterCode(filter, 'jxa');
-
-      expect(result.predicate).toContain('task.plannedDate()');
-      expect(result.predicate).toContain('2025-01-01');
-    });
-  });
-
-  describe('JXA target for combined filters', () => {
-    it('generates JXA code for combined filters', () => {
-      const filter: TaskFilter = {
-        completed: false,
-        flagged: true,
-        tags: ['urgent'],
-        tagsOperator: 'OR',
-      };
-      const result = generateFilterCode(filter, 'jxa');
-
-      expect(result.predicate).toContain('task.completed()');
-      expect(result.predicate).toContain('task.flagged()');
-      expect(result.predicate).toContain('taskTags');
-      expect(result.predicate).toContain('&&');
-    });
   });
 });
 
@@ -286,7 +222,6 @@ describe('generateFilterCodeSafe', () => {
       expect(result.code.predicate).toBe('task.flagged === true');
       expect(result.ast.type).toBe('comparison');
       expect(result.validation.valid).toBe(true);
-      expect(result.target).toBe('omnijs');
     }
   });
 
@@ -302,20 +237,6 @@ describe('generateFilterCodeSafe', () => {
       expect(result.ast.type).toBe('and');
       expect(result.validation.errors).toHaveLength(0);
       expect(result.validation.warnings).toHaveLength(0);
-    }
-  });
-});
-
-describe('generateFilterCodeSafe with JXA target', () => {
-  it('returns success with JXA target', () => {
-    const filter: TaskFilter = { completed: false, flagged: true };
-    const result = generateFilterCodeSafe(filter, 'jxa');
-
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.target).toBe('jxa');
-      expect(result.code.predicate).toContain('task.completed()');
-      expect(result.code.predicate).toContain('task.flagged()');
     }
   });
 });

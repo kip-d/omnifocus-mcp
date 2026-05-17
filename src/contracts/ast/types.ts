@@ -137,12 +137,11 @@ export type SyntheticFieldEmitter = (operator: ComparisonOperator, value: unknow
 
 /**
  * A synthetic field that doesn't map directly to an OmniFocus property.
- * Each entry declares how to emit for OmniJS (required) and JXA (null = generic path).
+ * Each entry declares how to emit for OmniJS (required).
  */
 export interface SyntheticFieldDef {
   readonly field: string;
   readonly omnijs: SyntheticFieldEmitter;
-  readonly jxa: SyntheticFieldEmitter | null;
 }
 
 function emitOmniJSStatusComparison(operator: ComparisonOperator, value: unknown, statusEnum: string): string {
@@ -168,14 +167,13 @@ function emitOmniJSTagStatusValid(operator: ComparisonOperator, value: unknown):
  * Adding a new synthetic field requires one entry here.
  */
 export const SYNTHETIC_FIELD_DEFS: readonly SyntheticFieldDef[] = [
-  { field: 'task.dropped', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Dropped'), jxa: null },
+  { field: 'task.dropped', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Dropped') },
   {
     field: 'task.available',
     omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Available'),
-    jxa: null,
   },
-  { field: 'task.blocked', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Blocked'), jxa: null },
-  { field: 'task.tagStatusValid', omnijs: emitOmniJSTagStatusValid, jxa: null },
+  { field: 'task.blocked', omnijs: (op, val) => emitOmniJSStatusComparison(op, val, 'Task.Status.Blocked') },
+  { field: 'task.tagStatusValid', omnijs: emitOmniJSTagStatusValid },
 ];
 
 /** Lookup map for fast field-to-def resolution in emitters. */

@@ -463,7 +463,7 @@ export function buildFilteredTasksScript(filter: NormalizedTaskFilter, options: 
   const isEmptyFilter = ast.type === 'literal' && ast.value === true;
 
   // Generate the filter predicate code
-  const filterCode = generateFilterCode(filter, 'omnijs');
+  const filterCode = generateFilterCode(filter);
 
   // Build description
   const filterDescription = describeFilterForScript(filter);
@@ -579,7 +579,7 @@ export function buildInboxScript(additionalFilter: TaskFilter = {}, options: Scr
   // Merge inbox filter with additional filters, then normalize
   const filter = normalizeFilter({ ...additionalFilter, inInbox: true });
 
-  const filterCode = generateFilterCode(filter, 'omnijs');
+  const filterCode = generateFilterCode(filter);
   const filterDescription = describeFilterForScript(filter);
   const fieldProjection = generateFieldProjection(fields, { noteTruncateLength });
 
@@ -748,7 +748,7 @@ export function buildRecurringTasksScript(options: RecurringTasksOptions = {}): 
   const normalizedFilter = normalizeFilter(filter);
 
   // Generate the filter predicate using AST
-  const filterCode = generateFilterCode(normalizedFilter, 'omnijs');
+  const filterCode = generateFilterCode(normalizedFilter);
   const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Build the AST to check if empty (it won't be - we always have hasRepetitionRule)
@@ -1499,7 +1499,7 @@ export function buildExportTasksScript(filter: ExportFilter = {}, options: Expor
   // Build AST and generate filter code
   const ast = buildAST(taskFilter);
   const isEmptyFilter = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(taskFilter, 'omnijs');
+  const filterCode = generateFilterCode(taskFilter);
   const filterDescription = describeFilterForScript(taskFilter);
 
   // Generate field projection
@@ -1950,7 +1950,7 @@ export function buildTaskCountScript(filter: TaskFilter = {}, options: TaskCount
   // Build AST and generate OmniJS filter code
   const ast = buildAST(filterForCode);
   const isEmptyFilterValue = ast.type === 'literal' && ast.value === true;
-  const filterCode = generateFilterCode(filterForCode, 'omnijs');
+  const filterCode = generateFilterCode(filterForCode);
   const filterDescription = describeFilterForScript(normalizedFilter);
 
   // Check if the filter needs tags - only fetch tags if the filter uses them
