@@ -141,6 +141,8 @@ export const ProjectFieldEnum = z.enum([
   'nextReviewDate',
   'reviewInterval', // OMN-60: readable review interval { unit, steps }
   'defaultSingletonActionHolder',
+  'tags', // OMN-62: settable via CreateDataSchema, now readable
+  'plannedDate', // OMN-62: OF 4.7+ planned date, settable via CreateDataSchema, now readable
 ]);
 
 // Sort field enum for type safety

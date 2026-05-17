@@ -1,12 +1,13 @@
 # OMN-61 Phase 3 — per-field write→read round-trip harness (design)
 
-Status: **BUILT** (2026-05-17) — `tests/integration/tools/unified/field-roundtrip.test.ts`, 26/26 green against live
-OmniFocus, wired into `test:integration` (excluded from `test:unit` by location). Prereqs shipped: Phase 1 (read parity,
-PR #11), Phase 2 (write parity, PR #12), `assertFieldPersisted` helper (OMN-41, in `tests/integration/helpers/`). The
-doc below is retained as the rationale of record; the matrix and hard lessons are now enforced by the harness. Build
-note: the `project.folder` move row initially read back from the _source_ folder — the exact OMN-60 confounded-oracle
-trap this doc warned about. Caught during the live run, root-caused (the writer was correct; the move persisted), and
-fixed by reading back from the _destination_ folder.
+Status: **BUILT** (2026-05-17), **OMN-62 resolved** (2026-05-17 — project `tags`/`plannedDate` promoted from xfail to
+real round-trip rows) — `tests/integration/tools/unified/field-roundtrip.test.ts`, 26/26 green (zero xfails) against
+live OmniFocus, wired into `test:integration` (excluded from `test:unit` by location). Prereqs shipped: Phase 1 (read
+parity, PR #11), Phase 2 (write parity, PR #12), `assertFieldPersisted` helper (OMN-41, in
+`tests/integration/helpers/`). The doc below is retained as the rationale of record; the matrix and hard lessons are now
+enforced by the harness. Build note: the `project.folder` move row initially read back from the _source_ folder — the
+exact OMN-60 confounded-oracle trap this doc warned about. Caught during the live run, root-caused (the writer was
+correct; the move persisted), and fixed by reading back from the _destination_ folder.
 
 ## Goal
 
@@ -72,16 +73,17 @@ Phase 1 is the disambiguator: only after a value is provably visible does a subs
 `clear*` field whose set phase already reads back `undefined` is a read gap (lesson #2) → `xfail` + ticket, not a clear
 failure.
 
-## Known read-gaps → `xfail` + ticket (do NOT treat as persistence failures)
+## Known read-gaps → RESOLVED (OMN-62)
 
-Settable on projects via the shared `CreateDataSchema` but **absent from `ProjectFieldEnum` and the project projection**
-— cannot be read back through the public API (the exact OMN-60 shape, different fields):
+Project **`tags`** and project **`plannedDate`** were settable via the shared `CreateDataSchema` but **absent from
+`ProjectFieldEnum` and the project projection** — unreadable through the public API (the exact OMN-60 shape, different
+fields). Originally filed as **OMN-62** and held in Phase 3 as `it.fails`/`xfail` placeholders.
 
-- project **`tags`**
-- project **`plannedDate`**
-
-Filed as **OMN-62**. Phase 3 marks these `it.fails`/`xfail` with `OMN-62` so the harness is honest: "can't verify — read
-gap", not a green skip. When OMN-62 ships, flip them to real round-trip rows.
+**OMN-62 shipped:** both fields were added to `ProjectFieldEnum`, `generateProjectFieldProjection` (accessors verified
+live via a raw OmniJS probe on OF 4.8.9 — `project.tags.map(t => t.name)`, `project.plannedDate`), and the
+`OmniFocusReadTool` `inputSchema` advertisement. The two `it.fails` placeholders were **promoted to genuine round-trip
+rows** in `projectRows` (not left as xfails — that would silently never exercise the now-working path, a vacuous green).
+No remaining project read-gaps.
 
 ## Mechanics (reuse, don't reinvent)
 
@@ -104,7 +106,8 @@ it like the other integration suites (separate vitest project / `test:integratio
 1. New `tests/integration/.../field-roundtrip.test.ts` from the OMN-60 template.
 2. Encode the matrix above as a table; one parametrized round-trip per row. Encode `clear*` fields as the two-phase
    set→verify-present→clear→verify-null assertion, not a single row.
-3. `xfail` the two known read-gaps with the ticket id.
+3. ~~`xfail` the two known read-gaps with the ticket id.~~ **Done, then resolved by OMN-62** — promoted to real
+   round-trip rows (see "Known read-gaps → RESOLVED" above).
 4. Run once against live OmniFocus; any unexpected non-persistence is a real bug → systematic-debugging (remember:
    confounded-oracle + blind-instrument traps from OMN-60 before blaming the writer).
 5. Wire into `test:integration`, not `test:unit`.

@@ -1050,6 +1050,8 @@ const DEFAULT_PROJECT_FIELDS = [
   'lastReviewDate',
   'nextReviewDate',
   'reviewInterval', // OMN-60: emitted by the script so it can be projected when requested
+  'tags', // OMN-62: emitted by the script so it can be projected when requested
+  'plannedDate', // OMN-62: emitted by the script so it can be projected when requested
 ];
 
 /**
@@ -1119,6 +1121,14 @@ function generateProjectFieldProjection(fields: string[], context?: { noteTrunca
         break;
       case 'defaultSingletonActionHolder':
         projections.push('defaultSingletonActionHolder: project.defaultSingletonActionHolder || false');
+        break;
+      case 'tags':
+        // OMN-62: mirrors task tags projection; project.tags verified live (OF 4.8.9)
+        projections.push('tags: project.tags ? project.tags.map(t => t.name) : []');
+        break;
+      case 'plannedDate':
+        // OMN-62: OF 4.7+; project.plannedDate accessor verified live via raw OmniJS probe
+        projections.push('plannedDate: project.plannedDate ? project.plannedDate.toISOString() : null');
         break;
     }
   }
