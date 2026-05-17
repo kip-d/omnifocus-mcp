@@ -1,8 +1,12 @@
 # OMN-61 Phase 3 — per-field write→read round-trip harness (design)
 
-Status: **design only** (build deferred to a fresh session, per 2026-05-16 decision). Prereqs shipped: Phase 1 (read
-parity, PR #11), Phase 2 (write parity, PR #12), `assertFieldPersisted` helper (OMN-41, in
-`tests/integration/helpers/`).
+Status: **BUILT** (2026-05-17) — `tests/integration/tools/unified/field-roundtrip.test.ts`, 26/26 green against live
+OmniFocus, wired into `test:integration` (excluded from `test:unit` by location). Prereqs shipped: Phase 1 (read parity,
+PR #11), Phase 2 (write parity, PR #12), `assertFieldPersisted` helper (OMN-41, in `tests/integration/helpers/`). The
+doc below is retained as the rationale of record; the matrix and hard lessons are now enforced by the harness. Build
+note: the `project.folder` move row initially read back from the _source_ folder — the exact OMN-60 confounded-oracle
+trap this doc warned about. Caught during the live run, root-caused (the writer was correct; the move persisted), and
+fixed by reading back from the _destination_ folder.
 
 ## Goal
 
