@@ -93,6 +93,16 @@ Change only the emitted script and the emitter:
 expensive `flattenedTasks` materialization (already paid before the loop), so `limited:true` no longer
 implies a performance saving. No consumer/contract break (fields unchanged).
 
+**Update the now-false documentation in the same function.** The JSDoc header
+(`script-builder.ts:1907-1920`) and the in-body comment (~line 1957) currently assert *"pure JXA …
+~40x faster"* and *"Do NOT use app.evaluateJavascript() - it's ~40x slower!"*. After this change those
+are actively false and are precisely the "disproven hypothesis baked into a comment" that caused this
+ticket. Replace them with an accurate note: the count runs in OmniJS via one `evaluateJavascript`
+because for whole-DB iteration the per-element JXA Apple-Event IPC (~40 s) dominates the one-time
+`evaluateJavascript` bridge cost; the ~7–10 s `flattenedTasks` materialization is the irreducible
+floor either way. (The "evaluateJavascript is ~40× slower" heuristic holds only for *small* result
+sets — state that caveat so the comment doesn't get "corrected" back.)
+
 Script-size: the OmniJS source is small (well under the 261 KB OmniJS-bridge limit; current largest
 script is ~31 KB per `SCRIPT_SIZE_LIMITS.md`).
 
