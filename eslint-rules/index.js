@@ -69,7 +69,16 @@ const plugin = {
             const fn = enclosingFunction(node);
             if (!fn || !fn.returnType) return;
             const annText = context.sourceCode.getText(fn.returnType);
-            if (!annText.includes('StandardResponse')) return;
+            // Response-contract type names whose presence in a method's
+            // return-type annotation means the method produces a tool response
+            // and is subject to this rule. `SystemResponse` (SystemTool.ts) is
+            // a type alias for StandardResponseV2; matched explicitly because
+            // the old substring check missed it. NO trailing \b — plain
+            // `StandardResponse` must still match the longer `StandardResponseV2`
+            // (no word boundary exists between `...Response` and `V2`); a
+            // trailing \b would silently stop enforcing the ~8 methods annotated
+            // StandardResponseV2<...> that are checked today.
+            if (!/\b(StandardResponse|SystemResponse)/.test(annText)) return;
 
             const keys = node.argument.properties
               .map((p) => (p.type === 'Property' && p.key && (p.key.name || p.key.value)) || null)
@@ -108,7 +117,16 @@ const plugin = {
             const fn = enclosingFunction(node);
             if (!fn || !fn.returnType) return;
             const annText = context.sourceCode.getText(fn.returnType);
-            if (!annText.includes('StandardResponse')) return;
+            // Response-contract type names whose presence in a method's
+            // return-type annotation means the method produces a tool response
+            // and is subject to this rule. `SystemResponse` (SystemTool.ts) is
+            // a type alias for StandardResponseV2; matched explicitly because
+            // the old substring check missed it. NO trailing \b — plain
+            // `StandardResponse` must still match the longer `StandardResponseV2`
+            // (no word boundary exists between `...Response` and `V2`); a
+            // trailing \b would silently stop enforcing the ~8 methods annotated
+            // StandardResponseV2<...> that are checked today.
+            if (!/\b(StandardResponse|SystemResponse)/.test(annText)) return;
 
             const text = context.sourceCode.getText(node.body);
             // Side-effecting catch blocks (no return) record sub-task results
