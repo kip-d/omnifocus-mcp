@@ -35,7 +35,7 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { expectOk } from '../../helpers/expect-ok.js';
 import { assertFieldPersisted } from '../../helpers/assert-field-persisted.js';
-import { SANDBOX_FOLDER_NAME, ensureSandboxFolder } from '../../helpers/sandbox-manager.js';
+import { SANDBOX_FOLDER_NAME, ensureSandboxFolder, fullCleanup } from '../../helpers/sandbox-manager.js';
 
 // A fixed, unambiguous future datetime. NOT a default time: due defaults to
 // 17:00, defer to 08:00 — :23 past 14:00 can only be a value we wrote.
@@ -187,16 +187,16 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
         /* best-effort */
       }
     }
-    // OMN-46 fixture-leak guard: the sandbox folder must hold no __TEST__
-    // projects once we're done. Fail loud if cleanup left residue.
-    try {
-      const residue = await client.callTool('omnifocus_read', projectQuery(['name']));
-      const leaked = (residue.data?.projects ?? []).filter((p: any) => String(p.name ?? '').startsWith('__TEST__'));
-      expect(leaked, `sandbox residue after cleanup: ${JSON.stringify(leaked)}`).toHaveLength(0);
-    } catch {
-      /* read failure here must not mask test results */
-    }
     serverProcess?.kill();
+    // OMN-46 fixture-leak guard. The targeted deletes above miss two things:
+    // the destination subfolder created by the folder-move test (no per-id
+    // folder delete in the write schema) and any entity orphaned by a failed
+    // delete. fullCleanup() (osascript-driven, no server needed) sweeps the
+    // whole sandbox — projects, subfolders, tags — and reports per-item
+    // failures in `errors`. Assert OUTSIDE any try/catch so a real leak fails
+    // the suite loud instead of being swallowed.
+    const report = await fullCleanup();
+    expect(report.errors, `sandbox cleanup errors (fixture leak): ${JSON.stringify(report.errors)}`).toHaveLength(0);
   }, 120000);
 
   // ── Task scalar fields ────────────────────────────────────────────────
@@ -541,16 +541,22 @@ describe('OMN-61 Phase 3: per-field write→read round-trip', () => {
   // Settable on projects via the shared CreateDataSchema but ABSENT from
   // ProjectFieldEnum / generateProjectFieldProjection — cannot be read back
   // through the public API. This is the OMN-60 shape for two more fields.
-  // it.fails keeps the harness honest: "can't verify — read gap", not a green
-  // skip. When OMN-62 ships (adds them to the enum + projection), flip these
-  // to real round-trip rows in projectRows above.
+  // Failure mechanism: ProjectQuerySchema is .strict() and `fields` is
+  // z.array(ProjectFieldEnum), so requesting 'tags'/'plannedDate' is rejected
+  // by Zod at the tool boundary — the read returns success:false and
+  // assertFieldPersisted throws at its `success === false` guard (the
+  // extractor never runs). it.fails keeps the harness honest: "can't verify —
+  // read gap", not a green skip. When OMN-62 ships (adds them to the enum +
+  // projection) these flip green automatically; promote them to real rows in
+  // projectRows above.
   describe('known read-gaps (OMN-62 — settable but unreadable on projects)', () => {
     it.fails(
       'project.tags — OMN-62: not in ProjectFieldEnum, cannot round-trip',
       async () => {
         const id = await createProject({ tags: [`__test-rt-${TS}`] });
-        // Requesting an unknown project field yields no projection → undefined.
-        // The assertion below is EXPECTED to throw until OMN-62 lands.
+        // `fields: ['id','tags']` is rejected by ProjectQuerySchema (.strict,
+        // tags ∉ ProjectFieldEnum) → read success:false → assertFieldPersisted
+        // throws at its success guard. EXPECTED to throw until OMN-62 lands.
         await assertFieldPersisted(client, {
           readTool: 'omnifocus_read',
           readParams: projectQuery(['tags']),
