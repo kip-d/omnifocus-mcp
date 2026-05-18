@@ -31,9 +31,14 @@ export function isKnown(ledger: Ledger, fingerprint: string): boolean {
   return fingerprint in ledger.entries;
 }
 
-export function recordDiagnosis(ledger: Ledger, path: string, e: Omit<LedgerEntry, 'diagnosedAt'>): Ledger {
+export function recordDiagnosis(
+  ledger: Ledger,
+  path: string,
+  e: Omit<LedgerEntry, 'diagnosedAt'>,
+  now: Date = new Date(),
+): Ledger {
   const next: Ledger = {
-    entries: { ...ledger.entries, [e.fingerprint]: { ...e, diagnosedAt: new Date().toISOString() } },
+    entries: { ...ledger.entries, [e.fingerprint]: { ...e, diagnosedAt: now.toISOString() } },
   };
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(next, null, 2));

@@ -148,11 +148,16 @@ export async function runDiagnosis(opts: RunDiagnosisOpts): Promise<void> {
     };
     triageRows.push(row);
 
-    // Record in ledger
-    ledger = recordDiagnosis(ledger, ledgerPath, {
-      fingerprint: cluster.fingerprint,
-      classification,
-    });
+    // Record in ledger (thread injected `now` so a full-ledger snapshot is deterministic)
+    ledger = recordDiagnosis(
+      ledger,
+      ledgerPath,
+      {
+        fingerprint: cluster.fingerprint,
+        classification,
+      },
+      now,
+    );
   }
 
   // 5. Render and write triage doc
@@ -172,21 +177,30 @@ async function main(): Promise<void> {
   const ledgerPath = defaultLedgerPath();
   const triageDocPath = join(process.cwd(), 'docs', 'dev', 'mcp-failure-triage.md');
 
-  // Read all failure records from logDir
+  // Read all failure records from logDir.
+  // Directory-level failure (missing/unreadable dir) → genuine "no logs" path.
+  // Per-file failure (one corrupt/unreadable file) → warn + skip that file, keep processing the rest,
+  // so a single bad file never misreports as "no failure logs found".
   let records: FailureRecord[] = [];
+  let files: string[] = [];
   try {
     const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-    const files = readdirSync(logDir).filter((f) => {
+    files = readdirSync(logDir).filter((f) => {
       const m = /failures-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f);
       return m && m[1] >= cutoff;
     });
-    for (const file of files) {
-      const content = readFileSync(join(logDir, file), 'utf-8');
-      records = records.concat(parseFailureLog(content));
-    }
   } catch {
     // logDir missing or unreadable → treat as empty (graceful no-op)
     console.info(`[diagnose-failures] No failure logs found in ${logDir} — writing empty triage doc.`);
+  }
+  for (const file of files) {
+    try {
+      const content = readFileSync(join(logDir, file), 'utf-8');
+      records = records.concat(parseFailureLog(content));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[diagnose-failures] Skipping unreadable failure log ${file}: ${msg}`);
+    }
   }
 
   const writeTriageDoc = (md: string): void => {

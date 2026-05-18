@@ -19,7 +19,10 @@ export interface TriageRow {
 export function renderTriageDoc(rows: TriageRow[], now: Date): string {
   const sorted = [...rows].sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
-    return a.fingerprint.localeCompare(b.fingerprint);
+    // Strict byte-wise comparison — localeCompare is locale-sensitive and determinism is a hard requirement.
+    if (a.fingerprint < b.fingerprint) return -1;
+    if (a.fingerprint > b.fingerprint) return 1;
+    return 0;
   });
 
   const generatedAt = now.toISOString();
@@ -43,6 +46,7 @@ export function renderTriageDoc(rows: TriageRow[], now: Date): string {
 | DESCRIPTION_GAP | tool description unclear; LLM-adjudicated |
 | LLM_EXPLORATION | no-op: LLM is probing the API; no fix required |
 | DATA_ERROR | no-op: bad caller data; not a schema issue |
+| NEEDS_LLM | agent not configured or unavailable — manual investigation required |
 | CAP_GUARD_TRIPPED | auto-Linear filing skipped because open issue count >= cap threshold |
 `;
 
