@@ -82,13 +82,19 @@ describe('diffSchemas', () => {
   it('reports FIELD_MISSING, ENUM_MISMATCH, REQUIRED_MISMATCH, COERCION_GAP', () => {
     const advertised = canonicalizeInputSchema({
       type: 'object',
-      properties: { mode: { type: 'string', enum: ['a', 'b'] }, limit: { type: 'number' }, ghost: { type: 'string' } },
-      required: ['mode'],
+      properties: {
+        mode: { type: 'string', enum: ['a', 'b'] },
+        limit: { type: 'number' },
+        ghost: { type: 'string' },
+        requiredHere: { type: 'string' }, // required in advertised, optional in Zod -> REQUIRED_MISMATCH
+      },
+      required: ['mode', 'requiredHere'],
     });
     const zod = canonicalizeZodSchema(
       z.object({
         mode: z.enum(['a']), // ENUM_MISMATCH (b advertised, not validated)
         limit: z.number(), // COERCION_GAP (advertised numeric, not coercible)
+        requiredHere: z.string().optional(), // REQUIRED_MISMATCH (advertised required, Zod optional)
         extra: z.string(), // advertised-missing (validated field never advertised)
       }),
     );
@@ -97,6 +103,7 @@ describe('diffSchemas', () => {
     expect(kinds).toContain('FIELD_MISSING'); // ghost advertised, not validated
     expect(kinds).toContain('FIELD_MISSING'); // extra validated, not advertised
     expect(kinds).toContain('ENUM_MISMATCH');
+    expect(kinds).toContain('REQUIRED_MISMATCH');
     expect(kinds).toContain('COERCION_GAP');
   });
 

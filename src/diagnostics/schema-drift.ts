@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface CanonicalField {
   type: string;
   required: boolean;
@@ -36,8 +38,17 @@ export function canonicalizeInputSchema(advertised: Record<string, unknown>, wra
   return out;
 }
 
-import { z } from 'zod';
-
+// ---------------------------------------------------------------------------
+// Zod private-API access (`_def`). Zod does NOT expose a stable public reflection
+// API, so canonicalizing a Zod schema means walking `_def`. The `typeName` string
+// constants below ('ZodEffects', 'ZodOptional', 'ZodDiscriminatedUnion', etc.) are
+// stable across all of Zod 3.x (this package pins `^3.25.76`), but a Zod 4 upgrade
+// WILL rename/restructure `_def` and these mappings must be re-derived against the
+// new internals. DIAGNOSIS BREADCRUMB: if `canonicalizeZodSchema` starts returning
+// `{}` for real tool schemas (the CI drift gate's non-vacuity assertion will fire
+// first), start here — `unwrap`/`fieldType`/`membersOf` `typeName` strings are the
+// first thing to re-check after any Zod version bump.
+// ---------------------------------------------------------------------------
 type ZDef = {
   typeName?: string;
   schema?: z.ZodTypeAny; // ZodEffects (z.preprocess / z.transform)
@@ -153,27 +164,31 @@ export function diffSchemas(advertised: CanonicalSchema, zod: CanonicalSchema): 
   const fields = new Set([...Object.keys(advertised), ...Object.keys(zod)]);
   for (const f of fields) {
     const a = advertised[f];
-    const z = zod[f];
-    if (a && !z) {
+    const zf = zod[f];
+    if (a && !zf) {
       findings.push({ kind: 'FIELD_MISSING', field: f, detail: 'advertised to LLM but not validated by Zod' });
       continue;
     }
-    if (!a && z) {
+    if (!a && zf) {
       findings.push({ kind: 'FIELD_MISSING', field: f, detail: 'validated by Zod but never advertised to LLM' });
       continue;
     }
-    if (!a || !z) continue;
-    if (a.enum && z.enum && JSON.stringify([...a.enum].sort()) !== JSON.stringify([...z.enum].sort())) {
-      findings.push({ kind: 'ENUM_MISMATCH', field: f, detail: `advertised [${a.enum}] vs validated [${z.enum}]` });
+    if (!a || !zf) continue;
+    if (a.enum && zf.enum && JSON.stringify([...a.enum].sort()) !== JSON.stringify([...zf.enum].sort())) {
+      findings.push({
+        kind: 'ENUM_MISMATCH',
+        field: f,
+        detail: `advertised [${a.enum.join(', ')}] vs validated [${zf.enum.join(', ')}]`,
+      });
     }
-    if (a.required !== z.required) {
+    if (a.required !== zf.required) {
       findings.push({
         kind: 'REQUIRED_MISMATCH',
         field: f,
-        detail: `advertised required=${a.required} vs validated required=${z.required}`,
+        detail: `advertised required=${a.required} vs validated required=${zf.required}`,
       });
     }
-    if (a.type === 'number' && z.coercible === false) {
+    if (a.type === 'number' && zf.coercible === false) {
       findings.push({
         kind: 'COERCION_GAP',
         field: f,
