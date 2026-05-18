@@ -75,18 +75,50 @@ currently live only in agent memory, invisible to a fresh session.
 
 A vitest unit test that:
 
-- Reads `CLAUDE.md` and globs `docs/dev/*.md`.
-- Extracts inline-code / link tokens matching `src/…` or `docs/…` with a file-ish extension
-  or a trailing `/` (directory).
-- **Strips** any `:NN` line suffix and trailing punctuation before resolving — line numbers
-  are precisely what we discourage, so the guard resolves the *file*, not the line.
-- Asserts each reference resolves on disk (repo-root relative); directory refs checked as
-  directories. Failure lists every unresolved reference.
-- Runs in `test:unit` → already gated in `test:pre-push` and `.github/workflows/ci.yml`. No
-  new CI wiring, no new npm script.
+**Input set.** `CLAUDE.md` plus glob `docs/dev/*.md`, read from the repo root.
 
-The guard is itself TDD'd: a fixture-based test proves it (a) fails on a known-dead path and
-(b) passes on resolvable ones, before it is pointed at the real docs.
+**Extraction surface (exact).** Scan only two Markdown constructs, never bare prose:
+
+1. Inline-code spans (`` `…` ``) and fenced-code-block contents.
+2. Markdown link *targets* — the `(...)` of `[text](target)`. The link *text* is **not**
+   scanned (avoids double-counting `[docs/DOCS_MAP.md](docs/DOCS_MAP.md)`).
+
+Within a scanned span, a **candidate** is the first whitespace/backtick-delimited token that,
+after the normalization below, matches `^/?(src|docs)/` and ends in an allowed extension
+**or** a trailing `/` (directory). Tokens not starting `src/` or `docs/` are ignored — this
+deliberately excludes `dist/index.js`, `node …`, and any `http(s)://…` URL (so the
+`modelcontextprotocol.io/...2025-06-18` URL in the MCP-test line is out of scope by
+construction; URLs never start `src/` or `docs/`).
+
+**Allowed extensions (explicit allowlist):** `.ts`, `.js`, `.md`, `.dot`, `.json`. A token
+matching `^/?(src|docs)/` with no allowed extension and no trailing `/` is reported as
+*malformed reference* (fail), not silently skipped.
+
+**Normalization before resolution, in order:**
+
+1. Strip a single leading `/` if present — CLAUDE.md uses both `docs/x.md` and
+   `/docs/dev/x.md` forms; a leading `/` means **repo-root**, never filesystem root. After
+   stripping, resolve as `path.join(repoRoot, token)`.
+2. Strip a trailing `:NN` (or `:NN:CC`) line/column suffix — line numbers are the volatile
+   specifics we discourage; the guard resolves the *file*, not the line.
+3. Strip trailing sentence punctuation (`.`, `,`, `)`, `;`, `:`) not part of the path.
+
+**Assertion.** Each normalized reference must resolve on disk: file refs via
+`fs.existsSync` as a file; refs ending `/` must exist **and** be a directory. The test
+fails with a list of every unresolved/malformed reference and its source file+line.
+
+**Ordering constraint.** The guard asserts the **post-§1-fix** state of `CLAUDE.md`. §1's
+content fixes (which delete the `minimal-tag-bridge.ts:41` token and other dead paths) land
+before the guard is pointed at the real `CLAUDE.md`. The guard's own correctness is proven
+independently against fixtures first (below).
+
+**CI/enforcement.** The test lives under `tests/unit/`, so it is picked up by the
+`vitest tests/unit` glob that both `npm run test:unit` (used in `test:pre-push`) and CI's
+`npm run test:quick` (`.github/workflows/ci.yml`) execute. No new npm script or CI wiring.
+
+The guard is itself TDD'd: fixture strings (a known-dead path → red; a resolvable path,
+a leading-slash path, and a `:NN`-suffixed path → green) prove the matcher before it is
+pointed at the real docs.
 
 ## Testing strategy
 
