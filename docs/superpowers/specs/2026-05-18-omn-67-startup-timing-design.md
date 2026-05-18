@@ -1,6 +1,7 @@
 # OMN-67 — Consolidated STARTUP COMPLETE timing line
 
-Date: 2026-05-18 Linear: OMN-67 Status: Design approved (2026-05-18), pending spec review
+Date: 2026-05-18 Linear: OMN-67 Status: Approved — spec-review (Approved + 3 advisories folded in) and user, 2026-05-18;
+ready for implementation plan
 
 ## Problem
 
